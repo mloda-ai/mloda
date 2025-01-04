@@ -1,0 +1,40 @@
+{
+  "name": "mloda Dev Container",
+  "image": "mcr.microsoft.com/vscode/devcontainers/python:3.10",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "postCreateCommand": "pip install -r docs/requirements.txt -r tests/requirements-test.txt && tox",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.shell.linux": "/bin/bash",
+        "files.exclude": {
+          "**/*egg-info": true,
+          "**/*_cache": true,
+          "**/__pycache__": true
+        },
+        "python.analysis.completeFunctionParens": true,
+        "python.languageServer": "Pylance",
+        "editor.formatOnSave": true,
+        "ruff.format.args": [
+          "--line-length=120"
+        ],
+        "editor.formatOnPaste": true,
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "markdown-mermaid.languages": [
+          "mermaid"
+        ]
+      },
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-azuretools.vscode-docker",
+        "charliermarsh.ruff",
+        "bierner.markdown-mermaid"
+      ]
+    }
+  },
+  "forwardPorts": [8000],
+  "remoteUser": "vscode"
+}

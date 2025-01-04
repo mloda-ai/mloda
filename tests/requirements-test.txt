@@ -1,0 +1,12 @@
+pytest
+pytest-xdist
+pytest-order
+pytest-timeout
+ruff
+mypy
+mktestdocs
+pandera
+tox
+pyarrow
+testbook
+ipykernel

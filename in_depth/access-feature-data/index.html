@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="../../img/favicon.ico" />
+    <title>(Feature) data - mloda docs</title>
+    <link rel="stylesheet" href="../../css/theme.css" />
+    <link rel="stylesheet" href="../../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "(Feature) data";
+        var mkdocs_page_input_path = "in_depth/access-feature-data.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="../.." class="icon icon-home"> mloda docs
+        </a>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption"><span class="caption-text">Home</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../..">mloda</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Introduction Notebooks</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" >Basics</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../examples/mloda_basics/0_table_of_content/">Table of Content</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../examples/mloda_basics/1_ml_mloda_intro/">Intro to the core interfaces of mloda</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../examples/mloda_basics/2_ml_advantage_process_focus/">What makes mloda unique?</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../examples/mloda_basics/3_ml_data_feature_feature_groups/">Data, Feature, FeatureSets and FeatureGroups in mloda</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../examples/mloda_basics/4_ml_data_producers_user_owner/">Data Producer, User, Owner in mloda</a>
+                </li>
+    </ul>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Getting Started</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/installation/">Installation</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/api-request/">API Request</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/feature-groups/">Feature Groups</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/compute-frameworks/">Compute Frameworks</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/extender/">Extender</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">In Depth - Basics</span></p>
+              <ul class="current">
+                  <li class="toctree-l1"><a class="reference internal" href="../mloda-api/">mloda API</a>
+                  </li>
+                  <li class="toctree-l1 current"><a class="reference internal current" href="#">(Feature) data</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#dataaccesscollection">DataAccessCollection</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#feature-scope-data-access">Feature Scope Data Access</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#input-features">Input features</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#data-creator">Data Creator</a>
+    </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../join_data/">Join data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../filter_data/">Filter data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../artifacts/">Artifacts</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">In Depth - Advanced</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../data-quality/">Data quality</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../domain/">Domain concept</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Development</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../development/">Contributers</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../license/">License - Apache 2.0</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../missing/">Missing</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Need Help?</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../faq/">FAQ</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../need-help/">Need Help</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../..">mloda docs</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../.." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">In Depth - Basics</li>
+      <li class="breadcrumb-item active">(Feature) data</li>
+    <li class="wy-breadcrumbs-aside">
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h2 id="access-feature-data">Access (feature) data</h2>
+<p>In this framework, features can access and manage data through several structured methods, each designed for specific use cases. Whether a feature requires access to shared data, isolated data, or needs to generate data independently, the system offers flexible solutions. This guide covers the key mechanisms for data access, including the </p>
+<ul>
+<li><strong>DataAccessCollection</strong> for centralized management, </li>
+<li><strong>Feature Scope Data Access</strong> for feature-specific control, </li>
+<li><strong>Input Features</strong> for inter-feature data sharing, </li>
+<li>and <strong>Data Creator</strong> for generating independent data. </li>
+</ul>
+<p>These methods ensure efficient data handling across the framework while promoting flexibility and scalability.</p>
+<h4 id="dataaccesscollection">DataAccessCollection</h4>
+<p>The DataAccessCollection is designed to control the access to data of any kind. The main purpose of this class is to organize and simplify interactions with these different data elements, making it easier to work to ingest data of various form into the framework. It provides as an interface for accessing and storing of data:</p>
+<p>The DataAccessCollection can only be added via <strong>mlodaAPI</strong>.</p>
+<p>List options:</p>
+<ol>
+<li>
+<p><strong>Files:</strong> Specifies the exact location of files: path/folder/text.txt</p>
+</li>
+<li>
+<p><strong>Folders:</strong> Points to directories where files are located: path/folder/</p>
+</li>
+<li>
+<p><strong>Credential dicts:</strong> Contains the necessary credentials to access data:<br />
+ {host: example.com, password: example}</p>
+</li>
+<li>
+<p><strong>Initialized connection object:</strong> Stores connection objects that are already initialized: (DBConnectionObject)</p>
+</li>
+<li>
+<p><strong>Unitialized connection object:</strong> Stores not initialized connection objects: (UninitializedDBConnection)</p>
+</li>
+</ol>
+<p>Example:</p>
+<pre><code class="language-python">data_access = DataAccessCollection()
+
+# Add file paths, folder paths, credentials, and connection objects
+data_access.add_file('path/to/folder/text.txt')
+data_access.add_folder('path/to/folder/')
+data_access.add_credential_dict({'host': 'example.com', 'password': 'example'})
+data_access.add_initialized_connection_object('InitializedDBConnection')
+data_access.add_uninitialized_connection_object('UninitializedDBConnection')
+
+mlodaAPI.run_all(
+    feature_list,
+    data_access_collection=data_access)
+</code></pre>
+<h4 id="feature-scope-data-access">Feature Scope Data Access</h4>
+<p>If data needs to be added specifically for a single feature (or features from the same feature group), you can use the feature_scope_data_access_name functionality.</p>
+<p>Example feature group definition:</p>
+<pre><code class="language-python">class ReadCsv(ReadFile):  # ReadFile is inheriting from AbstractFeatureGroup
+    _end: str = &quot;csv&quot;
+
+    @classmethod
+    def suffix(cls) -&gt; str:
+        return f&quot;.{cls._end}&quot;
+
+    @classmethod
+    def feature_scope_data_access_name(cls) -&gt; Optional[str]:
+        return f&quot;read_{cls._end}&quot;
+</code></pre>
+<p>Example usage</p>
+<pre><code class="language-python">feature = Feature(
+    name=&quot;example_feature&quot;, 
+    options={ReadCsv.feature_scope_data_access_name(): &quot;example.csv&quot;}
+)
+
+mlodaAPI.run_all([feature])
+</code></pre>
+<h4 id="input-features">Input features</h4>
+<p>The input_features method allows a feature to access data from other features. This enables data sharing and collaboration between different components of your system.</p>
+<p>This is one of the key aspects in how we achieve to split data from processes.</p>
+<pre><code class="language-python">
+class ExampleFeatureClass(AbstractFeatureGroup):
+    def input_features(self, options: Options, feature_name: FeatureName) -&gt; Optional[Set[Feature]]:
+        _input_features = {}
+        _input_features.add(Feature.int32_of(&quot;SUM_V1&quot;))
+        _input_features.add(Feature.str_of(&quot;Name&quot;))
+
+        # You can add diverse logics based on given options and/or feature names.
+        complicated_feature = Feature(name=feature_name.name.split(&quot;_&quot;)[1], compute_framework=&quot;PandasDataframe&quot;)
+        _input_features.add(complicated_feature)
+
+        return _input_features
+
+    # Use the features then in the calculate part.
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:
+        return {
+            data[&quot;SUM_V1&quot;], 
+            data[&quot;Name&quot;],
+            data[&quot;ExampleFeatureClass_SPLIT_VALUE&quot;],
+        }
+
+</code></pre>
+<p>As the input features can be fulfilled by <strong>multiple other features</strong>, we can have the same processes running in different environments, migrations and processes.</p>
+<h4 id="data-creator">Data Creator</h4>
+<p>The data creator can create data independent of any other dependency. It is essentially a base feature that does not needs a <strong>DataAccessCollection</strong> or <strong>Feature Scope Data Access</strong>.</p>
+<p>Usage:</p>
+<ul>
+<li>test data,</li>
+<li>sample data,</li>
+<li>dummy data,</li>
+<li>parameter data</li>
+</ul>
+<p>One could imagine that for experimenting one wants to see data. Then one could use this feature as input feature to another feature instead of e.g. the true data.</p>
+<pre><code class="language-python">
+class ExampleFeatureClass(AbstractFeatureGroup):
+    @classmethod
+    def input_data(cls) -&gt; Optional[BaseInputData]:
+        return DataCreator({&quot;ExampleFeatureClass&quot;, &quot;idx&quot;})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:
+        return {&quot;ExampleFeatureClass&quot;: [1, 2, 3], 
+                &quot;idx&quot;: [&quot;a&quot;, &quot;b&quot;, &quot;c&quot;]}
+</code></pre>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../mloda-api/" class="btn btn-neutral float-left" title="mloda API"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../join_data/" class="btn btn-neutral float-right" title="Join data">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+    
+      <span><a href="../mloda-api/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../join_data/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "../..";</script>
+    <script src="../../js/theme_extra.js"></script>
+    <script src="../../js/theme.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

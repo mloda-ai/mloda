@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="../../img/favicon.ico" />
+    <title>Domain concept - mloda docs</title>
+    <link rel="stylesheet" href="../../css/theme.css" />
+    <link rel="stylesheet" href="../../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Domain concept";
+        var mkdocs_page_input_path = "in_depth/domain.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="../.." class="icon icon-home"> mloda docs
+        </a>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption"><span class="caption-text">Home</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../..">mloda</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Introduction Notebooks</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" >Basics</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../examples/mloda_basics/0_table_of_content/">Table of Content</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../examples/mloda_basics/1_ml_mloda_intro/">Intro to the core interfaces of mloda</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../examples/mloda_basics/2_ml_advantage_process_focus/">What makes mloda unique?</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../examples/mloda_basics/3_ml_data_feature_feature_groups/">Data, Feature, FeatureSets and FeatureGroups in mloda</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../examples/mloda_basics/4_ml_data_producers_user_owner/">Data Producer, User, Owner in mloda</a>
+                </li>
+    </ul>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Getting Started</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/installation/">Installation</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/api-request/">API Request</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/feature-groups/">Feature Groups</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/compute-frameworks/">Compute Frameworks</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/extender/">Extender</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">In Depth - Basics</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../mloda-api/">mloda API</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../access-feature-data/">(Feature) data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../join_data/">Join data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../filter_data/">Filter data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../artifacts/">Artifacts</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">In Depth - Advanced</span></p>
+              <ul class="current">
+                  <li class="toctree-l1"><a class="reference internal" href="../data-quality/">Data quality</a>
+                  </li>
+                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Domain concept</a>
+    <ul class="current">
+    </ul>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Development</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../development/">Contributers</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../license/">License - Apache 2.0</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../missing/">Missing</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Need Help?</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../faq/">FAQ</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../need-help/">Need Help</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../..">mloda docs</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../.." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">In Depth - Advanced</li>
+      <li class="breadcrumb-item active">Domain concept</li>
+    <li class="wy-breadcrumbs-aside">
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h2 id="domain">Domain</h2>
+<p>The domain concept represents scenarios, where similar data is originating from different domains, be it business domains, logical domains or simply testing domains.</p>
+<p>The framework itself will match the domains of features and feature groups. This means the domains are essentially <strong>filters</strong>! </p>
+<p>However, we only apply them <strong>if they are set for features</strong>. As default, this is not the case!</p>
+<p><strong>Feature parameter</strong></p>
+<pre><code class="language-python">from mloda_core.abstract_plugins.components.feature import Feature
+
+Feature(name=&quot;Revenue&quot;,
+        domain=&quot;Sales&quot;
+)
+</code></pre>
+<p><strong>Feature option</strong></p>
+<pre><code class="language-python">Feature(name=&quot;Revenue&quot;,
+        options={&quot;domain&quot;: &quot;Fraud&quot;}
+)
+</code></pre>
+<p>The domain can also be set in the feature group.</p>
+<p><strong>Feature group</strong></p>
+<pre><code class="language-python">from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
+from mloda_core.abstract_plugins.components.domain import Domain
+
+class ExampleFeature(AbstractFeatureGroup):
+    @classmethod
+    def get_domain(cls) -&gt; Domain:
+        &quot;&quot;&quot;This function should return the domain for the feature group&quot;&quot;&quot;
+        return &quot;example_domain&quot;
+</code></pre>
+<p>For feature groups, the default domain is default_domain.</p>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../data-quality/" class="btn btn-neutral float-left" title="Data quality"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../../development/" class="btn btn-neutral float-right" title="Contributers">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+    
+      <span><a href="../data-quality/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../../development/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "../..";</script>
+    <script src="../../js/theme_extra.js"></script>
+    <script src="../../js/theme.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

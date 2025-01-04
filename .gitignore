@@ -1,9 +1,0 @@
-.mypy_cache
-.ruff_cache
-.tox
-*.egg-info
-.vscode
-__pycache__
-backup
-build/
-dist/

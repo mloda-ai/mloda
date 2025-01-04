@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="../../img/favicon.ico" />
+    <title>Data quality - mloda docs</title>
+    <link rel="stylesheet" href="../../css/theme.css" />
+    <link rel="stylesheet" href="../../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Data quality";
+        var mkdocs_page_input_path = "in_depth/data-quality.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="../.." class="icon icon-home"> mloda docs
+        </a>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption"><span class="caption-text">Home</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../..">mloda</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Introduction Notebooks</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" >Basics</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../examples/mloda_basics/0_table_of_content/">Table of Content</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../examples/mloda_basics/1_ml_mloda_intro/">Intro to the core interfaces of mloda</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../examples/mloda_basics/2_ml_advantage_process_focus/">What makes mloda unique?</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../examples/mloda_basics/3_ml_data_feature_feature_groups/">Data, Feature, FeatureSets and FeatureGroups in mloda</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../examples/mloda_basics/4_ml_data_producers_user_owner/">Data Producer, User, Owner in mloda</a>
+                </li>
+    </ul>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Getting Started</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/installation/">Installation</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/api-request/">API Request</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/feature-groups/">Feature Groups</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/compute-frameworks/">Compute Frameworks</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/extender/">Extender</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">In Depth - Basics</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../mloda-api/">mloda API</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../access-feature-data/">(Feature) data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../join_data/">Join data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../filter_data/">Filter data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../artifacts/">Artifacts</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">In Depth - Advanced</span></p>
+              <ul class="current">
+                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Data quality</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#feature-validation">Feature validation</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#validate-input-features">Validate Input Features</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#simple-validator">Simple validator</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#loading-a-validator-based-on-basevalidator">Loading a validator based on BaseValidator</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#log-only-validator-and-extender-use">Log only validator and Extender use</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#validate-output-features">Validate Output Features</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#simple-validator_1">Simple validator</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#loading-a-validator-based-on-basevalidator_1">Loading a validator based on BaseValidator</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#log-only-validator-and-extender-use_1">Log only validator and Extender use</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#artifacts">Artifacts</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#conclusion">Conclusion</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#software-testing">Software Testing</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#unit-tests">Unit tests</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#integration-tests">Integration Tests</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#data-comparison">Data Comparison</a>
+    </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../domain/">Domain concept</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Development</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../development/">Contributers</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../license/">License - Apache 2.0</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../missing/">Missing</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Need Help?</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../faq/">FAQ</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../need-help/">Need Help</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../..">mloda docs</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../.." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">In Depth - Advanced</li>
+      <li class="breadcrumb-item active">Data quality</li>
+    <li class="wy-breadcrumbs-aside">
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="data-quality">Data Quality</h1>
+<p>Ensuring data quality is crucial for the success of any data-driven project. This document outlines the various aspects of data quality and the measures taken to maintain it.</p>
+<h2 id="feature-validation">Feature validation</h2>
+<p>Feature validation ensures that the input and output features meet the expected standards and requirements.</p>
+<h4 id="validate-input-features">Validate Input Features</h4>
+<p>Input features are validated to ensure they conform to the expected formats, ranges, and distributions. This includes:</p>
+<ul>
+<li>Checking for missing values and handling them appropriately.</li>
+<li>Validating data types and ranges.</li>
+<li>Ensuring data consistency and integrity.</li>
+</ul>
+<p>Example: Input Feature Validation Using Custom Validators</p>
+<h6 id="simple-validator">Simple validator</h6>
+<pre><code class="language-python">from typing import Any, Optional, Set
+from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
+from mloda_core.abstract_plugins.components.feature_set import FeatureSet
+from mloda_core.abstract_plugins.components.options import Options
+from mloda_core.abstract_plugins.components.feature_name import FeatureName
+from mloda_core.abstract_plugins.components.feature import Feature
+from mloda_core.api.request import mlodaAPI
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
+
+
+class DocSimpleValidateInputFeatures(AbstractFeatureGroup):
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:
+        return {cls.get_class_name(): [1, 2, 3]}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -&gt; Optional[Set[Feature]]:
+        return {Feature(name=&quot;BaseValidateInputFeaturesBase&quot;, options=options)}
+
+    @classmethod
+    def validate_input_features(cls, data: Any, features: FeatureSet) -&gt; Optional[bool]:
+        &quot;&quot;&quot;This function is a naive implementation of a validator.&quot;&quot;&quot;
+
+        if len(data[&quot;BaseValidateInputFeaturesBase&quot;]) == 3:
+            raise ValueError(&quot;Data should have 3 elements&quot;)
+        return True
+</code></pre>
+<p>As we run it, it will return an error.</p>
+<pre><code class="language-python">results = mlodaAPI.run_all(
+            [&quot;DocSimpleValidateInputFeatures&quot;], {PyarrowTable}
+        )
+ValueError: Data should have 3 elements
+</code></pre>
+<h6 id="loading-a-validator-based-on-basevalidator">Loading a validator based on BaseValidator</h6>
+<p>In the following example, we replace the validate input features function.
+This function shows 2 examples:</p>
+<ul>
+<li>Loading a validator from the feature config.</li>
+<li>Instantiating a validator inplace.</li>
+</ul>
+<pre><code class="language-python">class DocCustomValidateInputFeatures(DocSimpleValidateInputFeatures):
+
+    @classmethod
+    def validate_input_features(cls, data: Any, features: FeatureSet) -&gt; Optional[bool]:
+        &quot;&quot;&quot;This function should be used to validate the input data.&quot;&quot;&quot;
+
+        validation_rules = {
+            &quot;BaseValidateInputFeaturesBase&quot;: Column(int, Check.in_range(1, 2)),
+        }
+
+        # Loading from feature config
+        if features.get_options_key(&quot;DocExamplePanderaValidator&quot;) is not None:
+            validator = features.get_options_key(&quot;DocExamplePanderaValidator&quot;)
+            if not isinstance(validator, DocExamplePanderaValidator):
+                raise ValueError(&quot;DocExamplePanderaValidator should be an instance of DocExamplePanderaValidator&quot;)
+        else:
+            validation_log_level = features.get_options_key(&quot;ValidationLevel&quot;)
+        # Instantiating a validator inplace
+            validator = DocExamplePanderaValidator(validation_rules, validation_log_level)
+
+        return validator.validate(data)  # type: ignore
+</code></pre>
+<p>The DocExamplePanderaValidator is based on the BaseValidator, which provides basic functionalities around logging. </p>
+<p>We show here an example by using the tool <a href="https://github.com/unionai-oss/pandera">Pandera</a>.</p>
+<pre><code class="language-python">from mloda_core.abstract_plugins.components.base_validator import BaseValidator
+import pyarrow as pa
+from pandera import Column, DataFrameSchema, Check
+from pandera.errors import SchemaError
+
+
+class DocExamplePanderaValidator(BaseValidator):
+    &quot;&quot;&quot;Custom validator to validate input features based on a specific rule.&quot;&quot;&quot;
+
+    def validate(self, data: pa.Table) -&gt; Optional[bool]:
+        &quot;&quot;&quot;This function should be used to validate the input data.&quot;&quot;&quot;
+
+        # Convert PyArrow Table to Pandas DataFrame if necessary
+        if isinstance(data, pa.Table):  # If the data is a PyArrow Table
+            data = data.to_pandas()
+
+        schema = DataFrameSchema(self.validation_rules)
+
+        try:
+            schema.validate(data)
+        except SchemaError as e:
+            self.handle_log_level(&quot;SchemaError:&quot;, e)
+        return True
+</code></pre>
+<p>The validator should raise an error again.</p>
+<pre><code class="language-python">results = mlodaAPI.run_all(
+            [&quot;DocCustomValidateInputFeatures&quot;], {PyarrowTable}
+        )
+</code></pre>
+<h6 id="log-only-validator-and-extender-use">Log only validator and Extender use</h6>
+<ul>
+<li>We throw a warning instead of raising an error.</li>
+<li>We use the extender functionality to print out the runtime as an example.</li>
+</ul>
+<pre><code class="language-python">from mloda_core.abstract_plugins.function_extender import WrapperFunctionEnum, WrapperFunctionExtender
+from tests.test_documentation.test_documentation import DokuValidateInputFeatureExtender
+
+example_feature = Feature(&quot;DocCustomValidateInputFeatures&quot;, {&quot;ValidationLevel&quot;: &quot;warning&quot;})
+
+results = mlodaAPI.run_all(
+            [example_feature], {PyarrowTable}, function_extender={DokuValidateInputFeatureExtender()}
+        )
+</code></pre>
+<p>This time it does not raise an error, we should see the following output:</p>
+<pre><code class="language-python">&quot;Time taken: 0.19909930229187012&quot;
+</code></pre>
+<h4 id="validate-output-features">Validate Output Features</h4>
+<p>Output features are validated to ensure they meet the expected outcomes and performance metrics. This includes:</p>
+<ul>
+<li>Comparing output features against expected results.</li>
+<li>Validating the statistics of data.</li>
+<li>Ensuring the output data has the right types.</li>
+</ul>
+<p><strong>The implementation and use is very similar to validating input features.</strong></p>
+<h6 id="simple-validator_1">Simple validator</h6>
+<pre><code class="language-python">from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
+from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
+
+
+class DocBaseValidateOutputFeaturesBase(AbstractFeatureGroup):
+    @classmethod
+    def input_data(cls) -&gt; Optional[BaseInputData]:
+        return DataCreator({cls.get_class_name()})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:
+        return {cls.get_class_name(): [1, 2, 3]}
+
+    @classmethod
+    def validate_output_features(cls, data: Any, config: Options) -&gt; Optional[bool]:
+        &quot;&quot;&quot;This function should be used to validate the output data.&quot;&quot;&quot;
+
+        if len(data[cls.get_class_name()]) != 3:
+            raise ValueError(&quot;Data should have 3 elements&quot;)
+        return True
+
+results = mlodaAPI.run_all(
+            [&quot;DocBaseValidateOutputFeaturesBase&quot;], {PyarrowTable}
+        )
+results
+</code></pre>
+<p>As this case works, we should not see an error. However, we see how similar the functionalities of input and output validations are.</p>
+<h6 id="loading-a-validator-based-on-basevalidator_1">Loading a validator based on BaseValidator</h6>
+<p>After this simple validation, let's reuse the pandera example from before.</p>
+<pre><code class="language-python">class DocBaseValidateOutputFeaturesBaseNegativePandera(DocBaseValidateOutputFeaturesBase):
+    &quot;&quot;&quot;Pandera example test case. This one is related to the pandera testcase for validate_input_features.&quot;&quot;&quot;
+
+    @classmethod
+    def validate_output_features(cls, data: Any, features: FeatureSet) -&gt; Optional[bool]:
+        &quot;&quot;&quot;This function should be used to validate the output data.&quot;&quot;&quot;
+
+        validation_rules = {
+            cls.get_class_name(): Column(int, Check.in_range(1, 2)),
+        }
+        validator = DocExamplePanderaValidator(validation_rules, features.get_options_key(&quot;ValidationLevel&quot;))
+        return validator.validate(data)
+</code></pre>
+<p>This one should fail:</p>
+<pre><code class="language-python">results = mlodaAPI.run_all(
+            [&quot;DocBaseValidateOutputFeaturesBaseNegativePandera&quot;], {PyarrowTable}
+        )
+</code></pre>
+<h6 id="log-only-validator-and-extender-use_1">Log only validator and Extender use</h6>
+<p>We can of course also use an extender, which was defined somewhere else.</p>
+<pre><code class="language-python">from tests.test_core.test_validate_features.test_validate_output_features import ValidateOutputFeatureExtender
+
+results = mlodaAPI.run_all(
+            [&quot;DocBaseValidateOutputFeaturesBase&quot;], {PyarrowTable},
+            function_extender={ValidateOutputFeatureExtender()}
+        )
+</code></pre>
+<p>Output similar to:</p>
+<pre><code class="language-python">&quot;Time taken: 3.409385681152344e-05&quot;
+</code></pre>
+<h4 id="artifacts">Artifacts</h4>
+<p><code>Artifacts</code> can also be used for validation as the full API is available. A use case could be to store statistics of a feature and then validate them later on.
+For more details on artifacts, refer to the <a href="https://tomkaltofen.github.io/mloda/in_depth/artifacts/">artifact documentation</a>.</p>
+<h4 id="conclusion">Conclusion</h4>
+<p>In conclusion, feature validation is crucial for ensuring data quality in both input and output stages. By leveraging custom validators and extenders, validation can be tailored to specific needs while maintaining flexibility. This process helps detect inconsistencies early, improving the accuracy and robustness of data  and feature pipelines.</p>
+<h2 id="software-testing">Software Testing</h2>
+<p>Software testing is an integral part of maintaining data quality. It ensures that the software components used in data processing and analysis are functioning correctly.</p>
+<h4 id="unit-tests">Unit tests</h4>
+<p>Unit tests are written to test individual components of the software. These tests ensure that each function and method works as expected in isolation. Unit tests are typically run using a testing framework like <code>pytest</code>.</p>
+<h4 id="integration-tests">Integration Tests</h4>
+<p>Integration tests are used to test the interaction between different components of the software. These tests ensure that the components work together as expected and that data flows correctly through the system.</p>
+<h2 id="data-comparison">Data Comparison</h2>
+<p>Data comparison involves comparing different datasets to ensure consistency and accuracy. This includes:
+- Comparing new datasets with historical data to identify any discrepancies.
+- Validating data transformations to ensure they produce the expected results.
+- Using statistical methods to compare distributions and identify anomalies.</p>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../artifacts/" class="btn btn-neutral float-left" title="Artifacts"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../domain/" class="btn btn-neutral float-right" title="Domain concept">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+    
+      <span><a href="../artifacts/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../domain/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "../..";</script>
+    <script src="../../js/theme_extra.js"></script>
+    <script src="../../js/theme.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="../../img/favicon.ico" />
+    <title>Feature Groups - mloda docs</title>
+    <link rel="stylesheet" href="../../css/theme.css" />
+    <link rel="stylesheet" href="../../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Feature Groups";
+        var mkdocs_page_input_path = "chapter1/feature-groups.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="../.." class="icon icon-home"> mloda docs
+        </a>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption"><span class="caption-text">Home</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../..">mloda</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Introduction Notebooks</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" >Basics</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../examples/mloda_basics/0_table_of_content/">Table of Content</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../examples/mloda_basics/1_ml_mloda_intro/">Intro to the core interfaces of mloda</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../examples/mloda_basics/2_ml_advantage_process_focus/">What makes mloda unique?</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../examples/mloda_basics/3_ml_data_feature_feature_groups/">Data, Feature, FeatureSets and FeatureGroups in mloda</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../examples/mloda_basics/4_ml_data_producers_user_owner/">Data Producer, User, Owner in mloda</a>
+                </li>
+    </ul>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Getting Started</span></p>
+              <ul class="current">
+                  <li class="toctree-l1"><a class="reference internal" href="../installation/">Installation</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../api-request/">API Request</a>
+                  </li>
+                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Feature Groups</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#1-import-the-required-modules-and-set-file-references">1. Import the Required Modules and Set File References</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#2-define-the-feature-group">2. Define the Feature Group</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#3-execute-the-request-using-the-new-feature-group">3. Execute the Request Using the New Feature Group</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#4-summary">4. Summary</a>
+    </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../compute-frameworks/">Compute Frameworks</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../extender/">Extender</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">In Depth - Basics</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../in_depth/mloda-api/">mloda API</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../in_depth/access-feature-data/">(Feature) data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../in_depth/join_data/">Join data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../in_depth/filter_data/">Filter data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../in_depth/artifacts/">Artifacts</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">In Depth - Advanced</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../in_depth/data-quality/">Data quality</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../in_depth/domain/">Domain concept</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Development</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../development/">Contributers</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../license/">License - Apache 2.0</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../missing/">Missing</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Need Help?</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../faq/">FAQ</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../need-help/">Need Help</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../..">mloda docs</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../.." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">Getting Started</li>
+      <li class="breadcrumb-item active">Feature Groups</li>
+    <li class="wy-breadcrumbs-aside">
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h3 id="creating-a-custom-feature-group">Creating a Custom Feature Group</h3>
+<p>In this example, we’ll create a custom feature group that multiplies the results of each feature by 2. We'll implement a new feature group and then use it within mloda.</p>
+<h4 id="1-import-the-required-modules-and-set-file-references">1. Import the Required Modules and Set File References</h4>
+<p>Start by importing the necessary modules to define the custom feature group and perform calculations:</p>
+<pre><code class="language-python">import pyarrow.compute as pc
+import pyarrow as pa
+
+from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
+from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
+
+file_path = &quot;tests/test_plugins/feature_group/src/dataset/creditcard_2023_short.csv&quot;
+data_access_collection = DataAccessCollection(files={file_path})
+
+feature_list = [&quot;id&quot;,&quot;V1&quot;,&quot;V2&quot;,&quot;V3&quot;]
+example_feature_list = [f&quot;Example_{f}&quot; for f in feature_list]
+
+</code></pre>
+<h4 id="2-define-the-feature-group">2. Define the Feature Group</h4>
+<p>The custom feature group, Example, operates on a set of input features. It depends on the root features (e.g., "id", "V1", etc.) and renames them with the prefix "Example_". </p>
+<p>The calculation logic for multiplying each feature by 2 is implemented in the calculate_feature function.</p>
+<pre><code class="language-python">class Example(AbstractFeatureGroup):
+    def input_features(self, _, feature_name):
+        return {feature_name.name.split(&quot;_&quot;)[1]}
+
+    @classmethod
+    def calculate_feature(cls, data, _):
+        multiplied_columns = [pc.multiply(data[column], 2) for column in data.column_names]
+        col_names = [f&quot;{cls.get_class_name()}_{col_names}&quot; for col_names in data.column_names]
+        multiplied_table = pa.table(multiplied_columns, names=col_names)
+        return multiplied_table
+</code></pre>
+<h4 id="3-execute-the-request-using-the-new-feature-group">3. Execute the Request Using the New Feature Group</h4>
+<p>To use the newly defined feature group, simply add the <strong>"Example_"</strong> prefix to each feature name. mloda will automatically resolve the dependency between the <strong>ReadCsvFeatureGroup</strong> and the <strong>ExampleFeatureGroup</strong>.</p>
+<pre><code class="language-python">from mloda_core.api.request import mlodaAPI
+
+result = mlodaAPI.run_all(
+            example_feature_list, 
+            compute_frameworks=[&quot;PyarrowTable&quot;], 
+            data_access_collection=data_access_collection
+        )
+result[0]
+</code></pre>
+<p>Expected output:</p>
+<pre><code class="language-python">pyarrow.Table
+Example_V28: double
+Example_id: int64
+...
+Example_V28: [[-0.26000604758867731,-0.26311827417649086,-0....]]
+Example_id: [[0,2,4,...]]
+....
+</code></pre>
+<h4 id="4-summary">4. Summary</h4>
+<p>In this example, we implemented a custom feature group, Example, that multiplies each feature value by 2. By defining a straightforward input_features method and a calculate_feature method, we were able to extend mloda's feature engineering capabilities with custom transformations. We then executed the request by simply modifying the feature names with a prefix ("Example_"), allowing mloda to handle dependencies and computations automatically.</p>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../api-request/" class="btn btn-neutral float-left" title="API Request"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../compute-frameworks/" class="btn btn-neutral float-right" title="Compute Frameworks">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+    
+      <span><a href="../api-request/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../compute-frameworks/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "../..";</script>
+    <script src="../../js/theme_extra.js"></script>
+    <script src="../../js/theme.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

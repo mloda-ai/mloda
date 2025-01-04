@@ -1,4 +1,3 @@
-# This workflow will run every time you push to the main branch. It will install the dependencies, build the site and deploy it to gh-pages.
 name: Deploy MkDocs to GitHub Pages
 
 on:
@@ -7,7 +6,7 @@ on:
       - main
 
 jobs:
-  gh-pages:
+  deploy:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code

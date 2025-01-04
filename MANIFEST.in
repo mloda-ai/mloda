@@ -1,0 +1,7 @@
+global-exclude __pycache__/
+global-exclude *.pyc
+prune **/__pycache__
+include README.md
+include LICENSE.TXT
+include NOTICE.md
+prune tests*

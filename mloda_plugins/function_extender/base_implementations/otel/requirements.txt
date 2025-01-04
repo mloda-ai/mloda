@@ -1,0 +1,5 @@
+opentelemetry-api
+opentelemetry-sdk
+opentelemetry-instrumentation
+opentelemetry-instrumentation-logging
+opentelemetry-instrumentation-requests

@@ -120,7 +120,7 @@ class TestEngineMultipleCfw:
         finally:
             try:
                 runner.manager.shutdown()
-            except Exception:
+            except Exception:  # nosec
                 pass
 
         # make sure all datasets are dropped on server

@@ -106,7 +106,7 @@ class mlodaAPI:
         finally:
             try:
                 self.runner.manager.shutdown()
-            except Exception:
+            except Exception:  # nosec
                 pass
 
     def setup_engine(self) -> None:

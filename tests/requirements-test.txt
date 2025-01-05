@@ -10,3 +10,4 @@ tox
 pyarrow
 testbook
 ipykernel
+bandit

@@ -15,6 +15,7 @@
 | async-lru                              | 2.0.4          | MIT License                                             |
 | attrs                                  | 24.3.0         | UNKNOWN                                                 |
 | babel                                  | 2.16.0         | BSD License                                             |
+| bandit                                 | 1.8.0          | Apache Software License                                 |
 | beautifulsoup4                         | 4.12.3         | MIT License                                             |
 | bleach                                 | 6.2.0          | Apache Software License                                 |
 | cachetools                             | 5.5.0          | MIT License                                             |
@@ -57,7 +58,9 @@
 | jupyterlab                             | 4.3.4          | BSD License                                             |
 | jupyterlab_pygments                    | 0.3.0          | BSD License                                             |
 | jupyterlab_server                      | 2.27.3         | BSD License                                             |
+| markdown-it-py                         | 3.0.0          | MIT License                                             |
 | matplotlib-inline                      | 0.1.7          | BSD License                                             |
+| mdurl                                  | 0.1.2          | MIT License                                             |
 | mermaid-py                             | 0.7.0          | MIT License                                             |
 | mistune                                | 3.1.0          | BSD License                                             |
 | mktestdocs                             | 0.2.4          | Apache Software License 2.0                             |
@@ -83,6 +86,7 @@
 | pandera                                | 0.22.1         | MIT License                                             |
 | pandocfilters                          | 1.5.1          | BSD License                                             |
 | parso                                  | 0.8.4          | MIT License                                             |
+| pbr                                    | 6.1.0          | Apache Software License                                 |
 | pexpect                                | 4.9.0          | ISC License (ISCL)                                      |
 | platformdirs                           | 4.3.6          | MIT License                                             |
 | pluggy                                 | 1.5.0          | MIT License                                             |
@@ -108,12 +112,14 @@
 | requests                               | 2.32.3         | Apache Software License                                 |
 | rfc3339-validator                      | 0.1.4          | MIT License                                             |
 | rfc3986-validator                      | 0.1.1          | MIT License                                             |
+| rich                                   | 13.9.4         | MIT License                                             |
 | rpds-py                                | 0.22.3         | MIT License                                             |
-| ruff                                   | 0.8.5          | MIT License                                             |
+| ruff                                   | 0.8.6          | MIT License                                             |
 | six                                    | 1.17.0         | MIT License                                             |
 | sniffio                                | 1.3.1          | Apache Software License; MIT License                    |
 | soupsieve                              | 2.6            | MIT License                                             |
 | stack-data                             | 0.6.3          | MIT License                                             |
+| stevedore                              | 5.4.0          | Apache Software License                                 |
 | terminado                              | 0.18.1         | BSD License                                             |
 | testbook                               | 0.4.2          | BSD License                                             |
 | tinycss2                               | 1.4.0          | BSD License                                             |

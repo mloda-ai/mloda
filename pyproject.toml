@@ -34,3 +34,23 @@ include-package-data = true
 
 [tool.setuptools.dynamic]
 dependencies = { file = ["requirements.txt"] }
+
+[tool.bandit]
+exclude_dirs = [
+    "venv",
+    ".venv",
+    "migrations",
+    "__pycache__",
+    "build",
+    "dist",
+    ".devcontainer",
+    ".tox",
+    ".vscode",
+    "attribution",
+    "*.egg-info",
+    "site-packages"
+]
+skips = [
+    "B101", # Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+    "B104"  # Possible binding to all interfaces detected.
+]

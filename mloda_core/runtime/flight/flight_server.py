@@ -54,7 +54,7 @@ class FlightServer(flight.FlightServerBase):  # type: ignore
             finally:
                 try:
                     writer.close()
-                except Exception:
+                except Exception:  # nosec
                     pass
 
     def do_get(self, context: Any, ticket: Any) -> Any:

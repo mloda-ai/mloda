@@ -117,56 +117,74 @@ In the following section, we will see how this can look like.
 
 #### Merging Data in the Compute Framework
 
-The compute framework can implement the following methods to handle data merging:
+The compute framework uses the base class BaseMergeEngine as configuration.
+In this example, we show the PandasMergeEngine.
 
--   **merge_inner**,
--   **merge_left**,
--   **merge_right**,
--   **merge_full_outer**.
+``` python
+class PandasDataframe(ComputeFrameWork):
+    def merge_engine(self) -> Type[BaseMergeEngine]:
+        return PandasMergeEngine
+```
 
-These methods are invoked via the final implementation in the abstract **ComputeFramework** class.
+The merge can implement:
 
-Abstract Method Implementation:
+-   **merge_inner**
+-   **merge_left**
+-   **merge_right**
+-   **merge_full_outer**
+
+These methods are invoked via the final implementation in the abstract class **BaseMergeEngine**:
+
 ``` python
 @final
-def merge(self, right_data: Any, jointype: JoinType, left_index: Index, right_index: Index) -> Any:
+def merge(self, left_data: Any, right_data: Any, jointype: JoinType, left_index: Index, right_index: Index) -> Any:
     if jointype == JoinType.INNER:
-        return self.merge_inner(right_data, left_index, right_index)
+        return self.merge_inner(left_data, right_data, left_index, right_index)
     if jointype == JoinType.LEFT:
-        return self.merge_left(right_data, left_index, right_index)
-    if jointype == JoinType.RIGHT:
-        return self.merge_right(right_data, left_index, right_index)
-    if jointype == JoinType.OUTER:
-        return self.merge_full_outter(right_data, left_index, right_index)
+        return self.merge_left(left_data, right_data, left_index, right_index)
+    ...
 ```
 
-A simplified implementation in a compute framework can look like:
+A simplified MergeEngine implementation looks like this:
 ``` python
-def merge_inner(self, right_data: Any, left_index: Index, right_index: Index) -> Any:
-    return self.framework_merge_function("inner", right_data, left_index, right_index, JoinType.INNER)
+class PandasMergeEngine(BaseMergeEngine):
+    def merge_inner(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
+        return self.merge_logic("inner", left_data, right_data, left_index, right_index, JoinType.INNER)
 
-def merge_left(self, right_data: Any, left_index: Index, right_index: Index) -> Any:
-    return self.framework_merge_function("left outer", right_data, left_index, right_index, JoinType.LEFT)
+    def merge_left(...)
+        ...
 
-# ... Implement merge_right and merge_full_outer similarly
+    def merge_right(...)
+        ...
 
-def framework_merge_function(
-    self, join_type: str, right_data: Any, left_index: Index, right_index: Index, jointype: JoinType
-) -> Any:
-    if left_index == right_index:
-        self.data = self.data.join(right_data, keys=left_index.index[0], join_type=join_type)
-        return self.data
-    else:
-        raise ValueError(
-            f"JoinType {join_type} with indexes {left_index} and {right_index} are not yet implemented in {self.__class__.__name__}"
-        )
+    def merge_outer(...)
+        ...
+
+    def merge_logic(
+        self, join_type: str, left_data: Any, right_data: Any, left_index: Index, right_index: Index, jointype: JoinType
+    ) -> Any:
+        if left_index.is_multi_index() or right_index.is_multi_index():
+            raise ValueError(f"MultiIndex is not yet implemented {self.__class__.__name__}")
+
+        if left_index == right_index:
+            left_idx = left_index.index[0]
+            right_idx = right_index.index[0]
+            left_data = self.pd_merge()(left_data, right_data, left_on=left_idx, right_on=right_idx, how=join_type)
+            return left_data
+
+        else:
+            raise ValueError(
+                f"JoinType {join_type} {left_index} {right_index} are not yet implemented {self.__class__.__name__}"
+            )
 ```
+
+
 
 Key Components:
 
--   **join_type**: Type of join operation (e.g., "inner", "left outer").
--   **right_data**: Dataset to join with the left dataset.
+-   **left_data**: Left dataset for the join.
+-   **right_data**: Right dataset for the join.
 -   **left_index** and **right_index**: Indexes specifying join keys.
 -   **jointype**: Instance of JoinType.
 
-By implementing these merge functions, the compute framework automatically handles data merging operations in the background, aligning with the relationships defined by **Index**, **JoinType**, and **Link**.
+By implementing these merge functionality, the compute framework automatically handles data merging operations in the background, aligning with the relationships defined by **Index**, **JoinType**, and **Link**.

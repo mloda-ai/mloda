@@ -1,11 +1,11 @@
-from typing import Any, Set
+from typing import Any, Set, Type
+from mloda_core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
+from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_merge_engine import PyArrowMergeEngine
 import pyarrow as pa
 
 from mloda_core.abstract_plugins.components.cfw_transformer import ComputeFrameworkTransformMap
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
-from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.link import JoinType
 
 
 try:
@@ -18,6 +18,9 @@ class PyarrowTable(ComputeFrameWork):
     @staticmethod
     def expected_data_framework() -> Any:
         return pa.Table
+
+    def merge_engine(self) -> Type[BaseMergeEngine]:
+        return PyArrowMergeEngine
 
     def transform(
         self,
@@ -46,26 +49,3 @@ class PyarrowTable(ComputeFrameWork):
 
     def set_column_names(self) -> None:
         self.column_names = set(self.data.schema.names)
-
-    def merge_inner(self, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        return self.framework_merge_function("inner", right_data, left_index, right_index, JoinType.INNER)
-
-    def merge_left(self, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        return self.framework_merge_function("left outer", right_data, left_index, right_index, JoinType.LEFT)
-
-    def merge_right(self, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        return self.framework_merge_function("right outer", right_data, left_index, right_index, JoinType.RIGHT)
-
-    def merge_full_outter(self, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        return self.framework_merge_function("full outer", right_data, left_index, right_index, JoinType.OUTER)
-
-    def framework_merge_function(
-        self, join_type: str, right_data: Any, left_index: Index, right_index: Index, jointype: JoinType
-    ) -> Any:
-        if left_index == right_index:
-            self.data = self.data.join(right_data, keys=left_index.index[0], join_type=join_type)
-            return self.data
-        else:
-            raise ValueError(
-                f"JoinType {join_type} {left_index} {right_index} are not yet implemented {self.__class__.__name__}"
-            )

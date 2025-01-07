@@ -1,4 +1,5 @@
 from copy import deepcopy
+from mloda_core.abstract_plugins.components.link import JoinType
 import pytest
 import pyarrow as pa
 
@@ -51,7 +52,8 @@ class TestPyarrowTableComputeFramework:
     def test_merge_inner(self) -> None:
         _pytable = PyarrowTable(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
         _pytable.data = self.left_data
-        result = _pytable.merge_inner(self.right_data, self.idx, self.idx)
+        merge_engine = _pytable.merge_engine()
+        result = merge_engine().merge(_pytable.data, self.right_data, JoinType.INNER, self.idx, self.idx)
         assert len(result) == 1
         expected = self.left_data.join(self.right_data, keys="idx", join_type="inner")
         assert result.equals(expected)
@@ -59,14 +61,16 @@ class TestPyarrowTableComputeFramework:
     def test_merge_left(self) -> None:
         _pytable = PyarrowTable(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
         _pytable.data = self.left_data
-        result = _pytable.merge_left(self.right_data, self.idx, self.idx)
+        merge_engine = _pytable.merge_engine()
+        result = merge_engine().merge(_pytable.data, self.right_data, JoinType.LEFT, self.idx, self.idx)
         expected = self.left_data.join(self.right_data, keys="idx", join_type="left outer")
         assert result.equals(expected)
 
     def test_merge_right(self) -> None:
         _pytable = PyarrowTable(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
         _pytable.data = self.left_data
-        result = _pytable.merge_right(self.right_data, self.idx, self.idx)
+        merge_engine = _pytable.merge_engine()
+        result = merge_engine().merge(_pytable.data, self.right_data, JoinType.RIGHT, self.idx, self.idx)
         expected = self.left_data.join(self.right_data, keys="idx", join_type="right outer")
         expected = expected.sort_by("idx")
         result = result.sort_by("idx")
@@ -77,7 +81,8 @@ class TestPyarrowTableComputeFramework:
     def test_merge_full_outer(self) -> None:
         _pytable = PyarrowTable(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
         _pytable.data = deepcopy(self.left_data)
-        result = _pytable.merge_full_outter(self.right_data, self.idx, self.idx)
+        merge_engine = _pytable.merge_engine()
+        result = merge_engine().merge(_pytable.data, self.right_data, JoinType.OUTER, self.idx, self.idx)
         expected = self.left_data.join(self.right_data, keys="idx", join_type="full outer")
         expected = expected.sort_by("idx")
         result = result.sort_by("idx")

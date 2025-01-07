@@ -1,4 +1,6 @@
 from typing import Any, Dict, Set, Tuple, Type
+from mloda_core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
+from mloda_plugins.compute_framework.base_implementations.pandas.pandas_merge_engine import PandasMergeEngine
 import pyarrow as pa
 from mloda_core.abstract_plugins.components.cfw_transformer import ComputeFrameworkTransformMap
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
@@ -10,9 +12,6 @@ try:
     import pandas as pd
 except ImportError:
     pd = None
-
-from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.link import JoinType
 
 
 class PandasDataframe(ComputeFrameWork):
@@ -72,35 +71,6 @@ class PandasDataframe(ComputeFrameWork):
     def set_column_names(self) -> None:
         self.column_names = set(self.data.columns)
 
-    def merge_inner(self, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        return self.framework_merge_function("inner", right_data, left_index, right_index, JoinType.INNER)
-
-    def merge_left(self, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        return self.framework_merge_function("left", right_data, left_index, right_index, JoinType.LEFT)
-
-    def merge_right(self, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        return self.framework_merge_function("right", right_data, left_index, right_index, JoinType.RIGHT)
-
-    def merge_full_outter(self, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        return self.framework_merge_function("outer", right_data, left_index, right_index, JoinType.OUTER)
-
-    def framework_merge_function(
-        self, join_type: str, right_data: Any, left_index: Index, right_index: Index, jointype: JoinType
-    ) -> Any:
-        if left_index.is_multi_index() or right_index.is_multi_index():
-            raise ValueError(f"MultiIndex is not yet implemented {self.__class__.__name__}")
-
-        if left_index == right_index:
-            left_idx = left_index.index[0]
-            right_idx = right_index.index[0]
-            self.data = self.pd_merge()(self.data, right_data, left_on=left_idx, right_on=right_idx, how=join_type)
-            return self.data
-
-        else:
-            raise ValueError(
-                f"JoinType {join_type} {left_index} {right_index} are not yet implemented {self.__class__.__name__}"
-            )
-
     @staticmethod
     def get_framework_transform_functions(from_other: bool, other: Any) -> Tuple[Any, Dict[str, Any]]:
         def pyarrow_table_to_pandas_dataframe(data: pd.DataFrame, parameters: Dict[str, Any] = {}) -> pa.Table:
@@ -118,3 +88,6 @@ class PandasDataframe(ComputeFrameWork):
 
     def filter_engine(self) -> Type[BaseFilterEngine]:
         return PandasFilterEngine
+
+    def merge_engine(self) -> Type[BaseMergeEngine]:
+        return PandasMergeEngine

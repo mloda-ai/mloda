@@ -1,3 +1,4 @@
+from mloda_core.abstract_plugins.components.link import JoinType
 import pytest
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
@@ -60,7 +61,8 @@ class TestPandasDataframeComputeFramework:
     def test_merge_inner(self) -> None:
         _pdDf = PandasDataframe(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
         _pdDf.data = self.left_data
-        result = _pdDf.merge_inner(self.right_data, self.idx, self.idx)
+        merge_engine = _pdDf.merge_engine()
+        result = merge_engine().merge(_pdDf.data, self.right_data, JoinType.INNER, self.idx, self.idx)
         assert len(result) == 1
         expected = PandasDataframe.pd_merge()(self.left_data, self.right_data, on="idx", how="inner")
         assert result.equals(expected)
@@ -68,14 +70,16 @@ class TestPandasDataframeComputeFramework:
     def test_merge_left(self) -> None:
         _pdDf = PandasDataframe(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
         _pdDf.data = self.left_data
-        result = _pdDf.merge_left(self.right_data, self.idx, self.idx)
+        merge_engine = _pdDf.merge_engine()
+        result = merge_engine().merge(_pdDf.data, self.right_data, JoinType.LEFT, self.idx, self.idx)
         expected = PandasDataframe.pd_merge()(self.left_data, self.right_data, on="idx", how="left")
         assert result.equals(expected)
 
     def test_merge_right(self) -> None:
         _pdDf = PandasDataframe(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
         _pdDf.data = self.left_data
-        result = _pdDf.merge_right(self.right_data, self.idx, self.idx)
+        merge_engine = _pdDf.merge_engine()
+        result = merge_engine().merge(_pdDf.data, self.right_data, JoinType.RIGHT, self.idx, self.idx)
         expected = PandasDataframe.pd_merge()(self.left_data, self.right_data, on="idx", how="right")
         assert all(expected["col2"] == result["col2"])
         assert_series_equal(expected["col1"], result["col1"])
@@ -84,6 +88,7 @@ class TestPandasDataframeComputeFramework:
     def test_merge_full_outer(self) -> None:
         _pdDf = PandasDataframe(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
         _pdDf.data = self.left_data
-        result = _pdDf.merge_full_outter(self.right_data, self.idx, self.idx)
+        merge_engine = _pdDf.merge_engine()
+        result = merge_engine().merge(_pdDf.data, self.right_data, JoinType.OUTER, self.idx, self.idx)
         expected = PandasDataframe.pd_merge()(self.left_data, self.right_data, on="idx", how="outer")
         assert result.equals(expected)

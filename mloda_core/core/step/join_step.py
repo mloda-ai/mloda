@@ -43,7 +43,10 @@ class JoinStep(Step):
             raise ValueError("From_cfw should not be none for join step.")
         from_cfw_data = self.get_data(from_cfw, cfw)
 
-        cfw.merge(from_cfw_data, self.link.jointype, self.link.left_index, self.link.right_index)
+        merge_engine = cfw.merge_engine()
+        cfw.data = merge_engine().merge(
+            cfw.data, from_cfw_data, self.link.jointype, self.link.left_index, self.link.right_index
+        )
 
         if self.location:
             # check if dataset was uploaded before -> then overwrite

@@ -1,14 +1,13 @@
 from abc import ABC
 from typing import Any, List, Optional, Set, Type, Union, final
 from uuid import UUID, uuid4
+from mloda_core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
 import pyarrow as pa
 
 from mloda_core.abstract_plugins.components.cfw_transformer import ComputeFrameworkTransformMap
 from mloda_core.abstract_plugins.function_extender import WrapperFunctionExtender, WrapperFunctionEnum
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
-from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.link import JoinType
 from mloda_core.filter.filter_engine import BaseFilterEngine
 from mloda_core.runtime.flight.flight_server import FlightServer
 
@@ -126,17 +125,16 @@ class ComputeFrameWork(ABC):
         """
         return data
 
-    def merge_inner(self, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        raise ValueError(f"JoinType inner are not yet implemented {self.__class__.__name__}")
+    def merge_engine(self) -> Type[BaseMergeEngine]:
+        """
+        This function should return a subclass of the BaseMergeEngine.
+        With this, we can merge data from the same compute framework.
 
-    def merge_left(self, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        raise ValueError(f"JoinType left are not yet implemented {self.__class__.__name__}")
-
-    def merge_right(self, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        raise ValueError(f"JoinType right are not yet implemented {self.__class__.__name__}")
-
-    def merge_full_outter(self, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        raise ValueError(f"JoinType full outer are not yet implemented {self.__class__.__name__}")
+        This implementation is optional.
+        """
+        raise NotImplementedError(
+            f"Merge functionality is for this compute framework not implemented {self.__class__.__name__}."
+        )
 
     def set_column_names(self) -> None:
         pass
@@ -316,17 +314,6 @@ class ComputeFrameWork(ABC):
         if extender is None:
             return feature_group.calculate_feature(self.data, features)
         return extender(feature_group.calculate_feature, self.data, features)
-
-    @final
-    def merge(self, right_data: Any, jointype: JoinType, left_index: Index, right_index: Index) -> Any:
-        if jointype == JoinType.INNER:
-            return self.merge_inner(right_data, left_index, right_index)
-        if jointype == JoinType.LEFT:
-            return self.merge_left(right_data, left_index, right_index)
-        if jointype == JoinType.RIGHT:
-            return self.merge_right(right_data, left_index, right_index)
-        if jointype == JoinType.OUTER:
-            return self.merge_full_outter(right_data, left_index, right_index)
 
     @final
     def set_data(self, data: Any) -> None:

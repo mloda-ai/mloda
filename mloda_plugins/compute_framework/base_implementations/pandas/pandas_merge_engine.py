@@ -29,16 +29,10 @@ class PandasMergeEngine(BaseMergeEngine):
         if left_index.is_multi_index() or right_index.is_multi_index():
             raise ValueError(f"MultiIndex is not yet implemented {self.__class__.__name__}")
 
-        if left_index == right_index:
-            left_idx = left_index.index[0]
-            right_idx = right_index.index[0]
-            left_data = self.pd_merge()(left_data, right_data, left_on=left_idx, right_on=right_idx, how=join_type)
-            return left_data
-
-        else:
-            raise ValueError(
-                f"JoinType {join_type} {left_index} {right_index} are not yet implemented {self.__class__.__name__}"
-            )
+        left_idx = left_index.index[0]
+        right_idx = right_index.index[0]
+        left_data = self.pd_merge()(left_data, right_data, left_on=left_idx, right_on=right_idx, how=join_type)
+        return left_data
 
     @staticmethod
     def pd_merge() -> Any:

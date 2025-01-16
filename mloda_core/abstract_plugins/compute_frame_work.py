@@ -144,7 +144,7 @@ class ComputeFrameWork(ABC):
         self, feature_group: Any, features: Any, location: str | None, data: Optional[Any] = None
     ) -> Optional[Any]:
         # case multiprocessing or case base api input feature
-        if data:
+        if data is not None:
             self.data = data
 
         self.run_validate_input_features(feature_group, features)

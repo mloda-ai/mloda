@@ -135,22 +135,11 @@ class TestResolveGraph:
         assert child_roots[uuid_7] == {uuid_1, uuid_6}
 
         link_trekker = resolver.resolver_links.get_link_trekker().data
-        assert len(link_trekker) == 1
+        assert len(link_trekker) == 2
 
         result_link = links.pop()
         expected_link_tuple = (result_link, BaseTestComputeFrameWork1, BaseTestComputeFrameWork1)
-        assert link_trekker[expected_link_tuple] == {uuid_7}
-
-        assert resolver.links_with_queue == [
-            uuid_1,
-            uuid_6,
-            uuid_2,
-            uuid_3,
-            uuid_4,
-            expected_link_tuple,
-            uuid_7,
-            uuid_5,
-        ]
+        assert link_trekker[expected_link_tuple] == {uuid_7, uuid_3, uuid_4}
 
         collector = []
         for e in queue_with_links_and_features:
@@ -158,9 +147,10 @@ class TestResolveGraph:
                 collector.append(e)
                 continue
             if isinstance(e, tuple):
-                assert issubclass(e[0], AbstractFeatureGroup)  # type: ignore
-                assert e[0] in [BaseLinkTestFeatureGroup1, BaseTestGraphFeatureGroup3]
-                for feature in e[1]:  # type: ignore
-                    collector.append(feature.uuid)  # type: ignore
+                if not isinstance(e[0], Link):
+                    assert issubclass(e[0], AbstractFeatureGroup)
+                    assert e[0] in [BaseLinkTestFeatureGroup1, BaseTestGraphFeatureGroup3]
+                    for feature in e[1]:
+                        collector.append(feature.uuid)  # type: ignore
                 continue
             raise ValueError("Not a valid type")

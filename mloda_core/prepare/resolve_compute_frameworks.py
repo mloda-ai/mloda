@@ -30,6 +30,7 @@ class ResolveComputeFrameworks:
             new_planned_queue.append(p)
 
         link_trekker.order_links_by_frameworks()
+        link_trekker.detect_and_remove_circular_dependencies()
 
         new_planned_queue = self.order_queue_by_trekker_order(new_planned_queue, link_trekker)
         return new_planned_queue
@@ -113,7 +114,15 @@ class ResolveComputeFrameworks:
         new_cfws = set()
 
         for link, left_cfw, right_cfw in trekked_links:
-            if link.jointype in (JoinType.INNER, JoinType.OUTER, JoinType.LEFT):
+            if link.jointype == JoinType.RIGHT:
+                if right_cfw in compute_frameworks:
+                    new_cfws.add(right_cfw)
+                elif left_cfw in compute_frameworks:
+                    new_cfws.add(right_cfw)
+                    self.to_invert_trekker_collection.append((link, left_cfw, right_cfw))
+                continue
+
+            if link.jointype in JoinType:
                 if left_cfw in compute_frameworks and right_cfw in compute_frameworks:
                     # We keep the left framework if possible. This can be dropped maybe later with more tests.
                     new_cfws.add(left_cfw)
@@ -124,13 +133,6 @@ class ResolveComputeFrameworks:
                     self.to_invert_trekker_collection.append((link, left_cfw, right_cfw))
                 continue
 
-            if link.jointype == JoinType.RIGHT:
-                if right_cfw in compute_frameworks:
-                    new_cfws.add(right_cfw)
-                elif left_cfw in compute_frameworks:
-                    new_cfws.add(right_cfw)
-                    self.to_invert_trekker_collection.append((link, left_cfw, right_cfw))
-                continue
             raise ValueError(
                 f"This jointype is not implemented: {link.jointype}. Possible types are: {[member.value for member in JoinType]}"
             )

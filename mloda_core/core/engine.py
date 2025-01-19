@@ -169,6 +169,17 @@ class Engine:
                 self.global_filter.add_filter_to_collection(feature_group_class, feature.name, match)
                 self.add_feature_to_collection(feature_group_class, match.filter_feature, features.child_uuid)
 
+    def add_feature_link_to_links(self, feature: Feature) -> None:
+        """With this functionality, we can add links with a feature instead via mloda API."""
+
+        if feature.link is None:
+            return
+
+        if self.links is None:
+            self.links = {feature.link}
+        else:
+            self.links.add(feature.link)
+
     def add_feature_to_collection(
         self,
         feature_group_class: Type[AbstractFeatureGroup],
@@ -179,6 +190,8 @@ class Engine:
         feature_collection = self.feature_group_collection[feature_group_class]
 
         if feature not in feature_collection:
+            self.add_feature_link_to_links(feature)
+
             self.feature_link_parents[feature.uuid] = set()
             feature_collection.add(feature)
             return True

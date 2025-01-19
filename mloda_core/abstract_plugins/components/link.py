@@ -9,10 +9,24 @@ from mloda_core.abstract_plugins.components.index.index import Index
 
 
 class JoinType(Enum):
+    """
+    Enum defining types of dataset merge operations.
+
+    Attributes:
+        INNER: Includes rows with matching keys from both datasets.
+        LEFT: Includes all rows from the left dataset, with matches from the right.
+        RIGHT: Includes all rows from the right dataset, with matches from the left.
+        OUTER: Includes all rows from both datasets, filling unmatched values with nulls.
+        APPEND: Stacks datasets vertically, preserving all rows from both.
+        UNION: Combines datasets, removing duplicate rows.
+    """
+
     INNER = "inner"
     LEFT = "left"
     RIGHT = "right"
     OUTER = "outer"
+    APPEND = "append"
+    UNION = "union"
 
 
 class Link:
@@ -72,6 +86,22 @@ class Link:
     ) -> Link:
         return cls(JoinType.RIGHT, left, right)
 
+    @classmethod
+    def append(
+        cls,
+        left: Tuple[Type[Any], Index],
+        right: Tuple[Type[Any], Index],
+    ) -> Link:
+        return cls(JoinType.APPEND, left, right)
+
+    @classmethod
+    def union(
+        cls,
+        left: Tuple[Type[Any], Index],
+        right: Tuple[Type[Any], Index],
+    ) -> Link:
+        return cls(JoinType.UNION, left, right)
+
     def matches(
         self,
         other_left_feature_group: Type[Any],
@@ -121,9 +151,11 @@ class Link:
                     continue
 
                 # case: A B and B A -> is not clear which join to use
+                # We exclude here append and union, because they are not directional.
                 if (
                     i_link.left_feature_group == j_link.right_feature_group
                     and i_link.right_feature_group == j_link.left_feature_group
+                    and i_link.jointype not in [JoinType.APPEND, JoinType.UNION]
                 ):
                     raise ValueError(
                         f"Link {i_link} and {j_link} have at least two different defined joins. Please remove one."

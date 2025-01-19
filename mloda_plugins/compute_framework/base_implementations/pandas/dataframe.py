@@ -77,7 +77,13 @@ class PandasDataframe(ComputeFrameWork):
             return pa.Table.to_pandas(data, **parameters)
 
         def pandas_dataframe_to_pyarrow_table(data: pd.DataFrame, parameters: Dict[str, Any] = {}) -> pa.Table:
-            return pa.Table.from_pandas(data, **parameters)
+            # drop pandas schema metadata
+            pyarrow_table = pa.Table.from_pandas(data, **parameters)
+            schema = pyarrow_table.schema
+            metadata = schema.metadata.copy() if schema.metadata else {}
+            metadata.pop(b"pandas", None)
+            new_schema = schema.with_metadata(metadata)
+            return pa.Table.from_arrays(pyarrow_table.columns, schema=new_schema)
 
         if other == pa.Table:
             if from_other:

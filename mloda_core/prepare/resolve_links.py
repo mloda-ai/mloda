@@ -68,10 +68,52 @@ class LinkTrekker:
              1.   (Link("inner", right_1, right_2): {uuid2}
              2.   (Link("inner", left, right_1), left, right_1): {uuid1},
         """
+
         self.order_links_by_frameworks()
         self.order_ordered_ids_by_relation()
         self.create_data_ordered()
         return self.data_ordered
+
+    def drop_dependency_in_case_of_circular_dependencies(self) -> None:
+        def adjust_order(data: Dict[LinkFrameworkTrekker, Set[UUID]], k_out: UUID, k_int: UUID) -> None:
+            found_out = None
+            found_in = None
+
+            for link_fw, dependant_features in data.items():
+                if link_fw[0].uuid == k_out:
+                    found_out = (k_out, dependant_features)
+
+                if link_fw[0].uuid == k_int:
+                    found_in = (k_in, dependant_features)
+
+            if found_out is None or found_in is None:
+                raise ValueError("Link not found in data!")
+
+            if len(found_out[1]) >= len(found_in[1]):
+                k_to_drop = found_out[0]
+                k_not_to_drop = found_in[0]
+            elif len(found_out[1]) < len(found_in[1]):
+                k_to_drop = found_in[0]
+                k_not_to_drop = found_out[0]
+            else:
+                raise ValueError("This should not happen!")
+
+            for k_order, v_order in self.order.items():
+                if k_not_to_drop != k_order:
+                    continue
+
+                if k_to_drop in v_order:
+                    v_order.remove(k_to_drop)
+                    break
+
+        for k_out, v_out in self.order.items():
+            for k_in, v_in in self.order.items():
+                if k_out == k_in:
+                    continue
+
+                if k_out in v_in:
+                    if k_in in v_out:
+                        adjust_order(self.data, k_out, k_in)
 
     def order_ordered_ids_by_relation(self) -> None:
         """
@@ -126,15 +168,18 @@ class LinkTrekker:
     def order_links_by_frameworks(self) -> None:
         for trekker, uuids in self.data.items():
             link = trekker[0]
-            _ = trekker[1]
+            left_framework = trekker[1]
             right_framework = trekker[2]
 
             for other_trekker, other_uuids in self.data.items():
                 other_link = other_trekker[0]
                 other_left_framework = other_trekker[1]
-                __ = other_trekker[2]
+                _ = other_trekker[2]
 
                 if link.uuid == other_link.uuid:
+                    continue
+
+                if right_framework == other_left_framework == left_framework:
                     continue
 
                 if right_framework == other_left_framework:
@@ -143,8 +188,52 @@ class LinkTrekker:
                     else:
                         self.order[other_link.uuid].add(link.uuid)
 
+        self.drop_dependency_in_case_of_circular_dependencies()
+
+    def detect_and_remove_circular_dependencies(self) -> None:
+        """
+        In case we have a circular dependency, we need to remove the circular dependency.
+
+        Example:
+            This case occur in append and union joins, where e.g. we have 4 features to append and thus 3 links.
+            It is not clear, which to append first, as they are all dependent on each other. This resolves it in a
+            random matter.
+        """
+
+        def is_circular(
+            node: UUID, path: List[UUID], visited: Set[UUID], dependency_map: Dict[UUID, Set[UUID]]
+        ) -> bool:
+            """Helper function to detect cycles using Depth First Search."""
+            visited.add(node)
+            path.append(node)
+
+            for neighbor in dependency_map.get(node, set()):
+                if neighbor in path:
+                    return True
+                if neighbor not in visited:
+                    if is_circular(neighbor, path, visited, dependency_map):
+                        return True
+            path.pop()
+            return False
+
+        dependency_dict = self.order
+
+        removed = set()
+        while True:
+            circular_found = False
+            visited: Set[UUID] = set()
+            for node in dependency_dict:
+                if node not in visited and is_circular(node, [], visited, dependency_dict):
+                    circular_found = True
+                    removed.add(node)  # add the node that started the circle
+                    del dependency_dict[node]
+                    break
+            if not circular_found:
+                break
+
     def create_data_ordered(self) -> None:
         # fill ordered dict by priority
+
         for o_id, oo_uuids in self.order.items():
             for k, v in self.data.items():
                 if k[0].uuid == o_id:
@@ -175,7 +264,7 @@ class ResolveLinks:
 
         for uuid in queue:
             for link, link_uuids in ordered.items():
-                if link[0] in already_joined:
+                if link in already_joined:
                     continue
 
                 for link_id in link_uuids:
@@ -192,7 +281,7 @@ class ResolveLinks:
         self.graph.set_all_parents_for_each_child()
         self.graph.set_root_parents_by_direct_()
 
-        self.go_through_each_child_with_root_and_look_for_links()
+        self.go_through_each_child_and_its_parents_and_look_for_links()
         self.validate_link_trekker()
 
     def validate_link_trekker(self) -> None:
@@ -215,40 +304,31 @@ class ResolveLinks:
                             f"Link {link} and {other} have the same feature groups, but different join types!"
                         )
 
-                    # case index different
-                    if link.left_index != other.left_index or link.right_index != other.right_index:
-                        raise Exception(f"Link {link} and {other} have the same feature groups, but different indexes!")
-
-                # check if right/left switch
-                # if (
-                #    link.left_feature_group.get_class_name() == other.right_feature_group.get_class_name()
-                #    and link.right_feature_group.get_class_name() == other.left_feature_group.get_class_name()
-                # ):
-                #    raise Exception(f"Link {link} and {other} have inverted feature groups!")
-
     def get_link_trekker(self) -> LinkTrekker:
         return self.link_trekker
 
-    def go_through_each_child_with_root_and_look_for_links(self) -> None:
-        for child_id, root_ids in self.graph.child_with_root.items():
-            for root_id_out in root_ids:
-                for root_id_in in root_ids:
-                    if root_id_out == root_id_in:
-                        continue
+    def go_through_each_child_and_its_parents_and_look_for_links(self) -> None:
+        if not self.links:
+            return
 
-                    r_left = self.graph.get_nodes()[root_id_out]
-                    r_right = self.graph.get_nodes()[root_id_in]
+        for link in self.links:
+            for child, parents in self.graph.parent_to_children_mapping.items():
+                for parent_in in parents:
+                    for parent_out in parents:
+                        if parent_in == parent_out:
+                            continue
 
-                    if self.links:
-                        for link in self.links:
-                            if link.matches(
-                                other_left_feature_group=r_left.feature_group_class,
-                                other_right_feature_group=r_right.feature_group_class,
-                            ):
-                                key = self.create_link_trekker_key(
-                                    link, r_left.feature.compute_frameworks, r_right.feature.compute_frameworks
-                                )
-                                self.set_link_trekker(key, child_id)
+                        r_left = self.graph.get_nodes()[parent_in]
+                        r_right = self.graph.get_nodes()[parent_out]
+
+                        if link.matches(
+                            other_left_feature_group=r_left.feature_group_class,
+                            other_right_feature_group=r_right.feature_group_class,
+                        ):
+                            key = self.create_link_trekker_key(
+                                link, r_left.feature.compute_frameworks, r_right.feature.compute_frameworks
+                            )
+                            self.set_link_trekker(key, child)
 
     def set_link_trekker(self, link_trekker_key: LinkFrameworkTrekker, uuid: UUID) -> None:
         self.link_trekker.update(link_trekker_key, uuid)

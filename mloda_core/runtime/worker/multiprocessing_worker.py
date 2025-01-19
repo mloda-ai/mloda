@@ -53,6 +53,11 @@ def worker(
                 from_cfw = cfw_register.get_cfw_uuid(command.left_framework.get_class_name(), command.link.uuid)  # type: ignore
 
                 if from_cfw is None:
+                    from_cfw = cfw_register.get_cfw_uuid(
+                        command.left_framework.get_class_name(), next(iter(command.right_framework_uuids))
+                    )
+
+                if from_cfw is None:
                     raise ValueError(f"from_cfw should not be none: {command}")
 
             if isinstance(command, TransformFrameworkStep):

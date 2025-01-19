@@ -149,7 +149,7 @@ A simplified MergeEngine implementation looks like this:
 ``` python
 class PandasMergeEngine(BaseMergeEngine):
     def merge_inner(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        return self.merge_logic("inner", left_data, right_data, left_index, right_index, JoinType.INNER)
+        return self.join_logic("inner", left_data, right_data, left_index, right_index, JoinType.INNER)
 
     def merge_left(...)
         ...
@@ -160,7 +160,7 @@ class PandasMergeEngine(BaseMergeEngine):
     def merge_outer(...)
         ...
 
-    def merge_logic(
+    def join_logic(
         self, join_type: str, left_data: Any, right_data: Any, left_index: Index, right_index: Index, jointype: JoinType
     ) -> Any:
         if left_index.is_multi_index() or right_index.is_multi_index():

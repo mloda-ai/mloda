@@ -41,12 +41,14 @@ class JoinStep(Step):
 
         if from_cfw is None:
             raise ValueError("From_cfw should not be none for join step.")
-        from_cfw_data = self.get_data(from_cfw, cfw)
+        from_cfw_data, from_cfw_uuid = self.get_data(from_cfw, cfw)
 
         merge_engine = cfw.merge_engine()
         cfw.data = merge_engine().merge(
             cfw.data, from_cfw_data, self.link.jointype, self.link.left_index, self.link.right_index
         )
+
+        cfw_register.add_to_merge_relation(cfw.uuid, from_cfw_uuid, cls_name=cfw.get_class_name())
 
         if self.location:
             # check if dataset was uploaded before -> then overwrite
@@ -65,10 +67,10 @@ class JoinStep(Step):
         if self.location and isinstance(from_cfw, UUID):
             data = FlightServer.download_table(self.location, str(from_cfw))
             data = cfw.convert_flyserver_data_back(data)
-            return data
+            return data, from_cfw
         if isinstance(from_cfw, UUID):
             raise ValueError("From_cfw is a UUID, but we are not using flightserver.")
-        return from_cfw.get_data()
+        return from_cfw.get_data(), from_cfw.uuid
 
     def matched(self, other_framework: Type[ComputeFrameWork], uuid: UUID) -> Optional[UUID]:
         """

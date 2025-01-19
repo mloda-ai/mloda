@@ -31,6 +31,9 @@ class CfwManager:
             Tuple[str, Set[UUID]],
         ] = {}
 
+        # merge relation
+        self.cfw_merge_relation: Dict[UUID, Tuple[UUID, str]] = {}
+
         # multiprocessing
         self.location: Optional[str] = None
         self.error = False
@@ -63,8 +66,31 @@ class CfwManager:
         for cfw_uuid, value in self.compute_frameworks.items():
             cls_name, children_if_root = value
             if cf_class_name == cls_name and feature_uuid in children_if_root:
+                cfw_uuid = self.find_leftmost(cfw_uuid, cls_name)
                 return cfw_uuid
         return None
+
+    def add_to_merge_relation(self, left_uuid: UUID, right_uuid: UUID, cls_name: str) -> None:
+        self.cfw_merge_relation[right_uuid] = (left_uuid, cls_name)
+
+        if left_uuid not in self.cfw_merge_relation:
+            self.cfw_merge_relation[left_uuid] = (left_uuid, cls_name)
+
+    def find_leftmost(self, uuid: UUID, cls_name: str) -> UUID:
+        # Was not merged
+        if uuid not in self.cfw_merge_relation:
+            return uuid
+
+        leftmost_uuid = uuid  # Start with the current UUID
+
+        # traverse through the merge relation to find the leftmost UUID
+        while self.cfw_merge_relation[uuid][0] != uuid:
+            uuid = self.cfw_merge_relation[uuid][0]
+
+            # Only take those with the same cfw_class
+            if self.cfw_merge_relation[uuid][1] == cls_name:
+                leftmost_uuid = uuid
+        return leftmost_uuid
 
     def add_cfw_to_compute_frameworks(self, uuid: UUID, cls_name: str, children_if_root: Set[UUID]) -> None:
         if self.compute_frameworks.get(uuid):

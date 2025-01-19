@@ -6,6 +6,7 @@ from mloda_core.abstract_plugins.components.data_types import DataType
 
 from mloda_core.abstract_plugins.components.domain import Domain
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
+from mloda_core.abstract_plugins.components.link import Link
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.utils import get_all_subclasses
@@ -44,6 +45,7 @@ class Feature:
         compute_framework: Optional[str] = None,
         data_type: Optional[Union[DataType, str]] = None,
         initial_requested_data: bool = False,
+        link: Optional[Link] = None,
     ):
         self.name = FeatureName(name) if isinstance(name, str) else name
         self.options = Options(options) if isinstance(options, dict) else options
@@ -61,6 +63,8 @@ class Feature:
         self.child_options: Optional[Options] = None
 
         self.initial_requested_data = initial_requested_data
+
+        self.link = link
 
     @classmethod
     def not_typed(cls, name: Union[str, FeatureName], options: dict[str, Any] = {}) -> Feature:

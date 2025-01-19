@@ -1,5 +1,6 @@
 from typing import Any
 
+
 from mloda_core.abstract_plugins.components.index.index import Index
 from mloda_core.abstract_plugins.components.link import JoinType
 from mloda_core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
@@ -21,10 +22,25 @@ class PyArrowMergeEngine(BaseMergeEngine):
     def merge_logic(
         self, join_type: str, left_data: Any, right_data: Any, left_index: Index, right_index: Index, jointype: JoinType
     ) -> Any:
-        if left_index == right_index:
-            left_data = left_data.join(right_data, keys=left_index.index[0], join_type=join_type)
-            return left_data
+        if left_index.is_multi_index() or right_index.is_multi_index():
+            raise ValueError(f"MultiIndex is not yet implemented {self.__class__.__name__}")
+
+        if left_index.index[0] != right_index.index[0]:
+            # PyArrow drops the index column in all cases.
+            # Thus, we create a copy of the index column and append it to the right_data to avoid this in case of different index columns.
+            _right_index = "mloda_right_index"
+            if _right_index in right_data.column_names:
+                raise ValueError(f"Column name {_right_index} already exists in right_data.")
+
+            right_data = right_data.append_column(_right_index, right_data[right_index.index[0]])
         else:
-            raise ValueError(
-                f"JoinType {join_type} {left_index} {right_index} are not yet implemented {self.__class__.__name__}"
-            )
+            _right_index = right_index.index[0]
+
+        left_data = left_data.join(
+            right_data,
+            keys=[left_index.index[0]],
+            right_keys=[_right_index],
+            join_type=join_type,
+        )
+
+        return left_data

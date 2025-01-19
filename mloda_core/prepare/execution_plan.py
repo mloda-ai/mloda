@@ -1,6 +1,8 @@
 from copy import copy, deepcopy
+import time
 from typing import Any, Generator, List, Optional, Set, Tuple, Type, Dict, Union
 from uuid import UUID
+
 from mloda_core.abstract_plugins.components.input_data.api.api_input_data_collection import (
     ApiInputDataCollection,
 )
@@ -118,6 +120,71 @@ class ExecutionPlan:
             right_framework_uuids=ep.right_framework_uuids,
         )
 
+    def reorder_execution_plan(
+        self, execution_plan: List[Union[JoinStep, FeatureGroupStep]]
+    ) -> List[Union[JoinStep, FeatureGroupStep]]:
+        """
+        During joinstep creation, we might have created a joinstep which is not in the correct order.
+        Here, we resort them by the required_uuids of a step.
+        """
+
+        calculated_required_uuids: Set[UUID] = set()
+
+        def is_already_done(required_uuids: Set[UUID]) -> bool:
+            # handle the case where we have no required uuids
+            if len(required_uuids) == 0 and first_loop is True:
+                return False
+
+            # handle the case where all required uuids are already calculated
+            not_done = required_uuids - calculated_required_uuids
+            if len(not_done) == 0:
+                return False
+            return True
+
+        new_execution_plan: List[Union[JoinStep, FeatureGroupStep]] = []
+
+        # loop variables
+        first_loop = True  # This is needed to handle the case where we have no required uuids
+        infinite_loop_break = time.time()  # This is needed to break the loop if we are in an infinite loop (error)
+
+        while True:
+            for ep in execution_plan:
+                if ep in new_execution_plan:
+                    continue
+
+                if is_already_done(ep.required_uuids):
+                    continue
+
+                if isinstance(ep, FeatureGroupStep):
+                    if not is_already_done(ep.required_uuids):
+                        calculated_required_uuids.update(ep.get_uuids())
+                        calculated_required_uuids.add(ep.uuid)
+
+                        new_execution_plan.append(ep)
+
+                elif isinstance(ep, JoinStep):
+                    if not is_already_done(ep.required_uuids):
+                        calculated_required_uuids.update(ep.get_uuids())
+                        new_execution_plan.append(ep)
+                else:
+                    raise ValueError(f"Element {ep} is not a valid element.")
+
+            first_loop = False
+            if len(execution_plan) == len(new_execution_plan):
+                break
+
+            if time.time() - infinite_loop_break > 0.1:
+                raise ValueError(
+                    "This should not happen. We are in an infinite loop. This means a step is not getting resolved. A step may be a feature, join or transform framework step."
+                )
+
+        # Sanity check that all elements are still there.
+        for ep in execution_plan:
+            if ep not in new_execution_plan:
+                raise ValueError(f"Element {ep} is not in the new execution plan.")
+
+        return new_execution_plan
+
     def add_tfs(
         self, execution_plan: List[Union[JoinStep, FeatureGroupStep]], graph: Graph
     ) -> List[Union[TransformFrameworkStep, JoinStep, FeatureGroupStep]]:
@@ -125,6 +192,8 @@ class ExecutionPlan:
 
         left_join_frameworks: Set[JoinStep] = {ep for ep in execution_plan if isinstance(ep, JoinStep)}
         need_to_upload_collector: Set[UUID] = set()
+
+        execution_plan = self.reorder_execution_plan(execution_plan)
 
         for ep in execution_plan:
             if isinstance(ep, JoinStep):
@@ -153,19 +222,24 @@ class ExecutionPlan:
                                 if uuid in ep.right_framework_uuids:
                                     # add the link uuid to the children_if_root of the right feature group
                                     inner_ep.add_value_to_children_if_root(ep.link.uuid)
+
+                                    # add to upload as this is the right feature group gets accessed in mp by other process
+                                    need_to_upload_collector.update(ep.right_framework_uuids)
                                     break
 
                                 if uuid in ep.left_framework_uuids:
                                     # add the link uuid to the children_if_root of the left feature group
+
                                     store_val = uuid
+
+                            if store_val is None:
+                                continue
 
                             # Check if any element of ep.left_framework_uuids is in inner_ep.required_uuids
                             # same for right framework
                             if any(elem in inner_ep.required_uuids for elem in ep.left_framework_uuids) and any(
                                 elem in inner_ep.required_uuids for elem in ep.right_framework_uuids
                             ):
-                                if store_val is None:
-                                    continue
                                 inner_ep.tfs_ids.add(store_val)
                                 inner_ep.features.any_uuid = store_val  # Resets the any_uuid to one of the left side
 
@@ -288,6 +362,8 @@ class ExecutionPlan:
             if len(children_uuids) == 0:
                 raise ValueError(f"Link {link} has no matching uuids.")
 
+        children_uuids = self.reduce_children_to_one_level(children_uuids, graph)
+
         # This gets the parent ids of the joinstep, which needs to be calulated before the link.
         required_uuids: Set[UUID] = set()
         for uuid in children_uuids:
@@ -336,6 +412,21 @@ class ExecutionPlan:
         # This makes sure that we do not write on the same datasets due to overlapping joins at once.
         self.joinstep_collection.add(js)
         return js
+
+    def reduce_children_to_one_level(self, children_uuids: Set[UUID], graph: Graph) -> Set[UUID]:
+        """
+        We reduce the children to one level. This is needed for the joinstep creation.
+        """
+
+        new_children_uuids: Set[UUID] = copy(children_uuids)
+        for child in children_uuids:
+            child_of_child = graph.adjacency_list[child]
+
+            for c_o_c in child_of_child:
+                if c_o_c in children_uuids:
+                    new_children_uuids.remove(c_o_c)
+
+        return new_children_uuids
 
     def is_valid_join_step(
         self,

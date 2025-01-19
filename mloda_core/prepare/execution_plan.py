@@ -294,9 +294,6 @@ class ExecutionPlan:
                                         store_val  # Resets the any_uuid to one of the left side
                                     )
 
-                                inner_ep.tfs_ids.add(store_val)
-                                inner_ep.features.any_uuid = store_val  # Resets the any_uuid to one of the left side
-
             elif isinstance(ep, FeatureGroupStep):
                 if ep.features.any_uuid is None:
                     raise ValueError(f"Feature group {ep.feature_group} has no uuid.")

@@ -30,7 +30,6 @@ class ResolveComputeFrameworks:
             new_planned_queue.append(p)
 
         link_trekker.order_links_by_frameworks()
-        link_trekker.detect_and_remove_circular_dependencies()
 
         new_planned_queue = self.order_queue_by_trekker_order(new_planned_queue, link_trekker)
         return new_planned_queue

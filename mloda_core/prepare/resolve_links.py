@@ -190,47 +190,6 @@ class LinkTrekker:
 
         self.drop_dependency_in_case_of_circular_dependencies()
 
-    def detect_and_remove_circular_dependencies(self) -> None:
-        """
-        In case we have a circular dependency, we need to remove the circular dependency.
-
-        Example:
-            This case occur in append and union joins, where e.g. we have 4 features to append and thus 3 links.
-            It is not clear, which to append first, as they are all dependent on each other. This resolves it in a
-            random matter.
-        """
-
-        def is_circular(
-            node: UUID, path: List[UUID], visited: Set[UUID], dependency_map: Dict[UUID, Set[UUID]]
-        ) -> bool:
-            """Helper function to detect cycles using Depth First Search."""
-            visited.add(node)
-            path.append(node)
-
-            for neighbor in dependency_map.get(node, set()):
-                if neighbor in path:
-                    return True
-                if neighbor not in visited:
-                    if is_circular(neighbor, path, visited, dependency_map):
-                        return True
-            path.pop()
-            return False
-
-        dependency_dict = self.order
-
-        removed = set()
-        while True:
-            circular_found = False
-            visited: Set[UUID] = set()
-            for node in dependency_dict:
-                if node not in visited and is_circular(node, [], visited, dependency_dict):
-                    circular_found = True
-                    removed.add(node)  # add the node that started the circle
-                    del dependency_dict[node]
-                    break
-            if not circular_found:
-                break
-
     def create_data_ordered(self) -> None:
         # fill ordered dict by priority
 

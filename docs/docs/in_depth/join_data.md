@@ -60,6 +60,8 @@ class JoinType(Enum):
     LEFT = "left"
     RIGHT = "right"
     OUTER = "outer"
+    APPEND = "append"
+    UNION = "union"
 
 join_type = JoinType.INNER
 ```
@@ -132,6 +134,8 @@ The merge can implement:
 -   **merge_left**
 -   **merge_right**
 -   **merge_full_outer**
+-   **merge_append**
+-   **merge_union**
 
 These methods are invoked via the final implementation in the abstract class **BaseMergeEngine**:
 

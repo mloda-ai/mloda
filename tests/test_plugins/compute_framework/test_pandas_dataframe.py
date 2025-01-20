@@ -92,3 +92,19 @@ class TestPandasDataframeComputeFramework:
         result = merge_engine().merge(_pdDf.data, self.right_data, JoinType.OUTER, self.idx, self.idx)
         expected = PandasDataframe.pd_merge()(self.left_data, self.right_data, on="idx", how="outer")
         assert result.equals(expected)
+
+    def test_merge_append(self) -> None:
+        _pdDf = PandasDataframe(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        _pdDf.data = self.left_data
+        merge_engine = _pdDf.merge_engine()
+        result = merge_engine().merge(_pdDf.data, self.right_data, JoinType.APPEND, self.idx, self.idx)
+        expected = pd.concat([self.left_data, self.right_data], ignore_index=True)
+        assert result.equals(expected)
+
+    def test_merge_union(self) -> None:
+        _pdDf = PandasDataframe(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        _pdDf.data = self.left_data
+        merge_engine = _pdDf.merge_engine()
+        result = merge_engine().merge(_pdDf.data, self.right_data, JoinType.UNION, self.idx, self.idx)
+        expected = pd.concat([self.left_data, self.right_data], ignore_index=True).drop_duplicates()
+        assert result.equals(expected)

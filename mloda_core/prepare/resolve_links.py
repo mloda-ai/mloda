@@ -192,6 +192,7 @@ class LinkTrekker:
 
     def create_data_ordered(self) -> None:
         # fill ordered dict by priority
+
         for o_id, oo_uuids in self.order.items():
             for k, v in self.data.items():
                 if k[0].uuid == o_id:
@@ -261,17 +262,6 @@ class ResolveLinks:
                         raise Exception(
                             f"Link {link} and {other} have the same feature groups, but different join types!"
                         )
-
-                    # case index different
-                    if link.left_index != other.left_index or link.right_index != other.right_index:
-                        raise Exception(f"Link {link} and {other} have the same feature groups, but different indexes!")
-
-                # check if right/left switch
-                # if (
-                #    link.left_feature_group.get_class_name() == other.right_feature_group.get_class_name()
-                #    and link.right_feature_group.get_class_name() == other.left_feature_group.get_class_name()
-                # ):
-                #    raise Exception(f"Link {link} and {other} have inverted feature groups!")
 
     def get_link_trekker(self) -> LinkTrekker:
         return self.link_trekker

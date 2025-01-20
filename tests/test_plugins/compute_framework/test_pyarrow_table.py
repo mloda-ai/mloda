@@ -87,3 +87,12 @@ class TestPyarrowTableComputeFramework:
         expected = expected.sort_by("idx")
         result = result.sort_by("idx")
         assert result.equals(expected)
+
+    def test_merge_append(self) -> None:
+        _pytable = PyarrowTable(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        _pytable.data = self.left_data
+        merge_engine = _pytable.merge_engine()
+        right_data = pa.table({"idx": [1, 2], "col1": ["x", "z"]})
+        result = merge_engine().merge_append(_pytable.data, right_data, self.idx, self.idx)
+        expected = pa.concat_tables([self.left_data, right_data])
+        assert result.equals(expected)

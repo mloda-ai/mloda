@@ -50,11 +50,11 @@ class Features:
     def merge_options(self, feature_options: Options, child_options: Options) -> None:
         """Merge child_options into feature_options without overwriting existing keys."""
 
-        for key, value in child_options.data.items():
-            for key, value in feature_options.data.items():
-                if key == key:
-                    if value != value:
-                        raise ValueError(f"Duplicate keys found in options: {key}")
+        for key_child, value_child in child_options.data.items():
+            for key_parent, value_parent in feature_options.data.items():
+                if key_child == key_parent:
+                    if value_child != value_parent:
+                        raise ValueError(f"Duplicate keys found in options: {key_child}")
 
         # Merge the child_options data into feature_options data
         _child_options = deepcopy(child_options)

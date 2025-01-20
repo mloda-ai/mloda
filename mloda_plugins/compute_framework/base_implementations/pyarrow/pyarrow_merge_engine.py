@@ -1,5 +1,6 @@
 from typing import Any
 
+import pyarrow as pa
 
 from mloda_core.abstract_plugins.components.index.index import Index
 from mloda_core.abstract_plugins.components.link import JoinType
@@ -8,18 +9,31 @@ from mloda_core.abstract_plugins.components.merge.base_merge_engine import BaseM
 
 class PyArrowMergeEngine(BaseMergeEngine):
     def merge_inner(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        return self.merge_logic("inner", left_data, right_data, left_index, right_index, JoinType.INNER)
+        return self.join_logic("inner", left_data, right_data, left_index, right_index, JoinType.INNER)
 
     def merge_left(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        return self.merge_logic("left outer", left_data, right_data, left_index, right_index, JoinType.LEFT)
+        return self.join_logic("left outer", left_data, right_data, left_index, right_index, JoinType.LEFT)
 
     def merge_right(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        return self.merge_logic("right outer", left_data, right_data, left_index, right_index, JoinType.RIGHT)
+        return self.join_logic("right outer", left_data, right_data, left_index, right_index, JoinType.RIGHT)
 
     def merge_full_outer(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        return self.merge_logic("full outer", left_data, right_data, left_index, right_index, JoinType.OUTER)
+        return self.join_logic("full outer", left_data, right_data, left_index, right_index, JoinType.OUTER)
 
-    def merge_logic(
+    def merge_append(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
+        # Ensure the schemas of both tables match before appending
+        if left_data.schema != right_data.schema:
+            raise ValueError("Schemas of the tables do not match for append operation.")
+        return pa.concat_tables([left_data, right_data])
+
+    def merge_union(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
+        """
+        https://github.com/apache/arrow/issues/30950 Currently, not existing in base pyarrow.
+        If needed, one could add it.
+        """
+        raise ValueError(f"JoinType union are not yet implemented {self.__class__.__name__}")
+
+    def join_logic(
         self, join_type: str, left_data: Any, right_data: Any, left_index: Index, right_index: Index, jointype: JoinType
     ) -> Any:
         if left_index.is_multi_index() or right_index.is_multi_index():

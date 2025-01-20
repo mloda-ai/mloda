@@ -193,6 +193,8 @@ class JoinType(Enum):
     LEFT = &quot;left&quot;
     RIGHT = &quot;right&quot;
     OUTER = &quot;outer&quot;
+    APPEND = &quot;append&quot;
+    UNION = &quot;union&quot;
 
 join_type = JoinType.INNER
 </code></pre>
@@ -252,6 +254,8 @@ In this example, we show the PandasMergeEngine.</p>
 <li><strong>merge_left</strong></li>
 <li><strong>merge_right</strong></li>
 <li><strong>merge_full_outer</strong></li>
+<li><strong>merge_append</strong></li>
+<li><strong>merge_union</strong></li>
 </ul>
 <p>These methods are invoked via the final implementation in the abstract class <strong>BaseMergeEngine</strong>:</p>
 <pre><code class="language-python">@final
@@ -265,7 +269,7 @@ def merge(self, left_data: Any, right_data: Any, jointype: JoinType, left_index:
 <p>A simplified MergeEngine implementation looks like this:</p>
 <pre><code class="language-python">class PandasMergeEngine(BaseMergeEngine):
     def merge_inner(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -&gt; Any:
-        return self.merge_logic(&quot;inner&quot;, left_data, right_data, left_index, right_index, JoinType.INNER)
+        return self.join_logic(&quot;inner&quot;, left_data, right_data, left_index, right_index, JoinType.INNER)
 
     def merge_left(...)
         ...
@@ -276,7 +280,7 @@ def merge(self, left_data: Any, right_data: Any, jointype: JoinType, left_index:
     def merge_outer(...)
         ...
 
-    def merge_logic(
+    def join_logic(
         self, join_type: str, left_data: Any, right_data: Any, left_index: Index, right_index: Index, jointype: JoinType
     ) -&gt; Any:
         if left_index.is_multi_index() or right_index.is_multi_index():

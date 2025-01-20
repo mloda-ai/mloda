@@ -28,7 +28,7 @@ class PandasMergeEngine(BaseMergeEngine):
         return self.join_logic("outer", left_data, right_data, left_index, right_index, JoinType.OUTER)
 
     def merge_append(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        return pd.concat([left_data, right_data], ignore_index=True)
+        return self.pd_concat()([left_data, right_data], ignore_index=True)
 
     def merge_union(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
         combined = self.merge_append(left_data, right_data, left_index, right_index)
@@ -50,3 +50,9 @@ class PandasMergeEngine(BaseMergeEngine):
         if pd is None:
             raise ImportError("Pandas is not installed. To be able to use this framework, please install pandas.")
         return pd.merge
+
+    @staticmethod
+    def pd_concat() -> Any:
+        if pd is None:
+            raise ImportError("Pandas is not installed. To be able to use this framework, please install pandas.")
+        return pd.concat

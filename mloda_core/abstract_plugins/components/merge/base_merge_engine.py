@@ -43,7 +43,7 @@ class BaseMergeEngine(ABC):
         raise ValueError(f"JoinType append are not yet implemented {self.__class__.__name__}")
 
     def merge_union(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        raise ValueError(f"JoinType union are not yet implemented{self.__class__.__name__}")
+        raise ValueError(f"JoinType union are not yet implemented {self.__class__.__name__}")
 
     @final
     def merge(self, left_data: Any, right_data: Any, jointype: JoinType, left_index: Index, right_index: Index) -> Any:
@@ -62,4 +62,4 @@ class BaseMergeEngine(ABC):
         elif jointype == JoinType.UNION:
             return self.merge_union(left_data, right_data, left_index, right_index)
         else:
-            raise ValueError(f"JoinType {jointype} are not yet implemented {self.__class__.__name__}")
+            raise ValueError(f"JoinType {jointype} is not yet implemented {self.__class__.__name__}")

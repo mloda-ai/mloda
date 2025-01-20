@@ -3,7 +3,6 @@ from typing import Any, Optional
 
 
 class DefaultOptionKeys(str, Enum):
-    mloda_index = "mloda_index"
     mloda_source_feature = "mloda_source_feature"
 
     # Recommend feature key for links

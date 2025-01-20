@@ -53,8 +53,6 @@ class Features:
         for key_child, value_child in child_options.data.items():
             for key_parent, value_parent in feature_options.data.items():
                 if key_child == key_parent:
-                    print()
-                    print(key_child, value_child, value_parent)
                     if value_child != value_parent:
                         raise ValueError(f"Duplicate keys found in options: {key_child}")
 

@@ -47,7 +47,6 @@ class GroupedAppendMergeTestFeature(AbstractFeatureGroup):
         source_features = options.get(DefaultOptionKeys.mloda_source_feature)
         left_links_cls = options.get(DefaultOptionKeys.left_link_cls)
         right_links_cls = options.get(DefaultOptionKeys.right_link_cls)
-        mloda_index = DefaultOptionKeys.mloda_index.value
         features = set()
 
         for cnt, value in enumerate(source_features):
@@ -62,14 +61,15 @@ class GroupedAppendMergeTestFeature(AbstractFeatureGroup):
                 Feature(
                     name=value,
                     link=_link,
-                    options={mloda_index: add_run_id(run_uuid)},
+                    index=Index(add_run_id(run_uuid)),
+                    options={"Arbritrary options": add_run_id(run_uuid)},
                 )
             )
         return features
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        data[cls.get_class_name()] = data.apply(lambda row: "".join(filter(lambda x: pd.notnull(x), row)), axis=1)
+        data[cls.get_class_name()] = data.apply(lambda row: "".join(filter(lambda x: pd.notna(x), row)), axis=1)
         data = data[[cls.get_class_name()]]
         return data
 
@@ -78,17 +78,10 @@ class Call2GroupedAppendMergeTestFeature(AbstractFeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         iteration = options.get("iteration")
 
-        _feature_name = GroupedAppendMergeTestFeature.get_class_name()
-
-        link = Link.append(
-            (GroupedAppendMergeTestFeature, Index(("1",))),
-            (GroupedAppendMergeTestFeature, Index(("1",))),
-        )
-
         features = frozenset({f"AppendMergeTestFeature{i}" for i in range(iteration)})
         feature = Feature(
-            name=_feature_name,
-            link=link,
+            name=GroupedAppendMergeTestFeature.get_class_name(),
+            index=Index((GroupedAppendMergeTestFeature.get_class_name(),)),
             options={
                 DefaultOptionKeys.mloda_source_feature: features,
                 DefaultOptionKeys.left_link_cls: AppendMergeTestFeature,
@@ -98,7 +91,8 @@ class Call2GroupedAppendMergeTestFeature(AbstractFeatureGroup):
 
         features2 = frozenset({f"SecondAppendMergeTestFeature{i}" for i in range(iteration)})
         feature2 = Feature(
-            name=_feature_name,
+            name=GroupedAppendMergeTestFeature.get_class_name(),
+            index=Index((f"{GroupedAppendMergeTestFeature.get_class_name()}2",)),
             options={
                 DefaultOptionKeys.mloda_source_feature: features2,
                 DefaultOptionKeys.left_link_cls: SecondAppendMergeTestFeature,
@@ -110,7 +104,7 @@ class Call2GroupedAppendMergeTestFeature(AbstractFeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        data[cls.get_class_name()] = data.apply(lambda row: "".join(filter(lambda x: pd.notnull(x), row)), axis=1)
+        data[cls.get_class_name()] = data.apply(lambda row: "".join(filter(lambda x: pd.notna(x), row)), axis=1)
         return data
 
 
@@ -198,10 +192,21 @@ class TestBaseMergeEngine:
             assert len(res) == 5
 
     def test_dependent_append_multiple_features_v3(self) -> None:
-        feature = Feature(name=Call2GroupedAppendMergeTestFeature.get_class_name(), options={"iteration": 1})
+        feature = Feature(
+            name=Call2GroupedAppendMergeTestFeature.get_class_name(),
+            options={
+                "iteration": 3,
+            },
+        )
+
+        link = Link.union(
+            (GroupedAppendMergeTestFeature, Index(("GroupedAppendMergeTestFeature",))),
+            (GroupedAppendMergeTestFeature, Index(("GroupedAppendMergeTestFeature2",))),
+        )
 
         result = mlodaAPI.run_all(
             [feature],
+            links={link},
             compute_frameworks=["PandasDataframe"],
             plugin_collector=PlugInCollector.enabled_feature_groups(
                 {
@@ -212,3 +217,6 @@ class TestBaseMergeEngine:
                 }
             ),
         )
+        for res in result:
+            assert len(res) == 6
+            assert res.columns == ["Call2GroupedAppendMergeTestFeature"]

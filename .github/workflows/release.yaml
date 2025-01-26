@@ -52,6 +52,9 @@ jobs:
             exit 0
           fi
 
+          echo "Raw dry_run_output:"
+          echo "$dry_run_output"
+          
           # Extract version from dry run output
           version=$(echo "$dry_run_output" | grep -oP "The next release version is \K[0-9]+\.[0-9]+\.[0-9]+")
          

@@ -1,7 +1,13 @@
 name: Release
 
+#on:
+#  workflow_dispatch:
+#    branches:
+#      - '*'
+
 on:
-  workflow_dispatch:
+  pull_request:
+
 
 jobs:
   github_release:
@@ -17,7 +23,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-          ref: main
+          ref: ${{ github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -34,28 +40,33 @@ jobs:
             @semantic-release/git \
             @semantic-release/github
 
-      - name: Create a release if needed
-        id: semantic
+      - name: Semantic Release Dry Run 
+        id: semantic_check
         run: |
           dry_run_output=$(semantic-release --dry-run 2>&1 || true)
-
+          
           # Check if there are no changes
           if $(echo "$dry_run_output" | grep -q "no new version is released"); then
             echo "No new release needed"
             echo "new_release_published=false" >> $GITHUB_OUTPUT
             exit 0
           fi
-
+          
           # Extract version from dry run output
           version=$(echo "$dry_run_output" | grep -oP "The next release version is \K[0-9]+\.[0-9]+\.[0-9]+")
           if [ -z "$version" ]; then
             echo "Error: Could not determine version"
             exit 1
           fi
-
+          
           echo "new_release_version=$version" >> $GITHUB_OUTPUT
+        env:
+          CI: true
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-          # Run actual release
+      - name: Semantic Release
+        id: semantic_release
+        run: |
           if semantic-release; then
             echo "Release successful"
             echo "new_release_published=true" >> $GITHUB_OUTPUT
@@ -76,6 +87,7 @@ jobs:
         uses: actions/checkout@v4
         with:
             persist-credentials: false
+            ref: ${{ github.ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v5

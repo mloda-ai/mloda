@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mloda"
-version = "0.1.0"
+version = "0.1.1"
 description = "Rethinking Data and Feature Engineering"
 readme = { file = "README.md", content-type = "text/markdown" }
 license = { file = "LICENSE.TXT" }

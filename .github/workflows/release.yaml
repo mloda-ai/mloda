@@ -1,0 +1,104 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  github_release:
+    name: GitHub Release
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      new_release_version: ${{ steps.semantic.outputs.new_release_version }}
+      new_release_published: ${{ steps.semantic.outputs.new_release_published }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: main
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+
+      - name: Install semantic release and plugins
+        run: |
+          npm install -g semantic-release@v24.2.1 \
+            conventional-changelog-cli \
+            conventional-changelog-conventionalcommits \
+            @semantic-release/changelog \
+            @semantic-release/exec \
+            @semantic-release/git \
+            @semantic-release/github
+
+      - name: Create a release if needed
+        id: semantic
+        run: |
+          dry_run_output=$(semantic-release --dry-run 2>&1 || true)
+
+          # Check if there are no changes
+          if $(echo "$dry_run_output" | grep -q "no new version is released"); then
+            echo "No new release needed"
+            echo "new_release_published=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Extract version from dry run output
+          version=$(echo "$dry_run_output" | grep -oP "The next release version is \K[0-9]+\.[0-9]+\.[0-9]+")
+          if [ -z "$version" ]; then
+            echo "Error: Could not determine version"
+            exit 1
+          fi
+
+          echo "new_release_version=$version" >> $GITHUB_OUTPUT
+
+          # Run actual release
+          if semantic-release; then
+            echo "Release successful"
+            echo "new_release_published=true" >> $GITHUB_OUTPUT
+          else
+            echo "Release failed"
+            exit 1
+          fi
+        env:
+          CI: true
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish:
+    needs: github_release
+    runs-on: ubuntu-24.04
+    if: needs.github_release.outputs.new_release_published == true
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+        with:
+            persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Create Virtual Environment
+        run: |
+          python -m venv venv
+          source venv/bin/activate
+
+      - name: Install dependencies
+        run: |
+          source venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install build twine
+
+      - name: Update pyproject.toml version
+        run: |
+          echo "Updating to version ${{ needs.github_release.outputs.new_release_version }}"
+          sed -i "s/^version = .*/version = \"${{ needs.github_release.outputs.new_release_version }}\"/" pyproject.toml
+
+      - name: Build the package
+        run: |
+           source venv/bin/activate
+           python -m build

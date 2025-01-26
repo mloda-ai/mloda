@@ -45,21 +45,7 @@ jobs:
         run: |
           dry_run_output=$(semantic-release --dry-run 2>&1 || true)
           
-          # Check if there are no changes
-          if $(echo "$dry_run_output" | grep -q "no new version is released"); then
-            echo "No new release needed"
-            echo "new_release_published=false" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          
-          # Extract version from dry run output
-          version=$(echo "$dry_run_output" | grep -oP "The next release version is \K[0-9]+\.[0-9]+\.[0-9]+")
-          if [ -z "$version" ]; then
-            echo "Error: Could not determine version"
-            exit 1
-          fi
-          
-          echo "new_release_version=$version" >> $GITHUB_OUTPUT
+         
         env:
           CI: true
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

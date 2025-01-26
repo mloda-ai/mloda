@@ -51,6 +51,9 @@ jobs:
             echo "new_release_published=false" >> $GITHUB_OUTPUT
             exit 0
           fi
+
+          # Extract version from dry run output
+          version=$(echo "$dry_run_output" | grep -oP "The next release version is \K[0-9]+\.[0-9]+\.[0-9]+")
          
         env:
           CI: true

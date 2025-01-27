@@ -5,7 +5,6 @@ from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGr
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.input_data.api.base_api_data import BaseApiData
-from mloda_core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
 from mloda_core.abstract_plugins.components.input_data.api.api_input_data_collection import (
     ApiInputDataCollection,
 )
@@ -32,16 +31,6 @@ class InputDataTestFeatureGroup(AbstractFeatureGroup):
             "InputDataTestFeatureGroup_V1": [1, 2, 3],
             "InputDataTestFeatureGroup_V2": [1, 2, 3],
         }
-
-
-class ApiInputDataTestFeatureGroup(AbstractFeatureGroup):
-    @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
-        return ApiInputData()
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return data
 
 
 class DataTestApiInputData(BaseApiData):

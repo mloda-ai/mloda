@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from typing import Any, List, Optional, Tuple
 from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
@@ -62,6 +63,8 @@ class ReadFile(BaseInputData):
             data_accesses = list(data_access.files | data_access.folders)
         elif isinstance(data_access, str):
             data_accesses = [data_access]
+        elif isinstance(data_access, Path):
+            data_accesses = [str(data_access)]
         else:
             return False
 

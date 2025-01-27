@@ -11,9 +11,10 @@ from mloda_core.abstract_plugins.components.index.index import Index
 from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
 from mloda_core.abstract_plugins.components.link import Link
-from mloda_core.abstract_plugins.components.options import Options, DefaultOptionKeys
+from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
+from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 
 class AppendMergeTestFeature(AbstractFeatureGroup):
@@ -45,8 +46,8 @@ class GroupedAppendMergeTestFeature(AbstractFeatureGroup):
         run_uuid = uuid.uuid4()
 
         source_features = options.get(DefaultOptionKeys.mloda_source_feature)
-        left_links_cls = options.get(DefaultOptionKeys.left_link_cls)
-        right_links_cls = options.get(DefaultOptionKeys.right_link_cls)
+        left_links_cls = options.get("left_link_cls")
+        right_links_cls = options.get("right_link_cls")
         features = set()
 
         for cnt, value in enumerate(source_features):
@@ -84,8 +85,8 @@ class Call2GroupedAppendMergeTestFeature(AbstractFeatureGroup):
             index=Index((GroupedAppendMergeTestFeature.get_class_name(),)),
             options={
                 DefaultOptionKeys.mloda_source_feature: features,
-                DefaultOptionKeys.left_link_cls: AppendMergeTestFeature,
-                DefaultOptionKeys.right_link_cls: AppendMergeTestFeature,
+                "left_link_cls": AppendMergeTestFeature,
+                "right_link_cls": AppendMergeTestFeature,
             },
         )
 
@@ -95,8 +96,8 @@ class Call2GroupedAppendMergeTestFeature(AbstractFeatureGroup):
             index=Index((f"{GroupedAppendMergeTestFeature.get_class_name()}2",)),
             options={
                 DefaultOptionKeys.mloda_source_feature: features2,
-                DefaultOptionKeys.left_link_cls: SecondAppendMergeTestFeature,
-                DefaultOptionKeys.right_link_cls: SecondAppendMergeTestFeature,
+                "left_link_cls": SecondAppendMergeTestFeature,
+                "right_link_cls": SecondAppendMergeTestFeature,
             },
         )
 
@@ -127,8 +128,8 @@ class TestBaseMergeEngine:
             name=GroupedAppendMergeTestFeature.get_class_name(),
             options={
                 DefaultOptionKeys.mloda_source_feature.value: features,
-                DefaultOptionKeys.left_link_cls: AppendMergeTestFeature,
-                DefaultOptionKeys.right_link_cls: AppendMergeTestFeature,
+                "left_link_cls": AppendMergeTestFeature,
+                "right_link_cls": AppendMergeTestFeature,
             },
         )
 
@@ -165,8 +166,8 @@ class TestBaseMergeEngine:
             name=feature_name,
             options={
                 DefaultOptionKeys.mloda_source_feature: features,
-                DefaultOptionKeys.left_link_cls: AppendMergeTestFeature,
-                DefaultOptionKeys.right_link_cls: AppendMergeTestFeature,
+                "left_link_cls": AppendMergeTestFeature,
+                "right_link_cls": AppendMergeTestFeature,
             },
         )
 
@@ -175,8 +176,8 @@ class TestBaseMergeEngine:
             name=feature_name,
             options={
                 DefaultOptionKeys.mloda_source_feature: features2,
-                DefaultOptionKeys.left_link_cls: SecondAppendMergeTestFeature,
-                DefaultOptionKeys.right_link_cls: SecondAppendMergeTestFeature,
+                "left_link_cls": SecondAppendMergeTestFeature,
+                "right_link_cls": SecondAppendMergeTestFeature,
             },
         )
 

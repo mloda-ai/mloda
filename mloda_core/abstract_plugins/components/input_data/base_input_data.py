@@ -50,13 +50,26 @@ class BaseInputData(ABC):
         subcls = get_all_filtereted_subclasses(BaseInputData, cls)
         for sub in subcls:
             for key, value in options.data.items():
-                if key == sub.data_access_name():
+                _key = cls.deal_with_base_input_data_name_as_cls_or_str(key)
+
+                if _key == sub.data_access_name():
                     matched_data_access = sub.match_subclass_data_access(value, [feature_name])  # type: ignore
                     if matched_data_access:
                         cls.add_base_input_data_to_options(sub, matched_data_access, options)
                         return True
                     break  # This case is if a feature requests an input feature, which should have scoped access.
         return False
+
+    @classmethod
+    def deal_with_base_input_data_name_as_cls_or_str(cls, key: Any) -> str:
+        if hasattr(key, "get_class_name"):
+            if not issubclass(key, BaseInputData):
+                raise ValueError(f"Key {key} is not a subclass of BaseInputData.")
+            key = key.get_class_name()
+
+        if not isinstance(key, str):
+            raise ValueError(f"Key {key} is not a string.")
+        return key
 
     @classmethod
     def global_scope_data_access(
@@ -139,6 +152,10 @@ class BaseInputData(ABC):
             return True
 
         return True
+
+    @classmethod
+    def get_class_name(cls) -> str:
+        return cls.__name__
 
 
 def get_all_filtereted_subclasses(cls: Any, parent_class: Any) -> List[Type[BaseInputData]]:

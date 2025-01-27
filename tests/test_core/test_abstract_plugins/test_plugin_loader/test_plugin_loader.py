@@ -9,9 +9,9 @@ class TestPluginLoader:
 
     def test_load_group(self) -> None:
         plugin_loader = PluginLoader()
-        plugin_loader.load_group("input_data")
-        assert "mloda_plugins.input_data.read_files.parquet" in plugin_loader.plugins
-        assert "mloda_plugins.input_data.read_files.csv" in plugin_loader.plugins
+        plugin_loader.load_group("feature_group")
+        assert "mloda_plugins.feature_group.input_data.read_files.parquet" in plugin_loader.plugins
+        assert "mloda_plugins.feature_group.input_data.read_files.csv" in plugin_loader.plugins
 
     def test_load_all_groups(self) -> None:
         plugin_loader = PluginLoader()

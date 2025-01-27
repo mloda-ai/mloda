@@ -29,12 +29,11 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 )
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.source_input_feature import SourceInputFeature
+
 from mloda_plugins.feature_group.input_data.api_data.api_data import ApiInputDataFeature
-from mloda_plugins.input_data.read_file_feature import ReadFileFeature
-from mloda_plugins.input_data.read_files.csv import CsvReader
-from tests.test_core.test_input_data.test_classes.test_input_classes import (
-    ReadFileFeatureWithIndex,
-)
+from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
+from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
+from tests.test_plugins.feature_group.test_input_data.test_classes.test_input_classes import ReadFileFeatureWithIndex
 
 
 class FeatureInputFeatureTest(AbstractFeatureGroup):

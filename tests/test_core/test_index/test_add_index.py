@@ -6,6 +6,10 @@ import tempfile
 from typing import Any, Set, Optional, Union, List
 import unittest
 
+from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
+from mloda_plugins.feature_group.input_data.read_db_feature import ReadDBFeature
+from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
+from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 import pyarrow as pa
 import pyarrow.compute as pc
 
@@ -19,9 +23,7 @@ from mloda_core.abstract_plugins.components.index.index import Index
 from mloda_core.abstract_plugins.components.link import Link
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.input_data.read_dbs.sqlite import SQLITEReader
-from mloda_plugins.input_data.read_files.csv import CsvReader
-from tests.test_core.test_input_data.test_classes.test_input_classes import (
+from tests.test_plugins.feature_group.test_input_data.test_classes.test_input_classes import (
     DBInputDataTestFeatureGroup,
     ReadFileFeatureWithIndex,
 )
@@ -113,6 +115,7 @@ class TestAddIndex(unittest.TestCase):
             [f],
             compute_frameworks=["PyarrowTable"],
             links={link},
+            plugin_collector=PlugInCollector.disabled_feature_groups({ReadDBFeature}),
         )
         res = result[0].to_pydict()
         assert res == {"TestAddIndexFeature": [6534.37, 2517.54]}

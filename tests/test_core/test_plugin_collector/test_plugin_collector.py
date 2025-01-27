@@ -6,7 +6,7 @@ import pytest
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
-from tests.test_core.test_input_data.test_input_data import InputDataTestFeatureGroup
+from tests.test_plugins.feature_group.test_input_data.test_input_data import InputDataTestFeatureGroup
 
 
 class ATestFeatureGroup(AbstractFeatureGroup):

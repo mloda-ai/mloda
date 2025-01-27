@@ -3,7 +3,7 @@ from typing import Any, Tuple
 from pyarrow import parquet as pyarrow_parquet
 
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_plugins.input_data.read_file import ReadFile
+from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
 
 class ParquetReader(ReadFile):

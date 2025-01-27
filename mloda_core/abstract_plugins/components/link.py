@@ -84,7 +84,7 @@ class Link:
         left: Tuple[Type[Any], Index],
         right: Tuple[Type[Any], Index],
     ) -> Link:
-        return cls(JoinType.RIGHT, left, right)
+        return cls(JoinType.OUTER, left, right)
 
     @classmethod
     def append(

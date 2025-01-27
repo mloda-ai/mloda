@@ -18,7 +18,7 @@ class TestPluginLoader:
         plugin_loader.load_all_plugins()
         # This test ensures that not accidentally a plugin is added or removed
         loaded_modules = plugin_loader.list_loaded_modules()
-        assert len(loaded_modules) == 17
+        assert len(loaded_modules) == 20
         cp_loaded_modules = plugin_loader.list_loaded_modules("compute_framework")
         assert len(cp_loaded_modules) < len(loaded_modules)
 

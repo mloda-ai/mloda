@@ -1,17 +1,4 @@
-from enum import Enum
 from typing import Any, Optional
-
-
-class DefaultOptionKeys(str, Enum):
-    mloda_source_feature = "mloda_source_feature"
-
-    # Recommend feature key for links
-    left_link_cls = "left_link_cls"
-    right_link_cls = "right_link_cls"
-
-    @classmethod
-    def list(cls) -> list[str]:
-        return [member.value for member in cls]
 
 
 class Options:

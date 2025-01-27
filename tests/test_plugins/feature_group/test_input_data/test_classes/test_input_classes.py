@@ -3,8 +3,8 @@ from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGr
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.index.index import Index
 from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda_plugins.input_data.read_db import ReadDB
-from mloda_plugins.input_data.read_file_feature import ReadFileFeature
+from mloda_plugins.feature_group.input_data.read_db import ReadDB
+from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
 
 
 class DBInputDataTestFeatureGroup(AbstractFeatureGroup):

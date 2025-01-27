@@ -12,9 +12,9 @@ from mloda_core.abstract_plugins.components.hashable_dict import HashableDict
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.input_data.read_db import ReadDB
-from mloda_plugins.input_data.read_dbs.sqlite import SQLITEReader
-from tests.test_core.test_input_data.test_classes.test_input_classes import DBInputDataTestFeatureGroup
+from mloda_plugins.feature_group.input_data.read_db import ReadDB
+from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
+from tests.test_plugins.feature_group.test_input_data.test_classes.test_input_classes import DBInputDataTestFeatureGroup
 from tests.test_core.test_integration.test_core.test_runner_one_compute_framework import SumFeature
 
 

@@ -120,9 +120,9 @@ from pathlib import Path
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_plugins.input_data.read_file import ReadFile
+from mloda_plugins.feature_group.input_data.read_file import ReadFile
 from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_plugins.input_data.read_files.csv import CsvReader
+from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 
 
 file_path = os.getcwd()

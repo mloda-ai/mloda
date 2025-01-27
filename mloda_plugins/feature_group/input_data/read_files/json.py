@@ -3,7 +3,7 @@ from typing import Any, Tuple
 from pyarrow import json as pyarrow_json
 
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_plugins.input_data.read_file import ReadFile
+from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
 
 class JsonReader(ReadFile):

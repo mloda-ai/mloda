@@ -119,7 +119,7 @@ SOFTWARE.
 
 
 Pygments
-2.18.0
+2.19.1
 BSD License
 https://pygments.org
 Copyright (c) 2006-2022 by the respective authors (see AUTHORS file).
@@ -193,7 +193,7 @@ SOFTWARE.
 
 
 anyio
-4.7.0
+4.8.0
 MIT License
 https://anyio.readthedocs.io/en/stable/versionhistory.html
 The MIT License (MIT)
@@ -776,7 +776,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 bandit
-1.8.0
+1.8.2
 Apache Software License
 https://bandit.readthedocs.io/
 
@@ -1013,7 +1013,7 @@ limitations under the License.
 
 
 cachetools
-5.5.0
+5.5.1
 MIT License
 https://github.com/tkem/cachetools/
 The MIT License (MIT)
@@ -1700,7 +1700,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 debugpy
-1.8.11
+1.8.12
 MIT License
 https://aka.ms/debugpy
     debugpy
@@ -2210,7 +2210,7 @@ https://execnet.readthedocs.io/en/latest/
 
 
 executing
-2.1.0
+2.2.0
 MIT License
 https://github.com/alexmojaki/executing
 MIT License
@@ -2270,7 +2270,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 filelock
-3.16.1
+3.17.0
 The Unlicense (Unlicense)
 https://github.com/tox-dev/py-filelock
 This is free and unencumbered software released into the public domain.
@@ -4692,7 +4692,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 numpy
-2.2.1
+2.2.2
 BSD License
 https://numpy.org
 Copyright (c) 2005-2024, NumPy Developers.
@@ -9011,7 +9011,7 @@ https://github.com/prometheus/client_python
 
 
 prompt_toolkit
-3.0.48
+3.0.50
 BSD License
 https://github.com/prompt-toolkit/python-prompt-toolkit
 Copyright (c) 2014, Jonathan Slenders
@@ -9128,7 +9128,7 @@ SOFTWARE.
 
 
 pyarrow
-18.1.0
+19.0.0
 Apache Software License
 https://arrow.apache.org/
 
@@ -11428,7 +11428,7 @@ OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 pydantic
-2.10.4
+2.10.5
 MIT License
 https://github.com/pydantic/pydantic
 The MIT License (MIT)
@@ -11482,7 +11482,7 @@ SOFTWARE.
 
 
 pyproject-api
-1.8.0
+1.9.0
 MIT License
 https://pyproject-api.readthedocs.io
 Permission is hereby granted, free of charge, to any person obtaining a
@@ -11751,8 +11751,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 referencing
-0.35.1
-MIT License
+0.36.1
+UNKNOWN
 https://github.com/python-jsonschema/referencing
 Copyright (c) 2022 Julian Berman
 
@@ -12063,7 +12063,7 @@ THE SOFTWARE.
 
 
 ruff
-0.8.6
+0.9.3
 MIT License
 https://docs.astral.sh/ruff
 MIT License
@@ -14073,7 +14073,7 @@ http://www.tornadoweb.org/
 
 
 tox
-4.23.2
+4.24.1
 MIT License
 http://tox.readthedocs.org
 Permission is hereby granted, free of charge, to any person obtaining a
@@ -14712,7 +14712,7 @@ PERFORMANCE OF THIS SOFTWARE.
 
 
 tzdata
-2024.2
+2025.1
 Apache Software License
 https://github.com/python/tzdata
 Apache Software License 2.0
@@ -14787,7 +14787,7 @@ SOFTWARE.
 
 
 virtualenv
-20.28.1
+20.29.1
 MIT License
 https://github.com/pypa/virtualenv
 Copyright (c) 2020-202x The virtualenv developers
@@ -15063,7 +15063,7 @@ https://github.com/websocket-client/websocket-client.git
 
 
 wrapt
-1.17.0
+1.17.2
 BSD License
 https://github.com/GrahamDumpleton/wrapt
 Copyright (c) 2013-2023, Graham Dumpleton

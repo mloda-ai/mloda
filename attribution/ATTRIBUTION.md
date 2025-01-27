@@ -4,10 +4,10 @@
 | Jinja2                                 | 3.1.5          | BSD License                                             |
 | MarkupSafe                             | 3.0.2          | BSD License                                             |
 | PyYAML                                 | 6.0.2          | MIT License                                             |
-| Pygments                               | 2.18.0         | BSD License                                             |
+| Pygments                               | 2.19.1         | BSD License                                             |
 | Send2Trash                             | 1.8.3          | BSD License                                             |
 | annotated-types                        | 0.7.0          | MIT License                                             |
-| anyio                                  | 4.7.0          | MIT License                                             |
+| anyio                                  | 4.8.0          | MIT License                                             |
 | argon2-cffi                            | 23.1.0         | MIT License                                             |
 | argon2-cffi-bindings                   | 21.2.0         | MIT License                                             |
 | arrow                                  | 1.3.0          | Apache Software License                                 |
@@ -15,25 +15,25 @@
 | async-lru                              | 2.0.4          | MIT License                                             |
 | attrs                                  | 24.3.0         | UNKNOWN                                                 |
 | babel                                  | 2.16.0         | BSD License                                             |
-| bandit                                 | 1.8.0          | Apache Software License                                 |
+| bandit                                 | 1.8.2          | Apache Software License                                 |
 | beautifulsoup4                         | 4.12.3         | MIT License                                             |
 | bleach                                 | 6.2.0          | Apache Software License                                 |
-| cachetools                             | 5.5.0          | MIT License                                             |
+| cachetools                             | 5.5.1          | MIT License                                             |
 | certifi                                | 2024.12.14     | Mozilla Public License 2.0 (MPL 2.0)                    |
 | cffi                                   | 1.17.1         | MIT License                                             |
 | chardet                                | 5.2.0          | GNU Lesser General Public License v2 or later (LGPLv2+) |
 | charset-normalizer                     | 3.4.1          | MIT License                                             |
 | colorama                               | 0.4.6          | BSD License                                             |
 | comm                                   | 0.2.2          | BSD License                                             |
-| debugpy                                | 1.8.11         | MIT License                                             |
+| debugpy                                | 1.8.12         | MIT License                                             |
 | decorator                              | 5.1.1          | BSD License                                             |
 | defusedxml                             | 0.7.1          | Python Software Foundation License                      |
 | distlib                                | 0.3.9          | Python Software Foundation License                      |
 | exceptiongroup                         | 1.2.2          | MIT License                                             |
 | execnet                                | 2.1.1          | MIT License                                             |
-| executing                              | 2.1.0          | MIT License                                             |
+| executing                              | 2.2.0          | MIT License                                             |
 | fastjsonschema                         | 2.21.1         | BSD License                                             |
-| filelock                               | 3.16.1         | The Unlicense (Unlicense)                               |
+| filelock                               | 3.17.0         | The Unlicense (Unlicense)                               |
 | fqdn                                   | 1.5.1          | Mozilla Public License 2.0 (MPL 2.0)                    |
 | h11                                    | 0.14.0         | MIT License                                             |
 | httpcore                               | 1.0.7          | BSD License                                             |
@@ -72,7 +72,7 @@
 | nest-asyncio                           | 1.6.0          | BSD License                                             |
 | notebook                               | 7.3.2          | BSD License                                             |
 | notebook_shim                          | 0.2.4          | BSD License                                             |
-| numpy                                  | 2.2.1          | BSD License                                             |
+| numpy                                  | 2.2.2          | BSD License                                             |
 | opentelemetry-api                      | 1.29.0         | Apache Software License                                 |
 | opentelemetry-instrumentation          | 0.50b0         | Apache Software License                                 |
 | opentelemetry-instrumentation-logging  | 0.50b0         | Apache Software License                                 |
@@ -91,15 +91,15 @@
 | platformdirs                           | 4.3.6          | MIT License                                             |
 | pluggy                                 | 1.5.0          | MIT License                                             |
 | prometheus_client                      | 0.21.1         | Apache Software License                                 |
-| prompt_toolkit                         | 3.0.48         | BSD License                                             |
+| prompt_toolkit                         | 3.0.50         | BSD License                                             |
 | psutil                                 | 6.1.1          | BSD License                                             |
 | ptyprocess                             | 0.7.0          | ISC License (ISCL)                                      |
 | pure_eval                              | 0.2.3          | MIT License                                             |
-| pyarrow                                | 18.1.0         | Apache Software License                                 |
+| pyarrow                                | 19.0.0         | Apache Software License                                 |
 | pycparser                              | 2.22           | BSD License                                             |
-| pydantic                               | 2.10.4         | MIT License                                             |
+| pydantic                               | 2.10.5         | MIT License                                             |
 | pydantic_core                          | 2.27.2         | MIT License                                             |
-| pyproject-api                          | 1.8.0          | MIT License                                             |
+| pyproject-api                          | 1.9.0          | MIT License                                             |
 | pytest                                 | 8.3.4          | MIT License                                             |
 | pytest-order                           | 1.3.0          | MIT License                                             |
 | pytest-timeout                         | 2.3.1          | DFSG approved; MIT License                              |
@@ -108,13 +108,13 @@
 | python-json-logger                     | 3.2.1          | BSD License                                             |
 | pytz                                   | 2024.2         | MIT License                                             |
 | pyzmq                                  | 26.2.0         | BSD License                                             |
-| referencing                            | 0.35.1         | MIT License                                             |
+| referencing                            | 0.36.1         | UNKNOWN                                                 |
 | requests                               | 2.32.3         | Apache Software License                                 |
 | rfc3339-validator                      | 0.1.4          | MIT License                                             |
 | rfc3986-validator                      | 0.1.1          | MIT License                                             |
 | rich                                   | 13.9.4         | MIT License                                             |
 | rpds-py                                | 0.22.3         | MIT License                                             |
-| ruff                                   | 0.8.6          | MIT License                                             |
+| ruff                                   | 0.9.3          | MIT License                                             |
 | six                                    | 1.17.0         | MIT License                                             |
 | sniffio                                | 1.3.1          | Apache Software License; MIT License                    |
 | soupsieve                              | 2.6            | MIT License                                             |
@@ -124,18 +124,18 @@
 | testbook                               | 0.4.2          | BSD License                                             |
 | tinycss2                               | 1.4.0          | BSD License                                             |
 | tornado                                | 6.4.2          | Apache Software License                                 |
-| tox                                    | 4.23.2         | MIT License                                             |
+| tox                                    | 4.24.1         | MIT License                                             |
 | traitlets                              | 5.14.3         | BSD License                                             |
 | typeguard                              | 4.4.1          | MIT License                                             |
 | types-python-dateutil                  | 2.9.0.20241206 | Apache Software License                                 |
 | typing-inspect                         | 0.9.0          | MIT License                                             |
 | typing_extensions                      | 4.12.2         | Python Software Foundation License                      |
-| tzdata                                 | 2024.2         | Apache Software License                                 |
+| tzdata                                 | 2025.1         | Apache Software License                                 |
 | uri-template                           | 1.3.0          | MIT License                                             |
 | urllib3                                | 2.3.0          | MIT License                                             |
-| virtualenv                             | 20.28.1        | MIT License                                             |
+| virtualenv                             | 20.29.1        | MIT License                                             |
 | webcolors                              | 24.11.1        | BSD License                                             |
 | webencodings                           | 0.5.1          | BSD License                                             |
 | websocket-client                       | 1.8.0          | Apache Software License                                 |
-| wrapt                                  | 1.17.0         | BSD License                                             |
+| wrapt                                  | 1.17.2         | BSD License                                             |
 | zipp                                   | 3.21.0         | MIT License                                             |

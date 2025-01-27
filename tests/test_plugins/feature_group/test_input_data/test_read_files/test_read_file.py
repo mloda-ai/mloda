@@ -1,6 +1,8 @@
 import os
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+from mloda_plugins.feature_group.input_data.read_file import ReadFile
+from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 import pyarrow as pa
 
 from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
@@ -9,9 +11,7 @@ from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.input_data.read_files.csv import CsvReader
-from mloda_plugins.input_data.read_file import ReadFile
-from tests.test_core.test_input_data.test_classes.test_input_classes import ReadFileFeatureWithIndex
+from tests.test_plugins.feature_group.test_input_data.test_classes.test_input_classes import ReadFileFeatureWithIndex
 
 
 class OverwrittenReadCsvInputDataTestFeatureGroup(ReadFileFeatureWithIndex):

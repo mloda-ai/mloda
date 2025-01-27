@@ -10,7 +10,7 @@ from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.options import Options
 
 
-from mloda_plugins.input_data.read_files.csv import CsvReader
+from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 
 
 try:

@@ -10,11 +10,11 @@ import pyarrow.orc as pyarrow_orc
 import pyarrow.parquet as pyarrow_parquet
 import pytest
 
-from mloda_plugins.input_data.read_files.csv import CsvReader
-from mloda_plugins.input_data.read_files.feather import FeatherReader
-from mloda_plugins.input_data.read_files.json import JsonReader
-from mloda_plugins.input_data.read_files.orc import OrcReader
-from mloda_plugins.input_data.read_files.parquet import ParquetReader
+from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
+from mloda_plugins.feature_group.input_data.read_files.feather import FeatherReader
+from mloda_plugins.feature_group.input_data.read_files.json import JsonReader
+from mloda_plugins.feature_group.input_data.read_files.orc import OrcReader
+from mloda_plugins.feature_group.input_data.read_files.parquet import ParquetReader
 
 
 class FeatureSet:

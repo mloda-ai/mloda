@@ -14,8 +14,8 @@ from mloda_core.abstract_plugins.components.link import Link
 from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.input_data.read_file_feature import ReadFileFeature
-from mloda_plugins.input_data.read_files.csv import CsvReader
+from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
+from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 
 import logging
 

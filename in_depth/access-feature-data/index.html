@@ -76,13 +76,17 @@
                   </li>
                   <li class="toctree-l1 current"><a class="reference internal current" href="#">(Feature) data</a>
     <ul class="current">
-    <li class="toctree-l2"><a class="reference internal" href="#dataaccesscollection">DataAccessCollection</a>
+    <li class="toctree-l2"><a class="reference internal" href="#dataaccesscollection-global-data-access">DataAccessCollection - global data access</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#global-scope-data-access">Global Scope Data Access</a>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#feature-scope-data-access">Feature Scope Data Access</a>
     </li>
-    <li class="toctree-l2"><a class="reference internal" href="#input-features">Input features</a>
+    <li class="toctree-l2"><a class="reference internal" href="#apidata">ApiData</a>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#data-creator">Data Creator</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#input-features">Input features</a>
     </li>
     </ul>
                   </li>
@@ -141,16 +145,17 @@
             <div class="section" itemprop="articleBody">
               
                 <h2 id="access-feature-data">Access (feature) data</h2>
-<p>In this framework, features can access and manage data through several structured methods, each designed for specific use cases. Whether a feature requires access to shared data, isolated data, or needs to generate data independently, the system offers flexible solutions. This guide covers the key mechanisms for data access, including the </p>
+<p>This framework provides several structured mechanisms for features to access and manage data, catering to diverse needs. Features can retrieve data through:</p>
 <ul>
-<li><strong>DataAccessCollection</strong> for centralized management, </li>
-<li><strong>Feature Scope Data Access</strong> for feature-specific control, </li>
-<li><strong>Input Features</strong> for inter-feature data sharing, </li>
-<li>and <strong>Data Creator</strong> for generating independent data. </li>
+<li><strong>DataAccessCollection</strong> for global data loading management, </li>
+<li><strong>Feature Scope Data Access</strong> for feature-specific data loading management, </li>
+<li><strong>Api Data</strong> for using data directly with the mlodaAPI request.</li>
+<li><strong>Data Creator</strong> for generating data instead of loading data,</li>
+<li><strong>Input Features</strong> facilitates data sharing between features.</li>
 </ul>
-<p>These methods ensure efficient data handling across the framework while promoting flexibility and scalability.</p>
-<h4 id="dataaccesscollection">DataAccessCollection</h4>
-<p>The DataAccessCollection is designed to control the access to data of any kind. The main purpose of this class is to organize and simplify interactions with these different data elements, making it easier to work to ingest data of various form into the framework. It provides as an interface for accessing and storing of data:</p>
+<p>These methods ensure efficient data management while maintaining flexibility and scalability. A typical scenario involves a complex feature relying on three input features. These input features, in turn, may depend on other input features or load data using ApiData.</p>
+<h4 id="dataaccesscollection-global-data-access">DataAccessCollection - global data access</h4>
+<p>The DataAccessCollection is designed to control the access to data of any kind. The main purpose of this class is to organize and simplify interactions with these different data elements, making it easier to work to ingest data of various form into the framework. It provides as an interface for accessing and storing of data on a global level.</p>
 <p>The DataAccessCollection can only be added via <strong>mlodaAPI</strong>.</p>
 <p>List options:</p>
 <ol>
@@ -171,8 +176,9 @@
 <p><strong>Unitialized connection object:</strong> Stores not initialized connection objects: (UninitializedDBConnection)</p>
 </li>
 </ol>
-<p>Example:</p>
-<pre><code class="language-python">data_access = DataAccessCollection()
+<p>You can apply these options like so:</p>
+<pre><code class="language-python">
+data_access = DataAccessCollection()
 
 # Add file paths, folder paths, credentials, and connection objects
 data_access.add_file('path/to/folder/text.txt')
@@ -185,57 +191,131 @@ mlodaAPI.run_all(
     feature_list,
     data_access_collection=data_access)
 </code></pre>
+<h4 id="global-scope-data-access">Global Scope Data Access</h4>
+<p>A concrete, simplified global scope data access is shown in this example:</p>
+<pre><code class="language-python">import os
+
+from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda_core.api.request import mlodaAPI
+
+
+file_path = os.getcwd()
+file_path += &quot;/docs/docs/in_depth&quot;
+
+data_access_collection = DataAccessCollection(folders={str(file_path)})
+
+result = mlodaAPI.run_all(
+            [&quot;AExample&quot;, &quot;BExample&quot;], 
+            compute_frameworks=[&quot;PandasDataframe&quot;], 
+            # Define data access on a global level
+            data_access_collection=data_access_collection
+        )
+print(result)
+</code></pre>
+<p>Output</p>
+<pre><code class="language-python">[  AExample  BExample
+0   Value1         2
+1   Value2         3]
+</code></pre>
 <h4 id="feature-scope-data-access">Feature Scope Data Access</h4>
+<p>The Feature Scope Data access is instead designed to control the access to data of any kind 
+on a local level. </p>
 <p>If data needs to be added specifically for a single feature (or features from the same feature group), you can use the feature_scope_data_access_name functionality.</p>
-<p>Example feature group definition:</p>
-<pre><code class="language-python">class ReadCsv(ReadFile):  # ReadFile is inheriting from AbstractFeatureGroup
-    _end: str = &quot;csv&quot;
-
-    @classmethod
-    def suffix(cls) -&gt; str:
-        return f&quot;.{cls._end}&quot;
-
-    @classmethod
-    def feature_scope_data_access_name(cls) -&gt; Optional[str]:
-        return f&quot;read_{cls._end}&quot;
-</code></pre>
-<p>Example usage</p>
-<pre><code class="language-python">feature = Feature(
-    name=&quot;example_feature&quot;, 
-    options={ReadCsv.feature_scope_data_access_name(): &quot;example.csv&quot;}
-)
-
-mlodaAPI.run_all([feature])
-</code></pre>
-<h4 id="input-features">Input features</h4>
-<p>The input_features method allows a feature to access data from other features. This enables data sharing and collaboration between different components of your system.</p>
-<p>This is one of the key aspects in how we achieve to split data from processes.</p>
+<p>We show the ReadFileFeature as example. It uses the input_data ReadFile. 
+In this case, we need to provide the specific reader class: CsvReader.</p>
 <pre><code class="language-python">
-class ExampleFeatureClass(AbstractFeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -&gt; Optional[Set[Feature]]:
-        _input_features = {}
-        _input_features.add(Feature.int32_of(&quot;SUM_V1&quot;))
-        _input_features.add(Feature.str_of(&quot;Name&quot;))
+# This feature is already implemented as plug-in, so do not run it again. This will raise intentional errors.
+class ReadFileFeature(AbstractFeatureGroup):
+    @classmethod
+    def input_data(cls) -&gt; Optional[BaseInputData]:
+        return ReadFile()
 
-        # You can add diverse logics based on given options and/or feature names.
-        complicated_feature = Feature(name=feature_name.name.split(&quot;_&quot;)[1], compute_framework=&quot;PandasDataframe&quot;)
-        _input_features.add(complicated_feature)
-
-        return _input_features
-
-    # Use the features then in the calculate part.
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:
-        return {
-            data[&quot;SUM_V1&quot;], 
-            data[&quot;Name&quot;],
-            data[&quot;ExampleFeatureClass_SPLIT_VALUE&quot;],
-        }
-
+        reader = cls.input_data()
+        if reader is not None:
+            data = reader.load(features)
+            return data
+        raise ValueError(f&quot;Reading file failed for feature {features.get_name_of_one_feature()}.&quot;)
 </code></pre>
-<p>As the input features can be fulfilled by <strong>multiple other features</strong>, we can have the same processes running in different environments, migrations and processes.</p>
+<p>As a side note, the ReadFileFeature was also used for the global scope automatism.</p>
+<p>To use it, we can simply:</p>
+<pre><code class="language-python">
+
+from typing import Optional, Any, List
+from pathlib import Path
+
+from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
+from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
+from mloda_core.abstract_plugins.components.feature_set import FeatureSet
+from mloda_plugins.feature_group.input_data.read_file import ReadFile
+from mloda_core.abstract_plugins.components.feature import Feature
+from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
+
+
+file_path = os.getcwd()
+file_path += &quot;/docs/docs/in_depth&quot;
+
+feature_list: List[Feature | str] = []
+feature_list.append(
+    Feature(
+        name=&quot;AExample&quot;,
+        # Define data access on a feature level
+        options={CsvReader.get_class_name(): file_path}),
+)
+
+
+result = mlodaAPI.run_all(feature_list, compute_frameworks=[&quot;PandasDataframe&quot;])
+print(result)
+</code></pre>
+<p>Output</p>
+<pre><code class="language-python">[  AExample
+0   Value1
+1   Value2]
+</code></pre>
+<p>Of course, we do not always want to load data during run. 
+We might want to give data to the framework. 
+For this purpose, we have the ApiData.</p>
+<h4 id="apidata">ApiData</h4>
+<p>The ApiData can read data given to mlodaAPI at request time.</p>
+<p>Use cases:</p>
+<ul>
+<li>web requests</li>
+<li>real-time prediction </li>
+<li>features as parameters</li>
+</ul>
+<p>The following example shows a simple ApiData setup.</p>
+<pre><code class="language-python">
+from typing import List
+
+from mloda_core.api.request import mlodaAPI
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_core.abstract_plugins.components.input_data.api.api_input_data_collection import ApiInputDataCollection
+
+# Setup the ApiInputDataCollection and api data.
+# These 2 objects are needed to relate given data to the correct features.
+api_input_data_collection = ApiInputDataCollection()
+api_data = api_input_data_collection.setup_key_api_data(
+    key_name=&quot;ExampleApiData&quot;, api_input_data={&quot;FeatureInputAPITest&quot;: [&quot;TestValue3&quot;, &quot;TestValue4&quot;]}
+)
+
+result = mlodaAPI.run_all(
+        [&quot;FeatureInputAPITest&quot;],
+        compute_frameworks={PandasDataframe},
+        api_input_data_collection=api_input_data_collection,
+        api_data=api_data,
+)
+for res in result:
+    print(res)
+</code></pre>
+<p>Output:</p>
+<pre><code class="language-python">  FeatureInputAPITest
+0          TestValue3
+1          TestValue4
+</code></pre>
+<p>Further, we do not want to always load data from outside, be it before or during the framework run, but we want to be able to create Data. For this purpose, we have the Data Creator.</p>
 <h4 id="data-creator">Data Creator</h4>
-<p>The data creator can create data independent of any other dependency. It is essentially a base feature that does not needs a <strong>DataAccessCollection</strong> or <strong>Feature Scope Data Access</strong>.</p>
+<p>The data creator can create data independent of any other dependency. It is essentially a base feature that does not need a <strong>DataAccessCollection</strong> or <strong>Feature Scope Data Access</strong>.</p>
 <p>Usage:</p>
 <ul>
 <li>test data,</li>
@@ -245,16 +325,99 @@ class ExampleFeatureClass(AbstractFeatureGroup):
 </ul>
 <p>One could imagine that for experimenting one wants to see data. Then one could use this feature as input feature to another feature instead of e.g. the true data.</p>
 <pre><code class="language-python">
-class ExampleFeatureClass(AbstractFeatureGroup):
+
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
+
+# Create a Creator FeatureGroup class, which delivers the data needed
+class AFeatureInputCreator(AbstractFeatureGroup):
+
+    # Define input_data with using DataCreator
     @classmethod
     def input_data(cls) -&gt; Optional[BaseInputData]:
-        return DataCreator({&quot;ExampleFeatureClass&quot;, &quot;idx&quot;})
+        return DataCreator({&quot;AFeatureInputCreator&quot;})
+
+    # Define the data this feature creates
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:
+        return {&quot;AFeatureInputCreator&quot;: [&quot;TestValue5&quot;, &quot;TestValue6&quot;]}
+
+result = mlodaAPI.run_all(
+        [&quot;AFeatureInputCreator&quot;],
+        compute_frameworks={PandasDataframe},
+)
+for res in result:
+     print(res)
+</code></pre>
+<p>Output</p>
+<pre><code class="language-python">  AFeatureInputCreator
+0          TestValue5
+1          TestValue6
+</code></pre>
+<p>Finally, as also the most important way to get data, is actually to depent on data inside the framework already. For this purpose, a feature can load data depending on other features.</p>
+<h4 id="input-features">Input features</h4>
+<p>The input_features method allows a feature to access data from other features. This enables data sharing and collaboration between different components of your system.</p>
+<p>This is one of the key aspects in how we achieve to split data from processes. </p>
+<p>In the following example, we will use data from another feature.</p>
+<pre><code class="language-python">
+from typing import Set
+
+from mloda_core.abstract_plugins.components.options import Options
+from mloda_core.abstract_plugins.components.feature_name import FeatureName
+from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
+
+# Set this variable as convention
+_mloda_source = &quot;mloda_source&quot;
+
+
+# First, we create a class, which uses input features from another class
+class AInputFeatureGroup(AbstractFeatureGroup):
+
+    def input_features(self, options: Options, feature_name: FeatureName) -&gt; Optional[Set[Feature]]:
+
+        # We use the source to make this feature flexible.
+        # One could give here different feature names via the configuration.
+        mloda_source = options.get(_mloda_source)
+        if mloda_source is None:
+            raise ValueError(f&quot;Option '{_mloda_source}' is required.&quot;)
+
+        features = set()
+        for source in mloda_source:
+            features.add(Feature(name=source,                # source in this example is &lt;AFeatureInputCreator&gt;
+                                 initial_requested_data=True # To see this feature also in the output, we can set this var to true.
+                                 )
+            )
+        return features
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:
-        return {&quot;ExampleFeatureClass&quot;: [1, 2, 3], 
-                &quot;idx&quot;: [&quot;a&quot;, &quot;b&quot;, &quot;c&quot;]}
+        data[&quot;AInputFeatureGroup&quot;] = len(data)
+        return data
+
+
+feature_list = []
+feature_list.append(
+    Feature(name=&quot;AInputFeatureGroup&quot;, options={_mloda_source: frozenset([&quot;AFeatureInputCreator&quot;])})
+)
+
+result = mlodaAPI.run_all(
+    feature_list,
+    compute_frameworks={PandasDataframe},
+    plugin_collector=PlugInCollector.enabled_feature_groups({AInputFeatureGroup, AFeatureInputCreator})
+
+)
+print(result)
 </code></pre>
+<p>Output:</p>
+<pre><code class="language-python">[AFeatureInputCreator
+0           TestValue5
+1           TestValue6,    
+AInputFeatureGroup
+0                   2
+1                   2]
+.......
+</code></pre>
+<p>As the input features can be fulfilled by <strong>multiple other features</strong>, we can have the same processes running in different environments, migrations and processes.</p>
               
             </div>
           </div><footer>

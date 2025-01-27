@@ -649,8 +649,8 @@ print(plugin_loader.list_loaded_modules("sql"))</div>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>['mloda_plugins.input_data.read_file', 'mloda_plugins.input_data.read_db_feature', 'mloda_plugins.input_data.read_db', 'mloda_plugins.input_data.read_file_feature', 'mloda_plugins.input_data.read_files.json', 'mloda_plugins.input_data.read_files.csv', 'mloda_plugins.input_data.read_files.parquet', 'mloda_plugins.input_data.read_files.feather', 'mloda_plugins.input_data.read_files.orc', 'mloda_plugins.input_data.read_dbs.sqlite']
-['mloda_plugins.input_data.read_dbs.sqlite']
+<pre>['mloda_plugins.feature_group.input_data.read_file', 'mloda_plugins.feature_group.input_data.read_db_feature', 'mloda_plugins.feature_group.input_data.read_db', 'mloda_plugins.feature_group.input_data.read_file_feature', 'mloda_plugins.feature_group.input_data.read_files.json', 'mloda_plugins.feature_group.input_data.read_files.csv', 'mloda_plugins.feature_group.input_data.read_files.parquet', 'mloda_plugins.feature_group.input_data.read_files.feather', 'mloda_plugins.feature_group.input_data.read_files.orc', 'mloda_plugins.feature_group.input_data.read_dbs.sqlite']
+['mloda_plugins.feature_group.input_data.read_dbs.sqlite']
 </pre>
 </div>
 </div>
@@ -789,7 +789,7 @@ categorical_features: List[str | Feature] = ["user_age_group", "product_category
 <div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># Step 2: We specify the data sources to load</span>
 <span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">from</span> <span class="nn">mloda_core.abstract_plugins.components.data_access_collection</span> <span class="kn">import</span> <span class="n">DataAccessCollection</span>
-<span class="kn">from</span> <span class="nn">mloda_plugins.input_data.read_dbs.sqlite</span> <span class="kn">import</span> <span class="n">SQLITEReader</span>
+<span class="kn">from</span> <span class="nn">mloda_plugins.feature_group.input_data.read_dbs.sqlite</span> <span class="kn">import</span> <span class="n">SQLITEReader</span>
 
 <span class="c1"># Initialize a DataAccessCollection object</span>
 <span class="n">data_access_collection</span> <span class="o">=</span> <span class="n">DataAccessCollection</span><span class="p">()</span>
@@ -811,7 +811,7 @@ categorical_features: List[str | Feature] = ["user_age_group", "product_category
 <div class="clipboard-copy-txt" id="cell-4"># Step 2: We specify the data sources to load
 import os
 from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda_plugins.input_data.read_dbs.sqlite import SQLITEReader
+from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 
 # Initialize a DataAccessCollection object
 data_access_collection = DataAccessCollection()
@@ -1111,7 +1111,7 @@ product_id: [[282,355,395]] &lt;class 'pyarrow.lib.Table'&gt;
 <span class="kn">from</span> <span class="nn">mloda_core.abstract_plugins.components.index.index</span> <span class="kn">import</span> <span class="n">Index</span>
 <span class="kn">from</span> <span class="nn">mloda_core.abstract_plugins.components.link</span> <span class="kn">import</span> <span class="n">JoinType</span><span class="p">,</span> <span class="n">Link</span>
 <span class="kn">from</span> <span class="nn">mloda_core.abstract_plugins.components.options</span> <span class="kn">import</span> <span class="n">Options</span>
-<span class="kn">from</span> <span class="nn">mloda_plugins.input_data.read_file_feature</span> <span class="kn">import</span> <span class="n">ReadFileFeature</span>
+<span class="kn">from</span> <span class="nn">mloda_plugins.feature_group.input_data.read_file_feature</span> <span class="kn">import</span> <span class="n">ReadFileFeature</span>
 
 
 <span class="c1"># Define the index for the join</span>
@@ -1174,7 +1174,7 @@ from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.index.index import Index
 from mloda_core.abstract_plugins.components.link import JoinType, Link
 from mloda_core.abstract_plugins.components.options import Options
-from mloda_plugins.input_data.read_file_feature import ReadFileFeature
+from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
 
 
 # Define the index for the join

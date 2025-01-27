@@ -673,7 +673,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span>
 <span class="kn">from</span> <span class="nn">mloda_core.abstract_plugins.components.feature</span> <span class="kn">import</span> <span class="n">Feature</span>
 <span class="kn">from</span> <span class="nn">mloda_core.abstract_plugins.components.data_access_collection</span> <span class="kn">import</span> <span class="n">DataAccessCollection</span>
-<span class="kn">from</span> <span class="nn">mloda_plugins.input_data.read_dbs.sqlite</span> <span class="kn">import</span> <span class="n">SQLITEReader</span>
+<span class="kn">from</span> <span class="nn">mloda_plugins.feature_group.input_data.read_dbs.sqlite</span> <span class="kn">import</span> <span class="n">SQLITEReader</span>
 <span class="kn">from</span> <span class="nn">mloda_core.abstract_plugins.plugin_loader.plugin_loader</span> <span class="kn">import</span> <span class="n">PluginLoader</span>
 <span class="kn">from</span> <span class="nn">mloda_core.api.request</span> <span class="kn">import</span> <span class="n">mlodaAPI</span>
 <span class="kn">from</span> <span class="nn">mloda_plugins.compute_framework.base_implementations.pyarrow.table</span> <span class="kn">import</span> <span class="n">PyarrowTable</span>
@@ -711,7 +711,7 @@ import os
 from typing import List
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda_plugins.input_data.read_dbs.sqlite import SQLITEReader
+from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 from mloda_core.api.request import mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
@@ -892,8 +892,8 @@ mlodaAPI.run_all(all_features, data_access_collection=data_access_collection, co
 
 <span class="kn">from</span> <span class="nn">mloda_core.abstract_plugins.components.feature_set</span> <span class="kn">import</span> <span class="n">FeatureSet</span>
 <span class="kn">from</span> <span class="nn">mloda_core.abstract_plugins.components.input_data.base_input_data</span> <span class="kn">import</span> <span class="n">BaseInputData</span>
-<span class="kn">from</span> <span class="nn">mloda_plugins.input_data.read_file_feature</span> <span class="kn">import</span> <span class="n">ReadFileFeature</span>
-<span class="kn">from</span> <span class="nn">mloda_plugins.input_data.read_files.csv</span> <span class="kn">import</span> <span class="n">CsvReader</span>
+<span class="kn">from</span> <span class="nn">mloda_plugins.feature_group.input_data.read_file_feature</span> <span class="kn">import</span> <span class="n">ReadFileFeature</span>
+<span class="kn">from</span> <span class="nn">mloda_plugins.feature_group.input_data.read_files.csv</span> <span class="kn">import</span> <span class="n">CsvReader</span>
 
 
 <span class="k">class</span> <span class="nc">CsvReader2</span><span class="p">(</span><span class="n">CsvReader</span><span class="p">):</span>
@@ -934,8 +934,8 @@ from pyarrow import csv as pyarrow_csv
 
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda_plugins.input_data.read_file_feature import ReadFileFeature
-from mloda_plugins.input_data.read_files.csv import CsvReader
+from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
+from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 
 
 class CsvReader2(CsvReader):

@@ -8,7 +8,7 @@ plugins:
         preset: "conventionalcommits",
         releaseRules:
           [
-            { type: "feat", release: "minor" },
+            { type: "feat", release: "patch" },
             { type: "impr", release: "patch" },
             { type: "refactor", release: "patch" },
             { type: "perf", release: "patch" },

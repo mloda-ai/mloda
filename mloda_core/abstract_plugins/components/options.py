@@ -1,5 +1,7 @@
 from typing import Any, Optional
 
+from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+
 
 class Options:
     """HashableDict
@@ -39,3 +41,19 @@ class Options:
 
     def __str__(self) -> str:
         return str(self.data)
+
+    def update_considering_mloda_source(self, other: "Options") -> None:
+        """
+        This functionality is used to update an options object with another options object.
+
+        However, we exclude the mloda_source_feature key from the update. We do it because we want to keep the
+        parent feature source feature in the options object. This object, is not relevant for the child feature.
+        """
+
+        exclude_key = DefaultOptionKeys.mloda_source_feature
+
+        other_data_copy = other.data.copy()
+        if exclude_key in other_data_copy and exclude_key in self.data:
+            del other_data_copy[exclude_key]
+
+        self.data.update(other_data_copy)

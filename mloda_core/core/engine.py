@@ -56,6 +56,10 @@ class Engine:
         # set api input collection if relevant
         self.api_input_data_collection = api_input_data_collection
 
+        # TODO
+        self.plugin_collector = plugin_collector
+        self.copy_compute_frameworks = deepcopy(compute_frameworks)
+
         self.data_access_collection = data_access_collection
         self.execution_planner = self.create_setup_execution_plan(features)
 
@@ -93,6 +97,9 @@ class Engine:
 
     def setup_features_recursion(self, features: Features) -> None:
         for feature in features:
+            self.accessible_plugins = PreFilterPlugins(
+                self.copy_compute_frameworks, self.plugin_collector
+            ).get_accessible_plugins()
             feature_group_class, compute_frameworks = IdentifyFeatureGroupClass(
                 feature, self.accessible_plugins, self.links, self.data_access_collection
             ).get()

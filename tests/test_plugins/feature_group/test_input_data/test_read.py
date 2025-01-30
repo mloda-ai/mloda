@@ -1,9 +1,11 @@
 import os
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Union
 
 import tempfile
 import unittest
 import sqlite3
+from mloda_core.abstract_plugins.components.feature_name import FeatureName
+from mloda_core.abstract_plugins.components.options import Options
 from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 import pytest
 import pyarrow as pa
@@ -20,7 +22,6 @@ from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
 from tests.test_plugins.feature_group.test_input_data.test_classes.test_input_classes import (
     DBInputDataTestFeatureGroup,
-    ReadFileFeatureWithIndex,
 )
 from tests.test_core.test_integration.test_core.test_runner_one_compute_framework import SumFeature
 
@@ -117,6 +118,30 @@ class TestTwoReader(unittest.TestCase):
     def test_agg_feature(self) -> None:
         index = Index(("id",))
 
+        class ReadFileFeatureWithIndex(ReadFileFeature):
+            @classmethod
+            def index_columns(cls) -> Optional[List[Index]]:
+                return [Index(("id",))]
+
+            @classmethod
+            def match_feature_group_criteria(
+                cls,
+                feature_name: Union[FeatureName, str],
+                options: Options,
+                data_access_collection: Optional[DataAccessCollection] = None,
+            ) -> bool:
+                # Feature is only valid for this test
+                if options.get("test_agg_feature") is None:
+                    return False
+
+                if isinstance(feature_name, FeatureName):
+                    feature_name = feature_name.name
+
+                if cls().is_root(options, feature_name):
+                    input_data_class = cls.input_data()
+                    return input_data_class.matches(feature_name, options, data_access_collection)  # type: ignore
+                return False
+
         class DBInputDataTestFeatureGroupWithIndex(DBInputDataTestFeatureGroup):
             @classmethod
             def index_columns(cls) -> Optional[List[Index]]:
@@ -153,6 +178,7 @@ class TestTwoReader(unittest.TestCase):
                 "sum": ("any_num", "Amount"),
                 SQLITEReader.__name__: HashableDict({SQLITEReader.db_path(): self.db_path, "table_name": "test_table"}),
                 CsvReader.__name__: self.file_path,
+                "test_agg_feature": True,
             },
         )
 
@@ -172,6 +198,6 @@ class TestTwoReader(unittest.TestCase):
                 compute_frameworks=["PyarrowTable"],
                 links={link},
                 plugin_collector=PlugInCollector.enabled_feature_groups(
-                    {ReadFileFeatureWithIndex, DBInputDataTestFeatureGroupWithIndex}
+                    {ReadFileFeature, DBInputDataTestFeatureGroupWithIndex}
                 ),
             )

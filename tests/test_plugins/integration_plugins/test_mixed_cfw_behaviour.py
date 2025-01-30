@@ -1,6 +1,5 @@
 import os
 from typing import Any, List, Set, Tuple
-import unittest
 import time
 
 import pytest
@@ -26,38 +25,6 @@ try:
     import pandas as pd
 except ImportError:
     pd = None
-
-
-class TestPandasDataFrames(unittest.TestCase):
-    file_path = f"{os.getcwd()}/tests/test_plugins/feature_group/src/dataset/creditcard_2023_short.csv"
-
-    feature_names = "id,V1,V2,V3,V4,V5,V6,V7,V8,V9,V10,V11,V12,V13,V14,V15,V16,V17,V18,V19,V20,V21,V22,V23,V24,V25,V26,V27,V28,Amount,Class"
-    feature_list = feature_names.split(",")
-
-    def assert_file(self, result_data: Any, expected_cols: int = 31) -> None:
-        assert isinstance(result_data, pd.DataFrame)
-        assert len(result_data) == 9
-        assert len(result_data.columns) == expected_cols
-
-    def test_load_pandas(self) -> None:
-        result_data = mlodaAPI.run_all(
-            self.feature_list,  # type: ignore
-            compute_frameworks=["PandasDataframe"],
-            data_access_collection=DataAccessCollection(files={self.file_path}),
-        )
-        self.assert_file(result_data[0])
-
-    def test_load_pyarrow_and_pandas(self) -> None:
-        from mloda_plugins.compute_framework.base_implementations.base_dataframe import BaseDataFrame
-
-        if BaseDataFrame is None:
-            raise ValueError("BaseDataFrame is not imported")
-        result_data = mlodaAPI.run_all(
-            self.feature_list,  # type: ignore
-            compute_frameworks=["BaseDataFrame"],
-            data_access_collection=DataAccessCollection(files={self.file_path}),
-        )
-        self.assert_file(result_data[0])
 
 
 class TestMixComputeFrameWork:

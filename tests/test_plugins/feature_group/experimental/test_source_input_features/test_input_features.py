@@ -33,7 +33,6 @@ from mloda_plugins.feature_group.experimental.source_input_feature import Source
 from mloda_plugins.feature_group.input_data.api_data.api_data import ApiInputDataFeature
 from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
 from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
-from tests.test_plugins.feature_group.test_input_data.test_classes.test_input_classes import ReadFileFeatureWithIndex
 
 
 class FeatureInputFeatureTest(AbstractFeatureGroup):
@@ -202,8 +201,8 @@ class TestInputFeatures:
 
     def test_input_feature_global_scope(self) -> None:
         file_path = Path(__file__).resolve().parent
-
-        data_access_collection = DataAccessCollection(folders={str(file_path)})
+        file_path = file_path.joinpath("example.csv")
+        data_access_collection = DataAccessCollection(files={str(file_path)})
 
         feature_list: List[Feature | str] = []
         feature_list.append(
@@ -217,9 +216,7 @@ class TestInputFeatures:
         )
 
         result = mlodaAPI.run_all(
-            feature_list,
-            compute_frameworks=["PandasDataframe"],
-            data_access_collection=data_access_collection,
+            feature_list, compute_frameworks=["PandasDataframe"], data_access_collection=data_access_collection
         )
         for res in result:
             assert len(res) == 2
@@ -231,8 +228,8 @@ class TestInputFeatures:
 
     def test_input_feature_all(self) -> None:
         file_path = Path(__file__).resolve().parent
-
-        data_access_collection = DataAccessCollection(folders={str(file_path)})
+        other_path = file_path.joinpath("example.csv")
+        data_access_collection = DataAccessCollection(files={str(other_path)})
         # global scope
         feature_list: List[Feature | str] = []
         feature_list.append(
@@ -307,7 +304,8 @@ class TestInputFeatures:
         requested_feature = "InputFeatureMergeTest"
 
         file_path = Path(__file__).resolve().parent
-        data_access_collection = DataAccessCollection(folders={str(file_path)})
+        file_path = file_path.joinpath("example.csv")
+        data_access_collection = DataAccessCollection(files={str(file_path)})
 
         # global scope, feature
         feature_list: List[Feature | str] = []
@@ -321,7 +319,7 @@ class TestInputFeatures:
                                 "FeatureInputCsv",
                                 None,
                                 None,
-                                (ReadFileFeatureWithIndex, "FeatureInputCsv"),
+                                (ReadFileFeature, "FeatureInputCsv"),
                                 (FeatureInputFeatureTest, "FeatureInputFeatureTest"),
                                 JoinType.APPEND.value,
                                 "FeatureInputCsv",
@@ -361,7 +359,8 @@ class TestInputFeatures:
         requested_feature = "InputFeatureMergeTest"
 
         file_path = Path(__file__).resolve().parent
-        data_access_collection = DataAccessCollection(folders={str(file_path)})
+        file_path = file_path.joinpath("example.csv")
+        data_access_collection = DataAccessCollection(files={str(file_path)})
 
         # global scope, feature
         feature_list: List[Feature | str] = []
@@ -375,7 +374,7 @@ class TestInputFeatures:
                                 "FeatureInputCsv",
                                 None,
                                 None,
-                                (ReadFileFeatureWithIndex, "FeatureInputCsv"),
+                                (ReadFileFeature, "FeatureInputCsv"),
                                 (FeatureInputFeatureTest, "FeatureInputFeatureTest"),
                                 "outer",
                                 "FeatureInputCsv",

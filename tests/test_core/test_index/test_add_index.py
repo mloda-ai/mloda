@@ -9,6 +9,7 @@ import unittest
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_plugins.feature_group.input_data.read_db_feature import ReadDBFeature
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
+from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
 from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -25,7 +26,6 @@ from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.api.request import mlodaAPI
 from tests.test_plugins.feature_group.test_input_data.test_classes.test_input_classes import (
     DBInputDataTestFeatureGroup,
-    ReadFileFeatureWithIndex,
 )
 
 
@@ -54,6 +54,30 @@ class TestAddIndex(unittest.TestCase):
     def test_add_index_simple(
         self,
     ) -> None:
+        class ReadFileFeatureWithIndex(ReadFileFeature):
+            @classmethod
+            def index_columns(cls) -> Optional[List[Index]]:
+                return [Index(("id",))]
+
+            @classmethod
+            def match_feature_group_criteria(
+                cls,
+                feature_name: Union[FeatureName, str],
+                options: Options,
+                data_access_collection: Optional[DataAccessCollection] = None,
+            ) -> bool:
+                # Feature is only valid for this test
+                if options.get("test_add_index_simple") is None:
+                    return False
+
+                if isinstance(feature_name, FeatureName):
+                    feature_name = feature_name.name
+
+                if cls().is_root(options, feature_name):
+                    input_data_class = cls.input_data()
+                    return input_data_class.matches(feature_name, options, data_access_collection)  # type: ignore
+                return False
+
         class DBInputDataTestFeatureGroupWithIndex(DBInputDataTestFeatureGroup):
             @classmethod
             def index_columns(cls) -> Optional[List[Index]]:
@@ -108,6 +132,7 @@ class TestAddIndex(unittest.TestCase):
             options={
                 CsvReader.__name__: self.file_path,
                 SQLITEReader.__name__: HashableDict({SQLITEReader.db_path(): self.db_path, "table_name": "test_table"}),
+                "test_add_index_simple": True,
             },
         )
 

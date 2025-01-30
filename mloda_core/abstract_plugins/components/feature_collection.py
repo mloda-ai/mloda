@@ -1,9 +1,9 @@
 from __future__ import annotations
-from copy import deepcopy
 from typing import Generator, List, Optional, Set, Union
 from uuid import UUID
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.options import Options
+from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 
 class Features:
@@ -53,12 +53,13 @@ class Features:
         for key_child, value_child in child_options.data.items():
             for key_parent, value_parent in feature_options.data.items():
                 if key_child == key_parent:
+                    if key_parent == DefaultOptionKeys.mloda_source_feature:
+                        continue
                     if value_child != value_parent:
                         raise ValueError(f"Duplicate keys found in options: {key_child}")
 
         # Merge the child_options data into feature_options data
-        _child_options = deepcopy(child_options)
-        feature_options.data.update(_child_options.data)
+        feature_options.update_considering_mloda_source(child_options)
 
     def check_duplicate_feature(self, feature: Feature) -> None:
         if feature in self.collection:

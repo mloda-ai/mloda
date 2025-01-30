@@ -37,13 +37,23 @@ class PlugInCollector:
         return False
 
     @staticmethod
-    def disabled_feature_groups(feature_group_cls: Set[Type[AbstractFeatureGroup]]) -> "PlugInCollector":
+    def disabled_feature_groups(
+        feature_group_cls: Set[Type[AbstractFeatureGroup]] | Type[AbstractFeatureGroup],
+    ) -> "PlugInCollector":
+        if not isinstance(feature_group_cls, Set):
+            feature_group_cls = {feature_group_cls}
+
         plugin_collector = PlugInCollector()
         plugin_collector.add_disabled_feature_group_classes(feature_group_cls)
         return plugin_collector
 
     @staticmethod
-    def enabled_feature_groups(feature_group_cls: Set[Type[AbstractFeatureGroup]]) -> "PlugInCollector":
+    def enabled_feature_groups(
+        feature_group_cls: Set[Type[AbstractFeatureGroup]] | Type[AbstractFeatureGroup],
+    ) -> "PlugInCollector":
+        if not isinstance(feature_group_cls, Set):
+            feature_group_cls = {feature_group_cls}
+
         plugin_collector = PlugInCollector()
         plugin_collector.add_enabled_feature_group_classes(feature_group_cls)
         return plugin_collector

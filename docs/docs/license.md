@@ -10,5 +10,4 @@ This means:
 
 Attributions:
 
-- Any attributions for third-party components or libraries are provided in the
-  "attribution" folder of this repository, see the [attribution](https://github.com/TomKaltofen/mloda/blob/main/attribution) folder in the GitHub repository.
+- Any attributions for third-party components or libraries are available in the [releases of this repository](https://github.com/TomKaltofen/mloda/releases) as asset: ATTRIBUTION.md THIRD_PARTY_LICENSES.md.

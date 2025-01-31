@@ -7,5 +7,4 @@ of the License at:
        http://www.apache.org/licenses/LICENSE-2.0
 
 Attributions:
-- Any attributions for third-party components or libraries are provided in the
-  "attribution" folder of this repository.
+- Any attributions for third-party components or libraries are available in the [releases of this repository](https://github.com/TomKaltofen/mloda/releases) as asset: ATTRIBUTION.md THIRD_PARTY_LICENSES.md.

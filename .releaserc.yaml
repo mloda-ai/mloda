@@ -54,7 +54,7 @@ plugins:
   - [
       "@semantic-release/github",
       {
-        "assets": [],
+        "assets": ["attribution/*.md"],
         "releasedLabels": ["released"],
         "releaseNameTemplate": "🚀 Version ${nextRelease.version}",
       },

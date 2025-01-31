@@ -19,6 +19,18 @@ jobs:
           persist-credentials: false
           ref: main
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install tox
+        run: pip install tox
+
+      - name: Generate License Files
+        run: |
+            tox -e python310
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -68,7 +80,7 @@ jobs:
         env:
           CI: true
           GITHUB_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
-         
+
   publish:
     needs: github_release
     runs-on: ubuntu-24.04

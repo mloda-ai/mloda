@@ -58,6 +58,18 @@ def run_tox() -> bool:
         return False
 
 
+def add_file_to_git(files: List[str], out: str) -> None:
+    """Stages the given file for commit using git add"""
+    for file in files:
+        file_path = os.path.join(out, file)
+        print(f"Adding {file_path} to git staging area.")
+        try:
+            subprocess.run(["git", "add", file_path], check=True)
+            print(f"{file_path} was successfully added to the git staging area.")
+        except subprocess.CalledProcessError as e:
+            print(f"Error adding {file_path} to git index {e}")
+
+
 if __name__ == "__main__":
     """
         This script downloads attribution files from the latest release of mloda and compares them using tox.
@@ -66,14 +78,21 @@ if __name__ == "__main__":
         You can view the results with git diff.
     """
 
-    files = ["ATTRIBUTION.md", "THIRD_PARTY_LICENSES.md"]
+    files = ["THIRD_PARTY_LICENSES.md"]
     base = f"https://github.com/TomKaltofen/mloda/releases/download/{get_version()}/"
     out = "attribution/"
 
-    if version := get_version():
-        print(f"Version: {version}")
-        download_files(base, files, out)
-        remove_tox()
-        run_tox()
-    else:
-        print("Exiting")
+    try:
+        if version := get_version():
+            print(f"Version: {version}")
+            download_files(base, files, out)
+            add_file_to_git(files, out)
+            remove_tox()
+            os.environ["TOX_WRITE_THIRD_PARTY_LICENSES"] = "true"
+            run_tox()
+        else:
+            print("Exiting")
+
+    finally:
+        if "TOX_WRITE_THIRD_PARTY_LICENSES" in os.environ:
+            del os.environ["TOX_WRITE_THIRD_PARTY_LICENSES"]

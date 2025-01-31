@@ -28,8 +28,19 @@ jobs:
         run: pip install tox
 
       - name: Generate License Files
+        env:
+          NO_WRITE_ATTRIBUTION_MD: " "
+          TOX_WRITE_THIRD_PARTY_LICENSES: true
         run: |
             tox -e python310
+            if [ ! -f "attribution/ATTRIBUTION.md" ]; then
+              echo "Error: Expected file attribution/ATTRIBUTION.md does not exist"
+              exit 1
+            fi
+            if [ ! -f "attribution/THIRD_PARTY_LICENSES.md" ]; then
+              echo "Error: Expected file attribution/THIRD_PARTY_LICENSES.md does not exist"
+              exit 1
+            fi
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

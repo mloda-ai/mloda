@@ -11,3 +11,5 @@ pyarrow
 testbook
 ipykernel
 bandit
+types-requests
+types-toml

@@ -133,7 +133,9 @@ class GeminiRequestLoop(LLMBaseRequest):
             response = cls.request(model, current_prompt, model_parameters, tools)
             response_text, tool_result = cls.handle_response(response, features, tools)
             all_results.append(response_text)
-            print(tool_result)
+
+            if response_text is None:
+                print(tool_result)
             if not tool_result:
                 break
 

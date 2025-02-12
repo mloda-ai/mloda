@@ -29,7 +29,7 @@ def test_llm_file_selector() -> None:
             options={
                 "prompt": prompt,
                 "target_folder": frozenset(target_folder),
-                "disallowed_files": frozenset(["__init__.py"]),
+                "disallowed_files": frozenset(["__init__.py", "run.py"]),
                 "file_type": "py",
             },
         )
@@ -41,7 +41,7 @@ def test_llm_file_selector() -> None:
     )
 
     # prompt = "Given the following code files, which code smells do you see?"
-    prompt = "Given the following code files, choose a code smell and fix it."
+    prompt = "Given the following code files, choose a code smell and fix it. Show the result as a whole file."
 
     files = None
     for res in results:

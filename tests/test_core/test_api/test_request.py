@@ -30,7 +30,7 @@ class TestmlodaAPI:
         return api_request
 
     def test_init_with_all_params(self) -> None:
-        features = [Feature("some_feature")]
+        features = [Feature("BaseTestGraphFeatureGroup3")]
 
         compute_fws = [fw.get_class_name() for fw in get_all_subclasses(ComputeFrameWork)]
         links = {
@@ -49,5 +49,4 @@ class TestmlodaAPI:
     def test_setup_engine(self, features: list[Union[str, Feature]]) -> None:
         with patch("mloda_core.core.engine.Engine.create_setup_execution_plan"):
             mloda_api = self.init_with_no_params(features)
-            mloda_api.setup_engine()
             assert isinstance(mloda_api.engine, Engine)

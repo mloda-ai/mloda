@@ -7,7 +7,7 @@ from mloda_plugins.feature_group.experimental.llm.tools.available.create_new_plu
     CreateFileTool,
 )
 from mloda_plugins.feature_group.experimental.llm.tools.available.multiply import MultiplyTool
-from mloda_plugins.feature_group.experimental.llm.tools.available.run_single_test import RunSinglePytestTool
+from mloda_plugins.feature_group.experimental.llm.tools.available.run_single_pytest import RunSinglePytestTool
 from mloda_plugins.feature_group.experimental.llm.tools.available.run_tox import RunToxTool
 from mloda_plugins.feature_group.experimental.llm.gemini import GeminiRequestLoop
 from mloda_plugins.feature_group.experimental.llm.tools.tool_collection import ToolCollection

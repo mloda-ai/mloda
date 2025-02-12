@@ -29,7 +29,7 @@ except ImportError:
 
 class ConcatenatedFileContent(AbstractFeatureGroup):
     """
-    A feature group that reads and combines content from Python files within a directory.
+    A feature group that reads and combines content from files within a directory (default: python files).
 
     It creates a set of features, each corresponding to a file,
     and joins them together for appending. It then concatenates all file

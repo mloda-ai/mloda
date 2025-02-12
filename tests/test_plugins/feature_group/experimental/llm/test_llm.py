@@ -1,11 +1,13 @@
 import os
 from typing import Any, List, Optional, Union
 
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_plugins.feature_group.experimental.llm.gemini import GeminiRequest
-from mloda_plugins.feature_group.input_data.read_context_files import ConcatenatedFileContent, find_file_paths
+from mloda_plugins.feature_group.experimental.llm.tools.available.multiply import MultiplyTool
 import pytest
 
+from mloda_core.abstract_plugins.components.feature_set import FeatureSet
+from mloda_plugins.feature_group.experimental.llm.gemini import GeminiRequestLoop
+from mloda_plugins.feature_group.experimental.llm.tools.tool_collection import ToolCollection
+from mloda_plugins.feature_group.input_data.read_context_files import ConcatenatedFileContent, find_file_paths
 from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
@@ -130,7 +132,7 @@ class TestPlugInLLM:
     def test_llm_gemini_base(self) -> None:
         features: List[Feature | str] = [
             Feature(
-                name=GeminiRequest.get_class_name(),
+                name=GeminiRequestLoop.get_class_name(),
                 options={
                     "model": "gemini-1.5-flash-8b",
                     "prompt": "What is the meaning of life?",
@@ -144,7 +146,7 @@ class TestPlugInLLM:
             features,
         )
         for res in results:
-            assert GeminiRequest.get_class_name() in res
+            assert GeminiRequestLoop.get_class_name() in res
             assert len(res) == 1
 
     def test_llm_gemini_given_prompt(self) -> None:
@@ -152,7 +154,7 @@ class TestPlugInLLM:
 
         features: List[Feature | str] = [
             Feature(
-                name=GeminiRequest.get_class_name(),
+                name=GeminiRequestLoop.get_class_name(),
                 options={
                     "model": "gemini-1.5-flash-8b",
                     "prompt": "Can you count to 5?",
@@ -177,17 +179,20 @@ class TestPlugInLLM:
         )
 
         for res in results:
-            assert GeminiRequest.get_class_name() in res
+            assert GeminiRequestLoop.get_class_name() in res
 
 
 @pytest.mark.skipif(os.environ.get("GEMINI_API_KEY") is None, reason="GEMINI KEY NOT SET")
 class TestGeminiLLMFiles:
-    def test_llm_gemini_files(self) -> None:
-        prompt = """  I added the llm features to the mloda_plugins folder. It is still in experimental stage. I want to split it into multiple files. Into which files would you split it?"""
+    def test_llm_gemini_prompt(self) -> None:
+        prompt = """ 
+         
+        Can you help me improve the Tools?
+        """
 
         features: List[Feature | str] = [
             Feature(
-                name=GeminiRequest.get_class_name(),
+                name=GeminiRequestLoop.get_class_name(),
                 options={
                     "model": "gemini-2.0-flash-exp",
                     "prompt": prompt,
@@ -213,11 +218,73 @@ class TestGeminiLLMFiles:
         )
 
         for i, res in enumerate(results):
-            assert GeminiRequest.get_class_name() in res
+            assert GeminiRequestLoop.get_class_name() in res
             assert len(res) == 1
 
             # print(res[GeminiRequest.get_class_name()].values)
-            formatted_output = format_array(f"Result {i} values: ", res[GeminiRequest.get_class_name()].values)
+            formatted_output = format_array(f"Result {i} values: ", res[GeminiRequestLoop.get_class_name()].values)
+            print(formatted_output)
+
+    def test_llm_gemini_tool_loop(self) -> None:
+        # prompt = """Can you first run test_init_with_all_params, and then tox?"""
+        prompt = """
+            Perform the following steps in order, ensuring each step completes before proceeding to the next:
+            Do not start with the next step until the previous step is completed.  
+            Do not start with the unit test.
+            The path of the written code is tests/test_plugins/
+
+
+            1) Use tool `create_or_overwrite_new_plugin_and_write_to_file` to create a gemini api requester with a gemini 1.5 flash model. Orient yourself on existing other FeatureGroup implementations. The file_path is tests/test_plugins/new_plugin.py .
+            2) Use tool `create_or_overwrite_unit_test`. The path will be tests/test_plugins/new_plugin_unit_test.py.
+            3) Use tool `run_pytest` for the unit test created in step 2.
+            4) Repeat step 1,2,3 until the test passes.
+            """
+
+        prompt = """ As first step: Multiply 5 by 5. As a second step, multiply the result by 2. """
+
+        tool_collection = ToolCollection()
+        tool_collection.add_tool(MultiplyTool.get_class_name())
+
+        features: List[Feature | str] = [
+            Feature(
+                name=GeminiRequestLoop.get_class_name(),
+                options={
+                    "model": "gemini-2.0-flash-exp",
+                    "prompt": prompt,
+                    "tools": tool_collection,
+                    DefaultOptionKeys.mloda_source_feature: frozenset([ConcatenatedFileContent.get_class_name()]),
+                    "target_folder": frozenset(
+                        [
+                            os.getcwd() + "/mloda_plugins",
+                            os.getcwd() + "/mloda_core/",
+                            # os.getcwd() + "/mloda_core/abstract_plugins/",
+                            os.getcwd() + "/tests/test_plugins/feature_group/experimental/",
+                            # os.getcwd() + "/mloda_core/api/",
+                        ]
+                    ),
+                    "disallowed_files": frozenset(
+                        [
+                            "__init__.py",
+                            "gemini.py",
+                            "llm_base_request.py",
+                        ]
+                    ),
+                    "file_type": "py",
+                },
+            )
+        ]
+
+        # Run the API
+        results = mlodaAPI.run_all(
+            features,
+            compute_frameworks={PandasDataframe},
+        )
+
+        for i, res in enumerate(results):
+            assert GeminiRequestLoop.get_class_name() in res
+            assert len(res) == 1
+
+            formatted_output = format_array(f"Result {i} values: ", res[GeminiRequestLoop.get_class_name()].values)
             print(formatted_output)
 
 

@@ -1,8 +1,8 @@
 import shutil
-import subprocess
+import subprocess  # nosec
 from typing import Any, List
-import requests  # type: ignore
-import toml  # type: ignore
+import requests
+import toml
 import os
 
 

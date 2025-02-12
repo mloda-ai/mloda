@@ -6,7 +6,7 @@ from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
 from mloda_plugins.feature_group.experimental.llm.tools.tool_collection import ToolCollection
-from mloda_plugins.feature_group.experimental.llm.tools.tool_data_classes import ToolFunctionDeclaration
+from mloda_plugins.feature_group.experimental.llm.tools.tool_data_classes import PytestResult, ToolFunctionDeclaration
 
 
 try:
@@ -88,7 +88,10 @@ class LLMBaseRequest(AbstractFeatureGroup):
         if not option_prompt and not data_prompt:
             raise ValueError(f"Prompt was not set for {cls.__name__}")
 
-        return f"{data_prompt} {option_prompt}".strip()
+        if option_prompt != "":
+            option_prompt = f""" {option_prompt} """
+
+        return f"{option_prompt}\nContext:\n{data_prompt} End Context\n "
 
     @classmethod
     def handle_response(cls, response: Any, features: FeatureSet, tools: ToolCollection | None) -> pd.DataFrame:
@@ -151,13 +154,12 @@ class LLMBaseRequest(AbstractFeatureGroup):
             raise ValueError(f"Tool {tool_name} not found in tool mappings.")
 
         tool_result = tool.function(**args)
-        if not isinstance(tool_result, str):
-            raise ValueError(f"Tool result must be a string. {tool_name}, {tool_result}")
+        if not isinstance(tool_result, str) and not isinstance(tool_result, PytestResult):
+            raise ValueError(f"Tool result must be a string or PytestResult. {tool_name}, {tool_result}")
 
         return_tool_result = tool.tool_result(tool_result, **args)
         if not isinstance(return_tool_result, str):
             raise ValueError(f"Tool result must be a string. {tool_name}, {return_tool_result}")
-
         return return_tool_result
 
     @classmethod

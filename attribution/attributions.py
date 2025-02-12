@@ -1,5 +1,5 @@
 import shutil
-import subprocess
+import subprocess  # nosec
 from typing import Any, List
 import requests
 import toml

@@ -31,7 +31,7 @@ class MultiplyTool(BaseTool):
     def tool_declaration(cls) -> ToolFunctionDeclaration:
         return cls.build_tool_declaration(
             name=cls.get_class_name(),
-            description=""" This function multiplies two numbers together. It takes two arguments, a and b, and returns a * b. """,
+            description=""" This tool multiplies two float numbers. It takes two arguments, a and b. """,
             parameters=[
                 InputDataObject(name="a", type="float", description="The first number to multiply."),
                 InputDataObject(name="b", type="float", description="The second number to multiply."),

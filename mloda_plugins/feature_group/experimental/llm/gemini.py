@@ -129,6 +129,7 @@ class GeminiRequestLoop(LLMBaseRequest):
         all_tool_result = ""
         while True:
             print("\n############################################\n")
+
             response = cls.request(model, current_prompt, model_parameters, tools)
             response_text, tool_result = cls.handle_response(response, features, tools)
             all_results.append(response_text)
@@ -143,21 +144,44 @@ class GeminiRequestLoop(LLMBaseRequest):
         return pd.DataFrame({cls.get_class_name(): ["\n".join(all_results)]})
 
     @classmethod
-    def loop_prompt(cls, initial_prompt: str, tool_result: str, all_tool_result: str) -> str:
-        current_prompt = f"{initial_prompt}."
+    def loop_prompt(cls, current_prompt: str, tool_result: str, all_tool_result: str) -> str:
+        prompt_parts = [
+            current_prompt,
+            "\n\n--------------------------------------------------\n",
+            "**Previous Steps:**",
+        ]
 
-        current_prompt += """\n ##################################################################### 
-        Everything after the hashtags are results from tool executions. Please keep everything afterwards in memory for determining the final result.
-                          """
+        if all_tool_result:
+            prompt_parts.extend(
+                [
+                    "\nResults from all prior tool executions:\n",
+                    all_tool_result,
+                    "\n\n--------------------------------------------------\n",
+                ]
+            )
 
         if all_tool_result != "":
             current_prompt += f"\n\n Previous steps were completed with the following results: {all_tool_result}. \n\n"
 
-        current_prompt += f"""\n\n The most recent step result was: {tool_result}. 
-        
-                    \n\nGiven the instructions before the hashtags, can you determine the final result? If so, determine the final result. """
-        print(len(current_prompt))
-        return current_prompt
+        prompt_parts.extend(
+            [
+                "\n**Most Recent Step:**",
+                "\nResult from the last tool execution:\n",
+                tool_result,
+                "\n\n--------------------------------------------------\n",
+                """
+            **Instructions:**
+
+            You are an expert reasoning agent. Given the information above (the original instructions, prior steps, and the most recent step result), carefully analyze the situation and determine the next action to take. 
+
+            *   If the goal is complete, respond with the `Final Answer: ` followed by the final answer.
+            *   If another tool is needed, determine the correct tool to use, and what input it needs.
+            """,
+            ]
+        )
+        improved_prompt = "".join(prompt_parts)  # Efficient string joining
+        print(len(improved_prompt))
+        return improved_prompt
 
     @classmethod
     def handle_response(

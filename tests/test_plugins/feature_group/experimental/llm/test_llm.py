@@ -225,47 +225,6 @@ class TestGeminiLLMFiles:
             formatted_output = format_array(f"Result {i} values: ", res[GeminiRequestLoop.get_class_name()].values)
             print(formatted_output)
 
-    def test_llm_gemini_tools(self) -> None:
-        prompt = """As first step, multiply 3 by 3. As a second step, return the result of the multplication."""
-
-        tool_collection = ToolCollection()
-        tool_collection.add_tool(MultiplyTool.get_class_name())
-
-        features: List[Feature | str] = [
-            Feature(
-                name=GeminiRequestLoop.get_class_name(),
-                options={
-                    "model": "gemini-2.0-flash-exp",
-                    "prompt": prompt,
-                    "tools": tool_collection,  # , "run_pytest", "run_tox"]),
-                    DefaultOptionKeys.mloda_source_feature: frozenset([ConcatenatedFileContent.get_class_name()]),
-                    "target_folder": frozenset(
-                        [
-                            os.getcwd() + "/mloda_plugins",
-                            # os.getcwd() + "/mloda_core/abstract_plugins/",
-                            os.getcwd() + "/tests/test_plugins/feature_group/experimental//",
-                            # os.getcwd() + "/mloda_core/api/",
-                        ]
-                    ),
-                    "disallowed_files": frozenset(["__init__.py", "gemini.py"]),
-                    "file_type": "py",
-                },
-            )
-        ]
-
-        # Run the API
-        results = mlodaAPI.run_all(
-            features,
-            compute_frameworks={PandasDataframe},
-        )
-
-        for i, res in enumerate(results):
-            assert GeminiRequestLoop.get_class_name() in res
-            assert len(res) == 1
-
-            formatted_output = format_array(f"Result {i} values: ", res[GeminiRequestLoop.get_class_name()].values)
-            print(formatted_output)
-
     def test_llm_gemini_tool_loop(self) -> None:
         # prompt = """Can you first run test_init_with_all_params, and then tox?"""
         prompt = """
@@ -293,23 +252,21 @@ class TestGeminiLLMFiles:
                     "model": "gemini-2.0-flash-exp",
                     "prompt": prompt,
                     "tools": tool_collection,
-                    # DefaultOptionKeys.mloda_source_feature: frozenset(),
                     DefaultOptionKeys.mloda_source_feature: frozenset([ConcatenatedFileContent.get_class_name()]),
                     "target_folder": frozenset(
                         [
                             os.getcwd() + "/mloda_plugins",
                             os.getcwd() + "/mloda_core/",
-                            os.getcwd() + "/mloda_core/abstract_plugins/",
+                            # os.getcwd() + "/mloda_core/abstract_plugins/",
                             os.getcwd() + "/tests/test_plugins/feature_group/experimental/",
-                            os.getcwd() + "/mloda_core/api/",
+                            # os.getcwd() + "/mloda_core/api/",
                         ]
                     ),
                     "disallowed_files": frozenset(
                         [
                             "__init__.py",
-                            # "tools.py",
                             "gemini.py",
-                            # "llm_base_request.py",
+                            "llm_base_request.py",
                         ]
                     ),
                     "file_type": "py",

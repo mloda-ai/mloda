@@ -28,6 +28,9 @@ class TextFileReader(ReadFile):
         with local_fs.open_input_file(file_path) as file:
             content = file.read().decode("utf-8")
 
+        if features.get_options_key("AddPathToContent"):
+            content = f"The file path of the following file is {file_path} : {content}"
+
         data = {cls.get_class_name(): [content]}
 
         return pd.DataFrame(data)

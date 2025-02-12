@@ -100,9 +100,8 @@ class Engine:
             self.accessible_plugins = PreFilterPlugins(
                 self.copy_compute_frameworks, self.plugin_collector
             ).get_accessible_plugins()
-            feature_group_class, compute_frameworks = IdentifyFeatureGroupClass(
-                feature, self.accessible_plugins, self.links, self.data_access_collection
-            ).get()
+
+            feature_group_class, compute_frameworks = self._identify_feature_group_and_frameworks(feature)
 
             feature_group = feature_group_class()
 
@@ -114,17 +113,26 @@ class Engine:
             added = self.add_feature_to_collection(feature_group_class, feature, features.child_uuid)
 
             if added:
-                self.call_recursion_by_using_input_feature_definition(
+                self._call_recursion_by_using_input_feature_definition(
                     feature_group_class, feature.uuid, feature.options, feature.name
                 )
 
             if self.global_filter:
-                self.add_filter_feature(feature_group_class, feature_group, feature, features)
+                self._add_filter_feature(feature_group_class, feature_group, feature, features)
 
             if feature_group.index_columns():
-                self.add_index_feature(feature_group_class, feature_group, feature, features)
+                self._add_index_feature(feature_group_class, feature_group, feature, features)
 
-    def add_index_feature(
+    def _identify_feature_group_and_frameworks(
+        self, feature: Feature
+    ) -> tuple[Type[AbstractFeatureGroup], Set[Type[ComputeFrameWork]]]:
+        """Identifies the feature group class and compute frameworks for a given feature."""
+        identifier = IdentifyFeatureGroupClass(
+            feature, self.accessible_plugins, self.links, self.data_access_collection
+        )
+        return identifier.get()
+
+    def _add_index_feature(
         self,
         feature_group_class: Type[AbstractFeatureGroup],
         feature_group: AbstractFeatureGroup,
@@ -154,7 +162,7 @@ class Engine:
                             feature_group_class, new_index_feature, features.child_uuid, True
                         )
 
-    def add_filter_feature(
+    def _add_filter_feature(
         self,
         feature_group_class: Type[AbstractFeatureGroup],
         feature_group: AbstractFeatureGroup,
@@ -216,7 +224,7 @@ class Engine:
 
         return False
 
-    def call_recursion_by_using_input_feature_definition(
+    def _call_recursion_by_using_input_feature_definition(
         self, feature_group_class: Type[AbstractFeatureGroup], uuid: UUID, options: Options, feature_name: FeatureName
     ) -> None:
         feature_group = feature_group_class()

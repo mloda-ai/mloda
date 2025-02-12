@@ -29,6 +29,25 @@ class mlodaAPI:
         api_input_data_collection: Optional[ApiInputDataCollection] = None,
         plugin_collector: Optional[PlugInCollector] = None,
     ) -> None:
+        self.features = self._process_features(requested_features, api_input_data_collection)
+        self.compute_framework = SetupComputeFramework(compute_frameworks, self.features).compute_frameworks
+        self.links = links
+        self.data_access_collection = data_access_collection
+        self.global_filter = global_filter
+        self.api_input_data_collection = api_input_data_collection
+        self.plugin_collector = plugin_collector
+
+        self.runner: None | Runner = None
+        self.engine: None | Engine = None
+
+        self.engine = self._create_engine()
+
+    def _process_features(
+        self,
+        requested_features: Union[Features, list[Union[Feature, str]]],
+        api_input_data_collection: Optional[ApiInputDataCollection],
+    ) -> Features:
+        """Processes the requested features, ensuring they are in the correct format and adding API input data."""
         if not isinstance(requested_features, Features):
             features = Features(requested_features)
         else:
@@ -36,19 +55,9 @@ class mlodaAPI:
 
         for feature in features:
             feature.initial_requested_data = True
-            self.add_api_input_data(feature, api_input_data_collection)
+            self._add_api_input_data(feature, api_input_data_collection)
 
-        self.compute_framework = SetupComputeFramework(compute_frameworks, features).compute_frameworks
-        self.links = links
-        self.features = features
-        self.data_access_collection = data_access_collection
-
-        self.runner: None | Runner = None
-        self.engine: None | Engine = None
-
-        self.global_filter = global_filter
-        self.api_input_data_collection = api_input_data_collection
-        self.plugin_collector = plugin_collector
+        return features
 
     @staticmethod
     def run_all(
@@ -86,7 +95,6 @@ class mlodaAPI:
         function_extender: Optional[Set[WrapperFunctionExtender]] = None,
         api_data: Optional[Dict[str, Any]] = None,
     ) -> None:
-        self.setup_engine()
         self.setup_engine_runner(parallelization_modes, flight_server)
         self.run_engine_computation(parallelization_modes, function_extender, api_data)
 
@@ -109,8 +117,8 @@ class mlodaAPI:
             except Exception:  # nosec
                 pass
 
-    def setup_engine(self) -> None:
-        self.engine = Engine(
+    def _create_engine(self) -> Engine:
+        engine = Engine(
             self.features,
             self.compute_framework,
             self.links,
@@ -119,8 +127,9 @@ class mlodaAPI:
             self.api_input_data_collection,
             self.plugin_collector,
         )
-        if not isinstance(self.engine, Engine):
+        if not isinstance(engine, Engine):
             raise ValueError("Engine initialization failed.")
+        return engine
 
     def setup_engine_runner(
         self,
@@ -148,7 +157,10 @@ class mlodaAPI:
             raise ValueError("You need to run any run function beforehand.")
         return self.runner.get_artifacts()
 
-    def add_api_input_data(self, feature: Feature, api_input_data_collection: Optional[ApiInputDataCollection]) -> None:
+    def _add_api_input_data(
+        self, feature: Feature, api_input_data_collection: Optional[ApiInputDataCollection]
+    ) -> None:
+        """Adds API input data to the feature options if available."""
         if api_input_data_collection:
             api_input_data_column_names = api_input_data_collection.get_column_names()
             if len(api_input_data_column_names.data) == 0:

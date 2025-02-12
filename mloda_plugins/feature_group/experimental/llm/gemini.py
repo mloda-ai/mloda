@@ -24,7 +24,7 @@ try:
     import google.generativeai as genai
     from google.ai.generativelanguage_v1beta.types import FunctionCall, Content, Part
 except ImportError:
-    genai, FunctionCall, Content, Part, functionDeclarations = None, None, None, None  # type: ignore
+    genai, FunctionCall, Content, Part, functionDeclarations = None, None, None, None, None  # type: ignore
 
 import logging
 

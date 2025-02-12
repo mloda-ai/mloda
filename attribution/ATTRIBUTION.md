@@ -16,7 +16,7 @@
 | attrs                                  | 25.1.0          | UNKNOWN                                                 |
 | babel                                  | 2.17.0          | BSD License                                             |
 | bandit                                 | 1.8.2           | Apache Software License                                 |
-| beautifulsoup4                         | 4.13.1          | MIT License                                             |
+| beautifulsoup4                         | 4.13.3          | MIT License                                             |
 | bleach                                 | 6.2.0           | Apache Software License                                 |
 | cachetools                             | 5.5.1           | MIT License                                             |
 | certifi                                | 2025.1.31       | Mozilla Public License 2.0 (MPL 2.0)                    |
@@ -74,7 +74,7 @@
 | mermaid-py                             | 0.7.0           | MIT License                                             |
 | mistune                                | 3.1.1           | BSD License                                             |
 | mktestdocs                             | 0.2.4           | Apache Software License 2.0                             |
-| mypy                                   | 1.14.1          | MIT License                                             |
+| mypy                                   | 1.15.0          | MIT License                                             |
 | mypy-extensions                        | 1.0.0           | MIT License                                             |
 | nbclient                               | 0.10.2          | BSD License                                             |
 | nbconvert                              | 7.16.6          | BSD License                                             |
@@ -83,20 +83,20 @@
 | notebook                               | 7.3.2           | BSD License                                             |
 | notebook_shim                          | 0.2.4           | BSD License                                             |
 | numpy                                  | 2.2.2           | BSD License                                             |
-| opentelemetry-api                      | 1.29.0          | Apache Software License                                 |
-| opentelemetry-instrumentation          | 0.50b0          | Apache Software License                                 |
-| opentelemetry-instrumentation-logging  | 0.50b0          | Apache Software License                                 |
-| opentelemetry-instrumentation-requests | 0.50b0          | Apache Software License                                 |
-| opentelemetry-sdk                      | 1.29.0          | Apache Software License                                 |
-| opentelemetry-semantic-conventions     | 0.50b0          | Apache Software License                                 |
-| opentelemetry-util-http                | 0.50b0          | Apache Software License                                 |
+| opentelemetry-api                      | 1.30.0          | Apache Software License                                 |
+| opentelemetry-instrumentation          | 0.51b0          | Apache Software License                                 |
+| opentelemetry-instrumentation-logging  | 0.51b0          | Apache Software License                                 |
+| opentelemetry-instrumentation-requests | 0.51b0          | Apache Software License                                 |
+| opentelemetry-sdk                      | 1.30.0          | Apache Software License                                 |
+| opentelemetry-semantic-conventions     | 0.51b0          | Apache Software License                                 |
+| opentelemetry-util-http                | 0.51b0          | Apache Software License                                 |
 | overrides                              | 7.7.0           | Apache License, Version 2.0                             |
 | packaging                              | 24.2            | Apache Software License; BSD License                    |
 | pandas                                 | 2.2.3           | BSD License                                             |
 | pandera                                | 0.22.1          | MIT License                                             |
 | pandocfilters                          | 1.5.1           | BSD License                                             |
 | parso                                  | 0.8.4           | MIT License                                             |
-| pbr                                    | 6.1.0           | Apache Software License                                 |
+| pbr                                    | 6.1.1           | Apache Software License                                 |
 | pexpect                                | 4.9.0           | ISC License (ISCL)                                      |
 | platformdirs                           | 4.3.6           | MIT License                                             |
 | pluggy                                 | 1.5.0           | MIT License                                             |
@@ -130,7 +130,7 @@
 | rich                                   | 13.9.4          | MIT License                                             |
 | rpds-py                                | 0.22.3          | MIT License                                             |
 | rsa                                    | 4.9             | Apache Software License                                 |
-| ruff                                   | 0.9.4           | MIT License                                             |
+| ruff                                   | 0.9.6           | MIT License                                             |
 | six                                    | 1.17.0          | MIT License                                             |
 | sniffio                                | 1.3.1           | Apache Software License; MIT License                    |
 | soupsieve                              | 2.6             | MIT License                                             |
@@ -153,7 +153,7 @@
 | uri-template                           | 1.3.0           | MIT License                                             |
 | uritemplate                            | 4.1.1           | Apache Software License; BSD License                    |
 | urllib3                                | 2.3.0           | MIT License                                             |
-| virtualenv                             | 20.29.1         | MIT License                                             |
+| virtualenv                             | 20.29.2         | MIT License                                             |
 | webcolors                              | 24.11.1         | BSD License                                             |
 | webencodings                           | 0.5.1           | BSD License                                             |
 | websocket-client                       | 1.8.0           | Apache Software License                                 |

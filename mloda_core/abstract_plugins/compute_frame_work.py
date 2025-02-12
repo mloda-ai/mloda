@@ -299,7 +299,7 @@ class ComputeFrameWork(ABC):
             if wrapper_function_enum in extender.wraps():
                 if found_extender is not None:
                     raise ValueError(
-                        f"Multiple function_extender found for {wrapper_function_enum}, {found_extender.__name__}, {extender.__name__}"
+                        f"Multiple function_extender found for {wrapper_function_enum}, {found_extender.__class__.__name__}, {extender.__class__.__name__}"
                     )
                 found_extender = extender
 

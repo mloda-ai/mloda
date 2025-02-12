@@ -15,4 +15,5 @@ class InstalledPackagesFeatureGroup(AbstractFeatureGroup):
             packages = result.stdout
             return {cls.get_class_name(): [packages]}
         except subprocess.CalledProcessError as e:
-            return {"error": str(e)}
+            error_message = f"Command '{e.cmd}' failed with return code {e.returncode}. Error output: {e.stderr}"
+            return {"error": error_message}

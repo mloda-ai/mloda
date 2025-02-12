@@ -81,8 +81,8 @@ class ListDirectoryFeatureGroup(AbstractFeatureGroup):
                 return True
         return False
 
-    @staticmethod
-    def _generate_tree_string(file_structure: Dict[str, Any], prefix: str = "") -> str:
+    @classmethod
+    def _generate_tree_string(cls, file_structure: Dict[str, Any], prefix: str = "") -> str:
         """Recursively generates a properly formatted tree-like string representation."""
         lines: List[str] = []
         items = list(file_structure.items())
@@ -92,5 +92,5 @@ class ListDirectoryFeatureGroup(AbstractFeatureGroup):
             lines.append(f"{prefix}{connector}{name}")
             if isinstance(content, dict) and content:
                 new_prefix = f"{prefix}{'    ' if is_last else '│   '}"
-                lines.append(ListDirectoryFeatureGroup._generate_tree_string(content, new_prefix))
+                lines.append(cls._generate_tree_string(content, new_prefix))
         return "\n".join(lines)  # Ensure the whole structure is kept as one string

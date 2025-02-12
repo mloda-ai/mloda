@@ -159,7 +159,10 @@ class TestSingleTools:
 
         # prompt = """ Create a new abstractfeaturegroup plugin getting the list and directory of the project. """
         # prompt = """ Can you create a mlodaAPI test fot the plugin ListDirectoryFeatureGroup."""
-        prompt = """you create a mlodaAPI test for the plugin InstalledPackagesFeatureGroup."""
+        # prompt = """you create a mlodaAPI test for the plugin InstalledPackagesFeatureGroup."""
+        prompt = """Create a new plugin where an llm is asked to chose from a list of code files, which help the most to answer a question. 
+                    You can use the ConcatenatedFileContent feature to get the list of files and GeminiRequestLoop to run the tools.
+        """
 
         tool_collection = ToolCollection()
         tool_collection.add_tool(CreateFileTool.get_class_name())

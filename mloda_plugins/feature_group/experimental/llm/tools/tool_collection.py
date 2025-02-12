@@ -35,21 +35,3 @@ class ToolCollection:
 
     def __str__(self) -> str:
         return str(self.data)
-
-    @staticmethod
-    def create_or_overwrite_new_plugin_and_write_to_file(code: str) -> str:
-        """Write code to file and return the file name."""
-
-        with open("tests/test_plugins/new_plugin.py", "w") as f:
-            f.write(code)
-
-        return code
-
-    @staticmethod
-    def create_or_overwrite_unit_test(code: str) -> str:
-        """Write code to file and return the file name."""
-
-        with open("tests/test_plugins/new_plugin_unit_test.py", "w") as f:
-            f.write(code)
-
-        return code

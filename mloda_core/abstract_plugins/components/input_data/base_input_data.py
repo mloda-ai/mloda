@@ -47,15 +47,15 @@ class BaseInputData(ABC):
         """
         We check for the feature scrope data access if any child classes match the data access.
         """
-        subcls = get_all_filtereted_subclasses(BaseInputData, cls)
-        for sub in subcls:
+        subclasses = get_all_filtereted_subclasses(BaseInputData, cls)
+        for subclass in subclasses:
             for key, value in options.data.items():
                 _key = cls.deal_with_base_input_data_name_as_cls_or_str(key)
 
-                if _key == sub.data_access_name():
-                    matched_data_access = sub.match_subclass_data_access(value, [feature_name])  # type: ignore
+                if _key == subclass.data_access_name():
+                    matched_data_access = subclass.match_subclass_data_access(value, [feature_name])  # type: ignore
                     if matched_data_access:
-                        cls.add_base_input_data_to_options(sub, matched_data_access, options)
+                        cls.add_base_input_data_to_options(subclass, matched_data_access, options)
                         return True
                     break  # This case is if a feature requests an input feature, which should have scoped access.
         return False
@@ -100,12 +100,12 @@ class BaseInputData(ABC):
         """
         We check for data access collection if any child classes match the data access.
         """
-        subcls = get_all_filtereted_subclasses(BaseInputData, cls)
+        subclasses = get_all_filtereted_subclasses(BaseInputData, cls)
 
-        for sub in subcls:
-            matched_data_access = sub.match_subclass_data_access(data_access_collection, feature_names)  # type: ignore
+        for subclass in subclasses:
+            matched_data_access = subclass.match_subclass_data_access(data_access_collection, feature_names)  # type: ignore
             if matched_data_access:
-                return (sub, matched_data_access)
+                return (subclass, matched_data_access)
         return False, False
 
     @classmethod
@@ -117,9 +117,11 @@ class BaseInputData(ABC):
         """
 
         if options.get("BaseInputData"):
-            if options.get("BaseInputData") == (cls_to_be_added, matched_data_access):
+            existing_data = options.get("BaseInputData")
+            if existing_data == (cls_to_be_added, matched_data_access):
                 return
-            already_cls_to_be_added, _ = options.get("BaseInputData")
+
+            already_cls_to_be_added, _ = existing_data
             raise ValueError(
                 f"BaseInputData already set with different values. {cls_to_be_added} != {already_cls_to_be_added}"
             )
@@ -159,13 +161,13 @@ class BaseInputData(ABC):
 
 
 def get_all_filtereted_subclasses(cls: Any, parent_class: Any) -> List[Type[BaseInputData]]:
-    new_cls = []
-    for _cls in get_all_subclasses(cls):
+    filtered_subclasses = []
+    for subclass in get_all_subclasses(cls):
         # This ensures that only the classes that are subclasses of the parent class are considered.
         # ReadFile -> CsvReader
-        if not issubclass(_cls, parent_class):
+        if not issubclass(subclass, parent_class):
             continue
 
-        if _cls.supports_scoped_data_access():
-            new_cls.append(_cls)
-    return new_cls
+        if subclass.supports_scoped_data_access():
+            filtered_subclasses.append(subclass)
+    return filtered_subclasses

@@ -14,16 +14,20 @@ from mloda_core.abstract_plugins.components.utils import get_all_subclasses
 
 
 class Feature:
-    """A class to represent a raw feature.
+    """Represents a raw feature.
 
+    Attributes:
+        name (FeatureName): The name of the feature.
+        options (Options): The options associated with the feature.
+        domain (Optional[Domain]): The domain of the feature.
+        compute_frameworks (Optional[Set[Type[ComputeFrameWork]]]): The compute frameworks supported by the feature.
+        data_type (Optional[DataType]): The data type of the feature.
+        initial_requested_data (bool): Whether the data was initially requested.
+        link (Optional[Link]): The link associated with the feature.
+        index (Optional[Index]): The index associated with the feature.
 
-    We intentionally only allow one compute framework per feature if this variable is set by init.
-    If this variable is not set, we allow multiple compute frameworks per feature during resolving the feature network.
-
-
-    Convencience class methods:
+    Class Methods (Convenience):
         not_typed(name, options): Creates a Feature instance without specifying a data type.
-
         str_of(name, options): Creates a Feature instance with STRING data type.
         int32_of(name, options): Creates a Feature instance with INT32 data type.
         int64_of(name, options): Creates a Feature instance with INT64 data type.
@@ -35,7 +39,6 @@ class Feature:
         timestamp_millis_of(name, options): Creates a Feature instance with TIMESTAMP_MILLIS data type.
         timestamp_micros_of(name, options): Creates a Feature instance with TIMESTAMP_MICROS data type.
         decimal_of(name, options): Creates a Feature instance with DECIMAL data type.
-
     """
 
     def __init__(
@@ -51,9 +54,9 @@ class Feature:
     ):
         self.name = FeatureName(name) if isinstance(name, str) else name
         self.options = Options(options) if isinstance(options, dict) else options
-        self.domain = self.set_domain(domain, self.options.data.get("domain"))
+        self.domain = self._set_domain(domain, self.options.data.get("domain"))
 
-        cf = self.set_compute_framework(compute_framework, self.options.data.get("compute_framework"))
+        cf = self._set_compute_framework(compute_framework, self.options.data.get("compute_framework"))
         self.compute_frameworks = {cf} if cf else None
 
         self.uuid = uuid4()
@@ -153,14 +156,14 @@ class Feature:
         )
         return hash((self.options, compute_frameworks_hashable))
 
-    def set_domain(self, domain: Optional[str], domain_options: Optional[str]) -> Union[None, Domain]:
+    def _set_domain(self, domain: Optional[str], domain_options: Optional[str]) -> Union[None, Domain]:
         if domain:
             return Domain(domain)
         elif domain_options:
             return Domain(domain_options)
         return None
 
-    def set_compute_framework(
+    def _set_compute_framework(
         self, compute_framework: Optional[str], compute_framework_options: Optional[str]
     ) -> Optional[Type[ComputeFrameWork]]:
         if compute_framework or compute_framework_options:

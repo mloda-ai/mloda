@@ -29,6 +29,7 @@ class TextFileReader(ReadFile):
             content = file.read().decode("utf-8")
 
         if features.get_options_key("AddPathToContent"):
+            file_path = file_path.strip("\n")
             content = f"The file path of the following file is {file_path} : {content}"
 
         data = {cls.get_class_name(): [content]}

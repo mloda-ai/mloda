@@ -66,7 +66,7 @@ from mloda_core.api.request import mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
 
 api = mlodaAPI(["BaseExampleArtifactFeature"], {PyarrowTable})
-api.batch_run()
+api._batch_run()
 artifacts = api.get_artifacts()
 print(artifacts)
 ```
@@ -84,7 +84,7 @@ from mloda_core.abstract_plugins.components.feature import Feature
 
 feat = Feature(name="BaseExampleArtifactFeature", options=artifacts)
 api = mlodaAPI([feat], {PyarrowTable})
-api.batch_run()
+api._batch_run()
 ```
 
 Result:

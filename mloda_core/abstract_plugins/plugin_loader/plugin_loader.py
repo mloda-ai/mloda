@@ -56,7 +56,12 @@ class PluginLoader:
         if not group_path.is_dir():
             raise ValueError(f"Group '{group_name}' does not exist in the package '{self.base_package}'")
 
-        # Traverse the group directory and its subdirectories recursively
+        self._load_plugins_from_path(group_path)
+
+    def _load_plugins_from_path(self, group_path: Path) -> None:
+        """
+        Loads plugins from a given path, recursively traversing subdirectories.
+        """
         for item in group_path.rglob("*.py"):  # Finds all .py files in the directory
             if item.name == "__init__.py":
                 continue  # Skip __init__.py

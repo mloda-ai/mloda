@@ -1,6 +1,6 @@
-"""
 # Top-Level Documentation for LLMs
 
+"""
 This module is designed to be used as a mixin or inherited class for defining input features.
 
 It allows defining input features that originate from:
@@ -38,7 +38,7 @@ Further, it allows defining:
         ```
 """
 
-from typing import Any, Dict, NamedTuple, Optional, Set, Tuple, Type
+from typing import Any, Dict, NamedTuple, Optional, Set, Tuple, Type, Union
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
@@ -109,12 +109,12 @@ class SourceTuple(NamedTuple):
     """
 
     feature_name: str
-    source_class: Optional[Type[AbstractFeatureGroup | str]] = None
+    source_class: Optional[Type[Union[AbstractFeatureGroup, str]]] = None
     source_value: Optional[str] = None
-    left_link: Optional[Tuple[Type[AbstractFeatureGroup], str | Index]] = None
-    right_link: Optional[Tuple[Type[AbstractFeatureGroup], str | Index]] = None
+    left_link: Optional[Tuple[Type[AbstractFeatureGroup], Union[str, Index]]] = None
+    right_link: Optional[Tuple[Type[AbstractFeatureGroup], Union[str, Index]]] = None
     join_type: Optional[JoinType] = None
-    merge_index: Optional[str | Index] = None
+    merge_index: Optional[Union[str, Index]] = None
 
 
 class SourceInputFeatureComposite:
@@ -141,20 +141,11 @@ class SourceInputFeatureComposite:
 
         mloda_source = options.get(DefaultOptionKeys.mloda_source_feature)
         if mloda_source is None:
-            raise ValueError(f"Option '{mloda_source}' is required for this feature.")
+            raise ValueError(f"Option '{DefaultOptionKeys.mloda_source_feature}' is required for this feature.")
 
         features = set()
         for source in mloda_source:
-            if isinstance(source, tuple):
-                try:
-                    source_tuple = SourceTuple(*source)
-                except TypeError as e:
-                    raise ValueError(f"Invalid source tuple: {source}") from e
-
-                feature = cls.handle_tuple(source_tuple)
-            else:
-                feature = Feature(name=source)
-
+            feature = cls._create_feature(source)
             features.add(feature)
 
         if options.get("initial_requested_data"):
@@ -164,41 +155,61 @@ class SourceInputFeatureComposite:
         return features
 
     @classmethod
-    def handle_tuple(cls, source: SourceTuple) -> Feature:
+    def _create_feature(cls, source: Union[str, SourceTuple]) -> Feature:
         """
-        This is a feature with dependent properties and join definitions.
+        Helper method to create a Feature object from a source definition.
+        """
+        if isinstance(source, str):
+            return Feature(name=source)
+        else:
+            try:
+                source_tuple = SourceTuple(*source)
+            except TypeError as e:
+                raise ValueError(f"Invalid source tuple: {source}") from e
+            return cls._handle_tuple(source_tuple)
 
-        source: A SourceTuple containing feature information
+    @classmethod
+    def _handle_tuple(cls, source: SourceTuple) -> Feature:
+        """
+        Handles the creation of a Feature with dependent properties and join definitions.
 
-        Required is only feature_name.
-            For local feature scope, we can define the source class and source value.
-            For merge and join operations, we can define the left and right link classes and the join type.
-            For append and union operations, we need to add possible index!
+        Args:
+            source: A SourceTuple containing feature information.
+
+        Returns:
+            A Feature object.
+
+        Details:
+            - Only feature_name is required in SourceTuple.
+            - For local feature scope, source_class and source_value can be defined.
+            - For merge and join operations, left_link and right_link classes and join_type can be defined.
+            - For append and union operations, merge_index can be added.
         """
 
-        _properties: Dict[str, Any] = {}
+        properties: Dict[str, Any] = {}
         if source.source_class:
-            _properties = {
+            properties = {
                 source.source_class.__name__
                 if isinstance(source.source_class, type)
                 else str(source.source_class): source.source_value
             }
 
-        _link, _index = None, None
+        link, index = None, None
 
         if source.left_link is not None and source.right_link is not None and source.join_type is not None:
-            _link = cls.handle_link(source.left_link, source.right_link, source.join_type)
+            link = cls._handle_link(source.left_link, source.right_link, source.join_type)
 
         if source.merge_index:
-            _index = Index((source.merge_index,)) if isinstance(source.merge_index, str) else source.merge_index
-        return Feature(name=source.feature_name, link=_link, index=_index, options=_properties)
+            index = Index((source.merge_index,)) if isinstance(source.merge_index, str) else source.merge_index
+
+        return Feature(name=source.feature_name, link=link, index=index, options=properties)
 
     @classmethod
-    def handle_link(
+    def _handle_link(
         cls,
-        left_link: Tuple[Type[AbstractFeatureGroup], str | Index],
-        right_link: Tuple[Type[AbstractFeatureGroup], str | Index],
-        jointype: Any,
+        left_link: Tuple[Type[AbstractFeatureGroup], Union[str, Index]],
+        right_link: Tuple[Type[AbstractFeatureGroup], Union[str, Index]],
+        join_type: Any,
     ) -> Link:
         """
         Creates a Link object for joining data from different source features.
@@ -206,7 +217,7 @@ class SourceInputFeatureComposite:
         Args:
            left_link: Tuple containing the left-side feature group class and index.
            right_link: Tuple containing the right-side feature group class and index.
-           jointype: The JoinType of the link.
+           join_type: The JoinType of the link.
 
         Returns:
            A Link object for joining data.
@@ -215,8 +226,8 @@ class SourceInputFeatureComposite:
             ValueError: If any of the link inputs are missing.
         """
 
-        if right_link is None or left_link is None or jointype is None:
-            raise ValueError(f"Link classes are required for handling link: {left_link} {right_link} {jointype}.")
+        if right_link is None or left_link is None or join_type is None:
+            raise ValueError(f"Link classes are required for handling link: {left_link} {right_link} {join_type}.")
 
         left_link_cls, left_index = left_link
         right_link_cls, right_index = right_link
@@ -224,28 +235,28 @@ class SourceInputFeatureComposite:
         left_index = Index((left_index,)) if isinstance(left_index, str) else left_index
         right_index = Index((right_index,)) if isinstance(right_index, str) else right_index
 
-        _join_func = cls.get_join_func(jointype)
+        join_func = cls._get_join_func(join_type)
 
-        _link = _join_func(
+        link_obj = join_func(
             (left_link_cls, left_index),
             (right_link_cls, right_index),
         )
 
-        if isinstance(_link, Link):
-            return _link
-        raise ValueError(f"Failed to create link for join type {jointype}, {_link}")
+        if isinstance(link_obj, Link):
+            return link_obj
+        raise ValueError(f"Failed to create link for join type {join_type}, {link_obj}")
 
     @classmethod
-    def get_join_func(cls, jointype: JoinType) -> Any:
+    def _get_join_func(cls, join_type: JoinType) -> Any:
         """
         Retrieves the correct Link method for the given JoinType.
         """
 
-        _jointype = JoinType(jointype) if isinstance(jointype, str) else jointype
-        if _jointype not in JoinType:
-            raise ValueError(f"Join type {_jointype} is not supported.")
+        jointype = JoinType(join_type) if isinstance(join_type, str) else join_type
+        if jointype not in JoinType:
+            raise ValueError(f"Join type {jointype} is not supported.")
 
-        _join_func_mapping = {
+        join_func_mapping = {
             JoinType.APPEND: Link.append,
             JoinType.UNION: Link.union,
             JoinType.OUTER: Link.outer,
@@ -253,4 +264,4 @@ class SourceInputFeatureComposite:
             JoinType.LEFT: Link.left,
             JoinType.RIGHT: Link.right,
         }
-        return _join_func_mapping[_jointype]
+        return join_func_mapping[jointype]

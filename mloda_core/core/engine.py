@@ -3,7 +3,9 @@ from copy import deepcopy
 from typing import Dict, Optional, Set, Type
 from uuid import UUID
 import uuid
+
 from mloda_core.abstract_plugins.components.index.add_index_feature import create_index_feature
+from mloda_core.abstract_plugins.components.index.index import Index
 from mloda_core.abstract_plugins.components.input_data.api.api_input_data_collection import (
     ApiInputDataCollection,
 )
@@ -87,9 +89,6 @@ class Engine:
         planned_queue = resolver.resolver_compute_framework.links(
             planned_queue, resolver.resolver_links.get_link_trekker()
         )
-        # need to resolve compute frameworks
-        # 1) first run -> joins: adjust to the provided links in the planned queue. Maybe also in the trekker? link trekker should have child uuid plus link
-        # 2) second run -> reduce by most common compute framework
 
         execution_planner = ExecutionPlan(self.global_filter, self.api_input_data_collection)
         execution_planner.create_execution_plan(planned_queue, graph, resolver.resolver_links.get_link_trekker())
@@ -97,31 +96,44 @@ class Engine:
 
     def setup_features_recursion(self, features: Features) -> None:
         for feature in features:
-            self.accessible_plugins = PreFilterPlugins(
-                self.copy_compute_frameworks, self.plugin_collector
-            ).get_accessible_plugins()
+            self._process_feature(feature, features)
 
-            feature_group_class, compute_frameworks = self._identify_feature_group_and_frameworks(feature)
+    def _process_feature(self, feature: Feature, features: Features) -> None:
+        """Processes a single feature by delegating tasks to helper methods."""
+        self.accessible_plugins = PreFilterPlugins(
+            self.copy_compute_frameworks, self.plugin_collector
+        ).get_accessible_plugins()
 
-            feature_group = feature_group_class()
+        feature_group_class, compute_frameworks = self._identify_feature_group_and_frameworks(feature)
+        feature_group = feature_group_class()
 
-            feature.name = feature_group.set_feature_name(feature.options, feature.name)
+        self._set_feature_name(feature, feature_group)
+        self._set_compute_framework_and_data_type(feature, compute_frameworks, feature_group_class)
 
-            feature = self.set_compute_framework(feature, compute_frameworks)
-            feature.data_type = self.set_data_type(feature, feature_group_class)
+        added = self.add_feature_to_collection(feature_group_class, feature, features.child_uuid)
 
-            added = self.add_feature_to_collection(feature_group_class, feature, features.child_uuid)
+        if added:
+            self._handle_input_features_recursion(feature_group_class, feature.uuid, feature.options, feature.name)
 
-            if added:
-                self._call_recursion_by_using_input_feature_definition(
-                    feature_group_class, feature.uuid, feature.options, feature.name
-                )
+        if self.global_filter:
+            self._add_filter_feature(feature_group_class, feature_group, feature, features)
 
-            if self.global_filter:
-                self._add_filter_feature(feature_group_class, feature_group, feature, features)
+        if feature_group.index_columns():
+            self._add_index_feature(feature_group_class, feature_group, feature, features)
 
-            if feature_group.index_columns():
-                self._add_index_feature(feature_group_class, feature_group, feature, features)
+    def _set_feature_name(self, feature: Feature, feature_group: AbstractFeatureGroup) -> None:
+        """Sets the feature name using the feature group's logic."""
+        feature.name = feature_group.set_feature_name(feature.options, feature.name)
+
+    def _set_compute_framework_and_data_type(
+        self,
+        feature: Feature,
+        compute_frameworks: Set[Type[ComputeFrameWork]],
+        feature_group_class: Type[AbstractFeatureGroup],
+    ) -> None:
+        """Sets the compute framework and data type for the feature."""
+        feature = self.set_compute_framework(feature, compute_frameworks)
+        feature.data_type = self.set_data_type(feature, feature_group_class)
 
     def _identify_feature_group_and_frameworks(
         self, feature: Feature
@@ -147,20 +159,38 @@ class Engine:
             return
 
         for index in indexes:
-            for link in self.links:
-                if link.left_feature_group == feature_group_class:
-                    if link.left_index == index:
-                        new_index_feature = create_index_feature(index, feature_group, feature)
-                        self.add_feature_to_collection(
-                            feature_group_class, new_index_feature, features.child_uuid, True
-                        )
+            self._process_index_feature(feature_group_class, feature_group, feature, features, index)
 
-                if link.right_feature_group == feature_group_class:
-                    if link.right_index == index:
-                        new_index_feature = create_index_feature(index, feature_group, feature)
-                        self.add_feature_to_collection(
-                            feature_group_class, new_index_feature, features.child_uuid, True
-                        )
+    def _process_index_feature(
+        self,
+        feature_group_class: Type[AbstractFeatureGroup],
+        feature_group: AbstractFeatureGroup,
+        feature: Feature,
+        features: Features,
+        index: Index,
+    ) -> None:
+        """Processes the index feature for both left and right links."""
+        if self.links is None:
+            return
+
+        for link in self.links:
+            if link.left_feature_group == feature_group_class and link.left_index == index:
+                self._create_and_add_index_feature(feature_group_class, feature_group, feature, features, index)
+
+            if link.right_feature_group == feature_group_class and link.right_index == index:
+                self._create_and_add_index_feature(feature_group_class, feature_group, feature, features, index)
+
+    def _create_and_add_index_feature(
+        self,
+        feature_group_class: Type[AbstractFeatureGroup],
+        feature_group: AbstractFeatureGroup,
+        feature: Feature,
+        features: Features,
+        index: Index,
+    ) -> None:
+        """Creates and adds a new index feature to the collection."""
+        new_index_feature = create_index_feature(index, feature_group, feature)
+        self.add_feature_to_collection(feature_group_class, new_index_feature, features.child_uuid, True)
 
     def _add_filter_feature(
         self,
@@ -216,17 +246,25 @@ class Engine:
             wanted_uuid = next((f.uuid for f in feature_collection if feature == f), None)
 
             if wanted_uuid is not None:
-                if not if_index_feature:
-                    self.feature_link_parents[child_uuid].remove(feature.uuid)
-                    self.feature_link_parents[child_uuid].add(wanted_uuid)
-                else:
-                    self.feature_link_parents[child_uuid].add(wanted_uuid)
+                self._update_feature_link_parents(child_uuid, feature.uuid, wanted_uuid, if_index_feature)
 
         return False
 
-    def _call_recursion_by_using_input_feature_definition(
+    def _update_feature_link_parents(
+        self, child_uuid: UUID, original_uuid: UUID, wanted_uuid: UUID, if_index_feature: bool
+    ) -> None:
+        """Updates the feature link parents based on whether it's an index feature or not."""
+        if not if_index_feature:
+            if original_uuid in self.feature_link_parents[child_uuid]:
+                self.feature_link_parents[child_uuid].remove(original_uuid)
+            self.feature_link_parents[child_uuid].add(wanted_uuid)
+        else:
+            self.feature_link_parents[child_uuid].add(wanted_uuid)
+
+    def _handle_input_features_recursion(
         self, feature_group_class: Type[AbstractFeatureGroup], uuid: UUID, options: Options, feature_name: FeatureName
     ) -> None:
+        """Handles recursion for input features of a feature group."""
         feature_group = feature_group_class()
 
         options = deepcopy(options)

@@ -23,9 +23,7 @@ class FeatureSet:
 
     def add_artifact_name(self) -> None:
         if self.options is None:
-            raise ValueError(
-                "No options set. This should only be called after adding a feature and thus at least empty Options."
-            )
+            raise ValueError("No options set. Call this after adding a feature to ensure Options are initialized.")
 
         for feature_name in self.get_all_names():
             if feature_name in self.options.data.keys():
@@ -56,7 +54,7 @@ class FeatureSet:
 
     def get_options(self) -> Options:
         if self.options is None:
-            raise ValueError("No options set. This should only be called after adding a feature.")
+            raise ValueError("No options set. Call this after adding a feature to ensure Options are initialized.")
         return self.options
 
     def get_options_key(self, key: str) -> Any:
@@ -67,12 +65,12 @@ class FeatureSet:
 
     def get_name_of_one_feature(self) -> FeatureName:
         if self.name_of_one_feature is None:
-            raise ValueError("Name of one feature not set. This should only be called after adding a feature.")
+            raise ValueError("No feature added yet. Add a feature before calling this method.")
         return self.name_of_one_feature
 
     def add_filters(self, single_filters: Set[SingleFilter]) -> None:
         if self.filters is not None:
-            raise ValueError("Filters already set. This should only be called once during setup of the feature set.")
+            raise ValueError("Filters already set. This should be called once during setup of the feature set.")
 
         if not isinstance(single_filters, Set):
             raise ValueError("Filters should be a set.")

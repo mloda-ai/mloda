@@ -86,7 +86,7 @@ class TestBaseArtifacts:
         flight_server: Any,
     ) -> Tuple[List[Any], Dict[str, Any]]:
         api = mlodaAPI(features, {PyarrowTable})
-        api.batch_run(parallelization_modes, flight_server)
+        api._batch_run(parallelization_modes, flight_server)
         results = api.get_result()
         artifacts = api.get_artifacts()
 

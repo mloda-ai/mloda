@@ -30,11 +30,24 @@ class JoinStep(Step):
     def get_uuids(self) -> Set[UUID]:
         return {self.uuid, self.link.uuid}
 
+    def _merge_data(self, cfw: ComputeFrameWork, from_cfw_data: Any) -> None:
+        """Merges data from another ComputeFramework into the current one."""
+        merge_engine = cfw.merge_engine()
+        cfw.data = merge_engine().merge(
+            cfw.data, from_cfw_data, self.link.jointype, self.link.left_index, self.link.right_index
+        )
+
+    def _upload_data_if_needed(self, cfw: ComputeFrameWork, cfw_register: CfwManager) -> None:
+        """Uploads the merged data to Flyway if a location is configured."""
+        if self.location:
+            if cfw_register.get_uuid_flyway_datasets(cfw.uuid):
+                cfw.upload_finished_data(self.location)
+
     def execute(
         self,
         cfw_register: CfwManager,
         cfw: ComputeFrameWork,
-        from_cfw: Optional[ComputeFrameWork] = None,
+        from_cfw: Optional[Union[ComputeFrameWork, UUID]] = None,
         data: Optional[Any] = None,
     ) -> Optional[Any]:
         self.location = cfw_register.get_location()
@@ -43,17 +56,11 @@ class JoinStep(Step):
             raise ValueError("From_cfw should not be none for join step.")
         from_cfw_data, from_cfw_uuid = self.get_data(from_cfw, cfw)
 
-        merge_engine = cfw.merge_engine()
-        cfw.data = merge_engine().merge(
-            cfw.data, from_cfw_data, self.link.jointype, self.link.left_index, self.link.right_index
-        )
+        self._merge_data(cfw, from_cfw_data)
 
         cfw_register.add_to_merge_relation(cfw.uuid, from_cfw_uuid, cls_name=cfw.get_class_name())
 
-        if self.location:
-            # check if dataset was uploaded before -> then overwrite
-            if cfw_register.get_uuid_flyway_datasets(cfw.uuid):
-                cfw.upload_finished_data(self.location)
+        self._upload_data_if_needed(cfw, cfw_register)
 
         return None
 

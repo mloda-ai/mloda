@@ -53,8 +53,10 @@ class LLMFileSelector(AbstractFeatureGroup):
 
         for str_paths in data[GeminiRequestLoop.get_class_name()].values:
             paths = str_paths.split(",")
-            paths = [s.strip("\n") for s in paths]
             for path in paths:
+                if "\n" in path:
+                    raise ValueError(f"File path {path} contains a newline character.")
+
                 if not os.path.exists(path):
                     raise ValueError(f"File {path} does not exist.")
 

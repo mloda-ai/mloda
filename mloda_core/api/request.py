@@ -1,6 +1,5 @@
 from typing import Any, Dict, List, Optional, Set, Type, Union
 
-
 from mloda_core.abstract_plugins.components.input_data.api.api_input_data_collection import (
     ApiInputDataCollection,
 )
@@ -48,10 +47,7 @@ class mlodaAPI:
         api_input_data_collection: Optional[ApiInputDataCollection],
     ) -> Features:
         """Processes the requested features, ensuring they are in the correct format and adding API input data."""
-        if not isinstance(requested_features, Features):
-            features = Features(requested_features)
-        else:
-            features = requested_features
+        features = requested_features if isinstance(requested_features, Features) else Features(requested_features)
 
         for feature in features:
             feature.initial_requested_data = True
@@ -85,37 +81,75 @@ class mlodaAPI:
             api_input_data_collection,
             plugin_collector,
         )
-        api.batch_run(parallelization_modes, flight_server, function_extender, api_data)
-        return api.get_result()
+        return api._execute_batch_run(parallelization_modes, flight_server, function_extender, api_data)
 
-    def batch_run(
+    def _execute_batch_run(
+        self,
+        parallelization_modes: Set[ParallelizationModes],
+        flight_server: Optional[Any],
+        function_extender: Optional[Set[WrapperFunctionExtender]],
+        api_data: Optional[Dict[str, Any]],
+    ) -> List[Any]:
+        """Encapsulates the batch run execution flow."""
+        self._batch_run(parallelization_modes, flight_server, function_extender, api_data)
+        return self.get_result()
+
+    def _batch_run(
         self,
         parallelization_modes: Set[ParallelizationModes] = {ParallelizationModes.SYNC},
         flight_server: Optional[Any] = None,
         function_extender: Optional[Set[WrapperFunctionExtender]] = None,
         api_data: Optional[Dict[str, Any]] = None,
     ) -> None:
-        self.setup_engine_runner(parallelization_modes, flight_server)
-        self.run_engine_computation(parallelization_modes, function_extender, api_data)
+        """Sets up the engine runner and runs the engine computation."""
+        self._setup_engine_runner(parallelization_modes, flight_server)
+        self._run_engine_computation(parallelization_modes, function_extender, api_data)
 
-    def run_engine_computation(
+    def _run_engine_computation(
         self,
         parallelization_modes: Set[ParallelizationModes] = {ParallelizationModes.SYNC},
         function_extender: Optional[Set[WrapperFunctionExtender]] = None,
         api_data: Optional[Dict[str, Any]] = None,
     ) -> None:
+        """Runs the engine computation within a context manager."""
         if not isinstance(self.runner, Runner):
             raise ValueError("You need to run setup_engine_runner beforehand.")
 
         try:
-            self.runner.__enter__(parallelization_modes, function_extender, api_data)
+            self._enter_runner_context(parallelization_modes, function_extender, api_data)
             self.runner.compute()
-            self.runner.__exit__(None, None, None)
         finally:
-            try:
-                self.runner.manager.shutdown()
-            except Exception:  # nosec
-                pass
+            self._exit_runner_context()
+
+    def _enter_runner_context(
+        self,
+        parallelization_modes: Set[ParallelizationModes],
+        function_extender: Optional[Set[WrapperFunctionExtender]],
+        api_data: Optional[Dict[str, Any]],
+    ) -> None:
+        """Enters the runner context."""
+        if self.runner is None:
+            raise ValueError("You need to run setup_engine_runner beforehand.")
+
+        self.runner.__enter__(parallelization_modes, function_extender, api_data)
+
+    def _exit_runner_context(self) -> None:
+        """Exits the runner context, shutting down the runner manager."""
+        if self.runner is None:
+            raise ValueError("You need to run setup_engine_runner beforehand.")
+
+        self.runner.__exit__(None, None, None)
+        self._shutdown_runner_manager()
+
+    def _shutdown_runner_manager(self) -> None:
+        """Shuts down the runner manager, handling potential exceptions."""
+        try:
+            if self.runner is None:
+                return
+
+            self.runner.manager.shutdown()
+        except Exception:  # nosec
+            pass
 
     def _create_engine(self) -> Engine:
         engine = Engine(
@@ -131,18 +165,20 @@ class mlodaAPI:
             raise ValueError("Engine initialization failed.")
         return engine
 
-    def setup_engine_runner(
+    def _setup_engine_runner(
         self,
         parallelization_modes: Set[ParallelizationModes] = {ParallelizationModes.SYNC},
         flight_server: Optional[Any] = None,
     ) -> None:
+        """Sets up the engine runner based on parallelization mode."""
         if self.engine is None:
             raise ValueError("You need to run setup_engine beforehand.")
 
-        if ParallelizationModes.MULTIPROCESSING in parallelization_modes:
-            self.runner = self.engine.compute(flight_server)
-        else:
-            self.runner = self.engine.compute()
+        self.runner = (
+            self.engine.compute(flight_server)
+            if ParallelizationModes.MULTIPROCESSING in parallelization_modes
+            else self.engine.compute()
+        )
 
         if not isinstance(self.runner, Runner):
             raise ValueError("Runner initialization failed.")

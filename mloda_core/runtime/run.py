@@ -28,11 +28,26 @@ logger = logging.getLogger(__name__)
 
 
 class Runner:
+    """
+    Orchestrates the execution of an mloda based on a given execution plan.
+
+    This class manages compute frameworks (CFWs), data dependencies, and parallel execution
+    using threads or multiprocessing. It handles the execution of feature group steps,
+    transform framework steps, and join steps, while also managing data dropping and result collection.
+    """
+
     def __init__(
         self,
         execution_planner: ExecutionPlan,
         flight_server: Optional[ParallelRunnerFlightServer] = None,
     ) -> None:
+        """
+        Initializes the Runner with an execution plan and optional flight server.
+
+        Args:
+            execution_planner: The execution plan that defines the steps to be executed.
+            flight_server: An optional flight server for data transfer.
+        """
         self.execution_planner = execution_planner
 
         self.cfw_register: CfwManager
@@ -57,35 +72,44 @@ class Runner:
         # It is set currently for convenience on this high level
         self.wait_for_drop_data = 0.01
 
-    def step_already_done(self, step_uuids: Set[UUID], finished_ids: Set[UUID]) -> bool:
-        for uuid in step_uuids:
-            if uuid not in finished_ids:
-                return False
-        return True
+    def _is_step_done(self, step_uuids: Set[UUID], finished_ids: Set[UUID]) -> bool:
+        """
+        Checks if all steps identified by the given UUIDs have already been finished.
+        """
+        return all(uuid in finished_ids for uuid in step_uuids)
 
-    def handle_data_to_drop(self, finished_ids: Set[UUID]) -> None:
-        if finished_ids == set():
+    def _drop_data_for_finished_cfws(self, finished_ids: Set[UUID]) -> None:
+        """
+        Handles the dropping of intermediate data based on finished steps.
+        """
+        if not finished_ids:
             return
 
-        mark_for_delete = set()
+        cfw_to_delete = set()
+        for cfw_uuid, step_uuids in self.track_data_to_drop.items():
+            if all(step_id in finished_ids for step_id in step_uuids):
+                self._drop_cfw_data(cfw_uuid)
+                cfw_to_delete.add(cfw_uuid)
 
-        for cfw_uuid, uuids in self.track_data_to_drop.items():
-            for id in uuids:
-                if id not in finished_ids:
-                    break
-
-                if self.location:
-                    # FlightServer.drop_tables(self.location, {str(self.cfw_collection[cfw_uuid].uuid)})
-                    pass
-                else:
-                    self.cfw_collection[cfw_uuid].drop_last_data()
-
-                mark_for_delete.add(cfw_uuid)
-
-        for cfw_uuid in mark_for_delete:
+        for cfw_uuid in cfw_to_delete:
             del self.track_data_to_drop[cfw_uuid]
 
+    def _drop_cfw_data(self, cfw_uuid: UUID) -> None:
+        """Drops data associated with a CFW."""
+        if self.location:
+            # FlightServer.drop_tables(self.location, {str(self.cfw_collection[cfw_uuid].uuid)})
+            pass
+        else:
+            self.cfw_collection[cfw_uuid].drop_last_data()
+
     def compute(self) -> None:
+        """
+        Executes the mloda pipeline based on the execution plan.
+
+        This method iterates through the execution plan, checks dependencies,
+        and executes steps using the appropriate parallelization mode.
+        It also handles errors, result collection, and data dropping.
+        """
         if self.cfw_register is None:
             raise ValueError("CfwManager not initialized")
 
@@ -109,26 +133,23 @@ class Runner:
                     to_finish_ids.update(step.get_uuids())
 
                     if isinstance(step, FeatureGroupStep):
-                        self.handle_data_to_drop(finished_ids)
+                        self._drop_data_for_finished_cfws(finished_ids)
 
-                    if self.step_already_done(step.get_uuids(), finished_ids):
+                    if self._is_step_done(step.get_uuids(), finished_ids):
                         continue
 
                     # check if step is currently running
                     if self.currently_running_step(step.get_uuids(), currently_running_steps):
-                        if self.handle_result(step):
-                            self.mark_step_as_finished(step.get_uuids(), finished_ids, currently_running_steps)
+                        if self._process_step_result(step):
+                            self._mark_step_as_finished(step.get_uuids(), finished_ids, currently_running_steps)
                         continue
 
-                    if not self.can_run_step(
+                    if not self._can_run_step(
                         step.required_uuids, step.get_uuids(), finished_ids, currently_running_steps
                     ):
                         continue
 
-                    execute_step = self.identify_mode_and_return_execute_step(
-                        self.cfw_register.get_parallelization_modes(), step.get_parallelization_mode()
-                    )
-                    execute_step(step)
+                    self._execute_step(step)
 
                 time.sleep(0.01)
 
@@ -137,6 +158,12 @@ class Runner:
             self.join()
 
     def get_done_steps_of_multiprocessing_result_queue(self) -> None:
+        """
+        Retrieves UUIDs of finished steps from multiprocessing result queues.
+
+        This method iterates through the result queues and adds any available UUIDs
+        to the collection of finished UUIDs.
+        """
         for r_queue in self.result_queues_collection:
             try:
                 result_uuid = r_queue.get(block=False)
@@ -144,7 +171,13 @@ class Runner:
             except queue.Empty:
                 continue
 
-    def handle_result(self, step: Any) -> Union[Any, bool]:
+    def _process_step_result(self, step: Any) -> Union[Any, bool]:
+        """
+        Handles the result of a step based on its type.
+
+        This method checks if a step is done, then performs specific actions based
+        on the step's type, such as adding results to the data collection or dropping data.
+        """
         # set step.is_done from other processes via result queue
         self.get_done_steps_of_multiprocessing_result_queue()
         if step.uuid in self.result_uuids_collection:
@@ -153,10 +186,7 @@ class Runner:
         if not step.step_is_done:
             return False
 
-        if isinstance(step, TransformFrameworkStep):
-            return True
-
-        if isinstance(step, JoinStep):
+        if isinstance(step, (TransformFrameworkStep, JoinStep)):
             return True
 
         if isinstance(step, FeatureGroupStep):
@@ -165,11 +195,17 @@ class Runner:
 
             cfw = self.get_cfw(step.compute_framework, step.features.any_uuid)
             self.add_to_result_data_collection(cfw, step.features, step.uuid)
-            self.drop_data_if_possible(cfw, step)
+            self._drop_data_if_possible(cfw, step)
 
         return True
 
-    def drop_data_if_possible(self, cfw: ComputeFrameWork, step: Any) -> None:
+    def _drop_data_if_possible(self, cfw: ComputeFrameWork, step: Any) -> None:
+        """
+        Drops data associated with a compute framework if possible.
+
+        This method checks if data can be dropped based on the CFW's dependencies
+        and either drops the data directly or sends a command to a worker process to do so.
+        """
         process, command_queue, result_queue = self.process_register.get(cfw.uuid, (None, None, None))
 
         feature_uuids_to_possible_drop = {f.uuid for f in step.features.features}
@@ -190,6 +226,13 @@ class Runner:
             time.sleep(self.wait_for_drop_data)
 
     def get_cfw(self, compute_framework: Type[ComputeFrameWork], feature_uuid: UUID) -> ComputeFrameWork:
+        """
+        Retrieves a compute framework based on its type and a feature UUID.
+
+        Args:
+            compute_framework: The type of compute framework to retrieve.
+            feature_uuid: The UUID of the feature associated with the compute framework.
+        """
         cfw_uuid = self.cfw_register.get_initialized_compute_framework_uuid(
             compute_framework, feature_uuid=feature_uuid
         )
@@ -198,6 +241,9 @@ class Runner:
         return self.cfw_collection[cfw_uuid]
 
     def prepare_execute_step(self, step: Any, parallelization_mode: ParallelizationModes) -> UUID:
+        """
+        Prepares a step for execution by initializing or retrieving the associated CFW.
+        """
         cfw_uuid: Optional[UUID] = None
 
         if isinstance(step, FeatureGroupStep):
@@ -246,6 +292,9 @@ class Runner:
         return cfw_uuid
 
     def prepare_tfs_right_cfw(self, step: TransformFrameworkStep) -> UUID:
+        """
+        Prepares the right CFW for a TransformFrameworkStep.
+        """
         uuid = step.right_framework_uuid if step.right_framework_uuid else next(iter(step.required_uuids))
 
         cfw_uuid = self.cfw_register.get_cfw_uuid(step.from_framework.get_class_name(), uuid)
@@ -258,6 +307,9 @@ class Runner:
         return cfw_uuid
 
     def prepare_tfs_and_joinstep(self, step: Any) -> Any:
+        """
+        Prepares CFWs required for TransformFrameworkStep or JoinStep.
+        """
         from_cfw: Optional[Union[ComputeFrameWork, UUID]] = None
         if isinstance(step, TransformFrameworkStep):
             from_cfw = self.prepare_tfs_right_cfw(step)
@@ -279,7 +331,19 @@ class Runner:
             from_cfw = self.cfw_collection[from_cfw_uuid]
         return from_cfw
 
+    def _execute_step(self, step: Any) -> None:
+        """
+        Executes a step based on its parallelization mode.
+        """
+        execution_function = self._get_execution_function(
+            self.cfw_register.get_parallelization_modes(), step.get_parallelization_mode()
+        )
+        execution_function(step)
+
     def sync_execute_step(self, step: Any) -> None:
+        """
+        Executes a step synchronously.
+        """
         cfw_uuid = self.prepare_execute_step(step, ParallelizationModes.SYNC)
 
         try:
@@ -295,25 +359,11 @@ class Runner:
             self.cfw_register.set_error(msg, exc_info)
 
     def thread_execute_step(self, step: Any) -> None:
+        """
+        Executes a step in a separate thread.
+        """
         cfw_uuid = self.prepare_execute_step(step, ParallelizationModes.THREADING)
         from_cfw = self.prepare_tfs_and_joinstep(step) or None
-
-        # print("")
-        # if isinstance(step, FeatureGroupStep):
-        # if step.feature_group.get_class_name() == "Join3CfwTest":
-        #    print("###", cfw_uuid)
-
-        #    print(step.feature_group.get_class_name(), cfw_uuid)
-
-        # elif isinstance(step, TransformFrameworkStep):
-        #    print("TFS")
-        #    print(step.from_framework.get_class_name(), " -> ", step.to_framework.get_class_name())
-        #    print(step.from_feature_group.get_class_name(), " -> ", step.to_feature_group.get_class_name())
-        #    print(from_cfw.uuid, " -> ", cfw_uuid)
-        # elif isinstance(step, JoinStep):
-        #    print("JOIN")
-        #    print(cfw_uuid, " -> ", from_cfw.uuid)
-        #    print(step.left_framework.get_class_name(), " -> ", step.right_framework.get_class_name())
 
         task = threading.Thread(
             target=thread_worker,
@@ -324,6 +374,9 @@ class Runner:
         task.start()
 
     def multi_execute_step(self, step: Any) -> None:
+        """
+        Executes a step in a separate process.
+        """
         cfw_uuid = self.prepare_execute_step(step, ParallelizationModes.MULTIPROCESSING)
 
         from_cfw = None
@@ -350,6 +403,9 @@ class Runner:
             raise ValueError("Command queue should not be None.")
 
     def join(self) -> None:
+        """
+        Joins all tasks (threads or processes) and terminates multiprocessing processes.
+        """
         failed = False
         for task in self.tasks:
             try:
@@ -365,6 +421,9 @@ class Runner:
             raise Exception("Error while joining tasks")
 
     def add_to_result_data_collection(self, cfw: ComputeFrameWork, features: FeatureSet, step_uuid: UUID) -> None:
+        """
+        Adds the result data to the result data collection.
+        """
         if initial_requested_features := features.get_initial_requested_features():
             result = None
             result = self.get_result_data(cfw, initial_requested_features, self.location)
@@ -374,6 +433,9 @@ class Runner:
     def get_result_data(
         self, cfw: ComputeFrameWork, selected_feature_names: Set[FeatureName], location: Optional[str] = None
     ) -> Any:
+        """
+        Gets result data from the compute framework.
+        """
         if cfw.data is not None:
             data = cfw.data
         elif location:
@@ -391,6 +453,12 @@ class Runner:
         feature_uuid: UUID,
         children_if_root: Set[UUID],
     ) -> UUID:
+        """
+        Adds a compute framework to the CFW register and CFW collection.
+
+        Returns:
+            The UUID of the compute framework.
+        """
         with multiprocessing.Lock():
             cfw_uuid = self.cfw_register.get_cfw_uuid(step.compute_framework.get_class_name(), feature_uuid)
             # if cfw does not exist, create a new one
@@ -406,6 +474,12 @@ class Runner:
         children_if_root: Set[UUID],
         uuid: Optional[UUID] = None,
     ) -> UUID:
+        """
+        Initializes a compute framework.
+
+        Returns:
+            The UUID of the compute framework.
+        """
         # get function_extender
         function_extender = self.cfw_register.get_function_extender()
 
@@ -426,6 +500,12 @@ class Runner:
         return new_cfw.get_uuid()
 
     def currently_running_step(self, step_uuids: Set[UUID], currently_running_steps: Set[UUID]) -> bool:
+        """
+        Checks if a step is currently running.
+
+        Returns:
+            True if the step is currently running, False otherwise.
+        """
         if next(iter(step_uuids)) not in currently_running_steps:
             return False
         return True
@@ -436,6 +516,9 @@ class Runner:
         function_extender: Optional[Set[WrapperFunctionExtender]] = None,
         api_data: Optional[Dict[str, Any]] = None,
     ) -> None:
+        """
+        Enters the context of the Runner.
+        """
         MyManager.register("CfwManager", CfwManager)
         self.manager = MyManager().__enter__()
         self.cfw_register = self.manager.CfwManager(parallelization_modes, function_extender)  # type: ignore
@@ -456,12 +539,23 @@ class Runner:
             self.cfw_register.set_api_data(api_data)
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        """
+        Exits the context of the Runner.
+
+        Args:
+            exc_type: The exception type.
+            exc_val: The exception value.
+            exc_tb: The exception traceback.
+        """
         self.manager.shutdown()
 
     def get_artifacts(self) -> Dict[str, Any]:
+        """
+        Gets the artifacts.
+        """
         return self.artifacts
 
-    def can_run_step(
+    def _can_run_step(
         self,
         required_uuids: Set[UUID],
         step_uuid: Set[UUID],
@@ -469,7 +563,7 @@ class Runner:
         currently_running_steps: Set[UUID],
     ) -> bool:
         """
-        Check if the step can be run. If it can, add it to the currently_running_steps set.
+        Checks if a step can be run. If it can, add it to the currently_running_steps set.
         """
 
         with threading.Lock():
@@ -478,16 +572,25 @@ class Runner:
                 return True
             return False
 
-    def mark_step_as_finished(
+    def _mark_step_as_finished(
         self, step_uuid: Set[UUID], finished_steps: Set[UUID], currently_running_steps: Set[UUID]
     ) -> None:
+        """
+        Marks a step as finished.
+        """
         with threading.Lock():
             currently_running_steps.difference_update(step_uuid)
             finished_steps.update(step_uuid)
 
-    def identify_mode_and_return_execute_step(
+    def _get_execution_function(
         self, mode_by_cfw_register: Set[ParallelizationModes], mode_by_step: Set[ParallelizationModes]
     ) -> Callable:  # type: ignore
+        """
+        Identifies the execution mode and returns the corresponding execute step function.
+
+        Returns:
+            The execute step function corresponding to the identified mode.
+        """
         modes = mode_by_cfw_register.intersection(mode_by_step)
 
         if ParallelizationModes.MULTIPROCESSING in modes:
@@ -497,6 +600,9 @@ class Runner:
         return self.sync_execute_step
 
     def get_result(self) -> List[Any]:
+        """
+        Gets the results.
+        """
         # TODO: This is a temporary solution. We need to return the data in a more structured way.
         # Idea: return a dictionary with the feature name as key and the data as value.
         # Idea: list can keep history for debug more

@@ -42,16 +42,27 @@ class ConcatenatedFileContent(AbstractFeatureGroup):
     join_feature_name = "FGConcatenatedFileContent_JoinLLMFiles"
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Set[Feature] | None:
+        disallowed_files = list(options.get("disallowed_files")) if options.get("disallowed_files") else ["__init__.py"]
+
         if options.get("file_paths"):
             file_paths = list(options.get("file_paths"))
+
+            if options.get("file_paths"):
+                file_paths = list(options.get("file_paths"))
+
+                new_file_paths = []
+                for file in file_paths:
+                    file_name = os.path.basename(file)  # Extracts only the file name
+
+                    if not file_name not in disallowed_files:
+                        _file = file.replace("\n", "")
+                        new_file_paths.append(_file)
+
         else:
             target_folder = options.get("target_folder")
             if not target_folder:
                 raise ValueError(f"The option 'target_folder' is required for {self.get_class_name()}.")
 
-            disallowed_files = (
-                list(options.get("disallowed_files")) if options.get("disallowed_files") else ["__init__.py"]
-            )
             file_type = options.get("file_type") or "py"
             file_paths = find_file_paths(list(target_folder), file_type, not_allowed_files_names=disallowed_files)
 

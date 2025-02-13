@@ -42,7 +42,7 @@ class FeatureGroupStep(Step):
         self,
         cfw_register: CfwManager,
         cfw: ComputeFrameWork,
-        from_cfw: Optional[ComputeFrameWork] = None,  # Not used in this implementation
+        from_cfw: Optional[Union[ComputeFrameWork, UUID]] = None,  # Not used in this implementation
         data: Optional[Any] = None,
     ) -> Optional[Any]:
         self.location = cfw_register.get_location()

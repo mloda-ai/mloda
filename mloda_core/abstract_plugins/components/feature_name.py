@@ -8,7 +8,7 @@ class FeatureName:
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, FeatureName):
-            raise Exception(f"Cannot compare FeatureName with {type(other)}.")
+            raise TypeError(f"Cannot compare FeatureName with {type(other)}.")
         return self.name == other.name
 
     def __hash__(self) -> int:

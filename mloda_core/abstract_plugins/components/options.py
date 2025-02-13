@@ -4,19 +4,15 @@ from mloda_plugins.feature_group.experimental.default_options_key import Default
 
 
 class Options:
-    """HashableDict
+    """
+    Options can be passed into the feature, allowing arbitrary variables to be used.
+    This enables configuration:
+    - at request time
+    - when defining input features of a feature_group.
 
-    Documentation Options:
-
-    Options can be passed into the feature, so that we can use arbitrary variables in the feature.
-    This means, we can define options in
-    - at request
-    - at defining input features of feature_group.
-
-    We forward at request options to the child features. This is done by the engine.
-    This enables us to configure children features by essentially two mechanism:
-    - at request by request feature options
-    - at defining input features of feature_group.
+    At-request options are forwarded to child features. This allows configuring children features by:
+    - request feature options
+    - defining input features of the feature_group.
     """
 
     def __init__(self, data: Optional[dict[str, Any]] = None) -> None:
@@ -44,10 +40,9 @@ class Options:
 
     def update_considering_mloda_source(self, other: "Options") -> None:
         """
-        This functionality is used to update an options object with another options object.
+        Updates the options object with data from another Options object, excluding the mloda_source_feature key.
 
-        However, we exclude the mloda_source_feature key from the update. We do it because we want to keep the
-        parent feature source feature in the options object. This object, is not relevant for the child feature.
+        The mloda_source_feature key is excluded to preserve the parent feature source, as it is not relevant to the child feature.
         """
 
         exclude_key = DefaultOptionKeys.mloda_source_feature

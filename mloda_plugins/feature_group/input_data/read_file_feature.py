@@ -14,7 +14,8 @@ class ReadFileFeature(AbstractFeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         reader = cls.input_data()
-        if reader is not None:
-            data = reader.load(features)
-            return data
-        raise ValueError(f"Reading file failed for feature {features.get_name_of_one_feature()}.")
+        if reader is None:
+            raise ValueError(f"No reader available for feature {features.get_name_of_one_feature()}.")
+
+        data = reader.load(features)
+        return data

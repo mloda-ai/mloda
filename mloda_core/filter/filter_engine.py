@@ -21,7 +21,7 @@ class BaseFilterEngine(ABC):
             return data
 
         for single_filter in features.filters:
-            if single_filter.filter_feature.name.name not in features.get_all_names():
+            if single_filter.filter_feature.name not in features.get_all_names():
                 continue
             data = cls.do_filter(data, single_filter)
 
@@ -30,7 +30,7 @@ class BaseFilterEngine(ABC):
     @classmethod
     def do_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
         if filter_feature.filter_type is None:
-            raise ValueError(f"Filter type evaluates to None {filter_feature.filter_feature.name.name}.")
+            raise ValueError(f"Filter type evaluates to None {filter_feature.filter_feature.name}.")
 
         if filter_feature.filter_type == "range":
             return cls.do_range_filter(data, filter_feature)

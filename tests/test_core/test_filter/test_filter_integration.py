@@ -4,7 +4,6 @@ from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
 from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 from mloda_core.filter.global_filter import GlobalFilter
 from mloda_core.runtime.flight.flight_server import FlightServer
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
@@ -15,6 +14,7 @@ from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGr
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_collection import Features
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
+from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 
 
 class GlobalFilterBasicTest(AbstractFeatureGroup):
@@ -71,7 +71,7 @@ class GlobalFilterHasDifferentNameTest(GlobalFilterBasicTest):
         if len(features.filters) != 1:  # type: ignore
             raise ValueError("Test Filter not found")
 
-        if next(iter(features.filters)).filter_feature.name.name != "GlobalFilterHasDifferentNameTest":  # type: ignore
+        if next(iter(features.filters)).filter_feature.name != "GlobalFilterHasDifferentNameTest":  # type: ignore
             raise ValueError("Filter feature name is not equal to eature name.")
 
         if len(features.get_all_names()) != 1:
@@ -159,7 +159,8 @@ class TestGlobalFilter:
             assert len(value) == 1
 
             single_feature = next(iter(value))
-            assert single_feature.filter_feature.name.name == global_filter_test_basic
+            assert single_feature.filter_feature.name == global_filter_test_basic
+            assert single_feature.filter_feature.name == global_filter_test_basic
             assert next(iter(global_filter.filters)).uuid == single_feature.uuid
 
     def test_global_filter_filter_requests_other_column(

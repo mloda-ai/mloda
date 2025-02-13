@@ -26,7 +26,7 @@ class SingleFilter:
         self.filter_feature = self.handle_filter_feature(filter_feature)
         self.filter_type = self.handle_filter_type(filter_type)
         self.parameter = self.handle_parameter(parameter)
-        self.name = self.filter_feature.name.name
+        self.name = self.filter_feature.name
 
         self.uuid = uuid.uuid4()
 

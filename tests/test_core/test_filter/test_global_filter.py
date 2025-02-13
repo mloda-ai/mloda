@@ -121,7 +121,7 @@ class TestGlobalFilterTimeTravel(unittest.TestCase):
         self.assertEqual(len(self.global_filter.filters), 2)
 
         # Check that the filters have the correct feature names
-        filter_features = {f.filter_feature.name.name for f in self.global_filter.filters}
+        filter_features = {f.filter_feature.name for f in self.global_filter.filters}
 
         self.assertIn(time_filter_feature, filter_features)
         self.assertIn(time_travel_filter_feature, filter_features)
@@ -159,7 +159,7 @@ class TestGlobalFilterTimeTravel(unittest.TestCase):
         self.assertEqual(len(self.global_filter.filters), 2)
 
         # Check that the time-travel filter has the correct feature name
-        filter_features = {f.filter_feature.name.name for f in self.global_filter.filters}
+        filter_features = {f.filter_feature.name for f in self.global_filter.filters}
         self.assertIn(time_travel_filter_feature, filter_features)
 
     def test_add_time_filters_without_validity(self) -> None:

@@ -63,7 +63,7 @@ class Features:
 
     def check_duplicate_feature(self, feature: Feature) -> None:
         if feature in self.collection:
-            raise ValueError(f"Duplicate feature setup: {feature.name.name}")
+            raise ValueError(f"Duplicate feature setup: {feature.name}")
 
     def __iter__(self) -> Generator[Feature, None, None]:
         yield from self.collection

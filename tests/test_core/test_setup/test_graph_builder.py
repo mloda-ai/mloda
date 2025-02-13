@@ -110,7 +110,7 @@ class TestGraphBuildGraph:
         # Assert nodes
         nodes = graph.get_nodes()
         assert len(nodes) == 3
-        assert nodes[f1.uuid].feature.name.name == "BaseTestFeature1"
+        assert nodes[f1.uuid].feature.name == "BaseTestFeature1"
         assert nodes[f1.uuid].feature_group_class == BaseTestFeatureGroup1
         assert nodes[g2.uuid].feature_group_class == BaseTestGraphFeatureGroup3
         assert nodes[g3.uuid].feature_group_class == BaseTestGraphFeatureGroup3
@@ -153,7 +153,7 @@ class TestGraphBuildGraph:
         # Assert nodes
         nodes = graph.get_nodes()
         assert len(nodes) == 3
-        assert nodes[f1.uuid].feature.name.name == "BaseTestFeature1"
+        assert nodes[f1.uuid].feature.name == "BaseTestFeature1"
         assert nodes[f1.uuid].feature_group_class == BaseTestFeatureGroup1
         assert nodes[g2.uuid].feature_group_class == BaseTestGraphFeatureGroup3
         assert nodes[g3.uuid].feature_group_class == BaseTestGraphFeatureGroup3

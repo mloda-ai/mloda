@@ -40,6 +40,6 @@ class BaseTestFeatureGroup2(AbstractFeatureGroup):
 
     @classmethod
     def return_data_type_rule(cls, feature: Feature) -> Optional[DataType]:
-        if "BaseTestFeature" in feature.name.name and "2" in feature.name.name:
+        if "BaseTestFeature" in feature.name and "2" in feature.name:
             return DataType.STRING
         return None

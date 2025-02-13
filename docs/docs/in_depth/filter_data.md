@@ -133,7 +133,7 @@ class ExampleOrderFilter(AbstractFeatureGroup):
         # Extract the filter value and filter_name information from the filters.
         for filter in features.filters:
             filter_value = filter.parameter[0]
-            filter_name = filter.filter_feature.name.name
+            filter_name = filter.filter_feature.name
             break
         # Create the order_id filter
         order_id_filter = [i for i, order_id in enumerate(_data_creator[filter_name]) if order_id == filter_value[1]]

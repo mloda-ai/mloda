@@ -202,7 +202,7 @@ class TestDynamicFeatureGroupFactory:
         assert len(input_features) == 1
 
         feature = next(iter(input_features))
-        assert feature.name.name == "source_feature_1"
+        assert feature.name == "source_feature_1"
         assert feature.initial_requested_data is True
 
         assert issubclass(DynamicTestFeatureGroup, AbstractFeatureGroup)
@@ -246,7 +246,7 @@ class TestDynamicFeatureGroupFactory:
         assert len(input_features) == 1
 
         feature = next(iter(input_features))
-        assert feature.name.name == "source_feature_1"
+        assert feature.name == "source_feature_1"
         assert feature.options.data.get("ReadFileFeature") == "test.csv"
 
         assert issubclass(ConcreteFeatureGroup, AbstractFeatureGroup)

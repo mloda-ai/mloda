@@ -1,13 +1,18 @@
 {
-  "name": "mloda Dev Container",
-  "image": "mcr.microsoft.com/vscode/devcontainers/python:3.10",
+  "name": "mloda Dev Container 2",
+  "dockerComposeFile": ["../../.devcontainer/docker-compose.yml"],
+  "service": "ki-agent-2",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+  "workspaceFolder": "/workspace",
+  "postAttachCommand": "cd /workspace && exec $SHELL",
   "features": {
     "ghcr.io/devcontainers/features/docker-in-docker:2": {}
   },
-  "postCreateCommand": "pip install -r docs/requirements.txt -r tests/requirements-test.txt && tox",
+  "overrideCommand": false,
   "customizations": {
     "vscode": {
       "settings": {
+        "terminal.integrated.cwd": "/workspace",
         "terminal.integrated.shell.linux": "/bin/bash",
         "files.exclude": {
           "**/*egg-info": true,
@@ -17,9 +22,6 @@
         "python.analysis.completeFunctionParens": true,
         "python.languageServer": "Pylance",
         "editor.formatOnSave": true,
-        "ruff.format.args": [
-          "--line-length=120"
-        ],
         "editor.formatOnPaste": true,
         "editor.defaultFormatter": "charliermarsh.ruff",
         "markdown-mermaid.languages": [
@@ -36,5 +38,6 @@
     }
   },
   "forwardPorts": [8000],
-  "remoteUser": "vscode"
+  "remoteUser": "vscode",
+  "shutdownAction": "stopCompose"
 }

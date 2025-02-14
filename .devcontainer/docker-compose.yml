@@ -1,0 +1,44 @@
+services:
+  ki-agent-1:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    volumes:
+      - ki_agent_1_data:/workspace  
+      - ~/.ssh:/home/vscode/.ssh:ro
+      - ~/.gitconfig:/home/vscode/.gitconfig:ro
+      - ~/.git-credentials:/home/vscode/.git-credentials:ro
+    ports:
+      - "8000:8000"
+    command: bash -c "cd /workspace && exec bash"  # Change directory to /workspace
+    stdin_open: true    # Keep STDIN open for interaction
+    tty: true           # Allocate a pseudo-TTY
+    container_name: ki-agent-1
+    networks:
+      - dev-network
+
+  ki-agent-2:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    volumes:
+      - ki_agent_2_data:/workspace  
+      - ~/.ssh:/home/vscode/.ssh:ro
+      - ~/.gitconfig:/home/vscode/.gitconfig:ro
+      - ~/.git-credentials:/home/vscode/.git-credentials:ro
+    ports:
+      - "8001:8000"
+    command: bash -c "cd /workspace && exec bash"  # Change directory to /workspace
+    stdin_open: true    # Keep STDIN open for interaction
+    tty: true           # Allocate a pseudo-TTY
+    container_name: ki-agent-2
+    networks:
+      - dev-network
+
+volumes:
+  ki_agent_1_data:
+  ki_agent_2_data:
+
+networks:
+  dev-network:
+    driver: bridge

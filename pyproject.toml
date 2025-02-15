@@ -54,3 +54,6 @@ skips = [
     "B101", # Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
     "B104"  # Possible binding to all interfaces detected.
 ]
+
+[project.scripts]
+mloda = "mloda_plugins.feature_group.experimental.llm.cli:main"

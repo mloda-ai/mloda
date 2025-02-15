@@ -2,6 +2,7 @@ import os
 from typing import List
 
 from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
+from mloda_plugins.feature_group.experimental.llm.cli import format_array
 import pytest
 
 from mloda_core.abstract_plugins.components.feature import Feature
@@ -11,7 +12,6 @@ from mloda_plugins.feature_group.experimental.llm.llm_file_selector import LLMFi
 from mloda_core.api.request import mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
 from mloda_plugins.feature_group.input_data.read_context_files import ConcatenatedFileContent
-from tests.test_plugins.feature_group.experimental.llm.test_llm import format_array
 
 
 @pytest.mark.skipif(os.environ.get("GEMINI_API_KEY") is None, reason="GEMINI KEY NOT SET")

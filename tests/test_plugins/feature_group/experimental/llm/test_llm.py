@@ -2,6 +2,7 @@ import os
 from typing import Any, List, Optional, Union
 
 from mloda_core.abstract_plugins.components.index.index import Index
+from mloda_plugins.feature_group.experimental.llm.cli import format_array
 from mloda_plugins.feature_group.experimental.llm.installed_packages_feature_group import InstalledPackagesFeatureGroup
 from mloda_plugins.feature_group.experimental.llm.tools.available.multiply import MultiplyTool
 from mloda_plugins.feature_group.input_data.api_data.api_data import ApiInputDataFeature
@@ -301,10 +302,3 @@ class TestGeminiLLMFiles:
 
             formatted_output = format_array(f"Result {i} values: ", res[GeminiRequestLoop.get_class_name()].values)
             print(formatted_output)
-
-
-def format_array(prefix: str, array: Any, indent: int = 2, color: str = "34") -> str:
-    """Formats a NumPy array for better console output."""
-    indent_str = " " * indent
-    formatted_values = ", ".join(map(str, array.tolist()))
-    return f"{indent_str}\033[{color}m{prefix} [\033[0m{formatted_values}\033[{color}m]\033[0m"

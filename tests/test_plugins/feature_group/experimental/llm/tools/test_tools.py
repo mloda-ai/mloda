@@ -3,6 +3,7 @@ from typing import List
 import logging
 
 from mloda_plugins.feature_group.experimental.llm.tools.available.adjust_file_tool import AdjustFileTool
+from mloda_plugins.feature_group.experimental.llm.tools.available.replace_file_tool import ReplaceFileTool
 import pytest
 
 from mloda_plugins.feature_group.experimental.llm.tools.available.create_new_file import (
@@ -189,6 +190,33 @@ class TestSingleTools:
             with open(sample_file_path, "r") as f:
                 content = f.read()
             assert content == "new_value\n"
+        finally:
+            # Clean up
+            os.remove(sample_file_path)
+
+    def test_replace_file(self) -> None:
+        prompt = """ Replace the content of the file 'replace.txt' with 'new content'. """
+        target_folder = [
+            os.getcwd() + "/tests/test_plugins/feature_group/experimental/llm/tools/",
+        ]
+        sample_file_path = os.path.join(target_folder[0], "replace.txt")
+
+        # Create a sample file with the old content
+        with open(sample_file_path, "w") as f:
+            f.write("old content\n")
+
+        try:
+            self.run_test(
+                prompt,
+                ReplaceFileTool.get_class_name(),
+                target_folder,
+                "'replace.txt'",
+            )
+
+            # Verify the replacement
+            with open(sample_file_path, "r") as f:
+                content = f.read()
+            assert content == "new content"
         finally:
             # Clean up
             os.remove(sample_file_path)

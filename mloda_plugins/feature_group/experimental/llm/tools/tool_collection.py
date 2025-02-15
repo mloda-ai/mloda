@@ -4,6 +4,7 @@ import logging
 from mloda_core.abstract_plugins.components.utils import get_all_subclasses
 from mloda_plugins.feature_group.experimental.llm.tools.base_tool import BaseTool
 from mloda_plugins.feature_group.experimental.llm.tools.tool_data_classes import ToolFunctionDeclaration
+from mloda_plugins.feature_group.experimental.llm.tools.available.replace_file_tool import ReplaceFileTool
 
 
 logger = logging.getLogger(__name__)

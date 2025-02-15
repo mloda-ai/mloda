@@ -19,6 +19,7 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 from tests.test_plugins.feature_group.experimental.llm.test_llm import format_array
 from mloda_plugins.feature_group.experimental.llm.tools.available.git_diff import GitDiffTool
+from mloda_plugins.feature_group.experimental.llm.tools.available.git_diff_cached import GitDiffCachedTool
 
 logger = logging.getLogger(__name__)
 
@@ -55,15 +56,16 @@ class TestSingleTools:
             )
         ]
 
-    def test_multiply(self) -> None:
-        prompt = """ As first step: Multiply 5 by 5. As a second step, multiply the result by 2. """
-
+    def run_test(
+        self, prompt: str, tool_classes: str | List[str], target_folder: List[str], expected_output: str
+    ) -> None:
         tool_collection = ToolCollection()
-        tool_collection.add_tool(MultiplyTool.get_class_name())
 
-        target_folder = [
-            os.getcwd() + "/tests/test_core/test_index",
-        ]
+        if isinstance(tool_classes, str):
+            tool_collection.add_tool(tool_classes)
+        else:
+            for tool_class in tool_classes:
+                tool_collection.add_tool(tool_class)
 
         features = self.get_features(prompt, tool_collection, target_folder)
 
@@ -73,72 +75,36 @@ class TestSingleTools:
         )
 
         for res in results:
-            assert "50" in res[GeminiRequestLoop.get_class_name()].values[0]
+            print(res)
+            assert expected_output in res[GeminiRequestLoop.get_class_name()].values[0]
+
+    def test_multiply(self) -> None:
+        prompt = """ As first step: Multiply 5 by 5. As a second step, multiply the result by 2. """
+        target_folder = [
+            os.getcwd() + "/tests/test_core/test_index",
+        ]
+        self.run_test(prompt, MultiplyTool.get_class_name(), target_folder, "50")
 
     def test_run_single_pytest(self) -> None:
         prompt = """ Run a unit test provided in the context by selecting a test by giving the name following the syntax: python3 -m pytest -k test_name -s. If you receive a 0 as return code, stop."""
-
-        tool_collection = ToolCollection()
-        tool_collection.add_tool(RunSinglePytestTool.get_class_name())
-
         target_folder = [
             os.getcwd() + "/tests/test_core/test_index",
         ]
-
-        features = self.get_features(prompt, tool_collection, target_folder)
-
-        results = mlodaAPI.run_all(
-            features,
-            compute_frameworks={PandasDataframe},
-        )
-
-        for res in results:
-            assert "test_add_index_simple" in res[GeminiRequestLoop.get_class_name()].values[0]
+        self.run_test(prompt, RunSinglePytestTool.get_class_name(), target_folder, "test_add_index_simple")
 
     def test_run_tox(self) -> None:
-        prompt = """ Run tox exactly one time. Propose a solution for the error if the return code is not 0. """
-
-        tool_collection = ToolCollection()
-        tool_collection.add_tool(RunToxTool.get_class_name())
-
+        prompt = """ Run tox exactly one time. """
         target_folder = [
             os.getcwd() + "/mloda_plugins",
         ]
-
-        features = self.get_features(prompt, tool_collection, target_folder)
-
-        results = mlodaAPI.run_all(
-            features,
-            compute_frameworks={PandasDataframe},
-        )
-
-        # for i, res in enumerate(results):
-        #    formatted_output = format_array(f"Result {i} values: ", res[GeminiRequestLoop.get_class_name()].values)
-        #    print(formatted_output)
-
-        for res in results:
-            assert "tox" in res[GeminiRequestLoop.get_class_name()].values[0]
+        self.run_test(prompt, RunToxTool.get_class_name(), target_folder, "tox")
 
     def test_create_new_plugin(self) -> None:
         prompt = """ Create a new plugin for a postgres reader and create tests for it.  """
-
-        tool_collection = ToolCollection()
-        tool_collection.add_tool(CreateFileTool.get_class_name())
-
         target_folder = [
             os.getcwd() + "/mloda_plugins",
         ]
-
-        features = self.get_features(prompt, tool_collection, target_folder)
-
-        results = mlodaAPI.run_all(
-            features,
-            compute_frameworks={PandasDataframe},
-        )
-
-        for i, res in enumerate(results):
-            formatted_output = format_array(f"Result {i} values: ", res[GeminiRequestLoop.get_class_name()].values)
-            print(formatted_output)
+        self.run_test(prompt, CreateFileTool.get_class_name(), target_folder, "Result 0 values:")
 
     def test_create_and_test_new_plugin(self) -> None:
         prompt = """  You are an AI agent tasked with creating a new feature group plugin for reading data from a PostgreSQL database, creating tests for this plugin, and running those tests to ensure the plugin functions correctly.  Your goal is to ensure that you do not run tools twice and handle all errors correctly.
@@ -160,50 +126,28 @@ class TestSingleTools:
             5.  **Report success**:
                 * After all of it let me know it has been done.
         """
-        # prompt = """ Create a new abstractfeaturegroup plugin getting the list and directory of the project. """
-        # prompt = """ Can you create a mlodaAPI test fot the plugin ListDirectoryFeatureGroup."""
-        # prompt = """you create a mlodaAPI test for the plugin InstalledPackagesFeatureGroup."""
-        prompt = """Create a new plugin where an llm is asked to chose from a list of code files, which help the most to answer a question. 
-                    You can use the ConcatenatedFileContent feature to get the list of files and GeminiRequestLoop to run the tools.
-        """
-        tool_collection = ToolCollection()
-        tool_collection.add_tool(CreateFileTool.get_class_name())
-        tool_collection.add_tool(RunSinglePytestTool.get_class_name())
-
         target_folder = [
             os.getcwd() + "/mloda_core/api",
             os.getcwd() + "/mloda_plugins",
             os.getcwd() + "/tests/test_plugins/",
         ]
-
-        features = self.get_features(prompt, tool_collection, target_folder)
-
-        results = mlodaAPI.run_all(
-            features,
-            compute_frameworks={PandasDataframe},
+        self.run_test(
+            prompt,
+            [CreateFileTool.get_class_name(), RunSinglePytestTool.get_class_name()],
+            target_folder,
+            "",
         )
 
-        for i, res in enumerate(results):
-            formatted_output = format_array(f"Result {i} values: ", res[GeminiRequestLoop.get_class_name()].values)
-            print(formatted_output)
-
-    def test_git_diff(self) -> None:
+    def test_git_diff_no_cache(self) -> None:
         prompt = """ Run git diff. Return the output. """
-
-        tool_collection = ToolCollection()
-        tool_collection.add_tool(GitDiffTool.get_class_name())
-
         target_folder = [
             os.getcwd() + "/mloda_plugins/function_extender",
         ]
+        self.run_test(prompt, GitDiffTool.get_class_name(), target_folder, "diff")
 
-        features = self.get_features(prompt, tool_collection, target_folder)
-
-        results = mlodaAPI.run_all(
-            features,
-            compute_frameworks={PandasDataframe},
-        )
-
-        for res in results:
-            print(res)
-            assert "diff" in res[GeminiRequestLoop.get_class_name()].values[0]
+    def test_git_diff_cached(self) -> None:
+        prompt = """ Run git diff --cached. Return the output. """
+        target_folder = [
+            os.getcwd() + "/mloda_plugins/function_extender",
+        ]
+        self.run_test(prompt, GitDiffCachedTool.get_class_name(), target_folder, "git_diff_cached")

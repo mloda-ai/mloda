@@ -16,7 +16,7 @@ class CreateFileTool(BaseTool):
     def tool_declaration(cls) -> ToolFunctionDeclaration:
         return cls.build_tool_declaration(
             name=cls.get_class_name(),
-            description="""This tool creates a new file with the provided content. Provide the complete text content for the file, and the desired path to create the file.""",
+            description="""This CreateFileTool creates a new file with the provided content. Provide the complete text content for the file, and the desired path to create the file.""",
             parameters=[
                 InputDataObject(
                     name="file_content",

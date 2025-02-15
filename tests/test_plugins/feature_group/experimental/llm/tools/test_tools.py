@@ -2,9 +2,10 @@ import os
 from typing import List
 import logging
 
+from mloda_plugins.feature_group.experimental.llm.tools.available.adjust_file_tool import AdjustFileTool
 import pytest
 
-from mloda_plugins.feature_group.experimental.llm.tools.available.create_new_plugin import (
+from mloda_plugins.feature_group.experimental.llm.tools.available.create_new_file import (
     CreateFileTool,
 )
 from mloda_plugins.feature_group.experimental.llm.tools.available.multiply import MultiplyTool
@@ -99,7 +100,7 @@ class TestSingleTools:
         ]
         self.run_test(prompt, RunToxTool.get_class_name(), target_folder, "tox")
 
-    def test_create_new_plugin(self) -> None:
+    def test_create_new_file(self) -> None:
         prompt = """ Create a new plugin for a postgres reader and create tests for it.  """
         target_folder = [
             os.getcwd() + "/mloda_plugins",
@@ -164,3 +165,30 @@ class TestSingleTools:
                 os.rmdir("tests/test_plugins/feature_group/experimental/llm/tools/test_folder")
             except Exception:  # nosec
                 pass
+
+    def test_adjust_file(self) -> None:
+        prompt = """ Adjust the file 'sample.txt' by replacing 'old_value' with 'new_value'. """
+        target_folder = [
+            os.getcwd() + "/tests/test_plugins/feature_group/experimental/llm/tools/",
+        ]
+        sample_file_path = os.path.join(target_folder[0], "sample.txt")
+        print(sample_file_path)
+        try:
+            # Create a sample file with the old content
+            with open(sample_file_path, "w") as f:
+                f.write("old_value\n")
+
+            self.run_test(
+                prompt,
+                AdjustFileTool.get_class_name(),
+                target_folder,
+                "'sample.txt'",
+            )
+
+            # Verify the adjustment
+            with open(sample_file_path, "r") as f:
+                content = f.read()
+            assert content == "new_value\n"
+        finally:
+            # Clean up
+            os.remove(sample_file_path)

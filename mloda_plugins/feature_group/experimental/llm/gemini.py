@@ -7,8 +7,12 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
+from mloda_core.abstract_plugins.components.index.index import Index
+from mloda_core.abstract_plugins.components.link import Link
 from mloda_core.abstract_plugins.components.options import Options
 
+from mloda_plugins.feature_group.experimental.llm.installed_packages_feature_group import InstalledPackagesFeatureGroup
+from mloda_plugins.feature_group.experimental.llm.list_directory_feature_group import ListDirectoryFeatureGroup
 from mloda_plugins.feature_group.experimental.llm.llm_base_request import LLMBaseRequest
 
 from mloda_plugins.feature_group.experimental.llm.tools.tool_collection import ToolCollection
@@ -72,10 +76,54 @@ class GeminiRequestLoop(LLMBaseRequest):
     """
     A feature group that interacts with Gemini, iteratively using tools
     until no tool is called by the llm anymore.
+
+    If the `project_meta_data` option is set to True, the feature group requires that the requested of the
+    feature GeminiRequestLoop set the link between SourceInputFeatureComposite and one of the other feature groups.
+
+    The specific SourceInputFeatureComposite depends on your projects access, thus we don t know it here.
+    If you encounter this feature and want an automatic link setting, we could develop this.
+    However, it was deprioritized due to the complexity of the feature.
+
+    Example in test test_llm_gemini_given_prompt:
+        installed = Index(("InstalledPackagesFeatureGroup",))
+        api_data = Index(("InputData1",))
+        link = Link.outer((InstalledPackagesFeatureGroup, installed), (ApiInputDataFeature, api_data))
+
+        Feature(
+                    name=GeminiRequestLoop.get_class_name(),
+                    options={
+                        ...
+                        "project_meta_data": True,
+                    },
+                    link=link
+        )
     """
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Set[Feature] | None:
-        return SourceInputFeatureComposite.input_features(options, feature_name)
+        features = SourceInputFeatureComposite.input_features(options, feature_name) or set()
+
+        if options.get("project_meta_data") is not None:
+            idx_installed = Index(("InstalledPackagesFeatureGroup",))
+            idx_list_dir = Index(("ListDirectoryFeatureGroup",))
+
+            link = Link.append(
+                (ListDirectoryFeatureGroup, idx_list_dir), (InstalledPackagesFeatureGroup, idx_installed)
+            )
+
+            list_dir = Feature(
+                name=ListDirectoryFeatureGroup.get_class_name(),
+                link=link,
+                index=idx_list_dir,
+            )
+            installed = Feature(
+                name=InstalledPackagesFeatureGroup.get_class_name(),
+                index=idx_installed,
+            )
+
+            features.add(list_dir)
+            features.add(installed)
+
+        return features
 
     @classmethod
     def request(cls, model: str, prompt: str, model_parameters: Dict[str, Any], tools: ToolCollection | None) -> Any:
@@ -117,6 +165,8 @@ class GeminiRequestLoop(LLMBaseRequest):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        data.iloc[0, 0] = "\n".join(data.stack().dropna().astype(str).tolist())  # Combine non-NaN values
+
         model = cls.get_model_from_config(features)
         prompt = cls.handle_prompt(data, features)
         model_parameters = cls.get_model_parameters(features)

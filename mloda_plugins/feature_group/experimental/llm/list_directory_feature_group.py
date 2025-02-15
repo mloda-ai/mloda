@@ -1,9 +1,11 @@
 import os
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Set, Type, Union
 import logging
 
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
+from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
 
 logger = logging.getLogger(__name__)
 
@@ -94,3 +96,7 @@ class ListDirectoryFeatureGroup(AbstractFeatureGroup):
                 new_prefix = f"{prefix}{'    ' if is_last else '│   '}"
                 lines.append(cls._generate_tree_string(content, new_prefix))
         return "\n".join(lines)  # Ensure the whole structure is kept as one string
+
+    @classmethod
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+        return {PandasDataframe}

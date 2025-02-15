@@ -28,5 +28,7 @@ def test_list_directory_feature_group_mlodaAPI() -> None:
     # This test checks if ListDirectoryFeatureGroup can be run via mlodaAPI
     features: List[Feature | str] = [ListDirectoryFeatureGroup.get_class_name()]
     result = mlodaAPI.run_all(features, compute_frameworks={PandasDataframe})
+    for res in result:
+        assert "__init__.py" not in res[ListDirectoryFeatureGroup.get_class_name()].values[0]
     assert len(result) == 1
     assert ListDirectoryFeatureGroup.get_class_name() in result[0]

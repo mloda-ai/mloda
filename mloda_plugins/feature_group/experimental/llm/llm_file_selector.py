@@ -41,7 +41,6 @@ class LLMFileSelector(AbstractFeatureGroup):
                 "target_folder": frozenset(target_folder),
                 "disallowed_files": frozenset(disallowed_files),
                 "file_type": file_type,
-                "AddPathToContent": True,
             },
         )
         return {llm_feature}
@@ -58,7 +57,7 @@ class LLMFileSelector(AbstractFeatureGroup):
                     raise ValueError(f"File path {path} contains a newline character.")
 
                 if not os.path.exists(path):
-                    raise ValueError(f"File {path} does not exist.")
+                    raise ValueError(f"File <{path}> does not exist.")
 
         return True
 

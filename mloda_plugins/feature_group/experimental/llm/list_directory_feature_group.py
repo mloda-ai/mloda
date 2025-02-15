@@ -11,6 +11,33 @@ logger = logging.getLogger(__name__)
 
 
 class ListDirectoryFeatureGroup(AbstractFeatureGroup):
+    """
+    A Feature Group that generates a string representation of a directory's file structure.
+
+    Purpose:
+    This class crawls a given directory (defaults to the project root), applying .gitignore rules
+    to filter out unwanted files and directories. It then creates a tree-like string
+    that represents the directory structure, including full paths, file types, and depth.
+    This representation can be used as input for LLMs to understand the codebase's organization.
+
+    Key Features:
+    - Ignores hidden directories (starting with ".") and __pycache__.
+    - Applies .gitignore patterns for flexible file and directory exclusion.
+    - Generates a string representation of the directory tree including full paths.
+    - Identifies each item as either a file or a directory.
+    - Provides the depth of each item within the directory structure.
+
+    Example:
+
+    ```
+    project_root/
+    ├── file1.txt (file) (depth: 1)
+    ├── dir1 (dir) (depth: 1)
+    │   └── file2.py (file) (depth: 2)
+    └── ...
+    ```
+    """
+
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         project_root = os.getcwd()  # Get project root (assumed to be CWD)
@@ -47,11 +74,13 @@ class ListDirectoryFeatureGroup(AbstractFeatureGroup):
             # Filter files based on .gitignore
             for f in files:
                 file_path = os.path.join(relative_root, f)
+                if "__init__.py" in file_path:
+                    continue
                 if not cls._is_ignored(file_path, ignore_patterns):
                     current_level[f] = None  # Files are stored as None in the structure
 
         # Generate formatted tree string
-        tree_string = cls._generate_tree_string(file_structure)
+        tree_string = cls._generate_full_path_tree_string(file_structure, project_root)
         return {cls.get_class_name(): [tree_string]}  # Ensuring the entire tree is a single string inside a list
 
     @staticmethod
@@ -84,18 +113,30 @@ class ListDirectoryFeatureGroup(AbstractFeatureGroup):
         return False
 
     @classmethod
-    def _generate_tree_string(cls, file_structure: Dict[str, Any], prefix: str = "") -> str:
-        """Recursively generates a properly formatted tree-like string representation."""
+    def _generate_full_path_tree_string(
+        cls, file_structure: Dict[str, Any], project_root: str, prefix: str = "", current_path: str = "", depth: int = 0
+    ) -> str:
+        """Recursively generates a full path tree string with file type indicators and depth."""
         lines: List[str] = []
-        items = list(file_structure.items())
+        items = sorted(file_structure.items())  # Sort items alphabetically
+
         for index, (name, content) in enumerate(items):
             is_last = index == len(items) - 1
             connector = "└── " if is_last else "├── "
-            lines.append(f"{prefix}{connector}{name}")
+
+            new_path = os.path.join(current_path, name)  # use os.path.join here to construct new path
+            if current_path == "":
+                new_path = name  # at the root directory, there is no sub directories so don't join,
+            file_type = "(dir)" if isinstance(content, dict) else "(file)"
+            lines.append(f"{prefix}{connector}{project_root}/{new_path} {file_type} (depth: {depth})")
+
             if isinstance(content, dict) and content:
                 new_prefix = f"{prefix}{'    ' if is_last else '│   '}"
-                lines.append(cls._generate_tree_string(content, new_prefix))
-        return "\n".join(lines)  # Ensure the whole structure is kept as one string
+                lines.append(
+                    cls._generate_full_path_tree_string(content, project_root, new_prefix, new_path, depth + 1)
+                )
+
+        return "\n".join(lines)
 
     @classmethod
     def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:

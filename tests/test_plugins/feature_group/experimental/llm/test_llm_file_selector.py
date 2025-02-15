@@ -19,14 +19,20 @@ def test_llm_file_selector() -> None:
     target_folder = [
         os.getcwd() + "/mloda_plugins",
         os.getcwd() + "/mloda_core",
+        os.getcwd() + "/tests/test_plugins",
     ]
 
     # prompt = """Given the following code files, which are most relevant files to answering the question
     #            'How do mloda feature groups work?? List the whole path of the file, separated by commas without any other chars."""
     # prompt = """Given the following code files, what are the most relevant files to answering the question
     #             'What is cool of mloda for data engineering? Exclude llm' List the whole path of the file, separated by commas without any other chars."""
-    prompt = """Given the following code files, what are the most relevant files to answering the question 
-                 'what of this framework mloda is innovative? Exclude llm' List the whole path of the file, separated by commas without any other chars."""
+    # prompt = """Given the following code files, what are the most relevant files to answering the question
+    #             'what of this framework mloda is innovative? Exclude llm' List the whole path of the file, separated by commas without any other chars."""
+
+    base_prompt_1 = "Given the following .py code files, which are most relevant files to answering the question"
+    base_prompt_2 = "Do not include *.md or .ipynb files. List the whole full path of the file, separated by commas without any other chars."
+
+    prompt = """ 'How do I create PostgresReader and test it?' """
 
     PluginLoader().all()
 
@@ -34,21 +40,16 @@ def test_llm_file_selector() -> None:
         Feature(
             name="LLMFileSelector",
             options={
-                "prompt": prompt,
+                "prompt": base_prompt_1 + prompt + base_prompt_2,
                 "target_folder": frozenset(target_folder),
                 "disallowed_files": frozenset(
                     [
                         "__init__.py",
-                        "run.py",
-                        "request.py",
-                        "compute_frame_work.py",
-                        "execution_plan.py",
-                        "source_input_feature.py",
-                        "engine.py",
-                        "abstract_feature_group.py",
+                        "geminipy.py",
                     ]
                 ),
                 "file_type": "py",
+                "project_meta_data": True,
             },
         )
     ]
@@ -66,7 +67,10 @@ def test_llm_file_selector() -> None:
 
     # prompt = "Given the following code files, which code smells do you see?"
     # prompt = "Given the following code files, choose a code smell and fix it. Do not focus on docs. Show the result as a whole file."
-    prompt = "Given the following code files, explain why this is innovative?"
+    # prompt = "Given the following code files, explain why this is innovative?"
+    prompt = (
+        "Given the following code files, give me an example for how to integrate feature groups? Show only the code."
+    )
 
     files = None
     for res in results:
@@ -90,6 +94,7 @@ def test_llm_file_selector() -> None:
             "prompt": prompt,
             DefaultOptionKeys.mloda_source_feature: frozenset([ConcatenatedFileContent.get_class_name()]),
             "file_paths": frozenset(files),
+            "project_meta_data": True,
         },
     )
 

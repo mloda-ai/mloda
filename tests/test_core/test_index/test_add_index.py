@@ -24,7 +24,7 @@ from mloda_core.abstract_plugins.components.index.index import Index
 from mloda_core.abstract_plugins.components.link import Link
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.api.request import mlodaAPI
-from tests.test_plugins.feature_group.test_input_data.test_classes.test_input_classes import (
+from tests.test_plugins.feature_group.input_data.test_classes.test_input_classes import (
     DBInputDataTestFeatureGroup,
 )
 

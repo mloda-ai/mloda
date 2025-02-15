@@ -53,8 +53,7 @@ class ConcatenatedFileContent(AbstractFeatureGroup):
                 new_file_paths = []
                 for file in file_paths:
                     file_name = os.path.basename(file)  # Extracts only the file name
-
-                    if not file_name not in disallowed_files:
+                    if file_name not in disallowed_files:
                         _file = file.replace("\n", "")
                         new_file_paths.append(_file)
 

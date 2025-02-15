@@ -37,7 +37,7 @@ class RunSinglePytestTool(BaseTool):
     def tool_declaration(cls) -> ToolFunctionDeclaration:
         return cls.build_tool_declaration(
             name=cls.get_class_name(),
-            description="""This tool executes a single pytest test function using the command: `python3 -m pytest -k test_name -s`.  The `test_name` *must* be the exact name of the test function. For example, to run `test_run_single_pytest`, use `-k test_run_single_pytest`.  Do not include class names or module paths. The goal is to run *only one* test and then immediately stop. If the pytest command returns with a return code of `0`, indicating a successful test run, the tool should *stop* and report success.""",
+            description="""This RunSinglePytestTool executes a single pytest test function using the command: `python3 -m pytest -k test_name -s`.  The `test_name` *must* be the exact name of the test function. For example, to run `test_run_single_pytest`, use `-k test_run_single_pytest`.  Do not include class names or module paths. The goal is to run *only one* test and then immediately stop. If the pytest command returns with a return code of `0`, indicating a successful test run, the tool should *stop* and report success.""",
             parameters=[
                 InputDataObject(
                     name="test_name",

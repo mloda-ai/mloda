@@ -254,7 +254,7 @@ class GeminiRequestLoop(LLMBaseRequest):
             if tool_calls:
                 if tools is None:
                     raise ValueError("Tools are not set.")
-
+                print(tool_calls)
                 tool_result = cls._execute_tools(tool_calls, features, tools)
                 return "", tool_result
 

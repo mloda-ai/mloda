@@ -1,5 +1,6 @@
 import os
 from typing import List
+import logging
 
 import pytest
 
@@ -17,6 +18,9 @@ from mloda_core.api.request import mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 from tests.test_plugins.feature_group.experimental.llm.test_llm import format_array
+from mloda_plugins.feature_group.experimental.llm.tools.available.git_diff import GitDiffTool
+
+logger = logging.getLogger(__name__)
 
 
 @pytest.mark.skipif(os.environ.get("GEMINI_API_KEY") is None, reason="GEMINI KEY NOT SET")
@@ -156,14 +160,12 @@ class TestSingleTools:
             5.  **Report success**:
                 * After all of it let me know it has been done.
         """
-
         # prompt = """ Create a new abstractfeaturegroup plugin getting the list and directory of the project. """
         # prompt = """ Can you create a mlodaAPI test fot the plugin ListDirectoryFeatureGroup."""
         # prompt = """you create a mlodaAPI test for the plugin InstalledPackagesFeatureGroup."""
         prompt = """Create a new plugin where an llm is asked to chose from a list of code files, which help the most to answer a question. 
                     You can use the ConcatenatedFileContent feature to get the list of files and GeminiRequestLoop to run the tools.
         """
-
         tool_collection = ToolCollection()
         tool_collection.add_tool(CreateFileTool.get_class_name())
         tool_collection.add_tool(RunSinglePytestTool.get_class_name())
@@ -184,3 +186,24 @@ class TestSingleTools:
         for i, res in enumerate(results):
             formatted_output = format_array(f"Result {i} values: ", res[GeminiRequestLoop.get_class_name()].values)
             print(formatted_output)
+
+    def test_git_diff(self) -> None:
+        prompt = """ Run git diff. Return the output. """
+
+        tool_collection = ToolCollection()
+        tool_collection.add_tool(GitDiffTool.get_class_name())
+
+        target_folder = [
+            os.getcwd() + "/mloda_plugins/function_extender",
+        ]
+
+        features = self.get_features(prompt, tool_collection, target_folder)
+
+        results = mlodaAPI.run_all(
+            features,
+            compute_frameworks={PandasDataframe},
+        )
+
+        for res in results:
+            print(res)
+            assert "diff" in res[GeminiRequestLoop.get_class_name()].values[0]

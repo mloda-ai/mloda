@@ -1,7 +1,10 @@
 import os
 from typing import Any, List, Optional, Union
 
+from mloda_core.abstract_plugins.components.index.index import Index
+from mloda_plugins.feature_group.experimental.llm.installed_packages_feature_group import InstalledPackagesFeatureGroup
 from mloda_plugins.feature_group.experimental.llm.tools.available.multiply import MultiplyTool
+from mloda_plugins.feature_group.input_data.api_data.api_data import ApiInputDataFeature
 import pytest
 
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
@@ -13,7 +16,7 @@ from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.input_data.api.api_input_data_collection import ApiInputDataCollection
 from mloda_core.abstract_plugins.components.input_data.api.base_api_data import BaseApiData
-from mloda_core.abstract_plugins.components.link import JoinType
+from mloda_core.abstract_plugins.components.link import JoinType, Link
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.api.request import mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
@@ -135,8 +138,9 @@ class TestPlugInLLM:
                 name=GeminiRequestLoop.get_class_name(),
                 options={
                     "model": "gemini-1.5-flash-8b",
-                    "prompt": "What is the meaning of life?",
+                    "prompt": "Does this file contain a directory structure and a list of installed packages? Answer with yes or no.",
                     DefaultOptionKeys.mloda_source_feature: frozenset([]),
+                    "project_meta_data": True,
                 },
             )
         ]
@@ -145,28 +149,37 @@ class TestPlugInLLM:
         results = mlodaAPI.run_all(
             features,
         )
-        for res in results:
+        for i, res in enumerate(results):
             assert GeminiRequestLoop.get_class_name() in res
             assert len(res) == 1
+            formatted_output = format_array(f"Result {i} values: ", res[GeminiRequestLoop.get_class_name()].values)
+            assert "yes" in formatted_output
 
     def test_llm_gemini_given_prompt(self) -> None:
         api_input_key = "TestApiInputData"
+
+        installed = Index(("InstalledPackagesFeatureGroup",))
+        api_data_index = Index(("InputData1",))
+
+        link = Link.outer((InstalledPackagesFeatureGroup, installed), (ApiInputDataFeature, api_data_index))
 
         features: List[Feature | str] = [
             Feature(
                 name=GeminiRequestLoop.get_class_name(),
                 options={
                     "model": "gemini-1.5-flash-8b",
-                    "prompt": "Can you count to 5?",
+                    "prompt": "Does this file contain a directory structure and a list of installed packages and Strawberries? Answer with yes or no.",
                     DefaultOptionKeys.mloda_source_feature: frozenset(["InputData1"]),
+                    "project_meta_data": True,
                 },
+                link=link,
             )
         ]
 
         api_input_data_collection = ApiInputDataCollection(registry={api_input_key: DataTestApiInputData})
         api_data = {
             api_input_key: {
-                "InputData1": ["Answer to the following question wrong: "],
+                "InputData1": [" Strawberries "],
             }
         }
 
@@ -178,8 +191,10 @@ class TestPlugInLLM:
             compute_frameworks={PandasDataframe},
         )
 
-        for res in results:
+        for i, res in enumerate(results):
             assert GeminiRequestLoop.get_class_name() in res
+            formatted_output = format_array(f"Result {i} values: ", res[GeminiRequestLoop.get_class_name()].values)
+            assert "yes" in formatted_output.lower()
 
 
 @pytest.mark.skipif(os.environ.get("GEMINI_API_KEY") is None, reason="GEMINI KEY NOT SET")

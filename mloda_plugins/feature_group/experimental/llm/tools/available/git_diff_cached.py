@@ -1,6 +1,5 @@
 import subprocess  # nosec
 from typing import Any
-
 from mloda_plugins.feature_group.experimental.llm.tools.base_tool import BaseTool
 from mloda_plugins.feature_group.experimental.llm.tools.tool_data_classes import (
     InputDataObject,
@@ -30,7 +29,7 @@ class GitDiffCachedTool(BaseTool):
 
     @classmethod
     def execute(cls, **kwargs: Any) -> str:
-        result = subprocess.run(["git", "diff", "--cached"], capture_output=True, text=True)
+        result = subprocess.run(["git", "diff", "--cached"], capture_output=True, text=True)  # nosec
         return result.stdout
 
     @classmethod

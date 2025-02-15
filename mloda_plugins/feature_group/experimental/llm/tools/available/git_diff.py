@@ -30,7 +30,7 @@ class GitDiffTool(BaseTool):
 
     @classmethod
     def execute(cls, **kwargs: Any) -> str:
-        result = subprocess.run(["git", "diff"], capture_output=True, text=True)
+        result = subprocess.run(["git", "diff"], capture_output=True, text=True)  # nosec
         return result.stdout
 
     @classmethod

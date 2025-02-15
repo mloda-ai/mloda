@@ -17,9 +17,9 @@ from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.api.request import mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
-from tests.test_plugins.feature_group.experimental.llm.test_llm import format_array
 from mloda_plugins.feature_group.experimental.llm.tools.available.git_diff import GitDiffTool
 from mloda_plugins.feature_group.experimental.llm.tools.available.git_diff_cached import GitDiffCachedTool
+from mloda_plugins.feature_group.experimental.llm.tools.available.create_folder_tool import CreateFolderTool
 
 logger = logging.getLogger(__name__)
 
@@ -151,3 +151,16 @@ class TestSingleTools:
             os.getcwd() + "/mloda_plugins/function_extender",
         ]
         self.run_test(prompt, GitDiffCachedTool.get_class_name(), target_folder, "git_diff_cached")
+
+    def test_create_folder(self) -> None:
+        prompt = """ Create a folder named 'test_folder' in the 'tests/test_plugins/feature_group/experimental/llm/tools/' directory. """
+        target_folder = [
+            os.getcwd() + "/tests/test_plugins/feature_group/experimental/llm/tools/",
+        ]
+        try:
+            self.run_test(prompt, CreateFolderTool.get_class_name(), target_folder, "folder")
+        finally:
+            try:
+                os.rmdir("tests/test_plugins/feature_group/experimental/llm/tools/test_folder")
+            except Exception:  # nosec
+                pass

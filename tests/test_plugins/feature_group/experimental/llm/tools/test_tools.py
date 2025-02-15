@@ -22,6 +22,12 @@ from mloda_plugins.feature_group.experimental.default_options_key import Default
 from mloda_plugins.feature_group.experimental.llm.tools.available.git_diff import GitDiffTool
 from mloda_plugins.feature_group.experimental.llm.tools.available.git_diff_cached import GitDiffCachedTool
 from mloda_plugins.feature_group.experimental.llm.tools.available.create_folder_tool import CreateFolderTool
+from mloda_plugins.feature_group.experimental.llm.tools.available.replace_file_tool_which_runs_tox import (
+    ReplaceAndRunAllTestsTool,
+)
+from mloda_plugins.feature_group.experimental.llm.tools.available.adjust_and_run_all_tests_tool import (
+    AdjustAndRunAllTestsTool,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -217,6 +223,60 @@ class TestSingleTools:
             with open(sample_file_path, "r") as f:
                 content = f.read()
             assert content == "new content"
+        finally:
+            # Clean up
+            os.remove(sample_file_path)
+
+    def test_replace_file_which_runs_tox(self) -> None:
+        prompt = """ Replace the content of the file 'replace_tox.txt' with 'new content' and then run tox. """
+        target_folder = [
+            os.getcwd() + "/tests/test_plugins/feature_group/experimental/llm/tools/",
+        ]
+        sample_file_path = os.path.join(target_folder[0], "replace_tox.txt")
+
+        # Create a sample file with the old content
+        with open(sample_file_path, "w") as f:
+            f.write("old content\n")
+
+        try:
+            self.run_test(
+                prompt,
+                ReplaceAndRunAllTestsTool.get_class_name(),
+                target_folder,
+                "Successfully replaced the content of 'replace_tox.txt' with the provided new content.",
+            )
+
+            # Verify the replacement
+            with open(sample_file_path, "r") as f:
+                content = f.read()
+            assert content == "new content"
+        finally:
+            # Clean up
+            os.remove(sample_file_path)
+
+    def test_adjust_and_run_all_tests(self) -> None:
+        prompt = """ Adjust the file 'adjust_and_run_tests.txt' by replacing 'old_value' with 'new_value' and then run all tests. """
+        target_folder = [
+            os.getcwd() + "/tests/test_plugins/feature_group/experimental/llm/tools/",
+        ]
+        sample_file_path = os.path.join(target_folder[0], "adjust_and_run_tests.txt")
+
+        # Create a sample file with the old content
+        with open(sample_file_path, "w") as f:
+            f.write("old_value\n")
+
+        try:
+            self.run_test(
+                prompt,
+                AdjustAndRunAllTestsTool.get_class_name(),
+                target_folder,
+                "'adjust_and_run_tests.txt'",
+            )
+
+            # Verify the adjustment
+            with open(sample_file_path, "r") as f:
+                content = f.read()
+            assert content == "new_value\n"
         finally:
             # Clean up
             os.remove(sample_file_path)

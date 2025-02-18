@@ -9,7 +9,7 @@ from mloda_plugins.feature_group.input_data.api_data.api_data import ApiInputDat
 import pytest
 
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_plugins.feature_group.experimental.llm.gemini import GeminiRequestLoop
+from mloda_plugins.feature_group.experimental.llm.llm_api.gemini import GeminiRequestLoop
 from mloda_plugins.feature_group.experimental.llm.tools.tool_collection import ToolCollection
 from mloda_plugins.feature_group.input_data.read_context_files import ConcatenatedFileContent, find_file_paths
 from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection

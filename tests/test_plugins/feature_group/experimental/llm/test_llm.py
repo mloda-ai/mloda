@@ -206,6 +206,10 @@ class TestGeminiLLMFiles:
         Can you help me improve the Tools?
         """
 
+        prompt = """
+            Can you create me a datacreator feature group which uses the git diff --cached tool to get data?
+        """
+
         features: List[Feature | str] = [
             Feature(
                 name=GeminiRequestLoop.get_class_name(),

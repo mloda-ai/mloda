@@ -39,10 +39,15 @@ class AdjustFileTool(BaseTool):
         with open(file_path, "r") as f:
             content = f.read()
 
+        _saved_content = content
+
         new_file_content = content.replace(old_content, new_content)
 
         with open(file_path, "w") as f:
             f.write(new_file_content)
+
+        if _saved_content == new_file_content:
+            return f"File '{file_path}' was not modified. No occurrences of '{old_content}' were found. NO CHANGES WERE MADE."
 
         return f"Successfully replaced all occurrences of '{old_content}' with '{new_content}' in file '{file_path}'."
 

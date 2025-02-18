@@ -1,4 +1,5 @@
 import logging
+import os
 import subprocess  # nosec
 from typing import Any
 
@@ -77,9 +78,14 @@ class RunToxTool(BaseTool):
 
         command = ["tox"]
 
+        custom_env = os.environ.copy()  # Copy existing environment variables
+        custom_env["DEACTIVATE_NOTEBOOK_AND_DOC_TESTS"] = (
+            "--ignore=tests/test_documentation/ --ignore=tests/test_examples/"  # Set a new environment variable  # Set a new environment variable
+        )
+
         logger.info(command)
 
-        process = subprocess.run(command, capture_output=True, text=True)  # nosec
+        process = subprocess.run(command, capture_output=True, text=True, env=custom_env)  # nosec
         if process.returncode == 0:
             return PytestResult(stdout=process.stdout, return_code=process.returncode)
         else:

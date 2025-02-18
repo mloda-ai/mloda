@@ -13,7 +13,7 @@ from mloda_plugins.feature_group.experimental.llm.tools.available.create_new_fil
 from mloda_plugins.feature_group.experimental.llm.tools.available.multiply import MultiplyTool
 from mloda_plugins.feature_group.experimental.llm.tools.available.run_single_pytest import RunSinglePytestTool
 from mloda_plugins.feature_group.experimental.llm.tools.available.run_tox import RunToxTool
-from mloda_plugins.feature_group.experimental.llm.gemini import GeminiRequestLoop
+from mloda_plugins.feature_group.experimental.llm.llm_api.gemini import GeminiRequestLoop
 from mloda_plugins.feature_group.experimental.llm.tools.tool_collection import ToolCollection
 from mloda_plugins.feature_group.input_data.read_context_files import ConcatenatedFileContent
 from mloda_core.abstract_plugins.components.feature import Feature

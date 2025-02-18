@@ -11,7 +11,7 @@ from mloda_core.abstract_plugins.components.input_data.creator.data_creator impo
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 from mloda_core.api.request import mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
-from mloda_plugins.feature_group.experimental.llm.gemini import GeminiRequestLoop
+from mloda_plugins.feature_group.experimental.llm.llm_api.gemini import GeminiRequestLoop
 from mloda_plugins.feature_group.experimental.llm.llm_file_selector import LLMFileSelector
 from mloda_plugins.feature_group.experimental.llm.tools.available.adjust_file_tool import AdjustFileTool
 from mloda_plugins.feature_group.experimental.llm.tools.available.git_diff import GitDiffTool

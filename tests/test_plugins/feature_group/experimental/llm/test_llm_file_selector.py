@@ -7,7 +7,7 @@ import pytest
 
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
-from mloda_plugins.feature_group.experimental.llm.gemini import GeminiRequestLoop
+from mloda_plugins.feature_group.experimental.llm.llm_api.gemini import GeminiRequestLoop
 from mloda_plugins.feature_group.experimental.llm.llm_file_selector import LLMFileSelector
 from mloda_core.api.request import mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe

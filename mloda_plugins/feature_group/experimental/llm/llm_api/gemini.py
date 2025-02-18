@@ -14,7 +14,7 @@ from mloda_core.abstract_plugins.components.options import Options
 
 from mloda_plugins.feature_group.experimental.llm.installed_packages_feature_group import InstalledPackagesFeatureGroup
 from mloda_plugins.feature_group.experimental.llm.list_directory_feature_group import ListDirectoryFeatureGroup
-from mloda_plugins.feature_group.experimental.llm.llm_base_request import LLMBaseRequest
+from mloda_plugins.feature_group.experimental.llm.llm_api.llm_base_request import LLMBaseRequest
 
 from mloda_plugins.feature_group.experimental.llm.tools.tool_collection import ToolCollection
 from mloda_plugins.feature_group.experimental.llm.tools.tool_data_classes import ToolFunctionDeclaration

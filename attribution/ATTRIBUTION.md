@@ -37,11 +37,11 @@
 | fqdn                                   | 1.5.1           | Mozilla Public License 2.0 (MPL 2.0)                    |
 | google-ai-generativelanguage           | 0.6.15          | Apache Software License                                 |
 | google-api-core                        | 2.24.1          | Apache Software License                                 |
-| google-api-python-client               | 2.160.0         | Apache Software License                                 |
+| google-api-python-client               | 2.161.0         | Apache Software License                                 |
 | google-auth                            | 2.38.0          | Apache Software License                                 |
 | google-auth-httplib2                   | 0.2.0           | Apache Software License                                 |
 | google-generativeai                    | 0.8.4           | Apache Software License                                 |
-| googleapis-common-protos               | 1.66.0          | Apache Software License                                 |
+| googleapis-common-protos               | 1.67.0          | Apache Software License                                 |
 | grpcio                                 | 1.70.0          | Apache Software License                                 |
 | grpcio-status                          | 1.70.0          | Apache Software License                                 |
 | h11                                    | 0.14.0          | MIT License                                             |
@@ -82,7 +82,7 @@
 | nest-asyncio                           | 1.6.0           | BSD License                                             |
 | notebook                               | 7.3.2           | BSD License                                             |
 | notebook_shim                          | 0.2.4           | BSD License                                             |
-| numpy                                  | 2.2.2           | BSD License                                             |
+| numpy                                  | 2.2.3           | BSD License                                             |
 | opentelemetry-api                      | 1.30.0          | Apache Software License                                 |
 | opentelemetry-instrumentation          | 0.51b0          | Apache Software License                                 |
 | opentelemetry-instrumentation-logging  | 0.51b0          | Apache Software License                                 |
@@ -104,7 +104,7 @@
 | prompt_toolkit                         | 3.0.50          | BSD License                                             |
 | proto-plus                             | 1.26.0          | Apache Software License                                 |
 | protobuf                               | 5.29.3          | 3-Clause BSD License                                    |
-| psutil                                 | 6.1.1           | BSD License                                             |
+| psutil                                 | 7.0.0           | BSD License                                             |
 | ptyprocess                             | 0.7.0           | ISC License (ISCL)                                      |
 | pure_eval                              | 0.2.3           | MIT License                                             |
 | pyarrow                                | 19.0.0          | Apache Software License                                 |

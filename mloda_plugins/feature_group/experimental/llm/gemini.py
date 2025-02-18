@@ -1,6 +1,7 @@
 from copy import copy
 from dataclasses import asdict
 import os
+import time
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 
@@ -27,8 +28,9 @@ except ImportError:
 try:
     import google.generativeai as genai
     from google.ai.generativelanguage_v1beta.types import FunctionCall, Content, Part
+    import google.api_core.exceptions
 except ImportError:
-    genai, FunctionCall, Content, Part, functionDeclarations = None, None, None, None, None  # type: ignore
+    genai, FunctionCall, Content, Part, functionDeclarations, google = None, None, None, None, None, None  # type: ignore
 
 import logging
 
@@ -131,7 +133,9 @@ class GeminiRequestLoop(LLMBaseRequest):
             gemini_model = cls._setup_model_if_needed(model)
             if gemini_model is not None:
                 _tools = cls.parse_tools(tools)
-                result = gemini_model.generate_content(prompt, generation_config=model_parameters, tools=_tools)
+
+                result = generate_content_with_retry(gemini_model, prompt, model_parameters, _tools)
+                # result = gemini_model.generate_content(prompt, generation_config=model_parameters, tools=_tools)
                 return result
         except Exception as e:
             logger.error(f"Error during Gemini request: {e}")
@@ -268,3 +272,54 @@ class GeminiRequestLoop(LLMBaseRequest):
             return str(response), None
 
         return response_text, None
+
+
+def generate_content_with_retry(
+    gemini_model: Any,
+    prompt: str,
+    generation_config: Any,
+    tools: List[Dict[str, Any]],
+    max_retries: int = int(os.environ.get("GEMINI_MAX_RETRIES", "5")),
+    initial_retry_delay: int = int(os.environ.get("GEMINI_INITIAL_RETRY_DELAY", "10")),
+    max_retry_delay: int = int(os.environ.get("GEMINI_MAX_RETRY_DELAY", "60")),
+) -> Any:
+    """
+    Generates content with retry logic to handle ResourceExhausted (429) errors due to rate limits.
+
+    Args:
+        gemini_model: Your Gemini model object.
+        prompt: The prompt for content generation.
+        generation_config: Generation configuration parameters.
+        tools: Tools to be used (if any).
+        max_retries: Maximum number of retry attempts.
+        initial_retry_delay: Initial delay in seconds before the first retry.
+        max_retry_delay: Maximum delay in seconds between retries.
+
+    Returns:
+        The generated content result if successful, or raises the last exception if retries fail.
+    """
+    retry_attempt = 0
+    while retry_attempt <= max_retries:
+        try:
+            result = gemini_model.generate_content(prompt, generation_config=generation_config, tools=tools)
+            return result  # Successful generation, return the result
+
+        except google.api_core.exceptions.ResourceExhausted as e:
+            if e.code == 429:  # Check if it's specifically a 429 Resource Exhausted error
+                retry_attempt += 1
+                if retry_attempt > max_retries:
+                    print(f"Maximum retries ({max_retries}) reached.  Still getting rate limited. Raising exception.")
+                    raise  # Re-raise the last exception if max retries exceeded
+
+                # Exponential backoff: delay increases with each retry
+                delay = min(initial_retry_delay * (2 ** (retry_attempt - 1)), max_retry_delay)
+                print(f"Rate limit hit (429). Retrying in {delay:.2f} seconds (Attempt {retry_attempt}/{max_retries}).")
+                time.sleep(delay)
+            else:
+                # Re-raise other ResourceExhausted errors (if any other codes exist)
+                raise  # It's a ResourceExhausted error but not 429, re-raise it
+
+        except Exception as e:
+            # Handle other potential exceptions (optional, depending on your needs)
+            print(f"An unexpected error occurred: {e}")
+            raise  # Re-raise the unexpected exception

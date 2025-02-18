@@ -30,7 +30,7 @@ class ReplaceFileTool(BaseTool):
             raise ValueError("Both 'file_path' and 'new_content' parameters are required")
 
         if not os.path.exists(file_path):
-            raise FileNotFoundError(f"The file '{file_path}' does not exist")
+            return f"The file '{file_path}' does not exist."
 
         with open(file_path, "w") as f:
             f.write(new_content)

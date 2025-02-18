@@ -67,3 +67,15 @@ class LLMFileSelector(AbstractFeatureGroup):
             columns={GeminiRequestLoop.get_class_name(): LLMFileSelector.get_class_name()}, inplace=False
         )
         return data
+
+    @classmethod
+    def validate_output_features(cls, data: Any, features: FeatureSet) -> Optional[bool]:
+        for str_paths in data[cls.get_class_name()].values:
+            paths = str_paths.split(",")
+            for path in paths:
+                if "\n" in path:
+                    raise ValueError(f"File path {path} contains a newline character.")
+
+                if not os.path.exists(path):
+                    raise ValueError(f"File <{path}> does not exist.")
+        return True

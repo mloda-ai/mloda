@@ -3,6 +3,7 @@ from typing import List
 import logging
 
 from mloda_plugins.feature_group.experimental.llm.tools.available.adjust_file_tool import AdjustFileTool
+from mloda_plugins.feature_group.experimental.llm.tools.available.read_file_tool import ReadFileTool
 from mloda_plugins.feature_group.experimental.llm.tools.available.replace_file_tool import ReplaceFileTool
 import pytest
 
@@ -280,3 +281,23 @@ class TestSingleTools:
         finally:
             # Clean up
             os.remove(sample_file_path)
+
+    def test_read_file_tool(self) -> None:
+        def _test_func(_prompt: str) -> None:
+            target_folder = [
+                os.getcwd() + "/tests/test_core/test_index",
+            ]
+
+            self.run_test(_prompt, ReadFileTool.get_class_name(), target_folder, "test_add_index_simple")
+
+        prompt = """ Read and return only the content of the file tests/test_core/test_index/test_add_index.py """
+        _test_func(prompt)
+
+        prompt = f""" Read and return only the content of the file {os.getcwd()}/tests/test_core/test_index/test_add_index.py """
+        _test_func(prompt)
+
+        prompt = """ Read and return only the content of the file tests/test_index/test_add_index.py.  **Only read and return the content of the file once!** """
+        _test_func(prompt)
+
+        prompt = f""" Read and return only the content of the file {os.getcwd()}/tests/test_core/test_index/test_add_index.py. **Only read and return the content of the file once!**"""
+        _test_func(prompt)

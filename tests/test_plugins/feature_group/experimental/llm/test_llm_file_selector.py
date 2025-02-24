@@ -3,11 +3,11 @@ from typing import List
 
 from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 from mloda_plugins.feature_group.experimental.llm.cli import format_array
+from mloda_plugins.feature_group.experimental.llm.llm_api.openai import OpenAIRequestLoop
 import pytest
 
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
-from mloda_plugins.feature_group.experimental.llm.llm_api.gemini import GeminiRequestLoop
 from mloda_plugins.feature_group.experimental.llm.llm_file_selector import LLMFileSelector
 from mloda_core.api.request import mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
@@ -54,16 +54,10 @@ def test_llm_file_selector() -> None:
         )
     ]
 
-    for i in range(5):
-        print(f"\nAttempt {i}")
-        try:
-            results = mlodaAPI.run_all(
-                features,
-                compute_frameworks={PandasDataframe},
-            )
-        except ValueError:
-            continue
-        break
+    results = mlodaAPI.run_all(
+        features,
+        compute_frameworks={PandasDataframe},
+    )
 
     # prompt = "Given the following code files, which code smells do you see?"
     # prompt = "Given the following code files, choose a code smell and fix it. Do not focus on docs. Show the result as a whole file."
@@ -87,8 +81,10 @@ def test_llm_file_selector() -> None:
         if "\n" in file:
             print(file)
 
+    _cls = OpenAIRequestLoop.get_class_name()
+
     llm_feature = Feature(
-        name=GeminiRequestLoop.get_class_name(),
+        name=_cls,
         options={
             "model": "gemini-2.0-flash-exp",  # Choose your desired model
             "prompt": prompt,
@@ -109,5 +105,5 @@ def test_llm_file_selector() -> None:
         return
 
     for i, res in enumerate(results):
-        formatted_output = format_array(f"Result {i} values: ", res[GeminiRequestLoop.get_class_name()].values)
+        formatted_output = format_array(f"Result {i} values: ", res[_cls].values)
         print(formatted_output)

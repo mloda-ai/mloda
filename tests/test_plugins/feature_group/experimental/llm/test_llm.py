@@ -4,6 +4,8 @@ from typing import Any, List, Optional, Union
 from mloda_core.abstract_plugins.components.index.index import Index
 from mloda_plugins.feature_group.experimental.llm.cli import format_array
 from mloda_plugins.feature_group.experimental.llm.installed_packages_feature_group import InstalledPackagesFeatureGroup
+
+from mloda_plugins.feature_group.experimental.llm.llm_api.openai import OpenAIRequestLoop
 from mloda_plugins.feature_group.experimental.llm.tools.available.multiply import MultiplyTool
 from mloda_plugins.feature_group.input_data.api_data.api_data import ApiInputDataFeature
 import pytest
@@ -133,28 +135,35 @@ class TestReadLLMFiles:
 
 @pytest.mark.skipif(os.environ.get("GEMINI_API_KEY") is None, reason="GEMINI KEY NOT SET")
 class TestPlugInLLM:
-    def test_llm_gemini_base(self) -> None:
-        features: List[Feature | str] = [
-            Feature(
-                name=GeminiRequestLoop.get_class_name(),
-                options={
-                    "model": "gemini-1.5-flash-8b",
-                    "prompt": "Does this file contain a directory structure and a list of installed packages? Answer with yes or no.",
-                    DefaultOptionKeys.mloda_source_feature: frozenset([]),
-                    "project_meta_data": True,
-                },
-            )
-        ]
+    def test_llm_base(self) -> None:
+        _test_classes = [OpenAIRequestLoop, GeminiRequestLoop]
 
-        # Run the API
-        results = mlodaAPI.run_all(
-            features,
-        )
-        for i, res in enumerate(results):
-            assert GeminiRequestLoop.get_class_name() in res
-            assert len(res) == 1
-            formatted_output = format_array(f"Result {i} values: ", res[GeminiRequestLoop.get_class_name()].values)
-            assert "yes" in formatted_output
+        for _cls in _test_classes:
+            features: List[Feature | str] = [
+                Feature(
+                    name=_cls.get_class_name(),
+                    options={
+                        "model": "gemini-1.5-flash-8b",
+                        "prompt": """Does this file contain a directory structure and a list of installed packages? 
+                                     Answer with yes if both are present, otherwise answer with no.""",
+                        DefaultOptionKeys.mloda_source_feature: frozenset([]),
+                        "project_meta_data": True,
+                    },
+                )
+            ]
+
+            # Run the API
+            results = mlodaAPI.run_all(
+                features,
+            )
+            for i, res in enumerate(results):
+                assert len(res) == 1
+
+                assert "yes" in res[_cls.get_class_name()].values
+
+                formatted_output = format_array(f"Result {i} values: ", res[_cls.get_class_name()].values)
+                print(formatted_output)
+                assert "yes" in formatted_output, _cls.get_class_name()
 
     def test_llm_gemini_given_prompt(self) -> None:
         api_input_key = "TestApiInputData"
@@ -164,38 +173,41 @@ class TestPlugInLLM:
 
         link = Link.outer((InstalledPackagesFeatureGroup, installed), (ApiInputDataFeature, api_data_index))
 
-        features: List[Feature | str] = [
-            Feature(
-                name=GeminiRequestLoop.get_class_name(),
-                options={
-                    "model": "gemini-1.5-flash-8b",
-                    "prompt": "Does this file contain a directory structure and a list of installed packages and Strawberries? Answer with yes or no.",
-                    DefaultOptionKeys.mloda_source_feature: frozenset(["InputData1"]),
-                    "project_meta_data": True,
-                },
-                link=link,
-            )
-        ]
+        _test_classes = [OpenAIRequestLoop, GeminiRequestLoop]
 
-        api_input_data_collection = ApiInputDataCollection(registry={api_input_key: DataTestApiInputData})
-        api_data = {
-            api_input_key: {
-                "InputData1": [" Strawberries "],
+        for _cls in _test_classes:
+            features: List[Feature | str] = [
+                Feature(
+                    name=_cls.get_class_name(),
+                    options={
+                        "model": "gemini-1.5-flash-8b",
+                        "prompt": "Does this file contain a directory structure and a list of installed packages and Strawberries? Answer with yes or no.",
+                        DefaultOptionKeys.mloda_source_feature: frozenset(["InputData1"]),
+                        "project_meta_data": True,
+                    },
+                    link=link,
+                )
+            ]
+
+            api_input_data_collection = ApiInputDataCollection(registry={api_input_key: DataTestApiInputData})
+            api_data = {
+                api_input_key: {
+                    "InputData1": [" Strawberries "],
+                }
             }
-        }
 
-        # Run the API
-        results = mlodaAPI.run_all(
-            features,
-            api_input_data_collection=api_input_data_collection,
-            api_data=api_data,
-            compute_frameworks={PandasDataframe},
-        )
+            # Run the API
+            results = mlodaAPI.run_all(
+                features,
+                api_input_data_collection=api_input_data_collection,
+                api_data=api_data,
+                compute_frameworks={PandasDataframe},
+            )
 
-        for i, res in enumerate(results):
-            assert GeminiRequestLoop.get_class_name() in res
-            formatted_output = format_array(f"Result {i} values: ", res[GeminiRequestLoop.get_class_name()].values)
-            assert "yes" in formatted_output.lower()
+            for i, res in enumerate(results):
+                assert _cls.get_class_name() in res
+                formatted_output = format_array(f"Result {i} values: ", res[_cls.get_class_name()].values)
+                assert "yes" in formatted_output.lower()
 
 
 @pytest.mark.skipif(os.environ.get("GEMINI_API_KEY") is None, reason="GEMINI KEY NOT SET")
@@ -210,42 +222,44 @@ class TestGeminiLLMFiles:
             Can you create me a datacreator feature group which uses the git diff --cached tool to get data?
         """
 
-        features: List[Feature | str] = [
-            Feature(
-                name=GeminiRequestLoop.get_class_name(),
-                options={
-                    "model": "gemini-2.0-flash-exp",
-                    "prompt": prompt,
-                    DefaultOptionKeys.mloda_source_feature: frozenset([ConcatenatedFileContent.get_class_name()]),
-                    "target_folder": frozenset(
-                        [
-                            os.getcwd() + "/mloda_plugins",
-                            # os.getcwd() + "/mloda_core/abstract_plugins/",
-                            os.getcwd() + "/tests/test_plugins/feature_group/experimental//",
-                            # os.getcwd() + "/mloda_core/api/",
-                        ]
-                    ),
-                    "disallowed_files": frozenset(["__init__.py"]),
-                    "file_type": "py",
-                },
+        _test_classes = [OpenAIRequestLoop, GeminiRequestLoop]
+        for _cls in _test_classes:
+            features: List[Feature | str] = [
+                Feature(
+                    name=_cls.get_class_name(),
+                    options={
+                        "model": "gemini-2.0-flash-exp",
+                        "prompt": prompt,
+                        DefaultOptionKeys.mloda_source_feature: frozenset([ConcatenatedFileContent.get_class_name()]),
+                        "target_folder": frozenset(
+                            [
+                                os.getcwd() + "/mloda_plugins",
+                                # os.getcwd() + "/mloda_core/abstract_plugins/",
+                                os.getcwd() + "/tests/test_plugins/feature_group/experimental//",
+                                # os.getcwd() + "/mloda_core/api/",
+                            ]
+                        ),
+                        "disallowed_files": frozenset(["__init__.py"]),
+                        "file_type": "py",
+                    },
+                )
+            ]
+
+            # Run the API
+            results = mlodaAPI.run_all(
+                features,
+                compute_frameworks={PandasDataframe},
             )
-        ]
 
-        # Run the API
-        results = mlodaAPI.run_all(
-            features,
-            compute_frameworks={PandasDataframe},
-        )
+            for i, res in enumerate(results):
+                assert _cls.get_class_name() in res
+                assert len(res) == 1
 
-        for i, res in enumerate(results):
-            assert GeminiRequestLoop.get_class_name() in res
-            assert len(res) == 1
+                # print(res[GeminiRequest.get_class_name()].values)
+                formatted_output = format_array(f"Result {i} values: ", res[_cls.get_class_name()].values)
+                print(formatted_output)
 
-            # print(res[GeminiRequest.get_class_name()].values)
-            formatted_output = format_array(f"Result {i} values: ", res[GeminiRequestLoop.get_class_name()].values)
-            print(formatted_output)
-
-    def test_llm_gemini_tool_loop(self) -> None:
+    def test_llm_tool_loop(self) -> None:
         # prompt = """Can you first run test_init_with_all_params, and then tox?"""
         prompt = """
             Perform the following steps in order, ensuring each step completes before proceeding to the next:
@@ -265,44 +279,45 @@ class TestGeminiLLMFiles:
         tool_collection = ToolCollection()
         tool_collection.add_tool(MultiplyTool.get_class_name())
 
-        features: List[Feature | str] = [
-            Feature(
-                name=GeminiRequestLoop.get_class_name(),
-                options={
-                    "model": "gemini-2.0-flash-exp",
-                    "prompt": prompt,
-                    "tools": tool_collection,
-                    DefaultOptionKeys.mloda_source_feature: frozenset([ConcatenatedFileContent.get_class_name()]),
-                    "target_folder": frozenset(
-                        [
-                            os.getcwd() + "/mloda_plugins",
-                            os.getcwd() + "/mloda_core/",
-                            # os.getcwd() + "/mloda_core/abstract_plugins/",
-                            os.getcwd() + "/tests/test_plugins/feature_group/experimental/",
-                            # os.getcwd() + "/mloda_core/api/",
-                        ]
-                    ),
-                    "disallowed_files": frozenset(
-                        [
-                            "__init__.py",
-                            "gemini.py",
-                            "llm_base_request.py",
-                        ]
-                    ),
-                    "file_type": "py",
-                },
+        _test_classes = [OpenAIRequestLoop, GeminiRequestLoop]
+        for _cls in _test_classes:
+            features: List[Feature | str] = [
+                Feature(
+                    name=_cls.get_class_name(),
+                    options={
+                        "model": "gemini-2.0-flash-exp",
+                        "prompt": prompt,
+                        "tools": tool_collection,
+                        DefaultOptionKeys.mloda_source_feature: frozenset([ConcatenatedFileContent.get_class_name()]),
+                        "target_folder": frozenset(
+                            [
+                                os.getcwd() + "/tests/test_core/test_index",
+                                # os.getcwd() + "/mloda_plugins",
+                                # os.getcwd() + "/mloda_core/",
+                                # os.getcwd() + "/mloda_core/abstract_plugins/",
+                                # os.getcwd() + "/tests/test_plugins/feature_group/experimental/",
+                                # os.getcwd() + "/mloda_core/api/",
+                            ]
+                        ),
+                        "disallowed_files": frozenset(
+                            [
+                                "__init__.py",
+                                "gemini.py",
+                                "llm_base_request.py",
+                            ]
+                        ),
+                        "file_type": "py",
+                    },
+                )
+            ]
+
+            # Run the API
+            results = mlodaAPI.run_all(
+                features,
+                compute_frameworks={PandasDataframe},
             )
-        ]
 
-        # Run the API
-        results = mlodaAPI.run_all(
-            features,
-            compute_frameworks={PandasDataframe},
-        )
-
-        for i, res in enumerate(results):
-            assert GeminiRequestLoop.get_class_name() in res
-            assert len(res) == 1
-
-            formatted_output = format_array(f"Result {i} values: ", res[GeminiRequestLoop.get_class_name()].values)
-            print(formatted_output)
+            for i, res in enumerate(results):
+                assert _cls.get_class_name() in res
+                formatted_output = format_array(f"Result {i} values: ", res[_cls.get_class_name()].values)
+                assert "50" in formatted_output.lower()

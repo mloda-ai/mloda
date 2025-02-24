@@ -1,7 +1,8 @@
 import os
-from typing import List
+from typing import Any, List
 import logging
 
+from mloda_plugins.feature_group.experimental.llm.llm_api.openai import OpenAIRequestLoop
 from mloda_plugins.feature_group.experimental.llm.tools.available.adjust_file_tool import AdjustFileTool
 from mloda_plugins.feature_group.experimental.llm.tools.available.read_file_tool import ReadFileTool
 from mloda_plugins.feature_group.experimental.llm.tools.available.replace_file_tool import ReplaceFileTool
@@ -33,10 +34,16 @@ from mloda_plugins.feature_group.experimental.llm.tools.available.adjust_and_run
 logger = logging.getLogger(__name__)
 
 
+@pytest.fixture(params=[GeminiRequestLoop.get_class_name(), OpenAIRequestLoop.get_class_name()])
+# @pytest.fixture(params=[OpenAIRequestLoop.get_class_name()])
+def request_loop(request: Any) -> Any:
+    return request.param
+
+
 @pytest.mark.skipif(os.environ.get("GEMINI_API_KEY") is None, reason="GEMINI KEY NOT SET")
 class TestSingleTools:
     def get_features(
-        self, prompt: str, tool_collection: ToolCollection, target_folder: List[str] = []
+        self, prompt: str, tool_collection: ToolCollection, request_loop: str, target_folder: List[str] = []
     ) -> List[Feature | str]:
         if target_folder == []:
             target_folder = [
@@ -46,7 +53,7 @@ class TestSingleTools:
 
         return [
             Feature(
-                name=GeminiRequestLoop.get_class_name(),
+                name=request_loop,
                 options={
                     "model": "gemini-2.0-flash-exp",
                     "prompt": prompt,
@@ -66,7 +73,12 @@ class TestSingleTools:
         ]
 
     def run_test(
-        self, prompt: str, tool_classes: str | List[str], target_folder: List[str], expected_output: str
+        self,
+        prompt: str,
+        tool_classes: str | List[str],
+        request_loop: str,
+        target_folder: List[str],
+        expected_output: str,
     ) -> None:
         tool_collection = ToolCollection()
 
@@ -76,7 +88,7 @@ class TestSingleTools:
             for tool_class in tool_classes:
                 tool_collection.add_tool(tool_class)
 
-        features = self.get_features(prompt, tool_collection, target_folder)
+        features = self.get_features(prompt, tool_collection, request_loop, target_folder)
 
         results = mlodaAPI.run_all(
             features,
@@ -85,37 +97,39 @@ class TestSingleTools:
 
         for res in results:
             print(res)
-            assert expected_output in res[GeminiRequestLoop.get_class_name()].values[0]
+            assert expected_output in res[request_loop].values[0]
 
-    def test_multiply(self) -> None:
+    def test_multiply(self, request_loop: str) -> None:
         prompt = """ As first step: Multiply 5 by 5. As a second step, multiply the result by 2. """
         target_folder = [
             os.getcwd() + "/tests/test_core/test_index",
         ]
-        self.run_test(prompt, MultiplyTool.get_class_name(), target_folder, "50")
+        self.run_test(prompt, MultiplyTool.get_class_name(), request_loop, target_folder, "50")
 
-    def test_run_single_pytest(self) -> None:
+    def test_run_single_pytest(self, request_loop: str) -> None:
         prompt = """ Run a unit test provided in the context by selecting a test by giving the name following the syntax: python3 -m pytest -k test_name -s. If you receive a 0 as return code, stop."""
         target_folder = [
             os.getcwd() + "/tests/test_core/test_index",
         ]
-        self.run_test(prompt, RunSinglePytestTool.get_class_name(), target_folder, "test_add_index_simple")
+        self.run_test(
+            prompt, RunSinglePytestTool.get_class_name(), request_loop, target_folder, "test_add_index_simple"
+        )
 
-    def test_run_tox(self) -> None:
+    def test_run_tox(self, request_loop: str) -> None:
         prompt = """ Run tox exactly one time. """
         target_folder = [
             os.getcwd() + "/mloda_plugins",
         ]
-        self.run_test(prompt, RunToxTool.get_class_name(), target_folder, "tox")
+        self.run_test(prompt, RunToxTool.get_class_name(), request_loop, target_folder, "tox")
 
-    def test_create_new_file(self) -> None:
+    def test_create_new_file(self, request_loop: str) -> None:
         prompt = """ Create a new plugin for a postgres reader and create tests for it.  """
         target_folder = [
             os.getcwd() + "/mloda_plugins",
         ]
-        self.run_test(prompt, CreateFileTool.get_class_name(), target_folder, "Result 0 values:")
+        self.run_test(prompt, CreateFileTool.get_class_name(), request_loop, target_folder, "Result 0 values:")
 
-    def test_create_and_test_new_plugin(self) -> None:
+    def test_create_and_test_new_plugin(self, request_loop: str) -> None:
         prompt = """  You are an AI agent tasked with creating a new feature group plugin for reading data from a PostgreSQL database, creating tests for this plugin, and running those tests to ensure the plugin functions correctly.  Your goal is to ensure that you do not run tools twice and handle all errors correctly.
 
             Follow these steps in order:
@@ -143,38 +157,39 @@ class TestSingleTools:
         self.run_test(
             prompt,
             [CreateFileTool.get_class_name(), RunSinglePytestTool.get_class_name()],
+            request_loop,
             target_folder,
             "",
         )
 
-    def test_git_diff_no_cache(self) -> None:
+    def test_git_diff_no_cache(self, request_loop: str) -> None:
         prompt = """ Run git diff. Return the output. """
         target_folder = [
             os.getcwd() + "/mloda_plugins/function_extender",
         ]
-        self.run_test(prompt, GitDiffTool.get_class_name(), target_folder, "diff")
+        self.run_test(prompt, GitDiffTool.get_class_name(), request_loop, target_folder, "diff")
 
-    def test_git_diff_cached(self) -> None:
+    def test_git_diff_cached(self, request_loop: str) -> None:
         prompt = """ Run git diff --cached. Return the output. """
         target_folder = [
             os.getcwd() + "/mloda_plugins/function_extender",
         ]
-        self.run_test(prompt, GitDiffCachedTool.get_class_name(), target_folder, "git_diff_cached")
+        self.run_test(prompt, GitDiffCachedTool.get_class_name(), request_loop, target_folder, "git_diff_cached")
 
-    def test_create_folder(self) -> None:
+    def test_create_folder(self, request_loop: str) -> None:
         prompt = """ Create a folder named 'test_folder' in the 'tests/test_plugins/feature_group/experimental/llm/tools/' directory. """
         target_folder = [
             os.getcwd() + "/tests/test_plugins/feature_group/experimental/llm/tools/",
         ]
         try:
-            self.run_test(prompt, CreateFolderTool.get_class_name(), target_folder, "folder")
+            self.run_test(prompt, CreateFolderTool.get_class_name(), request_loop, target_folder, "folder")
         finally:
             try:
                 os.rmdir("tests/test_plugins/feature_group/experimental/llm/tools/test_folder")
             except Exception:  # nosec
                 pass
 
-    def test_adjust_file(self) -> None:
+    def test_adjust_file(self, request_loop: str) -> None:
         prompt = """ Adjust the file 'sample.txt' by replacing 'old_value' with 'new_value'. """
         target_folder = [
             os.getcwd() + "/tests/test_plugins/feature_group/experimental/llm/tools/",
@@ -189,6 +204,7 @@ class TestSingleTools:
             self.run_test(
                 prompt,
                 AdjustFileTool.get_class_name(),
+                request_loop,
                 target_folder,
                 "'sample.txt'",
             )
@@ -201,7 +217,7 @@ class TestSingleTools:
             # Clean up
             os.remove(sample_file_path)
 
-    def test_replace_file(self) -> None:
+    def test_replace_file(self, request_loop: str) -> None:
         prompt = """ Replace the content of the file 'replace.txt' with 'new content'. """
         target_folder = [
             os.getcwd() + "/tests/test_plugins/feature_group/experimental/llm/tools/",
@@ -216,6 +232,7 @@ class TestSingleTools:
             self.run_test(
                 prompt,
                 ReplaceFileTool.get_class_name(),
+                request_loop,
                 target_folder,
                 "'replace.txt'",
             )
@@ -228,7 +245,7 @@ class TestSingleTools:
             # Clean up
             os.remove(sample_file_path)
 
-    def test_replace_file_which_runs_tox(self) -> None:
+    def test_replace_file_which_runs_tox(self, request_loop: str) -> None:
         prompt = """ Replace the content of the file 'replace_tox.txt' with 'new content' and then run tox. """
         target_folder = [
             os.getcwd() + "/tests/test_plugins/feature_group/experimental/llm/tools/",
@@ -243,6 +260,7 @@ class TestSingleTools:
             self.run_test(
                 prompt,
                 ReplaceAndRunAllTestsTool.get_class_name(),
+                request_loop,
                 target_folder,
                 "Successfully replaced the content of 'replace_tox.txt' with the provided new content.",
             )
@@ -255,7 +273,7 @@ class TestSingleTools:
             # Clean up
             os.remove(sample_file_path)
 
-    def test_adjust_and_run_all_tests(self) -> None:
+    def test_adjust_and_run_all_tests(self, request_loop: str) -> None:
         prompt = """ Adjust the file 'adjust_and_run_tests.txt' by replacing 'old_value' with 'new_value' and then run all tests. """
         target_folder = [
             os.getcwd() + "/tests/test_plugins/feature_group/experimental/llm/tools/",
@@ -270,6 +288,7 @@ class TestSingleTools:
             self.run_test(
                 prompt,
                 AdjustAndRunAllTestsTool.get_class_name(),
+                request_loop,
                 target_folder,
                 "'adjust_and_run_tests.txt'",
             )
@@ -282,13 +301,13 @@ class TestSingleTools:
             # Clean up
             os.remove(sample_file_path)
 
-    def test_read_file_tool(self) -> None:
+    def test_read_file_tool(self, request_loop: str) -> None:
         def _test_func(_prompt: str) -> None:
             target_folder = [
                 os.getcwd() + "/tests/test_core/test_index",
             ]
 
-            self.run_test(_prompt, ReadFileTool.get_class_name(), target_folder, "test_add_index_simple")
+            self.run_test(_prompt, ReadFileTool.get_class_name(), request_loop, target_folder, "test_add_index_simple")
 
         prompt = """ Read and return only the content of the file tests/test_core/test_index/test_add_index.py """
         _test_func(prompt)

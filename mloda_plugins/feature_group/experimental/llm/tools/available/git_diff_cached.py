@@ -19,9 +19,9 @@ class GitDiffCachedTool(BaseTool):
             description="Executes 'git diff --cached' and returns the raw diff output, showing the staged changes in the repository.",
             parameters=[
                 InputDataObject(
-                    name="A dummy object",
+                    name="Adummyobject",
                     type="str",
-                    description="A dummy object",
+                    description="Adummyobject",
                 ),
             ],
             required=[],

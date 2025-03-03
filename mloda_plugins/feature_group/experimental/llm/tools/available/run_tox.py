@@ -38,9 +38,9 @@ class RunToxTool(BaseTool):
             description="""This RunToxTool runs the 'tox' command to execute tests within isolated environments.  The RunToxTool is designed to run *exactly one* execution of 'tox', and then *always* stop. If the 'tox' command returns a return code of `0`, indicating success, the tool should report success. If the return code is not `0`, indicating failure, the tool should report failure. In *all* cases, the tool must stop after this single execution.""",
             parameters=[
                 InputDataObject(
-                    name="A dummy object",
+                    name="Adummyobject",
                     type="str",
-                    description="A dummy object",
+                    description="Adummyobject",
                 ),
             ],
             required=[],

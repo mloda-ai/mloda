@@ -20,9 +20,9 @@ class GitDiffTool(BaseTool):
             description="Executes 'git diff' and returns the raw diff output, showing the latest changes in the repository between your working directory and the last committed version.",
             parameters=[
                 InputDataObject(
-                    name="A dummy object",
+                    name="Adummyobject",
                     type="str",
-                    description="A dummy object",
+                    description="Adummyobject",
                 ),
             ],
             required=[],

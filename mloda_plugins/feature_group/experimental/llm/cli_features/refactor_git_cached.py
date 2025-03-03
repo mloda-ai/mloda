@@ -11,9 +11,11 @@ from mloda_core.abstract_plugins.components.input_data.creator.data_creator impo
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 from mloda_core.api.request import mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.feature_group.experimental.llm.llm_api.claude import ClaudeRequestLoop
 from mloda_plugins.feature_group.experimental.llm.llm_api.gemini import GeminiRequestLoop
 from mloda_plugins.feature_group.experimental.llm.llm_file_selector import LLMFileSelector
 from mloda_plugins.feature_group.experimental.llm.tools.available.adjust_file_tool import AdjustFileTool
+from mloda_plugins.feature_group.experimental.llm.tools.available.create_new_file import CreateFileTool
 from mloda_plugins.feature_group.experimental.llm.tools.available.git_diff import GitDiffTool
 from mloda_plugins.feature_group.experimental.llm.tools.available.git_diff_cached import GitDiffCachedTool
 from mloda_plugins.feature_group.experimental.llm.tools.available.read_file_tool import ReadFileTool
@@ -26,6 +28,12 @@ from mloda_plugins.feature_group.input_data.read_context_files import Concatenat
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 logger = logging.getLogger(__name__)
+
+
+class RunRefactorGeminiRequestLoop(GeminiRequestLoop):
+    @classmethod
+    def add_final_part_of_prompt(cls) -> str:
+        return """"""
 
 
 class RunRefactorDiffCached:
@@ -48,22 +56,15 @@ class RunRefactorDiffCached:
         # check if tests are passing
         previous = ""
         actual_git_diff = self.get_tool_output_by_feature_group_(DiffFeatureGroup)
-
-        for i in range(5):
-            previous = self.fix_code_smell(split_files, single_code_smell, previous, actual_git_diff)
+        single_code_smell, previous, actual_git_diff
+        for i in range(20):
+            previous = self.fix_code_smell(i, split_files, single_code_smell, previous, actual_git_diff)
             if "AnalysisComplete" in previous:
                 break
 
-    def fix_code_smell(self, files: List[str], code_smell: str, previous: str, current_git_diff: str) -> str:
-        if previous:
-            _previous = f"""**Previous Refactoring Steps:**
-                            {previous}
-            """
-        else:
-            _previous = """ **Previous Refactoring Steps:**
-                              No previous refactoring steps have been taken.
-                        """
-
+    def fix_code_smell(
+        self, run_number: int, files: List[str], code_smell: str, previous: str, current_git_diff: str
+    ) -> str:
         prompt = f""" 
 
                 **Objective:**
@@ -72,34 +73,17 @@ class RunRefactorDiffCached:
 
                 **Task Description:**
 
-                You are an automated code refactoring agent. You will be given information about a codebase and a specific code smell to address. Your task is to iteratively refactor the code using provided tools until the code smell is resolved and all tests pass.
+                Your task is to iteratively refactor the code using provided tools until the code smell is resolved and all tests pass.
 
-                For each iteration, you will receive:
+                The following table contains a code smell that you must address in the codebase.  Your task is to refactor the code to eliminate this code smell.  The table includes the following columns:
+                - Code Smell Description
+                - Location (file_name, function_name, line_numbers)
+                - Explanation
+                - step by step guide in how to fix this code smell.
 
-                1.  **Code Smell Description:**  A textual description of the code smell, including its location (file and potentially line numbers or code snippet).
-                2.  **Previous Refactoring Steps:** A summary of refactoring actions already taken (if any). This is for informational context.
-                3.  **Current Code Difference (Git Diff):** A `git diff` showing the changes made to the initial codebase so far. This represents the current codebase state.
-                4.  **Initial Code Files:** Access to the original codebase files (for reference, though you will be working with the current state as reflected in the diff).
+                {code_smell}
 
-                **Your Actions in each iteration:**
-
-                **Your Actions in each iteration:**
-
-                1.  **Analyze the Code Smell:**  Understand the description and location of the code smell.
-                2.  **Plan Refactoring Action:** Based on the code smell and the current code state, determine a *specific refactoring action* to take.  This action must be achievable using the provided tools (`AdjustFileTool`, `ReplaceFileTool`, `CreateFileTool`, `ReadFileTool`). Prioritize actions that directly address the described code smell. Consider if reading file content (`ReadFileTool`) is necessary to inform your refactoring plan.  *Remember: No dependency changes allowed.*
-                3.  **Select Tool and Target File(s):** Choose the appropriate tool (`AdjustFileTool`, `ReplaceFileTool`, `CreateFileTool`, or `ReadFileTool`) and identify the file(s) you need to interact with. For `CreateFileTool` and `ReplaceFileTool`, ensure you have the new file content ready. For `AdjustFileTool`, determine the specific changes needed within the file. For `ReadFileTool`, specify the file to read.
-                4.  **Execute Tool:**  Use the chosen tool to modify or read the file(s) according to your planned refactoring action.  Provide the necessary parameters for the tool (e.g., file path, content changes for modification tools, file path for reading).
-                5.  **Run Tests:** After each code modification (using `AdjustFileTool`, `ReplaceFileTool`, or `CreateFileTool`), immediately use the `RunToxTool` to execute the test suite.  *Note: `ReadFileTool` does not modify code, so no test run is needed immediately after using it, unless it's part of a larger refactoring plan that involves code modification in the same iteration.*
-                6.  **Evaluate Test Results:** Check if all tests passed (after using modification tools).
-                    *   **If tests pass:** Proceed to the next iteration. Analyze if the code smell is resolved. If the code smell is considered resolved, output "AnalysisComplete". If not resolved, continue iterating from step 1, considering the current code state and the remaining code smell.
-                    *   **If tests fail:** Your refactoring action has broken functionality. **Instead of immediately reverting, attempt to diagnose and fix the error.**
-                        *   **6.a. Analyze Test Output:** Examine the output from `RunToxTool`. Look for error messages, stack traces, and failed test names. Try to identify the *likely cause* of the test failure based on this output.  *(Initially, this can be simple keyword matching or pattern recognition in error messages.  For example, look for "NameError", "TypeError", "AssertionError", file paths, or line numbers mentioned in the errors.)*
-                        *   **6.b. Plan Fix Action (Attempt 1):** Based on your analysis of the test output, formulate a *targeted fix action*. This should be a small, focused change aimed at addressing the likely cause of the failure.  Use `AdjustFileTool` to make this fix.  *(For example, if you see a "NameError" mentioning a variable name, you might try to rename the variable back to its original name or correct a typo in its usage.)*
-                        *   **6.c. Execute Fix and Re-run Tests:** Execute the planned fix using `AdjustFileTool` and then immediately run `RunToxTool` again to see if the fix resolved the issue.
-                        *   **6.d. Evaluate Fix Attempt:**
-                            *   **If tests pass after the fix:**  The error is resolved! Proceed to the next iteration, analyzing if the code smell is now resolved and continuing the refactoring process.
-                            *   **If tests still fail after the fix attempt:** The initial fix was not successful. **Now, revert to the code state *before* the *original refactoring action that caused the tests to fail* (not just the fix attempt). Output "TestFailedAfterFixAttempt".** In more advanced scenarios, you could try a different fix, or log the failure for human review. For now, reverting after one fix attempt is a reasonable level of complexity.
-                                **Tools Available:**
+                You have following tools available:
 
                 *   `AdjustFileTool`:  Modify specific parts of an existing file.  Requires specifying the file path and the changes to be made (e.g., line number, content to replace, content to insert).
                 *   `CreateFileTool`: Create a new file with the specified content. Requires specifying the file path and the new file content.
@@ -107,21 +91,28 @@ class RunRefactorDiffCached:
                 *   `RunToxTool`: Execute the test suite.  No parameters needed. Returns pass/fail status.
                 *   `ReadFileTool`: Read the content of a file. Requires specifying the exact file path.
 
-                **Constraints:**
+                **Refactoring Steps**:
+                1. Outline in 2-3 sentences what you are planning to do. Take a second and consider the refactoring log. Do not try out the same step as before as shown in the refactoring log.
+                2. Identify the needed fix. You can use ReadFileTool to see the files. This means that these files represent the latest state. Always confirm changes by re-reading the file with ReadFileTool if a previous log indicates that changes were made.
+                3. Then, after you check the files, apply the correct tools to apply the fix. You can use the AdjustFileTool, CreateFileTool and ReplaceFileTool.
+                4. Afterwards, you must create a refactoring log with the following format.
+                **Refactoring Log**:
+                - **Summary**: Describe your changes in 100 words. If you used tools, specify the used tool and the parameters precisely.
+                - **Reason**: Why you made them in less than 20 words.
+                - **Next**: State the next action in a precise way in 50 words. If the next step should be a tool use, specify the tool and the parameters.
+                5. If you think that all tests should work, you can use RunToxTool to test the whole application.
+                6. If the smell is resolved, respond with AnalysisComplete and no further refactoring log is needed. AnalysisComplete ends the entire process.
 
-                *   **No Dependency Changes:** You *cannot* modify any dependency-related files or add new dependencies.
-                *   **Functionality Must Be Preserved:**  All existing tests must pass after each successful refactoring step when code is modified.
+                The refactoring log must follow this structure:
+                **Refactoring Log**:
+                Summary: <Max 100 words>  
+                Reason: <Max 20 words>  
+                Next: <Max 20 words>
 
-                **Input Data Format (for each iteration):**
-                Code Smell:
-                {code_smell}
-
-                {_previous}
-
-                Current Difference to the Codebase:
-                {current_git_diff}
-
-                **Initial Code Files**:
+                **Start context refactoring log**:
+                {previous}
+                **End context refactoring log**:
+  
                 """  # nosec
 
         tool_collection = ToolCollection()
@@ -129,11 +120,18 @@ class RunRefactorDiffCached:
         tool_collection.add_tool(RunToxTool.get_class_name())
         tool_collection.add_tool(ReplaceFileTool.get_class_name())
         tool_collection.add_tool(ReadFileTool.get_class_name())
+        tool_collection.add_tool(CreateFileTool.get_class_name())
+
+        expensive_model = ClaudeRequestLoop.get_class_name()
+        expensive_model = RunRefactorGeminiRequestLoop.get_class_name()
+
+        model = "claude-3-haiku-20240307"
+        model = "gemini-2.0-flash-exp"
 
         feature = Feature(
-            name=GeminiRequestLoop.get_class_name(),
+            name=expensive_model,
             options={
-                "model": "gemini-2.0-flash-exp",  # Choose your desired model
+                "model": model,
                 "prompt": prompt,
                 DefaultOptionKeys.mloda_source_feature: frozenset([ConcatenatedFileContent.get_class_name()]),
                 "file_paths": frozenset(files),
@@ -146,7 +144,10 @@ class RunRefactorDiffCached:
             [feature],
             compute_frameworks=self.compute_frameworks,
         )
-        res = results[0][GeminiRequestLoop.get_class_name()].values[0]
+        res = results[0][expensive_model].values[0]
+
+        res = f"""\n This was iterative {run_number}:{res}\n"""
+
         res = previous + res
 
         if isinstance(res, str):
@@ -176,23 +177,21 @@ class RunRefactorDiffCached:
             Given the following `git diff --cached` output:
             
             {git_diff_cached}
-
-            and the following list of potential code smells:
-
-            - Duplicated code blocks
-            - Readability issues (unclear variable names)
             
             DO NOT INCLUDE code smells related to options.
+            
+            Identify one code smell that is newly introduced or significantly worsened by the changes in the `git diff --cached`.  Focus on problems that are clearly fixable and would provide a tangible benefit to the codebase.
+            If no new or significantly worsened code smells are apparent in the `git diff --cached`, respond with "No actionable refactoring target identified."
+            If you identify a code smell, answer with the following table with the columns:
 
-            1.  **Analyze the `git diff --cached` output and the code it modifies.**
-            2.  **Identify *one specific* code smell that is newly introduced or significantly worsened by the changes in the `git diff`.**  Focus on problems that are clearly fixable and would provide a tangible benefit to the codebase.
-            3.  **Create a concise summary (no more than 100 words) that includes:**
-                *   A clear description of the identified code smell.
-                *   The specific location(s) in the code where the code smell occurs (e.g., file name, function name, line numbers).
-                *   A brief explanation of *why* this is a code smell and what negative impact it has.
-                *   A *brief* suggestion for how to refactor the code to address the smell.
+            - Code Smell Description
+            - Location (file_name, function_name, line_numbers)
+            - Explanation
+            - step by step guide in how to fix this code smell.
 
-            If no new or significantly worsened code smells are apparent in the `git diff`, respond with "No actionable refactoring target identified."
+            The table should be fitting in 200 words.
+
+            The step by step guide needs to be very clear, as else an meteorite will hit the earth if this code smell is not fixed.
 
         """
         print()

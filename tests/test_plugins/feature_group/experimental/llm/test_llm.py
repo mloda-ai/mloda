@@ -5,6 +5,7 @@ from mloda_core.abstract_plugins.components.index.index import Index
 from mloda_plugins.feature_group.experimental.llm.cli import format_array
 from mloda_plugins.feature_group.experimental.llm.installed_packages_feature_group import InstalledPackagesFeatureGroup
 
+from mloda_plugins.feature_group.experimental.llm.llm_api.claude import ClaudeRequestLoop
 from mloda_plugins.feature_group.experimental.llm.llm_api.openai import OpenAIRequestLoop
 from mloda_plugins.feature_group.experimental.llm.tools.available.multiply import MultiplyTool
 from mloda_plugins.feature_group.input_data.api_data.api_data import ApiInputDataFeature
@@ -136,14 +137,19 @@ class TestReadLLMFiles:
 @pytest.mark.skipif(os.environ.get("GEMINI_API_KEY") is None, reason="GEMINI KEY NOT SET")
 class TestPlugInLLM:
     def test_llm_base(self) -> None:
-        _test_classes = [OpenAIRequestLoop, GeminiRequestLoop]
+        _test_classes = [OpenAIRequestLoop, GeminiRequestLoop, ClaudeRequestLoop]
 
         for _cls in _test_classes:
+            if _cls == ClaudeRequestLoop:
+                _model = "claude-3-haiku-20240307"
+            else:
+                _model = "gemini-1.5-flash-8b"
+
             features: List[Feature | str] = [
                 Feature(
                     name=_cls.get_class_name(),
                     options={
-                        "model": "gemini-1.5-flash-8b",
+                        "model": _model,
                         "prompt": """Does this file contain a directory structure and a list of installed packages? 
                                      Answer with yes if both are present, otherwise answer with no.""",
                         DefaultOptionKeys.mloda_source_feature: frozenset([]),
@@ -279,13 +285,19 @@ class TestGeminiLLMFiles:
         tool_collection = ToolCollection()
         tool_collection.add_tool(MultiplyTool.get_class_name())
 
-        _test_classes = [OpenAIRequestLoop, GeminiRequestLoop]
+        _test_classes = [OpenAIRequestLoop, GeminiRequestLoop, ClaudeRequestLoop]
+        # _test_classes = [ClaudeRequestLoop]
         for _cls in _test_classes:
+            if _cls == ClaudeRequestLoop:
+                _model = "claude-3-haiku-20240307"
+            else:
+                _model = "gemini-2.0-flash-exp"
+
             features: List[Feature | str] = [
                 Feature(
                     name=_cls.get_class_name(),
                     options={
-                        "model": "gemini-2.0-flash-exp",
+                        "model": _model,
                         "prompt": prompt,
                         "tools": tool_collection,
                         DefaultOptionKeys.mloda_source_feature: frozenset([ConcatenatedFileContent.get_class_name()]),
@@ -321,3 +333,4 @@ class TestGeminiLLMFiles:
                 assert _cls.get_class_name() in res
                 formatted_output = format_array(f"Result {i} values: ", res[_cls.get_class_name()].values)
                 assert "50" in formatted_output.lower()
+                print(formatted_output)

@@ -1,5 +1,5 @@
 from copy import copy
-from typing import Any, Set
+from typing import Any, Set, Tuple
 
 
 from mloda_core.abstract_plugins.components.feature import Feature
@@ -83,30 +83,74 @@ class RequestLoop(LLMBaseRequest):
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         model, initial_prompt, model_parameters, tools = cls.read_properties(data, features)
 
-        current_prompt = copy(initial_prompt)
+        messages: str = ""
 
-        all_results = []
-        all_tool_result = ""
         while True:
             print("\n############################################\n")
 
-            response = cls.api().request(model, current_prompt, model_parameters, tools)
-            response_text, tool_result = cls.api().handle_response(response, features, tools)
+            messages, _messages = cls.initial_prompt_message(messages, initial_prompt)
 
-            if response_text:
-                response_text = response_text.strip()
-            all_results.append(response_text)
+            response = cls.api().request(model, _messages, model_parameters, tools)
 
-            if not tool_result:
+            responses, tool_result = cls.api().handle_response(response, features, tools)
+            messages = cls.manage_responses(messages, responses)
+            if tool_result == "":
                 break
+
+        final_response = cls.get_final_response(responses)
+
+        try:
+            if final_response[-1] == "\n":
+                final_response = final_response[:-1]
+        except Exception:
+            print(responses, tool_result)
+
+        return pd.DataFrame({cls.get_class_name(): [final_response]})
+
+    @classmethod
+    def manage_responses(cls, messages: Any, responses: Any) -> Any:
+        for response in responses:
+            if response.get("tool"):
+                print(response["tool"])
+                messages = cls.add_tool_response_to_messages(messages, response["tool"])
+
+            elif response.get("text"):
+                print(response["text"])
+                messages = cls.add_text_response_to_messages(messages, response["text"])
+
             else:
-                print(tool_result)
+                raise ValueError(f"Unknown response type: {response['type']}")
+        return messages
 
-            current_prompt = cls.loop_prompt(initial_prompt, tool_result, all_tool_result)
+    @classmethod
+    def get_final_response(cls, responses: Any) -> str:
+        result = []
 
-            all_tool_result += tool_result
+        for _msg in responses:
+            result.append(_msg["text"])
 
-        return pd.DataFrame({cls.get_class_name(): ["\n".join(all_results)]})
+        return "\n".join(result)
+
+    @classmethod
+    def add_tool_response_to_messages(cls, messages: Any, response: str) -> Any:
+        messages = messages + response
+        return messages
+
+    @classmethod
+    def add_text_response_to_messages(cls, messages: Any, response: str) -> Any:
+        messages = messages + response
+        return messages
+
+    @classmethod
+    def initial_prompt_message(cls, messages: Any, initial_prompt: str) -> Tuple[Any, Any]:
+        if not messages:
+            messages = initial_prompt
+            _messages = copy(messages)
+        else:
+            _messages = copy(messages)
+            _messages = _messages + cls.add_final_part_of_prompt()
+
+        return messages, _messages
 
     @classmethod
     def read_properties(cls, data: Any, features: FeatureSet) -> Any:
@@ -120,41 +164,10 @@ class RequestLoop(LLMBaseRequest):
         return model, prompt, model_parameters, tools
 
     @classmethod
-    def loop_prompt(cls, current_prompt: str, tool_result: str, all_tool_result: str) -> str:
-        prompt_parts = [
-            current_prompt,
-            "\n\n--------------------------------------------------\n",
-            "**Previous Steps:**",
-        ]
-
-        if all_tool_result:
-            prompt_parts.extend(
-                [
-                    "\nResults from all prior tool executions:\n",
-                    all_tool_result,
-                    "\n\n--------------------------------------------------\n",
-                ]
-            )
-
-        if all_tool_result != "":
-            current_prompt += f"\n\n Previous steps were completed with the following results: {all_tool_result}. \n\n"
-
-        prompt_parts.extend(
-            [
-                "\n**Most Recent Step:**",
-                "\nResult from the last tool execution:\n",
-                tool_result,
-                "\n\n--------------------------------------------------\n",
-                """
-            **Instructions:**
-
-            You are an expert reasoning agent. Given the information above (the original instructions, prior steps, and the most recent step result), carefully analyze the situation and determine the next action to take. 
+    def add_final_part_of_prompt(cls) -> str:
+        return """
+        Given the information above (the original instructions, prior steps, and the most recent step result), carefully analyze the situation and determine the next action to take.
 
             *   If the goal is complete, respond with the `Final Answer: ` followed by the final answer.
             *   If another tool is needed, determine the correct tool to use, and what input it needs.
-            """,
-            ]
-        )
-        improved_prompt = "".join(prompt_parts)
-        print(len(improved_prompt))
-        return improved_prompt
+        """

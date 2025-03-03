@@ -1,7 +1,7 @@
 from dataclasses import asdict
 import os
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
@@ -113,32 +113,33 @@ class GeminiAPI(LLMBaseApi):
     @classmethod
     def handle_response(
         cls, response: Any, features: FeatureSet, tools: ToolCollection | None
-    ) -> Tuple[str, Optional[str]]:
-        response_text = ""
-        tool_result = None
+    ) -> Tuple[List[Dict[str, str]], str]:
+        responses = []
+        used_tool = ""
+
         if hasattr(response, "parts"):
-            # Handle google.generativeai.types.generation_types.GenerateContentResponse
-            tool_calls = []
             for part in response.parts:
+                if hasattr(part, "text") and part.text:
+                    responses.append({"text": part.text})
+
                 if hasattr(part, "function_call") and part.function_call:
-                    tool_calls.append(part.function_call)
+                    if tools is None:
+                        raise ValueError("Tools are not set.")
 
-            if tool_calls:
-                if tools is None:
-                    raise ValueError("Tools are not set.")
-                tool_result = cls._execute_tools(tool_calls, features, tools)
-                return "", tool_result
+                    tool_dict = {
+                        "name": part.function_call.name,
+                        "args": part.function_call.args,
+                    }
 
-            for part in response.parts:
-                if hasattr(part, "text") and len(part.text) > 0:
-                    response_text += part.text
-        elif hasattr(response, "text"):
-            response_text = response.text
+                    tool_result = cls._execute_tools([tool_dict], features, tools)
+                    if tool_result:
+                        responses.append({"tool": tool_result})
+                        used_tool += tool_result
         else:
             logger.warning(f"Response has no text or parts attribute: {response}")
-            return str(response), None
+            return [], ""
 
-        return response_text, None
+        return responses, used_tool
 
     def generate_response(
         llm_model: Any,

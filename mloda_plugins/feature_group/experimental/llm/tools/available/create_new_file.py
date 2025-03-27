@@ -66,9 +66,9 @@ class CreateFileTool(BaseTool):
         while os.path.exists(file_path):
             return f"File already exists at {file_path}. Please provide a different path."
 
-        directory = os.path.dirname(file_path)
-        if not os.path.exists(directory):
-            return f"Directory does not exist at {directory}. Please provide a different path."
+        # directory = os.path.dirname(file_path)
+        # if not os.path.exists(directory):
+        #    return f"Directory does not exist at {directory}. Please provide a different path."
 
         with open(file_path, "w") as f:
             f.write(file_content)

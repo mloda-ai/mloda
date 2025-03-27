@@ -30,8 +30,7 @@ class TextFileReader(ReadFile):
 
         if features.get_options_key("AddPathToContent"):
             file_path = file_path.strip("\n")
-            content = f"The file path of the following file is {file_path} : {content}"
-
+            content = f"The file path of the following file is {file_path} : {content}. The file {file_path} ends here."
         data = {cls.get_class_name(): [content]}
 
         return pd.DataFrame(data)

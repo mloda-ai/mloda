@@ -84,8 +84,10 @@ class RequestLoop(LLMBaseRequest):
         model, initial_prompt, model_parameters, tools = cls.read_properties(data, features)
 
         messages: str = ""
+        import time
 
         while True:
+            # time.sleep(120)
             print("\n############################################\n")
 
             messages, _messages = cls.initial_prompt_message(messages, initial_prompt)

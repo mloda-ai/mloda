@@ -4,6 +4,7 @@ import logging
 
 from mloda_plugins.feature_group.experimental.llm.llm_api.openai import OpenAIRequestLoop
 from mloda_plugins.feature_group.experimental.llm.tools.available.adjust_file_tool import AdjustFileTool
+from mloda_plugins.feature_group.experimental.llm.tools.available.list_files_tool import ListFilesTool
 from mloda_plugins.feature_group.experimental.llm.tools.available.read_file_tool import ReadFileTool
 from mloda_plugins.feature_group.experimental.llm.tools.available.replace_file_tool import ReplaceFileTool
 import pytest
@@ -114,6 +115,13 @@ class TestSingleTools:
         self.run_test(
             prompt, RunSinglePytestTool.get_class_name(), request_loop, target_folder, "test_add_index_simple"
         )
+
+    def test_list_files_tool(self, request_loop: str) -> None:
+        prompt = """ List all files in the tests/test_core/test_index directory. """
+        target_folder = [
+            os.getcwd() + "/tests/test_core/test_index",
+        ]
+        self.run_test(prompt, ListFilesTool.get_class_name(), request_loop, target_folder, "test_add_index.py")
 
     def test_run_tox(self, request_loop: str) -> None:
         prompt = """ Run tox exactly one time. """

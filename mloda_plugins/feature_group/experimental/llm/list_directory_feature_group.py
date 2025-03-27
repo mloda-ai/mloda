@@ -44,7 +44,12 @@ class ListDirectoryFeatureGroup(AbstractFeatureGroup):
         file_structure: Dict[str, Any] = {}
 
         # Load ignore patterns from .gitignore
-        ignore_patterns = cls._load_gitignore_patterns(project_root)
+        gitignore_patterns = cls._load_gitignore_patterns(project_root)
+
+        extra_ignore_patterns = features.get_options_key("extra_ignore_patterns")
+        if extra_ignore_patterns is None:
+            extra_ignore_patterns = set()
+        ignore_patterns = gitignore_patterns.union(extra_ignore_patterns)
 
         for root, dirs, files in os.walk(project_root):
             # Get relative path from project root

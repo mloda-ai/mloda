@@ -7,3 +7,4 @@ __pycache__
 backup
 build/
 dist/
+memory_bank/llm_generated_content/

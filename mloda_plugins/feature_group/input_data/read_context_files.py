@@ -73,7 +73,11 @@ class ConcatenatedFileContent(AbstractFeatureGroup):
 
         def calculate_feature(cls: Any, data: Any, features: FeatureSet) -> Any:
             """Calculate feature for the dynamically created Join Class."""
-            data[class_name] = data[data.columns]
+
+            try:
+                data[class_name] = data[data.columns]
+            except Exception:
+                data[class_name] = data["MdFileReader"].fillna("") + data["PyFileReader"].fillna("")
             return data
 
         properties = {"calculate_feature": calculate_feature}
@@ -100,9 +104,17 @@ class ConcatenatedFileContent(AbstractFeatureGroup):
                 left_link = (ReadFileFeature, short_f_list[cnt])
                 right_link = (ReadFileFeature, short_f_list[cnt + 1])
 
+            file_path = Path(f)
+            if file_path.suffix == ".py":
+                source_class = PyFileReader.get_class_name()
+            elif file_path.suffix == ".md":
+                source_class = "MdFileReader"
+            else:
+                raise ValueError(f"File type {file_path.suffix} not supported")
+
             source_tuple = SourceTuple(
                 feature_name=short_f,
-                source_class=PyFileReader.get_class_name(),  # type: ignore
+                source_class=source_class,  # type: ignore
                 source_value=f,  # We use the file path, not the content.
                 left_link=left_link,
                 right_link=right_link,
@@ -122,9 +134,7 @@ class ConcatenatedFileContent(AbstractFeatureGroup):
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         if cls.join_feature_name not in data:
             raise ValueError(f"Feature {cls.join_feature_name} not found in the data.")
-
         combined_code = data[cls.join_feature_name].astype(str).str.cat(sep="\n\\nA new file begins here\\n")
-
         return pd.DataFrame({cls.get_class_name(): [combined_code]})
 
 
@@ -141,6 +151,12 @@ def find_file_paths(
             root_dir = Path(root_dir)
 
         for file_path in root_dir.rglob(f"*.{suffix}"):  # Matches all files
+            if file_path.name in not_allowed_files_names:
+                continue
+
+            file_paths.add(str(file_path.resolve()))
+
+        for file_path in root_dir.rglob("*.md"):  # Matches all files
             if file_path.name in not_allowed_files_names:
                 continue
 

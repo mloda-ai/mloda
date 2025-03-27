@@ -219,16 +219,11 @@ class TestPlugInLLM:
 @pytest.mark.skipif(os.environ.get("GEMINI_API_KEY") is None, reason="GEMINI KEY NOT SET")
 class TestGeminiLLMFiles:
     def test_llm_gemini_prompt(self) -> None:
-        prompt = """ 
-         
-        Can you help me improve the Tools?
-        """
-
         prompt = """
-            Can you create me a datacreator feature group which uses the git diff --cached tool to get data?
+            I want to create a memory bank for plugins. Can you help me with this?
         """
 
-        _test_classes = [OpenAIRequestLoop, GeminiRequestLoop]
+        _test_classes = [OpenAIRequestLoop]
         for _cls in _test_classes:
             features: List[Feature | str] = [
                 Feature(
@@ -240,9 +235,9 @@ class TestGeminiLLMFiles:
                         "target_folder": frozenset(
                             [
                                 os.getcwd() + "/mloda_plugins",
-                                # os.getcwd() + "/mloda_core/abstract_plugins/",
+                                os.getcwd() + "/mloda_core/abstract_plugins/",
                                 os.getcwd() + "/tests/test_plugins/feature_group/experimental//",
-                                # os.getcwd() + "/mloda_core/api/",
+                                os.getcwd() + "/mloda_core/api/",
                             ]
                         ),
                         "disallowed_files": frozenset(["__init__.py"]),

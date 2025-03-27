@@ -47,6 +47,7 @@ class LLMBaseApi(ABC):
             args_dict = response["args"]
             _name = response["name"]
 
+        print("This tool was called: ", _name, str(args_dict))
         tool_result = cls._execute_tool(_name, args_dict, tools)
         return tool_result
 

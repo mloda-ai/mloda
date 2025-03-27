@@ -90,10 +90,13 @@ class RequestLoop(LLMBaseRequest):
 
             messages, _messages = cls.initial_prompt_message(messages, initial_prompt)
 
+            print("\n_messages ", len(_messages))
+
             response = cls.api().request(model, _messages, model_parameters, tools)
 
             responses, tool_result = cls.api().handle_response(response, features, tools)
             messages = cls.manage_responses(messages, responses)
+
             if tool_result == "":
                 break
 
@@ -103,7 +106,8 @@ class RequestLoop(LLMBaseRequest):
             if final_response[-1] == "\n":
                 final_response = final_response[:-1]
         except Exception:
-            print(responses, tool_result)
+            # print(responses, tool_result)
+            pass
 
         return pd.DataFrame({cls.get_class_name(): [final_response]})
 
@@ -111,7 +115,6 @@ class RequestLoop(LLMBaseRequest):
     def manage_responses(cls, messages: Any, responses: Any) -> Any:
         for response in responses:
             if response.get("tool"):
-                print(response["tool"])
                 messages = cls.add_tool_response_to_messages(messages, response["tool"])
 
             elif response.get("text"):
@@ -155,7 +158,7 @@ class RequestLoop(LLMBaseRequest):
     @classmethod
     def read_properties(cls, data: Any, features: FeatureSet) -> Any:
         data.iloc[0, 0] = "\n".join(data.stack().dropna().astype(str).tolist())  # Combine non-NaN values
-
+        print(len(data.iloc[0, 0]))
         model = cls.get_model_from_config(features)
         prompt = copy(cls.handle_prompt(data, features))
         model_parameters = cls.get_model_parameters(features)

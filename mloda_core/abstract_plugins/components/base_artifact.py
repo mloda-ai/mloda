@@ -96,3 +96,8 @@ class BaseArtifact(ABC):
 
         if features.name_of_one_feature is None:
             raise ValueError("Feature name missing in feature set.")
+
+    @classmethod
+    @final
+    def get_class_name(cls) -> str:
+        return cls.__name__

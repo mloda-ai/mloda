@@ -4,7 +4,7 @@
 
 mloda's architecture revolves around two key components:
 
-*   **Plugins:** Feature Groups, Compute Frameworks, and Extenders
+*   **Plugins:** Feature Groups (`feature_groups.md`), Compute Frameworks, and Extenders
 *   **Core:** Core Engine
 
 The Core Engine handles dependencies between features and computations by coordinating linking, joining, filtering, and ordering operations.

@@ -8,6 +8,9 @@ Initializing the memory bank for the mloda project.
 
 *   Created the initial memory bank files: `projectbrief.md`, `productContext.md`, `systemPatterns.md`, and `techContext.md`.
 *   Added README.md files to top-level directories: `mloda_core/`, `mloda_plugins/`, and `tests/` to improve documentation.
+*   Added description and versioning capabilities to AbstractFeatureGroup:
+    * Created `FeatureGroupVersion` class to handle versioning logic
+*   Created a dedicated `feature_groups.md` file in the memory bank to document Feature Groups
 
 ## Next Steps
 

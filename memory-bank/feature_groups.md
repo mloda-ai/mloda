@@ -1,0 +1,81 @@
+# Feature Groups
+
+## Overview
+
+Feature Groups are a core component of the mloda framework that define feature dependencies and calculations. They transform input data into meaningful features for analysis and machine learning.
+
+## Key Concepts
+
+### Description and Versioning
+
+Feature Groups now include built-in description and versioning capabilities:
+
+#### Description
+
+- `description()`: Returns a human-readable description of a feature group
+- Uses the class's docstring or falls back to the class name
+- Helps users understand the purpose and functionality
+
+#### Versioning
+
+- `version()`: Generates a composite version identifier
+- Combines mloda package version, module name, and source code hash
+- Tracks changes, manages compatibility, and aids debugging
+
+### AbstractFeatureGroup
+
+The base class for all feature groups in mloda, providing a common interface and functionality:
+
+#### Core Methods (To Implement)
+- `calculate_feature`: Contains the logic to transform input features into output features
+
+#### Meta Data Methods
+- `description`: Returns a human-readable description of the feature group
+- `version`: Returns a composite version identifier for the feature group
+
+#### Feature identification
+- `match_feature_group_criteria`: Determines whether this feature group matches given criteria
+- `feature_names_supported`: Returns a set of feature names explicitly supported
+- `prefix`: Returns the prefix used for feature names
+
+#### Feature input data
+- `input_data`: Returns the input data class used for this feature group
+- `input_features`: Defines the input features required by this feature group
+
+#### Feature setup
+- `input_data`: Returns the input data class used for this feature group
+- `get_domain`: Returns the domain for this feature group
+- `return_data_type_rule`: Specifies a fixed return data type for this feature group
+- `index_columns`: Specifies the index columns used for merging or joining data
+- `compute_framework_rule`: Defines the rule for determining the compute framework
+- `artifact`: Returns the artifact associated with this feature group
+- `supports_index`: Indicates whether this feature group supports a given index
+- `set_feature_name`: Allows modification of the feature name based on configuration
+
+#### Quality Methods (Can Override)
+- `validate_input_features`: Validates the input data (optional)
+- `validate_output_features`: Validates the output data (optional)
+
+#### Utility Methods (Final)
+- `load_artifact`: Loads an artifact associated with a FeatureSet
+- `get_class_name`: Returns the name of the class
+- `is_root`: Determines if this is a root feature (no dependencies)
+- `compute_framework_definition`: Determines supported compute frameworks
+
+## Usage
+
+Feature Groups are used to:
+
+- Define dependencies between features
+- Implement transformation logic
+- Specify data types and constraints
+- Manage feature metadata
+
+Custom Feature Groups can be created by inheriting from `AbstractFeatureGroup` and implementing the required methods.
+
+## Changelog
+
+### 2025-03-30: Added Description and Versioning
+- Added `description()` method to provide human-readable descriptions of feature groups
+- Added `version()` method to generate composite version identifiers
+- Created `FeatureGroupVersion` class to handle versioning logic

@@ -7,6 +7,9 @@
 *   Added README.md files to top-level directories: `mloda_core/`, `mloda_plugins/`, and `tests/` to improve documentation.
 *   Added description and versioning capabilities to AbstractFeatureGroup
 *   Created a dedicated `feature_groups.md` file in the memory bank to document Feature Groups
+*   Implemented BaseAggregatedFeatureGroup with Pandas support for common aggregation operations
+*   Created modular folder structure for feature group implementations
+*   Implemented PyArrow version of the aggregated feature group
 
 ## What's Left to Build
 
@@ -16,7 +19,7 @@
 
 ## Current Status
 
-The memory bank has been initialized with basic information. Documentation has been improved with README.md files in key directories.
+The memory bank has been initialized with basic information. Documentation has been improved with README.md files in key directories. A new aggregated feature group pattern has been implemented with both Pandas and PyArrow support, allowing for efficient aggregation operations on different compute frameworks.
 
 ## Known Issues
 

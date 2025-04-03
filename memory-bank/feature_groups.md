@@ -73,7 +73,34 @@ Feature Groups are used to:
 
 Custom Feature Groups can be created by inheriting from `AbstractFeatureGroup` and implementing the required methods.
 
+## Creating New Feature Groups
+
+### Aggregated Feature Group Pattern
+
+When implementing feature groups that perform aggregation operations:
+
+1. **Structure**: 
+   - Create a base abstract class that defines the interface
+   - Implement concrete classes for specific compute frameworks (e.g., Pandas)
+   - Organize in a dedicated folder with separate files
+
+2. **Naming Convention**:
+   - Use `{aggregation_type}_aggr_{source_feature_name}` format
+   - Example: `sum_aggr_sales`, `avg_aggr_price`
+
+3. **Implementation Tips**:
+   - Handle edge cases in feature name validation (empty prefix/suffix)
+   - Use DataCreator with a set of feature names, not a dictionary
+   - For testing, expect multiple DataFrames in results (one per feature group)
+
 ## Changelog
+
+### 2025-04-03: Added PyArrow Aggregated Feature Group
+- Implemented PyArrow version of the aggregated feature group
+
+### 2025-04-03: Added Aggregated Feature Group
+- Created pattern for implementing aggregation operations on features
+- Implemented for Pandas with support for sum, min, max, avg, etc.
 
 ### 2025-03-30: Added Description and Versioning
 - Added `description()` method to provide human-readable descriptions of feature groups

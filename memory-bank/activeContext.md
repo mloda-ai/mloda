@@ -15,10 +15,11 @@ Initializing the memory bank for the mloda project.
     * Created a modular folder structure with separate files for base and implementation classes
     * Implemented feature name validation with proper error handling
     * Added Pandas implementation with support for common aggregation operations
-*   Implemented PyArrow aggregated feature group:
+*   Created `proposed_feature_groups.md` with new feature group categories
 
 ## Next Steps
 
+*   Implement the high-priority proposed feature groups
 *   Populate the memory bank files with more detailed information.
 *   Update the `.clinerules` file with project-specific patterns.
 *   Implement additional compute framework implementations for other feature groups

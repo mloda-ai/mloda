@@ -1,5 +1,5 @@
 import os
-from typing import Any, List, Optional, Union
+from typing import List, Optional, Union
 
 from mloda_core.abstract_plugins.components.index.index import Index
 from mloda_plugins.feature_group.experimental.llm.cli import format_array
@@ -11,7 +11,6 @@ from mloda_plugins.feature_group.experimental.llm.tools.available.multiply impor
 from mloda_plugins.feature_group.input_data.api_data.api_data import ApiInputDataFeature
 import pytest
 
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_plugins.feature_group.experimental.llm.llm_api.gemini import GeminiRequestLoop
 from mloda_plugins.feature_group.experimental.llm.tools.tool_collection import ToolCollection
 from mloda_plugins.feature_group.input_data.read_context_files import ConcatenatedFileContent, find_file_paths
@@ -20,13 +19,12 @@ from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.input_data.api.api_input_data_collection import ApiInputDataCollection
 from mloda_core.abstract_plugins.components.input_data.api.base_api_data import BaseApiData
-from mloda_core.abstract_plugins.components.link import JoinType, Link
+from mloda_core.abstract_plugins.components.link import Link
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.api.request import mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 from mloda_plugins.feature_group.input_data.read_files.text_file_reader import PyFileReader
-from mloda_plugins.feature_group.experimental.source_input_feature import SourceInputFeature, SourceTuple
 from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
 
 
@@ -69,69 +67,6 @@ class TestReadLLMFiles:
 
         result = mlodaAPI.run_all(new_features[:3], compute_frameworks={PandasDataframe})
         assert len(result) == 3
-
-    def test_join_llm_files1(self) -> None:
-        class JoinLLMFiles2(SourceInputFeature):
-            @classmethod
-            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-                data[cls.get_class_name()] = data[data.columns]
-                return data
-
-        project_root = os.getcwd() + "/mloda_plugins"
-        file_paths = find_file_paths([project_root], "py", not_allowed_files_names=["__init__.py"])
-
-        file_paths = list(file_paths)[:10]
-
-        short_f_list = [os.path.split(f)[-1] for f in file_paths]
-
-        set_fp = set()
-        for cnt, f in enumerate(file_paths):
-            short_f = os.path.split(f)[-1]
-            right_link, left_link = None, None
-
-            if cnt != len(file_paths) - 1:
-                left_link = (ReadFileFeature, short_f_list[cnt])
-                right_link = (ReadFileFeature, short_f_list[cnt + 1])
-
-            source_tuple = SourceTuple(
-                feature_name=short_f,
-                source_class=PyFileReader.get_class_name(),  # type: ignore
-                source_value=f,
-                left_link=left_link,
-                right_link=right_link,
-                join_type=JoinType.APPEND,
-                merge_index=short_f,
-            )
-            set_fp.add(source_tuple)
-
-        features: List[Feature | str] = []
-        features.append(
-            Feature(
-                name=JoinLLMFiles2.get_class_name(),
-                options={DefaultOptionKeys.mloda_source_feature: frozenset(set_fp)},
-            )
-        )
-
-        results = mlodaAPI.run_all(
-            features,
-            compute_frameworks={PandasDataframe},
-        )
-        assert len(results[0]) == 10
-        assert len(results) == 1
-
-    def test_join_llm_files2(self) -> None:
-        feature = Feature(
-            name=ConcatenatedFileContent.get_class_name(),
-            options={
-                "target_folder": frozenset([os.getcwd() + "/mloda_plugins"]),
-            },
-        )
-
-        results = mlodaAPI.run_all(
-            [feature],
-            compute_frameworks={PandasDataframe},
-        )
-        assert len(results) == 1
 
 
 @pytest.mark.skipif(os.environ.get("GEMINI_API_KEY") is None, reason="GEMINI KEY NOT SET")

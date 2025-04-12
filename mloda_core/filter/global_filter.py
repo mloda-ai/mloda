@@ -10,6 +10,7 @@ from mloda_core.abstract_plugins.components.data_access_collection import DataAc
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.filter.filter_type_enum import FilterTypeEnum
 from mloda_core.filter.single_filter import SingleFilter
+from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 
 import logging
@@ -175,7 +176,7 @@ class GlobalFilter:
         valid_from: Optional[datetime] = None,
         valid_to: Optional[datetime] = None,
         max_exclusive: bool = True,
-        time_filter_feature: Union[str, Feature] = "time_filter",
+        time_filter_feature: Union[str, Feature] = DefaultOptionKeys.reference_time,
         time_travel_filter_feature: Union[str, Feature] = "time_travel_filter",
     ) -> None:
         """
@@ -196,7 +197,7 @@ class GlobalFilter:
         - valid_from (Optional[datetime]): Start of the validity period (optional, with timezone).
         - valid_to (Optional[datetime]): End of the validity period (optional, with timezone).
         - max_exclusive (bool): If True, the `event_to` and `valid_to` values are treated as exclusive.
-        - time_filter_feature: the feature description for the time filter. Default is "time_filter".
+        - time_filter_feature: the feature description for the time filter. Default is DefaultOptionKeys.reference_time.
         - time_travel_filter_feature: the feature description for the time travel filter. Default is "time_travel_filter".
 
         The `single_filters` created will be converted to UTC as ISO 8601 formatted strings to ensure consistency

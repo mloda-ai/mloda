@@ -75,6 +75,14 @@ Custom Feature Groups can be created by inheriting from `AbstractFeatureGroup` a
 
 ## Creating New Feature Groups
 
+### Time Window Feature Group Pattern
+
+When implementing feature groups that perform time-based window operations:
+
+**Naming Convention**:
+- Use `{window_function}_{window_size}_{time_unit}_window_{source_feature_name}` format
+- Example: `avg_3_day_window_temperature`, `max_5_day_window_humidity`
+
 ### Aggregated Feature Group Pattern
 
 When implementing feature groups that perform aggregation operations:
@@ -94,6 +102,10 @@ When implementing feature groups that perform aggregation operations:
    - For testing, expect multiple DataFrames in results (one per feature group)
 
 ## Changelog
+
+### 2025-04-14: Added Time Window Feature Group
+- Created pattern for implementing time-based window operations on features
+- Integrated with global filter functionality
 
 ### 2025-04-03: Added PyArrow Aggregated Feature Group
 - Implemented PyArrow version of the aggregated feature group

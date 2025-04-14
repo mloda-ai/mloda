@@ -4,7 +4,7 @@
 
 | Category | Feature Group | Priority | Status |
 |----------|--------------|----------|--------|
-| Time Series | TimeWindowFeatureGroup | High | To Do |
+| Time Series | TimeWindowFeatureGroup | High | Implemented |
 | Data Quality | MissingValueFeatureGroup | High | To Do |
 | ML | ClusteringFeatureGroup | High | To Do |
 | Text Processing | TextCleaningFeatureGroup | Medium | To Do |

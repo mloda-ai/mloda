@@ -16,10 +16,12 @@ Initializing the memory bank for the mloda project.
     * Implemented feature name validation with proper error handling
     * Added Pandas implementation with support for common aggregation operations
 *   Created `proposed_feature_groups.md` with new feature group categories
+*   Implemented TimeWindowFeatureGroup:
+    * Integrated with global filter functionality
 
 ## Next Steps
 
-*   Implement the high-priority proposed feature groups
+*   Continue implementing the remaining high-priority proposed feature groups
 *   Populate the memory bank files with more detailed information.
 *   Update the `.clinerules` file with project-specific patterns.
 *   Implement additional compute framework implementations for other feature groups

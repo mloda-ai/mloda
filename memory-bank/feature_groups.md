@@ -83,6 +83,14 @@ When implementing feature groups that perform time-based window operations:
 - Use `{window_function}_{window_size}_{time_unit}_window_{source_feature_name}` format
 - Example: `avg_3_day_window_temperature`, `max_5_day_window_humidity`
 
+### Missing Value Feature Group Pattern
+
+When implementing feature groups that handle missing values in data:
+
+**Naming Convention**:
+- Use `{imputation_method}_imputed_{source_feature_name}` format
+- Examples: `mean_imputed_income`, `median_imputed_age`, `constant_imputed_category`
+
 ### Aggregated Feature Group Pattern
 
 When implementing feature groups that perform aggregation operations:
@@ -102,6 +110,10 @@ When implementing feature groups that perform aggregation operations:
    - For testing, expect multiple DataFrames in results (one per feature group)
 
 ## Changelog
+
+### 2025-04-14: Added Missing Value Imputation Feature Group
+- Created pattern for handling missing values in features
+- Implemented multiple imputation methods: mean, median, mode, constant, ffill, bfill
 
 ### 2025-04-14: Added Time Window Feature Group
 - Created pattern for implementing time-based window operations on features

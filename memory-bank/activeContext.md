@@ -18,9 +18,17 @@ Initializing the memory bank for the mloda project.
 *   Created `proposed_feature_groups.md` with new feature group categories
 *   Implemented TimeWindowFeatureGroup:
     * Integrated with global filter functionality
+*   Implemented MissingValueFeatureGroup:
+    * Created pattern for handling missing values in features
+    * Implemented multiple imputation methods: mean, median, mode, constant, ffill, bfill
+    * Added support for grouped imputation based on categorical features
 
 ## Next Steps
 
+*   Integration test a feature that aggregates timewindowed imputed features
+    * Combine TimeWindowFeatureGroup, MissingValueFeatureGroup, and AggregatedFeatureGroup
+    * Demonstrate the composability of feature groups in the mloda framework
+    * Create comprehensive test cases with different data scenarios
 *   Continue implementing the remaining high-priority proposed feature groups
 *   Populate the memory bank files with more detailed information.
 *   Update the `.clinerules` file with project-specific patterns.

@@ -73,14 +73,15 @@ class BaseTimeWindowFeatureGroup(AbstractFeatureGroup):
         Returns:
             The time filter feature name to use
         """
-        if options and options.get(DefaultOptionKeys.reference_time):
-            reference_time = options.get(DefaultOptionKeys.reference_time)
+        reference_time_key = DefaultOptionKeys.reference_time.value
+        if options and options.get(reference_time_key):
+            reference_time = options.get(reference_time_key)
             if not isinstance(reference_time, str):
                 raise ValueError(
                     f"Invalid reference_time option: {reference_time}. Must be string. Is: {type(reference_time)}."
                 )
             return reference_time
-        return DefaultOptionKeys.reference_time
+        return reference_time_key
 
     # Define supported window functions
     WINDOW_FUNCTIONS = {

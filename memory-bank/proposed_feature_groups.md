@@ -5,7 +5,7 @@
 | Category | Feature Group | Priority | Status |
 |----------|--------------|----------|--------|
 | Time Series | TimeWindowFeatureGroup | High | Implemented |
-| Data Quality | MissingValueFeatureGroup | High | To Do |
+| Data Quality | MissingValueFeatureGroup | High | Implemented |
 | ML | ClusteringFeatureGroup | High | To Do |
 | Text Processing | TextCleaningFeatureGroup | Medium | To Do |
 | Geospatial | GeoDistanceFeatureGroup | Medium | To Do |

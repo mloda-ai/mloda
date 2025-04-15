@@ -5,9 +5,16 @@ import os
 from pathlib import Path
 from typing import Any, List
 
+from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from testbook import testbook
 
-from docs.docs.examples.mloda_basics.create_synthetic_data import MlLifeCycleDataCreator
+from docs.docs.examples.mloda_basics.create_synthetic_data import (
+    CategoricalSyntheticDataSet,
+    LocationSyntheticDataSet,
+    MlLifeCycleDataCreator,
+    OrderSyntheticDataSet,
+    PaymentSyntheticDataSet,
+)
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.api.request import mlodaAPI
 from mloda_core.filter.global_filter import GlobalFilter
@@ -88,7 +95,16 @@ class TestMlodaBasicsNotebooks:
             time_filter_feature=Feature("update_date", options=example_options),
         )
 
-        result = mlodaAPI.run_all(feature_list, compute_frameworks=["PandasDataframe"], global_filter=global_filter)
+        plugin_collector = PlugInCollector.enabled_feature_groups(
+            {OrderSyntheticDataSet, PaymentSyntheticDataSet, LocationSyntheticDataSet, CategoricalSyntheticDataSet}
+        )
+
+        result = mlodaAPI.run_all(
+            feature_list,
+            compute_frameworks=["PandasDataframe"],
+            global_filter=global_filter,
+            plugin_collector=plugin_collector,
+        )
         assert 4 == len(result)
 
         for res in result:

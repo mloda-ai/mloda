@@ -1,20 +1,21 @@
 import pyarrow as pa
 import pyarrow.compute as pc
 import pytest
-from typing import List, Set, Type, Union
+from typing import List
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 from mloda_core.api.request import mlodaAPI
 
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.pyarrow import PyArrowMissingValueFeatureGroup
+
+from tests.test_plugins.feature_group.experimental.test_missing_value_feature_group.test_missing_value_utils import (
+    PyArrowMissingValueTestDataCreator,
+    validate_missing_value_features,
+)
 
 
 @pytest.fixture
@@ -278,31 +279,10 @@ class TestMissingValuePyArrowIntegration:
     def test_imputation_with_data_creator(self) -> None:
         """Test imputation features with mlodaAPI using DataCreator."""
 
-        # Create a feature group that uses DataCreator to provide test data
-        class TestDataCreator(AbstractFeatureGroup):
-            @classmethod
-            def input_data(cls) -> BaseInputData:
-                return DataCreator({"income", "age", "category", "temperature", "group"})
-
-            @classmethod
-            def calculate_feature(cls, data: pa.Table, features: FeatureSet) -> pa.Table:
-                # Return the test data
-                return pa.Table.from_pydict(
-                    {
-                        "income": [50000, None, 75000, None, 60000],
-                        "age": [30, 25, None, 45, None],
-                        "category": ["A", None, "B", "A", None],
-                        "temperature": [72.5, 68.3, None, None, 70.1],
-                        "group": ["X", "Y", "X", "Y", "X"],
-                    }
-                )
-
-            @classmethod
-            def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
-                return {PyarrowTable}
-
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups({TestDataCreator, PyArrowMissingValueFeatureGroup})
+        plugin_collector = PlugInCollector.enabled_feature_groups(
+            {PyArrowMissingValueTestDataCreator, PyArrowMissingValueFeatureGroup}
+        )
 
         options = Options({"constant_value": "Unknown"})
         feature_str = [
@@ -327,35 +307,9 @@ class TestMissingValuePyArrowIntegration:
             plugin_collector=plugin_collector,
         )
 
-        # Verify the results
-        assert len(result) == 2  # Two Tables: one for source data, one for imputed features
-
-        # Find the Table with the imputed features
-        imputed_table = None
+        # Convert PyArrow Tables to Pandas DataFrames
+        pandas_result = []
         for table in result:
-            if "mean_imputed_income" in table.schema.names:
-                imputed_table = table
-                break
+            pandas_result.append(table.to_pandas())
 
-        assert imputed_table is not None, "Table with imputed features not found"
-
-        # Verify the imputed features
-        assert "mean_imputed_income" in imputed_table.schema.names
-        assert not pc.is_null(imputed_table["mean_imputed_income"][1]).as_py()
-        assert not pc.is_null(imputed_table["mean_imputed_income"][3]).as_py()
-
-        assert "median_imputed_age" in imputed_table.schema.names
-        assert not pc.is_null(imputed_table["median_imputed_age"][2]).as_py()
-        assert not pc.is_null(imputed_table["median_imputed_age"][4]).as_py()
-
-        assert "mode_imputed_category" in imputed_table.schema.names
-        assert not pc.is_null(imputed_table["mode_imputed_category"][1]).as_py()
-        assert not pc.is_null(imputed_table["mode_imputed_category"][4]).as_py()
-
-        assert "constant_imputed_category" in imputed_table.schema.names
-        assert imputed_table["constant_imputed_category"][1].as_py() == "Unknown"
-        assert imputed_table["constant_imputed_category"][4].as_py() == "Unknown"
-
-        assert "ffill_imputed_temperature" in imputed_table.schema.names
-        assert not pc.is_null(imputed_table["ffill_imputed_temperature"][2]).as_py()
-        assert not pc.is_null(imputed_table["ffill_imputed_temperature"][3]).as_py()
+        validate_missing_value_features(pandas_result)

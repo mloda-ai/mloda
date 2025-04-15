@@ -1,17 +1,20 @@
 import pyarrow as pa
+import pandas as pd
 import pytest
-from typing import Any, Optional
+from typing import List
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import BaseAggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregatedFeatureGroup
+
+from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.test_aggregated_utils import (
+    PyArrowAggregatedTestDataCreator,
+    validate_aggregated_features,
+)
 
 
 @pytest.fixture
@@ -178,25 +181,10 @@ class TestAggPyArrowIntegration:
     def test_aggregation_with_data_creator(self) -> None:
         """Test aggregation features with mlodaAPI using DataCreator."""
 
-        # Create a feature group that uses DataCreator to provide test data
-        class TestDataCreator(AbstractFeatureGroup):
-            @classmethod
-            def input_data(cls) -> Optional[BaseInputData]:
-                return DataCreator({"sales", "quantity", "price", "discount", "customer_rating"})
-
-            @classmethod
-            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-                # Return the test data as a dictionary (will be converted to PyArrow Table)
-                return {
-                    "sales": [100, 200, 300, 400, 500],
-                    "quantity": [10, 20, 30, 40, 50],
-                    "price": [10.0, 9.5, 9.0, 8.5, 8.0],
-                    "discount": [0.1, 0.2, 0.15, 0.25, 0.1],
-                    "customer_rating": [4, 5, 3, 4, 5],
-                }
-
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups({TestDataCreator, PyArrowAggregatedFeatureGroup})
+        plugin_collector = PlugInCollector.enabled_feature_groups(
+            {PyArrowAggregatedTestDataCreator, PyArrowAggregatedFeatureGroup}
+        )
 
         # Run the API with multiple aggregation features
         result = mlodaAPI.run_all(
@@ -211,27 +199,8 @@ class TestAggPyArrowIntegration:
             plugin_collector=plugin_collector,
         )
 
-        # Verify the results
-        assert len(result) == 2  # Two Tables: one for source data, one for aggregated features
+        new_res: List[pd.DataFrame] = []
+        for res in result:
+            new_res.append(res.to_pandas())
 
-        # Find the Table with the aggregated features
-        agg_table = None
-        for table in result:
-            if "sum_aggr_sales" in table.schema.names:
-                agg_table = table
-                break
-
-        assert agg_table is not None, "Table with aggregated features not found"
-
-        # Verify the aggregated features
-        assert "sum_aggr_sales" in agg_table.schema.names
-        assert agg_table.column("sum_aggr_sales")[0].as_py() == 1500  # Sum of [100, 200, 300, 400, 500]
-
-        assert "avg_aggr_price" in agg_table.schema.names
-        assert agg_table.column("avg_aggr_price")[0].as_py() == 9.0  # Average of [10.0, 9.5, 9.0, 8.5, 8.0]
-
-        assert "min_aggr_discount" in agg_table.schema.names
-        assert agg_table.column("min_aggr_discount")[0].as_py() == 0.1  # Min of [0.1, 0.2, 0.15, 0.25, 0.1]
-
-        assert "max_aggr_customer_rating" in agg_table.schema.names
-        assert agg_table.column("max_aggr_customer_rating")[0].as_py() == 5  # Max of [4, 5, 3, 4, 5]
+        validate_aggregated_features(new_res)

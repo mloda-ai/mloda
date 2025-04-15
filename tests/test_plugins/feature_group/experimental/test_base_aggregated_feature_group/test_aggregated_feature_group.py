@@ -8,7 +8,7 @@ from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import BaseAggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
 
 from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.test_aggregated_utils import (
@@ -50,82 +50,82 @@ def feature_set_multiple() -> FeatureSet:
     return feature_set
 
 
-class TestBaseAggregatedFeatureGroup:
-    """Tests for the BaseAggregatedFeatureGroup class."""
+class TestAggregatedFeatureGroup:
+    """Tests for the AggregatedFeatureGroup class."""
 
     def test_get_aggregation_type(self) -> None:
         """Test extraction of aggregation type from feature name."""
-        assert BaseAggregatedFeatureGroup.get_aggregation_type("sum_aggr__sales") == "sum"
-        assert BaseAggregatedFeatureGroup.get_aggregation_type("min_aggr__quantity") == "min"
-        assert BaseAggregatedFeatureGroup.get_aggregation_type("max_aggr__price") == "max"
-        assert BaseAggregatedFeatureGroup.get_aggregation_type("avg_aggr__discount") == "avg"
+        assert AggregatedFeatureGroup.get_aggregation_type("sum_aggr__sales") == "sum"
+        assert AggregatedFeatureGroup.get_aggregation_type("min_aggr__quantity") == "min"
+        assert AggregatedFeatureGroup.get_aggregation_type("max_aggr__price") == "max"
+        assert AggregatedFeatureGroup.get_aggregation_type("avg_aggr__discount") == "avg"
 
         # Test with invalid feature names
         with pytest.raises(ValueError):
-            BaseAggregatedFeatureGroup.get_aggregation_type("invalid_feature_name")
+            AggregatedFeatureGroup.get_aggregation_type("invalid_feature_name")
 
         with pytest.raises(ValueError):
-            BaseAggregatedFeatureGroup.get_aggregation_type("_aggr_sales")
+            AggregatedFeatureGroup.get_aggregation_type("_aggr_sales")
 
         with pytest.raises(ValueError):
-            BaseAggregatedFeatureGroup.get_aggregation_type("sum_aggr_")
+            AggregatedFeatureGroup.get_aggregation_type("sum_aggr_")
 
     def test_mloda_source_feature(self) -> None:
         """Test extraction of source feature from feature name."""
-        assert BaseAggregatedFeatureGroup.mloda_source_feature("sum_aggr__sales") == "sales"
-        assert BaseAggregatedFeatureGroup.mloda_source_feature("min_aggr__quantity") == "quantity"
-        assert BaseAggregatedFeatureGroup.mloda_source_feature("max_aggr__price") == "price"
-        assert BaseAggregatedFeatureGroup.mloda_source_feature("avg_aggr__discount") == "discount"
+        assert AggregatedFeatureGroup.mloda_source_feature("sum_aggr__sales") == "sales"
+        assert AggregatedFeatureGroup.mloda_source_feature("min_aggr__quantity") == "quantity"
+        assert AggregatedFeatureGroup.mloda_source_feature("max_aggr__price") == "price"
+        assert AggregatedFeatureGroup.mloda_source_feature("avg_aggr__discount") == "discount"
 
         # Test with invalid feature names
         with pytest.raises(ValueError):
-            BaseAggregatedFeatureGroup.mloda_source_feature("invalid_feature_name")
+            AggregatedFeatureGroup.mloda_source_feature("invalid_feature_name")
 
         with pytest.raises(ValueError):
-            BaseAggregatedFeatureGroup.mloda_source_feature("sum_aggr_")
+            AggregatedFeatureGroup.mloda_source_feature("sum_aggr_")
 
         with pytest.raises(ValueError):
-            BaseAggregatedFeatureGroup.mloda_source_feature("_aggr_sales")
+            AggregatedFeatureGroup.mloda_source_feature("_aggr_sales")
 
     def test_supports_aggregation_type(self) -> None:
         """Test _supports_aggregation_type method."""
         # Test with supported aggregation types
-        assert BaseAggregatedFeatureGroup._supports_aggregation_type("sum")
-        assert BaseAggregatedFeatureGroup._supports_aggregation_type("min")
-        assert BaseAggregatedFeatureGroup._supports_aggregation_type("max")
-        assert BaseAggregatedFeatureGroup._supports_aggregation_type("avg")
-        assert BaseAggregatedFeatureGroup._supports_aggregation_type("mean")
-        assert BaseAggregatedFeatureGroup._supports_aggregation_type("count")
-        assert BaseAggregatedFeatureGroup._supports_aggregation_type("std")
-        assert BaseAggregatedFeatureGroup._supports_aggregation_type("var")
-        assert BaseAggregatedFeatureGroup._supports_aggregation_type("median")
+        assert AggregatedFeatureGroup._supports_aggregation_type("sum")
+        assert AggregatedFeatureGroup._supports_aggregation_type("min")
+        assert AggregatedFeatureGroup._supports_aggregation_type("max")
+        assert AggregatedFeatureGroup._supports_aggregation_type("avg")
+        assert AggregatedFeatureGroup._supports_aggregation_type("mean")
+        assert AggregatedFeatureGroup._supports_aggregation_type("count")
+        assert AggregatedFeatureGroup._supports_aggregation_type("std")
+        assert AggregatedFeatureGroup._supports_aggregation_type("var")
+        assert AggregatedFeatureGroup._supports_aggregation_type("median")
 
         # Test with unsupported aggregation type
-        assert not BaseAggregatedFeatureGroup._supports_aggregation_type("unsupported")
+        assert not AggregatedFeatureGroup._supports_aggregation_type("unsupported")
 
     def test_match_feature_group_criteria(self) -> None:
         """Test match_feature_group_criteria method."""
         options = Options()
 
         # Test with valid feature names
-        assert BaseAggregatedFeatureGroup.match_feature_group_criteria("sum_aggr__sales", options)
-        assert BaseAggregatedFeatureGroup.match_feature_group_criteria("min_aggr__quantity", options)
-        assert BaseAggregatedFeatureGroup.match_feature_group_criteria("max_aggr__price", options)
-        assert BaseAggregatedFeatureGroup.match_feature_group_criteria("avg_aggr__discount", options)
+        assert AggregatedFeatureGroup.match_feature_group_criteria("sum_aggr__sales", options)
+        assert AggregatedFeatureGroup.match_feature_group_criteria("min_aggr__quantity", options)
+        assert AggregatedFeatureGroup.match_feature_group_criteria("max_aggr__price", options)
+        assert AggregatedFeatureGroup.match_feature_group_criteria("avg_aggr__discount", options)
 
         # Test with FeatureName objects
-        assert BaseAggregatedFeatureGroup.match_feature_group_criteria(FeatureName("sum_aggr__sales"), options)
-        assert BaseAggregatedFeatureGroup.match_feature_group_criteria(FeatureName("min_aggr__quantity"), options)
+        assert AggregatedFeatureGroup.match_feature_group_criteria(FeatureName("sum_aggr__sales"), options)
+        assert AggregatedFeatureGroup.match_feature_group_criteria(FeatureName("min_aggr__quantity"), options)
 
         # Test with invalid feature names
-        assert not BaseAggregatedFeatureGroup.match_feature_group_criteria("invalid_feature_name", options)
-        assert not BaseAggregatedFeatureGroup.match_feature_group_criteria("sum_invalid_sales", options)
-        assert not BaseAggregatedFeatureGroup.match_feature_group_criteria("invalid_aggr_sales", options)
+        assert not AggregatedFeatureGroup.match_feature_group_criteria("invalid_feature_name", options)
+        assert not AggregatedFeatureGroup.match_feature_group_criteria("sum_invalid_sales", options)
+        assert not AggregatedFeatureGroup.match_feature_group_criteria("invalid_aggr_sales", options)
 
     def test_input_features(self) -> None:
         """Test input_features method."""
         options = Options()
-        feature_group = BaseAggregatedFeatureGroup()
+        feature_group = AggregatedFeatureGroup()
 
         # Test with valid feature names
         input_features = feature_group.input_features(options, FeatureName("sum_aggr__sales"))
@@ -248,9 +248,9 @@ class TestPandasAggregatedFeatureGroup:
     def test_calculate_feature_invalid_aggregation(self, sample_dataframe: pd.DataFrame) -> None:
         """Test calculate_feature method with invalid aggregation type."""
         # Temporarily modify the AGGREGATION_TYPES to simulate an invalid aggregation type
-        original_types = BaseAggregatedFeatureGroup.AGGREGATION_TYPES.copy()
+        original_types = AggregatedFeatureGroup.AGGREGATION_TYPES.copy()
         try:
-            BaseAggregatedFeatureGroup.AGGREGATION_TYPES = {"sum": "Sum of values"}
+            AggregatedFeatureGroup.AGGREGATION_TYPES = {"sum": "Sum of values"}
 
             feature_set = FeatureSet()
             feature_set.add(Feature("min_aggr__sales"))
@@ -259,7 +259,7 @@ class TestPandasAggregatedFeatureGroup:
                 PandasAggregatedFeatureGroup.calculate_feature(sample_dataframe, feature_set)
         finally:
             # Restore the original AGGREGATION_TYPES
-            BaseAggregatedFeatureGroup.AGGREGATION_TYPES = original_types
+            AggregatedFeatureGroup.AGGREGATION_TYPES = original_types
 
 
 class TestAggPandasIntegration:

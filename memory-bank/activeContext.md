@@ -11,7 +11,7 @@ Initializing the memory bank for the mloda project.
 *   Added description and versioning capabilities to AbstractFeatureGroup:
     * Created `FeatureGroupVersion` class to handle versioning logic
 *   Created a dedicated `feature_groups.md` file in the memory bank to document Feature Groups
-*   Implemented BaseAggregatedFeatureGroup pattern:
+*   Implemented AggregatedFeatureGroup pattern:
     * Created a modular folder structure with separate files for base and implementation classes
     * Implemented feature name validation with proper error handling
     * Added Pandas implementation with support for common aggregation operations

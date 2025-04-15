@@ -13,10 +13,10 @@ from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import BaseAggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 
 
-class PyArrowAggregatedFeatureGroup(BaseAggregatedFeatureGroup):
+class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
     """
     PyArrow implementation of aggregated feature group.
 

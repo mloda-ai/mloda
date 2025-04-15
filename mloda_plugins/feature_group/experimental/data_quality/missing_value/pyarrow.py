@@ -13,10 +13,10 @@ from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
-from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import BaseMissingValueFeatureGroup
+from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 
 
-class PyArrowMissingValueFeatureGroup(BaseMissingValueFeatureGroup):
+class PyArrowMissingValueFeatureGroup(MissingValueFeatureGroup):
     @classmethod
     def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
         return {PyarrowTable}

@@ -8,7 +8,7 @@ from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import BaseAggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregatedFeatureGroup
 
 from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.test_aggregated_utils import (
@@ -161,9 +161,9 @@ class TestPyArrowAggregatedFeatureGroup:
     def test_calculate_feature_invalid_aggregation(self, sample_table: pa.Table) -> None:
         """Test calculate_feature method with invalid aggregation type."""
         # Temporarily modify the AGGREGATION_TYPES to simulate an invalid aggregation type
-        original_types = BaseAggregatedFeatureGroup.AGGREGATION_TYPES.copy()
+        original_types = AggregatedFeatureGroup.AGGREGATION_TYPES.copy()
         try:
-            BaseAggregatedFeatureGroup.AGGREGATION_TYPES = {"sum": "Sum of values"}
+            AggregatedFeatureGroup.AGGREGATION_TYPES = {"sum": "Sum of values"}
 
             feature_set = FeatureSet()
             feature_set.add(Feature("min_aggr__sales"))
@@ -172,7 +172,7 @@ class TestPyArrowAggregatedFeatureGroup:
                 PyArrowAggregatedFeatureGroup.calculate_feature(sample_table, feature_set)
         finally:
             # Restore the original AGGREGATION_TYPES
-            BaseAggregatedFeatureGroup.AGGREGATION_TYPES = original_types
+            AggregatedFeatureGroup.AGGREGATION_TYPES = original_types
 
 
 class TestAggPyArrowIntegration:

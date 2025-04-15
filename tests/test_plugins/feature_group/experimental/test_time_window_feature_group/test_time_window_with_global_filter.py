@@ -181,7 +181,7 @@ class TestTimeWindowWithGlobalFilter:
         Test time window features with a custom time filter feature name.
 
         This test verifies that:
-        1. The BaseTimeWindowFeatureGroup can work with a custom time filter feature name
+        1. The TimeWindowFeatureGroup can work with a custom time filter feature name
         2. The GlobalFilter can be configured to use the same custom time filter feature name
         3. The integration works correctly with the custom time filter feature name
         """

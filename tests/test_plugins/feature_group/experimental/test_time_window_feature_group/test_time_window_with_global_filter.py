@@ -159,12 +159,22 @@ class TestTimeWindowWithGlobalFilter:
         # Get the window feature values
         avg_temp_values = window_features_df["avg_2_day_window_temperature"].tolist()
 
-        assert avg_temp_values == [25.0, 23.0, 19.5, 19.0, 21.0, 23.0], (
-            f"Unexpected avg_2_day_window_temperature values: {avg_temp_values}"
-        )
-        assert window_features_df["max_3_day_window_humidity"].tolist() == [55.0, 65.0, 70.0, 75.0, 75.0, 75.0], (
-            f"Unexpected max_3_day_window_humidity values: {window_features_df['max_3_day_window_humidity'].tolist()}"
-        )
+        assert avg_temp_values == [
+            25.0,
+            23.0,
+            19.5,
+            19.0,
+            21.0,
+            23.0,
+        ], f"Unexpected avg_2_day_window_temperature values: {avg_temp_values}"
+        assert window_features_df["max_3_day_window_humidity"].tolist() == [
+            55.0,
+            65.0,
+            70.0,
+            75.0,
+            75.0,
+            75.0,
+        ], f"Unexpected max_3_day_window_humidity values: {window_features_df['max_3_day_window_humidity'].tolist()}"
 
     def test_time_window_with_custom_time_filter_name(self) -> None:
         """

@@ -1,19 +1,20 @@
 import pandas as pd
 import pytest
-from typing import Any, Optional
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import BaseAggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
+
+from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.test_aggregated_utils import (
+    PandasAggregatedTestDataCreator,
+    validate_aggregated_features,
+)
 
 
 @pytest.fixture
@@ -267,25 +268,10 @@ class TestAggPandasIntegration:
     def test_aggregation_with_data_creator(self) -> None:
         """Test aggregation features with mlodaAPI using DataCreator."""
 
-        # Create a feature group that uses DataCreator to provide test data
-        class TestDataCreator(AbstractFeatureGroup):
-            @classmethod
-            def input_data(cls) -> Optional[BaseInputData]:
-                return DataCreator({"sales", "quantity", "price", "discount", "customer_rating"})
-
-            @classmethod
-            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-                # Return the test data
-                return {
-                    "sales": [100, 200, 300, 400, 500],
-                    "quantity": [10, 20, 30, 40, 50],
-                    "price": [10.0, 9.5, 9.0, 8.5, 8.0],
-                    "discount": [0.1, 0.2, 0.15, 0.25, 0.1],
-                    "customer_rating": [4, 5, 3, 4, 5],
-                }
-
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups({TestDataCreator, PandasAggregatedFeatureGroup})
+        plugin_collector = PlugInCollector.enabled_feature_groups(
+            {PandasAggregatedTestDataCreator, PandasAggregatedFeatureGroup}
+        )
 
         # Run the API with multiple aggregation features
         result = mlodaAPI.run_all(
@@ -300,27 +286,4 @@ class TestAggPandasIntegration:
             plugin_collector=plugin_collector,
         )
 
-        # Verify the results
-        assert len(result) == 2  # Two DataFrames: one for source data, one for aggregated features
-
-        # Find the DataFrame with the aggregated features
-        agg_df = None
-        for df in result:
-            if "sum_aggr_sales" in df.columns:
-                agg_df = df
-                break
-
-        assert agg_df is not None, "DataFrame with aggregated features not found"
-
-        # Verify the aggregated features
-        assert "sum_aggr_sales" in agg_df.columns
-        assert agg_df["sum_aggr_sales"].iloc[0] == 1500  # Sum of [100, 200, 300, 400, 500]
-
-        assert "avg_aggr_price" in agg_df.columns
-        assert agg_df["avg_aggr_price"].iloc[0] == 9.0  # Average of [10.0, 9.5, 9.0, 8.5, 8.0]
-
-        assert "min_aggr_discount" in agg_df.columns
-        assert agg_df["min_aggr_discount"].iloc[0] == 0.1  # Min of [0.1, 0.2, 0.15, 0.25, 0.1]
-
-        assert "max_aggr_customer_rating" in agg_df.columns
-        assert agg_df["max_aggr_customer_rating"].iloc[0] == 5  # Max of [4, 5, 3, 4, 5]
+        validate_aggregated_features(result)

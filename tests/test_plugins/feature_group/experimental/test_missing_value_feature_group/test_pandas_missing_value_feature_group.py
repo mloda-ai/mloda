@@ -1,19 +1,20 @@
 import pandas as pd
 import pytest
-from typing import List, Set, Type, Union
+from typing import List
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 from mloda_core.api.request import mlodaAPI
 
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import PandasMissingValueFeatureGroup
+
+from tests.test_plugins.feature_group.experimental.test_missing_value_feature_group.test_missing_value_utils import (
+    PandasMissingValueTestDataCreator,
+    validate_missing_value_features,
+)
 
 
 @pytest.fixture
@@ -275,31 +276,10 @@ class TestMissingValuePandasIntegration:
     def test_imputation_with_data_creator(self) -> None:
         """Test imputation features with mlodaAPI using DataCreator."""
 
-        # Create a feature group that uses DataCreator to provide test data
-        class TestDataCreator(AbstractFeatureGroup):
-            @classmethod
-            def input_data(cls) -> BaseInputData:
-                return DataCreator({"income", "age", "category", "temperature", "group"})
-
-            @classmethod
-            def calculate_feature(cls, data: pd.DataFrame, features: FeatureSet) -> pd.DataFrame:
-                # Return the test data
-                return pd.DataFrame(
-                    {
-                        "income": [50000, None, 75000, None, 60000],
-                        "age": [30, 25, None, 45, None],
-                        "category": ["A", None, "B", "A", None],
-                        "temperature": [72.5, 68.3, None, None, 70.1],
-                        "group": ["X", "Y", "X", "Y", "X"],
-                    }
-                )
-
-            @classmethod
-            def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
-                return {PandasDataframe}
-
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups({TestDataCreator, PandasMissingValueFeatureGroup})
+        plugin_collector = PlugInCollector.enabled_feature_groups(
+            {PandasMissingValueTestDataCreator, PandasMissingValueFeatureGroup}
+        )
 
         # Create options with constant value for constant imputation
         options = Options({"constant_value": "Unknown"})
@@ -326,34 +306,5 @@ class TestMissingValuePandasIntegration:
             plugin_collector=plugin_collector,
         )
 
-        # Verify the results
-        assert len(result) == 2  # Two DataFrames: one for source data, one for imputed features
-
-        # Find the DataFrame with the imputed features
-        imputed_df = None
-        for df in result:
-            if "mean_imputed_income" in df.columns:
-                imputed_df = df
-                break
-
-        assert imputed_df is not None, "DataFrame with imputed features not found"
-
-        # Verify the imputed features
-        assert "mean_imputed_income" in imputed_df.columns
-        assert abs(imputed_df["mean_imputed_income"].iloc[1] - 61666.67) < 0.1
-        assert abs(imputed_df["mean_imputed_income"].iloc[3] - 61666.67) < 0.1
-
-        assert "median_imputed_age" in imputed_df.columns
-        assert imputed_df["median_imputed_age"].iloc[2] == 30
-        assert imputed_df["median_imputed_age"].iloc[4] == 30
-
-        assert "mode_imputed_category" in imputed_df.columns
-        assert imputed_df["mode_imputed_category"].iloc[1] == "A"
-        assert imputed_df["mode_imputed_category"].iloc[4] == "A"
-
-        assert "constant_imputed_category" in imputed_df.columns
-        assert imputed_df["constant_imputed_category"].iloc[1] == "Unknown"
-        assert imputed_df["constant_imputed_category"].iloc[4] == "Unknown"
-
-        assert "ffill_imputed_temperature" in imputed_df.columns
-        # Forward fill depends on the order, so we can't assert exact values
+        # Validate the missing value features
+        validate_missing_value_features(result)

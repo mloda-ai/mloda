@@ -10,7 +10,7 @@ from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
 
-from tests.test_plugins.integration_plugins.test_data_creator import TestDataCreator
+from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
 
 # List of missing value features to test
@@ -23,7 +23,7 @@ MISSING_VALUE_FEATURES: List[Feature | str] = [
 ]
 
 
-class MissingValueTestDataCreator(TestDataCreator):
+class MissingValueTestDataCreator(ATestDataCreator):
     """Base class for missing value test data creators."""
 
     @classmethod

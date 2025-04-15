@@ -80,16 +80,16 @@ Custom Feature Groups can be created by inheriting from `AbstractFeatureGroup` a
 When implementing feature groups that perform time-based window operations:
 
 **Naming Convention**:
-- Use `{window_function}_{window_size}_{time_unit}_window_{mloda_source_feature}` format
-- Example: `avg_3_day_window_temperature`, `max_5_day_window_humidity`
+- Use `{window_function}_{window_size}_{time_unit}_window__{mloda_source_feature}` format (note the double underscore)
+- Example: `avg_3_day_window__temperature`, `max_5_day_window__humidity`
 
 ### Missing Value Feature Group Pattern
 
 When implementing feature groups that handle missing values in data:
 
 **Naming Convention**:
-- Use `{imputation_method}_imputed_{mloda_source_feature}` format
-- Examples: `mean_imputed_income`, `median_imputed_age`, `constant_imputed_category`
+- Use `{imputation_method}_imputed__{mloda_source_feature}` format (note the double underscore)
+- Examples: `mean_imputed__income`, `median_imputed__age`, `constant_imputed__category`
 
 ### Aggregated Feature Group Pattern
 
@@ -101,15 +101,40 @@ When implementing feature groups that perform aggregation operations:
    - Organize in a dedicated folder with separate files
 
 2. **Naming Convention**:
-   - Use `{aggregation_type}_aggr_{mloda_source_feature}` format
-   - Example: `sum_aggr_sales`, `avg_aggr_price`
+   - Use `{aggregation_type}_aggr__{mloda_source_feature}` format (note the double underscore)
+   - Example: `sum_aggr__sales`, `avg_aggr__price`
 
 3. **Implementation Tips**:
    - Handle edge cases in feature name validation (empty prefix/suffix)
    - Use DataCreator with a set of feature names, not a dictionary
    - For testing, expect multiple DataFrames in results (one per feature group)
 
+### Combined Feature Group Pattern
+
+Feature groups can be composed to create complex features by chaining multiple transformations:
+
+1. **Composability**:
+   - Feature groups can use the output of other feature groups as their input
+   - This allows for building complex features through a series of simpler transformations
+
+2. **Naming Convention**:
+   - Chain the naming patterns of the feature groups being composed
+   - Example: `max_aggr__sum_7_day_window__mean_imputed__price`
+     - First imputes missing values in price using mean imputation: `mean_imputed__price`
+     - Then applies a 7-day time window sum: `sum_7_day_window__mean_imputed__price`
+     - Finally applies a max aggregation: `max_aggr__sum_7_day_window__mean_imputed__price`
+
+3. **Implementation Tips**:
+   - Ensure each feature group in the chain correctly parses its portion of the feature name
+   - Test the feature chain with different data scenarios to verify correct behavior
+   - Use integration tests to validate the entire feature chain
+
 ## Changelog
+
+### 2025-04-15: Updated Feature Naming Conventions
+- Added double underscore before source feature names in all feature groups
+- Updated naming patterns to `{operation}__{mloda_source_feature}` format
+- Created integration test for combined feature groups demonstrating composability
 
 ### 2025-04-15: Standardized Source Feature Terminology
 - Renamed `get_source_feature` method to `mloda_source_feature` in all feature groups

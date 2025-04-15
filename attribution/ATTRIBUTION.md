@@ -37,11 +37,11 @@
 | fqdn                                   | 1.5.1           | Mozilla Public License 2.0 (MPL 2.0)                    |
 | google-ai-generativelanguage           | 0.6.15          | Apache Software License                                 |
 | google-api-core                        | 2.24.2          | Apache Software License                                 |
-| google-api-python-client               | 2.166.0         | Apache Software License                                 |
-| google-auth                            | 2.38.0          | Apache Software License                                 |
+| google-api-python-client               | 2.167.0         | Apache Software License                                 |
+| google-auth                            | 2.39.0          | Apache Software License                                 |
 | google-auth-httplib2                   | 0.2.0           | Apache Software License                                 |
 | google-generativeai                    | 0.8.4           | Apache Software License                                 |
-| googleapis-common-protos               | 1.69.2          | Apache Software License                                 |
+| googleapis-common-protos               | 1.70.0          | Apache Software License                                 |
 | grpcio                                 | 1.72.0rc1       | Apache Software License                                 |
 | grpcio-status                          | 1.71.0          | Apache Software License                                 |
 | h11                                    | 0.14.0          | MIT License                                             |
@@ -83,13 +83,13 @@
 | notebook                               | 7.4.0           | BSD License                                             |
 | notebook_shim                          | 0.2.4           | BSD License                                             |
 | numpy                                  | 2.2.4           | BSD License                                             |
-| opentelemetry-api                      | 1.32.0          | Apache Software License                                 |
-| opentelemetry-instrumentation          | 0.53b0          | Apache Software License                                 |
-| opentelemetry-instrumentation-logging  | 0.53b0          | Apache Software License                                 |
-| opentelemetry-instrumentation-requests | 0.53b0          | Apache Software License                                 |
-| opentelemetry-sdk                      | 1.32.0          | Apache Software License                                 |
-| opentelemetry-semantic-conventions     | 0.53b0          | Apache Software License                                 |
-| opentelemetry-util-http                | 0.53b0          | Apache Software License                                 |
+| opentelemetry-api                      | 1.32.1          | Apache Software License                                 |
+| opentelemetry-instrumentation          | 0.53b1          | Apache Software License                                 |
+| opentelemetry-instrumentation-logging  | 0.53b1          | Apache Software License                                 |
+| opentelemetry-instrumentation-requests | 0.53b1          | Apache Software License                                 |
+| opentelemetry-sdk                      | 1.32.1          | Apache Software License                                 |
+| opentelemetry-semantic-conventions     | 0.53b1          | Apache Software License                                 |
+| opentelemetry-util-http                | 0.53b1          | Apache Software License                                 |
 | overrides                              | 7.7.0           | Apache License, Version 2.0                             |
 | packaging                              | 24.2            | Apache Software License; BSD License                    |
 | pandas                                 | 2.2.3           | BSD License                                             |
@@ -101,7 +101,7 @@
 | platformdirs                           | 4.3.7           | MIT License                                             |
 | pluggy                                 | 1.5.0           | MIT License                                             |
 | prometheus_client                      | 0.21.1          | Apache Software License                                 |
-| prompt_toolkit                         | 3.0.50          | BSD License                                             |
+| prompt_toolkit                         | 3.0.51          | BSD License                                             |
 | proto-plus                             | 1.26.1          | Apache Software License                                 |
 | protobuf                               | 5.29.4          | 3-Clause BSD License                                    |
 | psutil                                 | 7.0.0           | BSD License                                             |

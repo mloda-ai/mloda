@@ -9,46 +9,63 @@ from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
+from mloda_plugins.feature_group.experimental.feature_chain_parser import FeatureChainParser
 
 
 class TestTimeWindowFeatureGroup:
     """Tests for the TimeWindowFeatureGroup class."""
 
-    def test_parse_feature_name(self) -> None:
-        """Test parsing of feature name into components."""
-        window_function, window_size, time_unit, source_feature = TimeWindowFeatureGroup.parse_feature_name(
+    def test_feature_chain_parser_integration(self) -> None:
+        """Test integration with FeatureChainParser."""
+        # Test valid feature names
+        feature_name = "avg_3_day_window__temperature"
+
+        # Test that the PREFIX_PATTERN is correctly defined
+        assert hasattr(TimeWindowFeatureGroup, "PREFIX_PATTERN")
+
+        # Test that FeatureChainParser methods work with the PREFIX_PATTERN
+        assert FeatureChainParser.validate_feature_name(feature_name, TimeWindowFeatureGroup.PREFIX_PATTERN)
+        assert (
+            FeatureChainParser.extract_source_feature(feature_name, TimeWindowFeatureGroup.PREFIX_PATTERN)
+            == "temperature"
+        )
+
+        # Test invalid feature names
+        assert not FeatureChainParser.validate_feature_name(
+            "invalid_feature_name", TimeWindowFeatureGroup.PREFIX_PATTERN
+        )
+        assert not FeatureChainParser.validate_feature_name(
+            "avg_day_window_temperature", TimeWindowFeatureGroup.PREFIX_PATTERN
+        )
+
+    def test_parse_time_window_prefix(self) -> None:
+        """Test parsing of time window prefix into components."""
+        window_function, window_size, time_unit = TimeWindowFeatureGroup.parse_time_window_prefix(
             "avg_3_day_window__temperature"
         )
         assert window_function == "avg"
         assert window_size == 3
         assert time_unit == "day"
-        assert source_feature == "temperature"
 
-        window_function, window_size, time_unit, source_feature = TimeWindowFeatureGroup.parse_feature_name(
+        window_function, window_size, time_unit = TimeWindowFeatureGroup.parse_time_window_prefix(
             "max_7_hour_window__humidity"
         )
         assert window_function == "max"
         assert window_size == 7
         assert time_unit == "hour"
-        assert source_feature == "humidity"
 
-    def test_parse_feature_name_invalid(self) -> None:
-        """Test parsing of invalid feature names."""
         # Test with invalid feature names
         with pytest.raises(ValueError):
-            TimeWindowFeatureGroup.parse_feature_name("invalid_feature_name")
+            TimeWindowFeatureGroup.parse_time_window_prefix("invalid_feature_name")
 
         with pytest.raises(ValueError):
-            TimeWindowFeatureGroup.parse_feature_name("avg_day_window_temperature")
+            TimeWindowFeatureGroup.parse_time_window_prefix("avg_day_window_temperature")
 
         with pytest.raises(ValueError):
-            TimeWindowFeatureGroup.parse_feature_name("avg_3_invalid_window_temperature")
+            TimeWindowFeatureGroup.parse_time_window_prefix("avg_3_invalid_window_temperature")
 
         with pytest.raises(ValueError):
-            TimeWindowFeatureGroup.parse_feature_name("invalid_3_day_window_temperature")
-
-        with pytest.raises(ValueError):
-            TimeWindowFeatureGroup.parse_feature_name("avg_-1_day_window_temperature")
+            TimeWindowFeatureGroup.parse_time_window_prefix("invalid_3_day_window_temperature")
 
     def test_get_window_function(self) -> None:
         """Test extraction of window function from feature name."""

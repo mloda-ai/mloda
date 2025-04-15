@@ -12,7 +12,7 @@ from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.options import Options
 
 
-class BaseAggregatedFeatureGroup(AbstractFeatureGroup):
+class AggregatedFeatureGroup(AbstractFeatureGroup):
     """
     Base class for all aggregated feature groups.
 

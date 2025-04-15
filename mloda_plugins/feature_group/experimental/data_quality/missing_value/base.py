@@ -13,7 +13,7 @@ from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.options import Options
 
 
-class BaseMissingValueFeatureGroup(AbstractFeatureGroup):
+class MissingValueFeatureGroup(AbstractFeatureGroup):
     """
     Base class for all missing value imputation feature groups.
 

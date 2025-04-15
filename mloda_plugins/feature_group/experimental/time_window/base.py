@@ -14,7 +14,7 @@ from mloda_core.abstract_plugins.components.options import Options
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 
-class BaseTimeWindowFeatureGroup(AbstractFeatureGroup):
+class TimeWindowFeatureGroup(AbstractFeatureGroup):
     """
     Base class for all time window feature groups.
 

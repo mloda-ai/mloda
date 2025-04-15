@@ -71,12 +71,12 @@ class TestBaseTimeWindowFeatureGroup:
         assert BaseTimeWindowFeatureGroup.get_time_unit("min_2_minute_window_pressure") == "minute"
         assert BaseTimeWindowFeatureGroup.get_time_unit("sum_4_second_window_wind_speed") == "second"
 
-    def test_get_source_feature(self) -> None:
+    def test_mloda_source_feature(self) -> None:
         """Test extraction of source feature from feature name."""
-        assert BaseTimeWindowFeatureGroup.get_source_feature("avg_3_day_window_temperature") == "temperature"
-        assert BaseTimeWindowFeatureGroup.get_source_feature("max_7_hour_window_humidity") == "humidity"
-        assert BaseTimeWindowFeatureGroup.get_source_feature("min_2_day_window_pressure") == "pressure"
-        assert BaseTimeWindowFeatureGroup.get_source_feature("sum_4_day_window_wind_speed") == "wind_speed"
+        assert BaseTimeWindowFeatureGroup.mloda_source_feature("avg_3_day_window_temperature") == "temperature"
+        assert BaseTimeWindowFeatureGroup.mloda_source_feature("max_7_hour_window_humidity") == "humidity"
+        assert BaseTimeWindowFeatureGroup.mloda_source_feature("min_2_day_window_pressure") == "pressure"
+        assert BaseTimeWindowFeatureGroup.mloda_source_feature("sum_4_day_window_wind_speed") == "wind_speed"
 
     def test_match_feature_group_criteria(self) -> None:
         """Test match_feature_group_criteria method."""

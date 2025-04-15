@@ -25,7 +25,10 @@ class BaseTimeWindowFeatureGroup(AbstractFeatureGroup):
     ## Feature Naming Convention
 
     Time window features follow this naming pattern:
-    `{window_function}_{window_size}_{time_unit}_window_{source_feature}`
+    `{window_function}_{window_size}_{time_unit}_window_{mloda_source_feature}`
+
+    The source feature (mloda_source_feature) is extracted from the feature name and used
+    as input for the time window operation.
 
     Examples:
     - `avg_7_day_window_temperature`: 7-day moving average of temperature
@@ -112,7 +115,7 @@ class BaseTimeWindowFeatureGroup(AbstractFeatureGroup):
     FEATURE_NAME_PATTERN = r"^([\w]+)_(\d+)_([\w]+)_window_([\w]+)$"
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
-        source_feature = self.get_source_feature(feature_name.name)
+        source_feature = self.mloda_source_feature(feature_name.name)
         time_filter_feature = Feature(self.get_time_filter_feature(options))
         return {Feature(source_feature), time_filter_feature}
 
@@ -125,7 +128,7 @@ class BaseTimeWindowFeatureGroup(AbstractFeatureGroup):
             feature_name: The feature name to parse
 
         Returns:
-            A tuple containing (window_function, window_size, time_unit, source_feature)
+            A tuple containing (window_function, window_size, time_unit, mloda_source_feature)
 
         Raises:
             ValueError: If the feature name does not match the expected pattern
@@ -134,7 +137,7 @@ class BaseTimeWindowFeatureGroup(AbstractFeatureGroup):
         if not match:
             raise ValueError(
                 f"Invalid time window feature name format: {feature_name}. "
-                f"Expected format: {{window_function}}_{{window_size}}_{{time_unit}}_window_{{source_feature}}"
+                f"Expected format: {{window_function}}_{{window_size}}_{{time_unit}}_window_{{mloda_source_feature}}"
             )
 
         window_function, window_size_str, time_unit, source_feature = match.groups()
@@ -176,7 +179,7 @@ class BaseTimeWindowFeatureGroup(AbstractFeatureGroup):
         return cls.parse_feature_name(feature_name)[2]
 
     @classmethod
-    def get_source_feature(cls, feature_name: str) -> str:
+    def mloda_source_feature(cls, feature_name: str) -> str:
         """Extract the source feature name from the feature name."""
         return cls.parse_feature_name(feature_name)[3]
 
@@ -205,7 +208,7 @@ class BaseTimeWindowFeatureGroup(AbstractFeatureGroup):
         window_function: str,
         window_size: int,
         time_unit: str,
-        source_feature: str,
+        mloda_source_feature: str,
         time_filter_feature: Optional[str] = None,
     ) -> Any:
         """
@@ -216,7 +219,7 @@ class BaseTimeWindowFeatureGroup(AbstractFeatureGroup):
             window_function: The type of window function to perform
             window_size: The size of the window
             time_unit: The time unit for the window
-            source_feature: The name of the source feature
+            mloda_source_feature: The name of the source feature
             time_filter_feature: The name of the time filter feature to use for time-based operations.
                                 If None, uses the value from get_time_filter_feature().
 

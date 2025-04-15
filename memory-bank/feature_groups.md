@@ -80,7 +80,7 @@ Custom Feature Groups can be created by inheriting from `AbstractFeatureGroup` a
 When implementing feature groups that perform time-based window operations:
 
 **Naming Convention**:
-- Use `{window_function}_{window_size}_{time_unit}_window_{source_feature_name}` format
+- Use `{window_function}_{window_size}_{time_unit}_window_{mloda_source_feature}` format
 - Example: `avg_3_day_window_temperature`, `max_5_day_window_humidity`
 
 ### Missing Value Feature Group Pattern
@@ -88,7 +88,7 @@ When implementing feature groups that perform time-based window operations:
 When implementing feature groups that handle missing values in data:
 
 **Naming Convention**:
-- Use `{imputation_method}_imputed_{source_feature_name}` format
+- Use `{imputation_method}_imputed_{mloda_source_feature}` format
 - Examples: `mean_imputed_income`, `median_imputed_age`, `constant_imputed_category`
 
 ### Aggregated Feature Group Pattern
@@ -101,7 +101,7 @@ When implementing feature groups that perform aggregation operations:
    - Organize in a dedicated folder with separate files
 
 2. **Naming Convention**:
-   - Use `{aggregation_type}_aggr_{source_feature_name}` format
+   - Use `{aggregation_type}_aggr_{mloda_source_feature}` format
    - Example: `sum_aggr_sales`, `avg_aggr_price`
 
 3. **Implementation Tips**:
@@ -110,6 +110,9 @@ When implementing feature groups that perform aggregation operations:
    - For testing, expect multiple DataFrames in results (one per feature group)
 
 ## Changelog
+
+### 2025-04-15: Standardized Source Feature Terminology
+- Renamed `get_source_feature` method to `mloda_source_feature` in all feature groups
 
 ### 2025-04-14: Added Missing Value Imputation Feature Group
 - Created pattern for handling missing values in features

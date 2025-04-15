@@ -49,7 +49,7 @@ def sample_time_table() -> pa.Table:
 def feature_set_avg_window() -> FeatureSet:
     """Create a feature set with an average time window feature."""
     feature_set = FeatureSet()
-    feature_set.add(Feature("avg_3_day_window_temperature"))
+    feature_set.add(Feature("avg_3_day_window__temperature"))
     return feature_set
 
 
@@ -57,10 +57,10 @@ def feature_set_avg_window() -> FeatureSet:
 def feature_set_multiple_windows() -> FeatureSet:
     """Create a feature set with multiple time window features."""
     feature_set = FeatureSet()
-    feature_set.add(Feature("avg_3_day_window_temperature"))
-    feature_set.add(Feature("max_5_day_window_humidity"))
-    feature_set.add(Feature("min_2_day_window_pressure"))
-    feature_set.add(Feature("sum_4_day_window_wind_speed"))
+    feature_set.add(Feature("avg_3_day_window__temperature"))
+    feature_set.add(Feature("max_5_day_window__humidity"))
+    feature_set.add(Feature("min_2_day_window__pressure"))
+    feature_set.add(Feature("sum_4_day_window__wind_speed"))
     return feature_set
 
 

@@ -23,15 +23,15 @@ class BaseMissingValueFeatureGroup(AbstractFeatureGroup):
     ## Feature Naming Convention
 
     Missing value features follow this naming pattern:
-    `{imputation_method}_imputed_{mloda_source_feature}`
+    `{imputation_method}_imputed__{mloda_source_feature}`
 
     The source feature (mloda_source_feature) is extracted from the feature name and used
-    as input for the imputation operation.
+    as input for the imputation operation. Note the double underscore before the source feature.
 
     Examples:
-    - `mean_imputed_income`: Impute missing values in income with the mean
-    - `median_imputed_age`: Impute missing values in age with the median
-    - `constant_imputed_category`: Impute missing values in category with a constant value
+    - `mean_imputed__income`: Impute missing values in income with the mean
+    - `median_imputed__age`: Impute missing values in age with the median
+    - `constant_imputed__category`: Impute missing values in category with a constant value
 
     ## Supported Imputation Methods
 
@@ -57,7 +57,7 @@ class BaseMissingValueFeatureGroup(AbstractFeatureGroup):
         "bfill": "Backward fill (use the next valid value)",
     }
 
-    FEATURE_NAME_PATTERN = r"^([\w]+)_imputed_([\w]+)$"
+    FEATURE_NAME_PATTERN = r"^([\w]+)_imputed__([\w]+)$"
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         """Extract source feature from the imputed feature name."""
@@ -82,7 +82,7 @@ class BaseMissingValueFeatureGroup(AbstractFeatureGroup):
         if not match:
             raise ValueError(
                 f"Invalid missing value feature name format: {feature_name}. "
-                f"Expected format: {{imputation_method}}_imputed_{{mloda_source_feature}}"
+                f"Expected format: {{imputation_method}}_imputed__{{mloda_source_feature}}"
             )
 
         imputation_method, mloda_source_feature = match.groups()

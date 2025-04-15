@@ -13,12 +13,12 @@ class TestBaseMissingValueFeatureGroup:
     def test_parse_feature_name(self) -> None:
         """Test parsing of feature name into components."""
         # Test valid feature names
-        assert BaseMissingValueFeatureGroup.parse_feature_name("mean_imputed_income") == ("mean", "income")
-        assert BaseMissingValueFeatureGroup.parse_feature_name("median_imputed_age") == ("median", "age")
-        assert BaseMissingValueFeatureGroup.parse_feature_name("mode_imputed_category") == ("mode", "category")
-        assert BaseMissingValueFeatureGroup.parse_feature_name("constant_imputed_status") == ("constant", "status")
-        assert BaseMissingValueFeatureGroup.parse_feature_name("ffill_imputed_temperature") == ("ffill", "temperature")
-        assert BaseMissingValueFeatureGroup.parse_feature_name("bfill_imputed_humidity") == ("bfill", "humidity")
+        assert BaseMissingValueFeatureGroup.parse_feature_name("mean_imputed__income") == ("mean", "income")
+        assert BaseMissingValueFeatureGroup.parse_feature_name("median_imputed__age") == ("median", "age")
+        assert BaseMissingValueFeatureGroup.parse_feature_name("mode_imputed__category") == ("mode", "category")
+        assert BaseMissingValueFeatureGroup.parse_feature_name("constant_imputed__status") == ("constant", "status")
+        assert BaseMissingValueFeatureGroup.parse_feature_name("ffill_imputed__temperature") == ("ffill", "temperature")
+        assert BaseMissingValueFeatureGroup.parse_feature_name("bfill_imputed__humidity") == ("bfill", "humidity")
 
         # Test invalid feature names
         with pytest.raises(ValueError):
@@ -32,12 +32,12 @@ class TestBaseMissingValueFeatureGroup:
 
     def test_get_imputation_method(self) -> None:
         """Test extraction of imputation method from feature name."""
-        assert BaseMissingValueFeatureGroup.get_imputation_method("mean_imputed_income") == "mean"
-        assert BaseMissingValueFeatureGroup.get_imputation_method("median_imputed_age") == "median"
-        assert BaseMissingValueFeatureGroup.get_imputation_method("mode_imputed_category") == "mode"
-        assert BaseMissingValueFeatureGroup.get_imputation_method("constant_imputed_status") == "constant"
-        assert BaseMissingValueFeatureGroup.get_imputation_method("ffill_imputed_temperature") == "ffill"
-        assert BaseMissingValueFeatureGroup.get_imputation_method("bfill_imputed_humidity") == "bfill"
+        assert BaseMissingValueFeatureGroup.get_imputation_method("mean_imputed__income") == "mean"
+        assert BaseMissingValueFeatureGroup.get_imputation_method("median_imputed__age") == "median"
+        assert BaseMissingValueFeatureGroup.get_imputation_method("mode_imputed__category") == "mode"
+        assert BaseMissingValueFeatureGroup.get_imputation_method("constant_imputed__status") == "constant"
+        assert BaseMissingValueFeatureGroup.get_imputation_method("ffill_imputed__temperature") == "ffill"
+        assert BaseMissingValueFeatureGroup.get_imputation_method("bfill_imputed__humidity") == "bfill"
 
         # Test with invalid feature names
         with pytest.raises(ValueError):
@@ -45,12 +45,12 @@ class TestBaseMissingValueFeatureGroup:
 
     def test_mloda_source_feature(self) -> None:
         """Test extraction of source feature from feature name."""
-        assert BaseMissingValueFeatureGroup.mloda_source_feature("mean_imputed_income") == "income"
-        assert BaseMissingValueFeatureGroup.mloda_source_feature("median_imputed_age") == "age"
-        assert BaseMissingValueFeatureGroup.mloda_source_feature("mode_imputed_category") == "category"
-        assert BaseMissingValueFeatureGroup.mloda_source_feature("constant_imputed_status") == "status"
-        assert BaseMissingValueFeatureGroup.mloda_source_feature("ffill_imputed_temperature") == "temperature"
-        assert BaseMissingValueFeatureGroup.mloda_source_feature("bfill_imputed_humidity") == "humidity"
+        assert BaseMissingValueFeatureGroup.mloda_source_feature("mean_imputed__income") == "income"
+        assert BaseMissingValueFeatureGroup.mloda_source_feature("median_imputed__age") == "age"
+        assert BaseMissingValueFeatureGroup.mloda_source_feature("mode_imputed__category") == "category"
+        assert BaseMissingValueFeatureGroup.mloda_source_feature("constant_imputed__status") == "status"
+        assert BaseMissingValueFeatureGroup.mloda_source_feature("ffill_imputed__temperature") == "temperature"
+        assert BaseMissingValueFeatureGroup.mloda_source_feature("bfill_imputed__humidity") == "humidity"
 
         # Test with invalid feature names
         with pytest.raises(ValueError):
@@ -61,16 +61,16 @@ class TestBaseMissingValueFeatureGroup:
         options = Options()
 
         # Test with valid feature names
-        assert BaseMissingValueFeatureGroup.match_feature_group_criteria("mean_imputed_income", options)
-        assert BaseMissingValueFeatureGroup.match_feature_group_criteria("median_imputed_age", options)
-        assert BaseMissingValueFeatureGroup.match_feature_group_criteria("mode_imputed_category", options)
-        assert BaseMissingValueFeatureGroup.match_feature_group_criteria("constant_imputed_status", options)
-        assert BaseMissingValueFeatureGroup.match_feature_group_criteria("ffill_imputed_temperature", options)
-        assert BaseMissingValueFeatureGroup.match_feature_group_criteria("bfill_imputed_humidity", options)
+        assert BaseMissingValueFeatureGroup.match_feature_group_criteria("mean_imputed__income", options)
+        assert BaseMissingValueFeatureGroup.match_feature_group_criteria("median_imputed__age", options)
+        assert BaseMissingValueFeatureGroup.match_feature_group_criteria("mode_imputed__category", options)
+        assert BaseMissingValueFeatureGroup.match_feature_group_criteria("constant_imputed__status", options)
+        assert BaseMissingValueFeatureGroup.match_feature_group_criteria("ffill_imputed__temperature", options)
+        assert BaseMissingValueFeatureGroup.match_feature_group_criteria("bfill_imputed__humidity", options)
 
         # Test with FeatureName objects
-        assert BaseMissingValueFeatureGroup.match_feature_group_criteria(FeatureName("mean_imputed_income"), options)
-        assert BaseMissingValueFeatureGroup.match_feature_group_criteria(FeatureName("median_imputed_age"), options)
+        assert BaseMissingValueFeatureGroup.match_feature_group_criteria(FeatureName("mean_imputed__income"), options)
+        assert BaseMissingValueFeatureGroup.match_feature_group_criteria(FeatureName("median_imputed__age"), options)
 
         # Test with invalid feature names
         assert not BaseMissingValueFeatureGroup.match_feature_group_criteria("invalid_feature_name", options)
@@ -83,20 +83,20 @@ class TestBaseMissingValueFeatureGroup:
         feature_group = BaseMissingValueFeatureGroup()
 
         # Test with valid feature names
-        input_features = feature_group.input_features(options, FeatureName("mean_imputed_income"))
+        input_features = feature_group.input_features(options, FeatureName("mean_imputed__income"))
         assert input_features == {Feature("income")}
 
-        input_features = feature_group.input_features(options, FeatureName("median_imputed_age"))
+        input_features = feature_group.input_features(options, FeatureName("median_imputed__age"))
         assert input_features == {Feature("age")}
 
-        input_features = feature_group.input_features(options, FeatureName("mode_imputed_category"))
+        input_features = feature_group.input_features(options, FeatureName("mode_imputed__category"))
         assert input_features == {Feature("category")}
 
-        input_features = feature_group.input_features(options, FeatureName("constant_imputed_status"))
+        input_features = feature_group.input_features(options, FeatureName("constant_imputed__status"))
         assert input_features == {Feature("status")}
 
-        input_features = feature_group.input_features(options, FeatureName("ffill_imputed_temperature"))
+        input_features = feature_group.input_features(options, FeatureName("ffill_imputed__temperature"))
         assert input_features == {Feature("temperature")}
 
-        input_features = feature_group.input_features(options, FeatureName("bfill_imputed_humidity"))
+        input_features = feature_group.input_features(options, FeatureName("bfill_imputed__humidity"))
         assert input_features == {Feature("humidity")}

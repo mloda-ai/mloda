@@ -43,18 +43,18 @@ class TestBaseMissingValueFeatureGroup:
         with pytest.raises(ValueError):
             BaseMissingValueFeatureGroup.get_imputation_method("invalid_feature_name")
 
-    def test_get_source_feature(self) -> None:
+    def test_mloda_source_feature(self) -> None:
         """Test extraction of source feature from feature name."""
-        assert BaseMissingValueFeatureGroup.get_source_feature("mean_imputed_income") == "income"
-        assert BaseMissingValueFeatureGroup.get_source_feature("median_imputed_age") == "age"
-        assert BaseMissingValueFeatureGroup.get_source_feature("mode_imputed_category") == "category"
-        assert BaseMissingValueFeatureGroup.get_source_feature("constant_imputed_status") == "status"
-        assert BaseMissingValueFeatureGroup.get_source_feature("ffill_imputed_temperature") == "temperature"
-        assert BaseMissingValueFeatureGroup.get_source_feature("bfill_imputed_humidity") == "humidity"
+        assert BaseMissingValueFeatureGroup.mloda_source_feature("mean_imputed_income") == "income"
+        assert BaseMissingValueFeatureGroup.mloda_source_feature("median_imputed_age") == "age"
+        assert BaseMissingValueFeatureGroup.mloda_source_feature("mode_imputed_category") == "category"
+        assert BaseMissingValueFeatureGroup.mloda_source_feature("constant_imputed_status") == "status"
+        assert BaseMissingValueFeatureGroup.mloda_source_feature("ffill_imputed_temperature") == "temperature"
+        assert BaseMissingValueFeatureGroup.mloda_source_feature("bfill_imputed_humidity") == "humidity"
 
         # Test with invalid feature names
         with pytest.raises(ValueError):
-            BaseMissingValueFeatureGroup.get_source_feature("invalid_feature_name")
+            BaseMissingValueFeatureGroup.mloda_source_feature("invalid_feature_name")
 
     def test_match_feature_group_criteria(self) -> None:
         """Test match_feature_group_criteria method."""

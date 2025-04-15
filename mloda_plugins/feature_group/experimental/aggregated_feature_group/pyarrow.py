@@ -41,7 +41,7 @@ class PyArrowAggregatedFeatureGroup(BaseAggregatedFeatureGroup):
         # Process each requested feature
         for feature_name in features.get_all_names():
             aggregation_type = cls.get_aggregation_type(feature_name)
-            source_feature = cls.get_source_feature(feature_name)
+            source_feature = cls.mloda_source_feature(feature_name)
 
             # Check if source feature exists in the table
             if source_feature not in data.schema.names:
@@ -64,7 +64,7 @@ class PyArrowAggregatedFeatureGroup(BaseAggregatedFeatureGroup):
         return data
 
     @classmethod
-    def _perform_aggregation(cls, data: Any, aggregation_type: str, source_feature: str) -> Any:
+    def _perform_aggregation(cls, data: Any, aggregation_type: str, mloda_source_feature: str) -> Any:
         """
         Perform the aggregation using PyArrow compute functions.
 
@@ -77,7 +77,7 @@ class PyArrowAggregatedFeatureGroup(BaseAggregatedFeatureGroup):
             The result of the aggregation
         """
         # Get the column to aggregate
-        column = data.column(source_feature)
+        column = data.column(mloda_source_feature)
 
         if aggregation_type == "sum":
             return pc.sum(column).as_py()

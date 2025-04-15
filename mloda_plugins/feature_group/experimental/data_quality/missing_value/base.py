@@ -23,7 +23,10 @@ class BaseMissingValueFeatureGroup(AbstractFeatureGroup):
     ## Feature Naming Convention
 
     Missing value features follow this naming pattern:
-    `{imputation_method}_imputed_{source_feature}`
+    `{imputation_method}_imputed_{mloda_source_feature}`
+
+    The source feature (mloda_source_feature) is extracted from the feature name and used
+    as input for the imputation operation.
 
     Examples:
     - `mean_imputed_income`: Impute missing values in income with the mean
@@ -58,8 +61,8 @@ class BaseMissingValueFeatureGroup(AbstractFeatureGroup):
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         """Extract source feature from the imputed feature name."""
-        source_feature = self.get_source_feature(feature_name.name)
-        return {Feature(source_feature)}
+        mloda_source_feature = self.mloda_source_feature(feature_name.name)
+        return {Feature(mloda_source_feature)}
 
     @classmethod
     def parse_feature_name(cls, feature_name: str) -> tuple[str, str]:
@@ -70,7 +73,7 @@ class BaseMissingValueFeatureGroup(AbstractFeatureGroup):
             feature_name: The feature name to parse
 
         Returns:
-            A tuple containing (imputation_method, source_feature)
+            A tuple containing (imputation_method, mloda_source_feature)
 
         Raises:
             ValueError: If the feature name does not match the expected pattern
@@ -79,10 +82,10 @@ class BaseMissingValueFeatureGroup(AbstractFeatureGroup):
         if not match:
             raise ValueError(
                 f"Invalid missing value feature name format: {feature_name}. "
-                f"Expected format: {{imputation_method}}_imputed_{{source_feature}}"
+                f"Expected format: {{imputation_method}}_imputed_{{mloda_source_feature}}"
             )
 
-        imputation_method, source_feature = match.groups()
+        imputation_method, mloda_source_feature = match.groups()
 
         # Validate imputation method
         if imputation_method not in cls.IMPUTATION_METHODS:
@@ -91,7 +94,7 @@ class BaseMissingValueFeatureGroup(AbstractFeatureGroup):
                 f"Supported methods: {', '.join(cls.IMPUTATION_METHODS.keys())}"
             )
 
-        return imputation_method, source_feature
+        return imputation_method, mloda_source_feature
 
     @classmethod
     def get_imputation_method(cls, feature_name: str) -> str:
@@ -99,7 +102,7 @@ class BaseMissingValueFeatureGroup(AbstractFeatureGroup):
         return cls.parse_feature_name(feature_name)[0]
 
     @classmethod
-    def get_source_feature(cls, feature_name: str) -> str:
+    def mloda_source_feature(cls, feature_name: str) -> str:
         """Extract the source feature name from the feature name."""
         return cls.parse_feature_name(feature_name)[1]
 
@@ -126,7 +129,7 @@ class BaseMissingValueFeatureGroup(AbstractFeatureGroup):
         cls,
         data: Any,
         imputation_method: str,
-        source_feature: str,
+        mloda_source_feature: str,
         constant_value: Optional[Any] = None,
         group_by_features: Optional[list[str]] = None,
     ) -> Any:
@@ -136,7 +139,7 @@ class BaseMissingValueFeatureGroup(AbstractFeatureGroup):
         Args:
             data: The input data
             imputation_method: The type of imputation to perform
-            source_feature: The name of the source feature to impute
+            mloda_source_feature: The name of the source feature to impute
             constant_value: The constant value to use for imputation (if method is 'constant')
             group_by_features: Optional list of features to group by before imputation
 

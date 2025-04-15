@@ -66,7 +66,7 @@ class PandasTimeWindowFeatureGroup(BaseTimeWindowFeatureGroup):
         window_function: str,
         window_size: int,
         time_unit: str,
-        source_feature: str,
+        mloda_source_feature: str,
         time_filter_feature: Optional[str] = None,
     ) -> pd.Series:
         """
@@ -77,7 +77,7 @@ class PandasTimeWindowFeatureGroup(BaseTimeWindowFeatureGroup):
             window_function: The type of window function to perform
             window_size: The size of the window
             time_unit: The time unit for the window
-            source_feature: The name of the source feature
+            mloda_source_feature: The name of the source feature
             time_filter_feature: The name of the time filter feature to use for time-based operations.
                                 If None, uses the value from get_time_filter_feature().
 
@@ -92,7 +92,7 @@ class PandasTimeWindowFeatureGroup(BaseTimeWindowFeatureGroup):
         # This is necessary for time-based rolling operations
         df_with_time_index = data.set_index(time_filter_feature).sort_index()
 
-        rolling_window = df_with_time_index[source_feature].rolling(window=window_size, min_periods=1)
+        rolling_window = df_with_time_index[mloda_source_feature].rolling(window=window_size, min_periods=1)
 
         if window_function == "sum":
             result = rolling_window.sum()

@@ -14,12 +14,6 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.base impo
 
 
 class PandasAggregatedFeatureGroup(BaseAggregatedFeatureGroup):
-    """
-    Pandas implementation of aggregated feature group.
-
-    Supports multiple aggregation types in a single class.
-    """
-
     @classmethod
     def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
         """Specify that this feature group works with Pandas."""
@@ -38,7 +32,7 @@ class PandasAggregatedFeatureGroup(BaseAggregatedFeatureGroup):
         # Process each requested feature
         for feature_name in features.get_all_names():
             aggregation_type = cls.get_aggregation_type(feature_name)
-            source_feature = cls.get_source_feature(feature_name)
+            source_feature = cls.mloda_source_feature(feature_name)
 
             if source_feature not in data.columns:
                 raise ValueError(f"Source feature '{source_feature}' not found in data")
@@ -53,33 +47,33 @@ class PandasAggregatedFeatureGroup(BaseAggregatedFeatureGroup):
         return data
 
     @classmethod
-    def _perform_aggregation(cls, data: Any, aggregation_type: str, source_feature: str) -> Any:
+    def _perform_aggregation(cls, data: Any, aggregation_type: str, mloda_source_feature: str) -> Any:
         """
         Perform the aggregation using Pandas.
 
         Args:
             data: The Pandas DataFrame
             aggregation_type: The type of aggregation to perform
-            source_feature: The name of the source feature to aggregate
+            mloda_source_feature: The name of the source feature to aggregate
 
         Returns:
             The result of the aggregation
         """
         if aggregation_type == "sum":
-            return data[source_feature].sum()
+            return data[mloda_source_feature].sum()
         elif aggregation_type == "min":
-            return data[source_feature].min()
+            return data[mloda_source_feature].min()
         elif aggregation_type == "max":
-            return data[source_feature].max()
+            return data[mloda_source_feature].max()
         elif aggregation_type in ["avg", "mean"]:
-            return data[source_feature].mean()
+            return data[mloda_source_feature].mean()
         elif aggregation_type == "count":
-            return data[source_feature].count()
+            return data[mloda_source_feature].count()
         elif aggregation_type == "std":
-            return data[source_feature].std()
+            return data[mloda_source_feature].std()
         elif aggregation_type == "var":
-            return data[source_feature].var()
+            return data[mloda_source_feature].var()
         elif aggregation_type == "median":
-            return data[source_feature].median()
+            return data[mloda_source_feature].median()
         else:
             raise ValueError(f"Unsupported aggregation type: {aggregation_type}")

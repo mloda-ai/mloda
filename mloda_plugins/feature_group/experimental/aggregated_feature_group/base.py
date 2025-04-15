@@ -16,8 +16,18 @@ class BaseAggregatedFeatureGroup(AbstractFeatureGroup):
     """
     Base class for all aggregated feature groups.
 
-    Follows naming convention: {aggregation_type}_aggr_{source_feature_name}
-    Examples: sum_aggr_sales, avg_aggr_temperature, max_aggr_price
+    ## Feature Naming Convention
+
+    Aggregated features follow this naming pattern:
+    `{aggregation_type}_aggr_{mloda_source_feature}`
+
+    The source feature (mloda_source_feature) is extracted from the feature name and used
+    as input for the aggregation operation.
+
+    Examples:
+    - `sum_aggr_sales`: Sum of sales values
+    - `avg_aggr_temperature`: Average of temperature values
+    - `max_aggr_price`: Maximum price value
     """
 
     # Define supported aggregation types
@@ -35,8 +45,8 @@ class BaseAggregatedFeatureGroup(AbstractFeatureGroup):
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         """Extract source feature from the aggregated feature name."""
-        source_feature = self.get_source_feature(feature_name.name)
-        return {Feature(source_feature)}
+        mloda_source_feature = self.mloda_source_feature(feature_name.name)
+        return {Feature(mloda_source_feature)}
 
     @classmethod
     def get_aggregation_type(cls, feature_name: str) -> str:
@@ -49,7 +59,7 @@ class BaseAggregatedFeatureGroup(AbstractFeatureGroup):
         return parts[0]
 
     @classmethod
-    def get_source_feature(cls, feature_name: str) -> str:
+    def mloda_source_feature(cls, feature_name: str) -> str:
         """Extract the source feature name from the aggregated feature name."""
         parts = feature_name.split("_aggr_")
         if len(parts) != 2 or not parts[1]:
@@ -81,14 +91,14 @@ class BaseAggregatedFeatureGroup(AbstractFeatureGroup):
         return aggregation_type in cls.AGGREGATION_TYPES
 
     @classmethod
-    def _perform_aggregation(cls, data: Any, aggregation_type: str, source_feature: str) -> Any:
+    def _perform_aggregation(cls, data: Any, aggregation_type: str, mloda_source_feature: str) -> Any:
         """
         Method to perform the aggregation. Should be implemented by subclasses.
 
         Args:
             data: The input data
             aggregation_type: The type of aggregation to perform
-            source_feature: The name of the source feature to aggregate
+            mloda_source_feature: The name of the source feature to aggregate
 
         Returns:
             The result of the aggregation

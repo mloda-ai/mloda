@@ -4,7 +4,6 @@ Base implementation for time window feature groups.
 
 from __future__ import annotations
 
-import re
 from typing import Any, Optional, Set, Union
 
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
@@ -12,6 +11,7 @@ from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+from mloda_plugins.feature_group.experimental.feature_chain_parser import FeatureChainParser
 
 
 class TimeWindowFeatureGroup(AbstractFeatureGroup):
@@ -112,7 +112,8 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
         "year": "Years",
     }
 
-    FEATURE_NAME_PATTERN = r"^([\w]+)_(\d+)_([\w]+)_window__([\w]+)$"
+    # Define the prefix pattern for this feature group
+    PREFIX_PATTERN = r"^([\w]+)_(\d+)_([\w]+)_window__"
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         source_feature = self.mloda_source_feature(feature_name.name)
@@ -120,27 +121,37 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
         return {Feature(source_feature), time_filter_feature}
 
     @classmethod
-    def parse_feature_name(cls, feature_name: str) -> tuple[str, int, str, str]:
+    def parse_time_window_prefix(cls, feature_name: str) -> tuple[str, int, str]:
         """
-        Parse the feature name into its components.
+        Parse the time window prefix into its components.
 
         Args:
             feature_name: The feature name to parse
 
         Returns:
-            A tuple containing (window_function, window_size, time_unit, mloda_source_feature)
+            A tuple containing (window_function, window_size, time_unit)
 
         Raises:
-            ValueError: If the feature name does not match the expected pattern
+            ValueError: If the prefix doesn't match the expected pattern
         """
-        match = re.match(cls.FEATURE_NAME_PATTERN, feature_name)
-        if not match:
+        # Extract the prefix part (everything before the double underscore)
+        prefix_end = feature_name.find("__")
+        if prefix_end == -1:
+            raise ValueError(
+                f"Invalid time window feature name format: {feature_name}. Missing double underscore separator."
+            )
+
+        prefix = feature_name[:prefix_end]
+
+        # Parse the prefix components
+        parts = prefix.split("_")
+        if len(parts) != 4 or parts[3] != "window":
             raise ValueError(
                 f"Invalid time window feature name format: {feature_name}. "
                 f"Expected format: {{window_function}}_{{window_size}}_{{time_unit}}_window__{{mloda_source_feature}}"
             )
 
-        window_function, window_size_str, time_unit, source_feature = match.groups()
+        window_function, window_size_str, time_unit = parts[0], parts[1], parts[2]
 
         # Validate window function
         if window_function not in cls.WINDOW_FUNCTIONS:
@@ -161,27 +172,27 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
         except ValueError:
             raise ValueError(f"Invalid window size: {window_size_str}. Must be a positive integer.")
 
-        return window_function, window_size, time_unit, source_feature
+        return window_function, window_size, time_unit
 
     @classmethod
     def get_window_function(cls, feature_name: str) -> str:
         """Extract the window function from the feature name."""
-        return cls.parse_feature_name(feature_name)[0]
+        return cls.parse_time_window_prefix(feature_name)[0]
 
     @classmethod
     def get_window_size(cls, feature_name: str) -> int:
         """Extract the window size from the feature name."""
-        return cls.parse_feature_name(feature_name)[1]
+        return cls.parse_time_window_prefix(feature_name)[1]
 
     @classmethod
     def get_time_unit(cls, feature_name: str) -> str:
         """Extract the time unit from the feature name."""
-        return cls.parse_feature_name(feature_name)[2]
+        return cls.parse_time_window_prefix(feature_name)[2]
 
     @classmethod
     def mloda_source_feature(cls, feature_name: str) -> str:
         """Extract the source feature name from the feature name."""
-        return cls.parse_feature_name(feature_name)[3]
+        return FeatureChainParser.extract_source_feature(feature_name, cls.PREFIX_PATTERN)
 
     @classmethod
     def match_feature_group_criteria(
@@ -195,8 +206,12 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
             feature_name = feature_name.name
 
         try:
-            # Try to parse the feature name - if it succeeds, it matches our pattern
-            cls.parse_feature_name(feature_name)
+            # First validate that this is a valid feature name for this feature group
+            if not FeatureChainParser.validate_feature_name(feature_name, cls.PREFIX_PATTERN):
+                return False
+
+            # Then validate the time window components
+            cls.parse_time_window_prefix(feature_name)
             return True
         except ValueError:
             return False

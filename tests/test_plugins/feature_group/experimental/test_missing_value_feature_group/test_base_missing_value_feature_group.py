@@ -5,30 +5,34 @@ from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.options import Options
 
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
+from mloda_plugins.feature_group.experimental.feature_chain_parser import FeatureChainParser
 
 
 class TestMissingValueFeatureGroup:
     """Tests for the MissingValueFeatureGroup class."""
 
-    def test_parse_feature_name(self) -> None:
-        """Test parsing of feature name into components."""
+    def test_feature_chain_parser_integration(self) -> None:
+        """Test integration with FeatureChainParser."""
         # Test valid feature names
-        assert MissingValueFeatureGroup.parse_feature_name("mean_imputed__income") == ("mean", "income")
-        assert MissingValueFeatureGroup.parse_feature_name("median_imputed__age") == ("median", "age")
-        assert MissingValueFeatureGroup.parse_feature_name("mode_imputed__category") == ("mode", "category")
-        assert MissingValueFeatureGroup.parse_feature_name("constant_imputed__status") == ("constant", "status")
-        assert MissingValueFeatureGroup.parse_feature_name("ffill_imputed__temperature") == ("ffill", "temperature")
-        assert MissingValueFeatureGroup.parse_feature_name("bfill_imputed__humidity") == ("bfill", "humidity")
+        feature_name = "mean_imputed__income"
+
+        # Test that the PREFIX_PATTERN is correctly defined
+        assert hasattr(MissingValueFeatureGroup, "PREFIX_PATTERN")
+
+        # Test that FeatureChainParser methods work with the PREFIX_PATTERN
+        assert FeatureChainParser.validate_feature_name(feature_name, MissingValueFeatureGroup.PREFIX_PATTERN)
+        assert FeatureChainParser.get_prefix_part(feature_name, MissingValueFeatureGroup.PREFIX_PATTERN) == "mean"
+        assert (
+            FeatureChainParser.extract_source_feature(feature_name, MissingValueFeatureGroup.PREFIX_PATTERN) == "income"
+        )
 
         # Test invalid feature names
-        with pytest.raises(ValueError):
-            MissingValueFeatureGroup.parse_feature_name("invalid_feature_name")
-
-        with pytest.raises(ValueError):
-            MissingValueFeatureGroup.parse_feature_name("mean_filled_income")
-
-        with pytest.raises(ValueError):
-            MissingValueFeatureGroup.parse_feature_name("unknown_imputed_income")
+        assert not FeatureChainParser.validate_feature_name(
+            "invalid_feature_name", MissingValueFeatureGroup.PREFIX_PATTERN
+        )
+        assert not FeatureChainParser.validate_feature_name(
+            "mean_filled_income", MissingValueFeatureGroup.PREFIX_PATTERN
+        )
 
     def test_get_imputation_method(self) -> None:
         """Test extraction of imputation method from feature name."""

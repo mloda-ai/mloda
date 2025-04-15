@@ -51,13 +51,14 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
 
         # Process each requested feature
         for feature_name in features.get_all_names():
-            window_function, window_size, time_unit, source_feature = cls.parse_feature_name(feature_name)
+            window_function, window_size, time_unit = cls.parse_time_window_prefix(feature_name)
+            mloda_source_feature = cls.mloda_source_feature(feature_name)
 
-            if source_feature not in data.schema.names:
-                raise ValueError(f"Source feature '{source_feature}' not found in data")
+            if mloda_source_feature not in data.schema.names:
+                raise ValueError(f"Source feature '{mloda_source_feature}' not found in data")
 
             result = cls._perform_window_operation(
-                data, window_function, window_size, time_unit, source_feature, time_filter_feature
+                data, window_function, window_size, time_unit, mloda_source_feature, time_filter_feature
             )
 
             # Add the new column to the table

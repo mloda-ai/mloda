@@ -10,6 +10,7 @@ from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGr
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.options import Options
+from mloda_plugins.feature_group.experimental.feature_chain_parser import FeatureChainParser
 
 
 class AggregatedFeatureGroup(AbstractFeatureGroup):
@@ -48,25 +49,21 @@ class AggregatedFeatureGroup(AbstractFeatureGroup):
         mloda_source_feature = self.mloda_source_feature(feature_name.name)
         return {Feature(mloda_source_feature)}
 
+    # Define the prefix pattern for this feature group
+    PREFIX_PATTERN = r"^([\w]+)_aggr__"
+
     @classmethod
     def get_aggregation_type(cls, feature_name: str) -> str:
         """Extract the aggregation type from the feature name."""
-        parts = feature_name.split("_aggr__")
-        if len(parts) != 2 or not parts[0]:
+        prefix_part = FeatureChainParser.get_prefix_part(feature_name, cls.PREFIX_PATTERN)
+        if prefix_part is None:
             raise ValueError(f"Invalid aggregated feature name format: {feature_name}")
-        if not parts[1]:
-            raise ValueError(f"Invalid aggregated feature name format: {feature_name}")
-        return parts[0]
+        return prefix_part
 
     @classmethod
     def mloda_source_feature(cls, feature_name: str) -> str:
         """Extract the source feature name from the aggregated feature name."""
-        parts = feature_name.split("_aggr__")
-        if len(parts) != 2 or not parts[1]:
-            raise ValueError(f"Invalid aggregated feature name format: {feature_name}")
-        if not parts[0]:
-            raise ValueError(f"Invalid aggregated feature name format: {feature_name}")
-        return parts[1]
+        return FeatureChainParser.extract_source_feature(feature_name, cls.PREFIX_PATTERN)
 
     @classmethod
     def match_feature_group_criteria(
@@ -80,6 +77,11 @@ class AggregatedFeatureGroup(AbstractFeatureGroup):
             feature_name = feature_name.name
 
         try:
+            # First validate that this is a valid feature name for this feature group
+            if not FeatureChainParser.validate_feature_name(feature_name, cls.PREFIX_PATTERN):
+                return False
+
+            # Then check if the aggregation type is supported
             agg_type = cls.get_aggregation_type(feature_name)
             return cls._supports_aggregation_type(agg_type)
         except ValueError:

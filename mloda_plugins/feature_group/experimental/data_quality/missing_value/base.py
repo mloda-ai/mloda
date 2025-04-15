@@ -4,13 +4,13 @@ Base implementation for missing value imputation feature groups.
 
 from __future__ import annotations
 
-import re
 from typing import Any, Optional, Set, Union
 
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.options import Options
+from mloda_plugins.feature_group.experimental.feature_chain_parser import FeatureChainParser
 
 
 class MissingValueFeatureGroup(AbstractFeatureGroup):
@@ -57,7 +57,8 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
         "bfill": "Backward fill (use the next valid value)",
     }
 
-    FEATURE_NAME_PATTERN = r"^([\w]+)_imputed__([\w]+)$"
+    # Define the prefix pattern for this feature group
+    PREFIX_PATTERN = r"^([\w]+)_imputed__"
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         """Extract source feature from the imputed feature name."""
@@ -65,27 +66,11 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
         return {Feature(mloda_source_feature)}
 
     @classmethod
-    def parse_feature_name(cls, feature_name: str) -> tuple[str, str]:
-        """
-        Parse the feature name into its components.
-
-        Args:
-            feature_name: The feature name to parse
-
-        Returns:
-            A tuple containing (imputation_method, mloda_source_feature)
-
-        Raises:
-            ValueError: If the feature name does not match the expected pattern
-        """
-        match = re.match(cls.FEATURE_NAME_PATTERN, feature_name)
-        if not match:
-            raise ValueError(
-                f"Invalid missing value feature name format: {feature_name}. "
-                f"Expected format: {{imputation_method}}_imputed__{{mloda_source_feature}}"
-            )
-
-        imputation_method, mloda_source_feature = match.groups()
+    def get_imputation_method(cls, feature_name: str) -> str:
+        """Extract the imputation method from the feature name."""
+        imputation_method = FeatureChainParser.get_prefix_part(feature_name, cls.PREFIX_PATTERN)
+        if imputation_method is None:
+            raise ValueError(f"Invalid missing value feature name format: {feature_name}")
 
         # Validate imputation method
         if imputation_method not in cls.IMPUTATION_METHODS:
@@ -94,17 +79,12 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
                 f"Supported methods: {', '.join(cls.IMPUTATION_METHODS.keys())}"
             )
 
-        return imputation_method, mloda_source_feature
-
-    @classmethod
-    def get_imputation_method(cls, feature_name: str) -> str:
-        """Extract the imputation method from the feature name."""
-        return cls.parse_feature_name(feature_name)[0]
+        return imputation_method
 
     @classmethod
     def mloda_source_feature(cls, feature_name: str) -> str:
         """Extract the source feature name from the feature name."""
-        return cls.parse_feature_name(feature_name)[1]
+        return FeatureChainParser.extract_source_feature(feature_name, cls.PREFIX_PATTERN)
 
     @classmethod
     def match_feature_group_criteria(
@@ -118,8 +98,12 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
             feature_name = feature_name.name
 
         try:
-            # Try to parse the feature name - if it succeeds, it matches our pattern
-            cls.parse_feature_name(feature_name)
+            # First validate that this is a valid feature name for this feature group
+            if not FeatureChainParser.validate_feature_name(feature_name, cls.PREFIX_PATTERN):
+                return False
+
+            # Then check if the imputation method is supported
+            cls.get_imputation_method(feature_name)
             return True
         except ValueError:
             return False

@@ -109,6 +109,26 @@ When implementing feature groups that perform aggregation operations:
    - Use DataCreator with a set of feature names, not a dictionary
    - For testing, expect multiple DataFrames in results (one per feature group)
 
+### Feature Chain Parser
+
+The `FeatureChainParser` is a utility class that handles the common aspects of feature name parsing and chaining across different feature group types:
+
+1. **Purpose**:
+   - Centralizes the logic for parsing feature names with chaining support
+   - Provides a consistent approach for all feature groups
+   - Makes feature group classes more focused on their specific functionality
+
+2. **Key Methods**:
+   - `extract_source_feature`: Extracts the source feature from a feature name based on a prefix pattern
+   - `validate_feature_name`: Validates that a feature name matches the expected pattern
+   - `is_chained_feature`: Checks if a feature name follows the chaining pattern
+   - `get_prefix_part`: Extracts the prefix part from a feature name
+
+3. **Usage**:
+   - Each feature group defines a `PREFIX_PATTERN` that matches its naming convention
+   - Feature groups use the `FeatureChainParser` methods with their specific pattern
+   - This approach simplifies the implementation of new feature groups that support chaining
+
 ### Combined Feature Group Pattern
 
 Feature groups can be composed to create complex features by chaining multiple transformations:
@@ -116,6 +136,7 @@ Feature groups can be composed to create complex features by chaining multiple t
 1. **Composability**:
    - Feature groups can use the output of other feature groups as their input
    - This allows for building complex features through a series of simpler transformations
+   - The `FeatureChainParser` handles the extraction of source features in the chain
 
 2. **Naming Convention**:
    - Chain the naming patterns of the feature groups being composed
@@ -125,11 +146,20 @@ Feature groups can be composed to create complex features by chaining multiple t
      - Finally applies a max aggregation: `max_aggr__sum_7_day_window__mean_imputed__price`
 
 3. **Implementation Tips**:
-   - Ensure each feature group in the chain correctly parses its portion of the feature name
+   - Use the `FeatureChainParser` to handle the parsing of chained feature names
    - Test the feature chain with different data scenarios to verify correct behavior
    - Use integration tests to validate the entire feature chain
 
 ## Changelog
+
+### 2025-04-15: Added Feature Chain Parser
+- Created `FeatureChainParser` utility class to handle feature name parsing and chaining
+- Refactored TimeWindowFeatureGroup, MissingValueFeatureGroup, and AggregatedFeatureGroup to use the parser
+- Improved maintainability by centralizing the chaining logic in one place
+
+### 2025-04-15: Refactored Feature Group Chaining
+- Extracted chaining capability from feature group classes to improve maintainability
+- Simplified implementation of TimeWindowFeatureGroup, MissingValueFeatureGroup, and AggregatedFeatureGroup
 
 ### 2025-04-15: Updated Feature Naming Conventions
 - Added double underscore before source feature names in all feature groups

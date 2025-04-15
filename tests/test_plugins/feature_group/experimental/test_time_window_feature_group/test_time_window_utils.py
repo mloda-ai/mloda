@@ -10,10 +10,10 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
-from tests.test_plugins.integration_plugins.test_data_creator import TestDataCreator
+from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
 
-class TimeWindowTestDataCreator(TestDataCreator):
+class TimeWindowTestDataCreator(ATestDataCreator):
     """Base class for time window test data creators."""
 
     @classmethod

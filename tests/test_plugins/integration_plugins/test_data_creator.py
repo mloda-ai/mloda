@@ -14,7 +14,7 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
 
 
-class TestDataCreator(AbstractFeatureGroup):
+class ATestDataCreator(AbstractFeatureGroup):
     """
     Base class for creating test data in different compute frameworks.
     Subclasses should set the compute_framework class variable and implement

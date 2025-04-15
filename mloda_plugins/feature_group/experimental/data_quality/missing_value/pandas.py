@@ -111,9 +111,9 @@ class PandasMissingValueFeatureGroup(BaseMissingValueFeatureGroup):
         elif imputation_method == "constant":
             return result.fillna(constant_value)
         elif imputation_method == "ffill":
-            return result.fillna(method="ffill")
+            return result.ffill()
         elif imputation_method == "bfill":
-            return result.fillna(method="bfill")
+            return result.bfill()
         else:
             raise ValueError(f"Unsupported imputation method: {imputation_method}")
 
@@ -178,9 +178,9 @@ class PandasMissingValueFeatureGroup(BaseMissingValueFeatureGroup):
             return result
         elif imputation_method == "ffill":
             # Forward fill within groups
-            return grouped[mloda_source_feature].transform(lambda x: x.fillna(method="ffill"))
+            return grouped[mloda_source_feature].transform(lambda x: x.ffill())
         elif imputation_method == "bfill":
             # Backward fill within groups
-            return grouped[mloda_source_feature].transform(lambda x: x.fillna(method="bfill"))
+            return grouped[mloda_source_feature].transform(lambda x: x.bfill())
         else:
             raise ValueError(f"Unsupported imputation method: {imputation_method}")

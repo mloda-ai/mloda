@@ -98,32 +98,28 @@ class PyArrowTimeWindowFeatureGroup(BaseTimeWindowFeatureGroup):
         time_column = data.column(time_filter_feature)
         source_column = data.column(mloda_source_feature)
 
-        # Convert window size to timedelta
-        window_delta = cls._get_time_delta(window_size, time_unit)
+        # Sort the data by time
+        # First create indices sorted by time
+        sorted_indices = pc.sort_indices(time_column)
+
+        # Get the sorted source values
+        sorted_source = pc.take(source_column, sorted_indices)
 
         # Create a list to store the results
         results = []
 
-        # For each row, calculate the window operation
-        for i in range(len(time_column)):
-            current_time = time_column[i].as_py()
-
-            # Find all rows within the window (current_time - window_delta <= time <= current_time)
-            window_start = current_time - window_delta
-
-            # Create a mask for rows within the window
-            mask = pc.and_(
-                pc.greater_equal(time_column, pa.scalar(window_start)),
-                pc.less_equal(time_column, pa.scalar(current_time)),
-            )
-
-            # Apply the mask to get values within the window
-            window_values = pc.filter(source_column, mask)
+        # For each row, calculate the window operation using a fixed-size window
+        # This matches the pandas implementation which uses rolling(window=window_size, min_periods=1)
+        for i in range(len(sorted_source)):
+            # Get the window values (current and previous values up to window_size)
+            start_idx = max(0, i - window_size + 1)
+            window_indices = pa.array(range(start_idx, i + 1))
+            window_values = pc.take(sorted_source, window_indices)
 
             # Apply the window function
             if len(window_values) == 0:
                 # If no values in window, use the current value
-                results.append(source_column[i].as_py())
+                results.append(sorted_source[i].as_py())
             else:
                 # Apply the appropriate window function
                 if window_function == "sum":
@@ -152,8 +148,12 @@ class PyArrowTimeWindowFeatureGroup(BaseTimeWindowFeatureGroup):
                 else:
                     raise ValueError(f"Unsupported window function: {window_function}")
 
+        # We need to reorder the results to match the original order
+        # Create a mapping from sorted indices to original indices
+        reordered_results = [results[sorted_indices.to_pylist().index(i)] for i in range(len(results))]
+
         # Convert the results to a PyArrow array
-        return pa.array(results)
+        return pa.array(reordered_results)
 
     @classmethod
     def _get_time_delta(cls, window_size: int, time_unit: str) -> datetime.timedelta:

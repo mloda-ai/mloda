@@ -10,7 +10,7 @@ from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
 
-from tests.test_plugins.integration_plugins.test_data_creator import TestDataCreator
+from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
 
 AGGREGATION_FEATURES: List[Feature | str] = [
@@ -21,7 +21,7 @@ AGGREGATION_FEATURES: List[Feature | str] = [
 ]
 
 
-class AggregatedTestDataCreator(TestDataCreator):
+class AggregatedTestDataCreator(ATestDataCreator):
     """Base class for aggregation test data creators."""
 
     @classmethod

@@ -15,11 +15,11 @@ from tests.test_plugins.integration_plugins.test_data_creator import TestDataCre
 
 # List of missing value features to test
 MISSING_VALUE_FEATURES: List[Feature | str] = [
-    "mean_imputed_income",  # Mean imputation
-    "median_imputed_age",  # Median imputation
-    "mode_imputed_category",  # Mode imputation
-    "constant_imputed_category",  # Constant imputation
-    "ffill_imputed_temperature",  # Forward fill imputation
+    "mean_imputed__income",  # Mean imputation
+    "median_imputed__age",  # Median imputation
+    "mode_imputed__category",  # Mode imputation
+    "constant_imputed__category",  # Constant imputation
+    "ffill_imputed__temperature",  # Forward fill imputation
 ]
 
 
@@ -69,20 +69,20 @@ def validate_missing_value_features(result: List[pd.DataFrame]) -> None:
         assert feature_name in imputed_df.columns, f"Expected feature '{feature_name}' not found"
 
     # Verify that missing values are imputed
-    assert imputed_df["constant_imputed_category"].iloc[1] == "Unknown"
-    assert imputed_df["constant_imputed_category"].iloc[4] == "Unknown"
+    assert imputed_df["constant_imputed__category"].iloc[1] == "Unknown"
+    assert imputed_df["constant_imputed__category"].iloc[4] == "Unknown"
 
-    assert not pd.isna(imputed_df["ffill_imputed_temperature"].iloc[2])
-    assert not pd.isna(imputed_df["ffill_imputed_temperature"].iloc[3])
+    assert not pd.isna(imputed_df["ffill_imputed__temperature"].iloc[2])
+    assert not pd.isna(imputed_df["ffill_imputed__temperature"].iloc[3])
 
-    assert "mean_imputed_income" in imputed_df.columns
-    assert abs(imputed_df["mean_imputed_income"].iloc[1] - 61666.67) < 1.0  # Increased tolerance for PyArrow
-    assert abs(imputed_df["mean_imputed_income"].iloc[3] - 61666.67) < 1.0  # Increased tolerance for PyArrow
+    assert "mean_imputed__income" in imputed_df.columns
+    assert abs(imputed_df["mean_imputed__income"].iloc[1] - 61666.67) < 1.0  # Increased tolerance for PyArrow
+    assert abs(imputed_df["mean_imputed__income"].iloc[3] - 61666.67) < 1.0  # Increased tolerance for PyArrow
 
-    assert "median_imputed_age" in imputed_df.columns
-    assert imputed_df["median_imputed_age"].iloc[2] == 30
-    assert imputed_df["median_imputed_age"].iloc[4] == 30
+    assert "median_imputed__age" in imputed_df.columns
+    assert imputed_df["median_imputed__age"].iloc[2] == 30
+    assert imputed_df["median_imputed__age"].iloc[4] == 30
 
-    assert "mode_imputed_category" in imputed_df.columns
-    assert imputed_df["mode_imputed_category"].iloc[1] == "A"
-    assert imputed_df["mode_imputed_category"].iloc[4] == "A"
+    assert "mode_imputed__category" in imputed_df.columns
+    assert imputed_df["mode_imputed__category"].iloc[1] == "A"
+    assert imputed_df["mode_imputed__category"].iloc[4] == "A"

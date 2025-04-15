@@ -19,15 +19,15 @@ class BaseAggregatedFeatureGroup(AbstractFeatureGroup):
     ## Feature Naming Convention
 
     Aggregated features follow this naming pattern:
-    `{aggregation_type}_aggr_{mloda_source_feature}`
+    `{aggregation_type}_aggr__{mloda_source_feature}`
 
     The source feature (mloda_source_feature) is extracted from the feature name and used
-    as input for the aggregation operation.
+    as input for the aggregation operation. Note the double underscore before the source feature.
 
     Examples:
-    - `sum_aggr_sales`: Sum of sales values
-    - `avg_aggr_temperature`: Average of temperature values
-    - `max_aggr_price`: Maximum price value
+    - `sum_aggr__sales`: Sum of sales values
+    - `avg_aggr__temperature`: Average of temperature values
+    - `max_aggr__price`: Maximum price value
     """
 
     # Define supported aggregation types
@@ -51,7 +51,7 @@ class BaseAggregatedFeatureGroup(AbstractFeatureGroup):
     @classmethod
     def get_aggregation_type(cls, feature_name: str) -> str:
         """Extract the aggregation type from the feature name."""
-        parts = feature_name.split("_aggr_")
+        parts = feature_name.split("_aggr__")
         if len(parts) != 2 or not parts[0]:
             raise ValueError(f"Invalid aggregated feature name format: {feature_name}")
         if not parts[1]:
@@ -61,7 +61,7 @@ class BaseAggregatedFeatureGroup(AbstractFeatureGroup):
     @classmethod
     def mloda_source_feature(cls, feature_name: str) -> str:
         """Extract the source feature name from the aggregated feature name."""
-        parts = feature_name.split("_aggr_")
+        parts = feature_name.split("_aggr__")
         if len(parts) != 2 or not parts[1]:
             raise ValueError(f"Invalid aggregated feature name format: {feature_name}")
         if not parts[0]:

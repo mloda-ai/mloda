@@ -83,15 +83,15 @@ class TestPandasTimeWindowFeatureGroup:
         result = PandasTimeWindowFeatureGroup.calculate_feature(sample_time_dataframe, feature_set_avg_window)
 
         # Check that the result contains the original data plus the time window feature
-        assert "avg_3_day_window_temperature" in result.columns
+        assert "avg_3_day_window__temperature" in result.columns
 
         # Check the values of the time window feature
         # First value should be the temperature itself (20)
         # Second value should be average of first two days (20+22)/2 = 21
         # Third value should be average of first three days (20+22+19)/3 = 20.33
-        assert result["avg_3_day_window_temperature"].iloc[0] == 20
-        assert abs(result["avg_3_day_window_temperature"].iloc[1] - 21) < 0.1
-        assert abs(result["avg_3_day_window_temperature"].iloc[2] - 20.33) < 0.1
+        assert result["avg_3_day_window__temperature"].iloc[0] == 20
+        assert abs(result["avg_3_day_window__temperature"].iloc[1] - 21) < 0.1
+        assert abs(result["avg_3_day_window__temperature"].iloc[2] - 20.33) < 0.1
 
         # Check that the original data is preserved
         assert "temperature" in result.columns
@@ -106,10 +106,10 @@ class TestPandasTimeWindowFeatureGroup:
         result = PandasTimeWindowFeatureGroup.calculate_feature(sample_time_dataframe, feature_set_multiple_windows)
 
         # Check that the result contains all time window features
-        assert "avg_3_day_window_temperature" in result.columns
-        assert "max_5_day_window_humidity" in result.columns
-        assert "min_2_day_window_pressure" in result.columns
-        assert "sum_4_day_window_wind_speed" in result.columns
+        assert "avg_3_day_window__temperature" in result.columns
+        assert "max_5_day_window__humidity" in result.columns
+        assert "min_2_day_window__pressure" in result.columns
+        assert "sum_4_day_window__wind_speed" in result.columns
 
         # Check that the original data is preserved
         assert "temperature" in result.columns
@@ -120,7 +120,7 @@ class TestPandasTimeWindowFeatureGroup:
     def test_calculate_feature_missing_source(self, sample_time_dataframe: pd.DataFrame) -> None:
         """Test calculate_feature method with missing source feature."""
         feature_set = FeatureSet()
-        feature_set.add(Feature("avg_3_day_window_missing"))
+        feature_set.add(Feature("avg_3_day_window__missing"))
 
         with pytest.raises(ValueError, match="Source feature 'missing' not found in data"):
             PandasTimeWindowFeatureGroup.calculate_feature(sample_time_dataframe, feature_set)

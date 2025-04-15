@@ -25,15 +25,15 @@ class BaseTimeWindowFeatureGroup(AbstractFeatureGroup):
     ## Feature Naming Convention
 
     Time window features follow this naming pattern:
-    `{window_function}_{window_size}_{time_unit}_window_{mloda_source_feature}`
+    `{window_function}_{window_size}_{time_unit}_window__{mloda_source_feature}`
 
     The source feature (mloda_source_feature) is extracted from the feature name and used
-    as input for the time window operation.
+    as input for the time window operation. Note the double underscore before the source feature.
 
     Examples:
-    - `avg_7_day_window_temperature`: 7-day moving average of temperature
-    - `max_3_hour_window_cpu_usage`: 3-hour rolling maximum of CPU usage
-    - `sum_30_minute_window_transactions`: 30-minute cumulative sum of transactions
+    - `avg_7_day_window__temperature`: 7-day moving average of temperature
+    - `max_3_hour_window__cpu_usage`: 3-hour rolling maximum of CPU usage
+    - `sum_30_minute_window__transactions`: 30-minute cumulative sum of transactions
 
     ## Supported Window Functions
 
@@ -112,7 +112,7 @@ class BaseTimeWindowFeatureGroup(AbstractFeatureGroup):
         "year": "Years",
     }
 
-    FEATURE_NAME_PATTERN = r"^([\w]+)_(\d+)_([\w]+)_window_([\w]+)$"
+    FEATURE_NAME_PATTERN = r"^([\w]+)_(\d+)_([\w]+)_window__([\w]+)$"
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         source_feature = self.mloda_source_feature(feature_name.name)
@@ -137,7 +137,7 @@ class BaseTimeWindowFeatureGroup(AbstractFeatureGroup):
         if not match:
             raise ValueError(
                 f"Invalid time window feature name format: {feature_name}. "
-                f"Expected format: {{window_function}}_{{window_size}}_{{time_unit}}_window_{{mloda_source_feature}}"
+                f"Expected format: {{window_function}}_{{window_size}}_{{time_unit}}_window__{{mloda_source_feature}}"
             )
 
         window_function, window_size_str, time_unit, source_feature = match.groups()

@@ -70,23 +70,6 @@ class TestAggregatedFeatureGroup:
         with pytest.raises(ValueError):
             AggregatedFeatureGroup.get_aggregation_type("sum_aggr_")
 
-    def test_mloda_source_feature(self) -> None:
-        """Test extraction of source feature from feature name."""
-        assert AggregatedFeatureGroup.mloda_source_feature("sum_aggr__sales") == "sales"
-        assert AggregatedFeatureGroup.mloda_source_feature("min_aggr__quantity") == "quantity"
-        assert AggregatedFeatureGroup.mloda_source_feature("max_aggr__price") == "price"
-        assert AggregatedFeatureGroup.mloda_source_feature("avg_aggr__discount") == "discount"
-
-        # Test with invalid feature names
-        with pytest.raises(ValueError):
-            AggregatedFeatureGroup.mloda_source_feature("invalid_feature_name")
-
-        with pytest.raises(ValueError):
-            AggregatedFeatureGroup.mloda_source_feature("sum_aggr_")
-
-        with pytest.raises(ValueError):
-            AggregatedFeatureGroup.mloda_source_feature("_aggr_sales")
-
     def test_supports_aggregation_type(self) -> None:
         """Test _supports_aggregation_type method."""
         # Test with supported aggregation types

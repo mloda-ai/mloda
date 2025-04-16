@@ -9,7 +9,6 @@ from typing import Any, List, Optional, Set, Type, Union
 import pyarrow as pa
 import pyarrow.compute as pc
 
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
@@ -22,49 +21,15 @@ class PyArrowMissingValueFeatureGroup(MissingValueFeatureGroup):
         return {PyarrowTable}
 
     @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        """
-        Perform missing value imputation using PyArrow.
+    def _check_source_feature_exists(cls, data: pa.Table, feature_name: str) -> None:
+        """Check if the feature exists in the Table."""
+        if feature_name not in data.schema.names:
+            raise ValueError(f"Source feature '{feature_name}' not found in data")
 
-        Processes all requested features, determining the imputation method
-        and source feature from each feature name.
-
-        Adds the imputed results to the input Table.
-        """
-        # Get constant value and group by features from options if available
-        constant_value = None
-        group_by_features = None
-
-        if features.options:
-            constant_value = features.options.get("constant_value")
-            group_by_features = features.options.get("group_by_features")
-
-        # Process each requested feature
-        for feature_name in features.get_all_names():
-            imputation_method = cls.get_imputation_method(feature_name)
-            source_feature = cls.mloda_source_feature(feature_name)
-
-            if source_feature not in data.schema.names:
-                raise ValueError(f"Source feature '{source_feature}' not found in data")
-
-            # Validate group by features if provided
-            if group_by_features:
-                for group_feature in group_by_features:
-                    if group_feature not in data.schema.names:
-                        raise ValueError(f"Group by feature '{group_feature}' not found in data")
-
-            # Validate constant value is provided for constant imputation
-            if imputation_method == "constant" and constant_value is None:
-                raise ValueError("Constant value must be provided for constant imputation method")
-
-            # Apply the appropriate imputation function
-            result = cls._perform_imputation(data, imputation_method, source_feature, constant_value, group_by_features)
-
-            # Add the new column to the table
-            data = data.append_column(feature_name, result)
-
-        # Return the modified Table
-        return data
+    @classmethod
+    def _add_result_to_data(cls, data: pa.Table, feature_name: str, result: Any) -> pa.Table:
+        """Add the result to the Table."""
+        return data.append_column(feature_name, result)
 
     @classmethod
     def _perform_imputation(

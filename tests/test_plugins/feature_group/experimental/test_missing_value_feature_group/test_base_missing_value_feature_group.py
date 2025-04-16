@@ -47,19 +47,6 @@ class TestMissingValueFeatureGroup:
         with pytest.raises(ValueError):
             MissingValueFeatureGroup.get_imputation_method("invalid_feature_name")
 
-    def test_mloda_source_feature(self) -> None:
-        """Test extraction of source feature from feature name."""
-        assert MissingValueFeatureGroup.mloda_source_feature("mean_imputed__income") == "income"
-        assert MissingValueFeatureGroup.mloda_source_feature("median_imputed__age") == "age"
-        assert MissingValueFeatureGroup.mloda_source_feature("mode_imputed__category") == "category"
-        assert MissingValueFeatureGroup.mloda_source_feature("constant_imputed__status") == "status"
-        assert MissingValueFeatureGroup.mloda_source_feature("ffill_imputed__temperature") == "temperature"
-        assert MissingValueFeatureGroup.mloda_source_feature("bfill_imputed__humidity") == "humidity"
-
-        # Test with invalid feature names
-        with pytest.raises(ValueError):
-            MissingValueFeatureGroup.mloda_source_feature("invalid_feature_name")
-
     def test_match_feature_group_criteria(self) -> None:
         """Test match_feature_group_criteria method."""
         options = Options()

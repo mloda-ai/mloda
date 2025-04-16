@@ -8,7 +8,6 @@ from typing import Any, Optional, Set, Type, Union
 
 import pandas as pd
 
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
@@ -21,43 +20,33 @@ class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         return {PandasDataframe}
 
     @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        """
-        Perform time window operations using Pandas.
-
-        Processes all requested features, determining the window function, window size,
-        time unit, and source feature from each feature name.
-
-        Adds the time window results directly to the input DataFrame.
-        """
-        time_filter_feature = cls.get_time_filter_feature(features.options)
-
-        # Check if the time filter feature exists in the DataFrame
+    def _check_time_filter_feature_exists(cls, data: pd.DataFrame, time_filter_feature: str) -> None:
+        """Check if the time filter feature exists in the DataFrame."""
         if time_filter_feature not in data.columns:
             raise ValueError(
                 f"Time filter feature '{time_filter_feature}' not found in data. "
                 f"Please ensure the DataFrame contains this column."
             )
 
-        # Check if the time filter feature is a datetime column
+    @classmethod
+    def _check_time_filter_feature_is_datetime(cls, data: pd.DataFrame, time_filter_feature: str) -> None:
+        """Check if the time filter feature is a datetime column."""
         if not pd.api.types.is_datetime64_any_dtype(data[time_filter_feature]):
             raise ValueError(
                 f"Time filter feature '{time_filter_feature}' must be a datetime column. "
                 f"Current dtype: {data[time_filter_feature].dtype}"
             )
 
-        # Process each requested feature
-        for feature_name in features.get_all_names():
-            window_function, window_size, time_unit = cls.parse_time_window_prefix(feature_name)
-            mloda_source_feature = cls.mloda_source_feature(feature_name)
+    @classmethod
+    def _check_source_feature_exists(cls, data: pd.DataFrame, mloda_source_feature: str) -> None:
+        """Check if the source feature exists in the DataFrame."""
+        if mloda_source_feature not in data.columns:
+            raise ValueError(f"Source feature '{mloda_source_feature}' not found in data")
 
-            if mloda_source_feature not in data.columns:
-                raise ValueError(f"Source feature '{mloda_source_feature}' not found in data")
-
-            data[feature_name] = cls._perform_window_operation(
-                data, window_function, window_size, time_unit, mloda_source_feature, time_filter_feature
-            )
-
+    @classmethod
+    def _add_result_to_data(cls, data: pd.DataFrame, feature_name: str, result: Any) -> pd.DataFrame:
+        """Add the result to the DataFrame."""
+        data[feature_name] = result
         return data
 
     @classmethod
@@ -69,7 +58,7 @@ class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         time_unit: str,
         mloda_source_feature: str,
         time_filter_feature: Optional[str] = None,
-    ) -> pd.Series:
+    ) -> Any:
         """
         Perform the time window operation using Pandas rolling window functions.
 
@@ -83,7 +72,7 @@ class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
                                 If None, uses the value from get_time_filter_feature().
 
         Returns:
-            The result of the window operation as a Pandas Series
+            The result of the window operation
         """
         # Use the default time filter feature if none is provided
         if time_filter_feature is None:
@@ -118,6 +107,7 @@ class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         else:
             raise ValueError(f"Unsupported window function: {window_function}")
 
+        # Convert to numpy array to avoid type issues
         return result.values
 
     @classmethod

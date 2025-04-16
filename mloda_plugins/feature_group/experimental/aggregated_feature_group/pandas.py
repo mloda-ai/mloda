@@ -6,7 +6,6 @@ from __future__ import annotations
 
 from typing import Any, Set, Type, Union
 
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
@@ -20,30 +19,15 @@ class PandasAggregatedFeatureGroup(AggregatedFeatureGroup):
         return {PandasDataframe}
 
     @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        """
-        Perform aggregations using Pandas.
+    def _check_source_feature_exists(cls, data: Any, feature_name: str) -> None:
+        """Check if the feature exists in the DataFrame."""
+        if feature_name not in data.columns:
+            raise ValueError(f"Source feature '{feature_name}' not found in data")
 
-        Processes all requested features, determining the aggregation type
-        and source feature from each feature name.
-
-        Adds the aggregated results directly to the input DataFrame.
-        """
-        # Process each requested feature
-        for feature_name in features.get_all_names():
-            aggregation_type = cls.get_aggregation_type(feature_name)
-            source_feature = cls.mloda_source_feature(feature_name)
-
-            if source_feature not in data.columns:
-                raise ValueError(f"Source feature '{source_feature}' not found in data")
-
-            if aggregation_type not in cls.AGGREGATION_TYPES:
-                raise ValueError(f"Unsupported aggregation type: {aggregation_type}")
-
-            # Apply the appropriate aggregation function and add result to the DataFrame
-            data[feature_name] = cls._perform_aggregation(data, aggregation_type, source_feature)
-
-        # Return the modified DataFrame
+    @classmethod
+    def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
+        """Add the result to the DataFrame."""
+        data[feature_name] = result
         return data
 
     @classmethod

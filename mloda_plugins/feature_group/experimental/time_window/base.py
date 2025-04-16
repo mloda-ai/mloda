@@ -9,6 +9,7 @@ from typing import Any, Optional, Set, Union
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
+from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.feature_chain_parser import FeatureChainParser
@@ -116,7 +117,7 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
     PREFIX_PATTERN = r"^([\w]+)_(\d+)_([\w]+)_window__"
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
-        source_feature = self.mloda_source_feature(feature_name.name)
+        source_feature = FeatureChainParser.extract_source_feature(feature_name.name, self.PREFIX_PATTERN)
         time_filter_feature = Feature(self.get_time_filter_feature(options))
         return {Feature(source_feature), time_filter_feature}
 
@@ -190,11 +191,6 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
         return cls.parse_time_window_prefix(feature_name)[2]
 
     @classmethod
-    def mloda_source_feature(cls, feature_name: str) -> str:
-        """Extract the source feature name from the feature name."""
-        return FeatureChainParser.extract_source_feature(feature_name, cls.PREFIX_PATTERN)
-
-    @classmethod
     def match_feature_group_criteria(
         cls,
         feature_name: Union[FeatureName, str],
@@ -215,6 +211,94 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
             return True
         except ValueError:
             return False
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        """
+        Perform time window operations.
+
+        Processes all requested features, determining the window function, window size,
+        time unit, and source feature from each feature name.
+
+        Adds the time window results directly to the input data structure.
+        """
+        time_filter_feature = cls.get_time_filter_feature(features.options)
+
+        cls._check_time_filter_feature_exists(data, time_filter_feature)
+
+        cls._check_time_filter_feature_is_datetime(data, time_filter_feature)
+
+        # Process each requested feature
+        for feature_name in features.get_all_names():
+            window_function, window_size, time_unit = cls.parse_time_window_prefix(feature_name)
+            mloda_source_feature = FeatureChainParser.extract_source_feature(feature_name, cls.PREFIX_PATTERN)
+
+            cls._check_source_feature_exists(data, mloda_source_feature)
+
+            result = cls._perform_window_operation(
+                data, window_function, window_size, time_unit, mloda_source_feature, time_filter_feature
+            )
+
+            data = cls._add_result_to_data(data, feature_name, result)
+
+        return data
+
+    @classmethod
+    def _check_time_filter_feature_exists(cls, data: Any, time_filter_feature: str) -> None:
+        """
+        Check if the time filter feature exists in the data.
+
+        Args:
+            data: The input data
+            time_filter_feature: The name of the time filter feature
+
+        Raises:
+            ValueError: If the time filter feature does not exist in the data
+        """
+        raise NotImplementedError(f"_check_time_filter_feature_exists not implemented in {cls.__name__}")
+
+    @classmethod
+    def _check_time_filter_feature_is_datetime(cls, data: Any, time_filter_feature: str) -> None:
+        """
+        Check if the time filter feature is a datetime column.
+
+        Args:
+            data: The input data
+            time_filter_feature: The name of the time filter feature
+
+        Raises:
+            ValueError: If the time filter feature is not a datetime column
+        """
+        raise NotImplementedError(f"_check_time_filter_feature_is_datetime not implemented in {cls.__name__}")
+
+    @classmethod
+    def _check_source_feature_exists(cls, data: Any, mloda_source_feature: str) -> None:
+        """
+        Check if the source feature exists in the data.
+
+        Args:
+            data: The input data
+            mloda_source_feature: The name of the source feature
+
+        Raises:
+            ValueError: If the source feature does not exist in the data
+        """
+        raise NotImplementedError(f"_check_source_feature_exists not implemented in {cls.__name__}")
+
+    @classmethod
+    def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
+        """
+        Add the result to the data.
+
+        Args:
+            data: The input data
+            feature_name: The name of the feature to add
+            result: The result to add
+
+        Returns:
+            The updated data
+        """
+        raise NotImplementedError(f"_add_result_to_data not implemented in {cls.__name__}")
 
     @classmethod
     def _perform_window_operation(

@@ -16,6 +16,7 @@ class DefaultOptionKeys(str, Enum):
     """
 
     mloda_source_feature = "mloda_source_feature"
+    mloda_source_feature_group = "mloda_source_feature_group"
     reference_time = "time_filter"
 
     @classmethod

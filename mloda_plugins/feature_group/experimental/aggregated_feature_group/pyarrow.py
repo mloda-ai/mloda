@@ -9,7 +9,6 @@ from typing import Any, Set, Type, Union
 import pyarrow as pa
 import pyarrow.compute as pc
 
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
@@ -29,39 +28,20 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
         return {PyarrowTable}
 
     @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        """
-        Perform aggregations using PyArrow.
+    def _check_source_feature_exists(cls, data: pa.Table, feature_name: str) -> None:
+        """Check if the feature exists in the Table."""
+        if feature_name not in data.schema.names:
+            raise ValueError(f"Source feature '{feature_name}' not found in data")
 
-        Processes all requested features, determining the aggregation type
-        and source feature from each feature name.
+    @classmethod
+    def _add_result_to_data(cls, data: pa.Table, feature_name: str, result: Any) -> pa.Table:
+        """Add the result to the Table."""
+        # Create an array with the aggregated result repeated for each row
+        repeat_count = data.num_rows
+        repeated_result = pa.array([result] * repeat_count)
 
-        Adds the aggregated results to the input Table.
-        """
-        # Process each requested feature
-        for feature_name in features.get_all_names():
-            aggregation_type = cls.get_aggregation_type(feature_name)
-            source_feature = cls.mloda_source_feature(feature_name)
-
-            # Check if source feature exists in the table
-            if source_feature not in data.schema.names:
-                raise ValueError(f"Source feature '{source_feature}' not found in data")
-
-            if aggregation_type not in cls.AGGREGATION_TYPES:
-                raise ValueError(f"Unsupported aggregation type: {aggregation_type}")
-
-            # Apply the appropriate aggregation function
-            result = cls._perform_aggregation(data, aggregation_type, source_feature)
-
-            # Create an array with the aggregated result repeated for each row
-            repeat_count = data.num_rows
-            repeated_result = pa.array([result] * repeat_count)
-
-            # Add the new column to the table
-            data = data.append_column(feature_name, repeated_result)
-
-        # Return the modified Table
-        return data
+        # Add the new column to the table
+        return data.append_column(feature_name, repeated_result)
 
     @classmethod
     def _perform_aggregation(cls, data: Any, aggregation_type: str, mloda_source_feature: str) -> Any:

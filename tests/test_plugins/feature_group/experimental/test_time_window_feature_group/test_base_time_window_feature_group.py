@@ -88,13 +88,6 @@ class TestTimeWindowFeatureGroup:
         assert TimeWindowFeatureGroup.get_time_unit("min_2_minute_window__pressure") == "minute"
         assert TimeWindowFeatureGroup.get_time_unit("sum_4_second_window__wind_speed") == "second"
 
-    def test_mloda_source_feature(self) -> None:
-        """Test extraction of source feature from feature name."""
-        assert TimeWindowFeatureGroup.mloda_source_feature("avg_3_day_window__temperature") == "temperature"
-        assert TimeWindowFeatureGroup.mloda_source_feature("max_7_hour_window__humidity") == "humidity"
-        assert TimeWindowFeatureGroup.mloda_source_feature("min_2_day_window__pressure") == "pressure"
-        assert TimeWindowFeatureGroup.mloda_source_feature("sum_4_day_window__wind_speed") == "wind_speed"
-
     def test_match_feature_group_criteria(self) -> None:
         """Test match_feature_group_criteria method."""
         options = Options()

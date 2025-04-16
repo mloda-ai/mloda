@@ -10,7 +10,6 @@ import datetime
 import pyarrow as pa
 import pyarrow.compute as pc
 
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
@@ -23,25 +22,17 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         return {PyarrowTable}
 
     @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        """
-        Perform time window operations using PyArrow.
-
-        Processes all requested features, determining the window function, window size,
-        time unit, and source feature from each feature name.
-
-        Adds the time window results directly to the input Table.
-        """
-        time_filter_feature = cls.get_time_filter_feature(features.options)
-
-        # Check if the time filter feature exists in the Table
+    def _check_time_filter_feature_exists(cls, data: pa.Table, time_filter_feature: str) -> None:
+        """Check if the time filter feature exists in the Table."""
         if time_filter_feature not in data.schema.names:
             raise ValueError(
                 f"Time filter feature '{time_filter_feature}' not found in data. "
                 f"Please ensure the Table contains this column."
             )
 
-        # Check if the time filter feature is a datetime column
+    @classmethod
+    def _check_time_filter_feature_is_datetime(cls, data: pa.Table, time_filter_feature: str) -> None:
+        """Check if the time filter feature is a datetime column."""
         time_column = data.column(time_filter_feature)
         if not pa.types.is_timestamp(time_column.type):
             raise ValueError(
@@ -49,22 +40,16 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
                 f"Current type: {time_column.type}"
             )
 
-        # Process each requested feature
-        for feature_name in features.get_all_names():
-            window_function, window_size, time_unit = cls.parse_time_window_prefix(feature_name)
-            mloda_source_feature = cls.mloda_source_feature(feature_name)
+    @classmethod
+    def _check_source_feature_exists(cls, data: pa.Table, mloda_source_feature: str) -> None:
+        """Check if the source feature exists in the Table."""
+        if mloda_source_feature not in data.schema.names:
+            raise ValueError(f"Source feature '{mloda_source_feature}' not found in data")
 
-            if mloda_source_feature not in data.schema.names:
-                raise ValueError(f"Source feature '{mloda_source_feature}' not found in data")
-
-            result = cls._perform_window_operation(
-                data, window_function, window_size, time_unit, mloda_source_feature, time_filter_feature
-            )
-
-            # Add the new column to the table
-            data = data.append_column(feature_name, result)
-
-        return data
+    @classmethod
+    def _add_result_to_data(cls, data: pa.Table, feature_name: str, result: Any) -> pa.Table:
+        """Add the result to the Table."""
+        return data.append_column(feature_name, result)
 
     @classmethod
     def _perform_window_operation(

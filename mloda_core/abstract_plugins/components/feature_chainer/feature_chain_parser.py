@@ -30,7 +30,7 @@ class FeatureChainParser:
 
         Args:
             feature_name: The feature name to parse
-            prefix_pattern: Regex pattern for the prefix (e.g., r"^([\w]+)_aggr__")
+            prefix_pattern: Regex pattern for the prefix (e.g., r"^([w]+)_aggr__")
 
         Returns:
             The source feature part of the name
@@ -133,7 +133,7 @@ class FeatureChainParser:
             The prefix part of the name, or None if the pattern doesn't match
 
         Example:
-            For "max_aggr__temperature" with pattern r"^([\w]+)_aggr__", returns "max"
+            For "max_aggr__temperature" with pattern r"^([w]+)_aggr__", returns "max"
         """
         match = re.match(prefix_pattern, feature_name)
         if not match:

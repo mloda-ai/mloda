@@ -21,6 +21,10 @@
     * Added support for creating features from options rather than explicit feature names
     * Enhanced AggregatedFeatureGroup, MissingValueFeatureGroup,TimeWindowFeatureGroup with configuration-based creation
     * Added integration tests demonstrating the new functionality
+*   Implemented TextCleaningFeatureGroup with Pandas support:
+    * Added support for text normalization, stopword removal, punctuation removal, etc.
+    * Integrated with FeatureChainParserConfiguration for configuration-based creation
+    * Added behavior note: different options create different feature sets in results
 *   Implemented ClusteringFeatureGroup with Pandas support:
     * Supports K-means, DBSCAN, hierarchical, spectral, and affinity clustering
     * Automatic determination of optimal cluster count
@@ -40,4 +44,6 @@ The FeatureChainParserConfiguration has been implemented to support configuratio
 
 ## Known Issues
 
-*   None identified.
+* FeatureSet are created unintuitive:  
+feature_set = FeatureSet()
+feature_set.add(feature)

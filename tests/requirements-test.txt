@@ -14,3 +14,4 @@ bandit
 types-requests
 types-toml
 scikit-learn
+nltk

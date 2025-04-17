@@ -27,6 +27,10 @@ Initializing the memory bank for the mloda project.
     * Moved feature_chain_parser.py to core components
     * Enhanced AggregatedFeatureGroup, MissingValueFeatureGroup, TimeWindowFeatureGroup with configuration-based creation
     * Added support for creating features from options rather than explicit feature names
+*   Implemented TextCleaningFeatureGroup with Pandas support:
+    * Added support for text normalization, stopword removal, punctuation removal, etc.
+    * Integrated with FeatureChainParserConfiguration for configuration-based creation
+    * Added behavior note: different options create different feature sets in results
 *   Implemented ClusteringFeatureGroup with Pandas support:
     * Supports various clustering algorithms (K-means, DBSCAN, hierarchical, etc.)
 ## Next Steps

@@ -197,6 +197,10 @@ Feature groups can be composed to create complex features by chaining multiple t
 
 ## Changelog
 
+### 2025-04-18: Added TextCleaningFeatureGroup
+- Added support for text normalization, stopword removal, punctuation removal, etc.
+- Added behavior note: different options create different feature sets in results
+
 ### 2025-04-17: Added ClusteringFeatureGroup
 - Implemented ClusteringFeatureGroup with Pandas support
 - Added support for K-means, DBSCAN, hierarchical, spectral, and affinity clustering

@@ -5,7 +5,7 @@ from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.options import Options
 
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
-from mloda_plugins.feature_group.experimental.feature_chain_parser import FeatureChainParser
+from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
 
 
 class TestMissingValueFeatureGroup:

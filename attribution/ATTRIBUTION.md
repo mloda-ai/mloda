@@ -16,7 +16,7 @@
 | attrs                                  | 25.3.0          | UNKNOWN                                                 |
 | babel                                  | 2.17.0          | BSD License                                             |
 | bandit                                 | 1.8.3           | Apache Software License                                 |
-| beautifulsoup4                         | 4.13.3          | MIT License                                             |
+| beautifulsoup4                         | 4.13.4          | MIT License                                             |
 | bleach                                 | 6.2.0           | Apache Software License                                 |
 | cachetools                             | 5.5.2           | MIT License                                             |
 | certifi                                | 2025.1.31       | Mozilla Public License 2.0 (MPL 2.0)                    |
@@ -40,7 +40,7 @@
 | google-api-python-client               | 2.167.0         | Apache Software License                                 |
 | google-auth                            | 2.39.0          | Apache Software License                                 |
 | google-auth-httplib2                   | 0.2.0           | Apache Software License                                 |
-| google-generativeai                    | 0.8.4           | Apache Software License                                 |
+| google-generativeai                    | 0.8.5           | Apache Software License                                 |
 | googleapis-common-protos               | 1.70.0          | Apache Software License                                 |
 | grpcio                                 | 1.72.0rc1       | Apache Software License                                 |
 | grpcio-status                          | 1.71.0          | Apache Software License                                 |
@@ -55,6 +55,7 @@
 | ipython                                | 8.35.0          | BSD License                                             |
 | isoduration                            | 20.11.0         | ISC License (ISCL)                                      |
 | jedi                                   | 0.19.2          | MIT License                                             |
+| joblib                                 | 1.4.2           | BSD License                                             |
 | json5                                  | 0.12.0          | Apache Software License                                 |
 | jsonpointer                            | 3.0.0           | BSD License                                             |
 | jsonschema                             | 4.23.0          | MIT License                                             |
@@ -129,8 +130,10 @@
 | rfc3986-validator                      | 0.1.1           | MIT License                                             |
 | rich                                   | 14.0.0          | MIT License                                             |
 | rpds-py                                | 0.24.0          | MIT                                                     |
-| rsa                                    | 4.9             | Apache Software License                                 |
-| ruff                                   | 0.11.5          | MIT License                                             |
+| rsa                                    | 4.9.1           | Apache Software License                                 |
+| ruff                                   | 0.11.6          | MIT License                                             |
+| scikit-learn                           | 1.6.1           | BSD License                                             |
+| scipy                                  | 1.15.2          | BSD License                                             |
 | six                                    | 1.17.0          | MIT License                                             |
 | sniffio                                | 1.3.1           | Apache Software License; MIT License                    |
 | soupsieve                              | 2.6             | MIT License                                             |
@@ -138,6 +141,7 @@
 | stevedore                              | 5.4.1           | Apache Software License                                 |
 | terminado                              | 0.18.1          | BSD License                                             |
 | testbook                               | 0.4.2           | BSD License                                             |
+| threadpoolctl                          | 3.6.0           | BSD License                                             |
 | tinycss2                               | 1.4.0           | BSD License                                             |
 | tornado                                | 6.4.2           | Apache Software License                                 |
 | tox                                    | 4.25.0          | MIT License                                             |

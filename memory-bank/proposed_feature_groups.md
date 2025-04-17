@@ -6,7 +6,7 @@
 |----------|--------------|----------|--------|
 | Time Series | TimeWindowFeatureGroup | High | Implemented |
 | Data Quality | MissingValueFeatureGroup | High | Implemented |
-| ML | ClusteringFeatureGroup | High | To Do |
+| ML | ClusteringFeatureGroup | High | Implemented |
 | Text Processing | TextCleaningFeatureGroup | Medium | To Do |
 | Geospatial | GeoDistanceFeatureGroup | Medium | To Do |
 | ML | DimensionalityReductionFeatureGroup | Medium | To Do |

@@ -4,18 +4,25 @@ Base implementation for time window feature groups.
 
 from __future__ import annotations
 
-from typing import Any, Optional, Set, Union
+from typing import Any, Optional, Set, Type, Union
 
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
+from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
+from mloda_core.abstract_plugins.components.feature_chainer.feature_chainer_parser_configuration import (
+    FeatureChainParserConfiguration,
+)
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
-from mloda_plugins.feature_group.experimental.feature_chain_parser import FeatureChainParser
 
 
 class TimeWindowFeatureGroup(AbstractFeatureGroup):
+    # Option keys for time window configuration
+    WINDOW_FUNCTION = "window_function"
+    WINDOW_SIZE = "window_size"
+    TIME_UNIT = "time_unit"
     """
     Base class for all time window feature groups.
 
@@ -326,3 +333,103 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
             The result of the window operation
         """
         raise NotImplementedError(f"_perform_window_operation not implemented in {cls.__name__}")
+
+    @classmethod
+    def configurable_feature_chain_parser(cls) -> Optional[Type[FeatureChainParserConfiguration]]:
+        """
+        Returns the FeatureChainParserConfiguration class for this feature group.
+
+        This method allows the Engine to automatically create features with the correct
+        naming convention based on configuration options, rather than requiring explicit
+        feature names.
+
+        Returns:
+            The TimeWindowFeatureChainParserConfiguration class
+        """
+        return TimeWindowFeatureChainParserConfiguration
+
+
+class TimeWindowFeatureChainParserConfiguration(FeatureChainParserConfiguration):
+    """
+    Feature chain parser configuration for TimeWindowFeatureGroup.
+
+    This class provides the configuration for parsing TimeWindowFeatureGroup features
+    from options. It defines the keys used for parsing and implements the parse_from_options
+    method to create feature names in the format "{window_function}_{window_size}_{time_unit}_window__{source_feature}".
+
+    This configuration is used by the Engine to automatically parse features with the
+    appropriate options into TimeWindowFeatureGroup features.
+    """
+
+    @classmethod
+    def parse_keys(cls) -> Set[str]:
+        """
+        Returns the keys that are used to parse the feature group.
+
+        Returns:
+            A set containing the window function, window size, time unit, and source feature keys
+        """
+        return {
+            TimeWindowFeatureGroup.WINDOW_FUNCTION,
+            TimeWindowFeatureGroup.WINDOW_SIZE,
+            TimeWindowFeatureGroup.TIME_UNIT,
+            DefaultOptionKeys.mloda_source_feature,
+        }
+
+    @classmethod
+    def parse_from_options(cls, options: Options) -> Optional[str]:
+        """
+        Parse a TimeWindowFeatureGroup feature from options.
+
+        Args:
+            options: A dictionary containing:
+                - WINDOW_FUNCTION: The window function (e.g., "sum", "avg")
+                - WINDOW_SIZE: The size of the window (e.g., 7)
+                - TIME_UNIT: The time unit (e.g., "day")
+                - DefaultOptionKeys.mloda_source_feature: The source feature name
+
+        Returns:
+            A feature name string in the format "{window_function}_{window_size}_{time_unit}_window__{mloda_source_feature}"
+
+        Raises:
+            ValueError: If the window function or time unit is not supported
+        """
+        # Extract required options
+        window_function = options.get(TimeWindowFeatureGroup.WINDOW_FUNCTION)
+        window_size = options.get(TimeWindowFeatureGroup.WINDOW_SIZE)
+        time_unit = options.get(TimeWindowFeatureGroup.TIME_UNIT)
+        source_feature = options.get(DefaultOptionKeys.mloda_source_feature)
+
+        # Validate options
+        if not window_function:
+            return None
+        if not window_size:
+            return None
+        if not time_unit:
+            return None
+        if not source_feature:
+            return None
+
+        # Validate window function
+        if window_function not in TimeWindowFeatureGroup.WINDOW_FUNCTIONS:
+            raise ValueError(
+                f"Unsupported window function: {window_function}. "
+                f"Supported functions: {list(TimeWindowFeatureGroup.WINDOW_FUNCTIONS.keys())}"
+            )
+
+        # Validate time unit
+        if time_unit not in TimeWindowFeatureGroup.TIME_UNITS:
+            raise ValueError(
+                f"Unsupported time unit: {time_unit}. Supported units: {list(TimeWindowFeatureGroup.TIME_UNITS.keys())}"
+            )
+
+        # Validate window size
+        try:
+            window_size_int = int(window_size)
+            if window_size_int <= 0:
+                raise ValueError("Window size must be positive")
+        except (ValueError, TypeError):
+            raise ValueError(f"Invalid window size: {window_size}. Must be a positive integer.")
+
+        # Build and return the feature name
+        return f"{window_function}_{window_size}_{time_unit}_window__{source_feature}"

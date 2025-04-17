@@ -4,17 +4,23 @@ Base implementation for missing value imputation feature groups.
 
 from __future__ import annotations
 
-from typing import Any, List, Optional, Set, Union
+from typing import Any, List, Optional, Set, Type, Union
 
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
+from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
+from mloda_core.abstract_plugins.components.feature_chainer.feature_chainer_parser_configuration import (
+    FeatureChainParserConfiguration,
+)
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.options import Options
-from mloda_plugins.feature_group.experimental.feature_chain_parser import FeatureChainParser
+from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 
 class MissingValueFeatureGroup(AbstractFeatureGroup):
+    # Option key for imputation method
+    IMPUTATION_METHOD = "imputation_method"
     """
     Base class for all missing value imputation feature groups.
 
@@ -199,3 +205,76 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
             The result of the imputation
         """
         raise NotImplementedError(f"_perform_imputation not implemented in {cls.__name__}")
+
+    @classmethod
+    def configurable_feature_chain_parser(cls) -> Optional[Type[FeatureChainParserConfiguration]]:
+        """
+        Returns the FeatureChainParserConfiguration class for this feature group.
+
+        This method allows the Engine to automatically create features with the correct
+        naming convention based on configuration options, rather than requiring explicit
+        feature names.
+
+        Returns:
+            The MissingValueFeatureChainParserConfiguration class
+        """
+        return MissingValueFeatureChainParserConfiguration
+
+
+class MissingValueFeatureChainParserConfiguration(FeatureChainParserConfiguration):
+    """
+    Feature chain parser configuration for MissingValueFeatureGroup.
+
+    This class provides the configuration for parsing MissingValueFeatureGroup features
+    from options. It defines the keys used for parsing and implements the parse_from_options
+    method to create feature names in the format "{imputation_method}_imputed__{source_feature}".
+
+    This configuration is used by the Engine to automatically parse features with the
+    appropriate options into MissingValueFeatureGroup features.
+    """
+
+    @classmethod
+    def parse_keys(cls) -> Set[str]:
+        """
+        Returns the keys that are used to parse the feature group.
+
+        Returns:
+            A set containing the imputation method and source feature keys
+        """
+        return {MissingValueFeatureGroup.IMPUTATION_METHOD, DefaultOptionKeys.mloda_source_feature}
+
+    @classmethod
+    def parse_from_options(cls, options: Options) -> Optional[str]:
+        """
+        Parse a MissingValueFeatureGroup feature from options.
+
+        Args:
+            options: A dictionary containing:
+                - IMPUTATION_METHOD: The imputation method (e.g., "mean", "median")
+                - DefaultOptionKeys.mloda_source_feature: The source feature name
+
+        Returns:
+            A feature name string in the format "{imputation_method}_imputed__{mloda_source_feature}"
+
+        Raises:
+            ValueError: If the imputation method is not supported
+        """
+        # Extract required options
+        imputation_method = options.get(MissingValueFeatureGroup.IMPUTATION_METHOD)
+        source_feature = options.get(DefaultOptionKeys.mloda_source_feature)
+
+        # Validate options
+        if not imputation_method:
+            return None
+        if not source_feature:
+            return None
+
+        # Validate imputation method
+        if imputation_method not in MissingValueFeatureGroup.IMPUTATION_METHODS:
+            raise ValueError(
+                f"Unsupported imputation method: {imputation_method}. "
+                f"Supported methods: {list(MissingValueFeatureGroup.IMPUTATION_METHODS.keys())}"
+            )
+
+        # Build and return the feature name
+        return f"{imputation_method}_imputed__{source_feature}"

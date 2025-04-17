@@ -109,7 +109,11 @@ When implementing feature groups that perform aggregation operations:
    - Use DataCreator with a set of feature names, not a dictionary
    - For testing, expect multiple DataFrames in results (one per feature group)
 
-### Feature Chain Parser
+### Feature Chain Parser and Configuration
+
+The feature chain parsing system consists of two main components:
+
+#### FeatureChainParser
 
 The `FeatureChainParser` is a utility class that handles the common aspects of feature name parsing and chaining across different feature group types:
 
@@ -128,6 +132,47 @@ The `FeatureChainParser` is a utility class that handles the common aspects of f
    - Each feature group defines a `PREFIX_PATTERN` that matches its naming convention
    - Feature groups use the `FeatureChainParser` methods with their specific pattern
    - This approach simplifies the implementation of new feature groups that support chaining
+
+#### FeatureChainParserConfiguration
+
+The `FeatureChainParserConfiguration` extends the feature chain parsing system to support configuration-based feature creation:
+
+1. **Purpose**:
+   - Enables creating features from options rather than explicit feature names
+   - Simplifies feature creation in client code
+   - Supports dynamic feature creation at runtime
+
+2. **Key Methods**:
+   - `parse_keys`: Returns the set of option keys used for parsing
+   - `parse_from_options`: Creates a feature name from options
+   - `create_feature_without_options`: Creates a feature with the parsed name and removes the parsed options
+
+3. **Integration with Feature Groups**:
+   - Feature groups implement `configurable_feature_chain_parser()` to return their parser configuration
+   - The Engine automatically uses this configuration to parse features with the appropriate options
+   - Implemented for `AggregatedFeatureGroup`, `MissingValueFeatureGroup`, and `TimeWindowFeatureGroup`
+
+4. **Usage Example**:
+
+   **AggregatedFeatureGroup**:
+   ```python
+   feature = Feature(
+       "PlaceHolder",  # Placeholder name, will be replaced
+       Options({
+           AggregatedFeatureGroup.AGGREGATION_TYPE: "sum",
+           DefaultOptionKeys.mloda_source_feature: "Sales"
+       })
+   )
+   
+   # The Engine will automatically parse this into a feature with name "sum_aggr__Sales"
+   ```
+### Clustering Feature Group Pattern
+
+When implementing feature groups that perform clustering operations:
+
+**Naming Convention**:
+- Use `cluster_{algorithm}_{k_value}__{mloda_source_features}` format (note the double underscore)
+- Example: `cluster_kmeans_5__customer_behavior`, `cluster_dbscan_auto__sensor_readings`
 
 ### Combined Feature Group Pattern
 
@@ -151,6 +196,18 @@ Feature groups can be composed to create complex features by chaining multiple t
    - Use integration tests to validate the entire feature chain
 
 ## Changelog
+
+### 2025-04-17: Added ClusteringFeatureGroup
+- Implemented ClusteringFeatureGroup with Pandas support
+- Added support for K-means, DBSCAN, hierarchical, spectral, and affinity clustering
+- Added automatic determination of optimal cluster count
+
+### 2025-04-17: Added Feature Chain Parser Configuration
+- Created `FeatureChainParserConfiguration` class for configuration-based feature creation
+- Moved feature_chain_parser.py to core components for better organization
+- Enhanced AggregatedFeatureGroup with configuration-based creation
+- Added integration tests demonstrating the new functionality
+- Updated Engine to automatically parse features with appropriate options
 
 ### 2025-04-15: Added Feature Chain Parser
 - Created `FeatureChainParser` utility class to handle feature name parsing and chaining

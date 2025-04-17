@@ -23,6 +23,7 @@
 | cffi                                   | 1.17.1          | MIT License                                             |
 | chardet                                | 5.2.0           | GNU Lesser General Public License v2 or later (LGPLv2+) |
 | charset-normalizer                     | 3.4.1           | MIT License                                             |
+| click                                  | 8.1.8           | BSD License                                             |
 | colorama                               | 0.4.6           | BSD License                                             |
 | comm                                   | 0.2.2           | BSD License                                             |
 | debugpy                                | 1.8.14          | MIT License                                             |
@@ -81,6 +82,7 @@
 | nbconvert                              | 7.16.6          | BSD License                                             |
 | nbformat                               | 5.10.4          | BSD License                                             |
 | nest-asyncio                           | 1.6.0           | BSD License                                             |
+| nltk                                   | 3.9.1           | Apache Software License                                 |
 | notebook                               | 7.4.0           | BSD License                                             |
 | notebook_shim                          | 0.2.4           | BSD License                                             |
 | numpy                                  | 2.2.4           | BSD License                                             |
@@ -125,6 +127,7 @@
 | pytz                                   | 2025.2          | MIT License                                             |
 | pyzmq                                  | 26.4.0          | BSD License                                             |
 | referencing                            | 0.36.2          | UNKNOWN                                                 |
+| regex                                  | 2024.11.6       | Apache Software License                                 |
 | requests                               | 2.32.3          | Apache Software License                                 |
 | rfc3339-validator                      | 0.1.4           | MIT License                                             |
 | rfc3986-validator                      | 0.1.1           | MIT License                                             |

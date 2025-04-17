@@ -33,6 +33,9 @@ Initializing the memory bank for the mloda project.
     * Added behavior note: different options create different feature sets in results
 *   Implemented ClusteringFeatureGroup with Pandas support:
     * Supports various clustering algorithms (K-means, DBSCAN, hierarchical, etc.)
+*   Implemented GeoDistanceFeatureGroup with Pandas support:
+    * Added support for haversine, euclidean, and manhattan distance calculations
+
 ## Next Steps
 
 *   Integration test a feature that aggregates timewindowed imputed features

@@ -16,6 +16,15 @@
     * Constant value imputation for any data type
     * Forward/backward fill for sequential data
     * Support for grouped imputation based on categorical features
+*   Implemented FeatureChainParserConfiguration for configuration-based feature creation:
+    * Moved feature_chain_parser.py to core components for better organization
+    * Added support for creating features from options rather than explicit feature names
+    * Enhanced AggregatedFeatureGroup, MissingValueFeatureGroup,TimeWindowFeatureGroup with configuration-based creation
+    * Added integration tests demonstrating the new functionality
+*   Implemented ClusteringFeatureGroup with Pandas support:
+    * Supports K-means, DBSCAN, hierarchical, spectral, and affinity clustering
+    * Automatic determination of optimal cluster count
+    * Standardized feature scaling and missing value handling
 
 ## What's Left to Build
 
@@ -25,7 +34,9 @@
 
 ## Current Status
 
-The memory bank has been initialized with basic information. Documentation has been improved with README.md files in key directories. A new aggregated feature group pattern has been implemented with both Pandas and PyArrow support, allowing for efficient aggregation operations on different compute frameworks. The TimeWindowFeatureGroup has been implemented to support time-based window operations. The MissingValueFeatureGroup has been implemented to handle missing values in data using various imputation methods. The next focus is on integration testing a feature that combines timewindowed imputed features with aggregation to demonstrate the composability of feature groups.
+The memory bank has been initialized with basic information. Documentation has been improved with README.md files in key directories. A new aggregated feature group pattern has been implemented with both Pandas and PyArrow support, allowing for efficient aggregation operations on different compute frameworks. The TimeWindowFeatureGroup has been implemented to support time-based window operations. The MissingValueFeatureGroup has been implemented to handle missing values in data using various imputation methods. 
+
+The FeatureChainParserConfiguration has been implemented to support configuration-based feature creation, allowing features to be created from options rather than explicit feature names. This enhances the flexibility of the framework and simplifies feature creation in client code. The AggregatedFeatureGroup has been enhanced with this configuration-based approach, and integration tests have been added to demonstrate the functionality.
 
 ## Known Issues
 

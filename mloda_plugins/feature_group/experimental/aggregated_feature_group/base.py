@@ -4,19 +4,27 @@ Base implementation for aggregated feature groups.
 
 from __future__ import annotations
 
-from typing import Any, Optional, Set, Union
+from typing import Any, Optional, Set, Type, Union
 
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
+from mloda_core.abstract_plugins.components.feature_chainer.feature_chainer_parser_configuration import (
+    FeatureChainParserConfiguration,
+)
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.options import Options
-from mloda_plugins.feature_group.experimental.feature_chain_parser import FeatureChainParser
+from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
+from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 
 class AggregatedFeatureGroup(AbstractFeatureGroup):
     """
     Base class for all aggregated feature groups.
+
+    The AggregatedFeatureGroup performs aggregation operations on source features,
+    such as sum, average, minimum, maximum, etc. It extracts the source feature from
+    the feature name and applies the specified aggregation operation.
 
     ## Feature Naming Convention
 
@@ -30,7 +38,33 @@ class AggregatedFeatureGroup(AbstractFeatureGroup):
     - `sum_aggr__sales`: Sum of sales values
     - `avg_aggr__temperature`: Average of temperature values
     - `max_aggr__price`: Maximum price value
+
+    ## Configuration-Based Creation
+
+    AggregatedFeatureGroup supports configuration-based creation through the
+    FeatureChainParserConfiguration mechanism. This allows features to be created
+    from options rather than explicit feature names.
+
+    To create an aggregated feature using configuration:
+
+    ```python
+    feature = Feature(
+        "PlaceHolder",  # Placeholder name, will be replaced
+        Options({
+            AggregatedFeatureGroup.AGGREGATION_TYPE: "sum",
+            DefaultOptionKeys.mloda_source_feature: "Sales"
+        })
+    )
+
+    # The Engine will automatically parse this into a feature with name "sum_aggr__Sales"
+    ```
+
+    The configuration-based approach is particularly useful when chaining multiple
+    feature groups together, which need additional configuration.
     """
+
+    # Option key for aggregation type
+    AGGREGATION_TYPE = "aggregation_type"
 
     # Define supported aggregation types
     AGGREGATION_TYPES = {
@@ -47,6 +81,7 @@ class AggregatedFeatureGroup(AbstractFeatureGroup):
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         """Extract source feature from the aggregated feature name."""
+
         mloda_source_feature = FeatureChainParser.extract_source_feature(feature_name.name, self.PREFIX_PATTERN)
         return {Feature(mloda_source_feature)}
 
@@ -157,3 +192,65 @@ class AggregatedFeatureGroup(AbstractFeatureGroup):
             The result of the aggregation
         """
         raise NotImplementedError(f"_perform_aggregation not implemented in {cls.__name__}")
+
+    @classmethod
+    def configurable_feature_chain_parser(cls) -> Optional[Type[FeatureChainParserConfiguration]]:
+        """
+        Indicates whether this feature group can be parsed using a FeatureChainParserConfiguration.
+        This functionality falls back to FeatureChainParser.
+        """
+        return AggFeatureChainParserConfiguration
+
+
+class AggFeatureChainParserConfiguration(FeatureChainParserConfiguration):
+    """
+    Feature chain parser configuration for AggregatedFeatureGroup.
+
+    This class provides the configuration for parsing AggregatedFeatureGroup features
+    from options. It defines the keys used for parsing and implements the parse_from_options
+    method to create feature names in the format "{aggregation_type}_aggr__{source_feature}".
+
+    This configuration is used by the Engine to automatically parse features with the
+    appropriate options into AggregatedFeatureGroup features.
+    """
+
+    @classmethod
+    def parse_keys(cls) -> Set[str]:
+        return {AggregatedFeatureGroup.AGGREGATION_TYPE, DefaultOptionKeys.mloda_source_feature}
+
+    @classmethod
+    def parse_from_options(cls, options: Options) -> Optional[str]:
+        """
+        Parse an AggregatedFeatureGroup feature from options.
+
+        Args:
+            options: A dictionary containing:
+                - AGGREGATION_TYPE: The aggregation type (e.g., "sum")
+                - DefaultOptionKeys.mloda_source_feature: The source feature name
+
+        Returns:
+            A feature name string in the format "{aggregation_type}_aggr__{mloda_source_feature}"
+
+        Raises:
+            ValueError: If required options are missing
+        """
+
+        # Extract required options
+        aggregation_type = options.get(AggregatedFeatureGroup.AGGREGATION_TYPE)
+        source_feature = options.get(DefaultOptionKeys.mloda_source_feature)
+
+        # Validate options
+        if not aggregation_type:
+            return None
+        if not source_feature:
+            return None
+
+        # Validate aggregation type
+        if aggregation_type not in AggregatedFeatureGroup.AGGREGATION_TYPES:
+            raise ValueError(
+                f"Unsupported aggregation type: {aggregation_type}. "
+                f"Supported types: {list(AggregatedFeatureGroup.AGGREGATION_TYPES.keys())}"
+            )
+
+        # Build and return the feature name
+        return f"{aggregation_type}_aggr__{source_feature}"

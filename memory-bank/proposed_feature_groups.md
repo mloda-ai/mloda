@@ -8,7 +8,7 @@
 | Data Quality | MissingValueFeatureGroup | High | Implemented |
 | ML | ClusteringFeatureGroup | High | Implemented |
 | Text Processing | TextCleaningFeatureGroup | Medium | Implemented |
-| Geospatial | GeoDistanceFeatureGroup | Medium | To Do |
+| Geospatial | GeoDistanceFeatureGroup | Medium | Implemented |
 | ML | DimensionalityReductionFeatureGroup | Medium | To Do |
 | Text Processing | SentimentAnalysisFeatureGroup | Low | To Do |
 | Time Series | ForecastingFeatureGroup | Low | To Do |

@@ -174,6 +174,19 @@ When implementing feature groups that perform clustering operations:
 - Use `cluster_{algorithm}_{k_value}__{mloda_source_features}` format (note the double underscore)
 - Example: `cluster_kmeans_5__customer_behavior`, `cluster_dbscan_auto__sensor_readings`
 
+### Geo Distance Feature Group Pattern
+
+When implementing feature groups that calculate distances between geographic points:
+
+**Naming Convention**:
+- Use `{distance_type}_distance__{point1_feature}__{point2_feature}` format (note the double underscores)
+- Examples: `haversine_distance__customer_location__store_location`, `euclidean_distance__origin__destination`
+
+**Implementation Tips**:
+- Support different distance metrics (haversine for geographic coordinates, euclidean and manhattan for Cartesian coordinates)
+- Use numpy for efficient distance calculations
+- Integrate with FeatureChainParserConfiguration for configuration-based creation
+
 ### Combined Feature Group Pattern
 
 Feature groups can be composed to create complex features by chaining multiple transformations:
@@ -196,6 +209,12 @@ Feature groups can be composed to create complex features by chaining multiple t
    - Use integration tests to validate the entire feature chain
 
 ## Changelog
+
+### 2025-04-18: Added GeoDistanceFeatureGroup
+- Implemented GeoDistanceFeatureGroup with Pandas support
+- Added support for haversine, euclidean, and manhattan distance calculations
+- Integrated with FeatureChainParserConfiguration for configuration-based creation
+- Added comprehensive unit and integration tests
 
 ### 2025-04-18: Added TextCleaningFeatureGroup
 - Added support for text normalization, stopword removal, punctuation removal, etc.

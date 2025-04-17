@@ -25,17 +25,6 @@ from mloda_plugins.feature_group.experimental.clustering.base import ClusteringF
 
 
 class PandasClusteringFeatureGroup(ClusteringFeatureGroup):
-    """
-    Pandas implementation of the ClusteringFeatureGroup.
-
-    This class implements the clustering operations for Pandas DataFrames using
-    scikit-learn clustering algorithms. It supports various clustering algorithms
-    including K-means, hierarchical clustering, DBSCAN, and more.
-
-    The implementation handles both fixed k-value clustering (like K-means) and
-    algorithms that automatically determine the number of clusters (like DBSCAN).
-    """
-
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFrameWork]]:
         """Define the compute framework for this feature group."""

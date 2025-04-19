@@ -41,6 +41,10 @@
     * Added `identify_naming_convention` method to ComputeFrameWork
 *   Updated DimensionalityReductionFeatureGroup:
     * Now uses multiple result columns pattern instead of arrays
+*   Implemented ForecastingFeatureGroup with Pandas support:
+    * Added support for multiple forecasting algorithms (linear, ridge, randomforest, etc.)
+    * Implemented automatic feature engineering for time series data
+    * Added artifact support for saving and loading trained models
 
 
 ## What's Left to Build
@@ -59,10 +63,17 @@ The TextCleaningFeatureGroup and ClusteringFeatureGroup have been implemented to
 
 The implementation of configurable_feature_chain_parser has been unified across all feature groups, improving consistency and maintainability.
 
-Support for Multiple Result Columns has been added, allowing feature groups to return multiple related columns using a naming convention pattern. This enhances the flexibility of the framework by enabling a single feature computation to produce multiple related outputs. The implementation includes the `identify_naming_convention` method in the ComputeFrameWork class, which automatically identifies columns that follow the pattern `feature_name~column_suffix`. This feature is demonstrated in the test cases with NFeatureNameBase and NFeatureConsumer examples.
+Support for Multiple Result Columns has been added, allowing feature groups to return multiple related columns using a naming convention pattern. This enhances the flexibility of the framework by enabling a single feature computation to produce multiple related outputs.
+
+The ForecastingFeatureGroup has been implemented to support time series forecasting with multiple algorithms and artifact saving/loading capabilities.
 
 ## Known Issues
 
 * FeatureSet are created unintuitive:  
 feature_set = FeatureSet()
 feature_set.add(feature)
+
+* Options.data cannot contain dictionaries as values:
+  * The Feature class's __hash__ method tries to hash the options.data dictionary
+  * When options.data contains a dictionary as a value, it causes "TypeError: unhashable type: 'dict'"
+  * Workaround: Use JSON serialization for complex data structures in options.data

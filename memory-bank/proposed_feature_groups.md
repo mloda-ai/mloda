@@ -10,8 +10,7 @@
 | Text Processing | TextCleaningFeatureGroup | Medium | Implemented |
 | Geospatial | GeoDistanceFeatureGroup | Medium | Implemented |
 | ML | DimensionalityReductionFeatureGroup | Medium | Implemented |
-| Text Processing | SentimentAnalysisFeatureGroup | Low | To Do |
-| Time Series | ForecastingFeatureGroup | Low | To Do |
+| Time Series | ForecastingFeatureGroup | Low | Implemented |
 | Graph-Based | NodeCentralityFeatureGroup | Low | To Do |
 
 ## Feature Group Categories
@@ -40,8 +39,9 @@ graph TD
 
 #### ForecastingFeatureGroup
 - **Purpose**: Generate forecasts for time series data using various algorithms
-- **Naming Convention**: `{algorithm}_forecast_{horizon}_{source_feature}`
-- **Examples**: `arima_forecast_7day_sales`, `prophet_forecast_24hr_energy_consumption`
+- **Naming Convention**: `{algorithm}_forecast_{horizon}{time_unit}__{mloda_source_feature}`
+- **Examples**: `linear_forecast_7day__sales`, `randomforest_forecast_24hr__energy_consumption`
+- **Implementation**: Supports multiple algorithms (linear, ridge, randomforest, etc.) with artifact saving/loading
 
 #### AnomalyDetectionFeatureGroup
 - **Purpose**: Identify anomalies in time series data
@@ -59,7 +59,6 @@ graph TD
 graph TD
     A[Text Processing Feature Groups] --> B[TextCleaningFeatureGroup]
     A --> C[TokenizationFeatureGroup]
-    A --> D[SentimentAnalysisFeatureGroup]
     A --> E[NamedEntityFeatureGroup]
     A --> F[TextSimilarityFeatureGroup]
     A --> G[TopicModelingFeatureGroup]
@@ -74,11 +73,6 @@ graph TD
 - **Purpose**: Split text into tokens (words, sentences, etc.)
 - **Naming Convention**: `{token_type}_tokens_{source_feature}`
 - **Examples**: `word_tokens_document`, `sentence_tokens_article`
-
-#### SentimentAnalysisFeatureGroup
-- **Purpose**: Determine sentiment of text data
-- **Naming Convention**: `sentiment_{model}_{source_feature}`
-- **Examples**: `sentiment_vader_review`, `sentiment_bert_feedback`
 
 #### NamedEntityFeatureGroup
 - **Purpose**: Extract named entities from text

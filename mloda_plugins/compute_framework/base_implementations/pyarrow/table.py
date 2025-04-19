@@ -45,7 +45,9 @@ class PyarrowTable(ComputeFrameWork):
         raise ValueError(f"Data {type(data)} is not supported by {self.__class__.__name__}")
 
     def select_data_by_column_names(self, data: Any, selected_feature_names: Set[FeatureName]) -> Any:
-        return data.select([f.name for f in selected_feature_names])
+        column_names = set(data.schema.names)
+        _selected_feature_names = self.identify_naming_convention(selected_feature_names, column_names)
+        return data.select([f for f in _selected_feature_names])
 
     def set_column_names(self) -> None:
         self.column_names = set(self.data.schema.names)

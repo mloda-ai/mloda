@@ -36,6 +36,9 @@ Initializing the memory bank for the mloda project.
 *   Implemented GeoDistanceFeatureGroup with Pandas support:
     * Added support for haversine, euclidean, and manhattan distance calculations
 *   Unified the implementation of configurable_feature_chain_parser across all feature groups
+*   Implemented Multiple Result Columns support:
+    * Added `identify_naming_convention` method to ComputeFrameWork
+    * Updated DimensionalityReductionFeatureGroup to use the pattern
 
 ## Next Steps
 

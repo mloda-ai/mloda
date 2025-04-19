@@ -93,8 +93,11 @@ def validate_dimensionality_reduction_results(result: List) -> None:  # type: ig
     assert result_df is not None, "DataFrame with dimensionality reduction features not found"
 
     # Verify the dimensionality reduction results
-    assert pca_feature in result_df.columns, f"{pca_feature} not found"
-    assert tsne_feature in result_df.columns, f"{tsne_feature} not found"
+    # With the multiple result columns pattern, we check for the dimension columns
+    assert f"{pca_feature}~dim1" in result_df.columns, f"{pca_feature}~dim1 not found"
+    assert f"{pca_feature}~dim2" in result_df.columns, f"{pca_feature}~dim2 not found"
+    assert f"{tsne_feature}~dim1" in result_df.columns, f"{tsne_feature}~dim1 not found"
+    assert f"{tsne_feature}~dim2" in result_df.columns, f"{tsne_feature}~dim2 not found"
 
 
 class TestDimensionalityReductionFeatureGroupIntegration:
@@ -213,7 +216,10 @@ class TestDimensionalityReductionFeatureGroupIntegration:
         assert result_df is not None, "DataFrame with dimensionality reduction features not found"
 
         # Verify the dimensionality reduction results
-        # All algorithms should have the original feature and dimension columns
-        assert pca_feature in result_df.columns, f"{pca_feature} not found"
-        assert ica_feature in result_df.columns, f"{ica_feature} not found"
-        assert isomap_feature in result_df.columns, f"{isomap_feature} not found"
+        # With the multiple result columns pattern, we check for the dimension columns
+        assert f"{pca_feature}~dim1" in result_df.columns, f"{pca_feature}~dim1 not found"
+        assert f"{pca_feature}~dim2" in result_df.columns, f"{pca_feature}~dim2 not found"
+        assert f"{ica_feature}~dim1" in result_df.columns, f"{ica_feature}~dim1 not found"
+        assert f"{ica_feature}~dim2" in result_df.columns, f"{ica_feature}~dim2 not found"
+        assert f"{isomap_feature}~dim1" in result_df.columns, f"{isomap_feature}~dim1 not found"
+        assert f"{isomap_feature}~dim2" in result_df.columns, f"{isomap_feature}~dim2 not found"

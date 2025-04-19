@@ -198,6 +198,10 @@ When implementing feature groups that perform dimensionality reduction operation
 - Use `{algorithm}_{dimension}d__{mloda_source_features}` format (note the double underscore)
 - Example: `pca_10d__customer_metrics`, `tsne_2d__product_attributes`
 
+**Result Columns**:
+- Uses the multiple result columns pattern with naming convention `{feature_name}~dim{i+1}`
+- Example: `pca_2d__customer_metrics~dim1`, `pca_2d__customer_metrics~dim2`
+
 ### Combined Feature Group Pattern
 
 Feature groups can be composed to create complex features by chaining multiple transformations:
@@ -225,7 +229,24 @@ When implementing feature groups that perform dimensionality reduction operation
 - Use `{algorithm}_{dimension}d__{mloda_source_features}` format (note the double underscore)
 - Example: `pca_10d__customer_metrics`, `tsne_2d__product_attributes`
 
+### Multiple Result Columns Pattern
+
+When implementing feature groups that return multiple related columns:
+
+**Naming Convention**:
+- Use `{feature_name}~{column_suffix}` format (note the tilde separator)
+- Example: `temperature~mean`, `temperature~max`, `temperature~min`
+
+**Implementation Tips**:
+- When consuming these features, access them using the naming convention pattern
+- The framework automatically identifies and selects columns that match the pattern
+
 ## Changelog
+
+### 2025-04-19: Added Multiple Result Columns Support
+- Added `identify_naming_convention` method to ComputeFrameWork
+- Updated compute framework implementations to support the new naming convention
+- Created documentation for the multiple result columns pattern
 
 ### 2025-04-19: Unified Feature Chain Parser Configuration
 - Unified the implementation of configurable_feature_chain_parser across all feature groups

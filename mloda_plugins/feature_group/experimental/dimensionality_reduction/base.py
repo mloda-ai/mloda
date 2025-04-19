@@ -45,6 +45,20 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
     - `tsne_3d__product_features`: t-SNE reduction to 3 dimensions of product features
     - `umap_10d__sensor_readings`: UMAP reduction to 10 dimensions of sensor readings
 
+    ## Result Columns
+
+    The dimensionality reduction results are stored using the multiple result columns pattern.
+    For each dimension in the reduced space, a column is created with the naming convention:
+    `{feature_name}~dim{i+1}`
+
+    For example, a PCA reduction to 2 dimensions with the feature name `pca_2d__customer_metrics`
+    will create the following columns:
+    - `pca_2d__customer_metrics~dim1`: First principal component
+    - `pca_2d__customer_metrics~dim2`: Second principal component
+
+    This allows for easy access to individual dimensions and leverages the multiple result
+    columns pattern for efficient data handling.
+
     ## Configuration-Based Creation
 
     DimensionalityReductionFeatureGroup supports configuration-based creation through the

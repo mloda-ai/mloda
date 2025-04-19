@@ -49,7 +49,10 @@ class PandasDimensionalityReductionFeatureGroup(DimensionalityReductionFeatureGr
     @classmethod
     def _add_result_to_data(cls, data: pd.DataFrame, feature_name: str, result: np.ndarray) -> pd.DataFrame:  # type: ignore
         """
-        Add the dimensionality reduction result to the DataFrame.
+        Add the dimensionality reduction result to the DataFrame using the multiple result columns pattern.
+
+        Instead of storing the entire result array in a single column, this method creates multiple
+        columns following the naming convention `feature_name~dim{i+1}` for each dimension.
 
         Args:
             data: The pandas DataFrame
@@ -57,15 +60,12 @@ class PandasDimensionalityReductionFeatureGroup(DimensionalityReductionFeatureGr
             result: The dimensionality reduction result (reduced features)
 
         Returns:
-            The updated DataFrame with the dimensionality reduction result added
+            The updated DataFrame with the dimensionality reduction result added as multiple columns
         """
-        # Store the entire result array in a single column
-        data[feature_name] = result.tolist()
-
-        # Also add individual dimension columns for backward compatibility and easier access
+        # Add individual dimension columns using the multiple result columns pattern
         algorithm, dimension = cls.parse_reduction_prefix(feature_name)
         for i in range(dimension):
-            column_name = f"{feature_name}_dim{i + 1}"
+            column_name = f"{feature_name}~dim{i + 1}"
             data[column_name] = result[:, i]
 
         return data

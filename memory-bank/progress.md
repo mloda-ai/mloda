@@ -37,6 +37,11 @@
 *   Implemented DimensionalityReductionFeatureGroup with Pandas support:
     * Added support for PCA, t-SNE, ICA, LDA, and Isomap algorithms
     * Implemented array-in-a-column approach for storing dimensionality reduction results
+*   Implemented Multiple Result Columns support:
+    * Added `identify_naming_convention` method to ComputeFrameWork
+*   Updated DimensionalityReductionFeatureGroup:
+    * Now uses multiple result columns pattern instead of arrays
+
 
 ## What's Left to Build
 
@@ -53,6 +58,8 @@ The FeatureChainParserConfiguration has been implemented to support configuratio
 The TextCleaningFeatureGroup and ClusteringFeatureGroup have been implemented to support text preprocessing and data clustering operations. The GeoDistanceFeatureGroup has been implemented to calculate distances between geographic points using various distance metrics, further expanding the framework's capabilities for geospatial analysis.
 
 The implementation of configurable_feature_chain_parser has been unified across all feature groups, improving consistency and maintainability.
+
+Support for Multiple Result Columns has been added, allowing feature groups to return multiple related columns using a naming convention pattern. This enhances the flexibility of the framework by enabling a single feature computation to produce multiple related outputs. The implementation includes the `identify_naming_convention` method in the ComputeFrameWork class, which automatically identifies columns that follow the pattern `feature_name~column_suffix`. This feature is demonstrated in the test cases with NFeatureNameBase and NFeatureConsumer examples.
 
 ## Known Issues
 

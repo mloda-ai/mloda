@@ -7,10 +7,7 @@ import pytest
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.options import Options
-from mloda_plugins.feature_group.experimental.clustering.base import (
-    ClusteringFeatureGroup,
-    ClusteringFeatureChainParserConfiguration,
-)
+from mloda_plugins.feature_group.experimental.clustering.base import ClusteringFeatureGroup
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 
@@ -96,7 +93,6 @@ class TestClusteringFeatureGroup:
         """Test the configurable_feature_chain_parser method."""
         parser_config = ClusteringFeatureGroup.configurable_feature_chain_parser()
         assert parser_config is not None
-        assert parser_config == ClusteringFeatureChainParserConfiguration
 
     def test_feature_chain_parser_integration(self) -> None:
         """Test integration with FeatureChainParser."""
@@ -127,7 +123,10 @@ class TestClusteringFeatureGroup:
         assert DefaultOptionKeys.mloda_source_feature not in parsed_feature.options.data
 
     def test_parse_from_options(self) -> None:
-        """Test the parse_from_options method of ClusteringFeatureChainParserConfiguration."""
+        """Test the parse_from_options method of the configurable feature chain parser."""
+        parser_config = ClusteringFeatureGroup.configurable_feature_chain_parser()
+        assert parser_config is not None
+
         # Valid options
         options = Options(
             {
@@ -136,7 +135,7 @@ class TestClusteringFeatureGroup:
                 DefaultOptionKeys.mloda_source_feature: "customer_behavior",
             }
         )
-        feature_name = ClusteringFeatureChainParserConfiguration.parse_from_options(options)
+        feature_name = parser_config.parse_from_options(options)
         assert feature_name == "cluster_kmeans_5__customer_behavior"
 
         # Auto k_value
@@ -147,7 +146,7 @@ class TestClusteringFeatureGroup:
                 DefaultOptionKeys.mloda_source_feature: "sensor_readings",
             }
         )
-        feature_name = ClusteringFeatureChainParserConfiguration.parse_from_options(options)
+        feature_name = parser_config.parse_from_options(options)
         assert feature_name == "cluster_dbscan_auto__sensor_readings"
 
         # Multiple source features
@@ -158,7 +157,7 @@ class TestClusteringFeatureGroup:
                 DefaultOptionKeys.mloda_source_feature: ["feature1", "feature2", "feature3"],
             }
         )
-        feature_name = ClusteringFeatureChainParserConfiguration.parse_from_options(options)
+        feature_name = parser_config.parse_from_options(options)
         assert feature_name == "cluster_kmeans_5__feature1,feature2,feature3"
 
         # Missing options
@@ -169,7 +168,7 @@ class TestClusteringFeatureGroup:
                 DefaultOptionKeys.mloda_source_feature: "customer_behavior",
             }
         )
-        feature_name = ClusteringFeatureChainParserConfiguration.parse_from_options(options)
+        feature_name = parser_config.parse_from_options(options)
         assert feature_name is None
 
         # Invalid algorithm
@@ -181,7 +180,7 @@ class TestClusteringFeatureGroup:
             }
         )
         with pytest.raises(ValueError):
-            ClusteringFeatureChainParserConfiguration.parse_from_options(options)
+            parser_config.parse_from_options(options)
 
         # Invalid k_value
         options = Options(
@@ -192,4 +191,4 @@ class TestClusteringFeatureGroup:
             }
         )
         with pytest.raises(ValueError):
-            ClusteringFeatureChainParserConfiguration.parse_from_options(options)
+            parser_config.parse_from_options(options)

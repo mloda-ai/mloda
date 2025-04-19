@@ -8,10 +8,7 @@ from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
-from mloda_plugins.feature_group.experimental.text_cleaning.base import (
-    TextCleaningFeatureGroup,
-    TextCleaningFeatureChainParserConfiguration,
-)
+from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
 
 
 class TestTextCleaningFeatureGroupBase:
@@ -71,18 +68,24 @@ class TestTextCleaningFeatureGroupBase:
         assert next(iter(input_features)).name.name == "sum_aggr__sales"
 
 
-class TestTextCleaningFeatureChainParserConfiguration:
-    """Tests for the TextCleaningFeatureChainParserConfiguration class."""
+class TestTextCleaningFeatureChainParser:
+    """Tests for the TextCleaningFeatureGroup's configurable_feature_chain_parser."""
 
     def test_parse_keys(self) -> None:
         """Test that the configuration returns the correct keys."""
-        keys = TextCleaningFeatureChainParserConfiguration.parse_keys()
+        parser = TextCleaningFeatureGroup.configurable_feature_chain_parser()
+        assert parser is not None
+
+        keys = parser.parse_keys()
         # Only mloda_source_feature is in parse_keys, CLEANING_OPERATIONS is preserved
         assert TextCleaningFeatureGroup.CLEANING_OPERATIONS not in keys
         assert DefaultOptionKeys.mloda_source_feature in keys
 
     def test_parse_from_options_valid(self) -> None:
         """Test that the configuration correctly parses valid options."""
+        parser = TextCleaningFeatureGroup.configurable_feature_chain_parser()
+        assert parser is not None
+
         # Valid options
         options = Options(
             {
@@ -91,27 +94,36 @@ class TestTextCleaningFeatureChainParserConfiguration:
             }
         )
 
-        feature_name = TextCleaningFeatureChainParserConfiguration.parse_from_options(options)
+        feature_name = parser.parse_from_options(options)
         assert feature_name == "cleaned_text__review"
 
     def test_parse_from_options_missing_operations(self) -> None:
         """Test that the configuration returns None when operations are missing."""
+        parser = TextCleaningFeatureGroup.configurable_feature_chain_parser()
+        assert parser is not None
+
         # Missing operations
         options = Options({DefaultOptionKeys.mloda_source_feature: "review"})
 
-        feature_name = TextCleaningFeatureChainParserConfiguration.parse_from_options(options)
+        feature_name = parser.parse_from_options(options)
         assert feature_name is None
 
     def test_parse_from_options_missing_source_feature(self) -> None:
         """Test that the configuration returns None when source feature is missing."""
+        parser = TextCleaningFeatureGroup.configurable_feature_chain_parser()
+        assert parser is not None
+
         # Missing source feature
         options = Options({TextCleaningFeatureGroup.CLEANING_OPERATIONS: ("normalize", "remove_stopwords")})
 
-        feature_name = TextCleaningFeatureChainParserConfiguration.parse_from_options(options)
+        feature_name = parser.parse_from_options(options)
         assert feature_name is None
 
     def test_parse_from_options_invalid_operation(self) -> None:
         """Test that the configuration raises an error for invalid operations."""
+        parser = TextCleaningFeatureGroup.configurable_feature_chain_parser()
+        assert parser is not None
+
         # Invalid operation
         options = Options(
             {
@@ -121,12 +133,15 @@ class TestTextCleaningFeatureChainParserConfiguration:
         )
 
         with pytest.raises(ValueError) as excinfo:
-            TextCleaningFeatureChainParserConfiguration.parse_from_options(options)
+            parser.parse_from_options(options)
 
         assert "Unsupported cleaning operation" in str(excinfo.value)
 
     def test_create_feature_without_options(self) -> None:
         """Test that the configuration correctly creates a feature without options."""
+        parser = TextCleaningFeatureGroup.configurable_feature_chain_parser()
+        assert parser is not None
+
         # Create a feature with options
         feature = Feature(
             "PlaceHolder",
@@ -139,7 +154,7 @@ class TestTextCleaningFeatureChainParserConfiguration:
         )
 
         # Create a feature without options
-        result = TextCleaningFeatureChainParserConfiguration.create_feature_without_options(feature)
+        result = parser.create_feature_without_options(feature)
 
         assert result is not None
         assert result.name.name == "cleaned_text__review"

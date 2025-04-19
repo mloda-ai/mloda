@@ -10,6 +10,7 @@ from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGr
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_chainer.feature_chainer_parser_configuration import (
     FeatureChainParserConfiguration,
+    create_configurable_parser,
 )
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
@@ -211,61 +212,32 @@ class GeoDistanceFeatureGroup(AbstractFeatureGroup):
     @classmethod
     def configurable_feature_chain_parser(cls) -> Optional[Type[FeatureChainParserConfiguration]]:
         """
-        Indicates whether this feature group can be parsed using a FeatureChainParserConfiguration.
-        """
-        return GeoDistanceFeatureChainParserConfiguration
+        Returns the FeatureChainParserConfiguration class for this feature group.
 
-
-class GeoDistanceFeatureChainParserConfiguration(FeatureChainParserConfiguration):
-    """
-    Feature chain parser configuration for GeoDistanceFeatureGroup.
-
-    This class provides the configuration for parsing GeoDistanceFeatureGroup features
-    from options. It defines the keys used for parsing and implements the parse_from_options
-    method to create feature names in the format "{distance_type}_distance__{point1_feature}__{point2_feature}".
-    """
-
-    @classmethod
-    def parse_keys(cls) -> Set[str]:
-        return {
-            GeoDistanceFeatureGroup.DISTANCE_TYPE,
-            GeoDistanceFeatureGroup.POINT1_FEATURE,
-            GeoDistanceFeatureGroup.POINT2_FEATURE,
-        }
-
-    @classmethod
-    def parse_from_options(cls, options: Options) -> Optional[str]:
-        """
-        Parse a GeoDistanceFeatureGroup feature from options.
-
-        Args:
-            options: A dictionary containing:
-                - DISTANCE_TYPE: The distance type (e.g., "haversine")
-                - POINT1_FEATURE: The first point feature name
-                - POINT2_FEATURE: The second point feature name
+        This method allows the Engine to automatically create features with the correct
+        naming convention based on configuration options, rather than requiring explicit
+        feature names.
 
         Returns:
-            A feature name string in the format "{distance_type}_distance__{point1_feature}__{point2_feature}"
-
-        Raises:
-            ValueError: If required options are missing or invalid
+            A configured FeatureChainParserConfiguration class
         """
 
-        # Extract required options
-        distance_type = options.get(GeoDistanceFeatureGroup.DISTANCE_TYPE)
-        point1_feature = options.get(GeoDistanceFeatureGroup.POINT1_FEATURE)
-        point2_feature = options.get(GeoDistanceFeatureGroup.POINT2_FEATURE)
-
-        # Validate options
-        if not distance_type or not point1_feature or not point2_feature:
-            return None
-
-        # Validate distance type
-        if distance_type not in GeoDistanceFeatureGroup.DISTANCE_TYPES:
+        # Define validation function within the method scope
+        def raise_unsupported_distance_type(distance_type: str) -> bool:
+            """Raise an error for unsupported distance type."""
             raise ValueError(
-                f"Unsupported distance type: {distance_type}. "
-                f"Supported types: {list(GeoDistanceFeatureGroup.DISTANCE_TYPES.keys())}"
+                f"Unsupported distance type: {distance_type}. Supported types: {list(cls.DISTANCE_TYPES.keys())}"
             )
 
-        # Build and return the feature name
-        return f"{distance_type}_distance__{point1_feature}__{point2_feature}"
+        # Create and return the configured parser
+        return create_configurable_parser(
+            parse_keys=[
+                cls.DISTANCE_TYPE,
+                cls.POINT1_FEATURE,
+                cls.POINT2_FEATURE,
+            ],
+            feature_name_template="{distance_type}_distance__{point1_feature}__{point2_feature}",
+            validation_rules={
+                cls.DISTANCE_TYPE: lambda x: x in cls.DISTANCE_TYPES or raise_unsupported_distance_type(x),
+            },
+        )

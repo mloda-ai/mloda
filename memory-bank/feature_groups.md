@@ -150,9 +150,12 @@ The `FeatureChainParserConfiguration` extends the feature chain parsing system t
 3. **Integration with Feature Groups**:
    - Feature groups implement `configurable_feature_chain_parser()` to return their parser configuration
    - The Engine automatically uses this configuration to parse features with the appropriate options
-   - Implemented for `AggregatedFeatureGroup`, `MissingValueFeatureGroup`, and `TimeWindowFeatureGroup`
+   - Implemented for all feature groups using a unified approach
 
-4. **Usage Example**:
+4. **Unified Implementation**:
+   - A factory function `create_configurable_parser` creates a configured parser class
+
+5. **Usage Example**:
 
    **AggregatedFeatureGroup**:
    ```python
@@ -209,6 +212,14 @@ Feature groups can be composed to create complex features by chaining multiple t
    - Use integration tests to validate the entire feature chain
 
 ## Changelog
+
+### 2025-04-19: Unified Feature Chain Parser Configuration
+- Unified the implementation of configurable_feature_chain_parser across all feature groups
+- Enhanced the create_configurable_parser function to handle list values and required keys
+- Fixed template key case sensitivity issues in TimeWindowFeatureGroup
+- Improved validation rules to provide consistent error messages
+- Updated all feature groups to use the unified implementation
+- Added comprehensive tests to verify the unified implementation
 
 ### 2025-04-18: Added GeoDistanceFeatureGroup
 - Implemented GeoDistanceFeatureGroup with Pandas support

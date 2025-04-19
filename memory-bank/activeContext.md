@@ -35,6 +35,7 @@ Initializing the memory bank for the mloda project.
     * Supports various clustering algorithms (K-means, DBSCAN, hierarchical, etc.)
 *   Implemented GeoDistanceFeatureGroup with Pandas support:
     * Added support for haversine, euclidean, and manhattan distance calculations
+*   Unified the implementation of configurable_feature_chain_parser across all feature groups
 
 ## Next Steps
 
@@ -46,6 +47,9 @@ Initializing the memory bank for the mloda project.
 *   Populate the memory bank files with more detailed information.
 *   Update the `.clinerules` file with project-specific patterns.
 *   Implement additional compute framework implementations for other feature groups
+*   Explore further improvements to the feature chain parser system:
+    * Consider adding support for more complex validation rules
+    * Investigate ways to make feature creation even more intuitive
 ## Active Decisions and Considerations
 
 *   Determining the best way to structure the memory bank for optimal information retrieval.

@@ -11,6 +11,7 @@ from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
 from mloda_core.abstract_plugins.components.feature_chainer.feature_chainer_parser_configuration import (
     FeatureChainParserConfiguration,
+    create_configurable_parser,
 )
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
@@ -286,84 +287,40 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
         feature names.
 
         Returns:
-            The ClusteringFeatureChainParserConfiguration class
+            A configured FeatureChainParserConfiguration class
         """
-        return ClusteringFeatureChainParserConfiguration
 
-
-class ClusteringFeatureChainParserConfiguration(FeatureChainParserConfiguration):
-    """
-    Feature chain parser configuration for ClusteringFeatureGroup.
-
-    This class provides the configuration for parsing ClusteringFeatureGroup features
-    from options. It defines the keys used for parsing and implements the parse_from_options
-    method to create feature names in the format "cluster_{algorithm}_{k_value}__{source_features}".
-
-    This configuration is used by the Engine to automatically parse features with the
-    appropriate options into ClusteringFeatureGroup features.
-    """
-
-    @classmethod
-    def parse_keys(cls) -> Set[str]:
-        """
-        Returns the keys that are used to parse the feature group.
-
-        Returns:
-            A set containing the algorithm, k_value, and source features keys
-        """
-        return {
-            ClusteringFeatureGroup.ALGORITHM,
-            ClusteringFeatureGroup.K_VALUE,
-            DefaultOptionKeys.mloda_source_feature,
-        }
-
-    @classmethod
-    def parse_from_options(cls, options: Options) -> Optional[str]:
-        """
-        Parse a ClusteringFeatureGroup feature from options.
-
-        Args:
-            options: A dictionary containing:
-                - ALGORITHM: The clustering algorithm (e.g., "kmeans", "dbscan")
-                - K_VALUE: The number of clusters or "auto"
-                - DefaultOptionKeys.mloda_source_feature: The source feature name(s)
-
-        Returns:
-            A feature name string in the format "cluster_{algorithm}_{k_value}__{mloda_source_features}"
-
-        Raises:
-            ValueError: If the algorithm is not supported or k_value is invalid
-        """
-        # Extract required options
-        algorithm = options.get(ClusteringFeatureGroup.ALGORITHM)
-        k_value = options.get(ClusteringFeatureGroup.K_VALUE)
-        source_features = options.get(DefaultOptionKeys.mloda_source_feature)
-
-        # Validate options
-        if not algorithm:
-            return None
-        if not k_value:
-            return None
-        if not source_features:
-            return None
-
-        # Validate algorithm
-        if algorithm not in ClusteringFeatureGroup.CLUSTERING_ALGORITHMS:
+        # Define validation functions within the method scope
+        def raise_unsupported_algorithm(algorithm: str) -> bool:
+            """Raise an error for unsupported clustering algorithm."""
             raise ValueError(
                 f"Unsupported clustering algorithm: {algorithm}. "
-                f"Supported algorithms: {list(ClusteringFeatureGroup.CLUSTERING_ALGORITHMS.keys())}"
+                f"Supported algorithms: {list(cls.CLUSTERING_ALGORITHMS.keys())}"
             )
 
-        # Validate k_value
-        if k_value != "auto" and not str(k_value).isdigit():
-            raise ValueError(f"Invalid k_value: {k_value}. Must be a positive integer or 'auto'.")
+        def validate_k_value(k_value: Union[int, str]) -> bool:
+            """Validate the k_value."""
+            if k_value == "auto":
+                return True
 
-        if k_value != "auto" and int(k_value) <= 0:
-            raise ValueError("k_value must be positive")
+            try:
+                k_value_int = int(k_value) if isinstance(k_value, str) else k_value
+                if k_value_int <= 0:
+                    raise ValueError("k_value must be positive")
+                return True
+            except (ValueError, TypeError):
+                raise ValueError(f"Invalid k_value: {k_value}. Must be a positive integer or 'auto'.")
 
-        # Handle multiple source features
-        if isinstance(source_features, list):
-            source_features = ",".join(source_features)
-
-        # Build and return the feature name
-        return f"cluster_{algorithm}_{k_value}__{source_features}"
+        # Create and return the configured parser
+        return create_configurable_parser(
+            parse_keys=[
+                cls.ALGORITHM,
+                cls.K_VALUE,
+                DefaultOptionKeys.mloda_source_feature,
+            ],
+            feature_name_template="cluster_{algorithm}_{k_value}__{mloda_source_feature}",
+            validation_rules={
+                cls.ALGORITHM: lambda x: x in cls.CLUSTERING_ALGORITHMS or raise_unsupported_algorithm(x),
+                cls.K_VALUE: validate_k_value,
+            },
+        )

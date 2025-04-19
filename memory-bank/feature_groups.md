@@ -190,6 +190,14 @@ When implementing feature groups that calculate distances between geographic poi
 - Use numpy for efficient distance calculations
 - Integrate with FeatureChainParserConfiguration for configuration-based creation
 
+### DimensionalityReductionFeatureGroup Pattern
+
+When implementing feature groups that perform dimensionality reduction operations:
+
+**Naming Convention**:
+- Use `{algorithm}_{dimension}d__{mloda_source_features}` format (note the double underscore)
+- Example: `pca_10d__customer_metrics`, `tsne_2d__product_attributes`
+
 ### Combined Feature Group Pattern
 
 Feature groups can be composed to create complex features by chaining multiple transformations:
@@ -208,8 +216,14 @@ Feature groups can be composed to create complex features by chaining multiple t
 
 3. **Implementation Tips**:
    - Use the `FeatureChainParser` to handle the parsing of chained feature names
-   - Test the feature chain with different data scenarios to verify correct behavior
-   - Use integration tests to validate the entire feature chain
+
+### DimensionalityReductionFeatureGroup Pattern
+
+When implementing feature groups that perform dimensionality reduction operations:
+
+**Naming Convention**:
+- Use `{algorithm}_{dimension}d__{mloda_source_features}` format (note the double underscore)
+- Example: `pca_10d__customer_metrics`, `tsne_2d__product_attributes`
 
 ## Changelog
 

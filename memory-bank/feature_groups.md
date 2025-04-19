@@ -241,7 +241,34 @@ When implementing feature groups that return multiple related columns:
 - When consuming these features, access them using the naming convention pattern
 - The framework automatically identifies and selects columns that match the pattern
 
+### ForecastingFeatureGroup Pattern
+
+When implementing feature groups that perform time series forecasting:
+
+**Naming Convention**:
+- Use `{algorithm}_forecast_{horizon}{time_unit}__{mloda_source_feature}` format (note the double underscore)
+- Examples: `linear_forecast_7day__sales`, `randomforest_forecast_24hr__energy_consumption`
+
+**Supported Algorithms**:
+- Linear regression, ridge regression, lasso regression
+- Random forest regression, gradient boosting regression
+- Support vector regression, k-nearest neighbors regression
+
+**Supported Time Units**:
+- second, minute, hour, day, week, month, year
+
+**Implementation Tips**:
+- Requires a datetime column for time-based operations
+- Automatically creates time-based features (hour, day of week, month, etc.)
+- Supports artifact saving/loading to reuse trained models
+- Integrates with FeatureChainParserConfiguration for configuration-based creation
+
 ## Changelog
+
+### 2025-04-19: Added ForecastingFeatureGroup
+- Implemented ForecastingFeatureGroup with Pandas support
+- Added support for multiple forecasting algorithms
+- Added artifact support for saving and loading trained models
 
 ### 2025-04-19: Added Multiple Result Columns Support
 - Added `identify_naming_convention` method to ComputeFrameWork

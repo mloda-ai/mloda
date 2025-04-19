@@ -11,6 +11,7 @@ from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
 from mloda_core.abstract_plugins.components.feature_chainer.feature_chainer_parser_configuration import (
     FeatureChainParserConfiguration,
+    create_configurable_parser,
 )
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
@@ -128,25 +129,19 @@ class TextCleaningFeatureGroup(AbstractFeatureGroup):
         Returns:
             The data with the cleaned text features added
         """
-        print(f"calculate_feature called in {cls.__name__}")
-        print(f"Features: {[f.name.name for f in features.features]}")
 
         # Process each requested feature
         for feature in features.features:
             feature_name = feature.name.name
-            print(f"Processing feature: {feature_name}")
-            print(f"Feature options: {feature.options.data}")
 
             # Extract source feature
             source_feature = FeatureChainParser.extract_source_feature(feature_name, cls.PREFIX_PATTERN)
-            print(f"Source feature: {source_feature}")
 
             # Check if source feature exists
             cls._check_source_feature_exists(data, source_feature)
 
             # Get operations from options
             operations = feature.options.get(cls.CLEANING_OPERATIONS) or ()
-            print(f"Operations: {operations}")
 
             # Validate operations
             for operation in operations:
@@ -158,12 +153,9 @@ class TextCleaningFeatureGroup(AbstractFeatureGroup):
 
             # Apply operations in sequence
             result = cls._get_source_text(data, source_feature)
-            print(f"Source text: {result.iloc[0] if hasattr(result, 'iloc') else result}")
 
             for operation in operations:
-                print(f"Applying operation: {operation}")
                 result = cls._apply_operation(data, result, operation)
-                print(f"Result after {operation}: {result.iloc[0] if hasattr(result, 'iloc') else result}")
 
             # Add result to data
             data = cls._add_result_to_data(data, feature_name, result)
@@ -238,69 +230,31 @@ class TextCleaningFeatureGroup(AbstractFeatureGroup):
         feature names.
 
         Returns:
-            The TextCleaningFeatureChainParserConfiguration class
+            A configured FeatureChainParserConfiguration class
         """
-        return TextCleaningFeatureChainParserConfiguration
 
+        # Define validation function within the method scope
+        def validate_cleaning_operations(operations: Any) -> bool:
+            """Validate the cleaning operations."""
+            # Check each operation
+            for operation in operations:
+                if operation not in cls.SUPPORTED_OPERATIONS:
+                    raise ValueError(
+                        f"Unsupported cleaning operation: {operation}. "
+                        f"Supported operations: {', '.join(cls.SUPPORTED_OPERATIONS.keys())}"
+                    )
+            return True
 
-class TextCleaningFeatureChainParserConfiguration(FeatureChainParserConfiguration):
-    """
-    Feature chain parser configuration for TextCleaningFeatureGroup.
-
-    This class provides the configuration for parsing TextCleaningFeatureGroup features
-    from options. It defines the keys used for parsing and implements the parse_from_options
-    method to create feature names in the format "cleaned_text__{source_feature}".
-
-    This configuration is used by the Engine to automatically parse features with the
-    appropriate options into TextCleaningFeatureGroup features.
-    """
-
-    @classmethod
-    def parse_keys(cls) -> Set[str]:
-        """
-        Returns the keys that are used to parse the feature group.
-
-        Returns:
-            A set containing only the source feature key, as the cleaning operations
-            should be preserved for use in calculate_feature
-        """
-        return {
-            DefaultOptionKeys.mloda_source_feature,
-        }
-
-    @classmethod
-    def parse_from_options(cls, options: Options) -> Optional[str]:
-        """
-        Parse a TextCleaningFeatureGroup feature from options.
-
-        Args:
-            options: A dictionary containing:
-                - CLEANING_OPERATIONS: List of cleaning operations to apply
-                - DefaultOptionKeys.mloda_source_feature: The source feature name
-
-        Returns:
-            A feature name string in the format "cleaned_text__{mloda_source_feature}"
-
-        Raises:
-            ValueError: If any of the specified operations are not supported
-        """
-        # Extract required options
-        operations = options.get(TextCleaningFeatureGroup.CLEANING_OPERATIONS)
-        source_feature = options.get(DefaultOptionKeys.mloda_source_feature)
-
-        # Validate options
-        if not operations:
-            return None
-        if not source_feature:
-            return None
-
-        # Validate operations
-        for operation in operations:
-            if operation not in TextCleaningFeatureGroup.SUPPORTED_OPERATIONS:
-                raise ValueError(
-                    f"Unsupported cleaning operation: {operation}. "
-                    f"Supported operations: {', '.join(TextCleaningFeatureGroup.SUPPORTED_OPERATIONS.keys())}"
-                )
-
-        # Build and return the feature name
-        return f"cleaned_text__{source_feature}"
+        # Create and return the configured parser
+        return create_configurable_parser(
+            parse_keys=[
+                DefaultOptionKeys.mloda_source_feature,
+            ],
+            feature_name_template="cleaned_text__{mloda_source_feature}",
+            validation_rules={
+                cls.CLEANING_OPERATIONS: validate_cleaning_operations,
+            },
+            required_keys=[
+                cls.CLEANING_OPERATIONS,
+            ],
+        )

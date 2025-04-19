@@ -11,6 +11,7 @@ from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
 from mloda_core.abstract_plugins.components.feature_chainer.feature_chainer_parser_configuration import (
     FeatureChainParserConfiguration,
+    create_configurable_parser,
 )
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
@@ -207,6 +208,16 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
         raise NotImplementedError(f"_perform_imputation not implemented in {cls.__name__}")
 
     @classmethod
+    def _raise_unsupported_imputation_method(cls, imputation_method: str) -> bool:
+        """
+        Raise an error for unsupported imputation method.
+        """
+        raise ValueError(
+            f"Unsupported imputation method: {imputation_method}. "
+            f"Supported methods: {list(cls.IMPUTATION_METHODS.keys())}"
+        )
+
+    @classmethod
     def configurable_feature_chain_parser(cls) -> Optional[Type[FeatureChainParserConfiguration]]:
         """
         Returns the FeatureChainParserConfiguration class for this feature group.
@@ -216,65 +227,16 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
         feature names.
 
         Returns:
-            The MissingValueFeatureChainParserConfiguration class
+            A configured FeatureChainParserConfiguration class
         """
-        return MissingValueFeatureChainParserConfiguration
-
-
-class MissingValueFeatureChainParserConfiguration(FeatureChainParserConfiguration):
-    """
-    Feature chain parser configuration for MissingValueFeatureGroup.
-
-    This class provides the configuration for parsing MissingValueFeatureGroup features
-    from options. It defines the keys used for parsing and implements the parse_from_options
-    method to create feature names in the format "{imputation_method}_imputed__{source_feature}".
-
-    This configuration is used by the Engine to automatically parse features with the
-    appropriate options into MissingValueFeatureGroup features.
-    """
-
-    @classmethod
-    def parse_keys(cls) -> Set[str]:
-        """
-        Returns the keys that are used to parse the feature group.
-
-        Returns:
-            A set containing the imputation method and source feature keys
-        """
-        return {MissingValueFeatureGroup.IMPUTATION_METHOD, DefaultOptionKeys.mloda_source_feature}
-
-    @classmethod
-    def parse_from_options(cls, options: Options) -> Optional[str]:
-        """
-        Parse a MissingValueFeatureGroup feature from options.
-
-        Args:
-            options: A dictionary containing:
-                - IMPUTATION_METHOD: The imputation method (e.g., "mean", "median")
-                - DefaultOptionKeys.mloda_source_feature: The source feature name
-
-        Returns:
-            A feature name string in the format "{imputation_method}_imputed__{mloda_source_feature}"
-
-        Raises:
-            ValueError: If the imputation method is not supported
-        """
-        # Extract required options
-        imputation_method = options.get(MissingValueFeatureGroup.IMPUTATION_METHOD)
-        source_feature = options.get(DefaultOptionKeys.mloda_source_feature)
-
-        # Validate options
-        if not imputation_method:
-            return None
-        if not source_feature:
-            return None
-
-        # Validate imputation method
-        if imputation_method not in MissingValueFeatureGroup.IMPUTATION_METHODS:
-            raise ValueError(
-                f"Unsupported imputation method: {imputation_method}. "
-                f"Supported methods: {list(MissingValueFeatureGroup.IMPUTATION_METHODS.keys())}"
-            )
-
-        # Build and return the feature name
-        return f"{imputation_method}_imputed__{source_feature}"
+        return create_configurable_parser(
+            parse_keys=[
+                cls.IMPUTATION_METHOD,
+                DefaultOptionKeys.mloda_source_feature,
+            ],
+            feature_name_template="{imputation_method}_imputed__{mloda_source_feature}",
+            validation_rules={
+                cls.IMPUTATION_METHOD: lambda x: x in cls.IMPUTATION_METHODS
+                or cls._raise_unsupported_imputation_method(x),
+            },
+        )

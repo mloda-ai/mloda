@@ -10,6 +10,7 @@ from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGr
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_chainer.feature_chainer_parser_configuration import (
     FeatureChainParserConfiguration,
+    create_configurable_parser,
 )
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
@@ -124,6 +125,13 @@ class AggregatedFeatureGroup(AbstractFeatureGroup):
         return aggregation_type in cls.AGGREGATION_TYPES
 
     @classmethod
+    def _raise_unsupported_aggregation_type(cls, aggregation_type: str) -> bool:
+        """
+        Raise an error for unsupported aggregation type.
+        """
+        raise ValueError(f"Unsupported aggregation type: {aggregation_type}")
+
+    @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         """
         Perform aggregations.
@@ -196,61 +204,23 @@ class AggregatedFeatureGroup(AbstractFeatureGroup):
     @classmethod
     def configurable_feature_chain_parser(cls) -> Optional[Type[FeatureChainParserConfiguration]]:
         """
-        Indicates whether this feature group can be parsed using a FeatureChainParserConfiguration.
-        This functionality falls back to FeatureChainParser.
-        """
-        return AggFeatureChainParserConfiguration
+        Returns the FeatureChainParserConfiguration class for this feature group.
 
-
-class AggFeatureChainParserConfiguration(FeatureChainParserConfiguration):
-    """
-    Feature chain parser configuration for AggregatedFeatureGroup.
-
-    This class provides the configuration for parsing AggregatedFeatureGroup features
-    from options. It defines the keys used for parsing and implements the parse_from_options
-    method to create feature names in the format "{aggregation_type}_aggr__{source_feature}".
-
-    This configuration is used by the Engine to automatically parse features with the
-    appropriate options into AggregatedFeatureGroup features.
-    """
-
-    @classmethod
-    def parse_keys(cls) -> Set[str]:
-        return {AggregatedFeatureGroup.AGGREGATION_TYPE, DefaultOptionKeys.mloda_source_feature}
-
-    @classmethod
-    def parse_from_options(cls, options: Options) -> Optional[str]:
-        """
-        Parse an AggregatedFeatureGroup feature from options.
-
-        Args:
-            options: A dictionary containing:
-                - AGGREGATION_TYPE: The aggregation type (e.g., "sum")
-                - DefaultOptionKeys.mloda_source_feature: The source feature name
+        This method allows the Engine to automatically create features with the correct
+        naming convention based on configuration options, rather than requiring explicit
+        feature names.
 
         Returns:
-            A feature name string in the format "{aggregation_type}_aggr__{mloda_source_feature}"
-
-        Raises:
-            ValueError: If required options are missing
+            A configured FeatureChainParserConfiguration class
         """
-
-        # Extract required options
-        aggregation_type = options.get(AggregatedFeatureGroup.AGGREGATION_TYPE)
-        source_feature = options.get(DefaultOptionKeys.mloda_source_feature)
-
-        # Validate options
-        if not aggregation_type:
-            return None
-        if not source_feature:
-            return None
-
-        # Validate aggregation type
-        if aggregation_type not in AggregatedFeatureGroup.AGGREGATION_TYPES:
-            raise ValueError(
-                f"Unsupported aggregation type: {aggregation_type}. "
-                f"Supported types: {list(AggregatedFeatureGroup.AGGREGATION_TYPES.keys())}"
-            )
-
-        # Build and return the feature name
-        return f"{aggregation_type}_aggr__{source_feature}"
+        return create_configurable_parser(
+            parse_keys=[
+                cls.AGGREGATION_TYPE,
+                DefaultOptionKeys.mloda_source_feature,
+            ],
+            feature_name_template="{aggregation_type}_aggr__{mloda_source_feature}",
+            validation_rules={
+                cls.AGGREGATION_TYPE: lambda x: x in cls.AGGREGATION_TYPES
+                or cls._raise_unsupported_aggregation_type(x),
+            },
+        )

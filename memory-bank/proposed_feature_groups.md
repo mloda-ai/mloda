@@ -9,7 +9,7 @@
 | ML | ClusteringFeatureGroup | High | Implemented |
 | Text Processing | TextCleaningFeatureGroup | Medium | Implemented |
 | Geospatial | GeoDistanceFeatureGroup | Medium | Implemented |
-| ML | DimensionalityReductionFeatureGroup | Medium | To Do |
+| ML | DimensionalityReductionFeatureGroup | Medium | Implemented |
 | Text Processing | SentimentAnalysisFeatureGroup | Low | To Do |
 | Time Series | ForecastingFeatureGroup | Low | To Do |
 | Graph-Based | NodeCentralityFeatureGroup | Low | To Do |

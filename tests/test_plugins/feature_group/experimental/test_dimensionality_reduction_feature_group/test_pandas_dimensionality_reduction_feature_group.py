@@ -1,0 +1,236 @@
+"""
+Tests for the PandasDimensionalityReductionFeatureGroup class.
+"""
+
+import pytest
+import pandas as pd
+import numpy as np
+
+from mloda_core.abstract_plugins.components.feature import Feature
+from mloda_core.abstract_plugins.components.feature_set import FeatureSet
+from mloda_core.abstract_plugins.components.options import Options
+from mloda_plugins.feature_group.experimental.dimensionality_reduction.pandas import (
+    PandasDimensionalityReductionFeatureGroup,
+)
+
+
+class TestPandasDimensionalityReductionFeatureGroup:
+    """Tests for the PandasDimensionalityReductionFeatureGroup class."""
+
+    @pytest.fixture
+    def sample_data(self) -> pd.DataFrame:
+        """Create a sample DataFrame for testing."""
+        # Create a DataFrame with multiple features and 100 samples
+        np.random.seed(42)
+
+        # Create data with some structure for dimensionality reduction
+        n_samples = 100
+        n_features = 10
+
+        # Create a DataFrame with random data
+        data = np.random.randn(n_samples, n_features)
+
+        # Add some structure (correlations between features)
+        data[:, 1] = data[:, 0] * 0.8 + np.random.randn(n_samples) * 0.2
+        data[:, 2] = data[:, 0] * 0.6 + np.random.randn(n_samples) * 0.4
+
+        # Create column names
+        columns = [f"feature{i}" for i in range(n_features)]
+
+        # Add a categorical column for LDA
+        categories = ["A", "B", "C"]
+        category_column = np.random.choice(categories, size=n_samples)
+
+        # Create a DataFrame
+        df = pd.DataFrame(data, columns=columns)
+        df["category"] = category_column
+
+        return df
+
+    def test_check_source_feature_exists(self, sample_data: pd.DataFrame) -> None:
+        """Test the _check_source_feature_exists method."""
+        # Valid feature
+        PandasDimensionalityReductionFeatureGroup._check_source_feature_exists(sample_data, "feature0")
+
+        # Invalid feature
+        with pytest.raises(ValueError):
+            PandasDimensionalityReductionFeatureGroup._check_source_feature_exists(sample_data, "invalid_feature")
+
+    def test_add_result_to_data(self, sample_data: pd.DataFrame) -> None:
+        """Test the _add_result_to_data method."""
+        # Create a result array (2D reduction of 10 samples)
+        result = np.random.randn(100, 2)
+
+        # Add the result to the data
+        updated_data = PandasDimensionalityReductionFeatureGroup._add_result_to_data(
+            sample_data, "pca_2d__feature0,feature1", result
+        )
+
+        # Check that the result was added
+        assert "pca_2d__feature0,feature1_dim1" in updated_data.columns
+        assert "pca_2d__feature0,feature1_dim2" in updated_data.columns
+        assert len(updated_data["pca_2d__feature0,feature1_dim1"]) == len(sample_data)
+        assert (updated_data["pca_2d__feature0,feature1_dim1"].values == result[:, 0]).all()
+        assert (updated_data["pca_2d__feature0,feature1_dim2"].values == result[:, 1]).all()
+
+    def test_perform_pca_reduction(self, sample_data: pd.DataFrame) -> None:
+        """Test the _perform_pca_reduction method."""
+        # Extract features
+        X = sample_data[["feature0", "feature1", "feature2"]].values
+
+        # Standardize the features
+        from sklearn.preprocessing import StandardScaler
+
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
+
+        # Perform PCA reduction
+        result = PandasDimensionalityReductionFeatureGroup._perform_pca_reduction(X_scaled, 2)
+
+        # Check that the result has the expected shape
+        assert result.shape == (100, 2)
+
+    def test_perform_tsne_reduction(self, sample_data: pd.DataFrame) -> None:
+        """Test the _perform_tsne_reduction method."""
+        # Extract features (use fewer samples for t-SNE to speed up the test)
+        X = sample_data[["feature0", "feature1", "feature2"]].iloc[:20].values
+
+        # Standardize the features
+        from sklearn.preprocessing import StandardScaler
+
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
+
+        # Perform t-SNE reduction
+        result = PandasDimensionalityReductionFeatureGroup._perform_tsne_reduction(X_scaled, 2)
+
+        # Check that the result has the expected shape
+        assert result.shape == (20, 2)
+
+    def test_perform_ica_reduction(self, sample_data: pd.DataFrame) -> None:
+        """Test the _perform_ica_reduction method."""
+        # Extract features
+        X = sample_data[["feature0", "feature1", "feature2"]].values
+
+        # Standardize the features
+        from sklearn.preprocessing import StandardScaler
+
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
+
+        # Perform ICA reduction
+        result = PandasDimensionalityReductionFeatureGroup._perform_ica_reduction(X_scaled, 2)
+
+        # Check that the result has the expected shape
+        assert result.shape == (100, 2)
+
+    def test_perform_lda_reduction(self, sample_data: pd.DataFrame) -> None:
+        """Test the _perform_lda_reduction method."""
+        # Extract features
+        X = sample_data[["feature0", "feature1", "feature2"]].values
+
+        # Standardize the features
+        from sklearn.preprocessing import StandardScaler
+
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
+
+        # Perform LDA reduction
+        result = PandasDimensionalityReductionFeatureGroup._perform_lda_reduction(X_scaled, 2, sample_data)
+
+        # Check that the result has the expected shape (LDA can produce at most n_classes-1 components)
+        assert result.shape[0] == 100
+        assert result.shape[1] <= 2
+
+    def test_perform_isomap_reduction(self, sample_data: pd.DataFrame) -> None:
+        """Test the _perform_isomap_reduction method."""
+        # Extract features (use fewer samples for Isomap to speed up the test)
+        X = sample_data[["feature0", "feature1", "feature2"]].iloc[:20].values
+
+        # Standardize the features
+        from sklearn.preprocessing import StandardScaler
+
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
+
+        # Perform Isomap reduction
+        result = PandasDimensionalityReductionFeatureGroup._perform_isomap_reduction(X_scaled, 2)
+
+        # Check that the result has the expected shape
+        assert result.shape == (20, 2)
+
+    def test_calculate_feature_pca(self, sample_data: pd.DataFrame) -> None:
+        """Test the calculate_feature method with PCA."""
+        # Create a feature set
+        feature_set = FeatureSet()
+        feature_set.add(Feature("pca_2d__feature0,feature1,feature2"))
+
+        # Calculate the feature
+        result = PandasDimensionalityReductionFeatureGroup.calculate_feature(sample_data, feature_set)
+
+        # Check that the result has the expected columns
+        assert "pca_2d__feature0,feature1,feature2_dim1" in result.columns
+        assert "pca_2d__feature0,feature1,feature2_dim2" in result.columns
+
+    def test_calculate_feature_tsne(self, sample_data: pd.DataFrame) -> None:
+        """Test the calculate_feature method with t-SNE."""
+        # Create a feature set (use a small subset for t-SNE to speed up the test)
+        small_sample = sample_data.iloc[:20].copy()
+        feature_set = FeatureSet()
+        feature_set.add(Feature("tsne_2d__feature0,feature1,feature2"))
+
+        # Calculate the feature
+        result = PandasDimensionalityReductionFeatureGroup.calculate_feature(small_sample, feature_set)
+
+        # Check that the result has the expected columns
+        assert "tsne_2d__feature0,feature1,feature2_dim1" in result.columns
+        assert "tsne_2d__feature0,feature1,feature2_dim2" in result.columns
+
+    def test_calculate_feature_multiple(self, sample_data: pd.DataFrame) -> None:
+        """Test the calculate_feature method with multiple dimensionality reduction features."""
+        # Create a feature set (use a small subset to speed up the test)
+        small_sample = sample_data.iloc[:20].copy()
+        feature_set = FeatureSet()
+        feature_set.add(Feature("pca_2d__feature0,feature1,feature2"))
+        feature_set.add(Feature("ica_2d__feature0,feature1,feature2"))
+
+        # Calculate the features
+        result = PandasDimensionalityReductionFeatureGroup.calculate_feature(small_sample, feature_set)
+
+        # Check that the result has the expected columns
+        assert "pca_2d__feature0,feature1,feature2_dim1" in result.columns
+        assert "pca_2d__feature0,feature1,feature2_dim2" in result.columns
+        assert "ica_2d__feature0,feature1,feature2_dim1" in result.columns
+        assert "ica_2d__feature0,feature1,feature2_dim2" in result.columns
+
+    def test_invalid_dimension(self, sample_data: pd.DataFrame) -> None:
+        """Test with an invalid dimension (too large)."""
+        # Create a feature set with a dimension that's too large
+        feature_set = FeatureSet()
+        feature_set.add(Feature("pca_20d__feature0,feature1,feature2"))  # Only 3 features, but asking for 20 dimensions
+
+        # Calculate the feature (should raise an error)
+        with pytest.raises(ValueError, match="Target dimension .* must be less than the number of source features"):
+            PandasDimensionalityReductionFeatureGroup.calculate_feature(sample_data, feature_set)
+
+    def test_missing_source_feature(self, sample_data: pd.DataFrame) -> None:
+        """Test with a missing source feature."""
+        # Create a feature set with a missing source feature
+        feature_set = FeatureSet()
+        feature_set.add(Feature("pca_2d__missing_feature"))
+
+        # Calculate the feature (should raise an error)
+        with pytest.raises(ValueError, match="Feature 'missing_feature' not found in the data"):
+            PandasDimensionalityReductionFeatureGroup.calculate_feature(sample_data, feature_set)
+
+    def test_unsupported_algorithm(self, sample_data: pd.DataFrame) -> None:
+        """Test with an unsupported algorithm."""
+        # This test should pass because the base class validation should catch this before
+        # it gets to the pandas implementation
+        feature_set = FeatureSet()
+        feature_set.add(Feature("unsupported_2d__feature0,feature1"))
+
+        # The match_feature_group_criteria method should return False for this feature
+        assert not PandasDimensionalityReductionFeatureGroup.match_feature_group_criteria(
+            "unsupported_2d__feature0,feature1", Options()
+        )

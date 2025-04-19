@@ -34,6 +34,9 @@
     * Integrated with FeatureChainParserConfiguration for configuration-based creation
     * Added comprehensive unit and integration tests
 *   Unified the implementation of configurable_feature_chain_parser across all feature groups
+*   Implemented DimensionalityReductionFeatureGroup with Pandas support:
+    * Added support for PCA, t-SNE, ICA, LDA, and Isomap algorithms
+    * Implemented array-in-a-column approach for storing dimensionality reduction results
 
 ## What's Left to Build
 

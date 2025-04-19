@@ -67,11 +67,11 @@ class TestPandasDimensionalityReductionFeatureGroup:
         )
 
         # Check that the result was added
-        assert "pca_2d__feature0,feature1_dim1" in updated_data.columns
-        assert "pca_2d__feature0,feature1_dim2" in updated_data.columns
-        assert len(updated_data["pca_2d__feature0,feature1_dim1"]) == len(sample_data)
-        assert (updated_data["pca_2d__feature0,feature1_dim1"].values == result[:, 0]).all()
-        assert (updated_data["pca_2d__feature0,feature1_dim2"].values == result[:, 1]).all()
+        assert "pca_2d__feature0,feature1~dim1" in updated_data.columns
+        assert "pca_2d__feature0,feature1~dim2" in updated_data.columns
+        assert len(updated_data["pca_2d__feature0,feature1~dim1"]) == len(sample_data)
+        assert (updated_data["pca_2d__feature0,feature1~dim1"].values == result[:, 0]).all()
+        assert (updated_data["pca_2d__feature0,feature1~dim2"].values == result[:, 1]).all()
 
     def test_perform_pca_reduction(self, sample_data: pd.DataFrame) -> None:
         """Test the _perform_pca_reduction method."""
@@ -169,8 +169,8 @@ class TestPandasDimensionalityReductionFeatureGroup:
         result = PandasDimensionalityReductionFeatureGroup.calculate_feature(sample_data, feature_set)
 
         # Check that the result has the expected columns
-        assert "pca_2d__feature0,feature1,feature2_dim1" in result.columns
-        assert "pca_2d__feature0,feature1,feature2_dim2" in result.columns
+        assert "pca_2d__feature0,feature1,feature2~dim1" in result.columns
+        assert "pca_2d__feature0,feature1,feature2~dim2" in result.columns
 
     def test_calculate_feature_tsne(self, sample_data: pd.DataFrame) -> None:
         """Test the calculate_feature method with t-SNE."""
@@ -183,8 +183,8 @@ class TestPandasDimensionalityReductionFeatureGroup:
         result = PandasDimensionalityReductionFeatureGroup.calculate_feature(small_sample, feature_set)
 
         # Check that the result has the expected columns
-        assert "tsne_2d__feature0,feature1,feature2_dim1" in result.columns
-        assert "tsne_2d__feature0,feature1,feature2_dim2" in result.columns
+        assert "tsne_2d__feature0,feature1,feature2~dim1" in result.columns
+        assert "tsne_2d__feature0,feature1,feature2~dim2" in result.columns
 
     def test_calculate_feature_multiple(self, sample_data: pd.DataFrame) -> None:
         """Test the calculate_feature method with multiple dimensionality reduction features."""
@@ -198,10 +198,10 @@ class TestPandasDimensionalityReductionFeatureGroup:
         result = PandasDimensionalityReductionFeatureGroup.calculate_feature(small_sample, feature_set)
 
         # Check that the result has the expected columns
-        assert "pca_2d__feature0,feature1,feature2_dim1" in result.columns
-        assert "pca_2d__feature0,feature1,feature2_dim2" in result.columns
-        assert "ica_2d__feature0,feature1,feature2_dim1" in result.columns
-        assert "ica_2d__feature0,feature1,feature2_dim2" in result.columns
+        assert "pca_2d__feature0,feature1,feature2~dim1" in result.columns
+        assert "pca_2d__feature0,feature1,feature2~dim2" in result.columns
+        assert "ica_2d__feature0,feature1,feature2~dim1" in result.columns
+        assert "ica_2d__feature0,feature1,feature2~dim2" in result.columns
 
     def test_invalid_dimension(self, sample_data: pd.DataFrame) -> None:
         """Test with an invalid dimension (too large)."""

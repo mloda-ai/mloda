@@ -24,6 +24,8 @@ nav:
   - In Depth - Advanced:
     - Data quality: in_depth/data-quality.md
     - Domain concept: in_depth/domain.md
+    - Feature Groups:
+      - Multiple Result Columns: in_depth/multiple_result_columns.md
     
   - Development:
     - Contributers: development.md

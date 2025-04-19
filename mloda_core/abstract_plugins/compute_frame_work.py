@@ -378,3 +378,45 @@ class ComputeFrameWork(ABC):
         if self.uuid is None:
             raise ValueError("UUID is not set")
         return self.uuid
+
+    @final
+    def identify_naming_convention(self, selected_feature_names: Set[FeatureName], column_names: Set[str]) -> Set[str]:
+        """
+        Identifies columns that match feature names or follow the naming convention pattern.
+
+        This method supports the multiple result columns pattern, where a feature group can
+        return multiple related columns using the naming convention 'feature_name~column_suffix'.
+
+        Args:
+            selected_feature_names: A set of FeatureName objects representing the requested features
+            column_names: A set of strings representing the available column names in the data
+
+        Returns:
+            A set of column names that match the requested features or follow the naming convention
+
+        Raises:
+            ValueError: If no matching columns are found
+
+        Example:
+            If selected_feature_names contains 'Temperature' and column_names contains
+            'Temperature~mean', 'Temperature~max', 'Temperature~min', this method will return
+            all three columns as they follow the naming convention.
+        """
+        feature_name_strings = {f.name for f in selected_feature_names}
+        _selected_feature_names: Set[str] = set()
+
+        for col in column_names:
+            for feature_name in feature_name_strings:
+                if col == feature_name:
+                    _selected_feature_names.add(col)
+                    continue
+
+                if col.startswith(f"{feature_name}~"):
+                    _selected_feature_names.add(col)
+
+        if not _selected_feature_names:
+            raise ValueError(
+                f"No columns found that match feature names {feature_name_strings} or follow the naming convention 'feature_name~column_name'"
+            )
+
+        return _selected_feature_names

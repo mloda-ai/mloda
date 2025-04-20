@@ -11,7 +11,7 @@
 | Geospatial | GeoDistanceFeatureGroup | Medium | Implemented |
 | ML | DimensionalityReductionFeatureGroup | Medium | Implemented |
 | Time Series | ForecastingFeatureGroup | Low | Implemented |
-| Graph-Based | NodeCentralityFeatureGroup | Low | To Do |
+| Graph-Based | NodeCentralityFeatureGroup | Low | Implemented |
 
 ## Feature Group Categories
 

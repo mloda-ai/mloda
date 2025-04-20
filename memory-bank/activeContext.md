@@ -43,6 +43,10 @@ Initializing the memory bank for the mloda project.
     * Added support for multiple forecasting algorithms (linear, ridge, randomforest, etc.)
     * Implemented automatic feature engineering for time series data
     * Added artifact support for saving and loading trained models
+*   Implemented NodeCentralityFeatureGroup with Pandas support:
+    * Added support for multiple centrality metrics (degree, betweenness, closeness, eigenvector, pagerank)
+    * Implemented matrix-based centrality calculations without requiring external graph libraries
+    * Added support for both directed and undirected graphs
 
 
 ## Next Steps
@@ -51,16 +55,13 @@ Initializing the memory bank for the mloda project.
     * Combine TimeWindowFeatureGroup, MissingValueFeatureGroup, and AggregatedFeatureGroup
     * Demonstrate the composability of feature groups in the mloda framework
     * Create comprehensive test cases with different data scenarios
-*   Continue implementing the remaining high-priority proposed feature groups
-*   Populate the memory bank files with more detailed information.
-*   Update the `.clinerules` file with project-specific patterns.
+
+*   Populate the memory bank files with more detailed information
+*   Update the `.clinerules` file with project-specific patterns
 *   Implement additional compute framework implementations for other feature groups
 *   Explore further improvements to the feature chain parser system:
     * Consider adding support for more complex validation rules
     * Investigate ways to make feature creation even more intuitive
-*   Implemented DimensionalityReductionFeatureGroup with Pandas support:
-    * Added support for PCA, t-SNE, ICA, LDA, and Isomap algorithms
-    * Implemented array-in-a-column approach for storing dimensionality reduction results
 
 ## Active Decisions and Considerations
 

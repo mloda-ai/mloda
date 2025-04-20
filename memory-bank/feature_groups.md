@@ -263,7 +263,38 @@ When implementing feature groups that perform time series forecasting:
 - Supports artifact saving/loading to reuse trained models
 - Integrates with FeatureChainParserConfiguration for configuration-based creation
 
+### NodeCentralityFeatureGroup Pattern
+
+When implementing feature groups that calculate centrality metrics for nodes in a graph:
+
+**Naming Convention**:
+- Use `{centrality_type}_centrality__{mloda_source_feature}` format (note the double underscore)
+- Examples: `degree_centrality__user`, `betweenness_centrality__product`, `pagerank_centrality__website`
+
+**Supported Centrality Types**:
+- `degree`: Measures the number of connections a node has
+- `betweenness`: Measures how often a node lies on the shortest path between other nodes
+- `closeness`: Measures how close a node is to all other nodes
+- `eigenvector`: Measures the influence of a node in a network
+- `pagerank`: A variant of eigenvector centrality used by Google
+
+**Graph Types**:
+- `directed`: A graph where edges have direction
+- `undirected`: A graph where edges have no direction (default)
+
+**Implementation Tips**:
+- Requires edge data with source and target columns
+- Optionally supports weighted edges with a weight column
+- Integrates with FeatureChainParserConfiguration for configuration-based creation
+- Implements matrix-based centrality calculations without requiring external graph libraries
+
 ## Changelog
+
+### 2025-04-20: Added NodeCentralityFeatureGroup
+- Implemented NodeCentralityFeatureGroup with Pandas support
+- Added support for multiple centrality metrics (degree, betweenness, closeness, eigenvector, pagerank)
+- Added support for both directed and undirected graphs
+- Added integration tests demonstrating feature usage and configuration-based creation
 
 ### 2025-04-19: Added ForecastingFeatureGroup
 - Implemented ForecastingFeatureGroup with Pandas support

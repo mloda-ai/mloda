@@ -45,6 +45,10 @@
     * Added support for multiple forecasting algorithms (linear, ridge, randomforest, etc.)
     * Implemented automatic feature engineering for time series data
     * Added artifact support for saving and loading trained models
+*   Implemented NodeCentralityFeatureGroup with Pandas support:
+    * Added support for multiple centrality metrics (degree, betweenness, closeness, eigenvector, pagerank)
+    * Implemented matrix-based centrality calculations without requiring external graph libraries
+    * Added support for both directed and undirected graphs
 
 
 ## What's Left to Build
@@ -66,6 +70,8 @@ The implementation of configurable_feature_chain_parser has been unified across 
 Support for Multiple Result Columns has been added, allowing feature groups to return multiple related columns using a naming convention pattern. This enhances the flexibility of the framework by enabling a single feature computation to produce multiple related outputs.
 
 The ForecastingFeatureGroup has been implemented to support time series forecasting with multiple algorithms and artifact saving/loading capabilities.
+
+The NodeCentralityFeatureGroup has been implemented to calculate various centrality metrics for nodes in a graph, providing insights into the importance and influence of nodes in network data. This feature group supports multiple centrality metrics and both directed and undirected graphs, making it versatile for different types of network analysis tasks.
 
 ## Known Issues
 

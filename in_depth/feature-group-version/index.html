@@ -5,15 +5,15 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       <link rel="shortcut icon" href="../../img/favicon.ico" />
-    <title>Artifacts - mloda docs</title>
+    <title>Feature Group Versioning - mloda docs</title>
     <link rel="stylesheet" href="../../css/theme.css" />
     <link rel="stylesheet" href="../../css/theme_extra.css" />
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
     
       <script>
         // Current page data
-        var mkdocs_page_name = "Artifacts";
-        var mkdocs_page_input_path = "in_depth/artifacts.md";
+        var mkdocs_page_name = "Feature Group Versioning";
+        var mkdocs_page_input_path = "in_depth/feature-group-version.md";
         var mkdocs_page_url = null;
       </script>
     
@@ -67,7 +67,7 @@
                   </li>
               </ul>
               <p class="caption"><span class="caption-text">In Depth - Basics</span></p>
-              <ul class="current">
+              <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../mloda-api/">mloda API</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../access-feature-data/">(Feature) data</a>
@@ -76,39 +76,17 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../filter_data/">Filter data</a>
                   </li>
-                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Artifacts</a>
-    <ul class="current">
-    <li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a>
-    </li>
-    <li class="toctree-l2"><a class="reference internal" href="#key-components">Key Components</a>
-        <ul>
-    <li class="toctree-l3"><a class="reference internal" href="#baseartifact">BaseArtifact</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#abstractfeaturegroup">AbstractFeatureGroup</a>
-    </li>
-        </ul>
-    </li>
-    <li class="toctree-l2"><a class="reference internal" href="#example">Example</a>
-        <ul>
-    <li class="toctree-l3"><a class="reference internal" href="#feature-group-with-artifact-implementation">Feature Group with Artifact implementation</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#testing-artifacts">Testing Artifacts</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#conclusion">Conclusion</a>
-    </li>
-        </ul>
-    </li>
-    </ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../artifacts/">Artifacts</a>
                   </li>
               </ul>
               <p class="caption"><span class="caption-text">In Depth - Advanced</span></p>
-              <ul>
+              <ul class="current">
                   <li class="toctree-l1"><a class="reference internal" href="../data-quality/">Data quality</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../domain/">Domain concept</a>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
-    <ul>
+                  <li class="toctree-l1 current"><a class="reference internal current" >Feature Groups</a>
+    <ul class="current">
                 <li class="toctree-l2"><a class="reference internal" href="../compute-framework-integration/">Compute Framework Integration</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-chain-parser/">Feature Chain Parser</a>
@@ -117,7 +95,21 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-group-testing/">Feature Group Testing</a>
                 </li>
-                <li class="toctree-l2"><a class="reference internal" href="../feature-group-version/">Feature Group Versioning</a>
+                <li class="toctree-l2 current"><a class="reference internal current" href="#">Feature Group Versioning</a>
+    <ul class="current">
+    <li class="toctree-l3"><a class="reference internal" href="#overview">Overview</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#key-concepts">Key Concepts</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#composite-version-identifier">Composite Version Identifier</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#the-featuregroupversion-class">The FeatureGroupVersion Class</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#benefits">Benefits</a>
+    </li>
+    </ul>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../multiple_result_columns/">Multiple Result Columns</a>
                 </li>
@@ -154,8 +146,9 @@
         <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
   <ul class="wy-breadcrumbs">
     <li><a href="../.." class="icon icon-home" aria-label="Docs"></a></li>
-          <li class="breadcrumb-item">In Depth - Basics</li>
-      <li class="breadcrumb-item active">Artifacts</li>
+          <li class="breadcrumb-item">In Depth - Advanced</li>
+          <li class="breadcrumb-item">Feature Groups</li>
+      <li class="breadcrumb-item active">Feature Group Versioning</li>
     <li class="wy-breadcrumbs-aside">
     </li>
   </ul>
@@ -164,85 +157,38 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
             <div class="section" itemprop="articleBody">
               
-                <h1 id="artifacts">Artifacts</h1>
-<p>Artifacts are a crucial part of the mloda, enabling the storage and retrieval of intermediate results feature engineering processes.
-Example use cases are embeddings, Feature Matrices, Model Checkpoints and more.</p>
+                <h1 id="feature-group-versioning">Feature Group Versioning</h1>
 <h2 id="overview">Overview</h2>
-<p>Artifacts are managed through a set of abstract and concrete classes that define how artifacts are created, saved, and loaded. The primary classes involved in artifact management include:</p>
+<p>Feature Group versioning in mloda provides a way to track changes, manage compatibility, and aid debugging. This document explains how the versioning system works and how it's used in feature groups.</p>
+<h2 id="key-concepts">Key Concepts</h2>
+<h3 id="composite-version-identifier">Composite Version Identifier</h3>
+<p>The version identifier is generated by combining:
+- The version of the 'mloda' package
+- The module name where the feature group is defined
+- A SHA-256 hash of the feature group class's source code</p>
+<p>This creates a unique identifier that represents the implementation state of the feature group.</p>
+<h3 id="the-featuregroupversion-class">The FeatureGroupVersion Class</h3>
+<p>The <code>FeatureGroupVersion</code> class handles the versioning logic:</p>
+<pre><code class="language-python">@classmethod
+def version(cls) -&gt; str:
+    &quot;&quot;&quot;
+    Returns a composite version identifier for this feature group.
+    &quot;&quot;&quot;
+    return FeatureGroupVersion.version(cls)
+</code></pre>
+<h2 id="benefits">Benefits</h2>
 <ul>
-<li><code>BaseArtifact</code>: The base class for all artifacts.</li>
-<li><code>AbstractFeatureGroup</code>: An abstract class that defines the structure for feature groups, including methods for artifact management. This class may contain a <code>BaseArtfact</code>.</li>
+<li><strong>Change Detection</strong>: Easily detect when a feature group implementation has changed</li>
+<li><strong>Compatibility Management</strong>: Ensure compatibility between different versions</li>
+<li><strong>Debugging</strong>: Trace issues back to specific implementations</li>
+<li><strong>Reproducibility</strong>: Recreate results with the same feature group version</li>
 </ul>
-<h2 id="key-components">Key Components</h2>
-<h4 id="baseartifact">BaseArtifact</h4>
-<p>The <code>BaseArtifact</code> class serves as the foundation for all artifacts. It provides the basic interface and functionality required for artifact management.</p>
-<h4 id="abstractfeaturegroup">AbstractFeatureGroup</h4>
-<p>The <code>AbstractFeatureGroup</code> class defines the structure for feature groups, including methods for creating data, calculating features, and managing artifacts. It includes methods such as <code>artifact</code> and <code>load_artifact</code> to handle artifact operations.</p>
-<h2 id="example">Example</h2>
-<h4 id="feature-group-with-artifact-implementation">Feature Group with Artifact implementation</h4>
-<p>The following example demonstrates how to implement and test an artifact.</p>
-<p>Here, we create a <code>FeatureGroup</code> with a configured <code>BaseArtifact</code>.</p>
-<pre><code class="language-python">from typing import Type, Any, Optional
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.base_artifact import BaseArtifact
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-
-
-class BaseExampleArtifactFeature(AbstractFeatureGroup):
-    @classmethod
-    def input_data(cls) -&gt; Optional[BaseInputData]:
-        return DataCreator({cls.get_class_name()})
-
-    @staticmethod
-    def artifact() -&gt; Type[BaseArtifact] | None:
-        return BaseArtifact
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:
-        if features.artifact_to_save:
-            features.save_artifact = &quot;BasicArtifact&quot;
-
-        if features.artifact_to_load:
-            result = cls.load_artifact(features)
-            print(f&quot;{result} is the loaded artifact.&quot;)
-
-        return {cls.get_class_name(): [1, 2, 3]}
-</code></pre>
-<p>Now, we run the query to the feature group to save the artifact. This example is very basic, but could be a much more complex artifact.</p>
-<pre><code class="language-python">from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
-
-api = mlodaAPI([&quot;BaseExampleArtifactFeature&quot;], {PyarrowTable})
-api._batch_run()
-artifacts = api.get_artifacts()
-print(artifacts)
-</code></pre>
-<p>Result:</p>
-<pre><code class="language-python">{'BaseExampleArtifactFeature': 'BasicArtifact'}
-</code></pre>
-<p>Now, let us use this artifact.</p>
-<pre><code class="language-python">from mloda_core.abstract_plugins.components.feature import Feature
-
-feat = Feature(name=&quot;BaseExampleArtifactFeature&quot;, options=artifacts)
-api = mlodaAPI([feat], {PyarrowTable})
-api._batch_run()
-</code></pre>
-<p>Result:</p>
-<pre><code class="language-python">&quot;BasicArtifact is the loaded artifact.&quot;
-</code></pre>
-<h4 id="testing-artifacts">Testing Artifacts</h4>
-<p>Testing artifact features involves creating test cases that ensure artifacts are correctly saved and loaded. The following example shows how to test the <code>BaseTestArtifactFeature</code> class.</p>
-<p><a href="https://github.com/TomKaltofen/mloda/tree/feature/main/tests/test_core/test_artifacts/test_artifacts.py">View the test file on GitHub</a></p>
-<h4 id="conclusion">Conclusion</h4>
-<p>Artifacts are a powerful feature in mloda, enabling efficient management of intermediate results in the machine learning pipeline. By understanding and utilizing the provided classes and methods, you can effectively manage artifacts in your projects.</p>
               
             </div>
           </div><footer>
     <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
-        <a href="../filter_data/" class="btn btn-neutral float-left" title="Filter data"><span class="icon icon-circle-arrow-left"></span> Previous</a>
-        <a href="../data-quality/" class="btn btn-neutral float-right" title="Data quality">Next <span class="icon icon-circle-arrow-right"></span></a>
+        <a href="../feature-group-testing/" class="btn btn-neutral float-left" title="Feature Group Testing"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../multiple_result_columns/" class="btn btn-neutral float-right" title="Multiple Result Columns">Next <span class="icon icon-circle-arrow-right"></span></a>
     </div>
 
   <hr/>
@@ -265,10 +211,10 @@ api._batch_run()
   <span class="rst-current-version" data-toggle="rst-current-version">
     
     
-      <span><a href="../filter_data/" style="color: #fcfcfc">&laquo; Previous</a></span>
+      <span><a href="../feature-group-testing/" style="color: #fcfcfc">&laquo; Previous</a></span>
     
     
-      <span><a href="../data-quality/" style="color: #fcfcfc">Next &raquo;</a></span>
+      <span><a href="../multiple_result_columns/" style="color: #fcfcfc">Next &raquo;</a></span>
     
   </span>
 </div>

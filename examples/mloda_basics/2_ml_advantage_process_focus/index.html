@@ -40,29 +40,25 @@
                   <li class="toctree-l1"><a class="reference internal" href="../../..">mloda</a>
                   </li>
               </ul>
-              <p class="caption"><span class="caption-text">Introduction Notebooks</span></p>
+              <p class="caption"><span class="caption-text">mloda Concepts</span></p>
               <ul class="current">
-                  <li class="toctree-l1 current"><a class="reference internal current" >Basics</a>
+                  <li class="toctree-l1"><a class="reference internal" href="../0_table_of_content/">Table of Content</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../1_ml_mloda_intro/">Intro to the core interfaces of mloda</a>
+                  </li>
+                  <li class="toctree-l1 current"><a class="reference internal current" href="#">What makes mloda unique?</a>
     <ul class="current">
-                <li class="toctree-l2"><a class="reference internal" href="../0_table_of_content/">Table of Content</a>
-                </li>
-                <li class="toctree-l2"><a class="reference internal" href="../1_ml_mloda_intro/">Intro to the core interfaces of mloda</a>
-                </li>
-                <li class="toctree-l2 current"><a class="reference internal current" href="#">What makes mloda unique?</a>
-    <ul class="current">
-    <li class="toctree-l3"><a class="reference internal" href="#data-should-be-reuseable">Data should be reuseable</a>
+    <li class="toctree-l2"><a class="reference internal" href="#data-should-be-reuseable">Data should be reuseable</a>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#accommodating-different-technologies-across-software-and-ml-lifecycles">Accommodating different technologies across software and ML lifecycles</a>
+    <li class="toctree-l2"><a class="reference internal" href="#accommodating-different-technologies-across-software-and-ml-lifecycles">Accommodating different technologies across software and ML lifecycles</a>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#addressing-the-needs-of-diverse-user-groups-with-mloda">Addressing the Needs of Diverse User Groups with mloda</a>
+    <li class="toctree-l2"><a class="reference internal" href="#addressing-the-needs-of-diverse-user-groups-with-mloda">Addressing the Needs of Diverse User Groups with mloda</a>
     </li>
     </ul>
-                </li>
-                <li class="toctree-l2"><a class="reference internal" href="../3_ml_data_feature_feature_groups/">Data, Feature, FeatureSets and FeatureGroups in mloda</a>
-                </li>
-                <li class="toctree-l2"><a class="reference internal" href="../4_ml_data_producers_user_owner/">Data Producer, User, Owner in mloda</a>
-                </li>
-    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../3_ml_data_feature_feature_groups/">Data, Feature, FeatureSets and FeatureGroups in mloda</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../4_ml_data_producers_user_owner/">Data Producer, User, Owner in mloda</a>
                   </li>
               </ul>
               <p class="caption"><span class="caption-text">Getting Started</span></p>
@@ -97,10 +93,26 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../../in_depth/domain/">Domain concept</a>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/compute-framework-integration/">Compute Framework Integration</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/feature-chain-parser/">Feature Chain Parser</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/feature-group-matching/">Feature Group Matching</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/feature-group-testing/">Feature Group Testing</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/feature-group-version/">Feature Group Versioning</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/multiple_result_columns/">Multiple Result Columns</a>
+                </li>
+    </ul>
+                  </li>
               </ul>
               <p class="caption"><span class="caption-text">Development</span></p>
               <ul>
-                  <li class="toctree-l1"><a class="reference internal" href="../../../development/">Contributers</a>
+                  <li class="toctree-l1"><a class="reference internal" href="../../../development/">Contributors</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../../license/">License - Apache 2.0</a>
                   </li>
@@ -128,8 +140,7 @@
         <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
   <ul class="wy-breadcrumbs">
     <li><a href="../../.." class="icon icon-home" aria-label="Docs"></a></li>
-          <li class="breadcrumb-item">Introduction Notebooks</li>
-          <li class="breadcrumb-item">Basics</li>
+          <li class="breadcrumb-item">mloda Concepts</li>
       <li class="breadcrumb-item active">What makes mloda unique?</li>
     <li class="wy-breadcrumbs-aside">
     </li>
@@ -614,7 +625,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </pre></div>
 <p>In this scenario, embedding data specifics into the process prevents sharing or adapting it for other tasks, leading to repeated rewrites and wasted effort.</p>
 <p>mloda addresses this issue by decoupling data and process definitions - the features. Instead of combining them in a single process, data and the features are treated as separate entities that come together only during calculation time. The following code snippet of mloda brings together data and features:</p>
-<div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">calculate_feature</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">features</span><span class="p">:</span> <span class="n">FeatureSet</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">calculate_feature</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">features</span><span class="p">:</span> <span class="n">FeatureSet</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
     <span class="o">...</span>
 </pre></div>
 <p>In this model:</p>

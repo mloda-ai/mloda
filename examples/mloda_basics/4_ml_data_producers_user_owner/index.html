@@ -40,52 +40,48 @@
                   <li class="toctree-l1"><a class="reference internal" href="../../..">mloda</a>
                   </li>
               </ul>
-              <p class="caption"><span class="caption-text">Introduction Notebooks</span></p>
+              <p class="caption"><span class="caption-text">mloda Concepts</span></p>
               <ul class="current">
-                  <li class="toctree-l1 current"><a class="reference internal current" >Basics</a>
+                  <li class="toctree-l1"><a class="reference internal" href="../0_table_of_content/">Table of Content</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../1_ml_mloda_intro/">Intro to the core interfaces of mloda</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../2_ml_advantage_process_focus/">What makes mloda unique?</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../3_ml_data_feature_feature_groups/">Data, Feature, FeatureSets and FeatureGroups in mloda</a>
+                  </li>
+                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Data Producer, User, Owner in mloda</a>
     <ul class="current">
-                <li class="toctree-l2"><a class="reference internal" href="../0_table_of_content/">Table of Content</a>
-                </li>
-                <li class="toctree-l2"><a class="reference internal" href="../1_ml_mloda_intro/">Intro to the core interfaces of mloda</a>
-                </li>
-                <li class="toctree-l2"><a class="reference internal" href="../2_ml_advantage_process_focus/">What makes mloda unique?</a>
-                </li>
-                <li class="toctree-l2"><a class="reference internal" href="../3_ml_data_feature_feature_groups/">Data, Feature, FeatureSets and FeatureGroups in mloda</a>
-                </li>
-                <li class="toctree-l2 current"><a class="reference internal current" href="#">Data Producer, User, Owner in mloda</a>
-    <ul class="current">
-    <li class="toctree-l3"><a class="reference internal" href="#roles-in-mloda">Roles in mloda</a>
+    <li class="toctree-l2"><a class="reference internal" href="#roles-in-mloda">Roles in mloda</a>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#data-producer">Data Producer</a>
+    <li class="toctree-l2"><a class="reference internal" href="#data-producer">Data Producer</a>
         <ul>
-    <li class="toctree-l4"><a class="reference internal" href="#featuregroup-api-plug-in-in-short">FeatureGroup API (plug-in) in short</a>
+    <li class="toctree-l3"><a class="reference internal" href="#featuregroup-api-plug-in-in-short">FeatureGroup API (plug-in) in short</a>
     </li>
-    <li class="toctree-l4"><a class="reference internal" href="#simple-example-implementation-of-the-featuregroup-api">Simple example implementation of the FeatureGroup API</a>
+    <li class="toctree-l3"><a class="reference internal" href="#simple-example-implementation-of-the-featuregroup-api">Simple example implementation of the FeatureGroup API</a>
     </li>
-    <li class="toctree-l4"><a class="reference internal" href="#complex-plug-ins">Complex plug-ins</a>
+    <li class="toctree-l3"><a class="reference internal" href="#complex-plug-ins">Complex plug-ins</a>
     </li>
-    <li class="toctree-l4"><a class="reference internal" href="#quality">Quality</a>
+    <li class="toctree-l3"><a class="reference internal" href="#quality">Quality</a>
     </li>
-    <li class="toctree-l4"><a class="reference internal" href="#consequences">Consequences</a>
+    <li class="toctree-l3"><a class="reference internal" href="#consequences">Consequences</a>
     </li>
         </ul>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#data-user-role">Data User Role</a>
+    <li class="toctree-l2"><a class="reference internal" href="#data-user-role">Data User Role</a>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#data-owner-role">Data Owner Role</a>
+    <li class="toctree-l2"><a class="reference internal" href="#data-owner-role">Data Owner Role</a>
         <ul>
-    <li class="toctree-l4"><a class="reference internal" href="#using-organization-wide-logging">Using organization wide logging</a>
+    <li class="toctree-l3"><a class="reference internal" href="#using-organization-wide-logging">Using organization wide logging</a>
     </li>
-    <li class="toctree-l4"><a class="reference internal" href="#logging-data-size">Logging data size</a>
+    <li class="toctree-l3"><a class="reference internal" href="#logging-data-size">Logging data size</a>
     </li>
         </ul>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#conclusion">Conclusion</a>
+    <li class="toctree-l2"><a class="reference internal" href="#conclusion">Conclusion</a>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#next-steps">Next steps</a>
+    <li class="toctree-l2"><a class="reference internal" href="#next-steps">Next steps</a>
     </li>
-    </ul>
-                </li>
     </ul>
                   </li>
               </ul>
@@ -121,10 +117,26 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../../in_depth/domain/">Domain concept</a>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/compute-framework-integration/">Compute Framework Integration</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/feature-chain-parser/">Feature Chain Parser</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/feature-group-matching/">Feature Group Matching</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/feature-group-testing/">Feature Group Testing</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/feature-group-version/">Feature Group Versioning</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/multiple_result_columns/">Multiple Result Columns</a>
+                </li>
+    </ul>
+                  </li>
               </ul>
               <p class="caption"><span class="caption-text">Development</span></p>
               <ul>
-                  <li class="toctree-l1"><a class="reference internal" href="../../../development/">Contributers</a>
+                  <li class="toctree-l1"><a class="reference internal" href="../../../development/">Contributors</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../../license/">License - Apache 2.0</a>
                   </li>
@@ -152,8 +164,7 @@
         <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
   <ul class="wy-breadcrumbs">
     <li><a href="../../.." class="icon icon-home" aria-label="Docs"></a></li>
-          <li class="breadcrumb-item">Introduction Notebooks</li>
-          <li class="breadcrumb-item">Basics</li>
+          <li class="breadcrumb-item">mloda Concepts</li>
       <li class="breadcrumb-item active">Data Producer, User, Owner in mloda</li>
     <li class="wy-breadcrumbs-aside">
     </li>
@@ -669,14 +680,14 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </div>
 <div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># We reuse the data from the first example and just rerun it for the sake of the example, but just in one cell.</span>
 
-<span class="kn">import</span> <span class="nn">os</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span>
-<span class="kn">from</span> <span class="nn">mloda_core.abstract_plugins.components.feature</span> <span class="kn">import</span> <span class="n">Feature</span>
-<span class="kn">from</span> <span class="nn">mloda_core.abstract_plugins.components.data_access_collection</span> <span class="kn">import</span> <span class="n">DataAccessCollection</span>
-<span class="kn">from</span> <span class="nn">mloda_plugins.feature_group.input_data.read_dbs.sqlite</span> <span class="kn">import</span> <span class="n">SQLITEReader</span>
-<span class="kn">from</span> <span class="nn">mloda_core.abstract_plugins.plugin_loader.plugin_loader</span> <span class="kn">import</span> <span class="n">PluginLoader</span>
-<span class="kn">from</span> <span class="nn">mloda_core.api.request</span> <span class="kn">import</span> <span class="n">mlodaAPI</span>
-<span class="kn">from</span> <span class="nn">mloda_plugins.compute_framework.base_implementations.pyarrow.table</span> <span class="kn">import</span> <span class="n">PyarrowTable</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.components.feature</span><span class="w"> </span><span class="kn">import</span> <span class="n">Feature</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.components.data_access_collection</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataAccessCollection</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.feature_group.input_data.read_dbs.sqlite</span><span class="w"> </span><span class="kn">import</span> <span class="n">SQLITEReader</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.plugin_loader.plugin_loader</span><span class="w"> </span><span class="kn">import</span> <span class="n">PluginLoader</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.api.request</span><span class="w"> </span><span class="kn">import</span> <span class="n">mlodaAPI</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.compute_framework.base_implementations.pyarrow.table</span><span class="w"> </span><span class="kn">import</span> <span class="n">PyarrowTable</span>
 
 <span class="n">plugin_loader</span> <span class="o">=</span> <span class="n">PluginLoader</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
 
@@ -802,19 +813,19 @@ mlodaAPI.run_all(all_features, data_access_collection=data_access_collection, co
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
 <h3 id="featuregroup-api-plug-in-in-short">FeatureGroup API (plug-in) in short<a class="anchor-link" href="#featuregroup-api-plug-in-in-short">¶</a></h3><p>In mloda, a data producer defines access by creating feature groups. Here's an example implementation:</p>
-<div class="highlight"><pre><span></span><span class="k">class</span> <span class="nc">FeatureGroupClass</span><span class="p">(</span><span class="n">AbstractFeatureGroup</span><span class="p">):</span>
+<div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">FeatureGroupClass</span><span class="p">(</span><span class="n">AbstractFeatureGroup</span><span class="p">):</span>
 
     <span class="c1"># Root feature definition</span>
     <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">input_data</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">input_data</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
         <span class="o">...</span>
 
     <span class="c1"># Features derived from other features</span>
-    <span class="k">def</span> <span class="nf">input_features</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">input_features</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
         <span class="o">...</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">calculate_feature</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">calculate_feature</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
         <span class="o">...</span>
 </pre></div>
 </div>
@@ -828,13 +839,13 @@ mlodaAPI.run_all(all_features, data_access_collection=data_access_collection, co
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
 <h3 id="simple-example-implementation-of-the-featuregroup-api">Simple example implementation of the FeatureGroup API<a class="anchor-link" href="#simple-example-implementation-of-the-featuregroup-api">¶</a></h3><p>In the background, mloda loads the plug-ins, which were created before, like this one.</p>
-<div class="highlight"><pre><span></span><span class="k">class</span> <span class="nc">ReadFileFeature</span><span class="p">(</span><span class="n">AbstractFeatureGroup</span><span class="p">):</span>
+<div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">ReadFileFeature</span><span class="p">(</span><span class="n">AbstractFeatureGroup</span><span class="p">):</span>
     <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">input_data</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">BaseInputData</span><span class="p">]:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">input_data</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">BaseInputData</span><span class="p">]:</span>
         <span class="k">return</span> <span class="n">ReadFile</span><span class="p">()</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">calculate_feature</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">features</span><span class="p">:</span> <span class="n">FeatureSet</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">calculate_feature</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">features</span><span class="p">:</span> <span class="n">FeatureSet</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
         <span class="n">reader</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">input_data</span><span class="p">()</span>
         <span class="k">if</span> <span class="n">reader</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">data</span> <span class="o">=</span> <span class="n">reader</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">features</span><span class="p">)</span>
@@ -842,21 +853,21 @@ mlodaAPI.run_all(all_features, data_access_collection=data_access_collection, co
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Reading file failed for feature </span><span class="si">{</span><span class="n">features</span><span class="o">.</span><span class="n">get_name_of_one_feature</span><span class="p">()</span><span class="si">}</span><span class="s2">."</span><span class="p">)</span>
 </pre></div>
 <p>We use composition to read different data sources. A ReadFile object looks like this:</p>
-<div class="highlight"><pre><span></span><span class="k">class</span> <span class="nc">CsvReader</span><span class="p">(</span><span class="n">ReadFile</span><span class="p">):</span>
+<div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">CsvReader</span><span class="p">(</span><span class="n">ReadFile</span><span class="p">):</span>
     <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">suffix</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">suffix</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
         <span class="k">return</span> <span class="p">(</span>
             <span class="s2">".csv"</span><span class="p">,</span>
             <span class="s2">".CSV"</span><span class="p">,</span>
         <span class="p">)</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">load_data</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data_access</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">features</span><span class="p">:</span> <span class="n">FeatureSet</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_data</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data_access</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">features</span><span class="p">:</span> <span class="n">FeatureSet</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
         <span class="n">result</span> <span class="o">=</span> <span class="n">pyarrow_csv</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">data_access</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">result</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">features</span><span class="o">.</span><span class="n">get_all_names</span><span class="p">()))</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">get_column_names</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">file_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_column_names</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">file_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
         <span class="n">read_options</span> <span class="o">=</span> <span class="n">pyarrow_csv</span><span class="o">.</span><span class="n">ReadOptions</span><span class="p">(</span><span class="n">skip_rows_after_names</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
         <span class="n">table</span> <span class="o">=</span> <span class="n">pyarrow_csv</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">file_name</span><span class="p">,</span> <span class="n">read_options</span><span class="o">=</span><span class="n">read_options</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">table</span><span class="o">.</span><span class="n">schema</span><span class="o">.</span><span class="n">names</span>
@@ -886,17 +897,17 @@ mlodaAPI.run_all(all_features, data_access_collection=data_access_collection, co
 </div>
 <div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># In the following, we will just adjust a bit the CsvReader to handle a different delimiter.</span>
 
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Optional</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Optional</span>
 
-<span class="kn">from</span> <span class="nn">pyarrow</span> <span class="kn">import</span> <span class="n">csv</span> <span class="k">as</span> <span class="n">pyarrow_csv</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="kn">import</span> <span class="n">csv</span> <span class="k">as</span> <span class="n">pyarrow_csv</span>
 
-<span class="kn">from</span> <span class="nn">mloda_core.abstract_plugins.components.feature_set</span> <span class="kn">import</span> <span class="n">FeatureSet</span>
-<span class="kn">from</span> <span class="nn">mloda_core.abstract_plugins.components.input_data.base_input_data</span> <span class="kn">import</span> <span class="n">BaseInputData</span>
-<span class="kn">from</span> <span class="nn">mloda_plugins.feature_group.input_data.read_file_feature</span> <span class="kn">import</span> <span class="n">ReadFileFeature</span>
-<span class="kn">from</span> <span class="nn">mloda_plugins.feature_group.input_data.read_files.csv</span> <span class="kn">import</span> <span class="n">CsvReader</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.components.feature_set</span><span class="w"> </span><span class="kn">import</span> <span class="n">FeatureSet</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.components.input_data.base_input_data</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseInputData</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.feature_group.input_data.read_file_feature</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReadFileFeature</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.feature_group.input_data.read_files.csv</span><span class="w"> </span><span class="kn">import</span> <span class="n">CsvReader</span>
 
 
-<span class="k">class</span> <span class="nc">CsvReader2</span><span class="p">(</span><span class="n">CsvReader</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">CsvReader2</span><span class="p">(</span><span class="n">CsvReader</span><span class="p">):</span>
     <span class="c1"># Adjusted CsvReader2 to handle the new delimiter</span>
     <span class="n">_parse_options</span> <span class="o">=</span> <span class="n">pyarrow_csv</span><span class="o">.</span><span class="n">ParseOptions</span><span class="p">(</span>
         <span class="n">delimiter</span><span class="o">=</span><span class="s2">","</span><span class="p">,</span>  <span class="c1"># Default delimiter</span>
@@ -905,19 +916,19 @@ mlodaAPI.run_all(all_features, data_access_collection=data_access_collection, co
     <span class="p">)</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">load_data</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data_access</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">features</span><span class="p">:</span> <span class="n">FeatureSet</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_data</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data_access</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">features</span><span class="p">:</span> <span class="n">FeatureSet</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
         <span class="n">result</span> <span class="o">=</span> <span class="n">pyarrow_csv</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">data_access</span><span class="p">,</span> <span class="n">parse_options</span><span class="o">=</span><span class="bp">cls</span><span class="o">.</span><span class="n">_parse_options</span><span class="p">)</span>
         <span class="nb">print</span><span class="p">(</span><span class="s2">"We used CsvReader2 to load the data."</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">result</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">features</span><span class="o">.</span><span class="n">get_all_names</span><span class="p">()))</span>
 
 
-<span class="k">class</span> <span class="nc">ReadFileFeature2</span><span class="p">(</span><span class="n">ReadFileFeature</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ReadFileFeature2</span><span class="p">(</span><span class="n">ReadFileFeature</span><span class="p">):</span>
     <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">input_data</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">BaseInputData</span><span class="p">]:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">input_data</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">BaseInputData</span><span class="p">]:</span>
         <span class="k">return</span> <span class="n">CsvReader2</span><span class="p">()</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">validate_output_features</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">features</span><span class="p">:</span> <span class="n">FeatureSet</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">validate_output_features</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">features</span><span class="p">:</span> <span class="n">FeatureSet</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]:</span>
         <span class="k">for</span> <span class="n">column_name</span> <span class="ow">in</span> <span class="n">features</span><span class="o">.</span><span class="n">get_all_names</span><span class="p">():</span>
             <span class="k">if</span> <span class="n">column_name</span> <span class="ow">in</span> <span class="n">data</span><span class="o">.</span><span class="n">column_names</span><span class="p">:</span>
                 <span class="n">column</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="n">column_name</span><span class="p">]</span>
@@ -991,7 +1002,7 @@ class ReadFileFeature2(ReadFileFeature):
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="kn">from</span> <span class="nn">mloda_core.abstract_plugins.components.plugin_option.plugin_collector</span> <span class="kn">import</span> <span class="n">PlugInCollector</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.components.plugin_option.plugin_collector</span><span class="w"> </span><span class="kn">import</span> <span class="n">PlugInCollector</span>
 
 <span class="n">result</span> <span class="o">=</span> <span class="n">mlodaAPI</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span>
     <span class="n">order_features</span><span class="p">,</span>
@@ -1069,8 +1080,8 @@ result = mlodaAPI.run_all(
 </ul>
 <p>An integration test could be done by using mlodaAPI.run_all and custom data.</p>
 <p>An example of a unit test could look like:</p>
-<div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">test_csv_reader_2</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> 
-   <span class="k">def</span> <span class="nf">test_parse_options_are_customized</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mock_read_csv</span><span class="p">):</span>
+<div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">test_csv_reader_2</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> 
+   <span class="k">def</span><span class="w"> </span><span class="nf">test_parse_options_are_customized</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mock_read_csv</span><span class="p">):</span>
         <span class="c1"># Ensure the parse options are as expected</span>
         <span class="n">expected_parse_options</span> <span class="o">=</span> <span class="n">pyarrow_csv</span><span class="o">.</span><span class="n">ParseOptions</span><span class="p">(</span>
             <span class="n">delimiter</span><span class="o">=</span><span class="s2">","</span><span class="p">,</span>
@@ -1109,8 +1120,8 @@ result = mlodaAPI.run_all(
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
 <h2 id="data-user-role">Data User Role<a class="anchor-link" href="#data-user-role">¶</a></h2><p>The Data User plays a pivotal role in configuring and utilizing the mloda API for machine learning and data workflows. The mloda API offers flexible configurations to cater to diverse use cases across the ML lifecycle. Below is an outline of the configurations and features that define the Data User's role:</p>
-<div class="highlight"><pre><span></span><span class="k">class</span> <span class="nc">mlodaAPI</span><span class="p">:</span>
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+<div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">mlodaAPI</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">requested_features</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Features</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">Feature</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]],</span>
         <span class="n">compute_frameworks</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Set</span><span class="p">[</span><span class="n">Type</span><span class="p">[</span><span class="n">ComputeFrameWork</span><span class="p">]],</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -1158,29 +1169,29 @@ result = mlodaAPI.run_all(
 <p>It can be the one who produces the data, the business stakeholder responsible for the service, or, in some cases, may not be explicitly defined.</p>
 <p>In mloda, the data owner is the one in control of the governance. However, as to date, this system is not included in this open-source offering, as this platform is reserved for development until the plugin ecosystem has a higher degree of maturity.</p>
 <p>We have the plug-in functionalities to integrate governance and operations systems in place. Two simple examples can be:</p>
-<h4 id="using-organization-wide-logging">Using organization wide logging<a class="anchor-link" href="#using-organization-wide-logging">¶</a></h4><div class="highlight"><pre><span></span><span class="k">class</span> <span class="nc">OtelExtender</span><span class="p">(</span><span class="n">WrapperFunctionExtender</span><span class="p">):</span>
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<h4 id="using-organization-wide-logging">Using organization wide logging<a class="anchor-link" href="#using-organization-wide-logging">¶</a></h4><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">OtelExtender</span><span class="p">(</span><span class="n">WrapperFunctionExtender</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">trace</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span>
 
         <span class="c1"># Function to be wrapped by the Extender</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">wrapped</span> <span class="o">=</span> <span class="p">{</span><span class="n">WrapperFunctionEnum</span><span class="o">.</span><span class="n">FEATURE_GROUP_CALCULATE_FEATURE</span><span class="p">}</span>
 
-    <span class="k">def</span> <span class="nf">wraps</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Set</span><span class="p">[</span><span class="n">WrapperFunctionEnum</span><span class="p">]:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">wraps</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Set</span><span class="p">[</span><span class="n">WrapperFunctionEnum</span><span class="p">]:</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">wrapped</span>
 
-    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">func</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">func</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">"OtelExtender"</span><span class="p">)</span>
         <span class="n">result</span> <span class="o">=</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">result</span>
 </pre></div>
-<h4 id="logging-data-size">Logging data size<a class="anchor-link" href="#logging-data-size">¶</a></h4><div class="highlight"><pre><span></span><span class="k">class</span> <span class="nc">LogSizeOfData</span><span class="p">(</span><span class="n">WrapperFunctionExtender</span><span class="p">):</span>
+<h4 id="logging-data-size">Logging data size<a class="anchor-link" href="#logging-data-size">¶</a></h4><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">LogSizeOfData</span><span class="p">(</span><span class="n">WrapperFunctionExtender</span><span class="p">):</span>
 
-    <span class="k">def</span> <span class="nf">wraps</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Set</span><span class="p">[</span><span class="n">WrapperFunctionEnum</span><span class="p">]:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">wraps</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Set</span><span class="p">[</span><span class="n">WrapperFunctionEnum</span><span class="p">]:</span>
         <span class="c1"># Function to be wrapped by the Extender</span>
         <span class="k">return</span> <span class="p">{</span><span class="n">WrapperFunctionEnum</span><span class="o">.</span><span class="n">VALIDATE_INPUT_FEATURE</span><span class="p">}</span>
 
-    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">func</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">func</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
         <span class="n">result</span> <span class="o">=</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="n">size</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">getsizeof</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
         <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Size: </span><span class="si">{</span><span class="n">size</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>

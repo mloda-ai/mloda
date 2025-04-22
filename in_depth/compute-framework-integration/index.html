@@ -5,15 +5,15 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       <link rel="shortcut icon" href="../../img/favicon.ico" />
-    <title>Artifacts - mloda docs</title>
+    <title>Compute Framework Integration - mloda docs</title>
     <link rel="stylesheet" href="../../css/theme.css" />
     <link rel="stylesheet" href="../../css/theme_extra.css" />
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
     
       <script>
         // Current page data
-        var mkdocs_page_name = "Artifacts";
-        var mkdocs_page_input_path = "in_depth/artifacts.md";
+        var mkdocs_page_name = "Compute Framework Integration";
+        var mkdocs_page_input_path = "in_depth/compute-framework-integration.md";
         var mkdocs_page_url = null;
       </script>
     
@@ -67,7 +67,7 @@
                   </li>
               </ul>
               <p class="caption"><span class="caption-text">In Depth - Basics</span></p>
-              <ul class="current">
+              <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../mloda-api/">mloda API</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../access-feature-data/">(Feature) data</a>
@@ -76,40 +76,44 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../filter_data/">Filter data</a>
                   </li>
-                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Artifacts</a>
-    <ul class="current">
-    <li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a>
-    </li>
-    <li class="toctree-l2"><a class="reference internal" href="#key-components">Key Components</a>
-        <ul>
-    <li class="toctree-l3"><a class="reference internal" href="#baseartifact">BaseArtifact</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#abstractfeaturegroup">AbstractFeatureGroup</a>
-    </li>
-        </ul>
-    </li>
-    <li class="toctree-l2"><a class="reference internal" href="#example">Example</a>
-        <ul>
-    <li class="toctree-l3"><a class="reference internal" href="#feature-group-with-artifact-implementation">Feature Group with Artifact implementation</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#testing-artifacts">Testing Artifacts</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#conclusion">Conclusion</a>
-    </li>
-        </ul>
-    </li>
-    </ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../artifacts/">Artifacts</a>
                   </li>
               </ul>
               <p class="caption"><span class="caption-text">In Depth - Advanced</span></p>
-              <ul>
+              <ul class="current">
                   <li class="toctree-l1"><a class="reference internal" href="../data-quality/">Data quality</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../domain/">Domain concept</a>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
-    <ul>
-                <li class="toctree-l2"><a class="reference internal" href="../compute-framework-integration/">Compute Framework Integration</a>
+                  <li class="toctree-l1 current"><a class="reference internal current" >Feature Groups</a>
+    <ul class="current">
+                <li class="toctree-l2 current"><a class="reference internal current" href="#">Compute Framework Integration</a>
+    <ul class="current">
+    <li class="toctree-l3"><a class="reference internal" href="#overview">Overview</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#core-concepts">Core Concepts</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#compute-framework-specification">Compute Framework Specification</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#framework-specific-implementations">Framework-Specific Implementations</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#implementation-pattern">Implementation Pattern</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#1-base-class">1. Base Class</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#2-framework-specific-implementation">2. Framework-Specific Implementation</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#framework-selection-process">Framework Selection Process</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#data-transformation">Data Transformation</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#example">Example</a>
+    </li>
+    </ul>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-chain-parser/">Feature Chain Parser</a>
                 </li>
@@ -154,8 +158,9 @@
         <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
   <ul class="wy-breadcrumbs">
     <li><a href="../.." class="icon icon-home" aria-label="Docs"></a></li>
-          <li class="breadcrumb-item">In Depth - Basics</li>
-      <li class="breadcrumb-item active">Artifacts</li>
+          <li class="breadcrumb-item">In Depth - Advanced</li>
+          <li class="breadcrumb-item">Feature Groups</li>
+      <li class="breadcrumb-item active">Compute Framework Integration</li>
     <li class="wy-breadcrumbs-aside">
     </li>
   </ul>
@@ -164,85 +169,111 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
             <div class="section" itemprop="articleBody">
               
-                <h1 id="artifacts">Artifacts</h1>
-<p>Artifacts are a crucial part of the mloda, enabling the storage and retrieval of intermediate results feature engineering processes.
-Example use cases are embeddings, Feature Matrices, Model Checkpoints and more.</p>
+                <h1 id="feature-group-compute-framework-integration">Feature Group Compute Framework Integration</h1>
 <h2 id="overview">Overview</h2>
-<p>Artifacts are managed through a set of abstract and concrete classes that define how artifacts are created, saved, and loaded. The primary classes involved in artifact management include:</p>
-<ul>
-<li><code>BaseArtifact</code>: The base class for all artifacts.</li>
-<li><code>AbstractFeatureGroup</code>: An abstract class that defines the structure for feature groups, including methods for artifact management. This class may contain a <code>BaseArtfact</code>.</li>
-</ul>
-<h2 id="key-components">Key Components</h2>
-<h4 id="baseartifact">BaseArtifact</h4>
-<p>The <code>BaseArtifact</code> class serves as the foundation for all artifacts. It provides the basic interface and functionality required for artifact management.</p>
-<h4 id="abstractfeaturegroup">AbstractFeatureGroup</h4>
-<p>The <code>AbstractFeatureGroup</code> class defines the structure for feature groups, including methods for creating data, calculating features, and managing artifacts. It includes methods such as <code>artifact</code> and <code>load_artifact</code> to handle artifact operations.</p>
+<p>One of mloda's key strengths is its ability to decouple feature definitions from specific computation technologies. This document explains how feature groups integrate with different compute frameworks.</p>
+<h2 id="core-concepts">Core Concepts</h2>
+<h3 id="compute-framework-specification">Compute Framework Specification</h3>
+<p>Feature groups specify which compute frameworks they support through the <code>compute_framework_rule</code> method:</p>
+<pre><code class="language-python">@classmethod
+def compute_framework_rule(cls) -&gt; set[type[ComputeFrameWork]]:
+    &quot;&quot;&quot;Define the compute frameworks this feature group supports.&quot;&quot;&quot;
+    return {PandasDataframe}  # Support only Pandas
+    # Or return True to support all available compute frameworks
+</code></pre>
+<h3 id="framework-specific-implementations">Framework-Specific Implementations</h3>
+<p>Feature groups follow a layered architecture:
+- Base class defines the interface and common functionality
+- Framework-specific classes implement the actual calculations</p>
+<pre><code>AbstractFeatureGroup
+  └── BaseFeatureGroup (e.g., ClusteringFeatureGroup)
+        ├── PandasImplementation
+        └── PyArrowImplementation
+</code></pre>
+<h2 id="implementation-pattern">Implementation Pattern</h2>
+<h3 id="1-base-class">1. Base Class</h3>
+<p>The base class defines the interface and common functionality:</p>
+<pre><code class="language-python">class MyFeatureGroup(AbstractFeatureGroup):
+    &quot;&quot;&quot;Base class for MyFeatureGroup.&quot;&quot;&quot;
+
+    def input_features(self, options, feature_name):
+        # Common logic for extracting input features
+
+    @classmethod
+    def calculate_feature(cls, data, features):
+        # This will be overridden by framework-specific implementations
+        raise NotImplementedError()
+</code></pre>
+<h3 id="2-framework-specific-implementation">2. Framework-Specific Implementation</h3>
+<p>Each framework-specific implementation:
+- Specifies which compute frameworks it supports
+- Implements the calculation logic for that framework</p>
+<pre><code class="language-python">class PandasMyFeatureGroup(MyFeatureGroup):
+    @classmethod
+    def compute_framework_rule(cls):
+        &quot;&quot;&quot;Define supported compute frameworks.&quot;&quot;&quot;
+        return {PandasDataframe}
+
+    @classmethod
+    def calculate_feature(cls, data, features):
+        &quot;&quot;&quot;Implement calculation using pandas.&quot;&quot;&quot;
+        # Pandas-specific implementation
+</code></pre>
+<h2 id="framework-selection-process">Framework Selection Process</h2>
+<p>When a feature is requested:</p>
+<ol>
+<li>The system identifies the appropriate feature group</li>
+<li>It checks which compute frameworks are supported by:</li>
+<li>The feature definition</li>
+<li>The feature group</li>
+<li>The API request</li>
+<li>It selects a compatible compute framework</li>
+<li>It uses the framework-specific implementation for calculations</li>
+</ol>
+<h2 id="data-transformation">Data Transformation</h2>
+<p>When data needs to move between compute frameworks:</p>
+<ol>
+<li>The <code>transform</code> method converts data between frameworks</li>
+<li>Each framework defines how to transform data to and from other frameworks</li>
+<li>The system automatically handles these transformations when needed</li>
+</ol>
 <h2 id="example">Example</h2>
-<h4 id="feature-group-with-artifact-implementation">Feature Group with Artifact implementation</h4>
-<p>The following example demonstrates how to implement and test an artifact.</p>
-<p>Here, we create a <code>FeatureGroup</code> with a configured <code>BaseArtifact</code>.</p>
-<pre><code class="language-python">from typing import Type, Any, Optional
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.base_artifact import BaseArtifact
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-
-
-class BaseExampleArtifactFeature(AbstractFeatureGroup):
-    @classmethod
-    def input_data(cls) -&gt; Optional[BaseInputData]:
-        return DataCreator({cls.get_class_name()})
-
-    @staticmethod
-    def artifact() -&gt; Type[BaseArtifact] | None:
-        return BaseArtifact
+<p>For a clustering feature group:</p>
+<pre><code class="language-python"># Base class (framework-agnostic)
+class ClusteringFeatureGroup(AbstractFeatureGroup):
+    def input_features(self, options, feature_name):
+        # Extract source features from feature name
 
     @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:
-        if features.artifact_to_save:
-            features.save_artifact = &quot;BasicArtifact&quot;
+    def calculate_feature(cls, data, features):
+        # This will be overridden by framework-specific implementations
 
-        if features.artifact_to_load:
-            result = cls.load_artifact(features)
-            print(f&quot;{result} is the loaded artifact.&quot;)
+# Pandas implementation
+class PandasClusteringFeatureGroup(ClusteringFeatureGroup):
+    @classmethod
+    def compute_framework_rule(cls):
+        return {PandasDataframe}
 
-        return {cls.get_class_name(): [1, 2, 3]}
-</code></pre>
-<p>Now, we run the query to the feature group to save the artifact. This example is very basic, but could be a much more complex artifact.</p>
-<pre><code class="language-python">from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
+    @classmethod
+    def calculate_feature(cls, data, features):
+        # Pandas-specific clustering implementation
 
-api = mlodaAPI([&quot;BaseExampleArtifactFeature&quot;], {PyarrowTable})
-api._batch_run()
-artifacts = api.get_artifacts()
-print(artifacts)
-</code></pre>
-<p>Result:</p>
-<pre><code class="language-python">{'BaseExampleArtifactFeature': 'BasicArtifact'}
-</code></pre>
-<p>Now, let us use this artifact.</p>
-<pre><code class="language-python">from mloda_core.abstract_plugins.components.feature import Feature
+# PyArrow implementation
+class PyArrowClusteringFeatureGroup(ClusteringFeatureGroup):
+    @classmethod
+    def compute_framework_rule(cls):
+        return {PyArrowTable}
 
-feat = Feature(name=&quot;BaseExampleArtifactFeature&quot;, options=artifacts)
-api = mlodaAPI([feat], {PyarrowTable})
-api._batch_run()
+    @classmethod
+    def calculate_feature(cls, data, features):
+        # PyArrow-specific clustering implementation
 </code></pre>
-<p>Result:</p>
-<pre><code class="language-python">&quot;BasicArtifact is the loaded artifact.&quot;
-</code></pre>
-<h4 id="testing-artifacts">Testing Artifacts</h4>
-<p>Testing artifact features involves creating test cases that ensure artifacts are correctly saved and loaded. The following example shows how to test the <code>BaseTestArtifactFeature</code> class.</p>
-<p><a href="https://github.com/TomKaltofen/mloda/tree/feature/main/tests/test_core/test_artifacts/test_artifacts.py">View the test file on GitHub</a></p>
-<h4 id="conclusion">Conclusion</h4>
-<p>Artifacts are a powerful feature in mloda, enabling efficient management of intermediate results in the machine learning pipeline. By understanding and utilizing the provided classes and methods, you can effectively manage artifacts in your projects.</p>
               
             </div>
           </div><footer>
     <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
-        <a href="../filter_data/" class="btn btn-neutral float-left" title="Filter data"><span class="icon icon-circle-arrow-left"></span> Previous</a>
-        <a href="../data-quality/" class="btn btn-neutral float-right" title="Data quality">Next <span class="icon icon-circle-arrow-right"></span></a>
+        <a href="../domain/" class="btn btn-neutral float-left" title="Domain concept"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../feature-chain-parser/" class="btn btn-neutral float-right" title="Feature Chain Parser">Next <span class="icon icon-circle-arrow-right"></span></a>
     </div>
 
   <hr/>
@@ -265,10 +296,10 @@ api._batch_run()
   <span class="rst-current-version" data-toggle="rst-current-version">
     
     
-      <span><a href="../filter_data/" style="color: #fcfcfc">&laquo; Previous</a></span>
+      <span><a href="../domain/" style="color: #fcfcfc">&laquo; Previous</a></span>
     
     
-      <span><a href="../data-quality/" style="color: #fcfcfc">Next &raquo;</a></span>
+      <span><a href="../feature-chain-parser/" style="color: #fcfcfc">Next &raquo;</a></span>
     
   </span>
 </div>

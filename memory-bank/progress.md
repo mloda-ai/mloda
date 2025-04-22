@@ -49,6 +49,8 @@
     * Added support for multiple centrality metrics (degree, betweenness, closeness, eigenvector, pagerank)
     * Implemented matrix-based centrality calculations without requiring external graph libraries
     * Added support for both directed and undirected graphs
+*   Created comprehensive in-depth documentation for feature groups:
+    * Added documentation in `docs/docs/in_depth/` directory for key feature group concepts
 
 
 ## What's Left to Build
@@ -56,7 +58,6 @@
 *   Populate the memory bank files with more detailed information.
 *   Update the `.clinerules` file with project-specific patterns.
 *   Implement the core functionality of the mloda project.
-
 ## Current Status
 
 The memory bank has been initialized with basic information. Documentation has been improved with README.md files in key directories. A new aggregated feature group pattern has been implemented with both Pandas and PyArrow support, allowing for efficient aggregation operations on different compute frameworks. The TimeWindowFeatureGroup has been implemented to support time-based window operations. The MissingValueFeatureGroup has been implemented to handle missing values in data using various imputation methods. 
@@ -72,6 +73,8 @@ Support for Multiple Result Columns has been added, allowing feature groups to r
 The ForecastingFeatureGroup has been implemented to support time series forecasting with multiple algorithms and artifact saving/loading capabilities.
 
 The NodeCentralityFeatureGroup has been implemented to calculate various centrality metrics for nodes in a graph, providing insights into the importance and influence of nodes in network data. This feature group supports multiple centrality metrics and both directed and undirected graphs, making it versatile for different types of network analysis tasks.
+
+Comprehensive documentation has been created for feature groups, covering key concepts such as feature chain parsing, feature group matching, testing, versioning, and compute framework integration. This documentation is available in the `docs/docs/in_depth/` directory and is linked from the Getting Started guides.
 
 ## Known Issues
 

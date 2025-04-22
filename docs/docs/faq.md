@@ -28,7 +28,7 @@ You'll learn a lot along the way!
 
 #### How do I create my first feature group using mloda? 
 
-Feature Groups define dependencies and calculations. To create your first Feature Group, check out this [basic example here](https://tomkaltofen.github.io/mloda/chapter1/feature-groups/).
+Feature Groups define dependencies and calculations. To create your first Feature Group, check out this [basic example here](https://tomkaltofen.github.io/mloda/chapter1/feature-groups/). For more advanced topics, see our [in-depth documentation on feature groups](https://tomkaltofen.github.io/mloda/in_depth/feature-chain-parser/).
 
 ## Features and Functionality
 
@@ -65,6 +65,3 @@ mloda is a straightforward Python module. You can install it and run it within y
 ## If you have other questions not answered
 
 Please raise an [issue](https://github.com/TomKaltofen/mloda/issues/) on our GitHub repository or email us at [mloda.info@gmail.com](mailto:mloda.info@gmail.com). We value community feedback and will do our best to address your questions and suggestions promptly.
-
-
-

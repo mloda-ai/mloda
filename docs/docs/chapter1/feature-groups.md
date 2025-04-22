@@ -65,3 +65,14 @@ Example_id: [[0,2,4,...]]
 #### 4. Summary
 
 In this example, we implemented a custom feature group, Example, that multiplies each feature value by 2. By defining a straightforward input_features method and a calculate_feature method, we were able to extend mloda's feature engineering capabilities with custom transformations. We then executed the request by simply modifying the feature names with a prefix ("Example_"), allowing mloda to handle dependencies and computations automatically.
+
+#### 5. Advanced Feature Group Topics
+
+For more in-depth information about feature groups, check out these advanced topics:
+
+- [Feature Chain Parser](../in_depth/feature-chain-parser.md) - How feature groups work with chained feature names
+- [Feature Group Matching](../in_depth/feature-group-matching.md) - How the system determines which feature group handles a feature
+- [Feature Group Testing](../in_depth/feature-group-testing.md) - Best practices for testing feature groups
+- [Feature Group Versioning](../in_depth/feature-group-version.md) - How versioning works in feature groups
+- [Compute Framework Integration](../in_depth/compute-framework-integration.md) - How feature groups integrate with compute frameworks
+- [Multiple Result Columns](../in_depth/multiple_result_columns.md) - How feature groups can return multiple related columns

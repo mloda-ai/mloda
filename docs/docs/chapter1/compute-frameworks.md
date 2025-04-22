@@ -123,6 +123,12 @@ In this case, the feature group ExampleB will only run on the PyarrowTable frame
 
 #### 5. Summary
 
-mloda's compute framework adds flexibility, allowing you to select the best tool for different stages of data and feature engineering. While it introduces some complexity, it’s invaluable for comparing technologies and managing environments.
+mloda's compute framework adds flexibility, allowing you to select the best tool for different stages of data and feature engineering. While it introduces some complexity, it's invaluable for comparing technologies and managing environments.
 
 That said, **you can configure mloda to use just one compute framework** for a more familiar workflow, similar to traditional feature stores, data pipelines, or ETL systems. Whether you prefer flexibility or simplicity, mloda adapts to your needs while ensuring consistent feature processing.
+
+### 6. Advanced Compute Framework Topics
+
+For more in-depth information about compute frameworks, check out these advanced topics:
+
+- [Compute Framework Integration](../in_depth/compute-framework-integration.md) - How feature groups integrate with different compute frameworks

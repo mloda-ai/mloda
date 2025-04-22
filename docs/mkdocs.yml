@@ -2,13 +2,12 @@ site_name: mloda docs
 nav:
   - Home: 
     - index.md
-  - Introduction Notebooks:
-    - Basics:
-      - Table of Content: examples/mloda_basics/0_table_of_content.ipynb
-      - Intro to the core interfaces of mloda: examples/mloda_basics/1_ml_mloda_intro.ipynb
-      - What makes mloda unique: examples/mloda_basics/2_ml_advantage_process_focus.ipynb
-      - Data, Feature, FeatureSets and FeatureGroups in mloda: examples/mloda_basics/3_ml_data_feature_feature_groups.ipynb
-      - Data Producer, User, Owner in mloda: examples/mloda_basics/4_ml_data_producers_user_owner.ipynb
+  - mloda Concepts:
+    - Table of Content: examples/mloda_basics/0_table_of_content.ipynb
+    - Intro to the core interfaces of mloda: examples/mloda_basics/1_ml_mloda_intro.ipynb
+    - What makes mloda unique: examples/mloda_basics/2_ml_advantage_process_focus.ipynb
+    - Data, Feature, FeatureSets and FeatureGroups in mloda: examples/mloda_basics/3_ml_data_feature_feature_groups.ipynb
+    - Data Producer, User, Owner in mloda: examples/mloda_basics/4_ml_data_producers_user_owner.ipynb
   - Getting Started:
     - Installation: chapter1/installation.md
     - API Request: chapter1/api-request.md
@@ -25,10 +24,15 @@ nav:
     - Data quality: in_depth/data-quality.md
     - Domain concept: in_depth/domain.md
     - Feature Groups:
+      - Compute Framework Integration: in_depth/compute-framework-integration.md
+      - Feature Chain Parser: in_depth/feature-chain-parser.md
+      - Feature Group Matching: in_depth/feature-group-matching.md
+      - Feature Group Testing: in_depth/feature-group-testing.md
+      - Feature Group Versioning: in_depth/feature-group-version.md
       - Multiple Result Columns: in_depth/multiple_result_columns.md
     
   - Development:
-    - Contributers: development.md
+    - Contributors: development.md
     - License - Apache 2.0: license.md
     - Missing: missing.md
   - Need Help?:

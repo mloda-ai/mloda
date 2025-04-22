@@ -47,21 +47,14 @@ Initializing the memory bank for the mloda project.
     * Added support for multiple centrality metrics (degree, betweenness, closeness, eigenvector, pagerank)
     * Implemented matrix-based centrality calculations without requiring external graph libraries
     * Added support for both directed and undirected graphs
+*   Completed comprehensive documentation for feature groups:
+    * Added in-depth documentation in `docs/docs/in_depth/` directory.
 
 
 ## Next Steps
 
-*   Integration test a feature that aggregates timewindowed imputed features
-    * Combine TimeWindowFeatureGroup, MissingValueFeatureGroup, and AggregatedFeatureGroup
-    * Demonstrate the composability of feature groups in the mloda framework
-    * Create comprehensive test cases with different data scenarios
-
 *   Populate the memory bank files with more detailed information
 *   Update the `.clinerules` file with project-specific patterns
-*   Implement additional compute framework implementations for other feature groups
-*   Explore further improvements to the feature chain parser system:
-    * Consider adding support for more complex validation rules
-    * Investigate ways to make feature creation even more intuitive
 
 ## Active Decisions and Considerations
 

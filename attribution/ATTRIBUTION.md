@@ -67,7 +67,7 @@
 | jupyter_core                           | 5.7.2           | BSD License                                             |
 | jupyter_server                         | 2.15.0          | BSD License                                             |
 | jupyter_server_terminals               | 0.5.3           | BSD License                                             |
-| jupyterlab                             | 4.4.0           | BSD License                                             |
+| jupyterlab                             | 4.4.1           | BSD License                                             |
 | jupyterlab_pygments                    | 0.3.0           | BSD License                                             |
 | jupyterlab_server                      | 2.27.3          | BSD License                                             |
 | markdown-it-py                         | 3.0.0           | MIT License                                             |
@@ -77,7 +77,7 @@
 | mistune                                | 3.1.3           | BSD License                                             |
 | mktestdocs                             | 0.2.4           | Apache Software License 2.0                             |
 | mypy                                   | 1.15.0          | MIT License                                             |
-| mypy-extensions                        | 1.0.0           | MIT License                                             |
+| mypy_extensions                        | 1.1.0           | UNKNOWN                                                 |
 | nbclient                               | 0.10.2          | BSD License                                             |
 | nbconvert                              | 7.16.6          | BSD License                                             |
 | nbformat                               | 5.10.4          | BSD License                                             |
@@ -85,7 +85,7 @@
 | nltk                                   | 3.9.1           | Apache Software License                                 |
 | notebook                               | 7.4.0           | BSD License                                             |
 | notebook_shim                          | 0.2.4           | BSD License                                             |
-| numpy                                  | 2.2.4           | BSD License                                             |
+| numpy                                  | 2.2.5           | BSD License                                             |
 | opentelemetry-api                      | 1.32.1          | Apache Software License                                 |
 | opentelemetry-instrumentation          | 0.53b1          | Apache Software License                                 |
 | opentelemetry-instrumentation-logging  | 0.53b1          | Apache Software License                                 |
@@ -94,7 +94,7 @@
 | opentelemetry-semantic-conventions     | 0.53b1          | Apache Software License                                 |
 | opentelemetry-util-http                | 0.53b1          | Apache Software License                                 |
 | overrides                              | 7.7.0           | Apache License, Version 2.0                             |
-| packaging                              | 24.2            | Apache Software License; BSD License                    |
+| packaging                              | 25.0            | Apache Software License; BSD License                    |
 | pandas                                 | 2.2.3           | BSD License                                             |
 | pandera                                | 0.23.1          | MIT License                                             |
 | pandocfilters                          | 1.5.1           | BSD License                                             |
@@ -139,7 +139,7 @@
 | scipy                                  | 1.15.2          | BSD License                                             |
 | six                                    | 1.17.0          | MIT License                                             |
 | sniffio                                | 1.3.1           | Apache Software License; MIT License                    |
-| soupsieve                              | 2.6             | MIT License                                             |
+| soupsieve                              | 2.7             | MIT License                                             |
 | stack-data                             | 0.6.3           | MIT License                                             |
 | stevedore                              | 5.4.1           | Apache Software License                                 |
 | terminado                              | 0.18.1          | BSD License                                             |

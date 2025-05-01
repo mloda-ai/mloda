@@ -3,7 +3,6 @@ from mloda_core.abstract_plugins.components.merge.base_merge_engine import BaseM
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_merge_engine import PyArrowMergeEngine
 import pyarrow as pa
 
-from mloda_core.abstract_plugins.components.cfw_transformer import ComputeFrameworkTransformMap
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 
@@ -22,13 +21,20 @@ class PyarrowTable(ComputeFrameWork):
     def merge_engine(self) -> Type[BaseMergeEngine]:
         return PyArrowMergeEngine
 
+    def select_data_by_column_names(self, data: Any, selected_feature_names: Set[FeatureName]) -> Any:
+        column_names = set(data.schema.names)
+        _selected_feature_names = self.identify_naming_convention(selected_feature_names, column_names)
+        return data.select([f for f in _selected_feature_names])
+
+    def set_column_names(self) -> None:
+        self.column_names = set(self.data.schema.names)
+
     def transform(
         self,
         data: Any,
         feature_names: Set[str],
-        transform_map: ComputeFrameworkTransformMap = ComputeFrameworkTransformMap(),
     ) -> Any:
-        transformed_data = self.transform_refactored(data, transform_map)
+        transformed_data = self.apply_compute_framework_transformer(data)
         if transformed_data is not None:
             return transformed_data
 
@@ -43,11 +49,3 @@ class PyarrowTable(ComputeFrameWork):
             raise ValueError(f"Only one feature can be added at a time: {feature_names}")
 
         raise ValueError(f"Data {type(data)} is not supported by {self.__class__.__name__}")
-
-    def select_data_by_column_names(self, data: Any, selected_feature_names: Set[FeatureName]) -> Any:
-        column_names = set(data.schema.names)
-        _selected_feature_names = self.identify_naming_convention(selected_feature_names, column_names)
-        return data.select([f for f in _selected_feature_names])
-
-    def set_column_names(self) -> None:
-        self.column_names = set(self.data.schema.names)

@@ -1,6 +1,9 @@
 from typing import Any, Optional, Set, Type, Union
 from uuid import UUID, uuid4
-from mloda_core.abstract_plugins.components.cfw_transformer import ComputeFrameworkTransformMap
+
+from mloda_core.abstract_plugins.components.framework_transformer.cfw_transformer import (
+    ComputeFrameworkTransformer,
+)
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 from mloda_core.core.cfw_manager import CfwManager
 from mloda_core.core.step.abstract_step import Step
@@ -26,6 +29,7 @@ class TransformFrameworkStep(Step):
         self.from_feature_group = from_feature_group
         self.to_feature_group = to_feature_group
         self.link_id = link_id
+        self.transformer = ComputeFrameworkTransformer()
 
         # This variable is only set, if the TFS was requested by a joinstep.
         self.right_framework_uuid: Optional[UUID] = None
@@ -64,6 +68,7 @@ class TransformFrameworkStep(Step):
 
         data = self.get_data(from_cfw)
         column_names = self.get_column_names(cfw_register, from_cfw)
+
         data = self.transform(cfw, data, column_names)
 
         cfw.set_data(data)
@@ -102,50 +107,18 @@ class TransformFrameworkStep(Step):
         cfw.set_data(data)
 
     def transform(self, cfw: ComputeFrameWork, data: Any, feature_names: Set[str]) -> Any:
-        transform_map = self.set_transform_map()
-        return cfw.transform(data, feature_names, transform_map)
+        if self.equal_frameworks():
+            return data
 
-    def set_transform_map(self) -> ComputeFrameworkTransformMap:
-        # get expected data framework
-        _from_concrete_framework = self.from_framework.expected_data_framework()
-        _to_concrete_framework = self.to_framework.expected_data_framework()
+        _from_fw = self.from_framework.expected_data_framework()
+        _to_fw = self.to_framework.expected_data_framework()
 
-        if _from_concrete_framework == _to_concrete_framework:
-            return ComputeFrameworkTransformMap()
+        transformer_cls = self.transformer.transformer_map[(_from_fw, _to_fw)]
+        data = transformer_cls.transform(_from_fw, _to_fw, data)
 
-        # get transformation function for expected data framework if exists
-        from_func, from_parameters = self.from_framework.get_framework_transform_functions(
-            from_other=False, other=_to_concrete_framework
-        )
+        return data
 
-        to_func, to_parameters = self.to_framework.get_framework_transform_functions(
-            from_other=True, other=_from_concrete_framework
-        )
-
-        if from_func is None and to_func is None:
-            raise ValueError(f"Transformation from {_from_concrete_framework} to {_to_concrete_framework} not found.")
-
-        if from_func and to_func:
-            raise ValueError(
-                f"Two framework transformations found for {_from_concrete_framework} to {_to_concrete_framework}."
-            )
-
-        if from_func:
-            parameters = from_parameters
-        else:
-            parameters = to_parameters
-
-        if parameters.get("defensive"):
-            raise ValueError(
-                f"Transformation parameter from {_from_concrete_framework} to {_to_concrete_framework} not found."
-            )
-
-        cfw_transform_map = ComputeFrameworkTransformMap()
-        cfw_transform_map.add_transformation(
-            _from_concrete_framework,
-            _to_concrete_framework,
-            from_func or to_func,
-            parameters,
-        )
-
-        return cfw_transform_map
+    def equal_frameworks(self) -> bool:
+        if self.from_framework.expected_data_framework() == self.to_framework.expected_data_framework():
+            return True
+        return False

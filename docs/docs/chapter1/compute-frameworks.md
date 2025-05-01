@@ -131,4 +131,5 @@ That said, **you can configure mloda to use just one compute framework** for a m
 
 For more in-depth information about compute frameworks, check out these advanced topics:
 
+- [Framework Transformers](../in_depth/framework-transformers.md) - How data is transformed between different compute frameworks
 - [Compute Framework Integration](../in_depth/compute-framework-integration.md) - How feature groups integrate with different compute frameworks

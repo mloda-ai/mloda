@@ -51,6 +51,11 @@
     * Added support for both directed and undirected graphs
 *   Created comprehensive in-depth documentation for feature groups:
     * Added documentation in `docs/docs/in_depth/` directory for key feature group concepts
+*   Added documentation for framework transformers:
+    * Added docstrings to `BaseTransformer`, `ComputeFrameworkTransformer`, and `PandasPyarrowTransformer` classes
+    * Created comprehensive documentation in `docs/docs/in_depth/framework-transformers.md`
+    * Updated navigation in `docs/mkdocs.yml` to include the new documentation
+    * Added references in related documentation files
 
 
 ## What's Left to Build
@@ -75,6 +80,8 @@ The ForecastingFeatureGroup has been implemented to support time series forecast
 The NodeCentralityFeatureGroup has been implemented to calculate various centrality metrics for nodes in a graph, providing insights into the importance and influence of nodes in network data. This feature group supports multiple centrality metrics and both directed and undirected graphs, making it versatile for different types of network analysis tasks.
 
 Comprehensive documentation has been created for feature groups, covering key concepts such as feature chain parsing, feature group matching, testing, versioning, and compute framework integration. This documentation is available in the `docs/docs/in_depth/` directory and is linked from the Getting Started guides.
+
+Documentation has also been added for framework transformers, which are a key component of mloda's compute framework system. The documentation includes detailed docstrings for the relevant classes (`BaseTransformer`, `ComputeFrameworkTransformer`, and `PandasPyarrowTransformer`) and a comprehensive guide in the `docs/docs/in_depth/framework-transformers.md` file. This documentation explains how data is transformed between different compute frameworks, how to create custom transformers, and how the transformation system integrates with the rest of the mloda architecture.
 
 ## Known Issues
 

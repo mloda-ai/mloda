@@ -30,9 +30,6 @@ class TestPandasDataframeComputeFramework:
     def test_expected_data_framework(self) -> None:
         assert self.pd_dataframe.expected_data_framework() == pd.DataFrame
 
-    def test_transform_data_as_expected_pandas(self) -> None:
-        assert all(self.pd_dataframe.transform(self.expected_data, set()) == self.expected_data)
-
     def test_transform_dict_to_table(self) -> None:
         assert all(self.pd_dataframe.transform(self.dict_data, set()) == self.expected_data)
 
@@ -40,6 +37,7 @@ class TestPandasDataframeComputeFramework:
         data = PandasDataframe.pd_series()([1, 2, 3])
         _pdDf = PandasDataframe(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
         _pdDf.set_data(PandasDataframe.pd_dataframe().from_dict({"existing_column": [4, 5, 6]}))
+
         data = _pdDf.transform(data=data, feature_names={"new_column"})
         assert data.equals(
             PandasDataframe.pd_dataframe().from_dict({"existing_column": [4, 5, 6], "new_column": [1, 2, 3]})

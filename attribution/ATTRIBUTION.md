@@ -19,7 +19,7 @@
 | beautifulsoup4                         | 4.13.4          | MIT License                                             |
 | bleach                                 | 6.2.0           | Apache Software License                                 |
 | cachetools                             | 5.5.2           | MIT License                                             |
-| certifi                                | 2025.1.31       | Mozilla Public License 2.0 (MPL 2.0)                    |
+| certifi                                | 2025.4.26       | Mozilla Public License 2.0 (MPL 2.0)                    |
 | cffi                                   | 1.17.1          | MIT License                                             |
 | chardet                                | 5.2.0           | GNU Lesser General Public License v2 or later (LGPLv2+) |
 | charset-normalizer                     | 3.4.1           | MIT License                                             |
@@ -37,30 +37,30 @@
 | filelock                               | 3.18.0          | The Unlicense (Unlicense)                               |
 | fqdn                                   | 1.5.1           | Mozilla Public License 2.0 (MPL 2.0)                    |
 | google-ai-generativelanguage           | 0.6.15          | Apache Software License                                 |
-| google-api-core                        | 2.24.2          | Apache Software License                                 |
-| google-api-python-client               | 2.167.0         | Apache Software License                                 |
+| google-api-core                        | 2.25.0rc0       | Apache Software License                                 |
+| google-api-python-client               | 2.169.0         | Apache Software License                                 |
 | google-auth                            | 2.39.0          | Apache Software License                                 |
 | google-auth-httplib2                   | 0.2.0           | Apache Software License                                 |
 | google-generativeai                    | 0.8.5           | Apache Software License                                 |
 | googleapis-common-protos               | 1.70.0          | Apache Software License                                 |
-| grpcio                                 | 1.72.0rc1       | Apache Software License                                 |
+| grpcio                                 | 1.71.0          | Apache Software License                                 |
 | grpcio-status                          | 1.71.0          | Apache Software License                                 |
-| h11                                    | 0.14.0          | MIT License                                             |
-| httpcore                               | 1.0.8           | BSD License                                             |
+| h11                                    | 0.16.0          | MIT License                                             |
+| httpcore                               | 1.0.9           | BSD License                                             |
 | httplib2                               | 0.22.0          | MIT License                                             |
 | httpx                                  | 0.28.1          | BSD License                                             |
 | idna                                   | 3.10            | BSD License                                             |
 | importlib_metadata                     | 8.6.1           | Apache Software License                                 |
 | iniconfig                              | 2.1.0           | MIT License                                             |
 | ipykernel                              | 6.29.5          | BSD License                                             |
-| ipython                                | 8.35.0          | BSD License                                             |
+| ipython                                | 8.36.0          | BSD License                                             |
 | isoduration                            | 20.11.0         | ISC License (ISCL)                                      |
 | jedi                                   | 0.19.2          | MIT License                                             |
 | joblib                                 | 1.4.2           | BSD License                                             |
 | json5                                  | 0.12.0          | Apache Software License                                 |
 | jsonpointer                            | 3.0.0           | BSD License                                             |
 | jsonschema                             | 4.23.0          | MIT License                                             |
-| jsonschema-specifications              | 2024.10.1       | MIT License                                             |
+| jsonschema-specifications              | 2025.4.1        | UNKNOWN                                                 |
 | jupyter-events                         | 0.12.0          | BSD License                                             |
 | jupyter-lsp                            | 2.2.5           | BSD License                                             |
 | jupyter_client                         | 8.6.3           | BSD License                                             |
@@ -83,7 +83,7 @@
 | nbformat                               | 5.10.4          | BSD License                                             |
 | nest-asyncio                           | 1.6.0           | BSD License                                             |
 | nltk                                   | 3.9.1           | Apache Software License                                 |
-| notebook                               | 7.4.0           | BSD License                                             |
+| notebook                               | 7.4.1           | BSD License                                             |
 | notebook_shim                          | 0.2.4           | BSD License                                             |
 | numpy                                  | 2.2.5           | BSD License                                             |
 | opentelemetry-api                      | 1.32.1          | Apache Software License                                 |
@@ -110,12 +110,12 @@
 | psutil                                 | 7.0.0           | BSD License                                             |
 | ptyprocess                             | 0.7.0           | ISC License (ISCL)                                      |
 | pure_eval                              | 0.2.3           | MIT License                                             |
-| pyarrow                                | 19.0.1          | Apache Software License                                 |
+| pyarrow                                | 20.0.0          | Apache Software License                                 |
 | pyasn1                                 | 0.6.1           | BSD License                                             |
 | pyasn1_modules                         | 0.4.2           | BSD License                                             |
 | pycparser                              | 2.22            | BSD License                                             |
-| pydantic                               | 2.11.3          | MIT License                                             |
-| pydantic_core                          | 2.33.1          | MIT License                                             |
+| pydantic                               | 2.11.4          | MIT License                                             |
+| pydantic_core                          | 2.33.2          | MIT License                                             |
 | pyparsing                              | 3.2.3           | MIT License                                             |
 | pyproject-api                          | 1.9.0           | MIT License                                             |
 | pytest                                 | 8.3.5           | MIT License                                             |
@@ -134,7 +134,7 @@
 | rich                                   | 14.0.0          | MIT License                                             |
 | rpds-py                                | 0.24.0          | MIT                                                     |
 | rsa                                    | 4.9.1           | Apache Software License                                 |
-| ruff                                   | 0.11.6          | MIT License                                             |
+| ruff                                   | 0.11.8          | MIT License                                             |
 | scikit-learn                           | 1.6.1           | BSD License                                             |
 | scipy                                  | 1.15.2          | BSD License                                             |
 | six                                    | 1.17.0          | MIT License                                             |

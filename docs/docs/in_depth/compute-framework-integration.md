@@ -89,6 +89,8 @@ When data needs to move between compute frameworks:
 2. Each framework defines how to transform data to and from other frameworks
 3. The system automatically handles these transformations when needed
 
+For more details on how data transformation works between compute frameworks, see [Framework Transformers](framework-transformers.md).
+
 ## Example
 
 For a clustering feature group:

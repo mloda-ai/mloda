@@ -1,5 +1,6 @@
 from typing import Optional, Set, Type, Any, Union
 from uuid import UUID, uuid4
+from mloda_core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 from mloda_core.core.cfw_manager import CfwManager
 
@@ -73,8 +74,10 @@ class JoinStep(Step):
         If we are not using multiprocessing, we just get the data from the compute framework.
         """
         if self.location and isinstance(from_cfw, UUID):
+            transformer = ComputeFrameworkTransformer()
+
             data = FlightServer.download_table(self.location, str(from_cfw))
-            data = cfw.convert_flyserver_data_back(data)
+            data = cfw.convert_flyserver_data_back(data, transformer)
             return data, from_cfw
         if isinstance(from_cfw, UUID):
             raise ValueError("From_cfw is a UUID, but we are not using flightserver.")

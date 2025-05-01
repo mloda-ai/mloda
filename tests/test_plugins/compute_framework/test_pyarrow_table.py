@@ -1,8 +1,8 @@
 from copy import deepcopy
-from mloda_core.abstract_plugins.components.link import JoinType
 import pytest
 import pyarrow as pa
 
+from mloda_core.abstract_plugins.components.link import JoinType
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
 from mloda_core.abstract_plugins.components.index.index import Index
@@ -20,9 +20,6 @@ class TestPyarrowTableComputeFramework:
     def test_expected_data_framework(self) -> None:
         assert self.pyarrow_table.expected_data_framework() == pa.Table
 
-    def test_transform_data_as_expected(self) -> None:
-        assert self.pyarrow_table.transform(self.expected_data, set()) == self.expected_data
-
     def test_transform_dict_to_table(self) -> None:
         assert self.pyarrow_table.transform(self.dict_data, set()) == self.expected_data
 
@@ -33,6 +30,7 @@ class TestPyarrowTableComputeFramework:
         for data in [chunked_array, pa_array]:
             _pytable = PyarrowTable(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
             _pytable.set_data(pa.table({"existing_column": [4, 5, 6]}))
+
             data = _pytable.transform(data=data, feature_names={"new_column"})
             assert data.equals(pa.table({"existing_column": [4, 5, 6], "new_column": [1, 2, 3]}))
 

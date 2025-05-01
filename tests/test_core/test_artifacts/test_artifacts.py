@@ -72,7 +72,7 @@ class BaseTestArtifactFeature(AbstractFeatureGroup):
     [
         ({ParallelizationModes.SYNC}),
         ({ParallelizationModes.THREADING}),
-        # ({ParallelizationModes.MULTIPROCESSING}),
+        ({ParallelizationModes.MULTIPROCESSING}),
     ],
 )
 class TestBaseArtifacts:

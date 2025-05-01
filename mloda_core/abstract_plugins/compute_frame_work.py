@@ -1,10 +1,12 @@
 from abc import ABC
 from typing import Any, List, Optional, Set, Type, Union, final
 from uuid import UUID, uuid4
+from mloda_core.abstract_plugins.components.framework_transformer.cfw_transformer import (
+    ComputeFrameworkTransformer,
+)
 from mloda_core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
 import pyarrow as pa
 
-from mloda_core.abstract_plugins.components.cfw_transformer import ComputeFrameworkTransformMap
 from mloda_core.abstract_plugins.function_extender import WrapperFunctionExtender, WrapperFunctionEnum
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
@@ -53,6 +55,8 @@ class ComputeFrameWork(ABC):
 
         self.uuid = uuid
 
+        self.transformer = ComputeFrameworkTransformer()
+
         # collects all datasets which were created based on this feature group except if it is the !final! feature
         self.object_ids: List[str] = []
 
@@ -82,7 +86,6 @@ class ComputeFrameWork(ABC):
         self,
         data: Any,
         feature_names: Set[str],
-        transform_map: ComputeFrameworkTransformMap = ComputeFrameworkTransformMap(),
     ) -> Any:
         """This function should be used to transform the data.
         The idea here is that we can transform the data to a common format.
@@ -92,27 +95,24 @@ class ComputeFrameWork(ABC):
         If you wish not to transform the data, you can leave this.
         This is not relevant if you stay in one compute framework as you don t need to switch it.
         """
-        transformed_data = self.transform_refactored(data, transform_map)
+
+        transformed_data = self.apply_compute_framework_transformer(data)
         if transformed_data is not None:
             return transformed_data
         return data
 
     @final
-    def transform_refactored(self, data: Any, transform_map: ComputeFrameworkTransformMap) -> Any:
+    def apply_compute_framework_transformer(self, data: Any) -> Any:
         """
         This part is also refactored to be more readable.
 
         The part, where we add single columns etc is not done yet.
         """
-        if isinstance(data, self.expected_data_framework()):
-            return data
-
-        if transform_map.transform_map:
-            return transform_map.transform(data, type(data), self.expected_data_framework(), {})
-
-        func, param = self.get_framework_transform_functions(from_other=True, other=type(data))
-        if func:
-            return func(data, param)
+        _from_fw = type(data)
+        _to_fw = self.expected_data_framework()
+        transformer_cls = self.transformer.transformer_map.get((_from_fw, _to_fw), None)
+        if transformer_cls is not None:
+            return transformer_cls.transform(_from_fw, _to_fw, data)
 
         return None
 
@@ -155,7 +155,11 @@ class ComputeFrameWork(ABC):
         data = self.run_final_filter(data, features)
 
         names = features.get_all_names()
-        self.data = self.transform(data, names)
+
+        if not isinstance(data, self.expected_data_framework()):
+            self.data = self.transform(data, names)
+        else:
+            self.data = data
 
         self.set_column_names()
 
@@ -338,9 +342,14 @@ class ComputeFrameWork(ABC):
             object_id = uuid4()
         _object_id = str(object_id)
 
-        func, param = self.get_framework_transform_functions(from_other=False, other=pa.Table)
-        if func:
-            self.data = func(self.data, param)
+        # transform to pa.Table for better parquet support
+        if not type(self.data) == pa.Table:
+            _from_fw = type(self.data)
+            _to_fw = pa.Table
+
+            transformer_cls = self.transformer.transformer_map.get((_from_fw, _to_fw), None)
+            if transformer_cls is not None:
+                self.data = transformer_cls.transform(_from_fw, _to_fw, self.data)
 
         FlightServer.upload_table(location, self.data, _object_id)
         self.object_ids.append(_object_id)
@@ -348,15 +357,18 @@ class ComputeFrameWork(ABC):
 
     @final
     @classmethod
-    def convert_flyserver_data_back(cls, data: Any) -> Any:
+    def convert_flyserver_data_back(cls, data: Any, transformer: ComputeFrameworkTransformer) -> Any:
         if not isinstance(data, pa.Table):
             return data
         if isinstance(data, cls.expected_data_framework()):
             return data
 
-        func, param = cls.get_framework_transform_functions(from_other=True, other=pa.Table)
-        if func:
-            return func(data, param)
+        _from_fw = type(data)
+        _to_fw = cls.expected_data_framework()
+
+        transformer_cls = transformer.transformer_map.get((_from_fw, _to_fw), None)
+        if transformer_cls is not None:
+            return transformer_cls.transform(_from_fw, _to_fw, data)
 
         raise ValueError(
             f"Conversion from {type(data)} to {cls.expected_data_framework()} is not supported. This can be created, when a flyserver was used."

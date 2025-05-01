@@ -2,6 +2,7 @@ import os
 from typing import Any, List, Set, Tuple
 import time
 
+from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 import pytest
 
 
@@ -32,6 +33,8 @@ class TestMixComputeFrameWork:
 
     feature_names = "id,V1,V2,V3,V4,V5,V6,V7,V8,V9,V10,V11,V12,V13,V14,V15,V16,V17,V18,V19,V20,V21,V22,V23,V24,V25,V26,V27,V28,Amount,Class"
     feature_list = feature_names.split(",")
+
+    PluginLoader().all()
 
     @classmethod
     def get_feature_list_from_local_scope(cls, features: List[str], path: str) -> List[str | Feature]:
@@ -67,8 +70,8 @@ class TestMixComputeFrameWork:
         "modes",
         [
             ({ParallelizationModes.SYNC}),
-            #   ({ParallelizationModes.THREADING}),
-            #   ({ParallelizationModes.MULTIPROCESSING}),
+            ({ParallelizationModes.THREADING}),
+            # ({ParallelizationModes.MULTIPROCESSING}),
         ],
     )
     def test_mix_cfw_can_be_called_from_same_feature(
@@ -109,8 +112,8 @@ class TestMixComputeFrameWork:
         "modes",
         [
             ({ParallelizationModes.SYNC}),
-            #   ({ParallelizationModes.THREADING}),
-            #   ({ParallelizationModes.MULTIPROCESSING}),
+            ({ParallelizationModes.THREADING}),
+            # ({ParallelizationModes.MULTIPROCESSING}),
         ],
     )
     def test_duplicate_feature_setup(

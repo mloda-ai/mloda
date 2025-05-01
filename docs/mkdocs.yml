@@ -23,8 +23,10 @@ nav:
   - In Depth - Advanced:
     - Data quality: in_depth/data-quality.md
     - Domain concept: in_depth/domain.md
-    - Feature Groups:
+    - Compute Frameworks:
+      - Framework Transformers: in_depth/framework-transformers.md
       - Compute Framework Integration: in_depth/compute-framework-integration.md
+    - Feature Groups:
       - Feature Chain Parser: in_depth/feature-chain-parser.md
       - Feature Group Matching: in_depth/feature-group-matching.md
       - Feature Group Testing: in_depth/feature-group-testing.md
@@ -40,7 +42,6 @@ nav:
     - Need Help: need-help.md
 
   # todo
-  #- ComputeFrameworkTransformMap in Depth: need-help.md
   #- Data Quality in Depth: need-help.md
   #- License in Depth: need-help.md
   #- Feature in Depth

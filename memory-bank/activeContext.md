@@ -49,6 +49,11 @@ Initializing the memory bank for the mloda project.
     * Added support for both directed and undirected graphs
 *   Completed comprehensive documentation for feature groups:
     * Added in-depth documentation in `docs/docs/in_depth/` directory.
+*   Added documentation for framework transformers:
+    * Added docstrings to `BaseTransformer`, `ComputeFrameworkTransformer`, and `PandasPyarrowTransformer` classes
+    * Created comprehensive documentation in `docs/docs/in_depth/framework-transformers.md`
+    * Updated navigation in `docs/mkdocs.yml` to include the new documentation
+    * Added references in related documentation files
 
 
 ## Next Steps

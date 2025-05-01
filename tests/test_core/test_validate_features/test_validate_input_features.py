@@ -95,7 +95,7 @@ class ValidateInputFeatureExtender(DokuExtender):
     [
         ({ParallelizationModes.SYNC}),
         ({ParallelizationModes.THREADING}),
-        #   ({ParallelizationModes.MULTIPROCESSING}),
+        # ({ParallelizationModes.MULTIPROCESSING}),
     ],
 )
 class TestValidateInputFeatures:

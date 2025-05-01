@@ -1,8 +1,6 @@
-from typing import Any, Dict, Set, Tuple, Type
+from typing import Any, Set, Type
 from mloda_core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.pandas.pandas_merge_engine import PandasMergeEngine
-import pyarrow as pa
-from mloda_core.abstract_plugins.components.cfw_transformer import ComputeFrameworkTransformMap
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 from mloda_core.filter.filter_engine import BaseFilterEngine
@@ -15,6 +13,21 @@ except ImportError:
 
 
 class PandasDataframe(ComputeFrameWork):
+    @staticmethod
+    def expected_data_framework() -> Any:
+        return PandasDataframe.pd_dataframe()
+
+    def merge_engine(self) -> Type[BaseMergeEngine]:
+        return PandasMergeEngine
+
+    def select_data_by_column_names(self, data: Any, selected_feature_names: Set[FeatureName]) -> Any:
+        column_names = set(data.columns)
+        _selected_feature_names = self.identify_naming_convention(selected_feature_names, column_names)
+        return data[[f for f in _selected_feature_names]]
+
+    def set_column_names(self) -> None:
+        self.column_names = set(self.data.columns)
+
     @staticmethod
     def pd_dataframe() -> Any:
         if pd is None:
@@ -33,17 +46,12 @@ class PandasDataframe(ComputeFrameWork):
             raise ImportError("Pandas is not installed. To be able to use this framework, please install pandas.")
         return pd.merge
 
-    @staticmethod
-    def expected_data_framework() -> Any:
-        return PandasDataframe.pd_dataframe()
-
     def transform(
         self,
         data: Any,
         feature_names: Set[str],
-        transform_map: ComputeFrameworkTransformMap = ComputeFrameworkTransformMap(),
     ) -> Any:
-        transformed_data = self.transform_refactored(data, transform_map)
+        transformed_data = self.apply_compute_framework_transformer(data)
         if transformed_data is not None:
             return transformed_data
 
@@ -65,37 +73,5 @@ class PandasDataframe(ComputeFrameWork):
 
         raise ValueError(f"Data {type(data)} is not supported by {self.__class__.__name__}")
 
-    def select_data_by_column_names(self, data: Any, selected_feature_names: Set[FeatureName]) -> Any:
-        column_names = set(data.columns)
-        _selected_feature_names = self.identify_naming_convention(selected_feature_names, column_names)
-        return data[[f for f in _selected_feature_names]]
-
-    def set_column_names(self) -> None:
-        self.column_names = set(self.data.columns)
-
-    @staticmethod
-    def get_framework_transform_functions(from_other: bool, other: Any) -> Tuple[Any, Dict[str, Any]]:
-        def pyarrow_table_to_pandas_dataframe(data: pd.DataFrame, parameters: Dict[str, Any] = {}) -> pa.Table:
-            return pa.Table.to_pandas(data, **parameters)
-
-        def pandas_dataframe_to_pyarrow_table(data: pd.DataFrame, parameters: Dict[str, Any] = {}) -> pa.Table:
-            # drop pandas schema metadata
-            pyarrow_table = pa.Table.from_pandas(data, **parameters)
-            schema = pyarrow_table.schema
-            metadata = schema.metadata.copy() if schema.metadata else {}
-            metadata.pop(b"pandas", None)
-            new_schema = schema.with_metadata(metadata)
-            return pa.Table.from_arrays(pyarrow_table.columns, schema=new_schema)
-
-        if other == pa.Table:
-            if from_other:
-                return pyarrow_table_to_pandas_dataframe, {}
-            return pandas_dataframe_to_pyarrow_table, {}
-
-        return None, {"defensive": None}
-
     def filter_engine(self) -> Type[BaseFilterEngine]:
         return PandasFilterEngine
-
-    def merge_engine(self) -> Type[BaseMergeEngine]:
-        return PandasMergeEngine

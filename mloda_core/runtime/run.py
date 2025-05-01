@@ -8,6 +8,7 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union
 from uuid import UUID, uuid4
 import logging
 
+from mloda_core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
 from mloda_core.abstract_plugins.function_extender import WrapperFunctionExtender
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
@@ -63,6 +64,9 @@ class Runner:
         ] = defaultdict()
         self.result_queues_collection: Set[multiprocessing.Queue] = set()  # type: ignore
         self.result_uuids_collection: Set[UUID] = set()
+
+        # Initialize framework transformer
+        self.transformer = ComputeFrameworkTransformer()
 
         self.flight_server = None
         if flight_server:
@@ -440,7 +444,7 @@ class Runner:
             data = cfw.data
         elif location:
             data = FlightServer.download_table(location, str(cfw.uuid))
-            data = cfw.convert_flyserver_data_back(data)
+            data = cfw.convert_flyserver_data_back(data, self.transformer)
         else:
             raise ValueError("Not implemented.")
 

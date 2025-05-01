@@ -60,7 +60,7 @@ class TimeTravelPositiveFilterTest(AbstractFeatureGroup):
     [
         ({ParallelizationModes.SYNC}),
         ({ParallelizationModes.THREADING}),
-        #  ({ParallelizationModes.MULTIPROCESSING}),
+        ({ParallelizationModes.MULTIPROCESSING}),
     ],
 )
 class TestTimeTravel:

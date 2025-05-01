@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="../../img/favicon.ico" />
+    <title>Framework Transformers - mloda docs</title>
+    <link rel="stylesheet" href="../../css/theme.css" />
+    <link rel="stylesheet" href="../../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Framework Transformers";
+        var mkdocs_page_input_path = "in_depth/framework-transformers.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="../.." class="icon icon-home"> mloda docs
+        </a>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption"><span class="caption-text">Home</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../..">mloda</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">mloda Concepts</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/0_table_of_content/">Table of Content</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/1_ml_mloda_intro/">Intro to the core interfaces of mloda</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/2_ml_advantage_process_focus/">What makes mloda unique?</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/3_ml_data_feature_feature_groups/">Data, Feature, FeatureSets and FeatureGroups in mloda</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/4_ml_data_producers_user_owner/">Data Producer, User, Owner in mloda</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Getting Started</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/installation/">Installation</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/api-request/">API Request</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/feature-groups/">Feature Groups</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/compute-frameworks/">Compute Frameworks</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/extender/">Extender</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">In Depth - Basics</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../mloda-api/">mloda API</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../access-feature-data/">(Feature) data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../join_data/">Join data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../filter_data/">Filter data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../artifacts/">Artifacts</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">In Depth - Advanced</span></p>
+              <ul class="current">
+                  <li class="toctree-l1"><a class="reference internal" href="../data-quality/">Data quality</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../domain/">Domain concept</a>
+                  </li>
+                  <li class="toctree-l1 current"><a class="reference internal current" >Compute Frameworks</a>
+    <ul class="current">
+                <li class="toctree-l2 current"><a class="reference internal current" href="#">Framework Transformers</a>
+    <ul class="current">
+    <li class="toctree-l3"><a class="reference internal" href="#overview">Overview</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#core-components">Core Components</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#basetransformer">BaseTransformer</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#computeframeworktransformer">ComputeFrameworkTransformer</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#pandaspyarrowtransformer">PandasPyarrowTransformer</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#how-framework-transformers-work">How Framework Transformers Work</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#registration-process">Registration Process</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#transformation-process">Transformation Process</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#example-flow">Example Flow</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#creating-custom-transformers">Creating Custom Transformers</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#integration-with-computeframework">Integration with ComputeFrameWork</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#benefits-of-framework-transformers">Benefits of Framework Transformers</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#conclusion">Conclusion</a>
+    </li>
+    </ul>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../compute-framework-integration/">Compute Framework Integration</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-chain-parser/">Feature Chain Parser</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-group-matching/">Feature Group Matching</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-group-testing/">Feature Group Testing</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-group-version/">Feature Group Versioning</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../multiple_result_columns/">Multiple Result Columns</a>
+                </li>
+    </ul>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Development</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../development/">Contributors</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../license/">License - Apache 2.0</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../missing/">Missing</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Need Help?</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../faq/">FAQ</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../need-help/">Need Help</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../..">mloda docs</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../.." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">In Depth - Advanced</li>
+          <li class="breadcrumb-item">Compute Frameworks</li>
+      <li class="breadcrumb-item active">Framework Transformers</li>
+    <li class="wy-breadcrumbs-aside">
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="framework-transformers">Framework Transformers</h1>
+<h2 id="overview">Overview</h2>
+<p>Framework transformers are a key component of mloda's compute framework system, enabling seamless conversion between different data representations. They allow feature groups to work with multiple compute frameworks by providing bidirectional transformation capabilities.</p>
+<h2 id="core-components">Core Components</h2>
+<h3 id="basetransformer">BaseTransformer</h3>
+<p>The <code>BaseTransformer</code> is an abstract base class that defines the interface for transforming data between different compute frameworks. It provides the foundation for all framework transformers in the system.</p>
+<pre><code class="language-python">class BaseTransformer:
+    &quot;&quot;&quot;
+    Abstract base class for transforming data between different compute frameworks.
+    &quot;&quot;&quot;
+</code></pre>
+<p>Key features:
+- Defines a consistent interface for all transformers
+- Handles the logic for determining transformation direction
+- Provides methods for checking if required frameworks are available
+- Manages the actual transformation process</p>
+<h3 id="computeframeworktransformer">ComputeFrameworkTransformer</h3>
+<p>The <code>ComputeFrameworkTransformer</code> manages the registry of available transformers and provides methods to find the appropriate transformer for a given pair of frameworks.</p>
+<pre><code class="language-python">class ComputeFrameworkTransformer:
+    &quot;&quot;&quot;
+    Manages transformations between different compute frameworks.
+    &quot;&quot;&quot;
+</code></pre>
+<p>Key features:
+- Maintains a registry of available transformers
+- Automatically discovers and registers all <code>BaseTransformer</code> subclasses
+- Provides a lookup mechanism to find the appropriate transformer for any framework pair</p>
+<h3 id="pandaspyarrowtransformer">PandasPyarrowTransformer</h3>
+<p>The <code>PandasPyarrowTransformer</code> is a concrete implementation of <code>BaseTransformer</code> that handles conversions between Pandas DataFrames and PyArrow Tables.</p>
+<pre><code class="language-python">class PandasPyarrowTransformer(BaseTransformer):
+    &quot;&quot;&quot;
+    Transformer for converting between Pandas DataFrame and PyArrow Table.
+    &quot;&quot;&quot;
+</code></pre>
+<p>Key features:
+- Converts Pandas DataFrames to PyArrow Tables and vice versa
+- Handles metadata properly during transformations
+- Ensures clean conversion by removing framework-specific metadata</p>
+<h2 id="how-framework-transformers-work">How Framework Transformers Work</h2>
+<h3 id="registration-process">Registration Process</h3>
+<ol>
+<li>During initialization, the <code>ComputeFrameworkTransformer</code> discovers all subclasses of <code>BaseTransformer</code></li>
+<li>Each transformer is registered in a mapping from framework pairs to transformer classes</li>
+<li>The mapping is bidirectional, allowing transformations in both directions</li>
+</ol>
+<h3 id="transformation-process">Transformation Process</h3>
+<p>When data needs to be transformed from one framework to another:</p>
+<ol>
+<li>The system identifies the source and target framework types</li>
+<li>It looks up the appropriate transformer in the registry</li>
+<li>It determines the direction of transformation (primary to secondary or vice versa)</li>
+<li>It calls the appropriate transformation method on the transformer</li>
+<li>The transformer converts the data to the target framework format</li>
+</ol>
+<h3 id="example-flow">Example Flow</h3>
+<pre><code>Pandas DataFrame → PandasPyarrowTransformer → PyArrow Table
+</code></pre>
+<p>Or in the reverse direction:</p>
+<pre><code>PyArrow Table → PandasPyarrowTransformer → Pandas DataFrame
+</code></pre>
+<h2 id="creating-custom-transformers">Creating Custom Transformers</h2>
+<p>To create a custom transformer for a new pair of frameworks:</p>
+<ol>
+<li>Subclass <code>BaseTransformer</code></li>
+<li>Implement the required methods:</li>
+<li><code>framework()</code> - Return the primary framework type</li>
+<li><code>other_framework()</code> - Return the secondary framework type</li>
+<li><code>import_fw()</code> - Import the primary framework module</li>
+<li><code>import_other_fw()</code> - Import the secondary framework module</li>
+<li><code>transform_fw_to_other_fw()</code> - Transform from primary to secondary</li>
+<li><code>transform_other_fw_to_fw()</code> - Transform from secondary to primary</li>
+</ol>
+<p>Example:</p>
+<pre><code class="language-python">from typing import Any
+
+class CustomTransformer(BaseTransformer):
+    @classmethod
+    def framework(cls) -&gt; Any:
+        return CustomFramework
+
+    @classmethod
+    def other_framework(cls) -&gt; Any:
+        return OtherFramework
+
+    @classmethod
+    def import_fw(cls) -&gt; None:
+        import custom_framework
+
+    @classmethod
+    def import_other_fw(cls) -&gt; None:
+        import other_framework
+
+    @classmethod
+    def transform_fw_to_other_fw(cls, data: Any) -&gt; Any:
+        # Convert from CustomFramework to OtherFramework
+        return other_framework.from_custom(data)
+
+    @classmethod
+    def transform_other_fw_to_fw(cls, data: Any) -&gt; Any:
+        # Convert from OtherFramework to CustomFramework
+        return custom_framework.from_other(data)
+</code></pre>
+<h2 id="integration-with-computeframework">Integration with ComputeFrameWork</h2>
+<p>The <code>ComputeFrameWork</code> class uses the transformer system to convert data between different frameworks when needed. This happens in several scenarios:</p>
+<ol>
+<li>When data needs to be transformed to match the expected framework of a feature group</li>
+<li>When data needs to be uploaded to a flight server (always converted to PyArrow Table)</li>
+<li>When data is retrieved from a flight server and needs to be converted back</li>
+</ol>
+<p>The transformation is handled automatically by the <code>apply_compute_framework_transformer</code> method:</p>
+<pre><code class="language-python">def apply_compute_framework_transformer(self, data: Any) -&gt; Any:
+    _from_fw = type(data)
+    _to_fw = self.expected_data_framework()
+    transformer_cls = self.transformer.transformer_map.get((_from_fw, _to_fw), None)
+    if transformer_cls is not None:
+        return transformer_cls.transform(_from_fw, _to_fw, data)
+    return None
+</code></pre>
+<h2 id="benefits-of-framework-transformers">Benefits of Framework Transformers</h2>
+<ul>
+<li><strong>Decoupling</strong>: Feature groups can be defined independently of specific compute frameworks</li>
+<li><strong>Flexibility</strong>: The system can work with multiple data representations</li>
+<li><strong>Extensibility</strong>: New frameworks can be added by implementing new transformers</li>
+<li><strong>Transparency</strong>: Transformations happen automatically without user intervention</li>
+</ul>
+<h2 id="conclusion">Conclusion</h2>
+<p>Framework transformers are a critical part of mloda's flexibility, allowing the system to work with multiple compute frameworks and data representations. By providing a clean interface for data conversion, they enable feature groups to be defined once and used with different technologies, supporting use cases like online/offline computation, testing, and migrations between environments.</p>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../domain/" class="btn btn-neutral float-left" title="Domain concept"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../compute-framework-integration/" class="btn btn-neutral float-right" title="Compute Framework Integration">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+    
+      <span><a href="../domain/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../compute-framework-integration/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "../..";</script>
+    <script src="../../js/theme_extra.js"></script>
+    <script src="../../js/theme.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

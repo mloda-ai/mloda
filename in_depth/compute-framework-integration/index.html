@@ -85,8 +85,10 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../domain/">Domain concept</a>
                   </li>
-                  <li class="toctree-l1 current"><a class="reference internal current" >Feature Groups</a>
+                  <li class="toctree-l1 current"><a class="reference internal current" >Compute Frameworks</a>
     <ul class="current">
+                <li class="toctree-l2"><a class="reference internal" href="../framework-transformers/">Framework Transformers</a>
+                </li>
                 <li class="toctree-l2 current"><a class="reference internal current" href="#">Compute Framework Integration</a>
     <ul class="current">
     <li class="toctree-l3"><a class="reference internal" href="#overview">Overview</a>
@@ -115,6 +117,10 @@
     </li>
     </ul>
                 </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
+    <ul>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-chain-parser/">Feature Chain Parser</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-group-matching/">Feature Group Matching</a>
@@ -159,7 +165,7 @@
   <ul class="wy-breadcrumbs">
     <li><a href="../.." class="icon icon-home" aria-label="Docs"></a></li>
           <li class="breadcrumb-item">In Depth - Advanced</li>
-          <li class="breadcrumb-item">Feature Groups</li>
+          <li class="breadcrumb-item">Compute Frameworks</li>
       <li class="breadcrumb-item active">Compute Framework Integration</li>
     <li class="wy-breadcrumbs-aside">
     </li>
@@ -237,6 +243,7 @@ def compute_framework_rule(cls) -&gt; set[type[ComputeFrameWork]]:
 <li>Each framework defines how to transform data to and from other frameworks</li>
 <li>The system automatically handles these transformations when needed</li>
 </ol>
+<p>For more details on how data transformation works between compute frameworks, see <a href="../framework-transformers/">Framework Transformers</a>.</p>
 <h2 id="example">Example</h2>
 <p>For a clustering feature group:</p>
 <pre><code class="language-python"># Base class (framework-agnostic)
@@ -272,7 +279,7 @@ class PyArrowClusteringFeatureGroup(ClusteringFeatureGroup):
             </div>
           </div><footer>
     <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
-        <a href="../domain/" class="btn btn-neutral float-left" title="Domain concept"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../framework-transformers/" class="btn btn-neutral float-left" title="Framework Transformers"><span class="icon icon-circle-arrow-left"></span> Previous</a>
         <a href="../feature-chain-parser/" class="btn btn-neutral float-right" title="Feature Chain Parser">Next <span class="icon icon-circle-arrow-right"></span></a>
     </div>
 
@@ -296,7 +303,7 @@ class PyArrowClusteringFeatureGroup(ClusteringFeatureGroup):
   <span class="rst-current-version" data-toggle="rst-current-version">
     
     
-      <span><a href="../domain/" style="color: #fcfcfc">&laquo; Previous</a></span>
+      <span><a href="../framework-transformers/" style="color: #fcfcfc">&laquo; Previous</a></span>
     
     
       <span><a href="../feature-chain-parser/" style="color: #fcfcfc">Next &raquo;</a></span>

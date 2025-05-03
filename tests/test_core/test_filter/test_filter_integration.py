@@ -1,5 +1,8 @@
 from typing import Any, Dict, List, Optional, Set, Type, Union
 import pytest
+
+import pyarrow as pa
+
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
@@ -30,10 +33,10 @@ class GlobalFilterBasicTest(AbstractFeatureGroup):
         for filter in features.filters:  # type: ignore
             if (
                 filter.__repr__()
-                != """<SingleFilter(feature_name=GlobalFilterBasicTest, type=eq, parameters=(('value', 1),))>"""
+                != """<SingleFilter(feature_name=GlobalFilterBasicTest, type=equal, parameters=(('value', 1),))>"""
             ):
                 raise ValueError("Test Filter not found")
-        return {cls.get_class_name(): [1, 2, 3]}
+        return pa.table({cls.get_class_name(): [1, 2, 3]})
 
     @classmethod
     def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
@@ -58,7 +61,7 @@ class GlobalFilterFromDifferentColumnTest(GlobalFilterBasicTest):
                 if feat.initial_requested_data is not False:
                     raise ValueError("Filter should not lead to automatic requested data.")
 
-        return {"GlobalFilterFromDifferentColumn1": [1, 2, 3]}
+        return pa.table({"GlobalFilterFromDifferentColumn1": [1, 2, 3], "GlobalFilterFromDifferentColumn2": [1, 2, 3]})
 
 
 class GlobalFilterHasDifferentNameTest(GlobalFilterBasicTest):
@@ -77,7 +80,7 @@ class GlobalFilterHasDifferentNameTest(GlobalFilterBasicTest):
         if len(features.get_all_names()) != 1:
             raise ValueError("Filter feature is same like normal feature.")
 
-        return {"GlobalFilterHasDifferentNameTest": [1, 2, 3]}
+        return pa.table({"GlobalFilterHasDifferentNameTest": [1, 2, 3], "GlobalFilterHasDifferentName2": [1, 2, 3]})
 
     def set_feature_name(self, config: Options, feature_name: FeatureName) -> FeatureName:
         return FeatureName(name="GlobalFilterHasDifferentNameTest")
@@ -136,13 +139,13 @@ class TestGlobalFilter:
         features = self.get_features([global_filter_test_basic])
 
         global_filter = GlobalFilter()
-        global_filter.add_filter(global_filter_test_basic, "eq", {"value": 1})
+        global_filter.add_filter(global_filter_test_basic, "equal", {"value": 1})
 
         runner = self.basic_runner(features, modes, flight_server, global_filter)
 
         for result in runner.get_result():
             res = result.to_pydict()
-            assert res == {global_filter_test_basic: [1, 2, 3]}
+            assert res == {global_filter_test_basic: [1]}
 
         result_global_filter = runner.execution_planner.global_filter
         assert result_global_filter.filters == global_filter.filters  # type: ignore
@@ -178,8 +181,12 @@ class TestGlobalFilter:
         else:
             filter_feat = Feature(name=f"{base_feature_name}2")
 
-        global_filter.add_filter(filter_feat, "eq", {"value": 1})
-        self.basic_runner(features, modes, flight_server, global_filter)
+        global_filter.add_filter(filter_feat, "equal", {"value": 1})
+        runner = self.basic_runner(features, modes, flight_server, global_filter)
+
+        for result in runner.get_result():
+            res = result.to_pydict()
+            assert res == {"GlobalFilterFromDifferentColumn1": [1]}
 
     def test_global_filter_filter_has_different_name(
         self, modes: Set[ParallelizationModes], flight_server: Any
@@ -196,5 +203,9 @@ class TestGlobalFilter:
         else:
             filter_feat = Feature(name=f"{base_feature_name}2")
 
-        global_filter.add_filter(filter_feat, "eq", {"value": 1})
-        self.basic_runner(features, modes, flight_server, global_filter)
+        global_filter.add_filter(filter_feat, "equal", {"value": 1})
+        runner = self.basic_runner(features, modes, flight_server, global_filter)
+
+        for result in runner.get_result():
+            res = result.to_pydict()
+            assert res == {"GlobalFilterHasDifferentNameTest": [1]}

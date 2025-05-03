@@ -1,6 +1,8 @@
 from typing import Any, Set, Type
 from mloda_core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
+from mloda_core.filter.filter_engine import BaseFilterEngine
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_merge_engine import PyArrowMergeEngine
+from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_filter_engine import PyArrowFilterEngine
 import pyarrow as pa
 
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
@@ -20,6 +22,9 @@ class PyarrowTable(ComputeFrameWork):
 
     def merge_engine(self) -> Type[BaseMergeEngine]:
         return PyArrowMergeEngine
+
+    def filter_engine(self) -> Type[BaseFilterEngine]:
+        return PyArrowFilterEngine
 
     def select_data_by_column_names(self, data: Any, selected_feature_names: Set[FeatureName]) -> Any:
         column_names = set(data.schema.names)

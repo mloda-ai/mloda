@@ -1,6 +1,9 @@
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Set, Type, Union
 import pytest
+
+import pyarrow as pa
+
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
@@ -41,7 +44,16 @@ class TimeTravelPositiveFilterTest(AbstractFeatureGroup):
         if len(features.filters) != 1:  # type: ignore
             raise ValueError("Test Filter not found")
 
-        return {cls.get_class_name(): [1, 2, 3]}
+        return pa.table(
+            {
+                cls.get_class_name(): [1, 2, 3],
+                "time_filter": [
+                    date.today().strftime("%Y-%m-%dT%H:%M:%S.%f%z"),
+                    "2025-04-13T20:40:48.546012+00:00",
+                    "2025-04-13T20:40:48.546012+00:00",
+                ],
+            }
+        )
 
     @classmethod
     def match_feature_group_criteria(  # type: ignore
@@ -135,4 +147,4 @@ class TestTimeTravel:
         runner = self.basic_runner(features, modes, flight_server, global_filter)
         for result in runner.get_result():
             res = result.to_pydict()
-            assert res == {filter_test: [1, 2, 3]}
+            assert res == {filter_test: [1]}

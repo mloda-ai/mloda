@@ -6,6 +6,10 @@ Initializing the memory bank for the mloda project.
 
 ## Recent Changes
 
+*   Implemented PyArrow Filter Engine functionality:
+    * Added `filter_engine` method to PyarrowTable class
+    * Achieved feature parity with PandasFilterEngine for filtering operations
+
 *   Created the initial memory bank files: `projectbrief.md`, `productContext.md`, `systemPatterns.md`, and `techContext.md`.
 *   Added README.md files to top-level directories: `mloda_core/`, `mloda_plugins/`, and `tests/` to improve documentation.
 *   Added description and versioning capabilities to AbstractFeatureGroup:
@@ -58,6 +62,7 @@ Initializing the memory bank for the mloda project.
 
 ## Next Steps
 
+*   Add integration tests for filtering with both compute frameworks
 *   Populate the memory bank files with more detailed information
 *   Update the `.clinerules` file with project-specific patterns
 

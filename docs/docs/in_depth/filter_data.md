@@ -65,7 +65,7 @@ In this example, we simply instantiate a GlobalFilter and add a SingleFilter.
 from mloda_core.filter.global_filter import GlobalFilter
 
 global_filter = GlobalFilter()
-global_filter.add_filter("example_order_id", "eq", {"value": 1})
+global_filter.add_filter("example_order_id", "equal", {"value": 1})
 
 global_filter.filters
 ```
@@ -73,7 +73,7 @@ global_filter.filters
 Result
 
 ``` python
-{<SingleFilter(feature_name=example_order_id, type=eq, parameters=(('value', 1),))>}
+{<SingleFilter(feature_name=example_order_id, type=equal, parameters=(('value', 1),))>}
 ```
 
 #### How to deal with time filters
@@ -108,7 +108,7 @@ The implementation of the concrete filters is dependent on the feature group. Th
 
 Further, the feature is a data creator, so we create the data here itself. 
 
-```python
+``` python
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from typing import Any, Union, Set, Type, Optional
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet

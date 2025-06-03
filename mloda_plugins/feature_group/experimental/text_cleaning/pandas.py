@@ -6,8 +6,6 @@ from __future__ import annotations
 
 import string
 
-import pandas as pd
-
 import unicodedata
 
 try:
@@ -19,6 +17,12 @@ except ImportError:
     nltk = None
     stopwords = None
     nltk_available = False
+
+
+try:
+    import pandas as pd
+except ImportError:
+    pd = None
 
 
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork

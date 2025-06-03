@@ -6,8 +6,13 @@ from __future__ import annotations
 
 from typing import Any, List, cast
 
-import numpy as np
-import pandas as pd
+
+try:
+    import pandas as pd
+    import numpy as np
+except ImportError:
+    pd = None
+    np = None  # type: ignore
 
 # Check if required packages are available
 SKLEARN_AVAILABLE = True
@@ -71,7 +76,7 @@ class PandasDimensionalityReductionFeatureGroup(DimensionalityReductionFeatureGr
         return data
 
     @classmethod
-    def _perform_reduction(  # type: ignore
+    def _perform_reduction(
         cls,
         data: Any,
         algorithm: str,

@@ -95,7 +95,8 @@ We show here an example by using the tool [Pandera](https://github.com/unionai-o
 ```python
 from mloda_core.abstract_plugins.components.base_validator import BaseValidator
 import pyarrow as pa
-from pandera import Column, DataFrameSchema, Check
+from pandera import pandas
+from pandera import Column, Check
 from pandera.errors import SchemaError
 
 
@@ -109,7 +110,7 @@ class DocExamplePanderaValidator(BaseValidator):
         if isinstance(data, pa.Table):  # If the data is a PyArrow Table
             data = data.to_pandas()
 
-        schema = DataFrameSchema(self.validation_rules)
+        schema = pandas.DataFrameSchema(self.validation_rules)
 
         try:
             schema.validate(data)
@@ -162,6 +163,7 @@ Output features are validated to ensure they meet the expected outcomes and perf
 ```python
 from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
+from tests.test_plugins.integration_plugins.test_validate_features.example_validator import BaseValidateOutputFeaturesBase
 
 
 class DocBaseValidateOutputFeaturesBase(AbstractFeatureGroup):
@@ -220,7 +222,7 @@ results = mlodaAPI.run_all(
 We can of course also use an extender, which was defined somewhere else.
 
 ```python
-from tests.test_core.test_validate_features.test_validate_output_features import ValidateOutputFeatureExtender
+from tests.test_plugins.integration_plugins.test_validate_features.test_validate_output_features import ValidateOutputFeatureExtender
 
 results = mlodaAPI.run_all(
             ["DocBaseValidateOutputFeaturesBase"], {PyarrowTable},

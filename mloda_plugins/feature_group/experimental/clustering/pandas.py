@@ -6,8 +6,6 @@ from __future__ import annotations
 
 from typing import Any, List, Union, cast
 
-import numpy as np
-import pandas as pd
 
 try:
     from sklearn.cluster import KMeans, AgglomerativeClustering, DBSCAN, SpectralClustering
@@ -17,6 +15,14 @@ except ImportError:
     KMeans, AgglomerativeClustering, DBSCAN, SpectralClustering = None, None, None, None
     StandardScaler = None
     silhouette_score = None
+
+
+try:
+    import pandas as pd
+    import numpy as np
+except ImportError:
+    pd = None
+    np = None  # type: ignore
 
 
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
@@ -62,7 +68,7 @@ class PandasClusteringFeatureGroup(ClusteringFeatureGroup):
         return data
 
     @classmethod
-    def _perform_clustering(  # type: ignore
+    def _perform_clustering(
         cls,
         data: Any,
         algorithm: str,

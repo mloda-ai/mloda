@@ -28,7 +28,8 @@ Feature groups follow a layered architecture:
 AbstractFeatureGroup
   └── BaseFeatureGroup (e.g., ClusteringFeatureGroup)
         ├── PandasImplementation
-        └── PyArrowImplementation
+        ├── PyArrowImplementation
+        └── PythonDictImplementation
 ```
 
 ## Implementation Pattern

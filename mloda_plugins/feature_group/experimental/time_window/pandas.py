@@ -6,12 +6,15 @@ from __future__ import annotations
 
 from typing import Any, Optional, Set, Type, Union
 
-import pandas as pd
-
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
-
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
+
+
+try:
+    import pandas as pd
+except ImportError:
+    pd = None
 
 
 class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):

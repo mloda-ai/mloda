@@ -62,7 +62,7 @@ class PandasClusteringFeatureGroup(ClusteringFeatureGroup):
         return data
 
     @classmethod
-    def _perform_clustering(  # type: ignore
+    def _perform_clustering(
         cls,
         data: Any,
         algorithm: str,

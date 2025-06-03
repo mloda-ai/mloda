@@ -43,7 +43,7 @@ ValueError: Multiple feature groups
 .... found for feature name: id.
 ```
 
-In this case, the framework finds multiple feature groups (like **ReadCsv** and **ReadCsvPandas**) that can handle the same file, but use different compute frameworks (**PyarrowTable** vs. **PandasDataframe**). Without explicitly specifying a compute framework, mloda doesn't know which one to use, leading to ambiguity.
+In this case, the framework finds multiple feature groups (like **ReadCsv** and **ReadCsvPandas**) that can handle the same file, but use different compute frameworks (**PyarrowTable** vs. **PandasDataframe** vs. **PythonDict**). Without explicitly specifying a compute framework, mloda doesn't know which one to use, leading to ambiguity.
 
 This might seem counterintuitive, but it’s actually a **feature**, allowing you to compare different technologies and computation methods, particularly useful in scenarios such as:
 
@@ -121,7 +121,28 @@ result[0]
 In this case, the feature group ExampleB will only run on the PyarrowTable framework, while the input feature group uses PandasDataframe, ensuring that the framework correctly handles the conversion between these technologies.
 
 
-#### 5. Summary
+#### 5. Available Compute Frameworks
+
+| Framework | Technology | Strengths | Best For | Dependencies |
+|-----------|------------|-----------|----------|--------------|
+| **PandasDataframe** | pandas DataFrame | Rich data transformation, familiar API | Development, data exploration, smaller datasets | pandas, numpy |
+| **PyarrowTable** | Apache Arrow Tables | Memory-efficient, high performance, columnar format | Production, big data, interoperability | pyarrow |
+| **PythonDict** | List[Dict[str, Any]] | Zero dependencies, simple, lightweight | Minimal environments, education, prototyping | None (Python stdlib only) |
+
+Example using PythonDict framework:
+``` python
+from mloda_core.abstract_plugins.components.feature import Feature
+
+feature = Feature("id", options={"compute_framework": "PythonDict"})
+
+result = mlodaAPI.run_all(
+    [feature], 
+    data_access_collection=data_access_collection
+)
+result[0]  # Returns List[Dict[str, Any]]
+```
+
+#### 6. Summary
 
 mloda's compute framework adds flexibility, allowing you to select the best tool for different stages of data and feature engineering. While it introduces some complexity, it's invaluable for comparing technologies and managing environments.
 

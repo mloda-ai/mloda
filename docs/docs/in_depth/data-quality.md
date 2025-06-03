@@ -95,7 +95,8 @@ We show here an example by using the tool [Pandera](https://github.com/unionai-o
 ```python
 from mloda_core.abstract_plugins.components.base_validator import BaseValidator
 import pyarrow as pa
-from pandera import Column, DataFrameSchema, Check
+from pandera import pandas
+from pandera import Column, Check
 from pandera.errors import SchemaError
 
 
@@ -109,7 +110,7 @@ class DocExamplePanderaValidator(BaseValidator):
         if isinstance(data, pa.Table):  # If the data is a PyArrow Table
             data = data.to_pandas()
 
-        schema = DataFrameSchema(self.validation_rules)
+        schema = pandas.DataFrameSchema(self.validation_rules)
 
         try:
             schema.validate(data)

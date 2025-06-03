@@ -40,6 +40,13 @@ The base class for all compute frameworks:
 - Optimized for performance and interoperability
 - Better suited for larger datasets and production environments
 
+### PythonDict
+- Based on native Python data structures (List[Dict[str, Any]])
+- Dependency-free implementation using only Python standard library
+- Simple and lightweight for basic data operations
+- Ideal for environments with minimal dependencies or educational purposes
+- Includes bidirectional transformation with PyArrow through PythonDictPyarrowTransformer
+
 ## Framework Transformers
 
 Enable seamless conversion between different data representations:
@@ -108,6 +115,9 @@ Compute frameworks are tested at multiple levels:
    - Framework selection based on feature group requirements
 
 ## Changelog
+
+### 2025-06-03: Implemented PythonDict Compute Framework
+- Added complete PythonDict framework implementation using List[Dict[str, Any]] data structure
 
 ### 2025-04-20: Added Multiple Result Columns Support
 - Added `identify_naming_convention` method to ComputeFrameWork

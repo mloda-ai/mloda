@@ -76,7 +76,7 @@ class CustomValidateInputFeatures(AbstractFeatureGroup):
             validation_log_level = features.get_options_key("ValidationLevel")
             validator = ExamplePanderaValidator(validation_rules, validation_log_level)
 
-        return validator.validate(data)  # type: ignore
+        return validator.validate(data)
 
 
 class ValidateInputFeatureExtender(DokuExtender):

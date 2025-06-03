@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pandera import DataFrameSchema
+from pandera import pandas
 import pyarrow as pa
 from pandera.errors import SchemaError
 
@@ -17,7 +17,7 @@ class ExamplePanderaValidator(BaseValidator):
         if isinstance(data, pa.Table):  # If the data is a PyArrow Table
             data = data.to_pandas()
 
-        schema = DataFrameSchema(self.validation_rules)
+        schema = pandas.DataFrameSchema(self.validation_rules)
 
         try:
             schema.validate(data)

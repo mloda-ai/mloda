@@ -71,7 +71,7 @@ class PandasDimensionalityReductionFeatureGroup(DimensionalityReductionFeatureGr
         return data
 
     @classmethod
-    def _perform_reduction(  # type: ignore
+    def _perform_reduction(
         cls,
         data: Any,
         algorithm: str,

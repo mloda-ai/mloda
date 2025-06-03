@@ -163,6 +163,7 @@ Output features are validated to ensure they meet the expected outcomes and perf
 ```python
 from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
+from tests.test_plugins.integration_plugins.test_validate_features.example_validator import BaseValidateOutputFeaturesBase
 
 
 class DocBaseValidateOutputFeaturesBase(AbstractFeatureGroup):

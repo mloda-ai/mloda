@@ -3,45 +3,24 @@ from typing import Any, Dict, List, Optional, Set
 import pytest
 
 
-from pandera import Column, Check
-
-
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
 from mloda_core.abstract_plugins.function_extender import WrapperFunctionEnum, WrapperFunctionExtender
 from mloda_core.api.request import mlodaAPI
 from mloda_core.runtime.flight.flight_server import FlightServer
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
 from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_collection import Features
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from tests.test_plugins.integration_plugins.test_validate_features.example_validator import ExamplePanderaValidator
+from tests.test_plugins.integration_plugins.test_validate_features.example_validator import (
+    BaseValidateOutputFeaturesBase,
+    BaseValidateOutputFeaturesBaseNegativePandera,
+)
 from tests.test_documentation.test_documentation import DokuExtender
 
 
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-class BaseValidateOutputFeaturesBase(AbstractFeatureGroup):
-    @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
-        return DataCreator({cls.get_class_name()})
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return {cls.get_class_name(): [1, 2, 3]}
-
-    @classmethod
-    def validate_output_features(cls, data: Any, features: FeatureSet) -> Optional[bool]:
-        """This function should be used to validate the output data."""
-
-        if len(data[cls.get_class_name()]) != 3:
-            raise ValueError("Data should have 3 elements")
-        return True
 
 
 class BaseValidateOutputFeaturesBaseNegative(BaseValidateOutputFeaturesBase):
@@ -53,21 +32,6 @@ class BaseValidateOutputFeaturesBaseNegative(BaseValidateOutputFeaturesBase):
         if len(data[cls.get_class_name()]) == 3:
             raise ValueError("Data should not have 3 elements.")
         return True
-
-
-class BaseValidateOutputFeaturesBaseNegativePandera(BaseValidateOutputFeaturesBase):
-    """Pandera example test case. This one is related to the pandera testcase for validate_input_features."""
-
-    @classmethod
-    def validate_output_features(cls, data: Any, features: FeatureSet) -> Optional[bool]:
-        """This function should be used to validate the output data."""
-
-        validation_rules = {
-            cls.get_class_name(): Column(int, Check.in_range(1, 2)),
-        }
-
-        validator = ExamplePanderaValidator(validation_rules, features.get_options_key("ValidationLevel"))
-        return validator.validate(data)
 
 
 class ValidateOutputFeatureExtender(DokuExtender):

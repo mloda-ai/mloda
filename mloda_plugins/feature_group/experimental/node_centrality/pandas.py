@@ -6,8 +6,13 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional, cast
 
-import numpy as np
-import pandas as pd
+
+try:
+    import pandas as pd
+    import numpy as np
+except ImportError:
+    pd = None
+    np = None  # type: ignore
 
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe

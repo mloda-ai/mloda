@@ -221,7 +221,7 @@ results = mlodaAPI.run_all(
 We can of course also use an extender, which was defined somewhere else.
 
 ```python
-from tests.test_core.test_validate_features.test_validate_output_features import ValidateOutputFeatureExtender
+from tests.test_plugins.integration_plugins.test_validate_features.test_validate_output_features import ValidateOutputFeatureExtender
 
 results = mlodaAPI.run_all(
             ["DocBaseValidateOutputFeaturesBase"], {PyarrowTable},

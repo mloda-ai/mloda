@@ -4,10 +4,8 @@ Pandas implementation for forecasting feature groups.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Set, Tuple, Type, Union, cast
+from typing import Any, Dict, List, Optional, Tuple, cast
 
-import numpy as np
-import pandas as pd
 from datetime import datetime, timedelta
 
 # Check if required packages are available
@@ -18,12 +16,18 @@ try:
     from sklearn.svm import SVR
     from sklearn.neighbors import KNeighborsRegressor
     from sklearn.preprocessing import StandardScaler
-    from sklearn.pipeline import Pipeline
 except ImportError:
     SKLEARN_AVAILABLE = False
 
+try:
+    import pandas as pd
+    import numpy as np
+except ImportError:
+    pd = None
+    np = None  # type: ignore
+
+
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
 from mloda_plugins.feature_group.experimental.forecasting.base import ForecastingFeatureGroup
 

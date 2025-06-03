@@ -17,7 +17,7 @@ from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGr
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_collection import Features
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from tests.test_core.test_validate_features.example_validator import ExamplePanderaValidator
+from tests.test_plugins.integration_plugins.test_validate_features.example_validator import ExamplePanderaValidator
 from tests.test_documentation.test_documentation import DokuExtender
 
 import logging

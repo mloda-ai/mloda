@@ -47,6 +47,14 @@ The base class for all compute frameworks:
 - Ideal for environments with minimal dependencies or educational purposes
 - Includes bidirectional transformation with PyArrow through PythonDictPyarrowTransformer
 
+### PolarsDataframe
+- Based on Polars DataFrame, a fast DataFrame library implemented in Rust
+- High-performance data processing with lazy evaluation capabilities
+- Memory-efficient columnar operations with excellent performance characteristics
+- Optimized for large datasets and complex analytical workloads
+- Includes bidirectional transformation with PyArrow through PolarsTransformer
+- Supports all standard operations: filtering, merging, transformations
+
 ## Framework Transformers
 
 Enable seamless conversion between different data representations:
@@ -115,6 +123,9 @@ Compute frameworks are tested at multiple levels:
    - Framework selection based on feature group requirements
 
 ## Changelog
+
+### 2025-06-07: Implemented Polars Compute Framework
+- Added complete Polars framework implementation using Polars DataFrame
 
 ### 2025-06-03: Implemented PythonDict Compute Framework
 - Added complete PythonDict framework implementation using List[Dict[str, Any]] data structure

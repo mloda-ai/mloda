@@ -104,6 +104,7 @@
 | pexpect                                | 4.9.0           | ISC License (ISCL)                                      |
 | platformdirs                           | 4.3.8           | MIT License                                             |
 | pluggy                                 | 1.6.0           | MIT License                                             |
+| polars                                 | 1.30.0          | MIT License                                             |
 | prometheus_client                      | 0.22.1          | UNKNOWN                                                 |
 | prompt_toolkit                         | 3.0.51          | BSD License                                             |
 | proto-plus                             | 1.26.1          | Apache Software License                                 |

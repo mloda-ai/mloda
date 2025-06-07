@@ -23,6 +23,8 @@ class PythonDictPyarrowTransformer(BaseTransformer):
 
     @classmethod
     def other_framework(cls) -> Any:
+        if pa is None:
+            return NotImplementedError
         return pa.Table
 
     @classmethod

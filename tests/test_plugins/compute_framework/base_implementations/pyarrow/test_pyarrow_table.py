@@ -1,5 +1,7 @@
 from copy import deepcopy
+from typing import Any
 import pytest
+from unittest.mock import patch
 import pyarrow as pa
 
 from mloda_core.abstract_plugins.components.link import JoinType
@@ -7,6 +9,20 @@ from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
 from mloda_core.abstract_plugins.components.index.index import Index
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
+
+
+class TestPyarrowTableAvailability:
+    @patch("builtins.__import__")
+    def test_is_available_when_pyarrow_not_installed(self, mock_import: Any) -> None:
+        """Test that is_available() returns False when pyarrow import fails."""
+
+        def side_effect(name: Any, *args: Any, **kwargs: Any) -> Any:
+            if name == "pyarrow":
+                raise ImportError("No module named 'pyarrow'")
+            return __import__(name, *args, **kwargs)
+
+        mock_import.side_effect = side_effect
+        assert PyarrowTable.is_available() is False
 
 
 class TestPyarrowTableComputeFramework:

@@ -129,6 +129,17 @@ In this case, the feature group ExampleB will only run on the PyarrowTable frame
 | **PyarrowTable** | Apache Arrow Tables | Memory-efficient, high performance, columnar format | Production, big data, interoperability | pyarrow |
 | **PythonDict** | List[Dict[str, Any]] | Zero dependencies, simple, lightweight | Minimal environments, education, prototyping | None (Python stdlib only) |
 
+##### Automatic Dependency Detection
+
+mloda automatically detects which compute frameworks are available based on installed dependencies. If a required dependency (like `pandas` or `pyarrow`) is not installed, the corresponding compute framework will be automatically excluded from discovery, preventing runtime errors.
+
+This means you can:
+- Install only the dependencies you need for your specific use case
+- Deploy mloda in minimal environments without all compute framework dependencies
+- Avoid import errors when optional dependencies are missing
+
+For example, if `polars` is not installed, `PolarsDataframe` will not be available as a compute framework option, and mloda will automatically work with the remaining available frameworks.
+
 Example using PythonDict framework:
 ``` python
 from mloda_core.abstract_plugins.components.feature import Feature

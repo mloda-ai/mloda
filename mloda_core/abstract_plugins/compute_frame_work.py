@@ -139,6 +139,17 @@ class ComputeFrameWork(ABC):
     def set_column_names(self) -> None:
         pass
 
+    @staticmethod
+    def is_available() -> bool:
+        """
+        Check if the compute framework's dependencies are available.
+        Subclasses should override this to check for their specific dependencies if needed.
+
+        Returns:
+            bool: True if all required dependencies are installed, False otherwise
+        """
+        return True  # Default implementation assumes no external dependencies
+
     @final
     def run_calculation(
         self, feature_group: Any, features: Any, location: str | None, data: Optional[Any] = None

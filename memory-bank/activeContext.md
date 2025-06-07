@@ -2,9 +2,17 @@
 
 ## Current Work Focus
 
-Successfully completed implementation of the Polars Compute Framework! This represents a major milestone in expanding mloda's compute framework ecosystem with high-performance data processing capabilities.
+Successfully completed implementation of automatic dependency detection for compute frameworks! This ensures that frameworks are automatically hidden from discovery when their dependencies (like Polars, PyArrow, or Pandas) are not installed, preventing runtime errors and enabling minimal deployment environments.
 
 ## Recent Changes
+
+*   **✅ COMPLETED: Automatic Dependency Detection for Compute Frameworks:**
+    * Added `is_available()` static method to `ComputeFrameWork` base class
+    * Implemented dependency checking in all existing frameworks (Pandas, PyArrow, Polars)
+    * Updated `get_cfw_subclasses()` in `accessible_plugins.py` to filter unavailable frameworks
+    * Updated documentation in `docs/docs/chapter1/compute-frameworks.md`
+
+## Previous Major Accomplishments
 
 *   Implemented PyArrow Filter Engine functionality:
     * Added `filter_engine` method to PyarrowTable class

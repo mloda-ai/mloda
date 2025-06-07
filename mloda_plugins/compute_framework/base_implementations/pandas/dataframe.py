@@ -14,6 +14,16 @@ except ImportError:
 
 class PandasDataframe(ComputeFrameWork):
     @staticmethod
+    def is_available() -> bool:
+        """Check if Pandas is installed and available."""
+        try:
+            import pandas
+
+            return True
+        except ImportError:
+            return False
+
+    @staticmethod
     def expected_data_framework() -> Any:
         return PandasDataframe.pd_dataframe()
 

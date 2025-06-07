@@ -409,13 +409,31 @@ def test_pyarrow_roundtrip():
 - Validate transformer auto-discovery mechanism
 
 ### Phase 2: Performance Frameworks  
-- Implement Polars framework with PyArrow transformer
+- ✅ **COMPLETED**: Implement Polars framework with PyArrow transformer
 - **Future TODO List (For Later Sessions)**:
   1. **Lazy evaluation support** - `pl.LazyFrame` implementation
-  2. **Hide from mloda core discovery** - Ensure framework isn't auto-discovered if Polars not installed
+  2. ✅ **COMPLETED**: **Hide from mloda core discovery** - Automatic dependency detection implemented for all frameworks
   3. **Feature group implementations** - Polars versions of existing feature groups
 - Implement DuckDB framework with PyArrow transformer
 - Add integration tests
+
+### ✅ Completed: Automatic Dependency Detection (Phase 2.2)
+
+**Implementation Summary**:
+- Added `is_available()` static method to `ComputeFrameWork` base class
+- Implemented dependency checking in all existing frameworks:
+  - `PandasDataframe.is_available()` - checks for pandas
+  - `PyarrowTable.is_available()` - checks for pyarrow  
+  - `PolarsDataframe.is_available()` - checks for polars
+- Updated `get_cfw_subclasses()` in `accessible_plugins.py` to filter unavailable frameworks
+- Added comprehensive tests for availability checking functionality
+- Updated documentation in `docs/docs/chapter1/compute-frameworks.md`
+
+**Benefits Achieved**:
+- Frameworks automatically hidden when dependencies missing
+- No runtime import errors for missing optional dependencies
+- Supports minimal deployment environments
+- Maintains backward compatibility
 
 ### Phase 3: Enterprise Frameworks
 - Implement Iceberg framework with PyArrow transformer

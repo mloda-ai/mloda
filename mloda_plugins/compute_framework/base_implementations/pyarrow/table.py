@@ -17,6 +17,16 @@ except ImportError:
 
 class PyarrowTable(ComputeFrameWork):
     @staticmethod
+    def is_available() -> bool:
+        """Check if PyArrow is installed and available."""
+        try:
+            import pyarrow
+
+            return True
+        except ImportError:
+            return False
+
+    @staticmethod
     def expected_data_framework() -> Any:
         return pa.Table
 

@@ -56,8 +56,10 @@ class PreFilterPlugins:
         return accessible_plugins
 
     @staticmethod
-    def get_cfw_subclasses() -> Set[Type[AbstractFeatureGroup]]:
-        return get_all_subclasses(ComputeFrameWork)
+    def get_cfw_subclasses() -> Set[Type[ComputeFrameWork]]:
+        all_subclasses = get_all_subclasses(ComputeFrameWork)
+        available_subclasses = {cls for cls in all_subclasses if cls.is_available()}
+        return available_subclasses
 
     @staticmethod
     def get_featuregroup_subclasses() -> Set[Type[AbstractFeatureGroup]]:

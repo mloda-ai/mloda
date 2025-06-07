@@ -1,6 +1,8 @@
 import os
+from typing import Any
 from mloda_core.abstract_plugins.components.link import JoinType
 import pytest
+from unittest.mock import patch
 from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataframe
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
@@ -15,6 +17,20 @@ try:
 except ImportError:
     logger.warning("Polars is not installed. Some tests will be skipped.")
     pl = None  # type: ignore
+
+
+class TestPolarsDataframeAvailability:
+    @patch("builtins.__import__")
+    def test_is_available_when_polars_not_installed(self, mock_import: Any) -> None:
+        """Test that is_available() returns False when polars import fails."""
+
+        def side_effect(name: Any, *args: Any, **kwargs: Any) -> Any:
+            if name == "polars":
+                raise ImportError("No module named 'polars'")
+            return __import__(name, *args, **kwargs)
+
+        mock_import.side_effect = side_effect
+        assert PolarsDataframe.is_available() is False
 
 
 class TestPolarsInstallation:
@@ -37,12 +53,13 @@ class TestPolarsInstallation:
 
 @pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
 class TestPolarsDataframeComputeFramework:
-    pl_dataframe = PolarsDataframe(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
-    dict_data = {"column1": [1, 2, 3], "column2": [4, 5, 6]}
-    expected_data = PolarsDataframe.pl_dataframe()(dict_data)
-    left_data = PolarsDataframe.pl_dataframe()({"idx": [1, 3], "col1": ["a", "b"]})
-    right_data = PolarsDataframe.pl_dataframe()({"idx": [1, 2], "col2": ["x", "z"]})
-    idx = Index(("idx",))
+    if pl:
+        pl_dataframe = PolarsDataframe(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        dict_data = {"column1": [1, 2, 3], "column2": [4, 5, 6]}
+        expected_data = PolarsDataframe.pl_dataframe()(dict_data)
+        left_data = PolarsDataframe.pl_dataframe()({"idx": [1, 3], "col1": ["a", "b"]})
+        right_data = PolarsDataframe.pl_dataframe()({"idx": [1, 2], "col2": ["x", "z"]})
+        idx = Index(("idx",))
 
     def test_expected_data_framework(self) -> None:
         assert self.pl_dataframe.expected_data_framework() == pl.DataFrame

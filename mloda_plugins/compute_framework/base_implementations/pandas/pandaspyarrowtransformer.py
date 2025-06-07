@@ -24,10 +24,14 @@ class PandasPyarrowTransformer(BaseTransformer):
 
     @classmethod
     def framework(cls) -> Any:
+        if pd is None:
+            return NotImplementedError
         return pd.DataFrame
 
     @classmethod
     def other_framework(cls) -> Any:
+        if pa is None:
+            return NotImplementedError
         return pa.Table
 
     @classmethod

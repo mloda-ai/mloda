@@ -25,13 +25,13 @@ class PolarsPyarrowTransformer(BaseTransformer):
     @classmethod
     def framework(cls) -> Any:
         if pl is None:
-            raise ImportError("Polars is not installed. To be able to use this framework, please install polars.")
+            return NotImplementedError
         return pl.DataFrame
 
     @classmethod
     def other_framework(cls) -> Any:
         if pa is None:
-            raise ImportError("PyArrow is not installed. To be able to use this framework, please install pyarrow.")
+            return NotImplementedError
         return pa.Table
 
     @classmethod

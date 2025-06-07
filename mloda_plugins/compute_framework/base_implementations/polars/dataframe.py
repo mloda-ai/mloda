@@ -14,6 +14,16 @@ except ImportError:
 
 class PolarsDataframe(ComputeFrameWork):
     @staticmethod
+    def is_available() -> bool:
+        """Check if Polars is installed and available."""
+        try:
+            import polars
+
+            return True
+        except ImportError:
+            return False
+
+    @staticmethod
     def expected_data_framework() -> Any:
         return PolarsDataframe.pl_dataframe()
 

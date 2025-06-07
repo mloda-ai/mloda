@@ -410,6 +410,10 @@ def test_pyarrow_roundtrip():
 
 ### Phase 2: Performance Frameworks  
 - Implement Polars framework with PyArrow transformer
+- **Future TODO List (For Later Sessions)**:
+  1. **Lazy evaluation support** - `pl.LazyFrame` implementation
+  2. **Hide from mloda core discovery** - Ensure framework isn't auto-discovered if Polars not installed
+  3. **Feature group implementations** - Polars versions of existing feature groups
 - Implement DuckDB framework with PyArrow transformer
 - Add integration tests
 

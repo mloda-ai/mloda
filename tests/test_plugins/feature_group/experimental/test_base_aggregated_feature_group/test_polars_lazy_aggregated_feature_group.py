@@ -2,9 +2,7 @@ from typing import Any
 import pytest
 
 from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataframe
@@ -40,7 +38,7 @@ class PolarsLazyAggregatedTestDataCreator(AggregatedTestDataCreator):
 
 
 @pytest.fixture
-def sample_lazy_dataframe() -> pl.LazyFrame:
+def sample_lazy_dataframe() -> Any:
     """Create a sample Polars LazyFrame for testing."""
     if not POLARS_AVAILABLE:
         pytest.skip("Polars not available")
@@ -74,7 +72,7 @@ def feature_set_multiple() -> FeatureSet:
     return feature_set
 
 
-@pytest.mark.skipif(not POLARS_AVAILABLE, reason="Polars not available")
+@pytest.mark.skipif(pl is None, reason="Polars not available")
 class TestPolarsLazyAggregatedFeatureGroup:
     """Tests for the PolarsLazyAggregatedFeatureGroup class."""
 
@@ -232,7 +230,7 @@ class TestPolarsLazyAggregatedFeatureGroup:
             AggregatedFeatureGroup.AGGREGATION_TYPES = original_types
 
 
-@pytest.mark.skipif(not POLARS_AVAILABLE, reason="Polars not available")
+@pytest.mark.skipif(pl is None, reason="Polars not available")
 class TestPolarsLazyAggregationIntegration:
     """Integration tests for the Polars Lazy aggregated feature group using DataCreator."""
 

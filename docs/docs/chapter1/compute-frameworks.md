@@ -127,6 +127,8 @@ In this case, the feature group ExampleB will only run on the PyarrowTable frame
 |-----------|------------|-----------|----------|--------------|
 | **PandasDataframe** | pandas DataFrame | Rich data transformation, familiar API | Development, data exploration, smaller datasets | pandas, numpy |
 | **PyarrowTable** | Apache Arrow Tables | Memory-efficient, high performance, columnar format | Production, big data, interoperability | pyarrow |
+| **PolarsDataframe** | Polars DataFrame | Fast, memory-efficient, eager evaluation | Development, immediate results | polars |
+| **PolarsLazyDataframe** | Polars LazyFrame | Query optimization, lazy evaluation | Large datasets, performance optimization | polars |
 | **PythonDict** | List[Dict[str, Any]] | Zero dependencies, simple, lightweight | Minimal environments, education, prototyping | None (Python stdlib only) |
 
 ##### Automatic Dependency Detection
@@ -151,6 +153,23 @@ result = mlodaAPI.run_all(
     data_access_collection=data_access_collection
 )
 result[0]  # Returns List[Dict[str, Any]]
+```
+
+Example using Polars frameworks:
+``` python
+from mloda_core.abstract_plugins.components.feature import Feature
+
+# Using Polars eager evaluation
+feature_eager = Feature("id", options={"compute_framework": "PolarsDataframe"})
+
+# Using Polars lazy evaluation
+feature_lazy = Feature("id", options={"compute_framework": "PolarsLazyDataframe"})
+
+result = mlodaAPI.run_all(
+    [feature_eager], 
+    data_access_collection=data_access_collection
+)
+result[0]  # Returns polars.DataFrame
 ```
 
 #### 6. Summary

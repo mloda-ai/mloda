@@ -126,3 +126,29 @@ class PyArrowClusteringFeatureGroup(ClusteringFeatureGroup):
     def calculate_feature(cls, data, features):
         # PyArrow-specific clustering implementation
 ```
+
+For an aggregated feature group with Polars support:
+
+``` python
+# Base class (framework-agnostic)
+class AggregatedFeatureGroup(AbstractFeatureGroup):
+    def input_features(self, options, feature_name):
+        # Extract source features from feature name
+        
+    @classmethod
+    def calculate_feature(cls, data, features):
+        # This will be overridden by framework-specific implementations
+
+# Polars Lazy implementation
+class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
+    @classmethod
+    def compute_framework_rule(cls):
+        return {PolarsLazyDataframe}
+    
+    @classmethod
+    def calculate_feature(cls, data, features):
+        # Polars lazy-specific aggregation implementation
+        # Uses lazy evaluation for query optimization
+```
+
+Note that Polars supports both eager (`PolarsDataframe`) and lazy (`PolarsLazyDataframe`) evaluation modes, allowing you to choose the appropriate strategy based on your performance requirements.

@@ -34,6 +34,45 @@ class PolarsMergeEngine(BaseMergeEngine):
         combined = self.merge_append(left_data, right_data, left_index, right_index)
         return combined.unique()
 
+    def get_column_names(self, data: Any) -> list[str]:
+        """Get column names from data. Override in subclasses for different data types."""
+        return list(data.columns)
+
+    def is_empty_data(self, data: Any) -> bool:
+        """Check if data is empty. Override in subclasses for different data types."""
+        return len(data) == 0
+
+    def column_exists_in_result(self, result: Any, column_name: str) -> bool:
+        """Check if column exists in result. Override in subclasses for different data types."""
+        return column_name in result.columns
+
+    def handle_empty_data(self, left_data: Any, right_data: Any, left_idx: str, right_idx: str) -> Any:
+        """Handle empty data cases. Override in subclasses for different data types."""
+        if self.is_empty_data(left_data) or self.is_empty_data(right_data):
+            # For empty datasets, create compatible schemas
+            if self.is_empty_data(left_data) and self.is_empty_data(right_data):
+                # Both empty - return empty with combined schema
+                combined_schema = {}
+                for col in self.get_column_names(left_data):
+                    combined_schema[col] = left_data[col].dtype
+                for col in self.get_column_names(right_data):
+                    if col not in combined_schema:
+                        combined_schema[col] = right_data[col].dtype
+                return pl.DataFrame(schema=combined_schema)
+            elif self.is_empty_data(left_data):
+                # Left empty - ensure left has compatible schema with right join column
+                left_schema = dict(left_data.schema)
+                if left_idx in self.get_column_names(right_data):
+                    left_schema[left_idx] = right_data[right_idx].dtype
+                return pl.DataFrame(schema=left_schema)
+            else:
+                # Right empty - ensure right has compatible schema with left join column
+                right_schema = dict(right_data.schema)
+                if right_idx in self.get_column_names(left_data):
+                    right_schema[right_idx] = left_data[left_idx].dtype
+                return pl.DataFrame(schema=right_schema)
+        return None
+
     def join_logic(
         self, join_type: str, left_data: Any, right_data: Any, left_index: Index, right_index: Index, jointype: JoinType
     ) -> Any:
@@ -43,30 +82,10 @@ class PolarsMergeEngine(BaseMergeEngine):
         left_idx = left_index.index[0]
         right_idx = right_index.index[0]
 
-        # Handle empty DataFrames by ensuring compatible schemas
-        if len(left_data) == 0 or len(right_data) == 0:
-            # For empty datasets, create compatible schemas
-            if len(left_data) == 0 and len(right_data) == 0:
-                # Both empty - return empty with combined schema
-                combined_schema = {}
-                for col in left_data.columns:
-                    combined_schema[col] = left_data[col].dtype
-                for col in right_data.columns:
-                    if col not in combined_schema:
-                        combined_schema[col] = right_data[col].dtype
-                return pl.DataFrame(schema=combined_schema)
-            elif len(left_data) == 0:
-                # Left empty - ensure left has compatible schema with right join column
-                left_schema = dict(left_data.schema)
-                if left_idx in right_data.columns:
-                    left_schema[left_idx] = right_data[right_idx].dtype
-                left_data = pl.DataFrame(schema=left_schema)
-            else:
-                # Right empty - ensure right has compatible schema with left join column
-                right_schema = dict(right_data.schema)
-                if right_idx in left_data.columns:
-                    right_schema[right_idx] = left_data[left_idx].dtype
-                right_data = pl.DataFrame(schema=right_schema)
+        # Handle empty data cases
+        empty_result = self.handle_empty_data(left_data, right_data, left_idx, right_idx)
+        if empty_result is not None:
+            return empty_result
 
         # Perform the join with nulls_equal=True to match null values (updated parameter name)
         try:
@@ -84,7 +103,7 @@ class PolarsMergeEngine(BaseMergeEngine):
 
         # Handle duplicate join columns only for full outer joins when column names are the same
         right_col_name = f"{right_idx}_right"
-        if right_col_name in result.columns and join_type == "full" and left_idx == right_idx:
+        if self.column_exists_in_result(result, right_col_name) and join_type == "full" and left_idx == right_idx:
             # For full outer joins with same column names, coalesce the columns
             # Use the right column value when left is null, otherwise use left
             result = result.with_columns(
@@ -95,8 +114,12 @@ class PolarsMergeEngine(BaseMergeEngine):
             ).drop(right_col_name)
 
         # Ensure consistent column ordering: join column first, then left columns, then right columns
-        left_cols = [col for col in left_data.columns if col != left_idx]
-        right_cols = [col for col in right_data.columns if col != right_idx and col not in left_data.columns]
+        left_cols = [col for col in self.get_column_names(left_data) if col != left_idx]
+        right_cols = [
+            col
+            for col in self.get_column_names(right_data)
+            if col != right_idx and col not in self.get_column_names(left_data)
+        ]
 
         # For different join column names, include the right join column in the ordering
         if left_idx != right_idx:
@@ -106,7 +129,8 @@ class PolarsMergeEngine(BaseMergeEngine):
         desired_order = [left_idx] + left_cols + right_cols
 
         # Select columns in the desired order (only if they exist in result)
-        existing_cols = [col for col in desired_order if col in result.columns]
+        result_columns = self.get_column_names(result)
+        existing_cols = [col for col in desired_order if col in result_columns]
         result = result.select(existing_cols)
 
         return result

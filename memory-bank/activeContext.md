@@ -2,20 +2,13 @@
 
 ## Current Work Focus
 
-Successfully completed documentation updates for the new Polars lazy functionality! Updated the compute frameworks documentation to include both PolarsDataframe and PolarsLazyDataframe, providing users with information about the new lazy evaluation capabilities.
+Successfully completed comprehensive documentation updates for the new DuckDB compute framework implementation! Updated all relevant documentation files to include DuckDB support and created dedicated documentation for framework connection objects.
 
 ## Recent Changes
 
+*   **✅ COMPLETED: DuckDB Framework Documentation Updates:**
 *   **✅ COMPLETED: Documentation Updates for Polars Lazy Functionality:**
-    * Updated `docs/docs/chapter1/compute-frameworks.md` to include PolarsDataframe and PolarsLazyDataframe in the frameworks table
-    * Added simple usage examples showing both eager and lazy Polars evaluation modes
-    * Updated `docs/docs/in_depth/compute-framework-integration.md` with PolarsLazyAggregatedFeatureGroup example
-    * Updated memory bank progress.md to reflect the new Polars lazy implementation
 *   **✅ COMPLETED: Automatic Dependency Detection for Compute Frameworks:**
-    * Added `is_available()` static method to `ComputeFrameWork` base class
-    * Implemented dependency checking in all existing frameworks (Pandas, PyArrow, Polars)
-    * Updated `get_cfw_subclasses()` in `accessible_plugins.py` to filter unavailable frameworks
-    * Updated documentation in `docs/docs/chapter1/compute-frameworks.md`
 
 ## Previous Major Accomplishments
 

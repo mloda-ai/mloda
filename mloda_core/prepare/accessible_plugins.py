@@ -1,5 +1,6 @@
 from copy import deepcopy
 from typing import Optional, Set, Type
+from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 
@@ -12,7 +13,9 @@ FeatureGroupEnvironmentMapping = dict[Type[AbstractFeatureGroup], Set[Type[Compu
 
 class PreFilterPlugins:
     def __init__(
-        self, compute_frameworks: Set[Type[ComputeFrameWork]], plugin_collector: Optional[PlugInCollector] = None
+        self,
+        compute_frameworks: Set[Type[ComputeFrameWork]],
+        plugin_collector: Optional[PlugInCollector] = None,
     ) -> None:
         feature_groups = self._set_feature_groups(plugin_collector)
         compute_frameworks = self._set_compute_frameworks(compute_frameworks)
@@ -38,7 +41,10 @@ class PreFilterPlugins:
             raise ValueError("No accessible feature groups found.")
         return accessible_feature_groups
 
-    def _set_compute_frameworks(self, compute_frameworks: Set[Type[ComputeFrameWork]]) -> Set[Type[ComputeFrameWork]]:
+    def _set_compute_frameworks(
+        self,
+        compute_frameworks: Set[Type[ComputeFrameWork]],
+    ) -> Set[Type[ComputeFrameWork]]:
         return compute_frameworks.intersection(self.get_cfw_subclasses())
 
     def resolve_feature_group_compute_framework_limitations(

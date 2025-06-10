@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Optional
 
 from mloda_core.abstract_plugins.components.framework_transformer.base_transformer import BaseTransformer
 
@@ -59,5 +59,5 @@ class PandasPyarrowTransformer(BaseTransformer):
         return pa.Table.from_arrays(pyarrow_table.columns, schema=new_schema)
 
     @classmethod
-    def transform_other_fw_to_fw(cls, data: Any) -> Any:
+    def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Optional[Any] = None) -> Any:
         return pa.Table.to_pandas(data)

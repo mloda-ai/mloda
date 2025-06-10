@@ -48,9 +48,9 @@ class TimeTravelPositiveFilterTest(AbstractFeatureGroup):
             {
                 cls.get_class_name(): [1, 2, 3],
                 "time_filter": [
-                    date.today().strftime("%Y-%m-%dT%H:%M:%S.%f%z"),
-                    "2025-04-13T20:40:48.546012+00:00",
-                    "2025-04-13T20:40:48.546012+00:00",
+                    (datetime.now(tz=timezone.utc) - timedelta(days=10)).isoformat(),  # 10 days ago - within range
+                    (datetime.now(tz=timezone.utc) - timedelta(days=30)).isoformat(),  # 30 days ago - outside range
+                    (datetime.now(tz=timezone.utc) - timedelta(days=30)).isoformat(),  # 30 days ago - outside range
                 ],
             }
         )

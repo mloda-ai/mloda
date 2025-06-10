@@ -1,6 +1,7 @@
 from abc import ABC
 from typing import Any, List, Optional, Set, Type, Union, final
 from uuid import UUID, uuid4
+from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda_core.abstract_plugins.components.framework_transformer.cfw_transformer import (
     ComputeFrameworkTransformer,
 )
@@ -60,6 +61,9 @@ class ComputeFrameWork(ABC):
         # collects all datasets which were created based on this feature group except if it is the !final! feature
         self.object_ids: List[str] = []
 
+        # connection object for frameworks that need persistent connections (e.g., DuckDB, Spark)
+        self.framework_connection_object: Optional[Any] = None
+
     @staticmethod
     def expected_data_framework() -> Any:
         """
@@ -74,13 +78,6 @@ class ComputeFrameWork(ABC):
         The BaseFilterEngine should be overwritten by the appropriate ComputeFrameWork if needed
         """
         raise NotImplementedError
-
-    @staticmethod
-    def get_framework_transform_functions(from_other: bool, other: Any) -> Any:
-        """
-        This function is used to transfor data from one expected data framework to another.
-        """
-        return None, {}
 
     def transform(
         self,
@@ -112,7 +109,7 @@ class ComputeFrameWork(ABC):
         _to_fw = self.expected_data_framework()
         transformer_cls = self.transformer.transformer_map.get((_from_fw, _to_fw), None)
         if transformer_cls is not None:
-            return transformer_cls.transform(_from_fw, _to_fw, data)
+            return transformer_cls.transform(_from_fw, _to_fw, data, self.framework_connection_object)
 
         return None
 
@@ -135,6 +132,19 @@ class ComputeFrameWork(ABC):
         raise NotImplementedError(
             f"Merge functionality is for this compute framework not implemented {self.__class__.__name__}."
         )
+
+    def set_framework_connection_object(self, framework_connection_object: Optional[Any] = None) -> None:
+        """
+        Some compute frameworks (e.g., DuckDB, Spark) require sharing their connection
+        with merge engines to ensure data consistency. Override this method in
+        subclasses that need to provide a connection object.
+        """
+        self.framework_connection_object = None
+
+    @final
+    def get_framework_connection_object(self) -> Any:
+        """This method retrieves the connection object set by `set_framework_connection_object`."""
+        return self.framework_connection_object
 
     def set_column_names(self) -> None:
         pass
@@ -168,6 +178,8 @@ class ComputeFrameWork(ABC):
         names = features.get_all_names()
 
         if not isinstance(data, self.expected_data_framework()):
+            # if data is not in the expected data framework, we need to transform it and for this, we may need the framework connection object
+            self.set_framework_connection_object(features.get_options_key(feature_group.get_class_name()))
             self.data = self.transform(data, names)
         else:
             self.data = data
@@ -360,7 +372,7 @@ class ComputeFrameWork(ABC):
 
             transformer_cls = self.transformer.transformer_map.get((_from_fw, _to_fw), None)
             if transformer_cls is not None:
-                self.data = transformer_cls.transform(_from_fw, _to_fw, self.data)
+                self.data = transformer_cls.transform(_from_fw, _to_fw, self.data, self.framework_connection_object)
 
         FlightServer.upload_table(location, self.data, _object_id)
         self.object_ids.append(_object_id)
@@ -379,7 +391,7 @@ class ComputeFrameWork(ABC):
 
         transformer_cls = transformer.transformer_map.get((_from_fw, _to_fw), None)
         if transformer_cls is not None:
-            return transformer_cls.transform(_from_fw, _to_fw, data)
+            return transformer_cls.transform(_from_fw, _to_fw, data, None)
 
         raise ValueError(
             f"Conversion from {type(data)} to {cls.expected_data_framework()} is not supported. This can be created, when a flyserver was used."

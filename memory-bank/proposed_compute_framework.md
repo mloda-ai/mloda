@@ -29,7 +29,7 @@ class PandasPyarrowTransformer(BaseTransformer):
         # Pandas → PyArrow conversion
         
     @classmethod
-    def transform_other_fw_to_fw(cls, data: Any) -> Any:
+    def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Optional[Any] = None) -> Any:
         # PyArrow → Pandas conversion
 ```
 

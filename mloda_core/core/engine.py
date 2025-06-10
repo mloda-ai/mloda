@@ -287,7 +287,7 @@ class Engine:
         """Handles recursion for input features of a feature group."""
         feature_group = feature_group_class()
 
-        options = deepcopy(options)
+        # options = deepcopy(options)
 
         try:
             input_features = feature_group.input_features(options, feature_name)

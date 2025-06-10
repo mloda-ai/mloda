@@ -1,6 +1,5 @@
 | Name                                   | Version         | License                                                 |
 |----------------------------------------|-----------------|---------------------------------------------------------|
-| Deprecated                             | 1.2.18          | MIT License                                             |
 | Jinja2                                 | 3.1.6           | BSD License                                             |
 | MarkupSafe                             | 3.0.2           | BSD License                                             |
 | PyYAML                                 | 6.0.2           | MIT License                                             |
@@ -30,6 +29,7 @@
 | decorator                              | 5.2.1           | BSD License                                             |
 | defusedxml                             | 0.7.1           | Python Software Foundation License                      |
 | distlib                                | 0.3.9           | Python Software Foundation License                      |
+| duckdb                                 | 1.3.0           | MIT License                                             |
 | exceptiongroup                         | 1.3.0           | MIT License                                             |
 | execnet                                | 2.1.1           | MIT License                                             |
 | executing                              | 2.2.0           | MIT License                                             |
@@ -38,8 +38,8 @@
 | fqdn                                   | 1.5.1           | Mozilla Public License 2.0 (MPL 2.0)                    |
 | google-ai-generativelanguage           | 0.6.15          | Apache Software License                                 |
 | google-api-core                        | 2.25.0          | Apache Software License                                 |
-| google-api-python-client               | 2.170.0         | Apache Software License                                 |
-| google-auth                            | 2.40.2          | Apache Software License                                 |
+| google-api-python-client               | 2.171.0         | Apache Software License                                 |
+| google-auth                            | 2.40.3          | Apache Software License                                 |
 | google-auth-httplib2                   | 0.2.0           | Apache Software License                                 |
 | google-generativeai                    | 0.8.5           | Apache Software License                                 |
 | googleapis-common-protos               | 1.70.0          | Apache Software License                                 |
@@ -50,7 +50,7 @@
 | httplib2                               | 0.22.0          | MIT License                                             |
 | httpx                                  | 0.28.1          | BSD License                                             |
 | idna                                   | 3.10            | BSD License                                             |
-| importlib_metadata                     | 8.6.1           | Apache Software License                                 |
+| importlib_metadata                     | 8.7.0           | Apache Software License                                 |
 | iniconfig                              | 2.1.0           | MIT License                                             |
 | ipykernel                              | 6.29.5          | BSD License                                             |
 | ipython                                | 8.37.0          | BSD License                                             |
@@ -86,16 +86,16 @@
 | notebook                               | 7.4.3           | BSD License                                             |
 | notebook_shim                          | 0.2.4           | BSD License                                             |
 | numpy                                  | 2.2.6           | BSD License                                             |
-| opentelemetry-api                      | 1.33.1          | Apache Software License                                 |
-| opentelemetry-instrumentation          | 0.54b1          | Apache Software License                                 |
-| opentelemetry-instrumentation-logging  | 0.54b1          | Apache Software License                                 |
-| opentelemetry-instrumentation-requests | 0.54b1          | Apache Software License                                 |
-| opentelemetry-sdk                      | 1.33.1          | Apache Software License                                 |
-| opentelemetry-semantic-conventions     | 0.54b1          | Apache Software License                                 |
-| opentelemetry-util-http                | 0.54b1          | Apache Software License                                 |
+| opentelemetry-api                      | 1.34.0          | Apache Software License                                 |
+| opentelemetry-instrumentation          | 0.55b0          | Apache Software License                                 |
+| opentelemetry-instrumentation-logging  | 0.55b0          | Apache Software License                                 |
+| opentelemetry-instrumentation-requests | 0.55b0          | Apache Software License                                 |
+| opentelemetry-sdk                      | 1.34.0          | Apache Software License                                 |
+| opentelemetry-semantic-conventions     | 0.55b0          | Apache Software License                                 |
+| opentelemetry-util-http                | 0.55b0          | Apache Software License                                 |
 | overrides                              | 7.7.0           | Apache License, Version 2.0                             |
 | packaging                              | 25.0            | Apache Software License; BSD License                    |
-| pandas                                 | 2.2.3           | BSD License                                             |
+| pandas                                 | 2.3.0           | BSD License                                             |
 | pandera                                | 0.24.0          | MIT License                                             |
 | pandocfilters                          | 1.5.1           | BSD License                                             |
 | parso                                  | 0.8.4           | MIT License                                             |
@@ -136,8 +136,8 @@
 | rich                                   | 14.0.0          | MIT License                                             |
 | rpds-py                                | 0.25.1          | MIT                                                     |
 | rsa                                    | 4.9.1           | Apache Software License                                 |
-| ruff                                   | 0.11.12         | MIT License                                             |
-| scikit-learn                           | 1.6.1           | BSD License                                             |
+| ruff                                   | 0.11.13         | MIT License                                             |
+| scikit-learn                           | 1.7.0           | BSD License                                             |
 | scipy                                  | 1.15.3          | BSD License                                             |
 | six                                    | 1.17.0          | MIT License                                             |
 | sniffio                                | 1.3.1           | Apache Software License; MIT License                    |
@@ -152,7 +152,7 @@
 | tox                                    | 4.26.0          | MIT License                                             |
 | tqdm                                   | 4.67.1          | MIT License; Mozilla Public License 2.0 (MPL 2.0)       |
 | traitlets                              | 5.14.3          | BSD License                                             |
-| typeguard                              | 4.4.2           | MIT License                                             |
+| typeguard                              | 4.4.3           | MIT License                                             |
 | types-python-dateutil                  | 2.9.0.20250516  | UNKNOWN                                                 |
 | types-requests                         | 2.32.0.20250602 | UNKNOWN                                                 |
 | types-toml                             | 0.10.8.20240310 | Apache Software License                                 |
@@ -168,4 +168,4 @@
 | webencodings                           | 0.5.1           | BSD License                                             |
 | websocket-client                       | 1.8.0           | Apache Software License                                 |
 | wrapt                                  | 1.17.2          | BSD License                                             |
-| zipp                                   | 3.22.0          | UNKNOWN                                                 |
+| zipp                                   | 3.23.0          | UNKNOWN                                                 |

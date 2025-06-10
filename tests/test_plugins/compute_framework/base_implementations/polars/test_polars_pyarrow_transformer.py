@@ -53,7 +53,7 @@ class TestPolarsPyarrowTransformer:
         arrow_table = pa.table({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.1, 2.2, 3.3]})
 
         # Transform to Polars
-        df = PolarsPyarrowTransformer.transform_other_fw_to_fw(arrow_table)
+        df = PolarsPyarrowTransformer.transform_other_fw_to_fw(arrow_table, None)
 
         # Verify it's a Polars DataFrame
         assert isinstance(df, pl.DataFrame)
@@ -77,7 +77,7 @@ class TestPolarsPyarrowTransformer:
 
         # Roundtrip: Polars -> PyArrow -> Polars
         arrow_table = PolarsPyarrowTransformer.transform_fw_to_other_fw(original_df)
-        restored_df = PolarsPyarrowTransformer.transform_other_fw_to_fw(arrow_table)
+        restored_df = PolarsPyarrowTransformer.transform_other_fw_to_fw(arrow_table, None)
 
         # Verify data integrity
         assert restored_df.equals(original_df)
@@ -89,7 +89,7 @@ class TestPolarsPyarrowTransformer:
 
         # Transform to PyArrow and back
         arrow_table = PolarsPyarrowTransformer.transform_fw_to_other_fw(empty_df)
-        restored_df = PolarsPyarrowTransformer.transform_other_fw_to_fw(arrow_table)
+        restored_df = PolarsPyarrowTransformer.transform_other_fw_to_fw(arrow_table, None)
 
         # Verify structure is preserved
         assert len(restored_df) == 0
@@ -104,7 +104,7 @@ class TestPolarsPyarrowTransformer:
 
         # Roundtrip transformation
         arrow_table = PolarsPyarrowTransformer.transform_fw_to_other_fw(df_with_nulls)
-        restored_df = PolarsPyarrowTransformer.transform_other_fw_to_fw(arrow_table)
+        restored_df = PolarsPyarrowTransformer.transform_other_fw_to_fw(arrow_table, None)
 
         # Verify null values are preserved
         assert restored_df.equals(df_with_nulls)
@@ -115,11 +115,11 @@ class TestPolarsPyarrowTransformer:
         df = pl.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
 
         # Test Polars -> PyArrow transformation
-        arrow_result = PolarsPyarrowTransformer.transform(pl.DataFrame, pa.Table, df)
+        arrow_result = PolarsPyarrowTransformer.transform(pl.DataFrame, pa.Table, df, None)
         assert isinstance(arrow_result, pa.Table)
 
         # Test PyArrow -> Polars transformation
-        polars_result = PolarsPyarrowTransformer.transform(pa.Table, pl.DataFrame, arrow_result)
+        polars_result = PolarsPyarrowTransformer.transform(pa.Table, pl.DataFrame, arrow_result, None)
         assert isinstance(polars_result, pl.DataFrame)
         assert polars_result.equals(df)
 
@@ -128,4 +128,4 @@ class TestPolarsPyarrowTransformer:
         df = pl.DataFrame({"a": [1, 2, 3]})
 
         with pytest.raises(ValueError):
-            PolarsPyarrowTransformer.transform(list, dict, df)
+            PolarsPyarrowTransformer.transform(list, dict, df, None)

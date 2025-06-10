@@ -33,9 +33,11 @@ class JoinStep(Step):
 
     def _merge_data(self, cfw: ComputeFrameWork, from_cfw_data: Any) -> None:
         """Merges data from another ComputeFramework into the current one."""
-        merge_engine = cfw.merge_engine()
+        merge_engine_class = cfw.merge_engine()
+        framework_connection = cfw.get_framework_connection_object()
+        merge_engine_instance = merge_engine_class(framework_connection)
 
-        cfw.data = merge_engine().merge(
+        cfw.data = merge_engine_instance.merge(
             cfw.data, from_cfw_data, self.link.jointype, self.link.left_index, self.link.right_index
         )
 

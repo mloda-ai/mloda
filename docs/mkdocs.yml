@@ -23,9 +23,11 @@ nav:
   - In Depth - Advanced:
     - Data quality: in_depth/data-quality.md
     - Domain concept: in_depth/domain.md
+    - Data Access Patterns: in_depth/data-access-patterns.md
     - Compute Frameworks:
       - Framework Transformers: in_depth/framework-transformers.md
       - Compute Framework Integration: in_depth/compute-framework-integration.md
+      - Framework Connection Object: in_depth/framework-connection-object.md
     - Feature Groups:
       - Feature Chain Parser: in_depth/feature-chain-parser.md
       - Feature Group Matching: in_depth/feature-group-matching.md
@@ -42,11 +44,7 @@ nav:
     - Need Help: need-help.md
 
   # todo
-  #- Data Quality in Depth: need-help.md
   #- License in Depth: need-help.md
-  #- Feature in Depth
-  #- Feature Groups in Depth: need-help.md
-  #- Compute Frameworks in Depth: need-help.md
   #- Extender in Depth: need-help.md
 
 theme:

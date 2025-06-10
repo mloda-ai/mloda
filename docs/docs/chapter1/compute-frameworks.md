@@ -129,6 +129,7 @@ In this case, the feature group ExampleB will only run on the PyarrowTable frame
 | **PyarrowTable** | Apache Arrow Tables | Memory-efficient, high performance, columnar format | Production, big data, interoperability | pyarrow |
 | **PolarsDataframe** | Polars DataFrame | Fast, memory-efficient, eager evaluation | Development, immediate results | polars |
 | **PolarsLazyDataframe** | Polars LazyFrame | Query optimization, lazy evaluation | Large datasets, performance optimization | polars |
+| **DuckDBFramework** | DuckDB Relations | SQL interface, fast analytics, OLAP queries | Analytical workloads, SQL-based transformations, data warehousing | duckdb |
 | **PythonDict** | List[Dict[str, Any]] | Zero dependencies, simple, lightweight | Minimal environments, education, prototyping | None (Python stdlib only) |
 
 ##### Automatic Dependency Detection
@@ -172,6 +173,30 @@ result = mlodaAPI.run_all(
 result[0]  # Returns polars.DataFrame
 ```
 
+Example using DuckDB framework:
+``` python
+from mloda_core.abstract_plugins.components.feature import Feature
+import duckdb
+
+# Create DuckDB connection
+connection = duckdb.connect()
+
+# Set up data access with connection
+data_access_collection = DataAccessCollection(
+    initialized_connection_object={connection}
+)
+
+feature = Feature("id", options={"compute_framework": "DuckDBFramework"})
+
+result = mlodaAPI.run_all(
+    [feature], 
+    data_access_collection=data_access_collection
+)
+result[0]  # Returns duckdb.DuckDBPyRelation
+```
+
+**Note**: DuckDB framework requires a connection object and does not support mloda framework inherent multiprocessing. Multiprocessing from DuckDB still works. It's optimized for analytical workloads and provides SQL-like operations on data.
+
 #### 6. Summary
 
 mloda's compute framework adds flexibility, allowing you to select the best tool for different stages of data and feature engineering. While it introduces some complexity, it's invaluable for comparing technologies and managing environments.
@@ -184,3 +209,4 @@ For more in-depth information about compute frameworks, check out these advanced
 
 - [Framework Transformers](../in_depth/framework-transformers.md) - How data is transformed between different compute frameworks
 - [Compute Framework Integration](../in_depth/compute-framework-integration.md) - How feature groups integrate with different compute frameworks
+- [Framework Connection Object](../in_depth/framework-connection-object.md) - How stateful frameworks manage persistent connections and state

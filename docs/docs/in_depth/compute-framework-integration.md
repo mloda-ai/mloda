@@ -152,3 +152,31 @@ class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
 ```
 
 Note that Polars supports both eager (`PolarsDataframe`) and lazy (`PolarsLazyDataframe`) evaluation modes, allowing you to choose the appropriate strategy based on your performance requirements.
+
+For an analytical feature group with DuckDB support:
+
+``` python
+# Base class (framework-agnostic)
+class AnalyticalFeatureGroup(AbstractFeatureGroup):
+    def input_features(self, options, feature_name):
+        # Extract source features from feature name
+        
+    @classmethod
+    def calculate_feature(cls, data, features):
+        # This will be overridden by framework-specific implementations
+
+# DuckDB implementation
+class DuckDBAnalyticalFeatureGroup(AnalyticalFeatureGroup):
+    @classmethod
+    def compute_framework_rule(cls):
+        return {DuckDBFramework}
+    
+    @classmethod
+    def calculate_feature(cls, data, features):
+        # DuckDB-specific analytical implementation
+        # Uses SQL-like operations for complex analytics
+        # Example: data.aggregate("column", "sum").df()
+        return data.aggregate("value_column", "sum")
+```
+
+**Important**: DuckDB feature groups require a connection object to be available. The framework will automatically handle connection management, but ensure your data access collection includes the necessary connection information.

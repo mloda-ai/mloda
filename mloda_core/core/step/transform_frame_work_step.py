@@ -114,7 +114,7 @@ class TransformFrameworkStep(Step):
         _to_fw = self.to_framework.expected_data_framework()
 
         transformer_cls = self.transformer.transformer_map[(_from_fw, _to_fw)]
-        data = transformer_cls.transform(_from_fw, _to_fw, data)
+        data = transformer_cls.transform(_from_fw, _to_fw, data, cfw.framework_connection_object)
 
         return data
 

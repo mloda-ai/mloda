@@ -16,6 +16,7 @@ from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
 from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
+from mloda_core.abstract_plugins.components.match_data.match_data import MatchData, MatchData
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
@@ -247,6 +248,9 @@ class AbstractFeatureGroup(ABC):
         if cls._is_root_and_matches_input_data(feature_name, options, data_access_collection):
             return True
 
+        if cls._matches_data(feature_name, options, data_access_collection):
+            return True
+
         if cls.feature_name_equal_to_class_name(feature_name):
             return True
 
@@ -417,3 +421,25 @@ class AbstractFeatureGroup(ABC):
         Requires: chainable feature!
         """
         return None
+
+    @final
+    @classmethod
+    def _matches_data(
+        cls, feature_name: str, options: Options, data_access_collection: Optional[DataAccessCollection]
+    ) -> bool:
+        """
+        This functionality is for matching data, when a data access is necessary.
+        This is relevant for compute frameworks which need a connection object.
+
+        To be used, create a class like this:
+
+        class MyMatchData(AbstractFeatureGroup, MatchData):
+            ...
+
+        and then create the function match_data_access.
+        """
+
+        if not issubclass(cls, MatchData):
+            return False
+
+        return cls.matches(feature_name, options, data_access_collection)

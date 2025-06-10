@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Any, Type, final
+from typing import Any, Optional, Type, final
 
 
 class BaseTransformer:
@@ -83,7 +83,9 @@ class BaseTransformer:
 
     @final
     @classmethod
-    def transform(cls, framework: Type[Any], other_framework: Type[Any], data: Any) -> Any:
+    def transform(
+        cls, framework: Type[Any], other_framework: Type[Any], data: Any, framework_connection_object: Optional[Any]
+    ) -> Any:
         """Transform data from one framework to another."""
 
         orientation = cls.identify_orientation(framework, other_framework)
@@ -96,7 +98,7 @@ class BaseTransformer:
         if orientation == "left":
             return cls.transform_fw_to_other_fw(data)
         if orientation == "right":
-            return cls.transform_other_fw_to_fw(data)
+            return cls.transform_other_fw_to_fw(data, framework_connection_object)
 
         raise ValueError(
             f"How did you get here after right/left? Framework {framework} or {other_framework} not supported by {cls.__name__}"
@@ -162,7 +164,7 @@ class BaseTransformer:
 
     @classmethod
     @abstractmethod
-    def transform_other_fw_to_fw(cls, data: Any) -> Any:
+    def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Optional[Any] = None) -> Any:
         """
         Transform data from the secondary framework to the primary framework.
 

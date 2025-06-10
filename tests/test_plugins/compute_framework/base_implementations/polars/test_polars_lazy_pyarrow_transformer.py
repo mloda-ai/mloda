@@ -1,5 +1,5 @@
 import pytest
-from typing import Any
+from typing import Optional
 from unittest.mock import patch
 
 from mloda_plugins.compute_framework.base_implementations.polars.polars_lazy_pyarrow_transformer import (
@@ -132,7 +132,7 @@ class TestPolarsLazyPyarrowTransformerEquivalence:
         arrow_table = pa.table(self.test_data)
 
         # Transform using both transformers
-        eager_result = PolarsPyarrowTransformer.transform_other_fw_to_fw(arrow_table)
+        eager_result = PolarsPyarrowTransformer.transform_other_fw_to_fw(arrow_table, None)
         lazy_result = PolarsLazyPyarrowTransformer.transform_other_fw_to_fw(arrow_table)
 
         # Collect lazy result and compare

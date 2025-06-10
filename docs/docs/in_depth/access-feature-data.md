@@ -10,6 +10,8 @@ This framework provides several structured mechanisms for features to access and
 
 These methods ensure efficient data management while maintaining flexibility and scalability. A typical scenario involves a complex feature relying on three input features. These input features, in turn, may depend on other input features or load data using ApiData.
 
+> **Advanced**: For a detailed explanation of the underlying data access patterns (BaseInputData vs MatchData), see [Data Access Patterns](data-access-patterns.md).
+
 #### DataAccessCollection - global data access
 
 The DataAccessCollection is designed to control the access to data of any kind. The main purpose of this class is to organize and simplify interactions with these different data elements, making it easier to work to ingest data of various form into the framework. It provides as an interface for accessing and storing of data on a global level.
@@ -321,6 +323,3 @@ AInputFeatureGroup
 ```
 
 As the input features can be fulfilled by **multiple other features**, we can have the same processes running in different environments, migrations and processes.
-
-
-

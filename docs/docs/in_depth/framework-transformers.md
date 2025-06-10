@@ -55,6 +55,25 @@ Key features:
 - Handles metadata properly during transformations
 - Ensures clean conversion by removing framework-specific metadata
 
+### DuckDBPyarrowTransformer
+
+The `DuckDBPyarrowTransformer` is a concrete implementation of `BaseTransformer` that handles conversions between DuckDB Relations and PyArrow Tables.
+
+``` python
+class DuckDBPyarrowTransformer(BaseTransformer):
+    """
+    Transformer for converting between DuckDB relations and PyArrow Table.
+    """
+```
+
+Key features:
+- Converts DuckDB Relations to PyArrow Tables and vice versa
+- Leverages DuckDB's native PyArrow integration for efficient zero-copy operations
+- Requires a DuckDB connection object for PyArrow → DuckDB transformations
+- Uses DuckDB's `to_arrow_table()` and `from_arrow()` methods for optimal performance
+
+**Important**: The DuckDB transformer requires a connection object when transforming from PyArrow to DuckDB. This is because DuckDB relations must be associated with a specific database connection.
+
 ## How Framework Transformers Work
 
 ### Registration Process
@@ -85,6 +104,16 @@ Or in the reverse direction:
 PyArrow Table → PandasPyarrowTransformer → Pandas DataFrame
 ```
 
+For DuckDB transformations:
+
+```
+DuckDB Relation → DuckDBPyarrowTransformer → PyArrow Table
+```
+
+```
+PyArrow Table → DuckDBPyarrowTransformer → DuckDB Relation (requires connection)
+```
+
 ## Creating Custom Transformers
 
 To create a custom transformer for a new pair of frameworks:
@@ -101,7 +130,7 @@ To create a custom transformer for a new pair of frameworks:
 Example:
 
 ```python
-from typing import Any
+from typing import Any, Optional
 
 class CustomTransformer(BaseTransformer):
     @classmethod
@@ -126,7 +155,7 @@ class CustomTransformer(BaseTransformer):
         return other_framework.from_custom(data)
 
     @classmethod
-    def transform_other_fw_to_fw(cls, data: Any) -> Any:
+    def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Optional[Any] = None) -> Any:
         # Convert from OtherFramework to CustomFramework
         return custom_framework.from_other(data)
 ```

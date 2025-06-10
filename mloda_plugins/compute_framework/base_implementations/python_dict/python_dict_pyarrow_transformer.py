@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Optional
 
 from mloda_core.abstract_plugins.components.framework_transformer.base_transformer import BaseTransformer
 
@@ -78,7 +78,7 @@ class PythonDictPyarrowTransformer(BaseTransformer):
         return pa.Table.from_pylist(data)
 
     @classmethod
-    def transform_other_fw_to_fw(cls, data: Any) -> Any:
+    def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Optional[Any] = None) -> Any:
         """
         Transform a PyArrow Table to a List[Dict].
 

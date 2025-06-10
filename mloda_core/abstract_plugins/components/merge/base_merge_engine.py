@@ -1,5 +1,5 @@
 from abc import ABC
-from typing import Any, final
+from typing import Any, Optional, final
 
 from mloda_core.abstract_plugins.components.index.index import Index
 from mloda_core.abstract_plugins.components.link import JoinType
@@ -13,6 +13,17 @@ class BaseMergeEngine(ABC):
     between two datasets, based on the specified join type. Subclasses are expected to
     implement the merge methods for specific join types as needed.
     """
+
+    def __init__(self, framework_connection: Optional[Any] = None) -> None:
+        """
+        Initialize the merge engine.
+
+        Args:
+            framework_connection: Optional connection object from the compute framework.
+                                Some frameworks (e.g., DuckDB, Spark) need to share their
+                                connection with merge engines for data consistency.
+        """
+        self.framework_connection = framework_connection
 
     def check_import(self) -> None:
         """

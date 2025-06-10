@@ -74,6 +74,9 @@
 *   **Completed Polars Lazy Compute Framework Implementation:**
     * Implemented PolarsLazyDataframe class for lazy evaluation support
     * Implemented PolarsLazyAggregatedFeatureGroup for aggregated feature groups with lazy evaluation
+*   **Completed DuckDB Compute Framework Implementation:**
+    * Implemented DuckDBFramework class with SQL interface and analytical capabilities
+    * Added framework connection object support for stateful database connections
 
 
 ## What's Left to Build

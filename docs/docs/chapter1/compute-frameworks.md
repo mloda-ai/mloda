@@ -130,6 +130,7 @@ In this case, the feature group ExampleB will only run on the PyarrowTable frame
 | **PolarsDataframe** | Polars DataFrame | Fast, memory-efficient, eager evaluation | Development, immediate results | polars |
 | **PolarsLazyDataframe** | Polars LazyFrame | Query optimization, lazy evaluation | Large datasets, performance optimization | polars |
 | **DuckDBFramework** | DuckDB Relations | SQL interface, fast analytics, OLAP queries | Analytical workloads, SQL-based transformations, data warehousing | duckdb |
+| **IcebergFramework** | Apache Iceberg Tables | Schema evolution, time travel, data lake management | Data lake scenarios, versioned datasets, large-scale analytics | pyiceberg, pyarrow |
 | **PythonDict** | List[Dict[str, Any]] | Zero dependencies, simple, lightweight | Minimal environments, education, prototyping | None (Python stdlib only) |
 
 ##### Automatic Dependency Detection
@@ -196,6 +197,35 @@ result[0]  # Returns duckdb.DuckDBPyRelation
 ```
 
 **Note**: DuckDB framework requires a connection object and does not support mloda framework inherent multiprocessing. Multiprocessing from DuckDB still works. It's optimized for analytical workloads and provides SQL-like operations on data.
+
+Example using Iceberg framework:
+``` python
+from mloda_core.abstract_plugins.components.feature import Feature
+from pyiceberg.catalog import load_catalog
+
+# Create Iceberg catalog (example with REST catalog)
+catalog = load_catalog("default", **{
+    "uri": "http://localhost:8181",
+    "credential": "client-credentials",
+    "client.id": "admin",
+    "client.secret": "password"
+})
+
+# Set up data access with catalog
+data_access_collection = DataAccessCollection(
+    initialized_connection_objects={catalog}
+)
+
+feature = Feature("id", options={"compute_framework": "IcebergFramework"})
+
+result = mlodaAPI.run_all(
+    [feature], 
+    data_access_collection=data_access_collection
+)
+result[0]  # Returns pyiceberg.table.Table or pyarrow.Table
+```
+
+**Note**: Iceberg framework requires a catalog connection object for table operations. It's optimized for data lake scenarios with schema evolution, time travel capabilities, and large-scale analytics. The framework uses PyArrow as an interchange format for compatibility with other mloda frameworks.
 
 #### 6. Summary
 

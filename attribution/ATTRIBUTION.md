@@ -36,6 +36,7 @@
 | fastjsonschema                         | 2.21.1          | BSD License                                             |
 | filelock                               | 3.18.0          | The Unlicense (Unlicense)                               |
 | fqdn                                   | 1.5.1           | Mozilla Public License 2.0 (MPL 2.0)                    |
+| fsspec                                 | 2025.5.1        | BSD License                                             |
 | google-ai-generativelanguage           | 0.6.15          | Apache Software License                                 |
 | google-api-core                        | 2.25.0          | Apache Software License                                 |
 | google-api-python-client               | 2.171.0         | Apache Software License                                 |
@@ -76,6 +77,7 @@
 | mermaid-py                             | 0.8.0           | MIT License                                             |
 | mistune                                | 3.1.3           | BSD License                                             |
 | mktestdocs                             | 0.2.4           | Apache Software License 2.0                             |
+| mmh3                                   | 5.1.0           | MIT License                                             |
 | mypy                                   | 1.16.0          | MIT License                                             |
 | mypy_extensions                        | 1.1.0           | UNKNOWN                                                 |
 | nbclient                               | 0.10.2          | BSD License                                             |
@@ -118,6 +120,7 @@
 | pycparser                              | 2.22            | BSD License                                             |
 | pydantic                               | 2.11.5          | MIT License                                             |
 | pydantic_core                          | 2.33.2          | MIT License                                             |
+| pyiceberg                              | 0.9.1           | Apache Software License                                 |
 | pyparsing                              | 3.2.3           | MIT License                                             |
 | pyproject-api                          | 1.9.1           | MIT License                                             |
 | pytest                                 | 8.4.0           | MIT License                                             |
@@ -133,7 +136,7 @@
 | requests                               | 2.32.3          | Apache Software License                                 |
 | rfc3339-validator                      | 0.1.4           | MIT License                                             |
 | rfc3986-validator                      | 0.1.1           | MIT License                                             |
-| rich                                   | 14.0.0          | MIT License                                             |
+| rich                                   | 13.9.4          | MIT License                                             |
 | rpds-py                                | 0.25.1          | MIT                                                     |
 | rsa                                    | 4.9.1           | Apache Software License                                 |
 | ruff                                   | 0.11.13         | MIT License                                             |
@@ -141,9 +144,12 @@
 | scipy                                  | 1.15.3          | BSD License                                             |
 | six                                    | 1.17.0          | MIT License                                             |
 | sniffio                                | 1.3.1           | Apache Software License; MIT License                    |
+| sortedcontainers                       | 2.4.0           | Apache Software License                                 |
 | soupsieve                              | 2.7             | MIT License                                             |
 | stack-data                             | 0.6.3           | MIT License                                             |
 | stevedore                              | 5.4.1           | Apache Software License                                 |
+| strictyaml                             | 1.7.3           | MIT License                                             |
+| tenacity                               | 9.1.2           | Apache Software License                                 |
 | terminado                              | 0.18.1          | BSD License                                             |
 | testbook                               | 0.4.2           | BSD License                                             |
 | threadpoolctl                          | 3.6.0           | BSD License                                             |

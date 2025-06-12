@@ -152,7 +152,7 @@ class PolarsPyarrowTransformer(BaseTransformer):
 **ComputeFrameWork Implementation**:
 ```python
 class DuckDBFramework(ComputeFrameWork):
-    def __init__(self):
+    def __init__(self) -> None:
         self.conn = duckdb.connect()
     
     def expected_data_framework(self) -> Type:

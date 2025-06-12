@@ -40,7 +40,7 @@ The base `ComputeFrameWork` class provides methods to manage connection objects:
 
 ``` python
 class ComputeFrameWork:
-    def __init__(self):
+    def __init__(self) -> None:
         # Connection object for frameworks that need persistent connections
         self.framework_connection_object: Optional[Any] = None
     

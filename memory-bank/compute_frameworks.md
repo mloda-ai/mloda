@@ -55,6 +55,24 @@ The base class for all compute frameworks:
 - Includes bidirectional transformation with PyArrow through PolarsTransformer
 - Supports all standard operations: filtering, merging, transformations
 
+### DuckDBFramework
+- Based on DuckDB Relations for SQL-based analytical operations
+- Provides SQL interface for complex analytical queries and transformations
+- Optimized for OLAP (Online Analytical Processing) workloads
+- Requires framework connection object for stateful database connections
+- Ideal for analytical workloads, SQL-based transformations, and data warehousing
+- Does not support mloda framework inherent multiprocessing (DuckDB multiprocessing still works)
+
+### IcebergFramework
+- Based on Apache Iceberg Tables for data lake management
+- Supports schema evolution, time travel, and versioned datasets
+- Optimized for large-scale analytics and data lake scenarios
+- Requires catalog connection object for table operations
+- Uses PyArrow as interchange format for compatibility with other mloda frameworks
+- Includes bidirectional transformation with PyArrow through IcebergPyarrowTransformer
+- Supports filtering operations through IcebergFilterEngine
+- Ideal for data lake scenarios with evolving schemas and large-scale analytics
+
 ## Framework Transformers
 
 Enable seamless conversion between different data representations:
@@ -123,6 +141,9 @@ Compute frameworks are tested at multiple levels:
    - Framework selection based on feature group requirements
 
 ## Changelog
+
+### 2025-06-11: Implemented Iceberg Compute Framework
+- Added Iceberg framework implementation using Apache Iceberg Tables
 
 ### 2025-06-07: Implemented Polars Compute Framework
 - Added complete Polars framework implementation using Polars DataFrame

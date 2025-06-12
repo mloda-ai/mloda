@@ -77,6 +77,9 @@
 *   **Completed DuckDB Compute Framework Implementation:**
     * Implemented DuckDBFramework class with SQL interface and analytical capabilities
     * Added framework connection object support for stateful database connections
+*   **Completed Iceberg Compute Framework Implementation:**
+    * Implemented IcebergFramework class with Apache Iceberg table support
+
 
 
 ## What's Left to Build

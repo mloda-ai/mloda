@@ -2,10 +2,11 @@
 
 ## Current Work Focus
 
-Successfully completed comprehensive documentation updates for the new DuckDB compute framework implementation! Updated all relevant documentation files to include DuckDB support and created dedicated documentation for framework connection objects.
+Successfully completed the Iceberg compute framework implementation! This includes the full framework implementation, comprehensive testing, and documentation updates.
 
 ## Recent Changes
 
+*   **✅ COMPLETED: Iceberg Compute Framework Implementation:**
 *   **✅ COMPLETED: DuckDB Framework Documentation Updates:**
 *   **✅ COMPLETED: Documentation Updates for Polars Lazy Functionality:**
 *   **✅ COMPLETED: Automatic Dependency Detection for Compute Frameworks:**

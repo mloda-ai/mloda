@@ -284,8 +284,11 @@ class ComputeFrameWork(ABC):
     def __hash__(self) -> int:
         return hash((self.get_class_name(), self.children_if_root))
 
-    @final
     def validate_expected_framework(self, location: Optional[str] = None) -> None:
+        """
+        Validates that the data is in the expected framework.
+        Only touch is if your framework supports multiple data frameworks.
+        """
         if self.expected_data_framework() is None:
             return
 

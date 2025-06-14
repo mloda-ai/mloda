@@ -5,7 +5,7 @@ Feature chain parser for handling feature name chaining across feature groups.
 from __future__ import annotations
 
 import re
-from typing import Optional
+from typing import List, Optional
 
 
 class FeatureChainParser:
@@ -65,33 +65,38 @@ class FeatureChainParser:
         return f"{prefix}__{mloda_source_feature}"
 
     @classmethod
-    def validate_feature_name(cls, feature_name: str, prefix_pattern: str) -> bool:
+    def validate_feature_name(cls, feature_name: str, prefix_patterns: str | List[str]) -> bool:
         """
-        Validate that a feature name matches the expected pattern.
+        Validate that a feature name matches the expected pattern(s).
 
         Args:
             feature_name: The feature name to validate
-            prefix_pattern: Regex pattern for the prefix
+            prefix_patterns: Regex pattern(s) for the prefix - can be a string or list of strings
 
         Returns:
             True if valid, False otherwise
         """
         try:
-            # Check if the feature name matches the prefix pattern
-            match = re.match(prefix_pattern, feature_name)
-            if not match:
-                return False
+            # Handle both single pattern and list of patterns
+            if isinstance(prefix_patterns, str):
+                prefix_patterns = [prefix_patterns]
 
-            # Check if the feature name contains a double underscore
-            if "__" not in feature_name:
-                return False
+            # Check if the feature name matches any of the prefix patterns
+            for prefix_pattern in prefix_patterns:
+                match = re.match(prefix_pattern, feature_name)
+                if match:
+                    # For patterns that don't require double underscore (like onehot~pattern),
+                    # just return True if pattern matches
+                    if "__" not in prefix_pattern:
+                        return True
 
-            # Check if there's something after the double underscore
-            parts = feature_name.split("__", 1)
-            if len(parts) != 2 or not parts[1]:
-                return False
+                    # For standard patterns, check double underscore requirement
+                    if "__" in feature_name:
+                        parts = feature_name.split("__", 1)
+                        if len(parts) == 2 and parts[1]:
+                            return True
 
-            return True
+            return False
         except Exception:
             return False
 
@@ -121,13 +126,13 @@ class FeatureChainParser:
             return False
 
     @classmethod
-    def get_prefix_part(cls, feature_name: str, prefix_pattern: str) -> Optional[str]:
+    def get_prefix_part(cls, feature_name: str, prefix_patterns: str | List[str]) -> Optional[str]:
         """
         Extract the prefix part from a feature name.
 
         Args:
             feature_name: The feature name to parse
-            prefix_pattern: Regex pattern for the prefix
+            prefix_patterns: Regex pattern(s) for the prefix - can be a string or list of strings
 
         Returns:
             The prefix part of the name, or None if the pattern doesn't match
@@ -135,9 +140,19 @@ class FeatureChainParser:
         Example:
             For "max_aggr__temperature" with pattern r"^([w]+)_aggr__", returns "max"
         """
-        match = re.match(prefix_pattern, feature_name)
-        if not match:
-            return None
+        # Handle both single pattern and list of patterns
+        if isinstance(prefix_patterns, str):
+            prefix_patterns = [prefix_patterns]
 
-        # Return the captured group from the regex
-        return match.group(1)
+        # Try each pattern to find a match
+        for prefix_pattern in prefix_patterns:
+            match = re.match(prefix_pattern, feature_name)
+            if match:
+                # For OneHot column patterns, return "onehot"
+                if "onehot_encoded__" in prefix_pattern and "~" in prefix_pattern:
+                    return "onehot"
+                # For standard patterns, return the captured group
+                elif match.groups():
+                    return match.group(1)
+
+        return None

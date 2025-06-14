@@ -75,7 +75,15 @@ class FeatureGroupStep(Step):
             return
 
         artifact_or_meta_information = artifact.save(features, features.save_artifact)
-        cfw_register.set_artifact_to_save(features.artifact_to_save, artifact_or_meta_information)  # type: ignore
+
+        # Handle multiple artifacts case (when artifact.save returns a dict of artifacts)
+        if isinstance(artifact_or_meta_information, dict) and isinstance(features.save_artifact, dict):
+            # This is a multiple artifacts case - save each artifact individually
+            for artifact_key, artifact_path in artifact_or_meta_information.items():
+                cfw_register.set_artifact_to_save(artifact_key, artifact_path)
+        else:
+            # Single artifact case (legacy behavior)
+            cfw_register.set_artifact_to_save(features.artifact_to_save, artifact_or_meta_information)  # type: ignore
 
     def validate_set_artifact_to_save(self, features: FeatureSet) -> None | Type[BaseArtifact]:
         if features.artifact_to_save is None:

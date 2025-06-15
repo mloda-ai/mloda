@@ -57,6 +57,8 @@
               <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/installation/">Installation</a>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/api-request/">API Request</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/feature-groups/">Feature Groups</a>
@@ -85,6 +87,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../domain/">Domain concept</a>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../data-access-patterns/">Data Access Patterns</a>
+                  </li>
                   <li class="toctree-l1 current"><a class="reference internal current" >Compute Frameworks</a>
     <ul class="current">
                 <li class="toctree-l2 current"><a class="reference internal current" href="#">Framework Transformers</a>
@@ -98,6 +102,8 @@
     <li class="toctree-l4"><a class="reference internal" href="#computeframeworktransformer">ComputeFrameworkTransformer</a>
     </li>
     <li class="toctree-l4"><a class="reference internal" href="#pandaspyarrowtransformer">PandasPyarrowTransformer</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#duckdbpyarrowtransformer">DuckDBPyarrowTransformer</a>
     </li>
         </ul>
     </li>
@@ -122,6 +128,8 @@
     </ul>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../compute-framework-integration/">Compute Framework Integration</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../framework-connection-object/">Framework Connection Object</a>
                 </li>
     </ul>
                   </li>
@@ -219,6 +227,19 @@
 - Converts Pandas DataFrames to PyArrow Tables and vice versa
 - Handles metadata properly during transformations
 - Ensures clean conversion by removing framework-specific metadata</p>
+<h3 id="duckdbpyarrowtransformer">DuckDBPyarrowTransformer</h3>
+<p>The <code>DuckDBPyarrowTransformer</code> is a concrete implementation of <code>BaseTransformer</code> that handles conversions between DuckDB Relations and PyArrow Tables.</p>
+<pre><code class="language-python">class DuckDBPyarrowTransformer(BaseTransformer):
+    &quot;&quot;&quot;
+    Transformer for converting between DuckDB relations and PyArrow Table.
+    &quot;&quot;&quot;
+</code></pre>
+<p>Key features:
+- Converts DuckDB Relations to PyArrow Tables and vice versa
+- Leverages DuckDB's native PyArrow integration for efficient zero-copy operations
+- Requires a DuckDB connection object for PyArrow → DuckDB transformations
+- Uses DuckDB's <code>to_arrow_table()</code> and <code>from_arrow()</code> methods for optimal performance</p>
+<p><strong>Important</strong>: The DuckDB transformer requires a connection object when transforming from PyArrow to DuckDB. This is because DuckDB relations must be associated with a specific database connection.</p>
 <h2 id="how-framework-transformers-work">How Framework Transformers Work</h2>
 <h3 id="registration-process">Registration Process</h3>
 <ol>
@@ -241,6 +262,11 @@
 <p>Or in the reverse direction:</p>
 <pre><code>PyArrow Table → PandasPyarrowTransformer → Pandas DataFrame
 </code></pre>
+<p>For DuckDB transformations:</p>
+<pre><code>DuckDB Relation → DuckDBPyarrowTransformer → PyArrow Table
+</code></pre>
+<pre><code>PyArrow Table → DuckDBPyarrowTransformer → DuckDB Relation (requires connection)
+</code></pre>
 <h2 id="creating-custom-transformers">Creating Custom Transformers</h2>
 <p>To create a custom transformer for a new pair of frameworks:</p>
 <ol>
@@ -254,7 +280,7 @@
 <li><code>transform_other_fw_to_fw()</code> - Transform from secondary to primary</li>
 </ol>
 <p>Example:</p>
-<pre><code class="language-python">from typing import Any
+<pre><code class="language-python">from typing import Any, Optional
 
 class CustomTransformer(BaseTransformer):
     @classmethod
@@ -279,7 +305,7 @@ class CustomTransformer(BaseTransformer):
         return other_framework.from_custom(data)
 
     @classmethod
-    def transform_other_fw_to_fw(cls, data: Any) -&gt; Any:
+    def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Optional[Any] = None) -&gt; Any:
         # Convert from OtherFramework to CustomFramework
         return custom_framework.from_other(data)
 </code></pre>
@@ -312,7 +338,7 @@ class CustomTransformer(BaseTransformer):
             </div>
           </div><footer>
     <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
-        <a href="../domain/" class="btn btn-neutral float-left" title="Domain concept"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../data-access-patterns/" class="btn btn-neutral float-left" title="Data Access Patterns"><span class="icon icon-circle-arrow-left"></span> Previous</a>
         <a href="../compute-framework-integration/" class="btn btn-neutral float-right" title="Compute Framework Integration">Next <span class="icon icon-circle-arrow-right"></span></a>
     </div>
 
@@ -336,7 +362,7 @@ class CustomTransformer(BaseTransformer):
   <span class="rst-current-version" data-toggle="rst-current-version">
     
     
-      <span><a href="../domain/" style="color: #fcfcfc">&laquo; Previous</a></span>
+      <span><a href="../data-access-patterns/" style="color: #fcfcfc">&laquo; Previous</a></span>
     
     
       <span><a href="../compute-framework-integration/" style="color: #fcfcfc">Next &raquo;</a></span>

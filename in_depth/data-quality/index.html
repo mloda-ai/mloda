@@ -57,6 +57,8 @@
               <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/installation/">Installation</a>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/api-request/">API Request</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/feature-groups/">Feature Groups</a>
@@ -125,11 +127,15 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../domain/">Domain concept</a>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../data-access-patterns/">Data Access Patterns</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" >Compute Frameworks</a>
     <ul>
                 <li class="toctree-l2"><a class="reference internal" href="../framework-transformers/">Framework Transformers</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../compute-framework-integration/">Compute Framework Integration</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../framework-connection-object/">Framework Connection Object</a>
                 </li>
     </ul>
                   </li>
@@ -267,7 +273,8 @@ This function shows 2 examples:</p>
 <p>We show here an example by using the tool <a href="https://github.com/unionai-oss/pandera">Pandera</a>.</p>
 <pre><code class="language-python">from mloda_core.abstract_plugins.components.base_validator import BaseValidator
 import pyarrow as pa
-from pandera import Column, DataFrameSchema, Check
+from pandera import pandas
+from pandera import Column, Check
 from pandera.errors import SchemaError
 
 
@@ -281,7 +288,7 @@ class DocExamplePanderaValidator(BaseValidator):
         if isinstance(data, pa.Table):  # If the data is a PyArrow Table
             data = data.to_pandas()
 
-        schema = DataFrameSchema(self.validation_rules)
+        schema = pandas.DataFrameSchema(self.validation_rules)
 
         try:
             schema.validate(data)
@@ -322,6 +329,7 @@ results = mlodaAPI.run_all(
 <h6 id="simple-validator_1">Simple validator</h6>
 <pre><code class="language-python">from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
+from tests.test_plugins.integration_plugins.test_validate_features.example_validator import BaseValidateOutputFeaturesBase
 
 
 class DocBaseValidateOutputFeaturesBase(AbstractFeatureGroup):
@@ -369,7 +377,7 @@ results
 </code></pre>
 <h6 id="log-only-validator-and-extender-use_1">Log only validator and Extender use</h6>
 <p>We can of course also use an extender, which was defined somewhere else.</p>
-<pre><code class="language-python">from tests.test_core.test_validate_features.test_validate_output_features import ValidateOutputFeatureExtender
+<pre><code class="language-python">from tests.test_plugins.integration_plugins.test_validate_features.test_validate_output_features import ValidateOutputFeatureExtender
 
 results = mlodaAPI.run_all(
             [&quot;DocBaseValidateOutputFeaturesBase&quot;], {PyarrowTable},

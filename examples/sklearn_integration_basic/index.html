@@ -4,21 +4,21 @@
     <meta charset="utf-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <link rel="shortcut icon" href="../../../img/favicon.ico" />
-    <title>Data Producer, User, Owner in mloda - mloda docs</title>
-    <link rel="stylesheet" href="../../../css/theme.css" />
-    <link rel="stylesheet" href="../../../css/theme_extra.css" />
+      <link rel="shortcut icon" href="../../img/favicon.ico" />
+    <title>mloda + scikit-learn Integration: Basic Example - mloda docs</title>
+    <link rel="stylesheet" href="../../css/theme.css" />
+    <link rel="stylesheet" href="../../css/theme_extra.css" />
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
     
       <script>
         // Current page data
-        var mkdocs_page_name = "Data Producer, User, Owner in mloda";
-        var mkdocs_page_input_path = "examples/mloda_basics/4_ml_data_producers_user_owner.ipynb";
+        var mkdocs_page_name = "mloda + scikit-learn Integration: Basic Example";
+        var mkdocs_page_input_path = "examples/sklearn_integration_basic.ipynb";
         var mkdocs_page_url = null;
       </script>
     
     <!--[if lt IE 9]>
-      <script src="../../../js/html5shiv.min.js"></script>
+      <script src="../../js/html5shiv.min.js"></script>
     <![endif]-->
       <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
       <script>hljs.highlightAll();</script> 
@@ -30,136 +30,114 @@
     <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
     <div class="wy-side-scroll">
       <div class="wy-side-nav-search">
-          <a href="../../.." class="icon icon-home"> mloda docs
+          <a href="../.." class="icon icon-home"> mloda docs
         </a>
       </div>
 
       <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption"><span class="caption-text">Home</span></p>
               <ul>
-                  <li class="toctree-l1"><a class="reference internal" href="../../..">mloda</a>
+                  <li class="toctree-l1"><a class="reference internal" href="../..">mloda</a>
                   </li>
               </ul>
               <p class="caption"><span class="caption-text">mloda Concepts</span></p>
-              <ul class="current">
-                  <li class="toctree-l1"><a class="reference internal" href="../0_table_of_content/">Table of Content</a>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../mloda_basics/0_table_of_content/">Table of Content</a>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../1_ml_mloda_intro/">Intro to the core interfaces of mloda</a>
+                  <li class="toctree-l1"><a class="reference internal" href="../mloda_basics/1_ml_mloda_intro/">Intro to the core interfaces of mloda</a>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../2_ml_advantage_process_focus/">What makes mloda unique?</a>
+                  <li class="toctree-l1"><a class="reference internal" href="../mloda_basics/2_ml_advantage_process_focus/">What makes mloda unique?</a>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../3_ml_data_feature_feature_groups/">Data, Feature, FeatureSets and FeatureGroups in mloda</a>
+                  <li class="toctree-l1"><a class="reference internal" href="../mloda_basics/3_ml_data_feature_feature_groups/">Data, Feature, FeatureSets and FeatureGroups in mloda</a>
                   </li>
-                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Data Producer, User, Owner in mloda</a>
-    <ul class="current">
-    <li class="toctree-l2"><a class="reference internal" href="#roles-in-mloda">Roles in mloda</a>
-    </li>
-    <li class="toctree-l2"><a class="reference internal" href="#data-producer">Data Producer</a>
-        <ul>
-    <li class="toctree-l3"><a class="reference internal" href="#featuregroup-api-plug-in-in-short">FeatureGroup API (plug-in) in short</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#simple-example-implementation-of-the-featuregroup-api">Simple example implementation of the FeatureGroup API</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#complex-plug-ins">Complex plug-ins</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#quality">Quality</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#consequences">Consequences</a>
-    </li>
-        </ul>
-    </li>
-    <li class="toctree-l2"><a class="reference internal" href="#data-user-role">Data User Role</a>
-    </li>
-    <li class="toctree-l2"><a class="reference internal" href="#data-owner-role">Data Owner Role</a>
-        <ul>
-    <li class="toctree-l3"><a class="reference internal" href="#using-organization-wide-logging">Using organization wide logging</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#logging-data-size">Logging data size</a>
-    </li>
-        </ul>
-    </li>
-    <li class="toctree-l2"><a class="reference internal" href="#conclusion">Conclusion</a>
-    </li>
-    <li class="toctree-l2"><a class="reference internal" href="#next-steps">Next steps</a>
-    </li>
-    </ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../mloda_basics/4_ml_data_producers_user_owner/">Data Producer, User, Owner in mloda</a>
                   </li>
               </ul>
               <p class="caption"><span class="caption-text">Getting Started</span></p>
-              <ul>
-                  <li class="toctree-l1"><a class="reference internal" href="../../../chapter1/installation/">Installation</a>
+              <ul class="current">
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/installation/">Installation</a>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
+                  <li class="toctree-l1 current"><a class="reference internal current" href="#">mloda + scikit-learn Integration: Basic Example</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#quick-comparison-traditional-sklearn-vs-mloda">Quick Comparison: Traditional sklearn vs mloda</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#setup-create-sample-data">Setup: Create Sample Data</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#traditional-scikit-learn-pipeline">Traditional scikit-learn Pipeline</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#mloda-approach">mloda Approach</a>
+    </li>
+    </ul>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../../chapter1/api-request/">API Request</a>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/api-request/">API Request</a>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../../chapter1/feature-groups/">Feature Groups</a>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/feature-groups/">Feature Groups</a>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../../chapter1/compute-frameworks/">Compute Frameworks</a>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/compute-frameworks/">Compute Frameworks</a>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../../chapter1/extender/">Extender</a>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/extender/">Extender</a>
                   </li>
               </ul>
               <p class="caption"><span class="caption-text">In Depth - Basics</span></p>
               <ul>
-                  <li class="toctree-l1"><a class="reference internal" href="../../../in_depth/mloda-api/">mloda API</a>
+                  <li class="toctree-l1"><a class="reference internal" href="../../in_depth/mloda-api/">mloda API</a>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../../in_depth/access-feature-data/">(Feature) data</a>
+                  <li class="toctree-l1"><a class="reference internal" href="../../in_depth/access-feature-data/">(Feature) data</a>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../../in_depth/join_data/">Join data</a>
+                  <li class="toctree-l1"><a class="reference internal" href="../../in_depth/join_data/">Join data</a>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../../in_depth/filter_data/">Filter data</a>
+                  <li class="toctree-l1"><a class="reference internal" href="../../in_depth/filter_data/">Filter data</a>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../../in_depth/artifacts/">Artifacts</a>
+                  <li class="toctree-l1"><a class="reference internal" href="../../in_depth/artifacts/">Artifacts</a>
                   </li>
               </ul>
               <p class="caption"><span class="caption-text">In Depth - Advanced</span></p>
               <ul>
-                  <li class="toctree-l1"><a class="reference internal" href="../../../in_depth/data-quality/">Data quality</a>
+                  <li class="toctree-l1"><a class="reference internal" href="../../in_depth/data-quality/">Data quality</a>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../../in_depth/domain/">Domain concept</a>
+                  <li class="toctree-l1"><a class="reference internal" href="../../in_depth/domain/">Domain concept</a>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../../in_depth/data-access-patterns/">Data Access Patterns</a>
+                  <li class="toctree-l1"><a class="reference internal" href="../../in_depth/data-access-patterns/">Data Access Patterns</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Compute Frameworks</a>
     <ul>
-                <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/framework-transformers/">Framework Transformers</a>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/framework-transformers/">Framework Transformers</a>
                 </li>
-                <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/compute-framework-integration/">Compute Framework Integration</a>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/compute-framework-integration/">Compute Framework Integration</a>
                 </li>
-                <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/framework-connection-object/">Framework Connection Object</a>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/framework-connection-object/">Framework Connection Object</a>
                 </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
     <ul>
-                <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/feature-chain-parser/">Feature Chain Parser</a>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/feature-chain-parser/">Feature Chain Parser</a>
                 </li>
-                <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/feature-group-matching/">Feature Group Matching</a>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/feature-group-matching/">Feature Group Matching</a>
                 </li>
-                <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/feature-group-testing/">Feature Group Testing</a>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/feature-group-testing/">Feature Group Testing</a>
                 </li>
-                <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/feature-group-version/">Feature Group Versioning</a>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/feature-group-version/">Feature Group Versioning</a>
                 </li>
-                <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/multiple_result_columns/">Multiple Result Columns</a>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/multiple_result_columns/">Multiple Result Columns</a>
                 </li>
     </ul>
                   </li>
               </ul>
               <p class="caption"><span class="caption-text">Development</span></p>
               <ul>
-                  <li class="toctree-l1"><a class="reference internal" href="../../../development/">Contributors</a>
+                  <li class="toctree-l1"><a class="reference internal" href="../../development/">Contributors</a>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../../license/">License - Apache 2.0</a>
+                  <li class="toctree-l1"><a class="reference internal" href="../../license/">License - Apache 2.0</a>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../../missing/">Missing</a>
+                  <li class="toctree-l1"><a class="reference internal" href="../../missing/">Missing</a>
                   </li>
               </ul>
               <p class="caption"><span class="caption-text">Need Help?</span></p>
               <ul>
-                  <li class="toctree-l1"><a class="reference internal" href="../../../faq/">FAQ</a>
+                  <li class="toctree-l1"><a class="reference internal" href="../../faq/">FAQ</a>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../../need-help/">Need Help</a>
+                  <li class="toctree-l1"><a class="reference internal" href="../../need-help/">Need Help</a>
                   </li>
               </ul>
       </div>
@@ -169,15 +147,15 @@
     <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
       <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
           <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
-          <a href="../../..">mloda docs</a>
+          <a href="../..">mloda docs</a>
         
       </nav>
       <div class="wy-nav-content">
         <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
   <ul class="wy-breadcrumbs">
-    <li><a href="../../.." class="icon icon-home" aria-label="Docs"></a></li>
-          <li class="breadcrumb-item">mloda Concepts</li>
-      <li class="breadcrumb-item active">Data Producer, User, Owner in mloda</li>
+    <li><a href="../.." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">Getting Started</li>
+      <li class="breadcrumb-item active">mloda + scikit-learn Integration: Basic Example</li>
     <li class="wy-breadcrumbs-aside">
     </li>
   </ul>
@@ -627,7 +605,8 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h1 id="data-producer-user-owner-in-mloda">Data Producer, User, Owner in mloda<a class="anchor-link" href="#data-producer-user-owner-in-mloda">¶</a></h1>
+<h1 id="mloda-scikit-learn-integration-basic-example">mloda + scikit-learn Integration: Basic Example<a class="anchor-link" href="#mloda-scikit-learn-integration-basic-example">¶</a></h1><p>This notebook demonstrates how mloda enhances scikit-learn workflows by providing reusable, manageable feature transformations.</p>
+<h2 id="quick-comparison-traditional-sklearn-vs-mloda">Quick Comparison: Traditional sklearn vs mloda<a class="anchor-link" href="#quick-comparison-traditional-sklearn-vs-mloda">¶</a></h2>
 </div>
 </div>
 </div>
@@ -638,36 +617,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="roles-in-mloda">Roles in mloda<a class="anchor-link" href="#roles-in-mloda">¶</a></h2><p>In this notebook, we will describe three roles which exists in the mloda framework.</p>
-<ul>
-<li><p>Data Producers: Provide access to raw data, business-layer data, or aggregated data.</p>
-<ul>
-<li>A data scientist or analyst might create simpler datasets or analytical outputs</li>
-<li>A data engineer might design access to complex data infrastructures, such as data lakes or warehouses</li>
-<li>Shares plug-ins and with it access to data</li>
-</ul>
-</li>
-<li><p>Data User: Interacts with mloda by applying plug-ins while making requests via the mlodaAPI.</p>
-<ul>
-<li>A data scientist or analyst who needs data and data transformations (features)</li>
-<li>Consumes features from other parts of the organizations</li>
-</ul>
-</li>
-<li><p>Data Owner: Ensures lifetime value, availability and governance of data and features</p>
-</li>
-</ul>
-</div>
-</div>
-</div>
-</div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="data-producer">Data Producer<a class="anchor-link" href="#data-producer">¶</a></h2><p>Let us look closer into the role of a data producer.</p>
-<p>What could a data producer create?</p>
+<h2 id="setup-create-sample-data">Setup: Create Sample Data<a class="anchor-link" href="#setup-create-sample-data">¶</a></h2>
 </div>
 </div>
 </div>
@@ -690,81 +640,57 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># We reuse the data from the first example and just rerun it for the sake of the example, but just in one cell.</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.components.feature</span><span class="w"> </span><span class="kn">import</span> <span class="n">Feature</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.components.data_access_collection</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataAccessCollection</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.feature_group.input_data.read_dbs.sqlite</span><span class="w"> </span><span class="kn">import</span> <span class="n">SQLITEReader</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.plugin_loader.plugin_loader</span><span class="w"> </span><span class="kn">import</span> <span class="n">PluginLoader</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.api.request</span><span class="w"> </span><span class="kn">import</span> <span class="n">mlodaAPI</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.compute_framework.base_implementations.pyarrow.table</span><span class="w"> </span><span class="kn">import</span> <span class="n">PyarrowTable</span>
+<span class="c1"># Create realistic sample data with missing values</span>
+<span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+<span class="n">n_samples</span> <span class="o">=</span> <span class="mi">1000</span>
 
-<span class="n">plugin_loader</span> <span class="o">=</span> <span class="n">PluginLoader</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<span class="n">data_dict</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"age"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">18</span><span class="p">,</span> <span class="mi">80</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">),</span>
+    <span class="s2">"weight"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="mi">70</span><span class="p">,</span> <span class="mi">15</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">),</span>
+    <span class="s2">"state"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">([</span><span class="s2">"CA"</span><span class="p">,</span> <span class="s2">"NY"</span><span class="p">,</span> <span class="s2">"TX"</span><span class="p">,</span> <span class="s2">"FL"</span><span class="p">],</span> <span class="n">n_samples</span><span class="p">),</span>
+    <span class="s2">"gender"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">([</span><span class="s2">"M"</span><span class="p">,</span> <span class="s2">"F"</span><span class="p">],</span> <span class="n">n_samples</span><span class="p">),</span>
+<span class="p">}</span>
 
-<span class="c1"># Initialize a DataAccessCollection object</span>
-<span class="n">data_access_collection</span> <span class="o">=</span> <span class="n">DataAccessCollection</span><span class="p">()</span>
+<span class="n">data</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">data_dict</span><span class="p">)</span>
 
-<span class="c1"># Define the folders containing the data</span>
-<span class="c1"># Note: We use two paths to accommodate different possible root locations as it depends where the code is executed.</span>
-<span class="n">base_data_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">getcwd</span><span class="p">(),</span> <span class="s2">"docs"</span><span class="p">,</span> <span class="s2">"docs"</span><span class="p">,</span> <span class="s2">"examples"</span><span class="p">,</span> <span class="s2">"mloda_basics"</span><span class="p">,</span> <span class="s2">"base_data"</span><span class="p">)</span>
-<span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">base_data_path</span><span class="p">):</span>
-    <span class="n">base_data_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">getcwd</span><span class="p">(),</span> <span class="s2">"base_data"</span><span class="p">)</span>
+<span class="c1"># Introduce missing values</span>
+<span class="n">missing_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="n">n_samples</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="mf">0.1</span> <span class="o">*</span> <span class="n">n_samples</span><span class="p">),</span> <span class="n">replace</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">data</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">missing_indices</span><span class="p">[:</span><span class="mi">50</span><span class="p">],</span> <span class="s2">"age"</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+<span class="n">data</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">missing_indices</span><span class="p">[</span><span class="mi">50</span><span class="p">:],</span> <span class="s2">"weight"</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
 
-<span class="c1"># Add the folder to the DataAccessCollection</span>
-<span class="n">data_access_collection</span><span class="o">.</span><span class="n">add_folder</span><span class="p">(</span><span class="n">base_data_path</span><span class="p">)</span>
-
-<span class="c1"># As a db cannot work with a folder, we need to add a connection for the db.</span>
-<span class="n">data_access_collection</span><span class="o">.</span><span class="n">add_credential_dict</span><span class="p">(</span>
-    <span class="n">credential_dict</span><span class="o">=</span><span class="p">{</span><span class="n">SQLITEReader</span><span class="o">.</span><span class="n">db_path</span><span class="p">():</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">base_data_path</span><span class="p">,</span> <span class="s2">"example.sqlite"</span><span class="p">)}</span>
-<span class="p">)</span>
-
-<span class="n">order_features</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Feature</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"order_id"</span><span class="p">,</span> <span class="s2">"product_id"</span><span class="p">,</span> <span class="s2">"quantity"</span><span class="p">,</span> <span class="s2">"item_price"</span><span class="p">]</span>
-<span class="n">payment_features</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Feature</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"payment_id"</span><span class="p">,</span> <span class="s2">"payment_type"</span><span class="p">,</span> <span class="s2">"payment_status"</span><span class="p">,</span> <span class="s2">"valid_datetime"</span><span class="p">]</span>
-<span class="n">location_features</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Feature</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"user_location"</span><span class="p">,</span> <span class="s2">"merchant_location"</span><span class="p">,</span> <span class="s2">"update_date"</span><span class="p">]</span>
-<span class="n">categorical_features</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Feature</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"user_age_group"</span><span class="p">,</span> <span class="s2">"product_category"</span><span class="p">,</span> <span class="s2">"transaction_type"</span><span class="p">]</span>
-<span class="n">all_features</span> <span class="o">=</span> <span class="n">order_features</span> <span class="o">+</span> <span class="n">payment_features</span> <span class="o">+</span> <span class="n">location_features</span> <span class="o">+</span> <span class="n">categorical_features</span>
-
-<span class="n">mlodaAPI</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span><span class="n">all_features</span><span class="p">,</span> <span class="n">data_access_collection</span><span class="o">=</span><span class="n">data_access_collection</span><span class="p">,</span> <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">{</span><span class="n">PyarrowTable</span><span class="p">})</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"Sample data with missing values:"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">head</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">Data shape: </span><span class="si">{</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Missing values: age=</span><span class="si">{</span><span class="n">data</span><span class="p">[</span><span class="s1">'age'</span><span class="p">]</span><span class="o">.</span><span class="n">isna</span><span class="p">()</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="si">}</span><span class="s2">, weight=</span><span class="si">{</span><span class="n">data</span><span class="p">[</span><span class="s1">'weight'</span><span class="p">]</span><span class="o">.</span><span class="n">isna</span><span class="p">()</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-1"># We reuse the data from the first example and just rerun it for the sake of the example, but just in one cell.
+<div class="clipboard-copy-txt" id="cell-1">import pandas as pd
+import numpy as np
 
-import os
-from typing import List
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
-from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
-from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
+# Create realistic sample data with missing values
+np.random.seed(42)
+n_samples = 1000
 
-plugin_loader = PluginLoader.all()
+data_dict = {
+    "age": np.random.randint(18, 80, n_samples),
+    "weight": np.random.normal(70, 15, n_samples),
+    "state": np.random.choice(["CA", "NY", "TX", "FL"], n_samples),
+    "gender": np.random.choice(["M", "F"], n_samples),
+}
 
-# Initialize a DataAccessCollection object
-data_access_collection = DataAccessCollection()
+data = pd.DataFrame(data_dict)
 
-# Define the folders containing the data
-# Note: We use two paths to accommodate different possible root locations as it depends where the code is executed.
-base_data_path = os.path.join(os.getcwd(), "docs", "docs", "examples", "mloda_basics", "base_data")
-if not os.path.exists(base_data_path):
-    base_data_path = os.path.join(os.getcwd(), "base_data")
+# Introduce missing values
+missing_indices = np.random.choice(n_samples, size=int(0.1 * n_samples), replace=False)
+data.loc[missing_indices[:50], "age"] = np.nan
+data.loc[missing_indices[50:], "weight"] = np.nan
 
-# Add the folder to the DataAccessCollection
-data_access_collection.add_folder(base_data_path)
-
-# As a db cannot work with a folder, we need to add a connection for the db.
-data_access_collection.add_credential_dict(
-    credential_dict={SQLITEReader.db_path(): os.path.join(base_data_path, "example.sqlite")}
-)
-
-order_features: List[str | Feature] = ["order_id", "product_id", "quantity", "item_price"]
-payment_features: List[str | Feature] = ["payment_id", "payment_type", "payment_status", "valid_datetime"]
-location_features: List[str | Feature] = ["user_location", "merchant_location", "update_date"]
-categorical_features: List[str | Feature] = ["user_age_group", "product_category", "transaction_type"]
-all_features = order_features + payment_features + location_features + categorical_features
-
-mlodaAPI.run_all(all_features, data_access_collection=data_access_collection, compute_frameworks={PyarrowTable})</div>
+print("Sample data with missing values:")
+print(data.head())
+print(f"\nData shape: {data.shape}")
+print(f"Missing values: age={data['age'].isna().sum()}, weight={data['weight'].isna().sum()}")</div>
 </div>
 </div>
 </div>
@@ -773,45 +699,20 @@ mlodaAPI.run_all(all_features, data_access_collection=data_access_collection, co
 <div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
 </div>
 <div class="jp-OutputArea jp-Cell-outputArea">
-<div class="jp-OutputArea-child jp-OutputArea-executeResult">
-<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[1]:</div>
-<div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain" tabindex="0">
-<pre>[pyarrow.Table
- user_location: string
- update_date: int64
- merchant_location: string
- ----
- user_location: [["East","West","North","West","West",...,"West","North","North","North","East"]]
- update_date: [[1640995200000,1641632290909,1642269381818,1642906472727,1643543563636,...,1701518836363,1702155927272,1702793018181,1703430109090,1704067200000]]
- merchant_location: [["North","East","East","East","North",...,"North","South","East","South","North"]],
- pyarrow.Table
- product_id: int64
- item_price: double
- quantity: int64
- order_id: int64
- ----
- product_id: [[282,355,395,319,275,...,170,328,361,192,271]]
- item_price: [[74.86,154.56,67.7,186.21,118.69,...,80.51,98.91,162.98,194.98,107.73]]
- quantity: [[6,2,4,9,5,...,4,3,5,5,6]]
- order_id: [[1,2,3,4,5,...,96,97,98,99,100]],
- pyarrow.Table
- payment_type: string
- valid_datetime: timestamp[ns, tz=UTC]
- payment_status: string
- payment_id: int64
- ----
- payment_type: [["debit card","debit card","store credit","credit card","store credit",...,"paypal","debit card","credit card","store credit","paypal"]]
- valid_datetime: [[2024-01-11 23:01:49.090909090Z,2024-01-15 09:41:49.090909090Z,2024-01-29 19:23:38.181818181Z,2024-01-04 18:10:54.545454545Z,2024-01-06 15:16:21.818181818Z,...,2024-01-13 12:36:21.818181818Z,2024-01-10 01:56:21.818181818Z,2024-01-15 02:10:54.545454545Z,2024-01-28 20:50:54.545454545Z,2024-01-06 00:14:32.727272727Z]]
- payment_status: [["failed","pending","completed","pending","failed",...,"completed","pending","completed","failed","completed"]]
- payment_id: [[1,2,3,4,5,...,96,97,98,99,100]],
- pyarrow.Table
- product_category: string
- transaction_type: string
- user_age_group: string
- ----
- product_category: [["clothing","home","clothing","clothing","clothing",...,"clothing","home","books","beauty","clothing"]]
- transaction_type: [["online","online","telephone","telephone","mail-order",...,"mail-order","in-store","telephone","mail-order","mail-order"]]
- user_age_group: [["26-35","26-35","36-45","55+","26-35",...,"26-35","46-55","36-45","26-35","36-45"]]]</pre>
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>Sample data with missing values:
+    age     weight state gender
+0  56.0  90.585667    NY      F
+1  69.0  59.833209    NY      M
+2  46.0  87.302978    FL      F
+3  32.0  64.374841    FL      M
+4  60.0  59.587811    FL      M
+
+Data shape: (1000, 4)
+Missing values: age=50, weight=50
+</pre>
 </div>
 </div>
 </div>
@@ -824,72 +725,12 @@ mlodaAPI.run_all(all_features, data_access_collection=data_access_collection, co
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h3 id="featuregroup-api-plug-in-in-short">FeatureGroup API (plug-in) in short<a class="anchor-link" href="#featuregroup-api-plug-in-in-short">¶</a></h3><p>In mloda, a data producer defines access by creating feature groups. Here's an example implementation:</p>
-<div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">FeatureGroupClass</span><span class="p">(</span><span class="n">AbstractFeatureGroup</span><span class="p">):</span>
-
-    <span class="c1"># Root feature definition</span>
-    <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">input_data</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
-        <span class="o">...</span>
-
-    <span class="c1"># Features derived from other features</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">input_features</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
-        <span class="o">...</span>
-
-    <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">calculate_feature</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
-        <span class="o">...</span>
-</pre></div>
+<h2 id="traditional-scikit-learn-pipeline">Traditional scikit-learn Pipeline<a class="anchor-link" href="#traditional-scikit-learn-pipeline">¶</a></h2>
 </div>
 </div>
 </div>
-</div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h3 id="simple-example-implementation-of-the-featuregroup-api">Simple example implementation of the FeatureGroup API<a class="anchor-link" href="#simple-example-implementation-of-the-featuregroup-api">¶</a></h3><p>In the background, mloda loads the plug-ins, which were created before, like this one.</p>
-<div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">ReadFileFeature</span><span class="p">(</span><span class="n">AbstractFeatureGroup</span><span class="p">):</span>
-    <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">input_data</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">BaseInputData</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="n">ReadFile</span><span class="p">()</span>
-
-    <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">calculate_feature</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">features</span><span class="p">:</span> <span class="n">FeatureSet</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-        <span class="n">reader</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">input_data</span><span class="p">()</span>
-        <span class="k">if</span> <span class="n">reader</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">data</span> <span class="o">=</span> <span class="n">reader</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">features</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">data</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Reading file failed for feature </span><span class="si">{</span><span class="n">features</span><span class="o">.</span><span class="n">get_name_of_one_feature</span><span class="p">()</span><span class="si">}</span><span class="s2">."</span><span class="p">)</span>
-</pre></div>
-<p>We use composition to read different data sources. A ReadFile object looks like this:</p>
-<div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">CsvReader</span><span class="p">(</span><span class="n">ReadFile</span><span class="p">):</span>
-    <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">suffix</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="p">(</span>
-            <span class="s2">".csv"</span><span class="p">,</span>
-            <span class="s2">".CSV"</span><span class="p">,</span>
-        <span class="p">)</span>
-
-    <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">load_data</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data_access</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">features</span><span class="p">:</span> <span class="n">FeatureSet</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-        <span class="n">result</span> <span class="o">=</span> <span class="n">pyarrow_csv</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">data_access</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">result</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">features</span><span class="o">.</span><span class="n">get_all_names</span><span class="p">()))</span>
-
-    <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">get_column_names</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">file_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-        <span class="n">read_options</span> <span class="o">=</span> <span class="n">pyarrow_csv</span><span class="o">.</span><span class="n">ReadOptions</span><span class="p">(</span><span class="n">skip_rows_after_names</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-        <span class="n">table</span> <span class="o">=</span> <span class="n">pyarrow_csv</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">file_name</span><span class="p">,</span> <span class="n">read_options</span><span class="o">=</span><span class="n">read_options</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">table</span><span class="o">.</span><span class="n">schema</span><span class="o">.</span><span class="n">names</span>
-</pre></div>
-<p>As you can see, the implementation is flexible in the sense that if you need something, you can adjust it quite easily. The other files like .json, .parquet and the sqlite access are implemented in a similar fashion.</p>
-</div>
-</div>
-</div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -907,91 +748,144 @@ mlodaAPI.run_all(all_features, data_access_collection=data_access_collection, co
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># In the following, we will just adjust a bit the CsvReader to handle a different delimiter.</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.pipeline</span><span class="w"> </span><span class="kn">import</span> <span class="n">Pipeline</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.preprocessing</span><span class="w"> </span><span class="kn">import</span> <span class="n">StandardScaler</span><span class="p">,</span> <span class="n">OneHotEncoder</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.impute</span><span class="w"> </span><span class="kn">import</span> <span class="n">SimpleImputer</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.compose</span><span class="w"> </span><span class="kn">import</span> <span class="n">ColumnTransformer</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Optional</span>
-
-<span class="kn">from</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="kn">import</span> <span class="n">csv</span> <span class="k">as</span> <span class="n">pyarrow_csv</span>
-
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.components.feature_set</span><span class="w"> </span><span class="kn">import</span> <span class="n">FeatureSet</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.components.input_data.base_input_data</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseInputData</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.feature_group.input_data.read_file_feature</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReadFileFeature</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.feature_group.input_data.read_files.csv</span><span class="w"> </span><span class="kn">import</span> <span class="n">CsvReader</span>
-
-
-<span class="k">class</span><span class="w"> </span><span class="nc">CsvReader2</span><span class="p">(</span><span class="n">CsvReader</span><span class="p">):</span>
-    <span class="c1"># Adjusted CsvReader2 to handle the new delimiter</span>
-    <span class="n">_parse_options</span> <span class="o">=</span> <span class="n">pyarrow_csv</span><span class="o">.</span><span class="n">ParseOptions</span><span class="p">(</span>
-        <span class="n">delimiter</span><span class="o">=</span><span class="s2">","</span><span class="p">,</span>  <span class="c1"># Default delimiter</span>
-        <span class="n">quote_char</span><span class="o">=</span><span class="s1">'"'</span><span class="p">,</span>  <span class="c1"># Handles quoted strings</span>
-        <span class="n">ignore_empty_lines</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>  <span class="c1"># Skips empty lines</span>
-    <span class="p">)</span>
-
-    <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">load_data</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data_access</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">features</span><span class="p">:</span> <span class="n">FeatureSet</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-        <span class="n">result</span> <span class="o">=</span> <span class="n">pyarrow_csv</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">data_access</span><span class="p">,</span> <span class="n">parse_options</span><span class="o">=</span><span class="bp">cls</span><span class="o">.</span><span class="n">_parse_options</span><span class="p">)</span>
-        <span class="nb">print</span><span class="p">(</span><span class="s2">"We used CsvReader2 to load the data."</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">result</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">features</span><span class="o">.</span><span class="n">get_all_names</span><span class="p">()))</span>
+<span class="c1"># numeric_preprocessor = Pipeline(</span>
+<span class="n">numeric_preprocessor</span> <span class="o">=</span> <span class="n">Pipeline</span><span class="p">(</span>
+    <span class="n">steps</span><span class="o">=</span><span class="p">[</span>
+        <span class="p">(</span><span class="s2">"imputation_mean"</span><span class="p">,</span> <span class="n">SimpleImputer</span><span class="p">(</span><span class="n">missing_values</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span> <span class="n">strategy</span><span class="o">=</span><span class="s2">"mean"</span><span class="p">)),</span>
+        <span class="p">(</span><span class="s2">"scaler"</span><span class="p">,</span> <span class="n">StandardScaler</span><span class="p">()),</span>
+    <span class="p">]</span>
+<span class="p">)</span>
 
 
-<span class="k">class</span><span class="w"> </span><span class="nc">ReadFileFeature2</span><span class="p">(</span><span class="n">ReadFileFeature</span><span class="p">):</span>
-    <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">input_data</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">BaseInputData</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="n">CsvReader2</span><span class="p">()</span>
+<span class="n">categorical_preprocessor</span> <span class="o">=</span> <span class="n">Pipeline</span><span class="p">(</span>
+    <span class="n">steps</span><span class="o">=</span><span class="p">[</span>
+        <span class="p">(</span>
+            <span class="s2">"imputation_constant"</span><span class="p">,</span>
+            <span class="n">SimpleImputer</span><span class="p">(</span><span class="n">fill_value</span><span class="o">=</span><span class="s2">"missing"</span><span class="p">,</span> <span class="n">strategy</span><span class="o">=</span><span class="s2">"constant"</span><span class="p">),</span>
+        <span class="p">),</span>
+        <span class="p">(</span><span class="s2">"onehot"</span><span class="p">,</span> <span class="n">OneHotEncoder</span><span class="p">(</span><span class="n">handle_unknown</span><span class="o">=</span><span class="s2">"ignore"</span><span class="p">)),</span>
+    <span class="p">]</span>
+<span class="p">)</span>
 
-    <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">validate_output_features</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">features</span><span class="p">:</span> <span class="n">FeatureSet</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]:</span>
-        <span class="k">for</span> <span class="n">column_name</span> <span class="ow">in</span> <span class="n">features</span><span class="o">.</span><span class="n">get_all_names</span><span class="p">():</span>
-            <span class="k">if</span> <span class="n">column_name</span> <span class="ow">in</span> <span class="n">data</span><span class="o">.</span><span class="n">column_names</span><span class="p">:</span>
-                <span class="n">column</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="n">column_name</span><span class="p">]</span>
-                <span class="k">if</span> <span class="n">column</span><span class="o">.</span><span class="n">null_count</span> <span class="o">==</span> <span class="n">column</span><span class="o">.</span><span class="n">length</span><span class="p">:</span>
-                    <span class="k">return</span> <span class="kc">False</span>
-            <span class="k">return</span> <span class="kc">True</span>
-        <span class="k">return</span> <span class="kc">True</span>
+<span class="n">preprocessor</span> <span class="o">=</span> <span class="n">ColumnTransformer</span><span class="p">(</span>
+    <span class="p">[</span>
+        <span class="p">(</span><span class="s2">"categorical"</span><span class="p">,</span> <span class="n">categorical_preprocessor</span><span class="p">,</span> <span class="p">[</span><span class="s2">"state"</span><span class="p">,</span> <span class="s2">"gender"</span><span class="p">]),</span>
+        <span class="p">(</span><span class="s2">"numerical"</span><span class="p">,</span> <span class="n">numeric_preprocessor</span><span class="p">,</span> <span class="p">[</span><span class="s2">"age"</span><span class="p">,</span> <span class="s2">"weight"</span><span class="p">]),</span>
+    <span class="p">]</span>
+<span class="p">)</span>
+
+<span class="c1"># Fit and transform</span>
+<span class="n">preprocessor</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>  <span class="c1"># Learn imputations, encoder categories, and scaler parameters</span>
+<span class="n">X_transformed</span> <span class="o">=</span> <span class="n">preprocessor</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>  <span class="c1"># Apply the transformations</span>
+
+<span class="n">onehot_feature_names</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">preprocessor</span><span class="o">.</span><span class="n">named_transformers_</span><span class="p">[</span><span class="s2">"categorical"</span><span class="p">]</span><span class="o">.</span><span class="n">named_steps</span><span class="p">[</span><span class="s2">"onehot"</span><span class="p">]</span><span class="o">.</span><span class="n">get_feature_names_out</span><span class="p">([</span><span class="s2">"state"</span><span class="p">,</span> <span class="s2">"gender"</span><span class="p">])</span>
+<span class="p">)</span>
+<span class="n">numeric_feature_names</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"age"</span><span class="p">,</span> <span class="s2">"weight"</span><span class="p">]</span>
+<span class="n">all_feature_names</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">onehot_feature_names</span><span class="p">,</span> <span class="n">numeric_feature_names</span><span class="p">])</span>
+
+<span class="n">df_transformed</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
+    <span class="n">X_transformed</span><span class="o">.</span><span class="n">toarray</span><span class="p">()</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">X_transformed</span><span class="p">,</span> <span class="s2">"toarray"</span><span class="p">)</span> <span class="k">else</span> <span class="n">X_transformed</span><span class="p">,</span>  <span class="c1"># type: ignore</span>
+    <span class="n">columns</span><span class="o">=</span><span class="n">all_feature_names</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">"✅ Transformed dataset with split fit/transform:"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">df_transformed</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Traditional pipeline result shape: </span><span class="si">{</span><span class="n">X_transformed</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Result: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">df_transformed</span><span class="o">.</span><span class="n">columns</span><span class="p">)</span><span class="si">}</span><span class="s2"> columns total"</span><span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-2"># In the following, we will just adjust a bit the CsvReader to handle a different delimiter.
+<div class="clipboard-copy-txt" id="cell-2">from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.impute import SimpleImputer
+from sklearn.compose import ColumnTransformer
 
-from typing import Any, Optional
-
-from pyarrow import csv as pyarrow_csv
-
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
-from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
-
-
-class CsvReader2(CsvReader):
-    # Adjusted CsvReader2 to handle the new delimiter
-    _parse_options = pyarrow_csv.ParseOptions(
-        delimiter=",",  # Default delimiter
-        quote_char='"',  # Handles quoted strings
-        ignore_empty_lines=True,  # Skips empty lines
-    )
-
-    @classmethod
-    def load_data(cls, data_access: Any, features: FeatureSet) -&gt; Any:
-        result = pyarrow_csv.read_csv(data_access, parse_options=cls._parse_options)
-        print("We used CsvReader2 to load the data.")
-        return result.select(list(features.get_all_names()))
+# numeric_preprocessor = Pipeline(
+numeric_preprocessor = Pipeline(
+    steps=[
+        ("imputation_mean", SimpleImputer(missing_values=np.nan, strategy="mean")),
+        ("scaler", StandardScaler()),
+    ]
+)
 
 
-class ReadFileFeature2(ReadFileFeature):
-    @classmethod
-    def input_data(cls) -&gt; Optional[BaseInputData]:
-        return CsvReader2()
+categorical_preprocessor = Pipeline(
+    steps=[
+        (
+            "imputation_constant",
+            SimpleImputer(fill_value="missing", strategy="constant"),
+        ),
+        ("onehot", OneHotEncoder(handle_unknown="ignore")),
+    ]
+)
 
-    @classmethod
-    def validate_output_features(cls, data: Any, features: FeatureSet) -&gt; Optional[bool]:
-        for column_name in features.get_all_names():
-            if column_name in data.column_names:
-                column = data[column_name]
-                if column.null_count == column.length:
-                    return False
-            return True
-        return True</div>
+preprocessor = ColumnTransformer(
+    [
+        ("categorical", categorical_preprocessor, ["state", "gender"]),
+        ("numerical", numeric_preprocessor, ["age", "weight"]),
+    ]
+)
+
+# Fit and transform
+preprocessor.fit(data)  # Learn imputations, encoder categories, and scaler parameters
+X_transformed = preprocessor.transform(data)  # Apply the transformations
+
+onehot_feature_names = (
+    preprocessor.named_transformers_["categorical"].named_steps["onehot"].get_feature_names_out(["state", "gender"])
+)
+numeric_feature_names = ["age", "weight"]
+all_feature_names = np.concatenate([onehot_feature_names, numeric_feature_names])
+
+df_transformed = pd.DataFrame(
+    X_transformed.toarray() if hasattr(X_transformed, "toarray") else X_transformed,  # type: ignore
+    columns=all_feature_names,
+)
+
+print("✅ Transformed dataset with split fit/transform:")
+print(df_transformed.head(2))
+
+print(f"Traditional pipeline result shape: {X_transformed.shape}")
+print(f"Result: {len(df_transformed.columns)} columns total")</div>
 </div>
 </div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>✅ Transformed dataset with split fit/transform:
+   state_CA  state_FL  state_NY  state_TX  gender_F  gender_M       age  \
+0       0.0       0.0       1.0       0.0       1.0       0.0  0.351358   
+1       0.0       0.0       1.0       0.0       0.0       1.0  1.086080   
+
+     weight  
+0  1.287800  
+1 -0.705904  
+Traditional pipeline result shape: (1000, 8)
+Result: 8 columns total
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h2 id="mloda-approach">mloda Approach<a class="anchor-link" href="#mloda-approach">¶</a></h2>
 </div>
 </div>
 </div>
@@ -1014,29 +908,207 @@ class ReadFileFeature2(ReadFileFeature):
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.components.plugin_option.plugin_collector</span><span class="w"> </span><span class="kn">import</span> <span class="n">PlugInCollector</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Any</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.abstract_feature_group</span><span class="w"> </span><span class="kn">import</span> <span class="n">AbstractFeatureGroup</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.components.input_data.base_input_data</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseInputData</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.components.input_data.creator.data_creator</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataCreator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.components.feature_set</span><span class="w"> </span><span class="kn">import</span> <span class="n">FeatureSet</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.plugin_loader.plugin_loader</span><span class="w"> </span><span class="kn">import</span> <span class="n">PluginLoader</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.api.request</span><span class="w"> </span><span class="kn">import</span> <span class="n">mlodaAPI</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.compute_framework.base_implementations.pandas.dataframe</span><span class="w"> </span><span class="kn">import</span> <span class="n">PandasDataframe</span>
 
-<span class="n">result</span> <span class="o">=</span> <span class="n">mlodaAPI</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span>
-    <span class="n">order_features</span><span class="p">,</span>
-    <span class="n">data_access_collection</span><span class="o">=</span><span class="n">data_access_collection</span><span class="p">,</span>
-    <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">{</span><span class="n">PyarrowTable</span><span class="p">},</span>
-    <span class="n">plugin_collector</span><span class="o">=</span><span class="n">PlugInCollector</span><span class="o">.</span><span class="n">enabled_feature_groups</span><span class="p">({</span><span class="n">ReadFileFeature2</span><span class="p">}),</span>
-<span class="p">)</span>
+<span class="c1"># In mloda, we have the concept of feature groups.</span>
+<span class="c1"># A feature group is an abstraction between a data framework and processes of a data transformation.</span>
+<span class="c1"># In this example, the data framework is clearly pandas.</span>
+<span class="c1"># The processes are typically meta information like names, but lifecyle definition, or dependencies or relations to other data.</span>
 
-<span class="c1"># We can see that the data was loaded using the new CsvReader2.</span>
-<span class="c1"># However, this is a rather simple use case. In a real-world scenario, we would have more complex data and more complex operations.</span>
+<span class="c1"># On the basis on the given data_dict earlier defined and its names, we use a DataCreator to inject the data_dict into the feature group abstraction.</span>
+<span class="c1"># Very simply spoken: we load the data.</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">SklearnDataCreator</span><span class="p">(</span><span class="n">AbstractFeatureGroup</span><span class="p">):</span>
+    <span class="c1"># This function is core to mloda. In this spot, the data framework with the actual data representation meets the defined and resolved processes.</span>
+    <span class="c1"># With this, we have access to the before and after state of a feature.</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">calculate_feature</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">features</span><span class="p">:</span> <span class="n">FeatureSet</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+        <span class="c1"># If this feature would not load data, we would use the data given from the parameter "data".</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">data_dict</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">data</span>
+
+    <span class="c1"># One way to get this data is via defined input_data. But there are many more and we should not go to deep into this topic for now.</span>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">input_data</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">BaseInputData</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="n">DataCreator</span><span class="p">({</span><span class="s2">"age"</span><span class="p">,</span> <span class="s2">"weight"</span><span class="p">,</span> <span class="s2">"state"</span><span class="p">,</span> <span class="s2">"gender"</span><span class="p">})</span>
+
+
+<span class="c1"># As next, we will use one method of defining what features we want as result from the mloda framework.</span>
+<span class="n">features</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">"standard_scaled__mean_imputed__age"</span><span class="p">,</span>  <span class="c1"># Scale imputed age</span>
+    <span class="s2">"standard_scaled__mean_imputed__weight"</span><span class="p">,</span>  <span class="c1"># Scale imputed weight</span>
+    <span class="s2">"onehot_encoded__state"</span><span class="p">,</span>  <span class="c1"># One-hot encode state</span>
+    <span class="s2">"onehot_encoded__gender"</span><span class="p">,</span>  <span class="c1"># One-hot encode gender</span>
+<span class="p">]</span>
+
+<span class="c1"># We now use a trick to register all known feature groups. mloda will only use those which are loaded into the namespace.</span>
+<span class="n">PluginLoader</span><span class="p">()</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+
+<span class="c1"># And then we execute mloda, which will resolve its dependencies of its feature groups and data frame technologies automatically.</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">mlodaAPI</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span><span class="n">features</span><span class="p">,</span> <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">{</span><span class="n">PandasDataframe</span><span class="p">})</span>
+<span class="n">_result</span><span class="p">,</span> <span class="n">_result2</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">result</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"✅ Transformed dataset with split fit/transform:"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">_result</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">_result2</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Result: </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">_result</span><span class="o">.</span><span class="n">columns</span><span class="p">)</span><span class="si">}</span><span class="s2"> </span><span class="se">\n</span><span class="s2"> </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">_result2</span><span class="o">.</span><span class="n">columns</span><span class="p">)</span><span class="si">}</span><span class="s2"> columns total"</span><span class="p">)</span>
+
+<span class="c1"># Remark 1: We have not yet added the functionality to map the value to a column string back. It is planned. https://github.com/TomKaltofen/mloda/issues/46</span>
+
+<span class="c1"># Remark 2: If you see the error "ValueError: Multiple feature groups", please restart the notebook. This happens if we load the class SklearnDataCreator twice into the notebook memory.</span>
+<span class="c1">#         I have yet to find a solution for this.</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-3">from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
+<div class="clipboard-copy-txt" id="cell-3">from typing import Optional, Any
+from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
+from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
+from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
+from mloda_core.abstract_plugins.components.feature_set import FeatureSet
+from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
+from mloda_core.api.request import mlodaAPI
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
 
-result = mlodaAPI.run_all(
-    order_features,
-    data_access_collection=data_access_collection,
-    compute_frameworks={PyarrowTable},
-    plugin_collector=PlugInCollector.enabled_feature_groups({ReadFileFeature2}),
-)
+# In mloda, we have the concept of feature groups.
+# A feature group is an abstraction between a data framework and processes of a data transformation.
+# In this example, the data framework is clearly pandas.
+# The processes are typically meta information like names, but lifecyle definition, or dependencies or relations to other data.
 
-# We can see that the data was loaded using the new CsvReader2.
-# However, this is a rather simple use case. In a real-world scenario, we would have more complex data and more complex operations.</div>
+# On the basis on the given data_dict earlier defined and its names, we use a DataCreator to inject the data_dict into the feature group abstraction.
+# Very simply spoken: we load the data.
+
+
+class SklearnDataCreator(AbstractFeatureGroup):
+    # This function is core to mloda. In this spot, the data framework with the actual data representation meets the defined and resolved processes.
+    # With this, we have access to the before and after state of a feature.
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:
+        # If this feature would not load data, we would use the data given from the parameter "data".
+        data = pd.DataFrame(data_dict)
+        return data
+
+    # One way to get this data is via defined input_data. But there are many more and we should not go to deep into this topic for now.
+    @classmethod
+    def input_data(cls) -&gt; Optional[BaseInputData]:
+        return DataCreator({"age", "weight", "state", "gender"})
+
+
+# As next, we will use one method of defining what features we want as result from the mloda framework.
+features = [
+    "standard_scaled__mean_imputed__age",  # Scale imputed age
+    "standard_scaled__mean_imputed__weight",  # Scale imputed weight
+    "onehot_encoded__state",  # One-hot encode state
+    "onehot_encoded__gender",  # One-hot encode gender
+]
+
+# We now use a trick to register all known feature groups. mloda will only use those which are loaded into the namespace.
+PluginLoader().all()
+
+# And then we execute mloda, which will resolve its dependencies of its feature groups and data frame technologies automatically.
+result = mlodaAPI.run_all(features, compute_frameworks={PandasDataframe})
+_result, _result2 = result[0], result[1]
+print("✅ Transformed dataset with split fit/transform:")
+print(_result.head(2))
+print(_result2.head(2))
+
+print(f"Result: {list(_result.columns)} \n {list(_result2.columns)} columns total")
+
+# Remark 1: We have not yet added the functionality to map the value to a column string back. It is planned. https://github.com/TomKaltofen/mloda/issues/46
+
+# Remark 2: If you see the error "ValueError: Multiple feature groups", please restart the notebook. This happens if we load the class SklearnDataCreator twice into the notebook memory.
+#         I have yet to find a solution for this.</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="application/vnd.jupyter.stderr" tabindex="0">
+<pre>/home/tom/envs/python310/lib/python3.10/site-packages/tqdm/auto.py:21: TqdmWarning: IProgress not found. Please update jupyter and ipywidgets. See https://ipywidgets.readthedocs.io/en/stable/user_install.html
+  from .autonotebook import tqdm as notebook_tqdm
+</pre>
+</div>
+</div>
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>✅ Transformed dataset with split fit/transform:
+   onehot_encoded__state~1  onehot_encoded__gender~0  onehot_encoded__state~0  \
+0                      0.0                       1.0                      0.0   
+1                      0.0                       0.0                      0.0   
+
+   onehot_encoded__gender~1  onehot_encoded__state~2  onehot_encoded__state~3  
+0                       0.0                      1.0                      0.0  
+1                       1.0                      1.0                      0.0  
+   standard_scaled__mean_imputed__age  standard_scaled__mean_imputed__weight
+0                            0.339295                               1.243621
+1                            1.057320                              -0.677472
+Result: ['onehot_encoded__state~1', 'onehot_encoded__gender~0', 'onehot_encoded__state~0', 'onehot_encoded__gender~1', 'onehot_encoded__state~2', 'onehot_encoded__state~3'] 
+ ['standard_scaled__mean_imputed__age', 'standard_scaled__mean_imputed__weight'] columns total
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [4]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="CodeMirror cm-s-jupyter">
+<div class="zeroclipboard-container">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-4">
+<div>
+<span class="notice" hidden="">Copied!</span>
+<svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
+<path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+<path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+</svg>
+</div>
+</clipboard-copy>
+</div>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># The beauty and strength of mloda is that we can combine feature groups in a very creative way.</span>
+<span class="n">chained_features</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">"max_aggr__standard_scaled__mean_imputed__age"</span><span class="p">,</span>  <span class="c1"># Do feature pipelines</span>
+    <span class="s2">"robust_scaled__mean_imputed__weight"</span><span class="p">,</span>  <span class="c1"># Different scaler for weight</span>
+    <span class="s2">"onehot_encoded__state~0"</span><span class="p">,</span>  <span class="c1"># Access specific one-hot column</span>
+<span class="p">]</span>
+
+<span class="n">result</span> <span class="o">=</span> <span class="n">mlodaAPI</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span><span class="n">chained_features</span><span class="p">,</span> <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">{</span><span class="n">PandasDataframe</span><span class="p">})</span>
+<span class="nb">print</span><span class="p">(</span>
+    <span class="n">result</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span>
+    <span class="n">result</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span>
+    <span class="n">result</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span>
+<span class="p">)</span>
+</pre></div>
+<div class="clipboard-copy-txt" id="cell-4"># The beauty and strength of mloda is that we can combine feature groups in a very creative way.
+chained_features = [
+    "max_aggr__standard_scaled__mean_imputed__age",  # Do feature pipelines
+    "robust_scaled__mean_imputed__weight",  # Different scaler for weight
+    "onehot_encoded__state~0",  # Access specific one-hot column
+]
+
+result = mlodaAPI.run_all(chained_features, compute_frameworks={PandasDataframe})
+print(
+    result[0].head(2),
+    result[1].head(2),
+    result[2].head(2),
+)</div>
 </div>
 </div>
 </div>
@@ -1048,198 +1120,139 @@ result = mlodaAPI.run_all(
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>We used CsvReader2 to load the data.
+<pre>   onehot_encoded__state~0
+0                      0.0
+1                      0.0    robust_scaled__mean_imputed__weight
+0                             0.938858
+1                            -0.535025    max_aggr__standard_scaled__mean_imputed__age
+0                                      1.609647
+1                                      1.609647
 </pre>
 </div>
 </div>
 </div>
 </div>
 </div>
-</div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h3 id="complex-plug-ins">Complex plug-ins<a class="anchor-link" href="#complex-plug-ins">¶</a></h3><p>These can be quite varied:</p>
-<ul>
-<li>aggregate features</li>
-<li>entity features</li>
-<li>historical features</li>
-</ul>
-<p>Additionally, one can also write feature groups for:</p>
-<ul>
-<li>using feature stores</li>
-<li>using orchestrator steps</li>
-<li>lazy evaluated functions</li>
-</ul>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="CodeMirror cm-s-jupyter">
+<div class="zeroclipboard-container">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-5">
+<div>
+<span class="notice" hidden="">Copied!</span>
+<svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
+<path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+<path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+</svg>
 </div>
+</clipboard-copy>
 </div>
-</div>
-</div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h3 id="quality">Quality<a class="anchor-link" href="#quality">¶</a></h3><p>The producer must optimize quality, which includes:</p>
-<ul>
-<li>defining input and output validators</li>
-<li>manage the storage and retrieval of artifacts</li>
-<li>implementing software testing</li>
-</ul>
-<p>An integration test could be done by using mlodaAPI.run_all and custom data.</p>
-<p>An example of a unit test could look like:</p>
-<div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">test_csv_reader_2</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> 
-   <span class="k">def</span><span class="w"> </span><span class="nf">test_parse_options_are_customized</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mock_read_csv</span><span class="p">):</span>
-        <span class="c1"># Ensure the parse options are as expected</span>
-        <span class="n">expected_parse_options</span> <span class="o">=</span> <span class="n">pyarrow_csv</span><span class="o">.</span><span class="n">ParseOptions</span><span class="p">(</span>
-            <span class="n">delimiter</span><span class="o">=</span><span class="s2">","</span><span class="p">,</span>
-            <span class="n">quote_char</span><span class="o">=</span><span class="s1">'"'</span><span class="p">,</span>
-            <span class="n">ignore_empty_lines</span><span class="o">=</span><span class="kc">True</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># We can replace feature groups and dataframe plugins in an easy fashion.</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.components.plugin_option.plugin_collector</span><span class="w"> </span><span class="kn">import</span> <span class="n">PlugInCollector</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">SecondSklearnDataCreator</span><span class="p">(</span><span class="n">AbstractFeatureGroup</span><span class="p">):</span>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">input_data</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">BaseInputData</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="n">DataCreator</span><span class="p">({</span><span class="s2">"age"</span><span class="p">,</span> <span class="s2">"weight"</span><span class="p">,</span> <span class="s2">"state"</span><span class="p">,</span> <span class="s2">"gender"</span><span class="p">})</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">calculate_feature</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">features</span><span class="p">:</span> <span class="n">FeatureSet</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"I, </span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="n">get_class_name</span><span class="p">()</span><span class="si">}</span><span class="s2"> AM NOW USED."</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="s2">"age"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">25</span><span class="p">,</span> <span class="mi">65</span><span class="p">,</span> <span class="mi">500</span><span class="p">),</span>
+                <span class="s2">"weight"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="mi">80</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="mi">500</span><span class="p">),</span>  <span class="c1"># Different distribution</span>
+                <span class="s2">"state"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">([</span><span class="s2">"WA"</span><span class="p">,</span> <span class="s2">"OR"</span><span class="p">],</span> <span class="mi">500</span><span class="p">),</span>  <span class="c1"># Different states!</span>
+                <span class="s2">"gender"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">([</span><span class="s2">"M"</span><span class="p">,</span> <span class="s2">"F"</span><span class="p">,</span> <span class="s2">"Other"</span><span class="p">],</span> <span class="mi">500</span><span class="p">),</span>  <span class="c1"># New category!</span>
+            <span class="p">}</span>
         <span class="p">)</span>
 
-        <span class="c1"># Call the method to trigger parse options usage</span>
-        <span class="n">CsvReader2</span><span class="o">.</span><span class="n">load_data</span><span class="p">(</span><span class="n">Mock</span><span class="p">(),</span> <span class="n">Mock</span><span class="p">(</span><span class="n">spec</span><span class="o">=</span><span class="n">FeatureSet</span><span class="p">))</span>
 
-        <span class="c1"># Verify that the _parse_options in CsvReader2 are customized</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">assertEqual</span><span class="p">(</span><span class="n">CsvReader2</span><span class="o">.</span><span class="n">_parse_options</span><span class="p">,</span> <span class="n">expected_parse_options</span><span class="p">)</span>
+<span class="n">chained_features</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">"max_aggr__standard_scaled__mean_imputed__age"</span><span class="p">,</span>  <span class="c1"># Step 2: Scale imputed</span>
+    <span class="s2">"robust_scaled__mean_imputed__weight"</span><span class="p">,</span>  <span class="c1"># Different scaler for weight</span>
+    <span class="s2">"onehot_encoded__state~0"</span><span class="p">,</span>  <span class="c1"># Access specific one-hot column</span>
+<span class="p">]</span>
+
+<span class="c1"># We deactivated now the other feature group, so that we use SecondSklearnDataCreator.</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">mlodaAPI</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span>
+    <span class="n">chained_features</span><span class="p">,</span>
+    <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">{</span><span class="n">PandasDataframe</span><span class="p">},</span>
+    <span class="n">plugin_collector</span><span class="o">=</span><span class="n">PlugInCollector</span><span class="o">.</span><span class="n">disabled_feature_groups</span><span class="p">(</span><span class="n">SklearnDataCreator</span><span class="p">),</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span>
+    <span class="n">result</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span>
+    <span class="n">result</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span>
+    <span class="n">result</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span>
+<span class="p">)</span>
 </pre></div>
-<p>This allows us to apply software engineering practices consistently throughout the entire data workflow.</p>
-</div>
-</div>
-</div>
-</div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h3 id="consequences">Consequences<a class="anchor-link" href="#consequences">¶</a></h3><p>Within mloda, the data producer is empowered as the primary driver, owing to the extensive and customizable range of available plugins.</p>
-<p>Unlike traditional data toolchains, mloda provides data producers with the flexibility to define their specific start and end points. This enables the versatile application of mloda across different parts of machine learning lifecycle, such as prototyping, training data preparation, or real-time result monitoring.</p>
-<p>This includes the autonomy to define the boundaries of the data producer's domain and to govern the outflow of data. Both aspects are managed through feature groups, which remain under the direct control of the data producer.</p>
-</div>
-</div>
-</div>
-</div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="data-user-role">Data User Role<a class="anchor-link" href="#data-user-role">¶</a></h2><p>The Data User plays a pivotal role in configuring and utilizing the mloda API for machine learning and data workflows. The mloda API offers flexible configurations to cater to diverse use cases across the ML lifecycle. Below is an outline of the configurations and features that define the Data User's role:</p>
-<div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">mlodaAPI</span><span class="p">:</span>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">requested_features</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Features</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">Feature</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]],</span>
-        <span class="n">compute_frameworks</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Set</span><span class="p">[</span><span class="n">Type</span><span class="p">[</span><span class="n">ComputeFrameWork</span><span class="p">]],</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">links</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Set</span><span class="p">[</span><span class="n">Link</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">data_access_collection</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">DataAccessCollection</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">global_filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">GlobalFilter</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">api_input_data_collection</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ApiInputDataCollection</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">plugin_collector</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">PlugInCollector</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<div class="clipboard-copy-txt" id="cell-5"># We can replace feature groups and dataframe plugins in an easy fashion.
+from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 
-<span class="n">data</span> <span class="o">=</span> <span class="n">mlodaAPI</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span><span class="n">requested_feature</span><span class="p">,</span><span class="o">...</span><span class="p">)</span>
-</pre></div>
-<p>Let’s use the API to further explain the Data User role. As shown above, there are several configurations to consider. The key ones are:</p>
-<ul>
-<li>Which features to request and if the compute_frameworks should be limited?</li>
-<li>How data is linked?</li>
-<li>What specific access rights and permissions does the user have?</li>
-<li>How data is refined to meet the requirements of the use case?</li>
-</ul>
-<p>With all the given configurations, the mloda core is designed, whenever feasible, to follow the process:</p>
-<ul>
-<li>First, formulate an optimized execution plan</li>
-<li>Second, to execute the plan accordingly</li>
-</ul>
-<p>What the user mostly gains is that the process is repeatable and can be run in most environments, as long as the plug-ins are available and the accesses exist (firewalls, credentials).</p>
-<p>The data user could run mloda API in following scenarios:</p>
-<ul>
-<li>POC notebooks</li>
-<li>Production code scenarios (model training or realtime prediction)</li>
-<li>Micro service endpont</li>
-<li>KPI or QA test data ingestion</li>
-</ul>
-<p>With this, the whole ml lifecycle is represented and plug-ins can be reused in a testable and repeatable way along this cycle.</p>
-</div>
-</div>
-</div>
-</div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="data-owner-role">Data Owner Role<a class="anchor-link" href="#data-owner-role">¶</a></h2><p>Data owners typically operate at various levels within an organization.</p>
-<p>It can be the one who produces the data, the business stakeholder responsible for the service, or, in some cases, may not be explicitly defined.</p>
-<p>In mloda, the data owner is the one in control of the governance. However, as to date, this system is not included in this open-source offering, as this platform is reserved for development until the plugin ecosystem has a higher degree of maturity.</p>
-<p>We have the plug-in functionalities to integrate governance and operations systems in place. Two simple examples can be:</p>
-<h4 id="using-organization-wide-logging">Using organization wide logging<a class="anchor-link" href="#using-organization-wide-logging">¶</a></h4><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">OtelExtender</span><span class="p">(</span><span class="n">WrapperFunctionExtender</span><span class="p">):</span>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">trace</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span>
 
-        <span class="c1"># Function to be wrapped by the Extender</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">wrapped</span> <span class="o">=</span> <span class="p">{</span><span class="n">WrapperFunctionEnum</span><span class="o">.</span><span class="n">FEATURE_GROUP_CALCULATE_FEATURE</span><span class="p">}</span>
+class SecondSklearnDataCreator(AbstractFeatureGroup):
+    @classmethod
+    def input_data(cls) -&gt; Optional[BaseInputData]:
+        return DataCreator({"age", "weight", "state", "gender"})
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">wraps</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Set</span><span class="p">[</span><span class="n">WrapperFunctionEnum</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">wrapped</span>
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:
+        print(f"I, {cls.get_class_name()} AM NOW USED.")
+        return pd.DataFrame(
+            {
+                "age": np.random.randint(25, 65, 500),
+                "weight": np.random.normal(80, 20, 500),  # Different distribution
+                "state": np.random.choice(["WA", "OR"], 500),  # Different states!
+                "gender": np.random.choice(["M", "F", "Other"], 500),  # New category!
+            }
+        )
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">func</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">"OtelExtender"</span><span class="p">)</span>
-        <span class="n">result</span> <span class="o">=</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">result</span>
-</pre></div>
-<h4 id="logging-data-size">Logging data size<a class="anchor-link" href="#logging-data-size">¶</a></h4><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">LogSizeOfData</span><span class="p">(</span><span class="n">WrapperFunctionExtender</span><span class="p">):</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">wraps</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Set</span><span class="p">[</span><span class="n">WrapperFunctionEnum</span><span class="p">]:</span>
-        <span class="c1"># Function to be wrapped by the Extender</span>
-        <span class="k">return</span> <span class="p">{</span><span class="n">WrapperFunctionEnum</span><span class="o">.</span><span class="n">VALIDATE_INPUT_FEATURE</span><span class="p">}</span>
+chained_features = [
+    "max_aggr__standard_scaled__mean_imputed__age",  # Step 2: Scale imputed
+    "robust_scaled__mean_imputed__weight",  # Different scaler for weight
+    "onehot_encoded__state~0",  # Access specific one-hot column
+]
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">func</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-        <span class="n">result</span> <span class="o">=</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="n">size</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">getsizeof</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Size: </span><span class="si">{</span><span class="n">size</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">result</span>
-</pre></div>
+# We deactivated now the other feature group, so that we use SecondSklearnDataCreator.
+result = mlodaAPI.run_all(
+    chained_features,
+    compute_frameworks={PandasDataframe},
+    plugin_collector=PlugInCollector.disabled_feature_groups(SklearnDataCreator),
+)
+print(
+    result[0].head(2),
+    result[1].head(2),
+    result[2].head(2),
+)</div>
 </div>
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
 </div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="conclusion">Conclusion<a class="anchor-link" href="#conclusion">¶</a></h2><p>In this notebook, we explored the roles of Data Producers, Data Users, and Data Owners within mloda. We delved into the responsibilities and functionalities associated with each role, highlighting how they contribute to the overall data lifecycle.</p>
-<ul>
-<li><p>Data Producers are responsible for implementing the plugins, ensuring the accuracy of data access processes, and defining relevant configuration options</p>
-</li>
-<li><p>Data Users create usage configuration and apply the mlodaAPI to receive data</p>
-</li>
-<li><p>Data Owners, while not fully covered in this open-source offering, they are critical for governance and ensuring the ongoing availability and maintenance of essential plugins</p>
-</li>
-</ul>
-<p>Understanding these roles and their interactions, shows how mloda's modular and extensible design is vital in bringing the change to efficient data management practices and processing throughout the machine learning lifecycle</p>
-</div>
-</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>I, SecondSklearnDataCreator AM NOW USED.
+   onehot_encoded__state~0
+0                      1.0
+1                      1.0    robust_scaled__mean_imputed__weight
+0                             0.677809
+1                            -0.293511    max_aggr__standard_scaled__mean_imputed__age
+0                                      1.631997
+1                                      1.631997
+</pre>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="next-steps">Next steps<a class="anchor-link" href="#next-steps">¶</a></h2><p>While mloda holds a great potential to become a unified portal, we face a key challenge: its plugin coverage is not comprehensive enough to integrate seamlessly across all available tools and technologies. Therefore, active community contributions are absolutely essential to accelerate both its adoption and its ability to transform data management practices</p>
 </div>
 </div>
 </div>
@@ -1255,8 +1268,8 @@ result = mlodaAPI.run_all(
             </div>
           </div><footer>
     <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
-        <a href="../3_ml_data_feature_feature_groups/" class="btn btn-neutral float-left" title="Data, Feature, FeatureSets and FeatureGroups in mloda"><span class="icon icon-circle-arrow-left"></span> Previous</a>
-        <a href="../../../chapter1/installation/" class="btn btn-neutral float-right" title="Installation">Next <span class="icon icon-circle-arrow-right"></span></a>
+        <a href="../../chapter1/installation/" class="btn btn-neutral float-left" title="Installation"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../../chapter1/api-request/" class="btn btn-neutral float-right" title="API Request">Next <span class="icon icon-circle-arrow-right"></span></a>
     </div>
 
   <hr/>
@@ -1279,17 +1292,17 @@ result = mlodaAPI.run_all(
   <span class="rst-current-version" data-toggle="rst-current-version">
     
     
-      <span><a href="../3_ml_data_feature_feature_groups/" style="color: #fcfcfc">&laquo; Previous</a></span>
+      <span><a href="../../chapter1/installation/" style="color: #fcfcfc">&laquo; Previous</a></span>
     
     
-      <span><a href="../../../chapter1/installation/" style="color: #fcfcfc">Next &raquo;</a></span>
+      <span><a href="../../chapter1/api-request/" style="color: #fcfcfc">Next &raquo;</a></span>
     
   </span>
 </div>
-    <script src="../../../js/jquery-3.6.0.min.js"></script>
-    <script>var base_url = "../../..";</script>
-    <script src="../../../js/theme_extra.js"></script>
-    <script src="../../../js/theme.js"></script>
+    <script src="../../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "../..";</script>
+    <script src="../../js/theme_extra.js"></script>
+    <script src="../../js/theme.js"></script>
     <script>
         jQuery(function () {
             SphinxRtdTheme.Navigation.enable(true);

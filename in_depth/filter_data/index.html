@@ -57,6 +57,8 @@
               <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/installation/">Installation</a>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/api-request/">API Request</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/feature-groups/">Feature Groups</a>
@@ -101,11 +103,15 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../domain/">Domain concept</a>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../data-access-patterns/">Data Access Patterns</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" >Compute Frameworks</a>
     <ul>
                 <li class="toctree-l2"><a class="reference internal" href="../framework-transformers/">Framework Transformers</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../compute-framework-integration/">Compute Framework Integration</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../framework-connection-object/">Framework Connection Object</a>
                 </li>
     </ul>
                   </li>
@@ -213,12 +219,12 @@
 <pre><code class="language-python">from mloda_core.filter.global_filter import GlobalFilter
 
 global_filter = GlobalFilter()
-global_filter.add_filter(&quot;example_order_id&quot;, &quot;eq&quot;, {&quot;value&quot;: 1})
+global_filter.add_filter(&quot;example_order_id&quot;, &quot;equal&quot;, {&quot;value&quot;: 1})
 
 global_filter.filters
 </code></pre>
 <p>Result</p>
-<pre><code class="language-python">{&lt;SingleFilter(feature_name=example_order_id, type=eq, parameters=(('value', 1),))&gt;}
+<pre><code class="language-python">{&lt;SingleFilter(feature_name=example_order_id, type=equal, parameters=(('value', 1),))&gt;}
 </code></pre>
 <h4 id="how-to-deal-with-time-filters">How to deal with time filters</h4>
 <p>In this example, we show how one can manage datetime relations.</p>

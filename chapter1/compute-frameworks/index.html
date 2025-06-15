@@ -57,6 +57,8 @@
               <ul class="current">
                   <li class="toctree-l1"><a class="reference internal" href="../installation/">Installation</a>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" href="../api-request/">API Request</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../feature-groups/">Feature Groups</a>
@@ -79,7 +81,13 @@
     </li>
         </ul>
     </li>
-    <li class="toctree-l2"><a class="reference internal" href="#5-summary">5. Summary</a>
+    <li class="toctree-l2"><a class="reference internal" href="#5-available-compute-frameworks">5. Available Compute Frameworks</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#automatic-dependency-detection">Automatic Dependency Detection</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#6-summary">6. Summary</a>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#6-advanced-compute-framework-topics">6. Advanced Compute Framework Topics</a>
     </li>
@@ -107,11 +115,15 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../in_depth/domain/">Domain concept</a>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../in_depth/data-access-patterns/">Data Access Patterns</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" >Compute Frameworks</a>
     <ul>
                 <li class="toctree-l2"><a class="reference internal" href="../../in_depth/framework-transformers/">Framework Transformers</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../in_depth/compute-framework-integration/">Compute Framework Integration</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/framework-connection-object/">Framework Connection Object</a>
                 </li>
     </ul>
                   </li>
@@ -203,7 +215,7 @@ ValueError: Multiple feature groups
 &lt;class 'ReadCsvPandas'&gt;: {&lt;class 'PandasDataframe'&gt;}
 .... found for feature name: id.
 </code></pre>
-<p>In this case, the framework finds multiple feature groups (like <strong>ReadCsv</strong> and <strong>ReadCsvPandas</strong>) that can handle the same file, but use different compute frameworks (<strong>PyarrowTable</strong> vs. <strong>PandasDataframe</strong>). Without explicitly specifying a compute framework, mloda doesn't know which one to use, leading to ambiguity.</p>
+<p>In this case, the framework finds multiple feature groups (like <strong>ReadCsv</strong> and <strong>ReadCsvPandas</strong>) that can handle the same file, but use different compute frameworks (<strong>PyarrowTable</strong> vs. <strong>PandasDataframe</strong> vs. <strong>PythonDict</strong>). Without explicitly specifying a compute framework, mloda doesn't know which one to use, leading to ambiguity.</p>
 <p>This might seem counterintuitive, but it’s actually a <strong>feature</strong>, allowing you to compare different technologies and computation methods, particularly useful in scenarios such as:</p>
 <ul>
 <li><strong>Migrations</strong>: Moving from one environment to another.</li>
@@ -272,7 +284,150 @@ result = mlodaAPI.run_all(
 result[0]
 </code></pre>
 <p>In this case, the feature group ExampleB will only run on the PyarrowTable framework, while the input feature group uses PandasDataframe, ensuring that the framework correctly handles the conversion between these technologies.</p>
-<h4 id="5-summary">5. Summary</h4>
+<h4 id="5-available-compute-frameworks">5. Available Compute Frameworks</h4>
+<table>
+<thead>
+<tr>
+<th>Framework</th>
+<th>Technology</th>
+<th>Strengths</th>
+<th>Best For</th>
+<th>Dependencies</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>PandasDataframe</strong></td>
+<td>pandas DataFrame</td>
+<td>Rich data transformation, familiar API</td>
+<td>Development, data exploration, smaller datasets</td>
+<td>pandas, numpy</td>
+</tr>
+<tr>
+<td><strong>PyarrowTable</strong></td>
+<td>Apache Arrow Tables</td>
+<td>Memory-efficient, high performance, columnar format</td>
+<td>Production, big data, interoperability</td>
+<td>pyarrow</td>
+</tr>
+<tr>
+<td><strong>PolarsDataframe</strong></td>
+<td>Polars DataFrame</td>
+<td>Fast, memory-efficient, eager evaluation</td>
+<td>Development, immediate results</td>
+<td>polars</td>
+</tr>
+<tr>
+<td><strong>PolarsLazyDataframe</strong></td>
+<td>Polars LazyFrame</td>
+<td>Query optimization, lazy evaluation</td>
+<td>Large datasets, performance optimization</td>
+<td>polars</td>
+</tr>
+<tr>
+<td><strong>DuckDBFramework</strong></td>
+<td>DuckDB Relations</td>
+<td>SQL interface, fast analytics, OLAP queries</td>
+<td>Analytical workloads, SQL-based transformations, data warehousing</td>
+<td>duckdb</td>
+</tr>
+<tr>
+<td><strong>IcebergFramework</strong></td>
+<td>Apache Iceberg Tables</td>
+<td>Schema evolution, time travel, data lake management</td>
+<td>Data lake scenarios, versioned datasets, large-scale analytics</td>
+<td>pyiceberg, pyarrow</td>
+</tr>
+<tr>
+<td><strong>PythonDict</strong></td>
+<td>List[Dict[str, Any]]</td>
+<td>Zero dependencies, simple, lightweight</td>
+<td>Minimal environments, education, prototyping</td>
+<td>None (Python stdlib only)</td>
+</tr>
+</tbody>
+</table>
+<h5 id="automatic-dependency-detection">Automatic Dependency Detection</h5>
+<p>mloda automatically detects which compute frameworks are available based on installed dependencies. If a required dependency (like <code>pandas</code> or <code>pyarrow</code>) is not installed, the corresponding compute framework will be automatically excluded from discovery, preventing runtime errors.</p>
+<p>This means you can:
+- Install only the dependencies you need for your specific use case
+- Deploy mloda in minimal environments without all compute framework dependencies
+- Avoid import errors when optional dependencies are missing</p>
+<p>For example, if <code>polars</code> is not installed, <code>PolarsDataframe</code> will not be available as a compute framework option, and mloda will automatically work with the remaining available frameworks.</p>
+<p>Example using PythonDict framework:</p>
+<pre><code class="language-python">from mloda_core.abstract_plugins.components.feature import Feature
+
+feature = Feature(&quot;id&quot;, options={&quot;compute_framework&quot;: &quot;PythonDict&quot;})
+
+result = mlodaAPI.run_all(
+    [feature], 
+    data_access_collection=data_access_collection
+)
+result[0]  # Returns List[Dict[str, Any]]
+</code></pre>
+<p>Example using Polars frameworks:</p>
+<pre><code class="language-python">from mloda_core.abstract_plugins.components.feature import Feature
+
+# Using Polars eager evaluation
+feature_eager = Feature(&quot;id&quot;, options={&quot;compute_framework&quot;: &quot;PolarsDataframe&quot;})
+
+# Using Polars lazy evaluation
+feature_lazy = Feature(&quot;id&quot;, options={&quot;compute_framework&quot;: &quot;PolarsLazyDataframe&quot;})
+
+result = mlodaAPI.run_all(
+    [feature_eager], 
+    data_access_collection=data_access_collection
+)
+result[0]  # Returns polars.DataFrame
+</code></pre>
+<p>Example using DuckDB framework:</p>
+<pre><code class="language-python">from mloda_core.abstract_plugins.components.feature import Feature
+import duckdb
+
+# Create DuckDB connection
+connection = duckdb.connect()
+
+# Set up data access with connection
+data_access_collection = DataAccessCollection(
+    initialized_connection_object={connection}
+)
+
+feature = Feature(&quot;id&quot;, options={&quot;compute_framework&quot;: &quot;DuckDBFramework&quot;})
+
+result = mlodaAPI.run_all(
+    [feature], 
+    data_access_collection=data_access_collection
+)
+result[0]  # Returns duckdb.DuckDBPyRelation
+</code></pre>
+<p><strong>Note</strong>: DuckDB framework requires a connection object and does not support mloda framework inherent multiprocessing. Multiprocessing from DuckDB still works. It's optimized for analytical workloads and provides SQL-like operations on data.</p>
+<p>Example using Iceberg framework:</p>
+<pre><code class="language-python">from mloda_core.abstract_plugins.components.feature import Feature
+from pyiceberg.catalog import load_catalog
+
+# Create Iceberg catalog (example with REST catalog)
+catalog = load_catalog(&quot;default&quot;, **{
+    &quot;uri&quot;: &quot;http://localhost:8181&quot;,
+    &quot;credential&quot;: &quot;client-credentials&quot;,
+    &quot;client.id&quot;: &quot;admin&quot;,
+    &quot;client.secret&quot;: &quot;password&quot;
+})
+
+# Set up data access with catalog
+data_access_collection = DataAccessCollection(
+    initialized_connection_objects={catalog}
+)
+
+feature = Feature(&quot;id&quot;, options={&quot;compute_framework&quot;: &quot;IcebergFramework&quot;})
+
+result = mlodaAPI.run_all(
+    [feature], 
+    data_access_collection=data_access_collection
+)
+result[0]  # Returns pyiceberg.table.Table or pyarrow.Table
+</code></pre>
+<p><strong>Note</strong>: Iceberg framework requires a catalog connection object for table operations. It's optimized for data lake scenarios with schema evolution, time travel capabilities, and large-scale analytics. The framework uses PyArrow as an interchange format for compatibility with other mloda frameworks.</p>
+<h4 id="6-summary">6. Summary</h4>
 <p>mloda's compute framework adds flexibility, allowing you to select the best tool for different stages of data and feature engineering. While it introduces some complexity, it's invaluable for comparing technologies and managing environments.</p>
 <p>That said, <strong>you can configure mloda to use just one compute framework</strong> for a more familiar workflow, similar to traditional feature stores, data pipelines, or ETL systems. Whether you prefer flexibility or simplicity, mloda adapts to your needs while ensuring consistent feature processing.</p>
 <h3 id="6-advanced-compute-framework-topics">6. Advanced Compute Framework Topics</h3>
@@ -280,6 +435,7 @@ result[0]
 <ul>
 <li><a href="../../in_depth/framework-transformers/">Framework Transformers</a> - How data is transformed between different compute frameworks</li>
 <li><a href="../../in_depth/compute-framework-integration/">Compute Framework Integration</a> - How feature groups integrate with different compute frameworks</li>
+<li><a href="../../in_depth/framework-connection-object/">Framework Connection Object</a> - How stateful frameworks manage persistent connections and state</li>
 </ul>
               
             </div>

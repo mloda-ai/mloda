@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="../../img/favicon.ico" />
+    <title>Data Access Patterns - mloda docs</title>
+    <link rel="stylesheet" href="../../css/theme.css" />
+    <link rel="stylesheet" href="../../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Data Access Patterns";
+        var mkdocs_page_input_path = "in_depth/data-access-patterns.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="../.." class="icon icon-home"> mloda docs
+        </a>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption"><span class="caption-text">Home</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../..">mloda</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">mloda Concepts</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/0_table_of_content/">Table of Content</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/1_ml_mloda_intro/">Intro to the core interfaces of mloda</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/2_ml_advantage_process_focus/">What makes mloda unique?</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/3_ml_data_feature_feature_groups/">Data, Feature, FeatureSets and FeatureGroups in mloda</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/4_ml_data_producers_user_owner/">Data Producer, User, Owner in mloda</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Getting Started</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/installation/">Installation</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/api-request/">API Request</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/feature-groups/">Feature Groups</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/compute-frameworks/">Compute Frameworks</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/extender/">Extender</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">In Depth - Basics</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../mloda-api/">mloda API</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../access-feature-data/">(Feature) data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../join_data/">Join data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../filter_data/">Filter data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../artifacts/">Artifacts</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">In Depth - Advanced</span></p>
+              <ul class="current">
+                  <li class="toctree-l1"><a class="reference internal" href="../data-quality/">Data quality</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../domain/">Domain concept</a>
+                  </li>
+                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Data Access Patterns</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#baseinputdata-pattern">BaseInputData Pattern</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#purpose">Purpose</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#key-characteristics">Key Characteristics</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#use-cases">Use Cases</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#example-implementation">Example Implementation</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#common-baseinputdata-implementations">Common BaseInputData Implementations</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#matchdata-pattern">MatchData Pattern</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#purpose_1">Purpose</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#key-characteristics_1">Key Characteristics</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#when-matchdata-is-used">When MatchData is Used</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#use-cases_1">Use Cases</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#example-implementation_1">Example Implementation</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#key-differences">Key Differences</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#how-they-work-together">How They Work Together</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#baseinputdata-workflow">BaseInputData Workflow</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#matchdata-workflow-connection-specific">MatchData Workflow (Connection-Specific)</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#combined-usage-example">Combined Usage Example</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#practical-examples">Practical Examples</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#scenario-1-standard-file-processing-baseinputdata-only">Scenario 1: Standard File Processing (BaseInputData Only)</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#scenario-2-duckdb-analytics-baseinputdata-matchdata">Scenario 2: DuckDB Analytics (BaseInputData + MatchData)</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#scenario-3-in-memory-processing-baseinputdata-only">Scenario 3: In-Memory Processing (BaseInputData Only)</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#integration-with-other-concepts">Integration with Other Concepts</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#compute-frameworks">Compute Frameworks</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#feature-groups">Feature Groups</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#best-practices">Best Practices</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#when-to-use-baseinputdata-only">When to Use BaseInputData Only</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#when-to-use-baseinputdata-matchdata">When to Use BaseInputData + MatchData</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#design-considerations">Design Considerations</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#related-documentation">Related Documentation</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#summary">Summary</a>
+    </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Compute Frameworks</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../framework-transformers/">Framework Transformers</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../compute-framework-integration/">Compute Framework Integration</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../framework-connection-object/">Framework Connection Object</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-chain-parser/">Feature Chain Parser</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-group-matching/">Feature Group Matching</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-group-testing/">Feature Group Testing</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-group-version/">Feature Group Versioning</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../multiple_result_columns/">Multiple Result Columns</a>
+                </li>
+    </ul>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Development</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../development/">Contributors</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../license/">License - Apache 2.0</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../missing/">Missing</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Need Help?</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../faq/">FAQ</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../need-help/">Need Help</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../..">mloda docs</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../.." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">In Depth - Advanced</li>
+      <li class="breadcrumb-item active">Data Access Patterns</li>
+    <li class="wy-breadcrumbs-aside">
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="data-access-patterns-baseinputdata-vs-matchdata">Data Access Patterns: BaseInputData vs MatchData</h1>
+<h2 id="overview">Overview</h2>
+<p>mloda provides two distinct but complementary patterns for data access: <strong>BaseInputData</strong> and <strong>MatchData</strong>. While they may appear similar at first glance, they serve different purposes and are used in different contexts within the framework.</p>
+<p>This document clarifies the differences between these concepts and their respective use cases. For practical examples of data access methods, see <a href="../access-feature-data/">Data Access Overview</a>.</p>
+<h2 id="baseinputdata-pattern">BaseInputData Pattern</h2>
+<h3 id="purpose">Purpose</h3>
+<p>BaseInputData is an <strong>abstract base class</strong> that defines how feature groups <strong>load and access data</strong>. It's the foundation for data loading mechanisms in mloda.</p>
+<h3 id="key-characteristics">Key Characteristics</h3>
+<ul>
+<li><strong>Data Loading Focus</strong>: Primarily concerned with how to load data from various sources</li>
+<li><strong>Feature Group Integration</strong>: Used by feature groups through the <code>input_data()</code> method</li>
+<li><strong>Inheritance-Based</strong>: Concrete implementations inherit from BaseInputData</li>
+<li><strong>Scope Management</strong>: Supports both global and feature-specific data access scopes</li>
+<li><strong>Universal Usage</strong>: Used by all feature groups that need to load data</li>
+</ul>
+<h3 id="use-cases">Use Cases</h3>
+<ul>
+<li>Reading files (CSV, JSON, Parquet, etc.)</li>
+<li>Connecting to databases</li>
+<li>Creating synthetic/test data</li>
+<li>Loading data from APIs</li>
+<li>Managing data dependencies between features</li>
+</ul>
+<p>For detailed examples of these use cases, see the <a href="../access-feature-data/">data access documentation</a>.</p>
+<h3 id="example-implementation">Example Implementation</h3>
+<pre><code class="language-python">from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
+
+class ReadFileFeature(AbstractFeatureGroup):
+    @classmethod
+    def input_data(cls) -&gt; Optional[BaseInputData]:
+        return ReadFile()  # BaseInputData implementation
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:
+        reader = cls.input_data()
+        if reader is not None:
+            data = reader.load(features)
+            return data
+        raise ValueError(&quot;Reading file failed.&quot;)
+</code></pre>
+<h3 id="common-baseinputdata-implementations">Common BaseInputData Implementations</h3>
+<ul>
+<li><strong>ReadFile</strong>: For file-based data loading (see <a href="../access-feature-data/#global-scope-data-access">access-feature-data</a>)</li>
+<li><strong>DataCreator</strong>: For generating synthetic data (see <a href="../access-feature-data/#data-creator">access-feature-data</a>)</li>
+<li><strong>ApiInputData</strong>: For runtime data injection (see <a href="../access-feature-data/#apidata">access-feature-data</a>)</li>
+<li><strong>DatabaseConnector</strong>: For database connections</li>
+</ul>
+<h2 id="matchdata-pattern">MatchData Pattern</h2>
+<h3 id="purpose_1">Purpose</h3>
+<p>MatchData is a <strong>specialized matching mechanism</strong> specifically designed for feature groups that require <strong>framework connection objects</strong>. It determines which data access method should be used when stateful connections are needed.</p>
+<h3 id="key-characteristics_1">Key Characteristics</h3>
+<ul>
+<li><strong>Connection-Specific</strong>: Only used for feature groups that need framework connection objects</li>
+<li><strong>Matching Logic</strong>: Determines which data source matches when connections are involved</li>
+<li><strong>Scope Resolution</strong>: Resolves conflicts between feature-scope and global-scope data access for stateful frameworks</li>
+<li><strong>Limited Usage</strong>: Only applies to specific compute frameworks (like DuckDB) that require persistent connections</li>
+</ul>
+<h3 id="when-matchdata-is-used">When MatchData is Used</h3>
+<p>MatchData is <strong>only</strong> used in these specific scenarios:
+- Feature groups that work with <strong>stateful compute frameworks</strong> (e.g., DuckDB)
+- When <strong>framework connection objects</strong> are required
+- For data sources that need <strong>persistent connections</strong> (databases, connection pools)</p>
+<h3 id="use-cases_1">Use Cases</h3>
+<ul>
+<li>Matching DuckDB features to appropriate DuckDB connections</li>
+<li>Routing features to specific database connections based on credentials</li>
+<li>Resolving data access when multiple connection objects are available</li>
+<li>Enabling flexible connection configuration for stateful frameworks</li>
+</ul>
+<h3 id="example-implementation_1">Example Implementation</h3>
+<pre><code class="language-python">from mloda_core.abstract_plugins.components.match_data.match_data import MatchData
+
+class DuckDBFeatureGroup(AbstractFeatureGroup, MatchData):
+    @classmethod
+    def match_data_access(
+        cls,
+        feature_name: str,
+        options: Options,
+        data_access_collection: Optional[DataAccessCollection] = None,
+        framework_connection_object: Optional[Any] = None,
+    ) -&gt; Any:
+        # Logic to determine if this matcher handles DuckDB connections
+        if framework_connection_object and isinstance(framework_connection_object, duckdb.DuckDBPyConnection):
+            return framework_connection_object
+        if data_access_collection and data_access_collection.has_duckdb_connections():
+            return data_access_collection.get_duckdb_connection()
+        return None
+</code></pre>
+<h2 id="key-differences">Key Differences</h2>
+<table>
+<thead>
+<tr>
+<th>Aspect</th>
+<th>BaseInputData</th>
+<th>MatchData</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Primary Purpose</strong></td>
+<td>Data loading and access</td>
+<td>Connection object matching for stateful frameworks</td>
+</tr>
+<tr>
+<td><strong>When Used</strong></td>
+<td>All feature groups that load data</td>
+<td>Only feature groups requiring framework connection objects</td>
+</tr>
+<tr>
+<td><strong>Scope</strong></td>
+<td>Universal data access pattern</td>
+<td>Specialized for stateful compute frameworks</td>
+</tr>
+<tr>
+<td><strong>Usage Pattern</strong></td>
+<td><code>input_data()</code> method in feature groups</td>
+<td>Multiple inheritance: <code>AbstractFeatureGroup, MatchData</code></td>
+</tr>
+<tr>
+<td><strong>Connection Dependency</strong></td>
+<td>Works with or without connections</td>
+<td>Specifically designed for connection objects</td>
+</tr>
+<tr>
+<td><strong>Framework Support</strong></td>
+<td>All compute frameworks</td>
+<td>Only stateful frameworks (DuckDB, database connections)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="how-they-work-together">How They Work Together</h2>
+<p>BaseInputData and MatchData serve <strong>different purposes</strong> and are used in <strong>different scenarios</strong>:</p>
+<h3 id="baseinputdata-workflow">BaseInputData Workflow</h3>
+<ol>
+<li><strong>Feature groups</strong> define their data loading strategy via <code>input_data()</code> method</li>
+<li><strong>BaseInputData implementations</strong> handle the actual data loading</li>
+<li>Works with <strong>all compute frameworks</strong> (stateful and stateless)</li>
+</ol>
+<h3 id="matchdata-workflow-connection-specific">MatchData Workflow (Connection-Specific)</h3>
+<ol>
+<li><strong>Only used</strong> when feature groups need <strong>framework connection objects</strong></li>
+<li><strong>MatchData</strong> determines which connection object to use for stateful frameworks</li>
+<li><strong>Only applies</strong> to specific compute frameworks like DuckDB that require persistent connections</li>
+</ol>
+<h3 id="combined-usage-example">Combined Usage Example</h3>
+<pre><code class="language-python">class DuckDBAnalyticsFeature(AbstractFeatureGroup, MatchData):
+    @classmethod
+    def input_data(cls) -&gt; Optional[BaseInputData]:
+        # BaseInputData for general data loading
+        return ReadFile()
+
+    @classmethod
+    def match_data_access(cls, feature_name: str, options: Options, 
+                         data_access_collection: Optional[DataAccessCollection] = None,
+                         framework_connection_object: Optional[Any] = None) -&gt; Any:
+        # MatchData for connection object matching
+        if framework_connection_object and isinstance(framework_connection_object, duckdb.DuckDBPyConnection):
+            return framework_connection_object
+        return None
+</code></pre>
+<h2 id="practical-examples">Practical Examples</h2>
+<h3 id="scenario-1-standard-file-processing-baseinputdata-only">Scenario 1: Standard File Processing (BaseInputData Only)</h3>
+<p><strong>Use Case</strong>: Reading CSV files with Pandas
+<strong>Pattern</strong>: Only BaseInputData is needed</p>
+<pre><code class="language-python">class CsvProcessingFeature(AbstractFeatureGroup):
+    @classmethod
+    def input_data(cls) -&gt; Optional[BaseInputData]:
+        return ReadFile()  # BaseInputData handles file reading
+</code></pre>
+<h3 id="scenario-2-duckdb-analytics-baseinputdata-matchdata">Scenario 2: DuckDB Analytics (BaseInputData + MatchData)</h3>
+<p><strong>Use Case</strong>: Analytics with DuckDB requiring connection objects
+<strong>Pattern</strong>: Both BaseInputData and MatchData are needed</p>
+<pre><code class="language-python">class DuckDBAnalyticsFeature(AbstractFeatureGroup, MatchData):
+    @classmethod
+    def input_data(cls) -&gt; Optional[BaseInputData]:
+        return ReadFile()  # BaseInputData for data loading
+
+    @classmethod
+    def match_data_access(cls, ...):
+        # MatchData for connection matching
+        return appropriate_duckdb_connection
+</code></pre>
+<p>For database connection patterns, see <a href="../framework-connection-object/">Framework Connection Object</a>.</p>
+<h3 id="scenario-3-in-memory-processing-baseinputdata-only">Scenario 3: In-Memory Processing (BaseInputData Only)</h3>
+<p><strong>Use Case</strong>: Creating synthetic data with Pandas
+<strong>Pattern</strong>: Only BaseInputData is needed</p>
+<pre><code class="language-python">class SyntheticDataFeature(AbstractFeatureGroup):
+    @classmethod
+    def input_data(cls) -&gt; Optional[BaseInputData]:
+        return DataCreator({&quot;synthetic_data&quot;})  # BaseInputData for data creation
+</code></pre>
+<h2 id="integration-with-other-concepts">Integration with Other Concepts</h2>
+<h3 id="compute-frameworks">Compute Frameworks</h3>
+<ul>
+<li><strong>BaseInputData</strong>: Works with all compute frameworks</li>
+<li><strong>MatchData</strong>: Only works with stateful frameworks requiring connection objects</li>
+</ul>
+<p>For more information, see:
+- <a href="../../chapter1/compute-frameworks/">Compute Frameworks</a>
+- <a href="../framework-connection-object/">Framework Connection Object</a>
+- <a href="../compute-framework-integration/">Compute Framework Integration</a></p>
+<h3 id="feature-groups">Feature Groups</h3>
+<p>These patterns are fundamental to how feature groups access data. For more details, see:
+- <a href="../../chapter1/feature-groups/">Feature Groups</a>
+- <a href="../feature-group-matching/">Feature Group Matching</a></p>
+<h2 id="best-practices">Best Practices</h2>
+<h3 id="when-to-use-baseinputdata-only">When to Use BaseInputData Only</h3>
+<ul>
+<li>Working with stateless compute frameworks (Pandas, PyArrow, Polars)</li>
+<li>File-based data loading</li>
+<li>API data injection</li>
+<li>Synthetic data generation</li>
+<li>Most standard data processing scenarios</li>
+</ul>
+<h3 id="when-to-use-baseinputdata-matchdata">When to Use BaseInputData + MatchData</h3>
+<ul>
+<li>Working with stateful compute frameworks (DuckDB)</li>
+<li>Database connections requiring persistent state</li>
+<li>Connection pooling scenarios</li>
+<li>When framework connection objects are required</li>
+</ul>
+<h3 id="design-considerations">Design Considerations</h3>
+<ul>
+<li><strong>BaseInputData</strong>: Focus on robust data loading, error handling, and performance</li>
+<li><strong>MatchData</strong>: Focus on accurate connection matching and state management</li>
+<li><strong>Integration</strong>: Use MatchData only when framework connection objects are actually needed</li>
+</ul>
+<h2 id="related-documentation">Related Documentation</h2>
+<ul>
+<li><strong><a href="../access-feature-data/">(Feature) data</a></strong> - Comprehensive guide to data access in mloda</li>
+<li><strong><a href="../framework-connection-object/">Framework Connection Object</a></strong> - Managing stateful connections (essential for understanding MatchData)</li>
+<li><strong><a href="../../chapter1/feature-groups/">Feature Groups</a></strong> - Introduction to feature groups</li>
+<li><strong><a href="../../chapter1/compute-frameworks/">Compute Frameworks</a></strong> - Overview of compute framework system</li>
+<li><strong><a href="../feature-group-matching/">Feature Group Matching</a></strong> - How features are matched to implementations</li>
+</ul>
+<h2 id="summary">Summary</h2>
+<p>BaseInputData and MatchData serve <strong>different and specialized roles</strong> in mloda's data access architecture:</p>
+<ul>
+<li><strong>BaseInputData</strong> is the <strong>universal pattern</strong> for data loading - used by all feature groups that need to load data</li>
+<li><strong>MatchData</strong> is a <strong>specialized pattern</strong> for connection object matching - only used by feature groups that require framework connection objects</li>
+</ul>
+<p><strong>Key Understanding:</strong>
+- <strong>Most feature groups</strong> only use BaseInputData
+- <strong>MatchData is only needed</strong> when working with stateful compute frameworks like DuckDB
+- <strong>They are not alternatives</strong> - they solve different problems in different contexts</p>
+<p>Understanding this distinction is crucial for:
+- Choosing the right pattern for your use case
+- Implementing feature groups correctly
+- Working with stateful vs stateless compute frameworks
+- Leveraging mloda's connection management capabilities</p>
+<p>This separation allows mloda to provide both universal data access (BaseInputData) and specialized connection management (MatchData) while keeping the complexity contained to only those scenarios that actually need it.</p>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../domain/" class="btn btn-neutral float-left" title="Domain concept"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../framework-transformers/" class="btn btn-neutral float-right" title="Framework Transformers">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+    
+      <span><a href="../domain/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../framework-transformers/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "../..";</script>
+    <script src="../../js/theme_extra.js"></script>
+    <script src="../../js/theme.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

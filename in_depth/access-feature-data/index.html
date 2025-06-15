@@ -57,6 +57,8 @@
               <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/installation/">Installation</a>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/api-request/">API Request</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/feature-groups/">Feature Groups</a>
@@ -99,11 +101,15 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../domain/">Domain concept</a>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../data-access-patterns/">Data Access Patterns</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" >Compute Frameworks</a>
     <ul>
                 <li class="toctree-l2"><a class="reference internal" href="../framework-transformers/">Framework Transformers</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../compute-framework-integration/">Compute Framework Integration</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../framework-connection-object/">Framework Connection Object</a>
                 </li>
     </ul>
                   </li>
@@ -172,6 +178,9 @@
 <li><strong>Input Features</strong> facilitates data sharing between features.</li>
 </ul>
 <p>These methods ensure efficient data management while maintaining flexibility and scalability. A typical scenario involves a complex feature relying on three input features. These input features, in turn, may depend on other input features or load data using ApiData.</p>
+<blockquote>
+<p><strong>Advanced</strong>: For a detailed explanation of the underlying data access patterns (BaseInputData vs MatchData), see <a href="../data-access-patterns/">Data Access Patterns</a>.</p>
+</blockquote>
 <h4 id="dataaccesscollection-global-data-access">DataAccessCollection - global data access</h4>
 <p>The DataAccessCollection is designed to control the access to data of any kind. The main purpose of this class is to organize and simplify interactions with these different data elements, making it easier to work to ingest data of various form into the framework. It provides as an interface for accessing and storing of data on a global level.</p>
 <p>The DataAccessCollection can only be added via <strong>mlodaAPI</strong>.</p>

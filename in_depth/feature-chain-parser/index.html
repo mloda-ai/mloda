@@ -57,6 +57,8 @@
               <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/installation/">Installation</a>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/api-request/">API Request</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/feature-groups/">Feature Groups</a>
@@ -85,11 +87,15 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../domain/">Domain concept</a>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../data-access-patterns/">Data Access Patterns</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" >Compute Frameworks</a>
     <ul>
                 <li class="toctree-l2"><a class="reference internal" href="../framework-transformers/">Framework Transformers</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../compute-framework-integration/">Compute Framework Integration</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../framework-connection-object/">Framework Connection Object</a>
                 </li>
     </ul>
                   </li>
@@ -118,6 +124,8 @@
     <li class="toctree-l4"><a class="reference internal" href="#3-enable-configuration-based-creation">3. Enable Configuration-Based Creation</a>
     </li>
         </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#multiple-result-columns-with-pattern">Multiple Result Columns with ~ Pattern</a>
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#benefits">Benefits</a>
     </li>
@@ -247,18 +255,27 @@ def configurable_feature_chain_parser(cls):
         }
     )
 </code></pre>
+<h2 id="multiple-result-columns-with-pattern">Multiple Result Columns with ~ Pattern</h2>
+<p>Some feature groups produce multiple result columns from a single input feature. The <code>~</code> pattern allows accessing individual columns:</p>
+<pre><code class="language-python"># OneHot encoding creates multiple columns
+base_feature = &quot;onehot_encoded__category&quot;  # Creates all columns
+specific_column = &quot;onehot_encoded__category~0&quot;  # Access first column
+another_column = &quot;onehot_encoded__category~1&quot;  # Access second column
+</code></pre>
+<p><strong>Implementation Note</strong>: Feature groups handle this pattern in their <code>input_features()</code> method to extract the base feature name, and in <code>calculate_feature()</code> to create the appropriately named result columns.</p>
 <h2 id="benefits">Benefits</h2>
 <ul>
 <li><strong>Consistent Naming</strong>: Enforces naming conventions across feature groups</li>
 <li><strong>Composability</strong>: Enables building complex features through chaining</li>
 <li><strong>Configuration-Based Creation</strong>: Simplifies feature creation in client code</li>
 <li><strong>Validation</strong>: Ensures feature names follow expected patterns</li>
+<li><strong>Multi-Column Support</strong>: Handle transformations that produce multiple result columns</li>
 </ul>
               
             </div>
           </div><footer>
     <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
-        <a href="../compute-framework-integration/" class="btn btn-neutral float-left" title="Compute Framework Integration"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../framework-connection-object/" class="btn btn-neutral float-left" title="Framework Connection Object"><span class="icon icon-circle-arrow-left"></span> Previous</a>
         <a href="../feature-group-matching/" class="btn btn-neutral float-right" title="Feature Group Matching">Next <span class="icon icon-circle-arrow-right"></span></a>
     </div>
 
@@ -282,7 +299,7 @@ def configurable_feature_chain_parser(cls):
   <span class="rst-current-version" data-toggle="rst-current-version">
     
     
-      <span><a href="../compute-framework-integration/" style="color: #fcfcfc">&laquo; Previous</a></span>
+      <span><a href="../framework-connection-object/" style="color: #fcfcfc">&laquo; Previous</a></span>
     
     
       <span><a href="../feature-group-matching/" style="color: #fcfcfc">Next &raquo;</a></span>

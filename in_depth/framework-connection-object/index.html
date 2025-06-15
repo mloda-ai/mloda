@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="../../img/favicon.ico" />
+    <title>Framework Connection Object - mloda docs</title>
+    <link rel="stylesheet" href="../../css/theme.css" />
+    <link rel="stylesheet" href="../../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Framework Connection Object";
+        var mkdocs_page_input_path = "in_depth/framework-connection-object.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="../.." class="icon icon-home"> mloda docs
+        </a>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption"><span class="caption-text">Home</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../..">mloda</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">mloda Concepts</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/0_table_of_content/">Table of Content</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/1_ml_mloda_intro/">Intro to the core interfaces of mloda</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/2_ml_advantage_process_focus/">What makes mloda unique?</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/3_ml_data_feature_feature_groups/">Data, Feature, FeatureSets and FeatureGroups in mloda</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/4_ml_data_producers_user_owner/">Data Producer, User, Owner in mloda</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Getting Started</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/installation/">Installation</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/api-request/">API Request</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/feature-groups/">Feature Groups</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/compute-frameworks/">Compute Frameworks</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/extender/">Extender</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">In Depth - Basics</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../mloda-api/">mloda API</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../access-feature-data/">(Feature) data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../join_data/">Join data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../filter_data/">Filter data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../artifacts/">Artifacts</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">In Depth - Advanced</span></p>
+              <ul class="current">
+                  <li class="toctree-l1"><a class="reference internal" href="../data-quality/">Data quality</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../domain/">Domain concept</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../data-access-patterns/">Data Access Patterns</a>
+                  </li>
+                  <li class="toctree-l1 current"><a class="reference internal current" >Compute Frameworks</a>
+    <ul class="current">
+                <li class="toctree-l2"><a class="reference internal" href="../framework-transformers/">Framework Transformers</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../compute-framework-integration/">Compute Framework Integration</a>
+                </li>
+                <li class="toctree-l2 current"><a class="reference internal current" href="#">Framework Connection Object</a>
+    <ul class="current">
+    <li class="toctree-l3"><a class="reference internal" href="#overview">Overview</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#what-is-a-framework-connection-object">What is a Framework Connection Object?</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#when-is-it-required">When is it Required?</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#stateful-frameworks">Stateful Frameworks</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#stateless-frameworks">Stateless Frameworks</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#how-it-works">How it Works</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#in-computeframework-base-class">In ComputeFrameWork Base Class</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#in-framework-transformers">In Framework Transformers</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#using-duckdb-with-mloda-api">Using DuckDB with mloda API</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#duckdb-transformer-example">DuckDB Transformer Example</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#implementation-guidelines">Implementation Guidelines</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#for-framework-developers">For Framework Developers</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#for-transformer-developers">For Transformer Developers</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#troubleshooting">Troubleshooting</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#common-issues">Common Issues</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#summary">Summary</a>
+    </li>
+    </ul>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-chain-parser/">Feature Chain Parser</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-group-matching/">Feature Group Matching</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-group-testing/">Feature Group Testing</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-group-version/">Feature Group Versioning</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../multiple_result_columns/">Multiple Result Columns</a>
+                </li>
+    </ul>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Development</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../development/">Contributors</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../license/">License - Apache 2.0</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../missing/">Missing</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Need Help?</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../faq/">FAQ</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../need-help/">Need Help</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../..">mloda docs</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../.." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">In Depth - Advanced</li>
+          <li class="breadcrumb-item">Compute Frameworks</li>
+      <li class="breadcrumb-item active">Framework Connection Object</li>
+    <li class="wy-breadcrumbs-aside">
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="framework-connection-object">Framework Connection Object</h1>
+<h2 id="overview">Overview</h2>
+<p>The Framework Connection Object is a key concept in mloda's compute framework system that enables stateful compute frameworks to maintain persistent connections and share resources across different operations. This is particularly important for frameworks like DuckDB, Spark, or database connections that require maintaining state between operations.</p>
+<h2 id="what-is-a-framework-connection-object">What is a Framework Connection Object?</h2>
+<p>A Framework Connection Object is an optional parameter that some compute frameworks use to:</p>
+<ul>
+<li><strong>Maintain persistent connections</strong> to databases or compute engines</li>
+<li><strong>Share state</strong> between different operations within the same compute session</li>
+<li><strong>Ensure data consistency</strong> across merge operations and transformations</li>
+<li><strong>Optimize performance</strong> by reusing connections and avoiding repeated setup costs</li>
+</ul>
+<h2 id="when-is-it-required">When is it Required?</h2>
+<h3 id="stateful-frameworks">Stateful Frameworks</h3>
+<p>Some compute frameworks require a connection object to function properly:</p>
+<ul>
+<li><strong>DuckDB</strong>: Requires a <code>DuckDBPyConnection</code> to maintain database state</li>
+<li><strong>Spark</strong>: Would require a SparkSession to manage cluster resources</li>
+<li><strong>Database frameworks</strong>: Need database connections for query execution</li>
+</ul>
+<h3 id="stateless-frameworks">Stateless Frameworks</h3>
+<p>Other frameworks don't require connection objects:</p>
+<ul>
+<li><strong>Pandas</strong>: Operations are performed on in-memory DataFrames</li>
+<li><strong>PyArrow</strong>: Tables are self-contained data structures</li>
+<li><strong>Polars</strong>: DataFrames and LazyFrames are independent objects</li>
+<li><strong>PythonDict</strong>: Simple Python data structures</li>
+</ul>
+<h2 id="how-it-works">How it Works</h2>
+<h3 id="in-computeframework-base-class">In ComputeFrameWork Base Class</h3>
+<p>The base <code>ComputeFrameWork</code> class provides methods to manage connection objects:</p>
+<pre><code class="language-python">class ComputeFrameWork:
+    def __init__(self) -&gt; None:
+        # Connection object for frameworks that need persistent connections
+        self.framework_connection_object: Optional[Any] = None
+
+    def set_framework_connection_object(self, framework_connection_object: Optional[Any] = None) -&gt; None:
+        &quot;&quot;&quot;
+        Some compute frameworks (e.g., DuckDB, Spark) require sharing their connection
+        with merge engines to ensure data consistency. Override this method in
+        subclasses that need to provide a connection object.
+        &quot;&quot;&quot;
+        self.framework_connection_object = None
+
+    def get_framework_connection_object(self) -&gt; Any:
+        &quot;&quot;&quot;This method retrieves the connection object set by `set_framework_connection_object`.&quot;&quot;&quot;
+        return self.framework_connection_object
+</code></pre>
+<h3 id="in-framework-transformers">In Framework Transformers</h3>
+<p>Framework transformers receive the connection object as a parameter:</p>
+<pre><code class="language-python">@classmethod
+def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Optional[Any] = None) -&gt; Any:
+    &quot;&quot;&quot;
+    Transform data from the secondary framework to the primary framework.
+
+    Args:
+        data: Data in the secondary framework format
+        framework_connection_object: Optional connection object for stateful frameworks
+
+    Returns:
+        Any: Transformed data in the primary framework format
+    &quot;&quot;&quot;
+</code></pre>
+<h3 id="using-duckdb-with-mloda-api">Using DuckDB with mloda API</h3>
+<pre><code class="language-python">from mloda_core.api.request import mlodaAPI
+from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
+import duckdb
+
+# Create DuckDB connection
+connection = duckdb.connect()
+
+# Set up data access
+data_access_collection = DataAccessCollection(initialized_connection_object={connection})
+
+# Run with DuckDB framework
+result = mlodaAPI.run_all(
+    [&quot;feature1&quot;, &quot;feature2&quot;],
+    compute_frameworks=[&quot;DuckDBFramework&quot;],
+    data_access_collection=data_access_collection
+)
+</code></pre>
+<h3 id="duckdb-transformer-example">DuckDB Transformer Example</h3>
+<p>The <code>DuckDBPyarrowTransformer</code> requires a connection object for PyArrow → DuckDB transformations:</p>
+<pre><code class="language-python">class DuckDBPyarrowTransformer(BaseTransformer):
+    @classmethod
+    def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Optional[Any] = None) -&gt; Any:
+        &quot;&quot;&quot;Transform a PyArrow Table to a DuckDB relation.&quot;&quot;&quot;
+        if framework_connection_object is None:
+            raise ValueError(&quot;A DuckDB connection object is required for this transformation.&quot;)
+
+        if not isinstance(framework_connection_object, duckdb.DuckDBPyConnection):
+            raise ValueError(f&quot;Expected a DuckDB connection object, got {type(framework_connection_object)}&quot;)
+
+        return framework_connection_object.from_arrow(data)
+</code></pre>
+<h2 id="implementation-guidelines">Implementation Guidelines</h2>
+<h3 id="for-framework-developers">For Framework Developers</h3>
+<p>When implementing a new compute framework that requires a connection object:</p>
+<ol>
+<li><strong>Override <code>set_framework_connection_object</code></strong>:</li>
+</ol>
+<pre><code class="language-python">def set_framework_connection_object(self, framework_connection_object: Optional[Any] = None) -&gt; None:
+    if framework_connection_object is not None:
+        if not isinstance(framework_connection_object, ExpectedConnectionType):
+            raise ValueError(f&quot;Expected connection type, got {type(framework_connection_object)}&quot;)
+        self.framework_connection_object = framework_connection_object
+</code></pre>
+<ol>
+<li><strong>Pass connection objects</strong> to merge engines and other components that need them.</li>
+</ol>
+<h3 id="for-transformer-developers">For Transformer Developers</h3>
+<p>When implementing transformers for stateful frameworks:</p>
+<ol>
+<li><strong>Accept the connection object parameter</strong>:</li>
+</ol>
+<pre><code class="language-python">@classmethod
+def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Optional[Any] = None) -&gt; Any:
+    # Implementation here
+</code></pre>
+<ol>
+<li><strong>Validate the connection object</strong> when required:</li>
+</ol>
+<pre><code class="language-python">if framework_connection_object is None:
+    raise ValueError(&quot;Connection object is required for this transformation.&quot;)
+</code></pre>
+<ol>
+<li><strong>Use the connection object</strong> for the transformation:</li>
+</ol>
+<pre><code class="language-python">return framework_connection_object.from_other_format(data)
+</code></pre>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="common-issues">Common Issues</h3>
+<ol>
+<li><strong>Missing Connection Object</strong>:
+   <code>ValueError: A DuckDB connection object is required for this transformation.</code>
+   <strong>Solution</strong>: Ensure you're providing a connection object when using stateful frameworks. Currently, parent features are not receiving the connection details automatic. Thus, you might need to give them a second time to root features!</li>
+</ol>
+<h2 id="summary">Summary</h2>
+<p>The Framework Connection Object is a powerful feature that enables mloda to work with stateful compute frameworks while maintaining the flexibility to work with stateless frameworks as well. By understanding when and how to use connection objects, you can:</p>
+<ul>
+<li><strong>Integrate database-backed compute frameworks</strong> like DuckDB</li>
+<li><strong>Maintain state consistency</strong> across operations</li>
+<li><strong>Optimize performance</strong> through connection reuse</li>
+<li><strong>Build robust applications</strong> with proper error handling</li>
+</ul>
+<p>This design allows mloda to support both simple, stateless frameworks (like Pandas) and complex, stateful frameworks (like DuckDB) within the same unified interface.</p>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../compute-framework-integration/" class="btn btn-neutral float-left" title="Compute Framework Integration"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../feature-chain-parser/" class="btn btn-neutral float-right" title="Feature Chain Parser">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+    
+      <span><a href="../compute-framework-integration/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../feature-chain-parser/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "../..";</script>
+    <script src="../../js/theme_extra.js"></script>
+    <script src="../../js/theme.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

@@ -10,6 +10,7 @@ nav:
     - Data Producer, User, Owner in mloda: examples/mloda_basics/4_ml_data_producers_user_owner.ipynb
   - Getting Started:
     - Installation: chapter1/installation.md
+    - sklearn Integration Tutorial: examples/sklearn_integration_basic.ipynb
     - API Request: chapter1/api-request.md
     - Feature Groups: chapter1/feature-groups.md
     - Compute Frameworks: chapter1/compute-frameworks.md

@@ -94,9 +94,23 @@ def configurable_feature_chain_parser(cls):
     )
 ```
 
+## Multiple Result Columns with ~ Pattern
+
+Some feature groups produce multiple result columns from a single input feature. The `~` pattern allows accessing individual columns:
+
+```python
+# OneHot encoding creates multiple columns
+base_feature = "onehot_encoded__category"  # Creates all columns
+specific_column = "onehot_encoded__category~0"  # Access first column
+another_column = "onehot_encoded__category~1"  # Access second column
+```
+
+**Implementation Note**: Feature groups handle this pattern in their `input_features()` method to extract the base feature name, and in `calculate_feature()` to create the appropriately named result columns.
+
 ## Benefits
 
 - **Consistent Naming**: Enforces naming conventions across feature groups
 - **Composability**: Enables building complex features through chaining
 - **Configuration-Based Creation**: Simplifies feature creation in client code
 - **Validation**: Ensures feature names follow expected patterns
+- **Multi-Column Support**: Handle transformations that produce multiple result columns

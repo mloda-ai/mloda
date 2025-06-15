@@ -97,8 +97,37 @@ Result:
 
 Testing artifact features involves creating test cases that ensure artifacts are correctly saved and loaded. The following example shows how to test the `BaseTestArtifactFeature` class.
 
-[View the test file on GitHub](https://github.com/TomKaltofen/mloda/tree/feature/main/tests/test_core/test_artifacts/test_artifacts.py)
+[View the test file on GitHub](https://github.com/TomKaltofen/mloda/blob/main/tests/test_core/test_artifacts/test_artifacts.py)
 
+#### Complex Artifact Example: SklearnArtifact
+
+For more advanced use cases, artifacts can handle complex data structures and multiple objects. The `SklearnArtifact` demonstrates this with fitted scikit-learn transformers:
+
+```python
+from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import SklearnArtifact
+
+class MySklearnFeatureGroup(AbstractFeatureGroup):
+    @staticmethod
+    def artifact() -> Type[BaseArtifact] | None:
+        return SklearnArtifact
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        # Save multiple artifacts with unique keys
+        if features.artifact_to_save:
+            SklearnArtifact.save_sklearn_artifact(
+                features, 
+                "my_transformer", 
+                {"fitted_transformer": fitted_model, "feature_names": ["col1", "col2"]}
+            )
+        
+        # Load specific artifact by key
+        if features.artifact_to_load:
+            artifact_data = SklearnArtifact.load_sklearn_artifact(features, "my_transformer")
+            fitted_model = artifact_data["fitted_transformer"]
+```
+
+This pattern supports file-based storage, multiple artifact management, and complex serialization.
 
 #### Conclusion
 

@@ -189,21 +189,15 @@ class SklearnArtifact(BaseArtifact):
         if not isinstance(artifact, dict):
             raise ValueError(f"Expected artifact to be a dictionary, got {type(artifact)}")
 
-        print(f"DEBUG: SklearnArtifact.custom_saver - saving {len(artifact)} artifacts: {list(artifact.keys())}")
-
         saved_paths = {}
 
         for artifact_key, artifact_data in artifact.items():
             # Generate unique file path for this artifact
             file_path = cls._get_artifact_file_path_for_key(features, artifact_key)
 
-            print(f"DEBUG: SklearnArtifact.custom_saver - saving {artifact_key} to {file_path}")
-
             # Save this specific artifact
             joblib.dump(artifact_data, file_path)
             saved_paths[artifact_key] = str(file_path)
-
-            print(f"DEBUG: SklearnArtifact.custom_saver - completed saving {artifact_key}")
 
         return saved_paths
 

@@ -1,0 +1,12 @@
+# Requirements for SHELXL Feature Group
+# 
+# This feature group uses only standard Python libraries and subprocess
+# to execute SHELXL and checkCIF commands. No additional Python packages
+# are required beyond what's already available in the mloda framework.
+#
+# External dependencies (must be installed separately):
+# - SHELXL: Crystallographic structure refinement program
+# - checkCIF: Structure validation program (optional)
+#
+# These are external crystallography software packages that need to be
+# installed and available in the system PATH.

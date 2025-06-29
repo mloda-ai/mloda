@@ -131,6 +131,7 @@ In this case, the feature group ExampleB will only run on the PyarrowTable frame
 | **PolarsLazyDataframe** | Polars LazyFrame | Query optimization, lazy evaluation | Large datasets, performance optimization | polars |
 | **DuckDBFramework** | DuckDB Relations | SQL interface, fast analytics, OLAP queries | Analytical workloads, SQL-based transformations, data warehousing | duckdb |
 | **IcebergFramework** | Apache Iceberg Tables | Schema evolution, time travel, data lake management | Data lake scenarios, versioned datasets, large-scale analytics | pyiceberg, pyarrow |
+| **SparkFramework** | Apache Spark DataFrames | Distributed processing, scalability, fault tolerance | Big data, distributed computing, production clusters | pyspark, Java 8+ |
 | **PythonDict** | List[Dict[str, Any]] | Zero dependencies, simple, lightweight | Minimal environments, education, prototyping | None (Python stdlib only) |
 
 ##### Automatic Dependency Detection
@@ -226,6 +227,33 @@ result[0]  # Returns pyiceberg.table.Table or pyarrow.Table
 ```
 
 **Note**: Iceberg framework requires a catalog connection object for table operations. It's optimized for data lake scenarios with schema evolution, time travel capabilities, and large-scale analytics. The framework uses PyArrow as an interchange format for compatibility with other mloda frameworks.
+
+Example using Spark framework:
+``` python
+from mloda_core.abstract_plugins.components.feature import Feature
+from pyspark.sql import SparkSession
+
+# Create SparkSession (optional - framework will auto-create if not provided)
+spark = SparkSession.builder \
+    .appName("MLoda-Spark-Example") \
+    .master("local[*]") \
+    .getOrCreate()
+
+# Set up data access with SparkSession
+data_access_collection = DataAccessCollection(
+    initialized_connection_objects={spark}
+)
+
+feature = Feature("id", options={"compute_framework": "SparkFramework"})
+
+result = mlodaAPI.run_all(
+    [feature], 
+    data_access_collection=data_access_collection
+)
+result[0]  # Returns pyspark.sql.DataFrame
+```
+
+**Note**: Spark framework requires PySpark installation and Java 8+ environment with JAVA_HOME configured. It's optimized for big data processing, distributed computing, and production clusters. The framework can auto-create a local SparkSession if none is provided, but for production use, you should provide a configured SparkSession. Does not support mloda framework inherent multiprocessing (uses Spark's own distributed processing).
 
 #### 6. Summary
 

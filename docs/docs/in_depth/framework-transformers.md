@@ -74,6 +74,26 @@ Key features:
 
 **Important**: The DuckDB transformer requires a connection object when transforming from PyArrow to DuckDB. This is because DuckDB relations must be associated with a specific database connection.
 
+### SparkPyarrowTransformer
+
+The `SparkPyarrowTransformer` is a concrete implementation of `BaseTransformer` that handles conversions between Spark DataFrames and PyArrow Tables.
+
+``` python
+class SparkPyarrowTransformer(BaseTransformer):
+    """
+    Transformer for converting between Spark DataFrame and PyArrow Table.
+    """
+```
+
+Key features:
+- Converts Spark DataFrames to PyArrow Tables and vice versa
+- Leverages Spark's native PyArrow integration for efficient conversions
+- Can use a provided SparkSession or auto-create one if needed
+- Handles distributed data processing through Spark's execution engine
+- Requires PySpark installation and Java 8+ environment
+
+**Note**: The Spark transformer can optionally use a SparkSession connection object. If none is provided, it will attempt to get the active session or create a new local session.
+
 ## How Framework Transformers Work
 
 ### Registration Process
@@ -112,6 +132,16 @@ DuckDB Relation → DuckDBPyarrowTransformer → PyArrow Table
 
 ```
 PyArrow Table → DuckDBPyarrowTransformer → DuckDB Relation (requires connection)
+```
+
+For Spark transformations:
+
+```
+Spark DataFrame → SparkPyarrowTransformer → PyArrow Table
+```
+
+```
+PyArrow Table → SparkPyarrowTransformer → Spark DataFrame (optional SparkSession)
 ```
 
 ## Creating Custom Transformers

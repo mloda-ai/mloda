@@ -4,7 +4,12 @@
 
 Successfully completed Phase 1 of the sklearn feature groups implementation! This includes the core pipeline feature group with comprehensive testing and artifact support.
 
+Most recently completed the Spark Compute Framework implementation, adding distributed data processing capabilities to mloda.
+
 ## Recent Changes
+
+*   **✅ COMPLETED: Spark Compute Framework Implementation:**
+
 
 *   **✅ COMPLETED: Phase 1 - Sklearn Pipeline Feature Group Implementation (FINAL):**
     * **File-based Artifact Storage**: Implemented SklearnArtifact with configurable storage paths using joblib

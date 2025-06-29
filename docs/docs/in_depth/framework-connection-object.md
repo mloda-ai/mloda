@@ -20,7 +20,8 @@ A Framework Connection Object is an optional parameter that some compute framewo
 Some compute frameworks require a connection object to function properly:
 
 - **DuckDB**: Requires a `DuckDBPyConnection` to maintain database state
-- **Spark**: Would require a SparkSession to manage cluster resources
+- **Spark**: Requires a `SparkSession` to manage cluster resources and distributed computing
+- **Iceberg**: Requires a catalog connection for table operations
 - **Database frameworks**: Need database connections for query execution
 
 ### Stateless Frameworks
@@ -93,6 +94,31 @@ data_access_collection = DataAccessCollection(initialized_connection_object={con
 result = mlodaAPI.run_all(
     ["feature1", "feature2"],
     compute_frameworks=["DuckDBFramework"],
+    data_access_collection=data_access_collection
+)
+```
+
+### Using Spark with mloda API
+
+``` python
+from mloda_core.api.request import mlodaAPI
+from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from pyspark.sql import SparkSession
+
+# Create SparkSession
+spark = SparkSession.builder \
+    .appName("MLoda-Spark-Application") \
+    .master("local[*]") \
+    .config("spark.sql.adaptive.enabled", "true") \
+    .getOrCreate()
+
+# Set up data access
+data_access_collection = DataAccessCollection(initialized_connection_objects={spark})
+
+# Run with Spark framework
+result = mlodaAPI.run_all(
+    ["feature1", "feature2"],
+    compute_frameworks=["SparkFramework"],
     data_access_collection=data_access_collection
 )
 ```

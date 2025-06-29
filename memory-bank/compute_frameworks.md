@@ -73,6 +73,17 @@ The base class for all compute frameworks:
 - Supports filtering operations through IcebergFilterEngine
 - Ideal for data lake scenarios with evolving schemas and large-scale analytics
 
+### SparkFramework
+- Based on Apache Spark DataFrames for distributed data processing
+- Leverages Spark's distributed computing capabilities for large-scale data operations
+- Requires SparkSession as framework connection object (auto-creates local session if not provided)
+- Optimized for big data processing, distributed computing, and scalable analytics
+- Includes bidirectional transformation with PyArrow through SparkPyarrowTransformer
+- Supports all standard operations: filtering (SparkFilterEngine), merging (SparkMergeEngine), transformations
+- Requires PySpark installation and Java 8+ environment with JAVA_HOME configured
+- Ideal for large datasets, distributed processing, and production big data workflows
+- Note: Does not support mloda framework inherent multiprocessing (Spark's own distributed processing is used)
+
 ## Framework Transformers
 
 Enable seamless conversion between different data representations:
@@ -141,6 +152,10 @@ Compute frameworks are tested at multiple levels:
    - Framework selection based on feature group requirements
 
 ## Changelog
+
+### 2025-06-29: Implemented Spark Compute Framework
+- Added complete Spark framework implementation using Apache Spark DataFrames
+
 
 ### 2025-06-11: Implemented Iceberg Compute Framework
 - Added Iceberg framework implementation using Apache Iceberg Tables

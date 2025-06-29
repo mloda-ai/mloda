@@ -180,3 +180,31 @@ class DuckDBAnalyticalFeatureGroup(AnalyticalFeatureGroup):
 ```
 
 **Important**: DuckDB feature groups require a connection object to be available. The framework will automatically handle connection management, but ensure your data access collection includes the necessary connection information.
+
+For a distributed processing feature group with Spark support:
+
+``` python
+# Base class (framework-agnostic)
+class DistributedFeatureGroup(AbstractFeatureGroup):
+    def input_features(self, options, feature_name):
+        # Extract source features from feature name
+        
+    @classmethod
+    def calculate_feature(cls, data, features):
+        # This will be overridden by framework-specific implementations
+
+# Spark implementation
+class SparkDistributedFeatureGroup(DistributedFeatureGroup):
+    @classmethod
+    def compute_framework_rule(cls):
+        return {SparkFramework}
+    
+    @classmethod
+    def calculate_feature(cls, data, features):
+        # Spark-specific distributed processing implementation
+        # Uses Spark DataFrame operations for scalable processing
+        # Example: data.groupBy("category").agg({"value": "sum"})
+        return data.groupBy("category_column").agg({"value_column": "sum"})
+```
+
+**Important**: Spark feature groups require PySpark installation and Java 8+ environment with JAVA_HOME configured. The framework can auto-create a local SparkSession if none is provided, but for production use, you should provide a configured SparkSession through the data access collection. Spark uses its own distributed processing capabilities instead of mloda's framework inherent multiprocessing.

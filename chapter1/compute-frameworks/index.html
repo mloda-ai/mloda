@@ -339,6 +339,13 @@ result[0]
 <td>pyiceberg, pyarrow</td>
 </tr>
 <tr>
+<td><strong>SparkFramework</strong></td>
+<td>Apache Spark DataFrames</td>
+<td>Distributed processing, scalability, fault tolerance</td>
+<td>Big data, distributed computing, production clusters</td>
+<td>pyspark, Java 8+</td>
+</tr>
+<tr>
 <td><strong>PythonDict</strong></td>
 <td>List[Dict[str, Any]]</td>
 <td>Zero dependencies, simple, lightweight</td>
@@ -427,6 +434,30 @@ result = mlodaAPI.run_all(
 result[0]  # Returns pyiceberg.table.Table or pyarrow.Table
 </code></pre>
 <p><strong>Note</strong>: Iceberg framework requires a catalog connection object for table operations. It's optimized for data lake scenarios with schema evolution, time travel capabilities, and large-scale analytics. The framework uses PyArrow as an interchange format for compatibility with other mloda frameworks.</p>
+<p>Example using Spark framework:</p>
+<pre><code class="language-python">from mloda_core.abstract_plugins.components.feature import Feature
+from pyspark.sql import SparkSession
+
+# Create SparkSession (optional - framework will auto-create if not provided)
+spark = SparkSession.builder \
+    .appName(&quot;MLoda-Spark-Example&quot;) \
+    .master(&quot;local[*]&quot;) \
+    .getOrCreate()
+
+# Set up data access with SparkSession
+data_access_collection = DataAccessCollection(
+    initialized_connection_objects={spark}
+)
+
+feature = Feature(&quot;id&quot;, options={&quot;compute_framework&quot;: &quot;SparkFramework&quot;})
+
+result = mlodaAPI.run_all(
+    [feature], 
+    data_access_collection=data_access_collection
+)
+result[0]  # Returns pyspark.sql.DataFrame
+</code></pre>
+<p><strong>Note</strong>: Spark framework requires PySpark installation and Java 8+ environment with JAVA_HOME configured. It's optimized for big data processing, distributed computing, and production clusters. The framework can auto-create a local SparkSession if none is provided, but for production use, you should provide a configured SparkSession. Does not support mloda framework inherent multiprocessing (uses Spark's own distributed processing).</p>
 <h4 id="6-summary">6. Summary</h4>
 <p>mloda's compute framework adds flexibility, allowing you to select the best tool for different stages of data and feature engineering. While it introduces some complexity, it's invaluable for comparing technologies and managing environments.</p>
 <p>That said, <strong>you can configure mloda to use just one compute framework</strong> for a more familiar workflow, similar to traditional feature stores, data pipelines, or ETL systems. Whether you prefer flexibility or simplicity, mloda adapts to your needs while ensuring consistent feature processing.</p>

@@ -105,6 +105,8 @@
     </li>
     <li class="toctree-l4"><a class="reference internal" href="#duckdbpyarrowtransformer">DuckDBPyarrowTransformer</a>
     </li>
+    <li class="toctree-l4"><a class="reference internal" href="#sparkpyarrowtransformer">SparkPyarrowTransformer</a>
+    </li>
         </ul>
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#how-framework-transformers-work">How Framework Transformers Work</a>
@@ -240,6 +242,20 @@
 - Requires a DuckDB connection object for PyArrow → DuckDB transformations
 - Uses DuckDB's <code>to_arrow_table()</code> and <code>from_arrow()</code> methods for optimal performance</p>
 <p><strong>Important</strong>: The DuckDB transformer requires a connection object when transforming from PyArrow to DuckDB. This is because DuckDB relations must be associated with a specific database connection.</p>
+<h3 id="sparkpyarrowtransformer">SparkPyarrowTransformer</h3>
+<p>The <code>SparkPyarrowTransformer</code> is a concrete implementation of <code>BaseTransformer</code> that handles conversions between Spark DataFrames and PyArrow Tables.</p>
+<pre><code class="language-python">class SparkPyarrowTransformer(BaseTransformer):
+    &quot;&quot;&quot;
+    Transformer for converting between Spark DataFrame and PyArrow Table.
+    &quot;&quot;&quot;
+</code></pre>
+<p>Key features:
+- Converts Spark DataFrames to PyArrow Tables and vice versa
+- Leverages Spark's native PyArrow integration for efficient conversions
+- Can use a provided SparkSession or auto-create one if needed
+- Handles distributed data processing through Spark's execution engine
+- Requires PySpark installation and Java 8+ environment</p>
+<p><strong>Note</strong>: The Spark transformer can optionally use a SparkSession connection object. If none is provided, it will attempt to get the active session or create a new local session.</p>
 <h2 id="how-framework-transformers-work">How Framework Transformers Work</h2>
 <h3 id="registration-process">Registration Process</h3>
 <ol>
@@ -266,6 +282,11 @@
 <pre><code>DuckDB Relation → DuckDBPyarrowTransformer → PyArrow Table
 </code></pre>
 <pre><code>PyArrow Table → DuckDBPyarrowTransformer → DuckDB Relation (requires connection)
+</code></pre>
+<p>For Spark transformations:</p>
+<pre><code>Spark DataFrame → SparkPyarrowTransformer → PyArrow Table
+</code></pre>
+<pre><code>PyArrow Table → SparkPyarrowTransformer → Spark DataFrame (optional SparkSession)
 </code></pre>
 <h2 id="creating-custom-transformers">Creating Custom Transformers</h2>
 <p>To create a custom transformer for a new pair of frameworks:</p>

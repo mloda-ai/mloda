@@ -117,6 +117,8 @@
     </li>
     <li class="toctree-l4"><a class="reference internal" href="#using-duckdb-with-mloda-api">Using DuckDB with mloda API</a>
     </li>
+    <li class="toctree-l4"><a class="reference internal" href="#using-spark-with-mloda-api">Using Spark with mloda API</a>
+    </li>
     <li class="toctree-l4"><a class="reference internal" href="#duckdb-transformer-example">DuckDB Transformer Example</a>
     </li>
         </ul>
@@ -213,7 +215,8 @@
 <p>Some compute frameworks require a connection object to function properly:</p>
 <ul>
 <li><strong>DuckDB</strong>: Requires a <code>DuckDBPyConnection</code> to maintain database state</li>
-<li><strong>Spark</strong>: Would require a SparkSession to manage cluster resources</li>
+<li><strong>Spark</strong>: Requires a <code>SparkSession</code> to manage cluster resources and distributed computing</li>
+<li><strong>Iceberg</strong>: Requires a catalog connection for table operations</li>
 <li><strong>Database frameworks</strong>: Need database connections for query execution</li>
 </ul>
 <h3 id="stateless-frameworks">Stateless Frameworks</h3>
@@ -274,6 +277,28 @@ data_access_collection = DataAccessCollection(initialized_connection_object={con
 result = mlodaAPI.run_all(
     [&quot;feature1&quot;, &quot;feature2&quot;],
     compute_frameworks=[&quot;DuckDBFramework&quot;],
+    data_access_collection=data_access_collection
+)
+</code></pre>
+<h3 id="using-spark-with-mloda-api">Using Spark with mloda API</h3>
+<pre><code class="language-python">from mloda_core.api.request import mlodaAPI
+from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from pyspark.sql import SparkSession
+
+# Create SparkSession
+spark = SparkSession.builder \
+    .appName(&quot;MLoda-Spark-Application&quot;) \
+    .master(&quot;local[*]&quot;) \
+    .config(&quot;spark.sql.adaptive.enabled&quot;, &quot;true&quot;) \
+    .getOrCreate()
+
+# Set up data access
+data_access_collection = DataAccessCollection(initialized_connection_objects={spark})
+
+# Run with Spark framework
+result = mlodaAPI.run_all(
+    [&quot;feature1&quot;, &quot;feature2&quot;],
+    compute_frameworks=[&quot;SparkFramework&quot;],
     data_access_collection=data_access_collection
 )
 </code></pre>

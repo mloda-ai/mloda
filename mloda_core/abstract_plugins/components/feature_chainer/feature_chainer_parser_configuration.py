@@ -171,7 +171,7 @@ class FeatureChainParserConfiguration:
         if feature_name is None:
             return None
 
-        feature.options.data = {k: v for k, v in feature.options.data.items() if k not in parse_keys}
+        feature.options.group = {k: v for k, v in feature.options.group.items() if k not in parse_keys}
         feature.name = FeatureName(feature_name)
 
         return feature

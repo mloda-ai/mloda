@@ -16,7 +16,7 @@ from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
 from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.components.match_data.match_data import MatchData, MatchData
+from mloda_core.abstract_plugins.components.match_data.match_data import MatchData
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
@@ -36,7 +36,21 @@ class AbstractFeatureGroup(ABC):
     - compute_framework_rule - default is true, which sets the compute framework to all available compute frameworks
     - index_columns - default is None
     - return_data_type_rule - default is None
+
+    Options - Feature Group Authority:
+    Each Feature Group defines which parameters should be in 'context' (metadata only).
+    All other parameters default to 'group' (require isolation) for safety.
+    This means that features end up in different resolved feature groups
+    if they have different parameters in group keys.
     """
+
+    # Feature Group Authority: Define which parameters are context only
+    # Override in subclasses to specify parameters that don't affect Feature Group resolution
+    # All other parameters will be treated as 'group' parameters (require isolation)
+    CONTEXT_PARAMETERS: Set[str] = set()
+
+    # Key to deactivate options validation (useful during migration or testing)
+    SKIP_OPTIONS_VALIDATION_KEY = "_skip_options_validation"
 
     def __init__(self) -> None:
         pass
@@ -398,6 +412,34 @@ class AbstractFeatureGroup(ABC):
         return cls().is_root(options, feature_name) and cls._matches_input_data(
             feature_name, options, data_access_collection
         )
+
+    @classmethod
+    def validate_options(cls, options: Options) -> None:
+        """
+        Validate that parameters are in correct categories according to Feature Group Authority Pattern.
+
+        This method ensures that:
+        - Context parameters defined in CONTEXT_PARAMETERS are in options.context
+        - All other parameters are in options.group (for isolation requirements)
+        - Validation can be skipped by setting SKIP_OPTIONS_VALIDATION_KEY in options
+
+        Args:
+            options: The Options object to validate
+
+        Raises:
+            ValueError: If parameters are in wrong categories
+        """
+        # Check if validation should be skipped
+        if cls.SKIP_OPTIONS_VALIDATION_KEY in options.group or cls.SKIP_OPTIONS_VALIDATION_KEY in options.context:
+            return
+
+        # Validate group parameters - check for misplaced context parameters
+        for key in options.group.keys():
+            if key in cls.CONTEXT_PARAMETERS:
+                raise ValueError(
+                    f"Parameter '{key}' should be in context, not group. "
+                    f"Context parameters for {cls.get_class_name()}: {cls.CONTEXT_PARAMETERS}"
+                )
 
     @classmethod
     def configurable_feature_chain_parser(cls) -> Optional[Type[FeatureChainParserConfiguration]]:

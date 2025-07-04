@@ -10,6 +10,7 @@ from mloda_core.api.request import mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.test_aggregated_utils import (
     PandasAggregatedTestDataCreator,
@@ -270,3 +271,141 @@ class TestAggPandasIntegration:
         )
 
         validate_aggregated_features(result)
+
+
+class TestAggregatedFeatureGroupOptionsValidation:
+    """Tests for the Options validation functionality in AggregatedFeatureGroup."""
+
+    def test_valid_options_context_parameters(self) -> None:
+        """Test that valid options with context parameters pass validation."""
+        options = Options(
+            context={AggregatedFeatureGroup.AGGREGATION_TYPE: "sum", DefaultOptionKeys.mloda_source_feature: "sales"},
+            group={"data_source": "production_db"},
+        )
+
+        # Should not raise any exception
+        AggregatedFeatureGroup.validate_options(options)
+
+    def test_valid_options_only_context(self) -> None:
+        """Test that options with only context parameters pass validation."""
+        options = Options(
+            context={AggregatedFeatureGroup.AGGREGATION_TYPE: "avg", DefaultOptionKeys.mloda_source_feature: "price"}
+        )
+
+        # Should not raise any exception
+        AggregatedFeatureGroup.validate_options(options)
+
+    def test_valid_options_only_group(self) -> None:
+        """Test that options with only group parameters pass validation."""
+        options = Options(group={"data_source": "staging_db", "environment": "test"})
+
+        # Should not raise any exception
+        AggregatedFeatureGroup.validate_options(options)
+
+    def test_invalid_options_context_in_group(self) -> None:
+        """Test that context parameters in group fail validation."""
+        options = Options(
+            group={
+                AggregatedFeatureGroup.AGGREGATION_TYPE: "sum",  # Should be in context
+                "data_source": "production_db",
+            },
+            context={DefaultOptionKeys.mloda_source_feature: "sales"},
+        )
+
+        with pytest.raises(ValueError, match="Parameter 'aggregation_type' should be in context, not group"):
+            AggregatedFeatureGroup.validate_options(options)
+
+    def test_invalid_options_mloda_source_in_group(self) -> None:
+        """Test that mloda_source_feature in group fails validation."""
+        options = Options(
+            group={
+                DefaultOptionKeys.mloda_source_feature: "sales",  # Should be in context
+                "data_source": "production_db",
+            },
+            context={AggregatedFeatureGroup.AGGREGATION_TYPE: "sum"},
+        )
+
+        with pytest.raises(ValueError, match="Parameter 'mloda_source_feature' should be in context, not group"):
+            AggregatedFeatureGroup.validate_options(options)
+
+    def test_skip_validation_in_group(self) -> None:
+        """Test that validation can be skipped with skip key in group."""
+        options = Options(
+            group={
+                AggregatedFeatureGroup.AGGREGATION_TYPE: "sum",  # Should be in context but validation skipped
+                "data_source": "production_db",
+                AggregatedFeatureGroup.SKIP_OPTIONS_VALIDATION_KEY: True,
+            },
+            context={DefaultOptionKeys.mloda_source_feature: "sales"},
+        )
+
+        # Should not raise any exception due to skip key
+        AggregatedFeatureGroup.validate_options(options)
+
+    def test_skip_validation_in_context(self) -> None:
+        """Test that validation can be skipped with skip key in context."""
+        options = Options(
+            group={
+                AggregatedFeatureGroup.AGGREGATION_TYPE: "sum",  # Should be in context but validation skipped
+                "data_source": "production_db",
+            },
+            context={
+                DefaultOptionKeys.mloda_source_feature: "sales",
+                AggregatedFeatureGroup.SKIP_OPTIONS_VALIDATION_KEY: True,
+            },
+        )
+
+        # Should not raise any exception due to skip key
+        AggregatedFeatureGroup.validate_options(options)
+
+    def test_options_equality_group_only(self) -> None:
+        """Test that Options equality works correctly (only compares group parameters)."""
+        options1 = Options(group={"data_source": "prod"}, context={"aggregation_type": "sum"})
+
+        options2 = Options(
+            group={"data_source": "prod"},
+            context={"aggregation_type": "avg"},  # Different context
+        )
+
+        options3 = Options(
+            group={"data_source": "staging"},  # Different group
+            context={"aggregation_type": "sum"},
+        )
+
+        # Options with same group but different context should be equal
+        assert options1 == options2
+
+        # Options with different group should not be equal
+        assert options1 != options3
+        assert options2 != options3
+
+    def test_options_hash_group_only(self) -> None:
+        """Test that Options hash works correctly (only uses group parameters)."""
+        options1 = Options(group={"data_source": "prod"}, context={"aggregation_type": "sum"})
+
+        options2 = Options(
+            group={"data_source": "prod"},
+            context={"aggregation_type": "avg"},  # Different context
+        )
+
+        options3 = Options(
+            group={"data_source": "staging"},  # Different group
+            context={"aggregation_type": "sum"},
+        )
+
+        # Options with same group but different context should have same hash
+        assert hash(options1) == hash(options2)
+
+        # Options with different group should have different hash
+        assert hash(options1) != hash(options3)
+        assert hash(options2) != hash(options3)
+
+    def test_unknown_parameters_allowed(self) -> None:
+        """Test that unknown parameters are allowed during migration."""
+        options = Options(
+            group={"unknown_group_param": "value", "data_source": "production_db"},
+            context={AggregatedFeatureGroup.AGGREGATION_TYPE: "sum", "unknown_context_param": "value"},
+        )
+
+        # Should not raise any exception - unknown parameters are allowed
+        AggregatedFeatureGroup.validate_options(options)

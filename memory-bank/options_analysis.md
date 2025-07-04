@@ -261,13 +261,165 @@ class AggregationFeatureGroup(AbstractFeatureGroup):
 - Clear documentation for developers
 - Feature Group-specific validation during migration
 
+## Phase 2: Feature Groups Migration Checklist
+
+### Migration Priorities
+
+#### Priority 1: Core Infrastructure (Foundation)
+- [ x ] **AbstractFeatureGroup** - Base class parameter handling and validation framework
+- [ ] **ComputeFrameWork** - Framework-specific options categorization
+- [ ] **Core Engine Components** - Resolution logic and parameter processing
+
+#### Priority 2: Experimental Feature Groups (High Usage)
+- [ x ] **AggregatedFeatureGroup** 
+  - **Context**: `aggregation_type` (sum, avg, min, max), `mloda_source_feature`
+  - **Group**: Data source isolation parameters (if any)
+  - **Authority**: Define aggregation algorithm parameters as context-only
+
+- [ ] **MissingValueFeatureGroup**
+  - **Context**: `imputation_method` (mean, median, mode, constant, ffill, bfill), `mloda_source_feature`
+  - **Group**: Data source/version parameters for A/B testing different datasets
+  - **Authority**: Imputation methods don't require isolation
+
+- [ ] **TimeWindowFeatureGroup**
+  - **Context**: `window_function`, `window_size`, `time_unit`, `mloda_source_feature`
+  - **Group**: `data_source`, `environment` for temporal data isolation
+  - **Authority**: Window calculations are metadata, data sources require isolation
+
+- [ ] **TextCleaningFeatureGroup**
+  - **Context**: `cleaning_operations` (normalize, remove_stopwords, remove_punctuation), `mloda_source_feature`
+  - **Group**: `data_source`, `language_model_version` for different text processing environments
+  - **Authority**: Text processing parameters are algorithmic, data sources require isolation
+
+- [ ] **ClusteringFeatureGroup**
+  - **Context**: `clustering_algorithm`, `n_clusters`, `auto_k`, `mloda_source_feature`
+  - **Group**: `data_source`, `feature_set_version` for comparing clustering on different datasets
+  - **Authority**: Clustering algorithms are computational, data versions require isolation
+
+#### Priority 3: Advanced Feature Groups
+- [ ] **DimensionalityReductionFeatureGroup**
+  - **Context**: `algorithm` (pca, tsne, ica, lda, isomap), `n_components`, `mloda_source_feature`
+  - **Group**: `data_source`, `preprocessing_version` for different data preparation pipelines
+  - **Authority**: Dimensionality algorithms are computational parameters
+
+- [ ] **ForecastingFeatureGroup**
+  - **Context**: `algorithm`, `horizon`, `time_unit`, `mloda_source_feature`, artifact parameters
+  - **Group**: `data_source`, `training_period`, `model_version` for comparing forecasts on different data
+  - **Authority**: Forecasting algorithms are computational, training data requires isolation
+
+- [ ] **GeoDistanceFeatureGroup**
+  - **Context**: `distance_type` (haversine, euclidean, manhattan), `mloda_source_feature`
+  - **Group**: `coordinate_system`, `data_source` for different geographic reference systems
+  - **Authority**: Distance calculations are computational, coordinate systems require isolation
+
+- [ ] **NodeCentralityFeatureGroup**
+  - **Context**: `centrality_type`, `graph_type` (directed/undirected), `mloda_source_feature`
+  - **Group**: `graph_data_source`, `network_version` for comparing centrality on different networks
+  - **Authority**: Centrality algorithms are computational, network data requires isolation
+
+#### Priority 4: Sklearn Feature Groups
+- [ ] **SklearnPipelineFeatureGroup**
+  - **Context**: `pipeline_name`, `pipeline_config`, `mloda_source_feature`, artifact storage parameters
+  - **Group**: `data_source`, `sklearn_version`, `model_environment` for ML pipeline isolation
+  - **Authority**: Pipeline configurations are computational, model environments require isolation
+
+- [ ] **SklearnScalingFeatureGroup**
+  - **Context**: `scaler_type` (standard, minmax, robust), scaler parameters, `mloda_source_feature`
+  - **Group**: `data_source`, `training_set_version` for scaling based on different training data
+  - **Authority**: Scaling algorithms are computational, training data requires isolation
+
+- [ ] **SklearnEncodingFeatureGroup**
+  - **Context**: `encoder_type` (onehot, label, ordinal), encoder parameters, `mloda_source_feature`
+  - **Group**: `data_source`, `category_mapping_version` for different encoding schemes
+  - **Authority**: Encoding algorithms are computational, category mappings require isolation
+
+#### Priority 5: Input Data Feature Groups
+- [ ] **ReadFileFeatureGroup** (CSV, Parquet, JSON, Feather, ORC, Text)
+  - **Context**: `file_format_options`, `parsing_parameters`, `column_selection`
+  - **Group**: `file_path`, `data_source`, `file_version` for reading different data sources
+  - **Authority**: File paths and versions require isolation, parsing options are metadata
+
+- [ ] **ReadDBFeatureGroup** (SQLite, etc.)
+  - **Context**: `query_parameters`, `result_formatting`, `column_selection`
+  - **Group**: `database_connection`, `schema_version`, `environment` for different databases
+  - **Authority**: Database connections require isolation, query parameters are metadata
+
+- [ ] **APIDataFeatureGroup**
+  - **Context**: `request_parameters`, `response_formatting`, `retry_settings`
+  - **Group**: `api_endpoint`, `api_version`, `environment`, `authentication` for different API sources
+  - **Authority**: API endpoints and auth require isolation, request parameters are metadata
+
+### Feature Group Authority Implementation Pattern
+
+Each Feature Group must implement:
+
+```python
+class ExampleFeatureGroup(AbstractFeatureGroup):
+    # Define which parameters require isolation (group)
+    GROUP_PARAMETERS = {"data_source", "environment", "data_version"}
+    
+    # Define which parameters are metadata only (context)
+    CONTEXT_PARAMETERS = {"algorithm_type", "mloda_source_feature", "debug_mode"}
+    
+    def validate_options(self, options: Options) -> None:
+        """Validate that parameters are in correct categories."""
+        # Validate group parameters
+        for key in options.group.keys():
+            if key not in self.GROUP_PARAMETERS:
+                if key in self.CONTEXT_PARAMETERS:
+                    raise ValueError(f"Parameter '{key}' should be in context, not group")
+                # Allow unknown parameters in group during migration
+        
+        # Validate context parameters
+        for key in options.context.keys():
+            if key not in self.CONTEXT_PARAMETERS:
+                if key in self.GROUP_PARAMETERS:
+                    raise ValueError(f"Parameter '{key}' should be in group, not context")
+                # Allow unknown parameters in context during migration
+    
+    @classmethod
+    def migrate_legacy_options(cls, legacy_options: dict[str, Any]) -> Options:
+        """Helper method to migrate legacy options to group/context separation."""
+        group = {}
+        context = {}
+        
+        for key, value in legacy_options.items():
+            if key in cls.GROUP_PARAMETERS:
+                group[key] = value
+            elif key in cls.CONTEXT_PARAMETERS:
+                context[key] = value
+            else:
+                # During migration, unknown parameters go to group for safety
+                group[key] = value
+        
+        return Options(group=group, context=context)
+```
+
+### Migration Testing Strategy
+
+For each Feature Group:
+
+1. **Parameter Analysis**: Review current usage patterns to identify group vs context parameters
+2. **Authority Definition**: Implement GROUP_PARAMETERS and CONTEXT_PARAMETERS sets
+3. **Validation Testing**: Ensure parameters are correctly categorized
+4. **Behavior Testing**: Verify Feature Group resolution works correctly after migration
+5. **Performance Testing**: Confirm reduced unnecessary splitting improves performance
+
+### Migration Success Criteria
+
+- [ ] **Functional**: Feature Group resolution correctly isolates only when needed
+- [ ] **Authority**: Each Feature Group properly validates its parameter categorization
+- [ ] **Performance**: Reduced unnecessary Feature Group splitting
+- [ ] **Compatibility**: All existing functionality continues to work
+- [ ] **Documentation**: Clear examples of group vs context usage for each Feature Group
+
 ## Next Steps
 
-1. **Implement new Options class** with group/context separation
+1. **✅ COMPLETED: Implement new Options class** with group/context separation
 2. **Define Feature Group categorization interfaces** for parameter validation
 3. **Create migration utilities** to help categorize existing parameters
 4. **Update core resolution logic** to use only group parameters
-5. **Begin systematic migration** starting with core modules
+5. **Begin systematic migration** using the checklist above
 6. **Add Feature Group-specific validation** for parameter categorization
 7. **Update all documentation** and examples
 

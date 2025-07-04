@@ -51,10 +51,12 @@ class AggregatedFeatureGroup(AbstractFeatureGroup):
     ```python
     feature = Feature(
         "PlaceHolder",  # Placeholder name, will be replaced
-        Options({
-            AggregatedFeatureGroup.AGGREGATION_TYPE: "sum",
-            DefaultOptionKeys.mloda_source_feature: "Sales"
-        })
+        Options(
+            context={
+                AggregatedFeatureGroup.AGGREGATION_TYPE: "sum",
+                DefaultOptionKeys.mloda_source_feature: "Sales"
+            }
+        )
     )
 
     # The Engine will automatically parse this into a feature with name "sum_aggr__Sales"
@@ -62,6 +64,24 @@ class AggregatedFeatureGroup(AbstractFeatureGroup):
 
     The configuration-based approach is particularly useful when chaining multiple
     feature groups together, which need additional configuration.
+
+    ## Options Parameter Categorization
+
+    This Feature Group implements the Feature Group Authority Pattern for proper
+    parameter categorization in the Options object:
+
+    ### Context Parameters (Don't Affect Feature Group Resolution)
+    - `aggregation_type`: The type of aggregation (sum, avg, min, max, etc.)
+    - `mloda_source_feature`: Source feature tracking metadata
+
+    ### Group Parameters (Require Feature Group Isolation)
+    - `data_source`: Different data sources for testing migrations
+    - `environment`: Production vs staging data sources
+    - `data_version`: Different data versions that must be kept separate
+
+    Multiple AggregatedFeatureGroups with different aggregation_type values can resolve
+    together because they don't require isolation - they're computational parameters
+    for the same logical group.
     """
 
     # Option key for aggregation type
@@ -78,6 +98,11 @@ class AggregatedFeatureGroup(AbstractFeatureGroup):
         "std": "Standard deviation of values",
         "var": "Variance of values",
         "median": "Median value",
+    }
+
+    CONTEXT_PARAMETERS = {
+        AGGREGATION_TYPE,
+        DefaultOptionKeys.mloda_source_feature,
     }
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:

@@ -96,27 +96,40 @@ class Engine:
         return execution_planner
 
     def parse_configured_features(self, feature: Feature, feature_groups: Set[Type[AbstractFeatureGroup]]) -> Feature:
+        # TODO: drop?
+        return feature
+
+        #### FIX LOGIC
         if not feature.options.get(DefaultOptionKeys.mloda_source_feature):
             return feature
+        return feature
+
+        # if feature.options.get(DefaultOptionKeys.mloda_source_feature):
 
         for fg in feature_groups:
             parser = fg.configurable_feature_chain_parser()
+            print("parser", parser)
             if parser is None:
                 continue
 
             new_feat = parser.create_feature_without_options(feature)
             if new_feat is None:
                 continue
+            print("new_feat", new_feat.name)
             return new_feat
+        print("no parser found")
 
+        # ä## FIX LOGIC
         return feature
 
     def setup_features_recursion(self, features: Features) -> None:
         for feature in features:
+            print("#######", feature.name)
             self.accessible_plugins = PreFilterPlugins(
                 self.copy_compute_frameworks, self.plugin_collector
             ).get_accessible_plugins()
 
+            print("äää", feature.name)
             parse_configured_features = self.parse_configured_features(feature, set(self.accessible_plugins.keys()))
 
             self._process_feature(parse_configured_features, features)
@@ -124,9 +137,9 @@ class Engine:
     def _process_feature(self, feature: Feature, features: Features) -> None:
         """Processes a single feature by delegating tasks to helper methods."""
 
+        print("ööö", feature.name)
         feature_group_class, compute_frameworks = self._identify_feature_group_and_frameworks(feature)
         feature_group = feature_group_class()
-
         self._set_feature_name(feature, feature_group)
         self._set_compute_framework_and_data_type(feature, compute_frameworks, feature_group_class)
 

@@ -825,7 +825,6 @@ class ExecutionPlan:
             feature_set = FeatureSet()
             for feature in features:
                 feature_set.add(feature)
-                feature.name
 
             self.feature_set_collections.append(feature_set.get_all_feature_ids())
 

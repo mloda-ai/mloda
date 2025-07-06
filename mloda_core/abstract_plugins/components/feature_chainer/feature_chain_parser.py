@@ -5,7 +5,16 @@ Feature chain parser for handling feature name chaining across feature groups.
 from __future__ import annotations
 
 import re
-from typing import List, Optional
+from typing import List, Optional, Set, Union, TYPE_CHECKING
+
+from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+from mloda_core.abstract_plugins.components.feature import Feature
+from mloda_core.abstract_plugins.components.options import Options
+
+
+if TYPE_CHECKING:
+    from mloda_core.abstract_plugins.components.feature import Feature
+    from mloda_core.abstract_plugins.components.options import Options
 
 
 class FeatureChainParser:
@@ -76,6 +85,7 @@ class FeatureChainParser:
         Returns:
             True if valid, False otherwise
         """
+
         try:
             # Handle both single pattern and list of patterns
             if isinstance(prefix_patterns, str):
@@ -100,30 +110,31 @@ class FeatureChainParser:
         except Exception:
             return False
 
-    @classmethod
-    def is_chained_feature(cls, feature_name: str, prefix_pattern: str) -> bool:
-        """
-        Check if a feature name follows the chaining pattern.
-
-        Args:
-            feature_name: The feature name to check
-            prefix_pattern: Regex pattern for the prefix
-
-        Returns:
-            True if the feature is chained, False otherwise
-        """
-        try:
-            # First validate that this is a valid feature name
-            if not cls.validate_feature_name(feature_name, prefix_pattern):
-                return False
-
-            # Extract the source feature
-            mloda_source_feature = cls.extract_source_feature(feature_name, prefix_pattern)
-
-            # If the source feature contains a double underscore, it's chained
-            return "__" in mloda_source_feature
-        except Exception:
-            return False
+    # @classmethod
+    # def _is_chained_feature(cls, feature_name: str, prefix_pattern: str) -> bool:
+    #    """
+    #    Check if a feature name follows the chaining pattern.
+    #
+    #    Args:
+    #        feature_name: The feature name to check
+    #        prefix_pattern: Regex pattern for the prefix
+    #
+    #    Returns:
+    #        True if the feature is chained, False otherwise
+    #    """
+    #    try:
+    #        # First validate that this is a valid feature name
+    #        if not cls.validate_feature_name(feature_name, prefix_pattern):
+    #            return False
+    #
+    #        # Extract the source feature
+    #        mloda_source_feature = cls.extract_source_feature(feature_name, prefix_pattern)#
+    #
+    #
+    #        # If the source feature contains a double underscore, it's chained
+    #        return "__" in mloda_source_feature
+    #    except Exception:
+    #        return False
 
     @classmethod
     def get_prefix_part(cls, feature_name: str, prefix_patterns: str | List[str]) -> Optional[str]:
@@ -156,3 +167,92 @@ class FeatureChainParser:
                     return match.group(1)
 
         return None
+
+    @classmethod
+    def extract_source_feature_from_options(cls, options: "Options") -> Union[str, "Feature", None]:
+        """Supports both string and nested Feature objects."""
+        return options.get(DefaultOptionKeys.mloda_source_feature)
+
+    @classmethod
+    def build_feature_with_nested_source(
+        cls, prefix: str, source_feature: Union[str, "Feature"], additional_options: Optional["Options"] = None
+    ) -> "Feature":
+        """
+        NEW METHOD: Build a Feature object with nested source feature support.
+
+        Args:
+            prefix: The prefix for the feature (e.g., "max_aggr")
+            source_feature: Either a string or Feature object
+            additional_options: Additional options to merge
+
+        Returns:
+            Feature object with proper options structure
+        """
+
+        # Create base options
+        options = additional_options or Options()
+
+        # Add source feature to context (metadata, doesn't affect grouping)
+        options.add_to_context(DefaultOptionKeys.mloda_source_feature, source_feature)
+
+        return Feature(prefix, options)
+
+    @classmethod
+    def supports_nested_chaining(cls, options: "Options") -> bool:
+        """Check if options contain nested Feature objects."""
+        source = cls.extract_source_feature_from_options(options)
+        return isinstance(source, Feature)
+
+    @classmethod
+    def extract_source_feature_unified(
+        cls, options: "Options", feature_name: str, prefix_pattern: str
+    ) -> Optional[Set["Feature"]]:
+        """
+        This method first checks for nested Feature objects in options, then falls back to string-based parsing.
+        This is the recommended method for feature groups to use in their input_features() method.
+
+        Args:
+            options: Options object that may contain nested Feature objects
+            feature_name: String feature name for fallback string-based parsing
+            prefix_pattern: Regex pattern for string-based parsing
+
+        Returns:
+            Set of Feature objects, or None if no source features found
+        """
+        # First, check for nested Feature objects (new approach)
+        nested_source = cls.extract_source_feature_from_options(options)
+        if isinstance(nested_source, Feature):
+            return {nested_source}  # Return the Feature object directly
+        elif isinstance(nested_source, str):
+            return {Feature(nested_source)}  # Create Feature from string
+
+        # Fall back to string-based parsing (traditional approach)
+        source_feature_name = cls.extract_source_feature(feature_name, prefix_pattern)
+        return {Feature(source_feature_name)}
+
+    @classmethod
+    def convert_nested_to_string_equivalent(cls, feature: "Feature") -> str:
+        """
+        NEW METHOD: Convert nested Feature structure to equivalent string representation.
+        This is useful for debugging, logging, or backward compatibility.
+        Supports unlimited depth.
+
+        Args:
+            feature: Feature object with potentially nested source features
+
+        Returns:
+            String representation of the nested feature chain
+        """
+
+        source_feature = cls.extract_source_feature_from_options(feature.options)
+
+        if source_feature is None:
+            return feature.name.name
+        elif isinstance(source_feature, str):
+            return f"{feature.name.name}__{source_feature}"
+        elif isinstance(source_feature, Feature):
+            # Recursive case - supports unlimited depth
+            source_chain = cls.convert_nested_to_string_equivalent(source_feature)
+            return f"{feature.name.name}__{source_chain}"
+        else:
+            return feature.name.name

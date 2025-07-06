@@ -19,6 +19,7 @@ class IdentifyFeatureGroupClass:
         links: Optional[Set[Link]],
         data_access_collection: Optional[DataAccessCollection] = None,
     ):
+        print("identity", feature.name.name)
         feature_group = self._filter_loop(feature, accessible_plugins, links, data_access_collection)
 
         self.validate(feature_group, feature)

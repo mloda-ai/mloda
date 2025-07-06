@@ -22,6 +22,7 @@ class PandasAggregatedFeatureGroup(AggregatedFeatureGroup):
     def _check_source_feature_exists(cls, data: Any, feature_name: str) -> None:
         """Check if the feature exists in the DataFrame."""
         if feature_name not in data.columns:
+            print("f2", feature_name, data.columns)
             raise ValueError(f"Source feature '{feature_name}' not found in data")
 
     @classmethod

@@ -58,7 +58,10 @@ class FeatureSet:
         return self.options
 
     def get_options_key(self, key: str) -> Any:
-        return self.get_options().data.get(key, None)
+        val = self.get_options().data.get(key, None)
+        if val is None:
+            val = self.get_options().context.get(key, None)
+        return val
 
     def get_initial_requested_features(self) -> Set[FeatureName]:
         return {feature.name for feature in self.features if feature.initial_requested_data}

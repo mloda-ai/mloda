@@ -64,4 +64,4 @@ mloda is a straightforward Python module. You can install it and run it within y
 
 ## If you have other questions not answered
 
-Please raise an [issue](https://github.com/TomKaltofen/mloda/issues/) on our GitHub repository or email us at [mloda.info@gmail.com](mailto:mloda.info@gmail.com). We value community feedback and will do our best to address your questions and suggestions promptly.
+Please raise an [issue](https://github.com/TomKaltofen/mloda/issues/) on our GitHub repository or email us at [info@mloda.ai](mailto:info@mloda.ai). We value community feedback and will do our best to address your questions and suggestions promptly.

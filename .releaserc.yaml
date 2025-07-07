@@ -63,4 +63,4 @@ plugins:
       "@semantic-release/git",
       { "assets": ["pyproject.toml"] },
     ]
-repositoryUrl: "https://github.com/tomkaltofen/mloda"
+repositoryUrl: "https://github.com/mloda-ai/mloda"

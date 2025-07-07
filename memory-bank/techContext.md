@@ -13,7 +13,7 @@
 
 ## Development Setup
 
-*   Clone the repository: `git clone https://github.com/TomKaltofen/mloda.git`
+*   Clone the repository: `git clone https://github.com/mloda-ai/mloda.git`
 *   Use a dev container (optional, requires Docker)
 *   Install test dependencies: `pip install -r tests/requirements-test.txt && pip install tox`
 

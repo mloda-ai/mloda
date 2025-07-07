@@ -18,7 +18,7 @@ Unlike traditional tools, mloda focuses on defining transformations rather than 
 
 #### How do I install mloda? How do I get started with mloda?
 
-Installation is straightforward via pip or by cloning the repository. [Installation guide and step-by-step guide](https://tomkaltofen.github.io/mloda/chapter1/installation/)
+Installation is straightforward via pip or by cloning the repository. [Installation guide and step-by-step guide](https://mloda-ai.github.io/mloda/chapter1/installation/)
 
 #### What are the prerequisites for using mloda? 
 
@@ -28,7 +28,7 @@ You'll learn a lot along the way!
 
 #### How do I create my first feature group using mloda? 
 
-Feature Groups define dependencies and calculations. To create your first Feature Group, check out this [basic example here](https://tomkaltofen.github.io/mloda/chapter1/feature-groups/). For more advanced topics, see our [in-depth documentation on feature groups](https://tomkaltofen.github.io/mloda/in_depth/feature-chain-parser/).
+Feature Groups define dependencies and calculations. To create your first Feature Group, check out this [basic example here](https://mloda-ai.github.io/mloda/chapter1/feature-groups/). For more advanced topics, see our [in-depth documentation on feature groups](https://mloda-ai.github.io/mloda/in_depth/feature-chain-parser/).
 
 ## Features and Functionality
 
@@ -64,4 +64,4 @@ mloda is a straightforward Python module. You can install it and run it within y
 
 ## If you have other questions not answered
 
-Please raise an [issue](https://github.com/TomKaltofen/mloda/issues/) on our GitHub repository or email us at [info@mloda.ai](mailto:info@mloda.ai). We value community feedback and will do our best to address your questions and suggestions promptly.
+Please raise an [issue](https://github.com/mloda-ai/mloda/issues/) on our GitHub repository or email us at [info@mloda.ai](mailto:info@mloda.ai). We value community feedback and will do our best to address your questions and suggestions promptly.

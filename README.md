@@ -1,13 +1,13 @@
 # mloda: Revolutionary Process-Data Separation for Feature and Data Engineering
 
-[![Documentation](https://img.shields.io/badge/docs-github.io-blue.svg)](https://tomkaltofen.github.io/mloda/)
+[![Documentation](https://img.shields.io/badge/docs-github.io-blue.svg)](https://mloda-ai.github.io/mloda/)
 [![PyPI version](https://badge.fury.io/py/mloda.svg)](https://badge.fury.io/py/mloda)
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/TomKaltofen/mloda/blob/main/LICENSE.TXT)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/mloda-ai/mloda/blob/main/LICENSE.TXT)
 -[![Tox](https://img.shields.io/badge/tested_with-tox-blue.svg)](https://tox.readthedocs.io/)
 -[![Checked with mypy](https://img.shields.io/badge/type%20checked-mypy-blue.svg)](http://mypy-lang.org/)
 -[![code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
-> **⚠️ Early Version Notice**: mloda is in active development. Some features described below are still being implemented. We're actively seeking feedback to shape the future of the framework. [Share your thoughts!](https://github.com/TomKaltofen/mloda/issues/)
+> **⚠️ Early Version Notice**: mloda is in active development. Some features described below are still being implemented. We're actively seeking feedback to shape the future of the framework. [Share your thoughts!](https://github.com/mloda-ai/mloda/issues/)
 
 ## 🚀 Transforming Feature Engineering Through Process-Data Separation
 
@@ -17,7 +17,7 @@ mloda **revolutionizes feature engineering** by separating **processes** (transf
 
 **🌐 Share Without Secrets**: Traditional pipelines lock business logic inside - mloda plugins separate transformations from business context, enabling safe community sharing.
 
-**🎯 Try the first example out NOW:** [sklearn Integration Example](https://tomkaltofen.github.io/mloda/examples/sklearn_integration_basic/) - See mloda transform traditional sklearn pipelines!
+**🎯 Try the first example out NOW:** [sklearn Integration Example](https://mloda-ai.github.io/mloda/examples/sklearn_integration_basic/) - See mloda transform traditional sklearn pipelines!
 
 ## 📋 Table of Contents
 
@@ -230,7 +230,7 @@ All operations work seamlessly across any compute framework with the same simple
 | **👤 Data User** | Consume features via API | Request features, configure workflows, build ML models |
 | **🛡️ Data Owner** | Governance & lifecycle | Control access, manage compliance, oversee data quality |
 
-**Organizational Clarity**: Each role has defined boundaries, enabling proper data governance while maintaining development flexibility. [Learn more about roles](https://tomkaltofen.github.io/mloda/examples/mloda_basics/4_ml_data_producers_user_owner/)
+**Organizational Clarity**: Each role has defined boundaries, enabling proper data governance while maintaining development flexibility. [Learn more about roles](https://mloda-ai.github.io/mloda/examples/mloda_basics/4_ml_data_producers_user_owner/)
 
 ## 🌐 Community-Driven Plugin Ecosystem
 
@@ -247,22 +247,22 @@ All operations work seamlessly across any compute framework with the same simple
 
 ## 📖 Documentation
 
-- **[Getting Started](https://tomkaltofen.github.io/mloda/chapter1/installation/)** - Installation and first steps
-- **[sklearn Integration](https://tomkaltofen.github.io/mloda/examples/sklearn_integration_basic/)** - Complete tutorial
-- **[Feature Groups](https://tomkaltofen.github.io/mloda/chapter1/feature-groups/)** - Core concepts
-- **[Compute Frameworks](https://tomkaltofen.github.io/mloda/chapter1/compute-frameworks/)** - Technology integration
-- **[API Reference](https://tomkaltofen.github.io/mloda/in_depth/mloda-api/)** - Complete API documentation
+- **[Getting Started](https://mloda-ai.github.io/mloda/chapter1/installation/)** - Installation and first steps
+- **[sklearn Integration](https://mloda-ai.github.io/mloda/examples/sklearn_integration_basic/)** - Complete tutorial
+- **[Feature Groups](https://mloda-ai.github.io/mloda/chapter1/feature-groups/)** - Core concepts
+- **[Compute Frameworks](https://mloda-ai.github.io/mloda/chapter1/compute-frameworks/)** - Technology integration
+- **[API Reference](https://mloda-ai.github.io/mloda/in_depth/mloda-api/)** - Complete API documentation
 
 ## 🤝 Contributing
 
 We welcome contributions! Whether you're building plugins, adding features, or improving documentation, your input is invaluable.
 
-- **[Development Guide](https://tomkaltofen.github.io/mloda/development/)** - How to contribute
-- **[GitHub Issues](https://github.com/TomKaltofen/mloda/issues/)** - Report bugs or request features
+- **[Development Guide](https://mloda-ai.github.io/mloda/development/)** - How to contribute
+- **[GitHub Issues](https://github.com/mloda-ai/mloda/issues/)** - Report bugs or request features
 - **[Email](mailto:info@mloda.ai)** - Direct contact
 
 ## 📄 License
 
-This project is licensed under the [Apache License, Version 2.0](https://github.com/TomKaltofen/mloda/blob/main/LICENSE.TXT).
+This project is licensed under the [Apache License, Version 2.0](https://github.com/mloda-ai/mloda/blob/main/LICENSE.TXT).
 
 ---

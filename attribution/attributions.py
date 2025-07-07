@@ -79,7 +79,7 @@ if __name__ == "__main__":
     """
 
     files = ["THIRD_PARTY_LICENSES.md"]
-    base = f"https://github.com/TomKaltofen/mloda/releases/download/{get_version()}/"
+    base = f"https://github.com/mloda-ai/mloda/releases/download/{get_version()}/"
     out = "attribution/"
 
     try:

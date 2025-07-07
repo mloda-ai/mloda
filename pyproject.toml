@@ -9,7 +9,7 @@ description = "Rethinking Data and Feature Engineering"
 readme = { file = "README.md", content-type = "text/markdown" }
 license = { file = "LICENSE.TXT" }
 authors = [
-    { name = "Tom Kaltofen", email = "mloda.info@gmail.com" }
+    { name = "Tom Kaltofen", email = "info@mloda.ai" }
 ]
 dependencies = [
     "pyarrow"
@@ -26,7 +26,7 @@ classifiers = [
 "Documentation" = "https://tomkaltofen.github.io/mloda/"
 "Source Code" = "https://github.com/TomKaltofen/mloda"
 "PyPI" = "https://pypi.org/project/mloda/"
-"Homepage" = "https://github.com/TomKaltofen/mloda"
+"Homepage" = "https://mloda.ai"
 
 [tool.setuptools]
 packages = { find = { include = ["mloda_core*", "mloda_plugins*"] } }

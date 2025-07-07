@@ -259,7 +259,7 @@ We welcome contributions! Whether you're building plugins, adding features, or i
 
 - **[Development Guide](https://tomkaltofen.github.io/mloda/development/)** - How to contribute
 - **[GitHub Issues](https://github.com/TomKaltofen/mloda/issues/)** - Report bugs or request features
-- **[Email](mailto:mloda.info@gmail.com)** - Direct contact
+- **[Email](mailto:info@mloda.ai)** - Direct contact
 
 ## 📄 License
 

@@ -67,7 +67,7 @@ mloda addresses common challenges in data and feature engineering by leveraging 
 
 ## Frequently Asked Questions (FAQ)
 
-If you have additional questions about mloda and how it can enhance your data and feature engineering workflow visit our [FAQ](https://tomkaltofen.github.io/mloda/faq) section, raise an [issue](https://github.com/TomKaltofen/mloda/issues/) on our GitHub repository, or email us at [mloda.info@gmail.com](mailto:mloda.info@gmail.com). 
+If you have additional questions about mloda and how it can enhance your data and feature engineering workflow visit our [FAQ](https://tomkaltofen.github.io/mloda/faq) section, raise an [issue](https://github.com/TomKaltofen/mloda/issues/) on our GitHub repository, or email us at [info@mloda.ai](mailto:info@mloda.ai).
 
 
 ## License

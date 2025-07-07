@@ -22,9 +22,9 @@ classifiers = [
 ]
 
 [project.urls]
-"Bug Tracker" = "https://github.com/TomKaltofen/mloda/issues"
-"Documentation" = "https://tomkaltofen.github.io/mloda/"
-"Source Code" = "https://github.com/TomKaltofen/mloda"
+"Bug Tracker" = "https://github.com/mloda-ai/mloda/issues"
+"Documentation" = "https://mloda-ai.github.io/mloda/"
+"Source Code" = "https://github.com/mloda-ai/mloda"
 "PyPI" = "https://pypi.org/project/mloda/"
 "Homepage" = "https://mloda.ai"
 

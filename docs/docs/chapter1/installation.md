@@ -7,7 +7,7 @@ pip install mloda
 ## 2. Install mloda via Git
 Alternatively, you can clone the repository and install from source:
 ```bash
-git clone https://github.com/TomKaltofen/mloda.git
+git clone https://github.com/mloda-ai/mloda.git
 cd mloda
 pip install .
 ```

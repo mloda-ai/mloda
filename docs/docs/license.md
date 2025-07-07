@@ -6,8 +6,8 @@ This means:
 
 - You are free to use, modify, and distribute the software as long as you comply with the terms of the license.
 - Proper attribution is required when distributing the software.
-- For full details, see the [LICENSE.TXT](https://github.com/TomKaltofen/mloda/blob/main/LICENSE.TXT) file in the GitHub repository.
+- For full details, see the [LICENSE.TXT](https://github.com/mloda-ai/mloda/blob/main/LICENSE.TXT) file in the GitHub repository.
 
 Attributions:
 
-- Any attributions for third-party components or libraries are available in the [releases of this repository](https://github.com/TomKaltofen/mloda/releases) as asset: ATTRIBUTION.md THIRD_PARTY_LICENSES.md.
+- Any attributions for third-party components or libraries are available in the [releases of this repository](https://github.com/mloda-ai/mloda/releases) as asset: ATTRIBUTION.md THIRD_PARTY_LICENSES.md.

@@ -238,7 +238,7 @@ Output similar to:
 #### Artifacts
 
 `Artifacts` can also be used for validation as the full API is available. A use case could be to store statistics of a feature and then validate them later on.
-For more details on artifacts, refer to the [artifact documentation](https://tomkaltofen.github.io/mloda/in_depth/artifacts/).
+For more details on artifacts, refer to the [artifact documentation](https://mloda-ai.github.io/mloda/in_depth/artifacts/).
 
 #### Conclusion
 

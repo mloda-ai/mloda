@@ -109,13 +109,33 @@
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#matching-process">Matching Process</a>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#default-matching-criteria">Default Matching Criteria</a>
+    <li class="toctree-l3"><a class="reference internal" href="#modern-unified-matching">Modern Unified Matching</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#1-dual-approach-support">1. Dual Approach Support</a>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#custom-matching">Custom Matching</a>
+    <li class="toctree-l4"><a class="reference internal" href="#2-property_mapping-configuration">2. PROPERTY_MAPPING Configuration</a>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#example">Example</a>
+    <li class="toctree-l4"><a class="reference internal" href="#3-validation-modes">3. Validation Modes</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#legacy-default-matching-criteria">Legacy Default Matching Criteria</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#matching-examples">Matching Examples</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#modern-feature-group-aggregation">Modern Feature Group (Aggregation)</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#parameter-classification-impact">Parameter Classification Impact</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#migration-path">Migration Path</a>
     </li>
     </ul>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../options-architecture/">Options Architecture</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../property-mapping/">PROPERTY_MAPPING</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-group-testing/">Feature Group Testing</a>
                 </li>
@@ -169,11 +189,70 @@
               
                 <h1 id="feature-group-matching-criteria">Feature Group Matching Criteria</h1>
 <h2 id="overview">Overview</h2>
-<p>The mloda framework uses a matching system to determine which feature group should handle a given feature. This document explains how this matching works.</p>
+<p>The mloda framework uses a sophisticated matching system to determine which feature group should handle a given feature. The modern approach supports both traditional string-based matching and configuration-based matching through the unified <code>FeatureChainParser</code>.</p>
 <h2 id="matching-process">Matching Process</h2>
-<p>When a feature is requested, the system checks all available feature groups to find the one that should handle the feature. This is done through the <code>match_feature_group_criteria</code> method in each feature group.</p>
-<h2 id="default-matching-criteria">Default Matching Criteria</h2>
-<p>By default, a feature group matches a feature if any of these conditions are true:</p>
+<p>When a feature is requested, the system checks all available feature groups to find the one that should handle the feature. This is done through the <code>match_feature_group_criteria</code> method in each feature group, which now typically uses the unified parser approach.</p>
+<h2 id="modern-unified-matching">Modern Unified Matching</h2>
+<p>The recommended approach uses <code>FeatureChainParser.match_configuration_feature_chain_parser</code> which provides:</p>
+<h3 id="1-dual-approach-support">1. Dual Approach Support</h3>
+<pre><code class="language-python">from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+from mloda_core.abstract_plugins.components.options import Options
+
+@classmethod
+def match_feature_group_criteria(cls, feature_name, options, data_access_collection=None):
+    return FeatureChainParser.match_configuration_feature_chain_parser(
+        feature_name, 
+        options, 
+        property_mapping=cls.PROPERTY_MAPPING,  # Configuration-based matching
+        pattern=cls.PATTERN,                    # String-based matching
+        prefix_patterns=cls.PREFIX_PATTERN
+    )
+</code></pre>
+<h3 id="2-property_mapping-configuration">2. PROPERTY_MAPPING Configuration</h3>
+<p>The <code>PROPERTY_MAPPING</code> defines how configuration-based features are validated:</p>
+<pre><code class="language-python">PROPERTY_MAPPING = {
+    &quot;aggregation_type&quot;: {
+        &quot;sum&quot;: &quot;Sum aggregation&quot;,
+        &quot;avg&quot;: &quot;Average aggregation&quot;,
+        &quot;max&quot;: &quot;Maximum aggregation&quot;,
+        DefaultOptionKeys.mloda_context: True,
+        DefaultOptionKeys.mloda_strict_validation: True,
+    },
+    DefaultOptionKeys.mloda_source_feature: {
+        &quot;explanation&quot;: &quot;Source feature for aggregation&quot;,
+        DefaultOptionKeys.mloda_context: True,
+        DefaultOptionKeys.mloda_strict_validation: False,
+    },
+}
+</code></pre>
+<h3 id="3-validation-modes">3. Validation Modes</h3>
+<h4 id="strict-validation">Strict Validation</h4>
+<p>When <code>mloda_strict_validation: True</code>, parameter values must be in the mapping:</p>
+<pre><code class="language-python"># This will match
+options = Options(context={&quot;aggregation_type&quot;: &quot;sum&quot;})  # &quot;sum&quot; is in mapping
+
+# This will fail validation
+options = Options(context={&quot;aggregation_type&quot;: &quot;custom&quot;})  # &quot;custom&quot; not in mapping
+</code></pre>
+<h4 id="flexible-validation">Flexible Validation</h4>
+<p>When <code>mloda_strict_validation: False</code> (default), any value is accepted:</p>
+<pre><code class="language-python"># Both will match
+options = Options(context={&quot;mloda_source_feature&quot;: &quot;sales&quot;})      # Any value OK
+options = Options(context={&quot;mloda_source_feature&quot;: &quot;custom_feature&quot;})  # Any value OK
+</code></pre>
+<h4 id="custom-validation-functions">Custom Validation Functions</h4>
+<p>For complex validation beyond simple value lists:</p>
+<pre><code class="language-python">PROPERTY_MAPPING = {
+    &quot;window_size&quot;: {
+        &quot;explanation&quot;: &quot;Size of the time window&quot;,
+        DefaultOptionKeys.mloda_context: True,
+        DefaultOptionKeys.mloda_strict_validation: True,
+        DefaultOptionKeys.mloda_validation_function: lambda x: isinstance(x, int) and x &gt; 0,
+    },
+}
+</code></pre>
+<h2 id="legacy-default-matching-criteria">Legacy Default Matching Criteria</h2>
+<p>For feature groups not yet modernized, the default matching criteria still apply:</p>
 <ol>
 <li>
 <p><strong>Root Feature with Matching Input Data</strong>: The feature group is a root feature (has no dependencies) and its input data matches the feature.</p>
@@ -194,30 +273,59 @@
    feature_name in FeatureGroup.feature_names_supported()</code></p>
 </li>
 </ol>
-<h2 id="custom-matching">Custom Matching</h2>
-<p>Feature groups can override the <code>match_feature_group_criteria</code> method to implement custom matching logic:</p>
-<pre><code class="language-python">@classmethod
-def match_feature_group_criteria(cls, feature_name, options, data_access_collection=None):
-    # Convert FeatureName to string if needed
-    if isinstance(feature_name, FeatureName):
-        feature_name = feature_name.name
+<h2 id="matching-examples">Matching Examples</h2>
+<h3 id="modern-feature-group-aggregation">Modern Feature Group (Aggregation)</h3>
+<pre><code class="language-python"># String-based matching
+feature = Feature(&quot;sum_aggr__sales&quot;)  # Matches via pattern
 
-    # Custom pattern matching
-    return re.match(r&quot;^pattern_\w+__source$&quot;, feature_name) is not None
+# Configuration-based matching  
+feature = Feature(
+    &quot;placeholder&quot;,
+    Options(context={
+        &quot;aggregation_type&quot;: &quot;sum&quot;,
+        &quot;mloda_source_feature&quot;: &quot;sales&quot;
+    })
+)  # Matches via PROPERTY_MAPPING validation
 </code></pre>
-<h2 id="example">Example</h2>
-<p>For a <code>ClusteringFeatureGroup</code>:</p>
-<ul>
-<li>Matches: <code>cluster_kmeans_5__customer_behavior</code> (prefix match)</li>
-<li>Matches: <code>ClusteringFeatureGroup</code> (class name match)</li>
-<li>Doesn't match: <code>kmeans_cluster_5__customer_behavior</code> (wrong pattern)</li>
-</ul>
+<h3 id="parameter-classification-impact">Parameter Classification Impact</h3>
+<p>The group/context parameter separation affects matching behavior:</p>
+<pre><code class="language-python"># These create different Feature Group instances (different group parameters)
+feature1 = Feature(&quot;placeholder&quot;, Options(
+    group={&quot;data_source&quot;: &quot;production&quot;},
+    context={&quot;aggregation_type&quot;: &quot;sum&quot;, &quot;mloda_source_feature&quot;: &quot;sales&quot;}
+))
+
+feature2 = Feature(&quot;placeholder&quot;, Options(
+    group={&quot;data_source&quot;: &quot;staging&quot;},  # Different group parameter
+    context={&quot;aggregation_type&quot;: &quot;sum&quot;, &quot;mloda_source_feature&quot;: &quot;sales&quot;}
+))
+
+# These create the same Feature Group instance (same group, different context)
+feature3 = Feature(&quot;placeholder&quot;, Options(
+    group={&quot;data_source&quot;: &quot;production&quot;},
+    context={&quot;aggregation_type&quot;: &quot;sum&quot;, &quot;mloda_source_feature&quot;: &quot;sales&quot;}
+))
+
+feature4 = Feature(&quot;placeholder&quot;, Options(
+    group={&quot;data_source&quot;: &quot;production&quot;},  # Same group parameter
+    context={&quot;aggregation_type&quot;: &quot;avg&quot;, &quot;mloda_source_feature&quot;: &quot;revenue&quot;}  # Different context
+))
+</code></pre>
+<h2 id="migration-path">Migration Path</h2>
+<p>When modernizing a feature group:</p>
+<ol>
+<li><strong>Add PROPERTY_MAPPING</strong> with parameter definitions</li>
+<li><strong>Update match_feature_group_criteria</strong> to use unified parser</li>
+<li><strong>Classify parameters</strong> as group vs context appropriately</li>
+<li><strong>Test both approaches</strong> work correctly</li>
+<li><strong>Update documentation</strong> and examples</li>
+</ol>
               
             </div>
           </div><footer>
     <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
         <a href="../feature-chain-parser/" class="btn btn-neutral float-left" title="Feature Chain Parser"><span class="icon icon-circle-arrow-left"></span> Previous</a>
-        <a href="../feature-group-testing/" class="btn btn-neutral float-right" title="Feature Group Testing">Next <span class="icon icon-circle-arrow-right"></span></a>
+        <a href="../options-architecture/" class="btn btn-neutral float-right" title="Options Architecture">Next <span class="icon icon-circle-arrow-right"></span></a>
     </div>
 
   <hr/>
@@ -243,7 +351,7 @@ def match_feature_group_criteria(cls, feature_name, options, data_access_collect
       <span><a href="../feature-chain-parser/" style="color: #fcfcfc">&laquo; Previous</a></span>
     
     
-      <span><a href="../feature-group-testing/" style="color: #fcfcfc">Next &raquo;</a></span>
+      <span><a href="../options-architecture/" style="color: #fcfcfc">Next &raquo;</a></span>
     
   </span>
 </div>

@@ -109,19 +109,25 @@
         <ul>
     <li class="toctree-l4"><a class="reference internal" href="#feature-chaining">Feature Chaining</a>
     </li>
-    <li class="toctree-l4"><a class="reference internal" href="#featurechainparser">FeatureChainParser</a>
+    <li class="toctree-l4"><a class="reference internal" href="#unified-parser-architecture">Unified Parser Architecture</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#options-architecture-group-vs-context-parameters">Options Architecture: Group vs Context Parameters</a>
     </li>
     <li class="toctree-l4"><a class="reference internal" href="#configuration-based-feature-creation">Configuration-Based Feature Creation</a>
     </li>
         </ul>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#implementation-in-feature-groups">Implementation in Feature Groups</a>
+    <li class="toctree-l3"><a class="reference internal" href="#modern-implementation-in-feature-groups">Modern Implementation in Feature Groups</a>
         <ul>
-    <li class="toctree-l4"><a class="reference internal" href="#1-define-a-prefix-pattern">1. Define a Prefix Pattern</a>
+    <li class="toctree-l4"><a class="reference internal" href="#1-define-property_mapping-configuration">1. Define PROPERTY_MAPPING Configuration</a>
     </li>
-    <li class="toctree-l4"><a class="reference internal" href="#2-extract-source-features">2. Extract Source Features</a>
+    <li class="toctree-l4"><a class="reference internal" href="#2-update-match_feature_group_criteria">2. Update match_feature_group_criteria</a>
     </li>
-    <li class="toctree-l4"><a class="reference internal" href="#3-enable-configuration-based-creation">3. Enable Configuration-Based Creation</a>
+    <li class="toctree-l4"><a class="reference internal" href="#3-modernize-input_features-method">3. Modernize input_features Method</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#4-update-calculate_feature-method">4. Update calculate_feature Method</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#5-advanced-property_mapping-features">5. Advanced PROPERTY_MAPPING Features</a>
     </li>
         </ul>
     </li>
@@ -132,6 +138,10 @@
     </ul>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-group-matching/">Feature Group Matching</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../options-architecture/">Options Architecture</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../property-mapping/">PROPERTY_MAPPING</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-group-testing/">Feature Group Testing</a>
                 </li>
@@ -185,7 +195,7 @@
               
                 <h1 id="feature-chain-parser">Feature Chain Parser</h1>
 <h2 id="overview">Overview</h2>
-<p>The Feature Chain Parser system enables feature groups to work with chained feature names and configuration-based feature creation. This document explains the key concepts and how to use them in your custom feature groups.</p>
+<p>The Feature Chain Parser system enables feature groups to work with both traditional string-based feature names and modern configuration-based feature creation. This unified approach provides flexibility while maintaining backward compatibility.</p>
 <h2 id="key-concepts">Key Concepts</h2>
 <h3 id="feature-chaining">Feature Chaining</h3>
 <p>Feature chaining allows feature groups to be composed, where the output of one feature group becomes the input to another. This is reflected in the feature name using a double underscore pattern:</p>
@@ -194,66 +204,174 @@
 <p>For example:
 - <code>sum_aggr__sales</code> - Simple feature
 - <code>max_aggr__sum_7_day_window__mean_imputed__price</code> - Chained feature</p>
-<h3 id="featurechainparser">FeatureChainParser</h3>
-<p>The <code>FeatureChainParser</code> class provides utilities for working with feature names:</p>
+<h3 id="unified-parser-architecture">Unified Parser Architecture</h3>
+<p>The modernized <code>FeatureChainParser</code> provides a unified approach through the <code>match_configuration_feature_chain_parser</code> method that handles:</p>
 <ul>
-<li><strong>Extracting source features</strong>: Get the input feature from a feature name</li>
-<li><strong>Validating feature names</strong>: Check if a name follows the expected pattern</li>
-<li><strong>Detecting chained features</strong>: Determine if a feature is part of a chain</li>
+<li><strong>String-based features</strong>: Traditional pattern matching with regex</li>
+<li><strong>Configuration-based features</strong>: Modern approach using Options and PROPERTY_MAPPING</li>
+<li><strong>Dual validation</strong>: Features can be validated using either or both approaches</li>
 </ul>
+<h3 id="options-architecture-group-vs-context-parameters">Options Architecture: Group vs Context Parameters</h3>
+<p>The new <code>Options</code> class separates parameters into two categories:</p>
+<ul>
+<li><strong>Group Parameters</strong>: Affect Feature Group resolution and splitting (stored in <code>options.group</code>)</li>
+<li><strong>Context Parameters</strong>: Metadata that doesn't affect splitting (stored in <code>options.context</code>)</li>
+</ul>
+<pre><code class="language-python">from mloda_core.abstract_plugins.components.options import Options
+from typing import Optional
+
+# New Options architecture
+options = Options(
+    group={
+        &quot;data_source&quot;: &quot;production&quot;,  # Affects Feature Group splitting
+    },
+    context={
+        &quot;aggregation_type&quot;: &quot;sum&quot;,    # Doesn't affect splitting
+        &quot;mloda_source_feature&quot;: &quot;sales&quot;
+    }
+)
+</code></pre>
 <h3 id="configuration-based-feature-creation">Configuration-Based Feature Creation</h3>
-<p>The <code>FeatureChainParserConfiguration</code> allows features to be created from configuration options rather than explicit names:</p>
+<p>Modern feature creation uses the Options architecture:</p>
 <pre><code class="language-python">from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.options import Options
 
-
-# Instead of explicitly naming features:
+# Traditional string-based approach:
 feature = Feature(&quot;sum_aggr__sales&quot;)
 
-# Use configuration-based creation:
+# Modern configuration-based approach:
 feature = Feature(
-    &quot;PlaceHolder&quot;,  # Will be replaced
-    Options({
-        &quot;aggregation_type&quot;: &quot;sum&quot;,
-        &quot;mloda_source_feature&quot;: &quot;sales&quot;
-    })
-)
-</code></pre>
-<h2 id="implementation-in-feature-groups">Implementation in Feature Groups</h2>
-<h3 id="1-define-a-prefix-pattern">1. Define a Prefix Pattern</h3>
-<pre><code class="language-python">from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-
-class MyFeatureGroup(AbstractFeatureGroup):
-    # Define the prefix pattern for feature name parsing
-    PREFIX_PATTERN = r&quot;^my_operation__&quot;
-</code></pre>
-<h3 id="2-extract-source-features">2. Extract Source Features</h3>
-<pre><code class="language-python">from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
-
-def input_features(self, options, feature_name):
-    # Extract source features using the FeatureChainParser
-    source_feature = FeatureChainParser.extract_source_feature(
-        feature_name.name, self.PREFIX_PATTERN)
-    return {Feature(source_feature)}
-</code></pre>
-<h3 id="3-enable-configuration-based-creation">3. Enable Configuration-Based Creation</h3>
-<pre><code class="language-python">from mloda_core.abstract_plugins.components.feature_chainer.feature_chainer_parser_configuration import (
-    create_configurable_parser
-)
-
-
-@classmethod
-def configurable_feature_chain_parser(cls):
-    return create_configurable_parser(
-        parse_keys=[
-            &quot;operation_param&quot;,
-            &quot;mloda_source_feature&quot;
-        ],
-        feature_name_template=&quot;my_operation_{operation_param}__{mloda_source_feature}&quot;,
-        validation_rules={
-            &quot;operation_param&quot;: lambda x: x in [&quot;valid&quot;, &quot;values&quot;]
+    &quot;placeholder&quot;,  # Will be replaced during processing
+    Options(
+        context={
+            &quot;aggregation_type&quot;: &quot;sum&quot;,
+            &quot;mloda_source_feature&quot;: &quot;sales&quot;
         }
     )
+)
+</code></pre>
+<h2 id="modern-implementation-in-feature-groups">Modern Implementation in Feature Groups</h2>
+<h3 id="1-define-property_mapping-configuration">1. Define PROPERTY_MAPPING Configuration</h3>
+<p>The modern approach uses <code>PROPERTY_MAPPING</code> to define parameter validation and classification:</p>
+<pre><code class="language-python">from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
+from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+from mloda_core.abstract_plugins.components.feature_name import FeatureName
+
+class MyFeatureGroup(AbstractFeatureGroup):
+    PATTERN = &quot;__&quot;
+    PREFIX_PATTERN = [r&quot;^([a-zA-Z_]+)_operation__&quot;]
+
+    PROPERTY_MAPPING = {
+        # Feature-specific parameter
+        &quot;operation_type&quot;: {
+            &quot;sum&quot;: &quot;Sum aggregation&quot;,
+            &quot;avg&quot;: &quot;Average aggregation&quot;, 
+            &quot;max&quot;: &quot;Maximum aggregation&quot;,
+            DefaultOptionKeys.mloda_context: True,  # Context parameter
+            DefaultOptionKeys.mloda_strict_validation: True,  # Strict validation
+        },
+        # Source feature parameter
+        DefaultOptionKeys.mloda_source_feature: {
+            &quot;explanation&quot;: &quot;Source feature for the operation&quot;,
+            DefaultOptionKeys.mloda_context: True,  # Context parameter
+            DefaultOptionKeys.mloda_strict_validation: False,  # Flexible validation
+        },
+    }
+</code></pre>
+<h3 id="2-update-match_feature_group_criteria">2. Update match_feature_group_criteria</h3>
+<p>Replace old pattern-only matching with unified parser:</p>
+<pre><code class="language-python">@classmethod
+def match_feature_group_criteria(cls, feature_name, options, data_access_collection=None):
+    return FeatureChainParser.match_configuration_feature_chain_parser(
+        feature_name, 
+        options, 
+        property_mapping=cls.PROPERTY_MAPPING,
+        pattern=cls.PATTERN, 
+        prefix_patterns=cls.PREFIX_PATTERN
+    )
+</code></pre>
+<h3 id="3-modernize-input_features-method">3. Modernize input_features Method</h3>
+<p>Handle both string-based and configuration-based features:</p>
+<pre><code class="language-python">def input_features(self, options: Options, feature_name: FeatureName) -&gt; Optional[Set[Feature]]:
+    &quot;&quot;&quot;Extract source feature from either configuration-based options or string parsing.&quot;&quot;&quot;
+
+    # Try string-based parsing first
+    _, source_feature = FeatureChainParser.parse_feature_name(
+        feature_name, self.PATTERN, self.PREFIX_PATTERN
+    )
+    if source_feature is not None:
+        return {Feature(source_feature)}
+
+    # Fall back to configuration-based approach
+    source_features = options.get_source_features()
+    if len(source_features) != 1:
+        raise ValueError(
+            f&quot;Expected exactly one source feature, but found {len(source_features)}: {source_features}&quot;
+        )
+    return set(source_features)
+</code></pre>
+<h3 id="4-update-calculate_feature-method">4. Update calculate_feature Method</h3>
+<p>Support dual approach in feature processing:</p>
+<pre><code class="language-python">def calculate_feature(self, features, options):
+    for feature in features.features:
+        # Try configuration-based approach first
+        try:
+            source_features = feature.options.get_source_features()
+            source_feature = next(iter(source_features))
+            source_feature_name = source_feature.get_name()
+
+            # Extract parameters from options
+            operation_type = feature.options.get(&quot;operation_type&quot;)
+
+        except (ValueError, StopIteration):
+            # Fall back to string-based approach for legacy features
+            operation_type, source_feature_name = FeatureChainParser.parse_feature_name(
+                feature.name, self.PATTERN, self.PREFIX_PATTERN
+            )
+
+        # Process using extracted values
+        # ... implementation logic
+</code></pre>
+<h3 id="5-advanced-property_mapping-features">5. Advanced PROPERTY_MAPPING Features</h3>
+<h4 id="validation-functions">Validation Functions</h4>
+<p>For complex validation beyond simple value lists:</p>
+<pre><code class="language-python">PROPERTY_MAPPING = {
+    &quot;dimension&quot;: {
+        &quot;explanation&quot;: &quot;Number of dimensions for reduction&quot;,
+        DefaultOptionKeys.mloda_context: True,
+        DefaultOptionKeys.mloda_strict_validation: True,
+        DefaultOptionKeys.mloda_validation_function: lambda x: isinstance(x, int) and x &gt; 0,
+    },
+}
+</code></pre>
+<h4 id="default-values">Default Values</h4>
+<p>Specify default values for optional parameters:</p>
+<pre><code class="language-python">PROPERTY_MAPPING = {
+    &quot;window_size&quot;: {
+        &quot;7&quot;: &quot;7-day window&quot;,
+        &quot;30&quot;: &quot;30-day window&quot;,
+        DefaultOptionKeys.mloda_default: &quot;7&quot;,  # Default value
+        DefaultOptionKeys.mloda_context: True,
+    },
+}
+</code></pre>
+<h4 id="group-vs-context-classification">Group vs Context Classification</h4>
+<pre><code class="language-python">PROPERTY_MAPPING = {
+    # Group parameter - affects Feature Group resolution
+    &quot;data_source&quot;: {
+        &quot;production&quot;: &quot;Production data&quot;,
+        &quot;staging&quot;: &quot;Staging data&quot;, 
+        DefaultOptionKeys.mloda_group: True,  # Explicit group parameter
+        DefaultOptionKeys.mloda_strict_validation: True,
+    },
+    # Context parameter - doesn't affect resolution
+    &quot;algorithm_type&quot;: {
+        &quot;kmeans&quot;: &quot;K-means clustering&quot;,
+        &quot;dbscan&quot;: &quot;DBSCAN clustering&quot;,
+        DefaultOptionKeys.mloda_context: True,  # Context parameter
+        DefaultOptionKeys.mloda_strict_validation: False,  # Flexible validation
+    },
+}
 </code></pre>
 <h2 id="multiple-result-columns-with-pattern">Multiple Result Columns with ~ Pattern</h2>
 <p>Some feature groups produce multiple result columns from a single input feature. The <code>~</code> pattern allows accessing individual columns:</p>

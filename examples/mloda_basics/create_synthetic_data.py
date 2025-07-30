@@ -36,7 +36,10 @@ class OrderSyntheticDataSet(AbstractFeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        num_samples = features.get_options_key("num_samples")
+        num_samples = next((f.options.get("num_samples") for f in features.features), None)
+
+        if num_samples is None:
+            raise ValueError("No num_samples option set for features.")
 
         return pd.DataFrame(
             {

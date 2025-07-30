@@ -5,14 +5,10 @@ Base implementation for scikit-learn encoding feature groups.
 from __future__ import annotations
 
 import datetime
-from typing import Any, Dict, List, Optional, Set, Type, Union
+from typing import Any, Dict, Optional, Set, Type, Union
 
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_chainer.feature_chainer_parser_configuration import (
-    FeatureChainParserConfiguration,
-    create_configurable_parser,
-)
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.options import Options
@@ -59,8 +55,7 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
 
     ## Configuration-Based Creation
 
-    EncodingFeatureGroup supports configuration-based creation through the
-    FeatureChainParserConfiguration mechanism. This allows features to be created
+    EncodingFeatureGroup supports configuration-based creation. This allows features to be created
     from options rather than explicit feature names.
 
     To create an encoding feature using configuration:
@@ -89,28 +84,62 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
         "ordinal": "OrdinalEncoder",
     }
 
+    # Define patterns for parsing
+    PATTERN = "__"
+    PREFIX_PATTERN = r"^(onehot|label|ordinal)_encoded__"
+
+    # Property mapping for new configuration-based approach
+    PROPERTY_MAPPING = {
+        ENCODER_TYPE: {
+            **SUPPORTED_ENCODERS,  # All supported encoder types as valid options
+            DefaultOptionKeys.mloda_context: True,  # Context parameter
+            DefaultOptionKeys.mloda_strict_validation: True,  # Enable strict validation
+        },
+        DefaultOptionKeys.mloda_source_feature: {
+            "explanation": "Source feature to encode",
+            DefaultOptionKeys.mloda_context: True,  # Context parameter
+            DefaultOptionKeys.mloda_strict_validation: False,  # Flexible validation
+        },
+    }
+
     @staticmethod
     def artifact() -> Type[BaseArtifact] | None:
         """Return the artifact class for sklearn encoder persistence."""
         return SklearnArtifact
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
-        """Extract source features from the encoding feature name."""
-        mloda_source_feature = FeatureChainParser.extract_source_feature(feature_name.name, self.PREFIX_PATTERN)
-        # Remove ~suffix if present (for OneHot column patterns like category~1)
-        base_feature = mloda_source_feature.split("~")[0]
-        return {Feature(base_feature)}
+        """Extract source feature from either configuration-based options or string parsing."""
 
-    # Define the prefix pattern for this feature group
-    PREFIX_PATTERN = r"^(onehot|label|ordinal)_encoded__"
+        # Try string-based parsing first
+        _, source_feature = FeatureChainParser.parse_feature_name(feature_name, self.PATTERN, [self.PREFIX_PATTERN])
+        if source_feature is not None:
+            # Remove ~suffix if present (for OneHot column patterns like category~1)
+            base_feature = source_feature.split("~")[0]
+            return {Feature(base_feature)}
+
+        # Fall back to configuration-based approach
+        source_features = options.get_source_features()
+        if len(source_features) != 1:
+            raise ValueError(
+                f"Expected exactly one source feature, but found {len(source_features)}: {source_features}"
+            )
+        return set(source_features)
 
     @classmethod
     def get_encoder_type(cls, feature_name: str) -> str:
         """Extract the encoder type from the feature name."""
-        prefix_part = FeatureChainParser.get_prefix_part(feature_name, cls.PREFIX_PATTERN)
-        if prefix_part is None:
+        encoder_type, _ = FeatureChainParser.parse_feature_name(feature_name, cls.PATTERN, [cls.PREFIX_PATTERN])
+        if encoder_type is None:
             raise ValueError(f"Invalid encoding feature name format: {feature_name}")
-        return prefix_part
+
+        # Remove the "_encoded" suffix to get just the encoder type
+        encoder_type = encoder_type.replace("_encoded", "").strip("_")
+        if encoder_type not in cls.SUPPORTED_ENCODERS:
+            raise ValueError(
+                f"Unsupported encoder type: {encoder_type}. Supported types: {', '.join(cls.SUPPORTED_ENCODERS.keys())}"
+            )
+
+        return encoder_type
 
     @classmethod
     def match_feature_group_criteria(
@@ -119,20 +148,15 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
         options: Options,
         data_access_collection: Optional[Any] = None,
     ) -> bool:
-        """Check if feature name matches the expected pattern."""
-        if isinstance(feature_name, FeatureName):
-            feature_name = feature_name.name
-
-        try:
-            # Validate that this is a valid feature name for this feature group
-            if not FeatureChainParser.validate_feature_name(feature_name, cls.PREFIX_PATTERN):
-                return False
-
-            # Extract encoder type to ensure it's supported
-            encoder_type = cls.get_encoder_type(feature_name)
-            return encoder_type in cls.SUPPORTED_ENCODERS
-        except ValueError:
-            return False
+        """Check if feature name matches the expected pattern using unified parser."""
+        # Use the unified parser with property mapping for full configuration support
+        return FeatureChainParser.match_configuration_feature_chain_parser(
+            feature_name,
+            options,
+            property_mapping=cls.PROPERTY_MAPPING,
+            pattern=cls.PATTERN,
+            prefix_patterns=[cls.PREFIX_PATTERN],
+        )
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -140,14 +164,13 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
         Apply scikit-learn encoders to features.
 
         Processes all requested features, determining the encoder type
-        and source feature from each feature name.
+        and source feature from either string parsing or configuration-based options.
 
         Adds the encoding results directly to the input data structure.
         """
         # Process each requested feature
-        for feature_name in features.get_all_names():
-            encoder_type = cls.get_encoder_type(feature_name)
-            source_feature = FeatureChainParser.extract_source_feature(feature_name, cls.PREFIX_PATTERN)
+        for feature in features.features:
+            encoder_type, source_feature = cls._extract_encoder_type_and_source_feature(feature)
 
             # Remove ~suffix if present (for OneHot column patterns like category~1)
             base_source_feature = source_feature.split("~")[0]
@@ -179,13 +202,57 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
                 }
                 SklearnArtifact.save_sklearn_artifact(features, artifact_key, artifact_data)
 
-            # Appl  y the fitted encoder to get results
+            # Apply the fitted encoder to get results
             result = cls._apply_encoder(data, base_source_feature, fitted_encoder)
 
             # Add result to data (handling multiple columns for OneHotEncoder)
-            data = cls._add_result_to_data(data, feature_name, result, encoder_type)
+            data = cls._add_result_to_data(data, feature.get_name(), result, encoder_type)
 
         return data
+
+    @classmethod
+    def _extract_encoder_type_and_source_feature(cls, feature: Feature) -> tuple[str, str]:
+        """
+        Extract encoder type and source feature name from a feature.
+
+        Tries string-based parsing first, falls back to configuration-based approach.
+
+        Args:
+            feature: The feature to extract parameters from
+
+        Returns:
+            Tuple of (encoder_type, source_feature_name)
+
+        Raises:
+            ValueError: If parameters cannot be extracted
+        """
+        encoder_type = None
+        source_feature_name: str | None = None
+
+        # Try string-based parsing first
+        feature_name_str = feature.name.name if hasattr(feature.name, "name") else str(feature.name)
+
+        if cls.PATTERN in feature_name_str:
+            encoder_type = cls.get_encoder_type(feature_name_str)
+            source_feature_name = FeatureChainParser.extract_source_feature(feature_name_str, cls.PREFIX_PATTERN)
+            return encoder_type, source_feature_name
+
+        # Fall back to configuration-based approach
+        source_features = feature.options.get_source_features()
+        source_feature = next(iter(source_features))
+        source_feature_name = source_feature.get_name()
+
+        encoder_type = feature.options.get(cls.ENCODER_TYPE)
+
+        if encoder_type is None or source_feature_name is None:
+            raise ValueError(f"Could not extract encoder type and source feature from: {feature.name}")
+
+        if encoder_type not in cls.SUPPORTED_ENCODERS:
+            raise ValueError(
+                f"Unsupported encoder type: {encoder_type}. Supported types: {', '.join(cls.SUPPORTED_ENCODERS.keys())}"
+            )
+
+        return encoder_type, source_feature_name
 
     @classmethod
     def _import_sklearn_components(cls) -> Dict[str, Any]:
@@ -378,26 +445,3 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
             The updated data
         """
         raise NotImplementedError(f"_add_result_to_data not implemented in {cls.__name__}")
-
-    @classmethod
-    def configurable_feature_chain_parser(cls) -> Optional[Type[FeatureChainParserConfiguration]]:
-        """
-        Returns the FeatureChainParserConfiguration class for this feature group.
-
-        This method allows the Engine to automatically create features with the correct
-        naming convention based on configuration options, rather than requiring explicit
-        feature names.
-
-        Returns:
-            A configured FeatureChainParserConfiguration class
-        """
-        return create_configurable_parser(
-            parse_keys=[
-                cls.ENCODER_TYPE,
-                DefaultOptionKeys.mloda_source_feature,
-            ],
-            feature_name_template="{encoder_type}_encoded__{mloda_source_feature}",
-            validation_rules={
-                cls.ENCODER_TYPE: lambda x: isinstance(x, str) and x in cls.SUPPORTED_ENCODERS,
-            },
-        )

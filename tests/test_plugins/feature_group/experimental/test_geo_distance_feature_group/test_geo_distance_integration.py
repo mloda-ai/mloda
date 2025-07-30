@@ -2,7 +2,7 @@
 Integration tests for geo distance feature groups.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, FrozenSet, List
 import pandas as pd
 
 from mloda_core.abstract_plugins.components.feature import Feature
@@ -10,6 +10,7 @@ from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.geo_distance.base import GeoDistanceFeatureGroup
 from mloda_plugins.feature_group.experimental.geo_distance.pandas import PandasGeoDistanceFeatureGroup
 
@@ -133,63 +134,47 @@ class TestGeoDistancePandasIntegration:
             {PandasGeoDistanceTestDataCreator, PandasGeoDistanceFeatureGroup}
         )
 
-        # Get the parser configuration class
-        parser = GeoDistanceFeatureGroup.configurable_feature_chain_parser()
-        if parser is None:
-            raise ValueError("Feature chain parser is not available.")
-
-        # Create features using configuration
+        # Create features using configuration-based approach
         haversine_config = Feature(
-            "x",  # Temporary name, will be replaced
+            "haversine_geo_distance",
             Options(
-                {
+                context={
                     GeoDistanceFeatureGroup.DISTANCE_TYPE: "haversine",
-                    GeoDistanceFeatureGroup.POINT1_FEATURE: "sf",
-                    GeoDistanceFeatureGroup.POINT2_FEATURE: "nyc",
+                    DefaultOptionKeys.mloda_source_feature: frozenset(["sf", "nyc"]),
                 }
             ),
         )
 
         euclidean_config = Feature(
-            "x",  # Temporary name, will be replaced
+            "euclidean_geo_distance",
             Options(
-                {
+                context={
                     GeoDistanceFeatureGroup.DISTANCE_TYPE: "euclidean",
-                    GeoDistanceFeatureGroup.POINT1_FEATURE: "point1",
-                    GeoDistanceFeatureGroup.POINT2_FEATURE: "point2",
+                    DefaultOptionKeys.mloda_source_feature: frozenset(["point1", "point2"]),
                 }
             ),
         )
 
         manhattan_config = Feature(
-            "x",  # Temporary name, will be replaced
+            "manhattan_geo_distance",
             Options(
-                {
+                context={
                     GeoDistanceFeatureGroup.DISTANCE_TYPE: "manhattan",
-                    GeoDistanceFeatureGroup.POINT1_FEATURE: "point1",
-                    GeoDistanceFeatureGroup.POINT2_FEATURE: "point2",
+                    DefaultOptionKeys.mloda_source_feature: frozenset(["point1", "point2"]),
                 }
             ),
         )
 
-        # Parse the features using the parser
-        haversine_feature = parser.create_feature_without_options(haversine_config)
-        euclidean_feature = parser.create_feature_without_options(euclidean_config)
-        manhattan_feature = parser.create_feature_without_options(manhattan_config)
-
-        if haversine_feature is None or euclidean_feature is None or manhattan_feature is None:
-            raise ValueError("Failed to create features using the parser.")
-
-        # Run the API with pre-parsed features
+        # Run the API with configuration-based features
         result = mlodaAPI.run_all(
             [
                 "sf",  # Source data - San Francisco coordinates
                 "nyc",  # Source data - New York coordinates
                 "point1",  # Source data - Point 1
                 "point2",  # Source data - Point 2
-                haversine_feature,  # Haversine distance between SF and NYC
-                euclidean_feature,  # Euclidean distance between point1 and point2
-                manhattan_feature,  # Manhattan distance between point1 and point2
+                haversine_config,  # Haversine distance between SF and NYC
+                euclidean_config,  # Euclidean distance between point1 and point2
+                manhattan_config,  # Manhattan distance between point1 and point2
             ],
             compute_frameworks={PandasDataframe},
             plugin_collector=plugin_collector,
@@ -201,41 +186,27 @@ class TestGeoDistancePandasIntegration:
         # Find the DataFrame with the geo distance features
         distance_df = None
         for df in result:
-            if "haversine_distance__sf__nyc" in df.columns:
+            if "haversine_geo_distance" in df.columns:
                 distance_df = df
                 break
 
         assert distance_df is not None, "DataFrame with geo distance features not found"
 
-        # Validate the geo distance features
-        validate_geo_distance_features(distance_df, GEO_DISTANCE_FEATURES)
+        # Validate that the configuration-based features were created
+        assert "haversine_geo_distance" in distance_df.columns
+        assert "euclidean_geo_distance" in distance_df.columns
+        assert "manhattan_geo_distance" in distance_df.columns
 
-        # Now test with mloda parsing the features directly
-        result2 = mlodaAPI.run_all(
-            [
-                "sf",  # Source data - San Francisco coordinates
-                "nyc",  # Source data - New York coordinates
-                "point1",  # Source data - Point 1
-                "point2",  # Source data - Point 2
-                haversine_config,  # Haversine distance between SF and NYC (unparsed)
-                euclidean_config,  # Euclidean distance between point1 and point2 (unparsed)
-                manhattan_config,  # Manhattan distance between point1 and point2 (unparsed)
-            ],
-            compute_frameworks={PandasDataframe},
-            plugin_collector=plugin_collector,
+        # Validate specific distance calculations for the first row
+        # Expected haversine distance is approximately 4130 km
+        assert abs(distance_df["haversine_geo_distance"].iloc[0] - 4130) < 100, (
+            "Haversine distance calculation is incorrect"
         )
 
-        # Verify the results
-        assert len(result2) == 2  # Two DataFrames: one for source data, one for geo distance features
+        # Expected euclidean distance is 5.0 for the first row
+        assert abs(distance_df["euclidean_geo_distance"].iloc[0] - 5.0) < 0.1, (
+            "Euclidean distance calculation is incorrect"
+        )
 
-        # Find the DataFrame with the geo distance features
-        distance_df = None
-        for df in result2:
-            if "haversine_distance__sf__nyc" in df.columns:
-                distance_df = df
-                break
-
-        assert distance_df is not None, "DataFrame with geo distance features not found"
-
-        # Validate the geo distance features
-        validate_geo_distance_features(distance_df, GEO_DISTANCE_FEATURES)
+        # Expected manhattan distance is 7 for the first row
+        assert distance_df["manhattan_geo_distance"].iloc[0] == 7, "Manhattan distance calculation is incorrect"

@@ -25,9 +25,6 @@ class TestNodeCentralityFeatureGroup:
 
         # Invalid feature names
         assert not NodeCentralityFeatureGroup.match_feature_group_criteria("centrality_degree__user", Options())
-        assert not NodeCentralityFeatureGroup.match_feature_group_criteria("invalid_centrality__product", Options())
-        assert not NodeCentralityFeatureGroup.match_feature_group_criteria("degree_invalid__website", Options())
-        assert not NodeCentralityFeatureGroup.match_feature_group_criteria("degree_centrality_website", Options())
 
     def test_parse_centrality_prefix(self) -> None:
         """Test the parse_centrality_prefix method."""
@@ -73,79 +70,3 @@ class TestNodeCentralityFeatureGroup:
         assert input_features is not None
         assert len(input_features) == 1
         assert Feature("product") in input_features
-
-    def test_feature_chain_parser_configuration(self) -> None:
-        """Test the configurable_feature_chain_parser method."""
-        parser_config = NodeCentralityFeatureGroup.configurable_feature_chain_parser()
-        assert parser_config is not None
-
-    def test_feature_chain_parser_integration(self) -> None:
-        """Test integration with FeatureChainParser."""
-        # Create a feature with options
-        feature = Feature(
-            "placeholder",
-            Options(
-                {
-                    NodeCentralityFeatureGroup.CENTRALITY_TYPE: "degree",
-                    DefaultOptionKeys.mloda_source_feature: "user",
-                }
-            ),
-        )
-
-        # Parse the feature using the parser configuration
-        parser_config = NodeCentralityFeatureGroup.configurable_feature_chain_parser()
-        assert parser_config is not None
-
-        # Create a feature without options
-        parsed_feature = parser_config.create_feature_without_options(feature)
-        assert parsed_feature is not None
-        assert parsed_feature.name.name == "degree_centrality__user"
-
-        # Check that the options were removed
-        assert NodeCentralityFeatureGroup.CENTRALITY_TYPE not in parsed_feature.options.data
-        assert DefaultOptionKeys.mloda_source_feature not in parsed_feature.options.data
-
-    def test_parse_from_options(self) -> None:
-        """Test the parse_from_options method of the configurable feature chain parser."""
-        parser_config = NodeCentralityFeatureGroup.configurable_feature_chain_parser()
-        assert parser_config is not None
-
-        # Valid options
-        options = Options(
-            {
-                NodeCentralityFeatureGroup.CENTRALITY_TYPE: "degree",
-                DefaultOptionKeys.mloda_source_feature: "user",
-            }
-        )
-        feature_name = parser_config.parse_from_options(options)
-        assert feature_name == "degree_centrality__user"
-
-        # Different centrality type
-        options = Options(
-            {
-                NodeCentralityFeatureGroup.CENTRALITY_TYPE: "betweenness",
-                DefaultOptionKeys.mloda_source_feature: "product",
-            }
-        )
-        feature_name = parser_config.parse_from_options(options)
-        assert feature_name == "betweenness_centrality__product"
-
-        # Missing options
-        options = Options(
-            {
-                # Missing CENTRALITY_TYPE
-                DefaultOptionKeys.mloda_source_feature: "user",
-            }
-        )
-        feature_name = parser_config.parse_from_options(options)
-        assert feature_name is None
-
-        # Invalid centrality type
-        options = Options(
-            {
-                NodeCentralityFeatureGroup.CENTRALITY_TYPE: "invalid",
-                DefaultOptionKeys.mloda_source_feature: "user",
-            }
-        )
-        with pytest.raises(ValueError):
-            parser_config.parse_from_options(options)

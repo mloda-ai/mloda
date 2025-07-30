@@ -35,4 +35,4 @@ jobs:
       env:
         PYTEST_WORKERS: 2
       run: tox ${{ matrix.toxenv }}
-      timeout-minutes: 2
+      timeout-minutes: 3

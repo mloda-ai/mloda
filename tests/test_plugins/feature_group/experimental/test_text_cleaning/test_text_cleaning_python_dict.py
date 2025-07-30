@@ -306,35 +306,6 @@ class TestPythonDictTextCleaningFeatureGroup:
 
         assert "Unsupported cleaning operation" in str(excinfo.value)
 
-    def test_integration_with_configuration(self) -> None:
-        """Test integration with the feature chain parser configuration."""
-        # Create feature with configuration
-        feature = Feature(
-            "PlaceHolder",  # Will be replaced
-            Options(
-                {
-                    TextCleaningFeatureGroup.CLEANING_OPERATIONS: ("normalize", "remove_punctuation"),
-                    DefaultOptionKeys.mloda_source_feature: "text",
-                }
-            ),
-        )
-
-        # Create feature without options using the configuration
-        parser = TextCleaningFeatureGroup.configurable_feature_chain_parser()
-        if parser is not None:
-            result = parser.create_feature_without_options(feature)
-
-            assert result is not None
-            assert result.name.name == "cleaned_text__text"
-            # CLEANING_OPERATIONS is preserved for use in calculate_feature
-            assert TextCleaningFeatureGroup.CLEANING_OPERATIONS in result.options.data
-            assert result.options.data[TextCleaningFeatureGroup.CLEANING_OPERATIONS] == (
-                "normalize",
-                "remove_punctuation",
-            )
-            # Only mloda_source_feature is removed
-            assert DefaultOptionKeys.mloda_source_feature not in result.options.data
-
 
 class TestTextCleaningPythonDictIntegration:
     """Integration tests for the text cleaning feature group using PythonDict framework."""

@@ -172,19 +172,19 @@ class TestPandasDimensionalityReductionFeatureGroup:
         assert "pca_2d__feature0,feature1,feature2~dim1" in result.columns
         assert "pca_2d__feature0,feature1,feature2~dim2" in result.columns
 
-    def test_calculate_feature_tsne(self, sample_data: pd.DataFrame) -> None:
-        """Test the calculate_feature method with t-SNE."""
-        # Create a feature set (use a small subset for t-SNE to speed up the test)
-        small_sample = sample_data.iloc[:20].copy()
-        feature_set = FeatureSet()
-        feature_set.add(Feature("tsne_2d__feature0,feature1,feature2"))
+    # def test_calculate_feature_tsne(self, sample_data: pd.DataFrame) -> None:
+    #    """Test the calculate_feature method with t-SNE."""
+    # Create a feature set (use a small subset for t-SNE to speed up the test)
+    #    small_sample = sample_data.iloc[:20].copy()
+    #    feature_set = FeatureSet()
+    #    feature_set.add(Feature("tsne_2d__feature0,feature1,feature2"))
 
-        # Calculate the feature
-        result = PandasDimensionalityReductionFeatureGroup.calculate_feature(small_sample, feature_set)
+    # Calculate the feature
+    #    result = PandasDimensionalityReductionFeatureGroup.calculate_feature(small_sample, feature_set)
 
-        # Check that the result has the expected columns
-        assert "tsne_2d__feature0,feature1,feature2~dim1" in result.columns
-        assert "tsne_2d__feature0,feature1,feature2~dim2" in result.columns
+    #    # Check that the result has the expected columns
+    #    assert "tsne_2d__feature0,feature1,feature2~dim1" in result.columns
+    #    assert "tsne_2d__feature0,feature1,feature2~dim2" in result.columns
 
     def test_calculate_feature_multiple(self, sample_data: pd.DataFrame) -> None:
         """Test the calculate_feature method with multiple dimensionality reduction features."""

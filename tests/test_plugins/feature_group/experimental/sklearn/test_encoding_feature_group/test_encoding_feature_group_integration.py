@@ -12,6 +12,7 @@ from mloda_core.abstract_plugins.components.plugin_option.plugin_collector impor
 from mloda_core.api.request import mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
 from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
+from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
@@ -150,25 +151,167 @@ class TestEncodingFeatureGroupIntegration:
             assert sum(row_values) == 1  # Exactly one 1
             assert all(val in [0, 1] for val in row_values)  # Only 0s and 1s
 
-    def test_configuration_based_feature_creation(self) -> None:
-        """Test creating encoding features using configuration options."""
-        # Create feature with configuration options
-        feature = Feature(
-            "placeholder",
+    def test_onehot_encoding_specific_column_access(self) -> None:
+        """Test one-hot encoding with specific column access using ~0, ~1, etc."""
+        # Skip test if sklearn not available
+        try:
+            import sklearn
+        except ImportError:
+            pytest.skip("scikit-learn not available")
+
+        PluginLoader().all()
+
+        # Enable the necessary feature groups
+        plugin_collector = PlugInCollector.enabled_feature_groups(
+            {EncodingIntegrationTestDataCreator, PandasEncodingFeatureGroup}
+        )
+
+        # Create specific one-hot encoding features for individual columns
+        onehot_feature_0 = Feature("onehot_encoded__category~0")
+        onehot_feature_1 = Feature("onehot_encoded__category~1")
+
+        # Phase 1: Test individual column access
+        api1 = mlodaAPI(
+            [onehot_feature_0, onehot_feature_1],
+            {PandasDataframe},
+            plugin_collector=plugin_collector,
+        )
+        api1._batch_run()
+        results1 = api1.get_result()
+        artifacts1 = api1.get_artifacts()
+
+        # Verify specific columns were created
+        assert len(results1) == 1
+        df1 = results1[0]
+
+        # Should have the specific columns we requested
+        assert "onehot_encoded__category~0" in df1.columns
+        assert "onehot_encoded__category~1" in df1.columns
+
+        # Verify artifacts were created for the encoding feature
+        assert len(artifacts1) >= 1
+        assert "onehot_encoded__category" in artifacts1
+
+        # Verify the columns contain only 0s and 1s
+        assert all(val in [0, 1] for val in df1["onehot_encoded__category~0"])
+        assert all(val in [0, 1] for val in df1["onehot_encoded__category~1"])
+
+        # Test that the columns are complementary for binary case or part of multi-class
+        col_0_values = df1["onehot_encoded__category~0"].tolist()
+        col_1_values = df1["onehot_encoded__category~1"].tolist()
+
+        # At least one column should have some 1s (not all zeros)
+        assert sum(col_0_values) > 0 or sum(col_1_values) > 0
+
+        # Phase 2: Test that we can also get the full onehot encoding
+        onehot_full_feature = Feature("onehot_encoded__category")
+
+        api2 = mlodaAPI(
+            [onehot_full_feature],
+            {PandasDataframe},
+            plugin_collector=plugin_collector,
+        )
+        api2._batch_run()
+        results2 = api2.get_result()
+
+        # Verify full encoding creates all columns
+        assert len(results2) == 1
+        df2 = results2[0]
+
+        # Should have multiple columns with ~ separator
+        full_onehot_columns = [col for col in df2.columns if col.startswith("onehot_encoded__category~")]
+        assert len(full_onehot_columns) >= 2  # Should have at least the columns we know exist
+
+        # The individual columns we requested should match the corresponding columns in full encoding
+        if "onehot_encoded__category~0" in df2.columns:
+            assert df1["onehot_encoded__category~0"].equals(df2["onehot_encoded__category~0"])
+        if "onehot_encoded__category~1" in df2.columns:
+            assert df1["onehot_encoded__category~1"].equals(df2["onehot_encoded__category~1"])
+
+    def test_configuration_based_onehot_with_column_suffix(self) -> None:
+        """Test configuration-based OneHot encoding with specific column access (~0, ~1)."""
+        # Skip test if sklearn not available
+        try:
+            import sklearn
+        except ImportError:
+            pytest.skip("scikit-learn not available")
+
+        PluginLoader().all()
+
+        # Enable the necessary feature groups
+        plugin_collector = PlugInCollector.enabled_feature_groups(
+            {EncodingIntegrationTestDataCreator, PandasEncodingFeatureGroup}
+        )
+
+        # Create configuration-based OneHot encoding features with specific column access
+        onehot_config_feature_0 = Feature(
+            "onehot1",  # Specific column with ~0 suffix
             Options(
-                {PandasEncodingFeatureGroup.ENCODER_TYPE: "label", DefaultOptionKeys.mloda_source_feature: "status"}
+                context={
+                    EncodingFeatureGroup.ENCODER_TYPE: "onehot",
+                    DefaultOptionKeys.mloda_source_feature: "category",
+                }
             ),
         )
 
-        # Get parser configuration
-        parser_config = PandasEncodingFeatureGroup.configurable_feature_chain_parser()
-        assert parser_config is not None
+        onehot_config_feature_1 = Feature(
+            "onehot2",  # Specific column with ~1 suffix
+            Options(
+                context={
+                    EncodingFeatureGroup.ENCODER_TYPE: "onehot",
+                    DefaultOptionKeys.mloda_source_feature: "category",
+                }
+            ),
+        )
 
-        # Parse feature name from options
-        parsed_feature = parser_config.create_feature_without_options(feature)
-        assert parsed_feature is not None
-        assert parsed_feature.name.name == "label_encoded__status"
+        # Test configuration-based features with column suffixes
+        api = mlodaAPI(
+            [onehot_config_feature_0, onehot_config_feature_1],
+            {PandasDataframe},
+            plugin_collector=plugin_collector,
+        )
+        api._batch_run()
+        results = api.get_result()
+        artifacts = api.get_artifacts()
 
-        # Verify options were removed
-        assert PandasEncodingFeatureGroup.ENCODER_TYPE not in parsed_feature.options.data
-        assert DefaultOptionKeys.mloda_source_feature not in parsed_feature.options.data
+        # Verify results
+        assert len(results) == 1
+        df = results[0]
+
+        # Should have the specific columns we requested
+        assert "onehot1~1" in df.columns
+        assert "onehot2~2" in df.columns
+
+        # Verify artifacts were created for the encoding feature
+        assert len(artifacts) >= 1
+        assert "onehot_encoded__category" in artifacts
+
+        # Verify the columns contain only 0s and 1s
+        assert all(val in [0, 1] for val in df["onehot1~1"])
+        assert all(val in [0, 1] for val in df["onehot2~2"])
+
+        # Test that configuration-based and string-based approaches produce identical results
+        # Create equivalent string-based features
+        onehot_string_feature_0 = Feature("onehot_encoded__category~0")
+        onehot_string_feature_1 = Feature("onehot_encoded__category~1")
+
+        api_string = mlodaAPI(
+            [onehot_string_feature_0, onehot_string_feature_1],
+            {PandasDataframe},
+            plugin_collector=plugin_collector,
+        )
+        api_string._batch_run()
+        results_string = api_string.get_result()
+
+        # Verify string-based results match configuration-based results
+        assert len(results_string) == 1
+        df_string = results_string[0]
+
+        # Compare specific column results
+        assert df["onehot1~0"].equals(df_string["onehot_encoded__category~0"])
+        assert df["onehot2~1"].equals(df_string["onehot_encoded__category~1"])
+
+        # At least one column should have some 1s (not all zeros)
+        col_0_values = df["onehot1~1"].tolist()
+        col_1_values = df["onehot2~2"].tolist()
+        assert sum(col_0_values) > 0 or sum(col_1_values) > 0

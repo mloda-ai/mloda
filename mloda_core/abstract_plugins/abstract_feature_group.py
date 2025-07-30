@@ -8,15 +8,12 @@ from mloda_core.abstract_plugins.components.data_access_collection import DataAc
 from mloda_core.abstract_plugins.components.data_types import DataType
 
 from mloda_core.abstract_plugins.components.domain import Domain
-from mloda_core.abstract_plugins.components.feature_chainer.feature_chainer_parser_configuration import (
-    FeatureChainParserConfiguration,
-)
 from mloda_core.abstract_plugins.components.feature_group_version import FeatureGroupVersion
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
 from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.components.match_data.match_data import MatchData, MatchData
+from mloda_core.abstract_plugins.components.match_data.match_data import MatchData
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
@@ -398,29 +395,6 @@ class AbstractFeatureGroup(ABC):
         return cls().is_root(options, feature_name) and cls._matches_input_data(
             feature_name, options, data_access_collection
         )
-
-    @classmethod
-    def configurable_feature_chain_parser(cls) -> Optional[Type[FeatureChainParserConfiguration]]:
-        """
-        Requires: chainable feature!
-
-        Returns the FeatureChainParserConfiguration class for this feature group, if available.
-
-        This method allows feature groups to specify a configuration class that can be used
-        to parse feature names from options. When implemented, it enables the Engine to
-        automatically create features with the correct naming convention based on configuration
-        options, rather than requiring explicit feature names.
-
-        If a feature group does not support configuration-based parsing, this method
-        should return None (the default implementation).
-
-        Returns:
-            The FeatureChainParserConfiguration class for this feature group, or None if
-            configuration-based parsing is not supported
-
-        Requires: chainable feature!
-        """
-        return None
 
     @final
     @classmethod

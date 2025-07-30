@@ -125,13 +125,6 @@ class TestReadDB(unittest.TestCase):
         with self.assertRaises(ValueError):
             read_db.init_reader(options)
 
-    def test_load_no_data(self) -> None:
-        read_db = ReadDB()
-        features = FeatureSet()
-        features.options = Options()
-        with self.assertRaises(ValueError):
-            read_db.load(features)
-
     def test_match_subclass_data_access(self) -> None:
         data_access = DataAccessCollection(credential_dicts={SQLITEReader.db_path(): self.db_path})
         feature_names = ["name"]

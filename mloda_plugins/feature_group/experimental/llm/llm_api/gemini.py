@@ -17,7 +17,7 @@ try:
     import google.generativeai as genai
     from google.ai.generativelanguage_v1beta.types import FunctionCall, Content, Part
 except ImportError:
-    genai, FunctionCall, Content, Part, functionDeclarations, google = None, None, None, None, None, None  # type: ignore
+    genai, FunctionCall, Content, Part, functionDeclarations, google = None, None, None, None, None, None
 
 import logging
 
@@ -87,7 +87,7 @@ class GeminiAPI(LLMBaseApi):
         raise ValueError("Gemini model is not set.")
 
     @classmethod
-    def _setup_model_if_needed(cls, model: str) -> "genai.GenerativeModel":  # type: ignore
+    def _setup_model_if_needed(cls, model: str) -> "genai.GenerativeModel":
         api_key = os.environ.get("GEMINI_API_KEY")
         if not api_key:
             raise ValueError("GEMINI_API_KEY environment variable is not set.")
@@ -95,8 +95,8 @@ class GeminiAPI(LLMBaseApi):
         if genai is None:
             raise ImportError("Please install google.generativeai to use this feature.")
 
-        genai.configure(api_key=api_key)  # type: ignore
-        return genai.GenerativeModel(model)  # type: ignore
+        genai.configure(api_key=api_key)
+        return genai.GenerativeModel(model)
 
     @classmethod
     def parse_tools(cls, tools: ToolCollection | None) -> List[Dict[str, Any]]:

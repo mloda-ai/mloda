@@ -2,6 +2,7 @@
 Tests for SklearnArtifact.
 """
 
+from mloda_core.abstract_plugins.components.feature import Feature
 import pytest
 from unittest.mock import Mock, patch
 from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import SklearnArtifact
@@ -78,11 +79,8 @@ class TestSklearnArtifact:
         except ImportError:
             pytest.skip("scikit-learn or joblib not available")
 
-        features = Mock(spec=FeatureSet)
-        features.name_of_one_feature = Mock()
-        features.name_of_one_feature.name = "test_custom_saver_feature"
-        features.options = Mock()
-        features.options.data = {}
+        features = FeatureSet()
+        features.add(Feature("test_custom_saver_feature", Options()))
 
         # Use the new multiple artifact format
         artifact = {
@@ -116,10 +114,8 @@ class TestSklearnArtifact:
 
         # Use a unique temporary directory to ensure isolation
         with tempfile.TemporaryDirectory() as temp_dir:
-            features = Mock(spec=FeatureSet)
-            features.options = Mock()
-            features.options.data = {"artifact_storage_path": temp_dir}
-            features.name_of_one_feature = None
+            features = FeatureSet()
+            features.add(Feature("test_no_options_feature", Options({"artifact_storage_path": temp_dir})))
 
             result = SklearnArtifact.custom_loader(features)
             assert result is None
@@ -130,11 +126,8 @@ class TestSklearnArtifact:
 
         # Use a unique temporary directory to ensure isolation
         with tempfile.TemporaryDirectory() as temp_dir:
-            features = Mock(spec=FeatureSet)
-            features.options = Mock()
-            features.options.data = {"artifact_storage_path": temp_dir}
-            features.name_of_one_feature = Mock()
-            features.name_of_one_feature.name = "test_no_artifact_feature_unique"
+            features = FeatureSet()
+            features.add(Feature("test_no_artifact_feature_unique", Options({"artifact_storage_path": temp_dir})))
 
             result = SklearnArtifact.custom_loader(features)
             assert result is None
@@ -161,11 +154,8 @@ class TestSklearnArtifact:
         artifact = {"test_with_artifact_key": {"fitted_transformer": scaler, "feature_names": ["feature1", "feature2"]}}
 
         # Mock features with unique name
-        features = Mock(spec=FeatureSet)
-        features.options = Mock()
-        features.options.data = {}
-        features.name_of_one_feature = Mock()
-        features.name_of_one_feature.name = "test_with_artifact_feature_unique"
+        features = FeatureSet()
+        features.add(Feature("test_with_artifact_feature_unique", Options({})))
 
         try:
             # First save the artifact

@@ -29,7 +29,15 @@ class PyArrowMissingValueFeatureGroup(MissingValueFeatureGroup):
     @classmethod
     def _add_result_to_data(cls, data: pa.Table, feature_name: str, result: Any) -> pa.Table:
         """Add the result to the Table."""
-        return data.append_column(feature_name, result)
+        if feature_name in data.schema.names:
+            # Column exists - replace it
+            # Remove the existing column and add the new one
+            column_index = data.schema.names.index(feature_name)
+            data = data.remove_column(column_index)
+            return data.append_column(feature_name, result)
+        else:
+            # Column doesn't exist - add it
+            return data.append_column(feature_name, result)
 
     @classmethod
     def _perform_imputation(

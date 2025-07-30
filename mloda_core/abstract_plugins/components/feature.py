@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from typing import Any, Dict, Optional, Set, Type, Union
 from uuid import UUID, uuid4
 from mloda_core.abstract_plugins.components.data_types import DataType
@@ -11,6 +12,7 @@ from mloda_core.abstract_plugins.components.link import Link
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.utils import get_all_subclasses
+from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 
 class Feature:
@@ -133,6 +135,7 @@ class Feature:
         return (
             self.name == other.name
             and self.options == other.options
+            and self.options.context == other.options.context
             and self.domain == other.domain
             and self.compute_frameworks == other.compute_frameworks
             and self.data_type == other.data_type
@@ -143,9 +146,21 @@ class Feature:
         compute_frameworks_hashable = (
             frozenset(self.compute_frameworks) if self.compute_frameworks is not None else None
         )
-        return hash(
-            (self.name, self.options, self.domain, compute_frameworks_hashable, self.data_type, self.child_options)
-        )
+
+        child_options = copy.deepcopy(self.child_options)
+        if child_options:
+            if child_options.get(DefaultOptionKeys.mloda_source_feature):
+                val = child_options.get(DefaultOptionKeys.mloda_source_feature)
+
+                if isinstance(val, frozenset):
+                    for v in val:
+                        if isinstance(v, Feature):
+                            child_options.group[DefaultOptionKeys.mloda_source_feature] = v.name.name
+
+                if isinstance(val, Feature):
+                    child_options.group[DefaultOptionKeys.mloda_source_feature] = val.name.name
+
+        return hash((self.name, self.options, self.domain, compute_frameworks_hashable, self.data_type, child_options))
 
     def is_different_data_type(self, other: Feature) -> bool:
         return self.name == other.options and self.data_type == other.data_type

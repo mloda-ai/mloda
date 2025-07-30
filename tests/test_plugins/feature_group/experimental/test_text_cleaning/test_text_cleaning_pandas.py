@@ -207,25 +207,25 @@ class TestPandasTextCleaningFeatureGroup:
         assert "Unsupported cleaning operation" in str(excinfo.value)
 
     def test_integration_with_configuration(self) -> None:
-        """Test integration with the feature chain parser configuration."""
-        # Create feature with configuration
+        """Test integration with configuration-based feature creation."""
+        # Test configuration-based feature creation using new Options structure
         feature = Feature(
-            "PlaceHolder",  # Will be replaced
+            "placeholder",  # Placeholder name for configuration-based feature
             Options(
-                {
+                context={
                     TextCleaningFeatureGroup.CLEANING_OPERATIONS: ("normalize", "remove_punctuation"),
                     DefaultOptionKeys.mloda_source_feature: "text",
                 }
             ),
         )
 
-        # Create feature without options using the configuration
-        result = TextCleaningFeatureGroup.configurable_feature_chain_parser().create_feature_without_options(feature)  # type: ignore
+        # Test that the feature matches the criteria for text cleaning
+        assert TextCleaningFeatureGroup.match_feature_group_criteria(feature.name, feature.options)
 
-        assert result is not None
-        assert result.name.name == "cleaned_text__text"
-        # CLEANING_OPERATIONS is preserved for use in calculate_feature
-        assert TextCleaningFeatureGroup.CLEANING_OPERATIONS in result.options.data
-        assert result.options.data[TextCleaningFeatureGroup.CLEANING_OPERATIONS] == ("normalize", "remove_punctuation")
-        # Only mloda_source_feature is removed
-        assert DefaultOptionKeys.mloda_source_feature not in result.options.data
+        # Test input features extraction
+        feature_group = TextCleaningFeatureGroup()
+        input_features = feature_group.input_features(feature.options, feature.name)
+        assert input_features is not None
+        assert len(input_features) == 1
+        source_feature = next(iter(input_features))
+        assert source_feature.name.name == "text"

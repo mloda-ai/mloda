@@ -119,22 +119,17 @@ class TestNodeCentralityPandasIntegration:
     def test_node_centrality_with_configuration(self) -> None:
         """
         Test node centrality features using the configuration-based approach
-        with FeatureChainParserConfiguration.
         """
         # Enable the necessary feature groups
         plugin_collector = PlugInCollector.enabled_feature_groups(
             {NodeCentralityTestDataCreator, PandasNodeCentralityFeatureGroup}
         )
 
-        # Create features using configuration
-        parser = NodeCentralityFeatureGroup.configurable_feature_chain_parser()
-        assert parser is not None, "NodeCentralityFeatureGroup parser is not available"
-
-        # Create degree centrality feature
+        # Create degree centrality feature using configuration-based approach
         degree_feature = Feature(
-            "placeholder",
+            "placeholder1",
             Options(
-                {
+                context={
                     NodeCentralityFeatureGroup.CENTRALITY_TYPE: "degree",
                     DefaultOptionKeys.mloda_source_feature: "source",
                     NodeCentralityFeatureGroup.GRAPH_TYPE: "undirected",
@@ -143,11 +138,11 @@ class TestNodeCentralityPandasIntegration:
             ),
         )
 
-        # Create betweenness centrality feature
+        # Create betweenness centrality feature using configuration-based approach
         betweenness_feature = Feature(
-            "placeholder",
+            "placeholder2",
             Options(
-                {
+                context={
                     NodeCentralityFeatureGroup.CENTRALITY_TYPE: "betweenness",
                     DefaultOptionKeys.mloda_source_feature: "source",
                     NodeCentralityFeatureGroup.GRAPH_TYPE: "undirected",
@@ -175,16 +170,14 @@ class TestNodeCentralityPandasIntegration:
         # Find the DataFrame with the node centrality features
         centrality_df = None
         for df in result:
-            if "degree_centrality__source" in df.columns:
+            if "placeholder1" in df.columns:
                 centrality_df = df
                 break
 
         assert centrality_df is not None, "DataFrame with node centrality features not found"
 
         # Validate the node centrality features
-        validate_node_centrality_features(
-            centrality_df, ["degree_centrality__source", "betweenness_centrality__source"]
-        )
+        validate_node_centrality_features(centrality_df, ["placeholder1", "placeholder2"])
 
     def test_directed_vs_undirected_graph(self) -> None:
         """Test node centrality features with different graph types."""
@@ -194,15 +187,11 @@ class TestNodeCentralityPandasIntegration:
             {NodeCentralityTestDataCreator, PandasNodeCentralityFeatureGroup}
         )
 
-        # Create features with different graph types
-        parser = NodeCentralityFeatureGroup.configurable_feature_chain_parser()
-        assert parser is not None, "NodeCentralityFeatureGroup parser is not available"
-
         # Create degree centrality features with different graph types and source features
         degree_undirected = Feature(
-            "placeholder",
+            "placeholder1",
             Options(
-                {
+                context={
                     NodeCentralityFeatureGroup.CENTRALITY_TYPE: "degree",
                     DefaultOptionKeys.mloda_source_feature: "source",  # Use source for undirected
                     NodeCentralityFeatureGroup.GRAPH_TYPE: "undirected",
@@ -212,9 +201,9 @@ class TestNodeCentralityPandasIntegration:
         )
 
         degree_directed = Feature(
-            "placeholder",
+            "placeholder2",
             Options(
-                {
+                context={
                     NodeCentralityFeatureGroup.CENTRALITY_TYPE: "degree",
                     DefaultOptionKeys.mloda_source_feature: "target",  # Use target for directed
                     NodeCentralityFeatureGroup.GRAPH_TYPE: "directed",
@@ -244,9 +233,9 @@ class TestNodeCentralityPandasIntegration:
         target_df = None
 
         for df in result:
-            if "degree_centrality__source" in df.columns:
+            if "placeholder1" in df.columns:
                 source_df = df
-            if "degree_centrality__target" in df.columns:
+            if "placeholder2" in df.columns:
                 target_df = df
 
         # Verify both features were found in the results
@@ -254,8 +243,8 @@ class TestNodeCentralityPandasIntegration:
         assert target_df is not None, "DataFrame with target centrality feature not found"
 
         # Verify both features have valid values
-        assert (source_df["degree_centrality__source"] >= 0).all(), "Undirected centrality has negative values"
-        assert (target_df["degree_centrality__target"] >= 0).all(), "Directed centrality has negative values"
+        assert (source_df["placeholder1"] >= 0).all(), "Undirected centrality has negative values"
+        assert (target_df["placeholder2"] >= 0).all(), "Directed centrality has negative values"
 
         # Verify the features have different shapes or values
         # This is a simple check to ensure the graph type parameter is having an effect

@@ -152,7 +152,6 @@ class Runner:
                         step.required_uuids, step.get_uuids(), finished_ids, currently_running_steps
                     ):
                         continue
-
                     self._execute_step(step)
 
                 time.sleep(0.01)

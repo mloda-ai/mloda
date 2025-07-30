@@ -28,13 +28,21 @@ class SQLITEReader(ReadDB):
     def build_query(cls, features: FeatureSet) -> str:
         query = "select "
 
-        for feature in features.get_all_names():
-            query += f"{feature}, "
+        options = None
+        for feature in features.features:
+            query += f"{feature.get_name()}, "
+            options = feature.options
 
         query = query[:-2] + " "  # last comma is removed
 
         query += "from "
-        query += f"{cls.get_table(features.options)};"
+
+        if options is None:
+            raise ValueError(
+                "Options were not set. Call this after adding a feature to ensure Options are initialized."
+            )
+
+        query += f"{cls.get_table(options)};"
 
         if query is None:
             raise ValueError("query cannot be None")

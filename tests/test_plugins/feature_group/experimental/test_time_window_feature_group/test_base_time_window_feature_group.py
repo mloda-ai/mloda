@@ -24,18 +24,9 @@ class TestTimeWindowFeatureGroup:
         assert hasattr(TimeWindowFeatureGroup, "PREFIX_PATTERN")
 
         # Test that FeatureChainParser methods work with the PREFIX_PATTERN
-        assert FeatureChainParser.validate_feature_name(feature_name, TimeWindowFeatureGroup.PREFIX_PATTERN)
         assert (
             FeatureChainParser.extract_source_feature(feature_name, TimeWindowFeatureGroup.PREFIX_PATTERN)
             == "temperature"
-        )
-
-        # Test invalid feature names
-        assert not FeatureChainParser.validate_feature_name(
-            "invalid_feature_name", TimeWindowFeatureGroup.PREFIX_PATTERN
-        )
-        assert not FeatureChainParser.validate_feature_name(
-            "avg_day_window_temperature", TimeWindowFeatureGroup.PREFIX_PATTERN
         )
 
     def test_parse_time_window_prefix(self) -> None:

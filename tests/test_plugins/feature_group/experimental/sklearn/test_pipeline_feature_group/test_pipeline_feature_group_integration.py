@@ -173,10 +173,6 @@ class TestSklearnPipelineFeatureGroupIntegration:
             {SklearnPipelineTestDataCreator, PandasSklearnPipelineFeatureGroup}
         )
 
-        parser = SklearnPipelineFeatureGroup.configurable_feature_chain_parser()
-        if parser is None:
-            raise ValueError("Feature chain parser is not available.")
-
         # Create a feature using configuration
         f1 = Feature(
             "x",
@@ -188,14 +184,12 @@ class TestSklearnPipelineFeatureGroupIntegration:
             ),
         )
 
-        feature1 = parser.create_feature_without_options(f1)
-
-        if feature1 is None:
+        if f1 is None:
             raise ValueError("Failed to create feature using the parser.")
 
         # Test with pre-parsed features
         results = mlodaAPI.run_all(
-            [feature1],
+            [f1],
             compute_frameworks={PandasDataframe},
             plugin_collector=plugin_collector,
         )
@@ -205,14 +199,14 @@ class TestSklearnPipelineFeatureGroupIntegration:
         # Find the DataFrame with the scaled feature
         scaled_df = None
         for df in results:
-            if "sklearn_pipeline_scaling__income" in df.columns:
+            if "x" in df.columns:
                 scaled_df = df
                 break
 
         assert scaled_df is not None, "DataFrame with scaled features not found"
 
         # Verify that scaling was applied
-        scaled_values = scaled_df["sklearn_pipeline_scaling__income"]
+        scaled_values = scaled_df["x"]
         assert abs(scaled_values.mean()) < 1e-10, "Scaled values should have mean close to 0"
 
         # Test with mloda parsing the features
@@ -239,10 +233,6 @@ class TestSklearnPipelineFeatureGroupIntegration:
             {SklearnPipelineTestDataCreator, PandasSklearnPipelineFeatureGroup}
         )
 
-        parser = SklearnPipelineFeatureGroup.configurable_feature_chain_parser()
-        if parser is None:
-            raise ValueError("Feature chain parser is not available.")
-
         # Create a feature with custom pipeline steps using frozenset to make it hashable
         # Convert the list of pipeline steps to a frozenset of tuples
         pipeline_steps_list = [
@@ -259,21 +249,21 @@ class TestSklearnPipelineFeatureGroupIntegration:
             "x",
             Options(
                 {
-                    SklearnPipelineFeatureGroup.PIPELINE_NAME: "custom",
                     SklearnPipelineFeatureGroup.PIPELINE_STEPS: pipeline_steps_frozenset,
+                    SklearnPipelineFeatureGroup.PIPELINE_PARAMS: frozenset(
+                        [
+                            ("scaler__with_mean", True),
+                            ("minmax__feature_range", (0, 1)),
+                        ]
+                    ),
                     DefaultOptionKeys.mloda_source_feature: "income",
                 }
             ),
         )
 
-        feature1 = parser.create_feature_without_options(f1)
-
-        if feature1 is None:
-            raise ValueError("Failed to create feature using the parser.")
-
         # Test with custom pipeline
         results = mlodaAPI.run_all(
-            [feature1],
+            [f1],
             compute_frameworks={PandasDataframe},
             plugin_collector=plugin_collector,
         )
@@ -283,7 +273,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         # Find the DataFrame with the transformed feature
         transformed_df = None
         for df in results:
-            if "sklearn_pipeline_custom__income" in df.columns:
+            if "x" in df.columns:
                 transformed_df = df
                 break
 
@@ -292,7 +282,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         # Verify that the custom pipeline was applied
         # Since we're using frozenset, the actual pipeline creation will use defaults
         # but we can verify that the feature was created and processed
-        transformed_values = transformed_df["sklearn_pipeline_custom__income"]
+        transformed_values = transformed_df["x"]
         assert transformed_values is not None, "Transformed values should exist"
         assert len(transformed_values) == 5, "Should have 5 transformed values"
 
@@ -387,11 +377,9 @@ class TestSklearnPipelineFeatureGroupIntegration:
             # Verify artifact file was created in expected location
             from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import SklearnArtifact
             from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-            from mloda_core.abstract_plugins.components.feature_name import FeatureName
 
             mock_features = FeatureSet()
-            mock_features.name_of_one_feature = FeatureName("sklearn_pipeline_scaling__income")
-            mock_features.options = Options(feature_options)
+            mock_features.add(Feature("sklearn_pipeline_scaling__income", Options(feature_options)))
 
             # Use the new artifact key-based file path method
             artifact_key = "sklearn_pipeline_scaling__income"

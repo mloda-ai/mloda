@@ -95,35 +95,18 @@ class Engine:
         execution_planner.create_execution_plan(planned_queue, graph, resolver.resolver_links.get_link_trekker())
         return execution_planner
 
-    def parse_configured_features(self, feature: Feature, feature_groups: Set[Type[AbstractFeatureGroup]]) -> Feature:
-        if not feature.options.get(DefaultOptionKeys.mloda_source_feature):
-            return feature
-
-        for fg in feature_groups:
-            parser = fg.configurable_feature_chain_parser()
-            if parser is None:
-                continue
-
-            new_feat = parser.create_feature_without_options(feature)
-            if new_feat is None:
-                continue
-            return new_feat
-
-        return feature
-
     def setup_features_recursion(self, features: Features) -> None:
         for feature in features:
             self.accessible_plugins = PreFilterPlugins(
                 self.copy_compute_frameworks, self.plugin_collector
             ).get_accessible_plugins()
 
-            parse_configured_features = self.parse_configured_features(feature, set(self.accessible_plugins.keys()))
-
-            self._process_feature(parse_configured_features, features)
+            self._process_feature(feature, features)
 
     def _process_feature(self, feature: Feature, features: Features) -> None:
         """Processes a single feature by delegating tasks to helper methods."""
 
+        # Drop feature chainer parser properties
         feature_group_class, compute_frameworks = self._identify_feature_group_and_frameworks(feature)
         feature_group = feature_group_class()
 

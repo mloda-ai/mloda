@@ -32,6 +32,8 @@ nav:
     - Feature Groups:
       - Feature Chain Parser: in_depth/feature-chain-parser.md
       - Feature Group Matching: in_depth/feature-group-matching.md
+      - Options Architecture: in_depth/options-architecture.md
+      - PROPERTY_MAPPING: in_depth/property-mapping.md
       - Feature Group Testing: in_depth/feature-group-testing.md
       - Feature Group Versioning: in_depth/feature-group-version.md
       - Multiple Result Columns: in_depth/multiple_result_columns.md

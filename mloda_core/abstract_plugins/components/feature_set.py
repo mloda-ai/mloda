@@ -53,12 +53,36 @@ class FeatureSet:
         return f"{self.features}"
 
     def get_options(self) -> Options:
+        """
+        You are only allowed to use this function,
+        if you expect that all options are the same for all resolved features of a feature group.
+
+        If you can, please avoid this function and use the options of the feature directly.
+        """
         if self.options is None:
             raise ValueError("No options set. Call this after adding a feature to ensure Options are initialized.")
+        self.validate_equal_options()
         return self.options
 
     def get_options_key(self, key: str) -> Any:
+        """
+        You are only allowed to use this function,
+        if you expect that all options are the same for all resolved features of a feature group.
+
+        If you can, please avoid this function and use the options of the feature directly.
+        """
+
+        self.validate_equal_options()
         return self.get_options().data.get(key, None)
+
+    def validate_equal_options(self) -> None:
+        """Checks if all features have the same options."""
+        _options = None
+        for feature in self.features:
+            if _options:
+                if _options != feature.options:
+                    raise ValueError("All features must have the same options.")
+            _options = feature.options
 
     def get_initial_requested_features(self) -> Set[FeatureName]:
         return {feature.name for feature in self.features if feature.initial_requested_data}

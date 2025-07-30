@@ -1,3 +1,4 @@
+from copy import deepcopy
 from typing import Any, Dict, List, Optional, Set, Type, Union
 
 from mloda_core.abstract_plugins.components.input_data.api.api_input_data_collection import (
@@ -28,7 +29,10 @@ class mlodaAPI:
         api_input_data_collection: Optional[ApiInputDataCollection] = None,
         plugin_collector: Optional[PlugInCollector] = None,
     ) -> None:
-        self.features = self._process_features(requested_features, api_input_data_collection)
+        # The features object is potentially changed during the run, so we need to deepcopy it, so that follow up runs with the same object are not affected.
+        _requested_features = deepcopy(requested_features)
+
+        self.features = self._process_features(_requested_features, api_input_data_collection)
         self.compute_framework = SetupComputeFramework(compute_frameworks, self.features).compute_frameworks
         self.links = links
         self.data_access_collection = data_access_collection

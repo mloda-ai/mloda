@@ -9,10 +9,6 @@ from typing import Any, Optional, Set, Type, Union
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
-from mloda_core.abstract_plugins.components.feature_chainer.feature_chainer_parser_configuration import (
-    FeatureChainParserConfiguration,
-    create_configurable_parser,
-)
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.options import Options
@@ -121,13 +117,61 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
         "year": "Years",
     }
 
+    # Define PROPERTY_MAPPING for the new unified parser approach
+    PROPERTY_MAPPING = {
+        # Window function parameter (context parameter)
+        WINDOW_FUNCTION: {
+            **WINDOW_FUNCTIONS,  # Reference existing WINDOW_FUNCTIONS dict
+            DefaultOptionKeys.mloda_context: True,  # Mark as context parameter
+            DefaultOptionKeys.mloda_strict_validation: True,  # Enable strict validation
+        },
+        # Window size parameter (context parameter)
+        WINDOW_SIZE: {
+            "explanation": "Size of the time window (must be positive integer)",
+            DefaultOptionKeys.mloda_context: True,  # Mark as context parameter
+            DefaultOptionKeys.mloda_strict_validation: True,  # Enable strict validation
+            DefaultOptionKeys.mloda_validation_function: lambda x: (isinstance(x, int) and x > 0)
+            or (isinstance(x, str) and x.isdigit() and int(x) > 0),
+        },
+        # Time unit parameter (context parameter)
+        TIME_UNIT: {
+            **TIME_UNITS,  # Reference existing TIME_UNITS dict
+            DefaultOptionKeys.mloda_context: True,  # Mark as context parameter
+            DefaultOptionKeys.mloda_strict_validation: True,  # Enable strict validation
+        },
+        # Source feature parameter (context parameter)
+        DefaultOptionKeys.mloda_source_feature: {
+            "explanation": "Source feature to apply time window operation to",
+            DefaultOptionKeys.mloda_context: True,  # Mark as context parameter
+            DefaultOptionKeys.mloda_strict_validation: False,  # Flexible validation
+        },
+    }
+
     # Define the prefix pattern for this feature group
     PREFIX_PATTERN = r"^([\w]+)_(\d+)_([\w]+)_window__"
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
-        source_feature = FeatureChainParser.extract_source_feature(feature_name.name, self.PREFIX_PATTERN)
+        """Extract source feature from either configuration-based options or string parsing."""
+
+        source_feature: str | None = None
+
+        # Try string-based parsing first
+        _, source_feature = FeatureChainParser.parse_feature_name(
+            feature_name.name, self.PREFIX_PATTERN, [self.PREFIX_PATTERN]
+        )
+        if source_feature is not None:
+            time_filter_feature = Feature(self.get_time_filter_feature(options))
+            return {Feature(source_feature), time_filter_feature}
+
+        # Fall back to configuration-based approach
+        source_features = options.get_source_features()
+        if len(source_features) != 1:
+            raise ValueError(
+                f"Expected exactly one source feature, but found {len(source_features)}: {source_features}"
+            )
+
         time_filter_feature = Feature(self.get_time_filter_feature(options))
-        return {Feature(source_feature), time_filter_feature}
+        return set(source_features) | {time_filter_feature}
 
     @classmethod
     def parse_time_window_prefix(cls, feature_name: str) -> tuple[str, int, str]:
@@ -209,16 +253,14 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
         if isinstance(feature_name, FeatureName):
             feature_name = feature_name.name
 
-        try:
-            # First validate that this is a valid feature name for this feature group
-            if not FeatureChainParser.validate_feature_name(feature_name, cls.PREFIX_PATTERN):
-                return False
-
-            # Then validate the time window components
-            cls.parse_time_window_prefix(feature_name)
-            return True
-        except ValueError:
-            return False
+        # Use unified parser approach with PROPERTY_MAPPING
+        return FeatureChainParser.match_configuration_feature_chain_parser(
+            feature_name,
+            options,
+            property_mapping=cls.PROPERTY_MAPPING,
+            pattern=cls.PREFIX_PATTERN,
+            prefix_patterns=[cls.PREFIX_PATTERN],
+        )
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -230,16 +272,62 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
 
         Adds the time window results directly to the input data structure.
         """
-        time_filter_feature = cls.get_time_filter_feature(features.options)
+
+        _options = None
+        for feature in features.features:
+            if _options:
+                if _options != feature.options:
+                    raise ValueError("All features must have the same options.")
+            _options = feature.options
+
+        time_filter_feature = cls.get_time_filter_feature(_options)
 
         cls._check_time_filter_feature_exists(data, time_filter_feature)
 
         cls._check_time_filter_feature_is_datetime(data, time_filter_feature)
 
         # Process each requested feature
-        for feature_name in features.get_all_names():
-            window_function, window_size, time_unit = cls.parse_time_window_prefix(feature_name)
-            mloda_source_feature = FeatureChainParser.extract_source_feature(feature_name, cls.PREFIX_PATTERN)
+        for feature in features.features:
+            feature_name = feature.get_name()
+
+            # Try string-based parsing first (for legacy features)
+            parsed_params, mloda_source_feature = FeatureChainParser.parse_feature_name(
+                feature_name, cls.PREFIX_PATTERN, [cls.PREFIX_PATTERN]
+            )
+
+            if mloda_source_feature is not None:
+                # String-based approach succeeded
+                window_function, window_size, time_unit = cls.parse_time_window_prefix(feature_name)
+            else:
+                # Fall back to configuration-based approach
+                has_config_params = (
+                    feature.options.get(cls.WINDOW_FUNCTION) is not None
+                    and feature.options.get(cls.WINDOW_SIZE) is not None
+                    and feature.options.get(cls.TIME_UNIT) is not None
+                )
+
+                if not has_config_params:
+                    raise ValueError(
+                        f"Feature '{feature_name}' does not match string pattern and lacks configuration parameters"
+                    )
+
+                # Configuration-based approach
+                source_features = feature.options.get_source_features()
+                if len(source_features) != 1:
+                    raise ValueError(
+                        f"Expected exactly one source feature, but found {len(source_features)}: {source_features}"
+                    )
+                source_feature = next(iter(source_features))
+                mloda_source_feature = source_feature.get_name()
+
+                # Extract parameters from options
+                window_function = feature.options.get(cls.WINDOW_FUNCTION)
+                window_size = feature.options.get(cls.WINDOW_SIZE)
+                time_unit = feature.options.get(cls.TIME_UNIT)
+
+                # Convert window_size to int if it's a string
+                if isinstance(window_size, str):
+                    window_size = int(window_size)
 
             cls._check_source_feature_exists(data, mloda_source_feature)
 
@@ -247,7 +335,7 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
                 data, window_function, window_size, time_unit, mloda_source_feature, time_filter_feature
             )
 
-            data = cls._add_result_to_data(data, feature_name, result)
+            data = cls._add_result_to_data(data, feature.get_name(), result)
 
         return data
 
@@ -334,30 +422,3 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
             The result of the window operation
         """
         raise NotImplementedError(f"_perform_window_operation not implemented in {cls.__name__}")
-
-    @classmethod
-    def configurable_feature_chain_parser(cls) -> Optional[Type[FeatureChainParserConfiguration]]:
-        """
-        Returns the FeatureChainParserConfiguration class for this feature group.
-
-        This method allows the Engine to automatically create features with the correct
-        naming convention based on configuration options, rather than requiring explicit
-        feature names.
-
-        Returns:
-            A configured FeatureChainParserConfiguration class
-        """
-        return create_configurable_parser(
-            parse_keys=[
-                cls.WINDOW_FUNCTION,
-                cls.WINDOW_SIZE,
-                cls.TIME_UNIT,
-                DefaultOptionKeys.mloda_source_feature,
-            ],
-            feature_name_template="{window_function}_{window_size}_{time_unit}_window__{mloda_source_feature}",
-            validation_rules={
-                cls.WINDOW_FUNCTION: lambda x: x in cls.WINDOW_FUNCTIONS,
-                cls.TIME_UNIT: lambda x: x in cls.TIME_UNITS,
-                cls.WINDOW_SIZE: lambda x: (isinstance(x, int) or (isinstance(x, str) and x.isdigit())) and int(x) > 0,
-            },
-        )

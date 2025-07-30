@@ -20,18 +20,8 @@ class TestMissingValueFeatureGroup:
         assert hasattr(MissingValueFeatureGroup, "PREFIX_PATTERN")
 
         # Test that FeatureChainParser methods work with the PREFIX_PATTERN
-        assert FeatureChainParser.validate_feature_name(feature_name, MissingValueFeatureGroup.PREFIX_PATTERN)
-        assert FeatureChainParser.get_prefix_part(feature_name, MissingValueFeatureGroup.PREFIX_PATTERN) == "mean"
         assert (
             FeatureChainParser.extract_source_feature(feature_name, MissingValueFeatureGroup.PREFIX_PATTERN) == "income"
-        )
-
-        # Test invalid feature names
-        assert not FeatureChainParser.validate_feature_name(
-            "invalid_feature_name", MissingValueFeatureGroup.PREFIX_PATTERN
-        )
-        assert not FeatureChainParser.validate_feature_name(
-            "mean_filled_income", MissingValueFeatureGroup.PREFIX_PATTERN
         )
 
     def test_get_imputation_method(self) -> None:

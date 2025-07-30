@@ -155,10 +155,13 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         # Generate future timestamps for forecasting
         future_timestamps = cls._generate_future_timestamps(last_timestamp, horizon, time_unit)
 
+        # Determine appropriate lag features based on horizon, time unit, and data size
+        lag_features = cls._determine_lag_features(horizon, time_unit, len(df))
+
         # Create or load the model
         if model_artifact is None:
             # Create feature matrix for training
-            X, y = cls._create_features(df, mloda_source_feature, time_filter_feature)
+            X, y = cls._create_features(df, mloda_source_feature, time_filter_feature, lag_features)
 
             # Train the model
             model, scaler = cls._train_model(X, y, algorithm)
@@ -169,19 +172,23 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
                 "scaler": scaler,
                 "last_trained_timestamp": last_timestamp,
                 "feature_names": X.columns.tolist(),
+                "lag_features": lag_features,
             }
         else:
             # Load the model from the artifact
             model = model_artifact["model"]
             scaler = model_artifact["scaler"]
             feature_names = model_artifact["feature_names"]
+            lag_features = model_artifact["lag_features"]
 
             # Update the artifact with the new last timestamp
             artifact = model_artifact.copy()
             artifact["last_trained_timestamp"] = last_timestamp
 
         # Create features for future timestamps
-        future_features = cls._create_future_features(df, future_timestamps, mloda_source_feature, time_filter_feature)
+        future_features = cls._create_future_features(
+            df, future_timestamps, mloda_source_feature, time_filter_feature, lag_features
+        )
 
         # Scale the features if a scaler is available
         if scaler is not None:
@@ -246,8 +253,51 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         return future_timestamps
 
     @classmethod
+    def _determine_lag_features(cls, horizon: int, time_unit: str, data_size: int) -> List[int]:
+        """
+        Determine appropriate lag features based on horizon, time unit, and data size.
+
+        Args:
+            horizon: The forecast horizon
+            time_unit: The time unit for the horizon
+            data_size: The size of the available data
+
+        Returns:
+            A list of lag periods to use
+        """
+        # Base lag features that are generally useful
+        base_lags = [1, 2, 3]
+
+        # Add seasonal lags based on time unit
+        seasonal_lags = []
+        if time_unit in ["hour", "day"]:
+            # For hourly/daily data, add weekly seasonality if we have enough data
+            if data_size > 10:  # Need at least 10 samples after lag 7
+                seasonal_lags.append(7)
+        elif time_unit in ["week", "month"]:
+            # For weekly/monthly data, add yearly seasonality if we have enough data
+            if time_unit == "week" and data_size > 55:  # Need at least 55 samples after lag 52
+                seasonal_lags.append(52)
+            elif time_unit == "month" and data_size > 15:  # Need at least 15 samples after lag 12
+                seasonal_lags.append(12)
+
+        # Combine base and seasonal lags
+        all_lags = base_lags + seasonal_lags
+
+        # Filter lags to ensure we have enough data for training
+        # We need at least max(lags) + 5 samples for meaningful training
+        max_allowed_lag = max(1, data_size - 5)
+        filtered_lags = [lag for lag in all_lags if lag <= max_allowed_lag]
+
+        # Ensure we have at least one lag
+        if not filtered_lags:
+            filtered_lags = [1]
+
+        return sorted(filtered_lags)
+
+    @classmethod
     def _create_features(
-        cls, df: pd.DataFrame, mloda_source_feature: str, time_filter_feature: str
+        cls, df: pd.DataFrame, mloda_source_feature: str, time_filter_feature: str, lag_features: List[int]
     ) -> Tuple[pd.DataFrame, pd.Series]:
         """
         Create features for training the forecasting model.
@@ -256,6 +306,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
             df: The pandas DataFrame
             mloda_source_feature: The name of the source feature
             time_filter_feature: The name of the time filter feature
+            lag_features: List of lag periods to use
 
         Returns:
             A tuple containing (feature_matrix, target_vector)
@@ -270,11 +321,19 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         df_features = cls._create_time_features(df_features, time_filter_feature)
 
         # Create lag features (previous values)
-        df_features = cls._create_lag_features(df_features, mloda_source_feature, lags=[1, 2, 3, 7])
+        df_features = cls._create_lag_features(df_features, mloda_source_feature, lags=lag_features)
 
         # Drop rows with NaN values (from lag features)
         df_features = df_features.dropna()
         y = y.loc[df_features.index]
+
+        # Ensure we have at least some data for training
+        if len(df_features) == 0:
+            raise ValueError(
+                f"No training data available after creating lag features. "
+                f"Original data size: {len(df)}, lags used: {lag_features}. "
+                f"Consider using a dataset with more samples."
+            )
 
         # Drop the original source feature and time filter feature
         X = df_features.drop([mloda_source_feature, time_filter_feature], axis=1)
@@ -346,6 +405,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         future_timestamps: List[datetime],
         mloda_source_feature: str,
         time_filter_feature: str,
+        lag_features: List[int],
     ) -> pd.DataFrame:
         """
         Create features for future timestamps.
@@ -355,6 +415,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
             future_timestamps: List of future timestamps to create features for
             mloda_source_feature: The name of the source feature
             time_filter_feature: The name of the time filter feature
+            lag_features: List of lag periods to use
 
         Returns:
             A DataFrame with features for future timestamps
@@ -366,17 +427,20 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         future_df = cls._create_time_features(future_df, time_filter_feature)
 
         # Get the most recent values for lag features
-        last_values = df[mloda_source_feature].iloc[-3:].tolist()
-        last_values.reverse()  # Reverse to get [t-3, t-2, t-1]
+        max_lag = max(lag_features)
+        available_values = min(len(df), max_lag)
+        last_values = df[mloda_source_feature].iloc[-available_values:].tolist()
+        last_values.reverse()  # Reverse to get [t-n, ..., t-2, t-1]
 
         # Pad with the last value if we don't have enough history
-        while len(last_values) < 7:
+        while len(last_values) < max_lag:
             last_values.append(last_values[-1] if last_values else 0)
 
-        # Create lag features for future timestamps
-        for i, lag in enumerate([1, 2, 3, 7]):
-            if i < len(last_values):
-                future_df[f"{mloda_source_feature}_lag_{lag}"] = last_values[i]
+        # Create lag features for future timestamps (only for the lags we actually used)
+        for lag in lag_features:
+            lag_index = lag - 1  # Convert lag to index (lag 1 = index 0)
+            if lag_index < len(last_values):
+                future_df[f"{mloda_source_feature}_lag_{lag}"] = last_values[lag_index]
             else:
                 future_df[f"{mloda_source_feature}_lag_{lag}"] = last_values[-1]
 

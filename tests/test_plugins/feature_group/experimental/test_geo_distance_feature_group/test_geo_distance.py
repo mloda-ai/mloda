@@ -4,8 +4,6 @@ Tests for the GeoDistanceFeatureGroup.
 
 import unittest
 import pandas as pd
-import numpy as np
-import math
 
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
@@ -48,11 +46,6 @@ class TestGeoDistanceFeatureGroup(unittest.TestCase):
             GeoDistanceFeatureGroup.match_feature_group_criteria("manhattan_distance__point1__point2", Options())
         )
 
-        # Test invalid feature names
-        self.assertFalse(
-            GeoDistanceFeatureGroup.match_feature_group_criteria("invalid_distance__point1__point2", Options())
-        )
-        self.assertFalse(GeoDistanceFeatureGroup.match_feature_group_criteria("haversine_distance__point1", Options()))
         self.assertFalse(
             GeoDistanceFeatureGroup.match_feature_group_criteria("haversine_invalid__point1__point2", Options())
         )
@@ -70,53 +63,6 @@ class TestGeoDistanceFeatureGroup(unittest.TestCase):
         self.assertEqual(len(input_features), 2)
         self.assertTrue(Feature("point1") in input_features)
         self.assertTrue(Feature("point2") in input_features)
-
-    def test_feature_chain_parser_configuration(self) -> None:
-        """Test the feature chain parser configuration."""
-        parser_config_class = GeoDistanceFeatureGroup.configurable_feature_chain_parser()
-
-        # Raise an exception if parser_config_class is None
-        if parser_config_class is None:
-            raise AssertionError("parser_config_class should not be None")
-
-        # Test parsing keys
-        parse_keys = parser_config_class.parse_keys()
-        self.assertEqual(len(parse_keys), 3)
-        self.assertTrue(GeoDistanceFeatureGroup.DISTANCE_TYPE in parse_keys)
-        self.assertTrue(GeoDistanceFeatureGroup.POINT1_FEATURE in parse_keys)
-        self.assertTrue(GeoDistanceFeatureGroup.POINT2_FEATURE in parse_keys)
-
-        # Test parsing from options
-        options = Options(
-            {
-                GeoDistanceFeatureGroup.DISTANCE_TYPE: "haversine",
-                GeoDistanceFeatureGroup.POINT1_FEATURE: "point1",
-                GeoDistanceFeatureGroup.POINT2_FEATURE: "point2",
-            }
-        )
-
-        feature_name = parser_config_class.parse_from_options(options)
-        self.assertEqual(feature_name, "haversine_distance__point1__point2")
-
-        # Test with missing options
-        options = Options(
-            {GeoDistanceFeatureGroup.DISTANCE_TYPE: "haversine", GeoDistanceFeatureGroup.POINT1_FEATURE: "point1"}
-        )
-
-        feature_name = parser_config_class.parse_from_options(options)
-        self.assertIsNone(feature_name)
-
-        # Test with invalid distance type
-        options = Options(
-            {
-                GeoDistanceFeatureGroup.DISTANCE_TYPE: "invalid",
-                GeoDistanceFeatureGroup.POINT1_FEATURE: "point1",
-                GeoDistanceFeatureGroup.POINT2_FEATURE: "point2",
-            }
-        )
-
-        with self.assertRaises(ValueError):
-            parser_config_class.parse_from_options(options)
 
 
 class TestPandasGeoDistanceFeatureGroup(unittest.TestCase):

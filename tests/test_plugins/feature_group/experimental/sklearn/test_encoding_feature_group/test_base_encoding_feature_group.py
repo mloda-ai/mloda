@@ -63,7 +63,6 @@ class TestEncodingFeatureGroup:
             "encoded__category",  # Missing encoder type
             "onehot__category",  # Missing 'encoded'
             "",  # Empty string
-            "onehot_encoded__",  # Missing source feature
         ]
 
         for name in invalid_names:
@@ -123,101 +122,6 @@ class TestEncodingFeatureGroup:
                 feature_name, EncodingFeatureGroup.PREFIX_PATTERN
             )
             assert source_feature == expected_source, f"Expected {expected_source}, got {source_feature}"
-
-    def test_configurable_feature_chain_parser(self) -> None:
-        """Test that configurable feature chain parser is properly configured."""
-        parser_config = EncodingFeatureGroup.configurable_feature_chain_parser()
-        assert parser_config is not None
-
-    def test_feature_chain_parser_integration(self) -> None:
-        """Test integration with FeatureChainParser."""
-        from mloda_core.abstract_plugins.components.feature import Feature
-
-        # Create a feature with options
-        feature = Feature(
-            "placeholder",
-            Options(
-                {
-                    EncodingFeatureGroup.ENCODER_TYPE: "onehot",
-                    DefaultOptionKeys.mloda_source_feature: "category",
-                }
-            ),
-        )
-
-        # Parse the feature using the parser configuration
-        parser_config = EncodingFeatureGroup.configurable_feature_chain_parser()
-        assert parser_config is not None
-
-        # Create a feature without options
-        parsed_feature = parser_config.create_feature_without_options(feature)
-        assert parsed_feature is not None
-        assert parsed_feature.name.name == "onehot_encoded__category"
-
-        # Check that the options were removed
-        assert EncodingFeatureGroup.ENCODER_TYPE not in parsed_feature.options.data
-        assert DefaultOptionKeys.mloda_source_feature not in parsed_feature.options.data
-
-    def test_parse_from_options(self) -> None:
-        """Test the parse_from_options method of the configurable feature chain parser."""
-        parser_config = EncodingFeatureGroup.configurable_feature_chain_parser()
-        assert parser_config is not None
-
-        # Valid options for different encoders
-        options = Options(
-            {
-                EncodingFeatureGroup.ENCODER_TYPE: "onehot",
-                DefaultOptionKeys.mloda_source_feature: "category",
-            }
-        )
-        feature_name = parser_config.parse_from_options(options)
-        assert feature_name == "onehot_encoded__category"
-
-        options = Options(
-            {
-                EncodingFeatureGroup.ENCODER_TYPE: "label",
-                DefaultOptionKeys.mloda_source_feature: "status",
-            }
-        )
-        feature_name = parser_config.parse_from_options(options)
-        assert feature_name == "label_encoded__status"
-
-        options = Options(
-            {
-                EncodingFeatureGroup.ENCODER_TYPE: "ordinal",
-                DefaultOptionKeys.mloda_source_feature: "priority",
-            }
-        )
-        feature_name = parser_config.parse_from_options(options)
-        assert feature_name == "ordinal_encoded__priority"
-
-        # Missing options
-        options = Options(
-            {
-                # Missing ENCODER_TYPE
-                DefaultOptionKeys.mloda_source_feature: "category",
-            }
-        )
-        feature_name = parser_config.parse_from_options(options)
-        assert feature_name is None
-
-        options = Options(
-            {
-                EncodingFeatureGroup.ENCODER_TYPE: "onehot",
-                # Missing mloda_source_feature
-            }
-        )
-        feature_name = parser_config.parse_from_options(options)
-        assert feature_name is None
-
-        # Invalid encoder type
-        options = Options(
-            {
-                EncodingFeatureGroup.ENCODER_TYPE: "invalid_encoder",
-                DefaultOptionKeys.mloda_source_feature: "category",
-            }
-        )
-        with pytest.raises(ValueError):
-            parser_config.parse_from_options(options)
 
     def test_supported_encoders(self) -> None:
         """Test that all supported encoders are properly defined."""

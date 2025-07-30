@@ -58,7 +58,15 @@ class ReadDB(BaseInputData):
         return reader(), data_access
 
     def load(self, features: FeatureSet) -> Any:
-        reader, data_access = self.init_reader(features.options)
+        _options = None
+        for feature in features.features:
+            if _options:
+                if _options != feature.options:
+                    raise ValueError("All features must have the same options.")
+            _options = feature.options
+
+        reader, data_access = self.init_reader(_options)
+
         data = reader.load_data(data_access, features)
 
         if data is None:

@@ -151,9 +151,9 @@ class TestClusteringFeatureGroupIntegration:
 
         # Create features using the parser configuration
         kmeans_feature = Feature(
-            "placeholder",
+            "cluster_kmeans_2__feature1,feature2",
             Options(
-                {
+                context={
                     ClusteringFeatureGroup.ALGORITHM: "kmeans",
                     ClusteringFeatureGroup.K_VALUE: 2,
                     DefaultOptionKeys.mloda_source_feature: "feature1,feature2",
@@ -162,9 +162,9 @@ class TestClusteringFeatureGroupIntegration:
         )
 
         dbscan_feature = Feature(
-            "placeholder",
+            "cluster_dbscan_auto__feature1,feature2",
             Options(
-                {
+                context={
                     ClusteringFeatureGroup.ALGORITHM: "dbscan",
                     ClusteringFeatureGroup.K_VALUE: "auto",
                     DefaultOptionKeys.mloda_source_feature: "feature1,feature2",
@@ -173,9 +173,9 @@ class TestClusteringFeatureGroupIntegration:
         )
 
         hierarchical_feature = Feature(
-            "placeholder",
+            "cluster_hierarchical_2__feature1,feature2",
             Options(
-                {
+                context={
                     ClusteringFeatureGroup.ALGORITHM: "hierarchical",
                     ClusteringFeatureGroup.K_VALUE: 2,
                     DefaultOptionKeys.mloda_source_feature: "feature1,feature2",
@@ -199,7 +199,6 @@ class TestClusteringFeatureGroupIntegration:
             plugin_collector=plugin_collector,
         )
 
-        # Validate the results
         validate_clustering_results(result)
 
     def test_integration_with_different_algorithms(self) -> None:

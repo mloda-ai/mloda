@@ -35,7 +35,6 @@ class TestTextCleaningFeatureGroupBase:
         invalid_names = [
             "clean_text__review",  # Wrong prefix
             "cleaned_text_review",  # Missing double underscore
-            "cleaned_text__",  # Missing source feature
             "cleaned__text__review",  # Extra double underscore in wrong place
         ]
 
@@ -69,97 +68,47 @@ class TestTextCleaningFeatureGroupBase:
 
 
 class TestTextCleaningFeatureChainParser:
-    """Tests for the TextCleaningFeatureGroup's configurable_feature_chain_parser."""
+    """Tests for the TextCleaningFeatureGroup's modernized configuration-based features."""
 
-    def test_parse_keys(self) -> None:
-        """Test that the configuration returns the correct keys."""
-        parser = TextCleaningFeatureGroup.configurable_feature_chain_parser()
-        assert parser is not None
-
-        keys = parser.parse_keys()
-        # Only mloda_source_feature is in parse_keys, CLEANING_OPERATIONS is preserved
-        assert TextCleaningFeatureGroup.CLEANING_OPERATIONS not in keys
-        assert DefaultOptionKeys.mloda_source_feature in keys
-
-    def test_parse_from_options_valid(self) -> None:
-        """Test that the configuration correctly parses valid options."""
-        parser = TextCleaningFeatureGroup.configurable_feature_chain_parser()
-        assert parser is not None
-
-        # Valid options
+    def test_configuration_based_matching(self) -> None:
+        """Test that configuration-based features are properly matched."""
+        # Test configuration-based feature creation
         options = Options(
-            {
+            context={
                 TextCleaningFeatureGroup.CLEANING_OPERATIONS: ("normalize", "remove_stopwords"),
                 DefaultOptionKeys.mloda_source_feature: "review",
             }
         )
 
-        feature_name = parser.parse_from_options(options)
-        assert feature_name == "cleaned_text__review"
+        # Configuration-based features should match with placeholder names
+        assert TextCleaningFeatureGroup.match_feature_group_criteria("placeholder", options)
 
-    def test_parse_from_options_missing_operations(self) -> None:
-        """Test that the configuration returns None when operations are missing."""
-        parser = TextCleaningFeatureGroup.configurable_feature_chain_parser()
-        assert parser is not None
+        # Test with group/context separation - operations in context should match
+        options_with_group = Options(
+            group={"some_group_param": "value"},
+            context={
+                TextCleaningFeatureGroup.CLEANING_OPERATIONS: ("normalize", "remove_punctuation"),
+                DefaultOptionKeys.mloda_source_feature: "description",
+            },
+        )
+        assert TextCleaningFeatureGroup.match_feature_group_criteria("placeholder", options_with_group)
 
-        # Missing operations
-        options = Options({DefaultOptionKeys.mloda_source_feature: "review"})
-
-        feature_name = parser.parse_from_options(options)
-        assert feature_name is None
-
-    def test_parse_from_options_missing_source_feature(self) -> None:
-        """Test that the configuration returns None when source feature is missing."""
-        parser = TextCleaningFeatureGroup.configurable_feature_chain_parser()
-        assert parser is not None
-
-        # Missing source feature
-        options = Options({TextCleaningFeatureGroup.CLEANING_OPERATIONS: ("normalize", "remove_stopwords")})
-
-        feature_name = parser.parse_from_options(options)
-        assert feature_name is None
-
-    def test_parse_from_options_invalid_operation(self) -> None:
-        """Test that the configuration raises an error for invalid operations."""
-        parser = TextCleaningFeatureGroup.configurable_feature_chain_parser()
-        assert parser is not None
-
-        # Invalid operation
+    def test_configuration_based_input_features(self) -> None:
+        """Test that configuration-based features extract correct input features."""
+        # Configuration-based feature with source feature in options
         options = Options(
-            {
-                TextCleaningFeatureGroup.CLEANING_OPERATIONS: ("invalid_operation",),
+            context={
+                TextCleaningFeatureGroup.CLEANING_OPERATIONS: ("normalize", "remove_stopwords"),
                 DefaultOptionKeys.mloda_source_feature: "review",
             }
         )
 
-        with pytest.raises(ValueError) as excinfo:
-            parser.parse_from_options(options)
+        feature_group = TextCleaningFeatureGroup()
+        feature_name = FeatureName("placeholder")
 
-        assert "Unsupported cleaning operation" in str(excinfo.value)
+        input_features = feature_group.input_features(options, feature_name)
 
-    def test_create_feature_without_options(self) -> None:
-        """Test that the configuration correctly creates a feature without options."""
-        parser = TextCleaningFeatureGroup.configurable_feature_chain_parser()
-        assert parser is not None
-
-        # Create a feature with options
-        feature = Feature(
-            "PlaceHolder",
-            Options(
-                {
-                    TextCleaningFeatureGroup.CLEANING_OPERATIONS: ("normalize", "remove_stopwords"),
-                    DefaultOptionKeys.mloda_source_feature: "review",
-                }
-            ),
-        )
-
-        # Create a feature without options
-        result = parser.create_feature_without_options(feature)
-
-        assert result is not None
-        assert result.name.name == "cleaned_text__review"
-        # CLEANING_OPERATIONS is preserved for use in calculate_feature
-        assert TextCleaningFeatureGroup.CLEANING_OPERATIONS in result.options.data
-        assert result.options.data[TextCleaningFeatureGroup.CLEANING_OPERATIONS] == ("normalize", "remove_stopwords")
-        # Only mloda_source_feature is removed
-        assert DefaultOptionKeys.mloda_source_feature not in result.options.data
+        assert input_features is not None
+        assert len(input_features) == 1
+        source_feature = next(iter(input_features))
+        assert source_feature.name.name == "review"

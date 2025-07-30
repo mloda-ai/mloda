@@ -58,29 +58,6 @@ class TestForecastingFeatureGroup(unittest.TestCase):
         self.assertFalse(ForecastingFeatureGroup.match_feature_group_criteria("invalid_feature_name", Options()))
         self.assertFalse(ForecastingFeatureGroup.match_feature_group_criteria("linear_7day__sales", Options()))
 
-    def test_configurable_feature_chain_parser(self) -> None:
-        """Test the configurable feature chain parser."""
-        # Create a feature with options
-        feature = Feature(
-            "PlaceHolder",
-            Options(
-                {
-                    ForecastingFeatureGroup.ALGORITHM: "linear",
-                    ForecastingFeatureGroup.HORIZON: 7,
-                    ForecastingFeatureGroup.TIME_UNIT: "day",
-                    DefaultOptionKeys.mloda_source_feature: "sales",
-                }
-            ),
-        )
-
-        # Get the parser configuration
-        parser_config = ForecastingFeatureGroup.configurable_feature_chain_parser()
-
-        # Parse the feature name from options
-        feature_name = parser_config.parse_from_options(feature.options)  # type: ignore
-
-        self.assertEqual(feature_name, "linear_forecast_7day__sales")
-
     def test_input_features(self) -> None:
         """Test extraction of input features."""
         feature_name = "linear_forecast_7day__sales"
@@ -159,8 +136,7 @@ class TestForecastingFeatureGroup(unittest.TestCase):
 
         # Create a feature set with artifact saving enabled
         feature_set = FeatureSet()
-        feature_set.add(Feature(feature_name))
-        feature_set.options = self.options
+        feature_set.add(Feature(feature_name, self.options))
         feature_set.artifact_to_save = feature_name
 
         # Calculate the feature
@@ -190,7 +166,9 @@ class TestForecastingFeatureGroup(unittest.TestCase):
 
         # Set the serialized artifact in the options using the feature name as the key
         options2.data[feature_name] = serialized_artifact
-        feature_set2.options = options2
+
+        for feature in feature_set2.features:
+            feature.options = options2
 
         # Set the artifact to load
         feature_set2.artifact_to_load = feature_name

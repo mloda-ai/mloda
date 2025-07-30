@@ -9,10 +9,6 @@ from typing import Any, Optional, Set, Type, Union
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
-from mloda_core.abstract_plugins.components.feature_chainer.feature_chainer_parser_configuration import (
-    FeatureChainParserConfiguration,
-    create_configurable_parser,
-)
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.options import Options
@@ -47,8 +43,7 @@ class NodeCentralityFeatureGroup(AbstractFeatureGroup):
 
     ## Configuration-Based Creation
 
-    NodeCentralityFeatureGroup supports configuration-based creation through the
-    FeatureChainParserConfiguration mechanism. This allows features to be created
+    NodeCentralityFeatureGroup supports configuration-based. This allows features to be created
     from options rather than explicit feature names.
 
     To create a centrality feature using configuration:
@@ -136,13 +131,50 @@ class NodeCentralityFeatureGroup(AbstractFeatureGroup):
 
     # Define the prefix pattern for this feature group
     PREFIX_PATTERN = r"^([\w]+)_centrality__"
+    PATTERN = "__"
+
+    # Property mapping for configuration-based feature creation
+    PROPERTY_MAPPING = {
+        # Context parameters (don't affect Feature Group resolution)
+        CENTRALITY_TYPE: {
+            **CENTRALITY_TYPES,  # All supported centrality types as valid options
+            DefaultOptionKeys.mloda_context: True,
+            DefaultOptionKeys.mloda_strict_validation: True,
+        },
+        GRAPH_TYPE: {
+            **GRAPH_TYPES,  # All supported graph types as valid options
+            DefaultOptionKeys.mloda_context: True,
+            DefaultOptionKeys.mloda_strict_validation: True,
+            DefaultOptionKeys.mloda_default: "undirected",
+        },
+        WEIGHT_COLUMN: {
+            "explanation": "Column name for edge weights (optional)",
+            DefaultOptionKeys.mloda_context: True,
+            DefaultOptionKeys.mloda_default: None,
+        },
+        DefaultOptionKeys.mloda_source_feature: {
+            "explanation": "Source feature representing the nodes for centrality calculation",
+            DefaultOptionKeys.mloda_context: True,
+        },
+    }
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
-        """Extract source features from the centrality feature name."""
-        source_feature_str = FeatureChainParser.extract_source_feature(feature_name.name, self.PREFIX_PATTERN)
+        """Extract source feature from either configuration-based options or string parsing."""
 
-        # Create a feature from the source feature string
-        return {Feature(source_feature_str.strip())}
+        source_feature: str | None = None
+
+        # string based
+        _, source_feature = FeatureChainParser.parse_feature_name(feature_name, self.PATTERN, [self.PREFIX_PATTERN])
+        if source_feature is not None:
+            return {Feature(source_feature)}
+
+        # configuration based
+        source_features = options.get_source_features()
+        if len(source_features) != 1:
+            raise ValueError(
+                f"Expected exactly one source feature, but found {len(source_features)}: {source_features}"
+            )
+        return set(source_features)
 
     @classmethod
     def parse_centrality_prefix(cls, feature_name: str) -> str:
@@ -202,16 +234,13 @@ class NodeCentralityFeatureGroup(AbstractFeatureGroup):
         if isinstance(feature_name, FeatureName):
             feature_name = feature_name.name
 
-        try:
-            # First validate that this is a valid feature name for this feature group
-            if not FeatureChainParser.validate_feature_name(feature_name, cls.PREFIX_PATTERN):
-                return False
-
-            # Then validate the centrality components
-            cls.parse_centrality_prefix(feature_name)
-            return True
-        except ValueError:
-            return False
+        return FeatureChainParser.match_configuration_feature_chain_parser(
+            feature_name,
+            options,
+            property_mapping=cls.PROPERTY_MAPPING,
+            pattern=cls.PATTERN,
+            prefix_patterns=[cls.PREFIX_PATTERN],
+        )
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -225,18 +254,11 @@ class NodeCentralityFeatureGroup(AbstractFeatureGroup):
         """
         # Process each feature
         for feature in features.features:
-            feature_name = feature.name.name
-            centrality_type = cls.get_centrality_type(feature_name)
-            source_feature_str = FeatureChainParser.extract_source_feature(feature_name, cls.PREFIX_PATTERN)
+            centrality_type, source_feature_str = cls._extract_centrality_and_source_feature(feature)
 
-            # Get graph type and weight column from options if available
-            options = feature.options
-
-            # Get graph type with default value if not present
-            graph_type = options.get(cls.GRAPH_TYPE) or "undirected"
-
-            # Get weight column with default value if not present
-            weight_column = options.get(cls.WEIGHT_COLUMN)
+            # Common parameter extraction (works for both approaches)
+            graph_type = feature.options.get(cls.GRAPH_TYPE) or "undirected"
+            weight_column = feature.options.get(cls.WEIGHT_COLUMN)
 
             # Validate graph type
             if graph_type not in cls.GRAPH_TYPES:
@@ -251,9 +273,56 @@ class NodeCentralityFeatureGroup(AbstractFeatureGroup):
             result = cls._calculate_centrality(data, centrality_type, source_feature_str, graph_type, weight_column)
 
             # Add the result to the data
-            data = cls._add_result_to_data(data, feature_name, result)
+            data = cls._add_result_to_data(data, feature.get_name(), result)
 
         return data
+
+    @classmethod
+    def _extract_centrality_and_source_feature(cls, feature: Feature) -> tuple[str, str]:
+        """
+        Extract centrality type and source feature name from a feature.
+
+        Tries string-based parsing first, falls back to configuration-based approach.
+
+        Args:
+            feature: The feature to extract parameters from
+
+        Returns:
+            Tuple of (centrality_type, source_feature_name)
+
+        Raises:
+            ValueError: If parameters cannot be extracted
+        """
+        centrality_type = None
+        source_feature_name: str | None = None
+
+        # Try string-based parsing first
+        prefix_part, source_feature_name = FeatureChainParser.parse_feature_name(
+            feature.name, cls.PATTERN, [cls.PREFIX_PATTERN]
+        )
+        if prefix_part is not None and source_feature_name is not None:
+            # Extract centrality type from the prefix (e.g., "degree_centrality" -> "degree")
+            if prefix_part.endswith("_centrality"):
+                centrality_type = prefix_part[: -len("_centrality")]
+                if centrality_type in cls.CENTRALITY_TYPES:
+                    return centrality_type, source_feature_name
+
+        # Fall back to configuration-based approach
+        source_features = feature.options.get_source_features()
+        if len(source_features) != 1:
+            raise ValueError(
+                f"Expected exactly one source feature, but found {len(source_features)}: {source_features}"
+            )
+
+        source_feature = next(iter(source_features))
+        source_feature_name = source_feature.get_name()
+
+        centrality_type = feature.options.get(cls.CENTRALITY_TYPE)
+
+        if centrality_type is None or source_feature_name is None:
+            raise ValueError(f"Could not extract centrality type and source feature from: {feature.name}")
+
+        return centrality_type, source_feature_name
 
     @classmethod
     def _check_source_feature_exists(cls, data: Any, feature_name: str) -> None:
@@ -307,43 +376,3 @@ class NodeCentralityFeatureGroup(AbstractFeatureGroup):
             The result of the centrality calculation
         """
         raise NotImplementedError(f"_calculate_centrality not implemented in {cls.__name__}")
-
-    @classmethod
-    def configurable_feature_chain_parser(cls) -> Optional[Type[FeatureChainParserConfiguration]]:
-        """
-        Returns the FeatureChainParserConfiguration class for this feature group.
-
-        This method allows the Engine to automatically create features with the correct
-        naming convention based on configuration options, rather than requiring explicit
-        feature names.
-
-        Returns:
-            A configured FeatureChainParserConfiguration class
-        """
-
-        # Define validation functions within the method scope
-        def raise_unsupported_centrality_type(centrality_type: str) -> bool:
-            """Raise an error for unsupported centrality type."""
-            raise ValueError(
-                f"Unsupported centrality type: {centrality_type}. Supported types: {list(cls.CENTRALITY_TYPES.keys())}"
-            )
-
-        def validate_graph_type(graph_type: str) -> bool:
-            """Validate the graph type."""
-            if graph_type not in cls.GRAPH_TYPES:
-                raise ValueError(
-                    f"Unsupported graph type: {graph_type}. Supported types: {list(cls.GRAPH_TYPES.keys())}"
-                )
-            return True
-
-        # Create and return the configured parser
-        return create_configurable_parser(
-            parse_keys=[
-                cls.CENTRALITY_TYPE,
-                DefaultOptionKeys.mloda_source_feature,
-            ],
-            feature_name_template="{centrality_type}_centrality__{mloda_source_feature}",
-            validation_rules={
-                cls.CENTRALITY_TYPE: lambda x: x in cls.CENTRALITY_TYPES or raise_unsupported_centrality_type(x),
-            },
-        )

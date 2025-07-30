@@ -2,6 +2,7 @@ from abc import ABC
 from typing import Any, Optional, final
 
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
+from mloda_core.abstract_plugins.components.options import Options
 
 
 class BaseArtifact(ABC):
@@ -49,7 +50,34 @@ class BaseArtifact(ABC):
 
         However, you can overwrite this method to load the artifact by any means necessary.
         """
-        return features.options.get(features.name_of_one_feature.name)  # type: ignore
+
+        options = cls.get_singular_option_from_options(features)
+        return options.get(features.name_of_one_feature.name)  # type: ignore
+
+    @classmethod
+    def get_singular_option_from_options(cls, features: FeatureSet) -> Options | None:
+        """
+        Helper method to retrieve a singular option from the options object.
+
+        The artifacts were designed before the context in feature groups was introduced.
+        If you encounter here an error,  please message the maintainers to update the code.
+        It is simply not clear if this is a valid use case.
+        """
+
+        _options = None
+        for feature in features.features:
+            if _options:
+                if _options != feature.options:
+                    raise ValueError("""All features must have the same options. The artifacts were designed before the context in feature groups was introduced.
+                                        If you encounter here an error,  please message the maintainers to update the code.
+                                        It is simply not clear if this is a valid use case.""")
+
+            _options = feature.options
+
+        if _options is None:
+            return None
+
+        return _options
 
     @final
     @classmethod
@@ -91,7 +119,9 @@ class BaseArtifact(ABC):
         """
         Validates that the FeatureSet has the necessary attributes set.
         """
-        if features.options is None:
+
+        options = BaseArtifact.get_singular_option_from_options(features)
+        if options is None:
             raise ValueError("No options set. This should only be called after adding a feature.")
 
         if features.name_of_one_feature is None:

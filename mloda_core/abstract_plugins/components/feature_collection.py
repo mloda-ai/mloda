@@ -37,7 +37,6 @@ class Features:
                 child_options = Options({})
 
             feature = Feature(name=feature, options=child_options) if isinstance(feature, str) else feature
-
             if child_uuid:
                 self.parent_uuids.add(feature.uuid)
                 self.child_uuid = child_uuid
@@ -55,7 +54,12 @@ class Features:
                 if key_child == key_parent:
                     if key_parent == DefaultOptionKeys.mloda_source_feature:
                         continue
+
                     if value_child != value_parent:
+                        # The child options property should not overwrite the parent options, as it was set intentionally.
+                        if key_parent in feature_options.get(DefaultOptionKeys.mloda_feature_chainer_parser_key) or []:
+                            continue
+
                         raise ValueError(f"Duplicate keys found in options: {key_child}")
 
         # Merge the child_options data into feature_options data

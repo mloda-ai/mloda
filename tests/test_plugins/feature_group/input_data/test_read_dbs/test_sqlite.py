@@ -95,13 +95,6 @@ class TestSQLITEReader:
         ):
             SQLITEReader.is_valid_credentials(credentials)
 
-    def test_build_query(self) -> None:
-        features = MockFeatureSet(["id", "name", "age"])
-        with patch.object(SQLITEReader, "get_table", return_value="test_table"):
-            query = SQLITEReader.build_query(features)  # type: ignore
-        expected_query = "select id, name, age from test_table;"
-        assert query == expected_query
-
     def test_load_data(self, valid_credentials: Any, mock_read_db: Any, mock_read_as_pa_data: Any) -> None:
         feature_set = FeatureSet()
         features = {Feature("id"), Feature("name"), Feature("age")}

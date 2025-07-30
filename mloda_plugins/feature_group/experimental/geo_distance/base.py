@@ -8,14 +8,11 @@ from typing import Any, Optional, Set, Type, Union
 
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_chainer.feature_chainer_parser_configuration import (
-    FeatureChainParserConfiguration,
-    create_configurable_parser,
-)
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
+from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 
 class GeoDistanceFeatureGroup(AbstractFeatureGroup):
@@ -23,33 +20,67 @@ class GeoDistanceFeatureGroup(AbstractFeatureGroup):
     Base class for all geo distance feature groups.
 
     The GeoDistanceFeatureGroup calculates distances between geographic points,
-    such as haversine (great-circle), euclidean, or manhattan distances. It extracts
-    the two point features from the feature name and calculates the distance between them.
+    such as haversine (great-circle), euclidean, or manhattan distances. Supports both
+    string-based feature creation and configuration-based creation with proper
+    group/context parameter separation.
 
-    ## Feature Naming Convention
+    ## Feature Creation Methods
 
-    Geo distance features follow this naming pattern:
-    `{distance_type}_distance__{point1_feature}__{point2_feature}`
+    ### 1. String-Based Creation
 
-    The point features are extracted from the feature name and used as inputs for the
-    distance calculation. Note the double underscore before each point feature.
+    Features follow the naming pattern: `{distance_type}_distance__{point1_feature}__{point2_feature}`
 
     Examples:
-    - `haversine_distance__customer_location__store_location`: Great-circle distance between customer and store
-    - `euclidean_distance__origin__destination`: Straight-line distance between origin and destination
-    - `manhattan_distance__pickup__dropoff`: Manhattan distance between pickup and dropoff points
+    ```python
+    features = [
+        "haversine_distance__customer_location__store_location",  # Great-circle distance
+        "euclidean_distance__origin__destination",               # Straight-line distance
+        "manhattan_distance__pickup__dropoff"                    # Manhattan distance
+    ]
+    ```
 
-    ## Configuration-Based Creation
+    ### 2. Configuration-Based Creation
 
-    GeoDistanceFeatureGroup supports configuration-based creation through the
-    FeatureChainParserConfiguration mechanism. This allows features to be created
-    from options rather than explicit feature names.
+    Uses Options with proper group/context parameter separation:
+
+    ```python
+    feature = Feature(
+        name="placeholder",
+        options=Options(
+            context={
+                GeoDistanceFeatureGroup.DISTANCE_TYPE: "haversine",
+                DefaultOptionKeys.mloda_source_feature: ["customer_location", "store_location"],
+            }
+        )
+    )
+    ```
+
+    ## Parameter Classification
+
+    ### Context Parameters (Default)
+    These parameters don't affect Feature Group resolution/splitting:
+    - `distance_type`: The type of distance calculation (haversine, euclidean, manhattan)
+    - `mloda_source_feature`: The source features (list of exactly 2 point features)
+
+    ### Group Parameters
+    Currently none for GeoDistanceFeatureGroup. Parameters that affect Feature Group
+    resolution/splitting would be placed here.
+
+    ## Supported Distance Types
+
+    - `haversine`: Great-circle distance on a sphere (for lat/lon coordinates)
+    - `euclidean`: Straight-line distance between two points
+    - `manhattan`: Sum of absolute differences between coordinates
+
+    ## Requirements
+    - Exactly 2 source features (point features) are required
+    - Point features should contain coordinate data (tuples, lists, or separate x/y columns)
+    - For haversine distance, coordinates should be in (latitude, longitude) format
+    - For euclidean/manhattan distance, coordinates should be in (x, y) format
     """
 
-    # Option keys for distance type and point features
+    # Option keys for distance type
     DISTANCE_TYPE = "distance_type"
-    POINT1_FEATURE = "point1_feature"
-    POINT2_FEATURE = "point2_feature"
 
     # Define supported distance types
     DISTANCE_TYPES = {
@@ -60,31 +91,64 @@ class GeoDistanceFeatureGroup(AbstractFeatureGroup):
 
     # Define the prefix pattern for this feature group
     PREFIX_PATTERN = r"^([\w]+)_distance__"
+    PATTERN = "__"
+
+    # Property mapping for configuration-based features with group/context separation
+    PROPERTY_MAPPING = {
+        DISTANCE_TYPE: {
+            **DISTANCE_TYPES,
+            DefaultOptionKeys.mloda_context: True,
+            DefaultOptionKeys.mloda_strict_validation: True,
+        },
+        DefaultOptionKeys.mloda_source_feature: {
+            "explanation": "Source features (exactly 2 point features required)",
+            DefaultOptionKeys.mloda_context: True,
+            DefaultOptionKeys.mloda_strict_validation: True,
+            DefaultOptionKeys.mloda_validation_function: lambda x: (
+                # Accept individual strings (when parser iterates over list elements)
+                isinstance(x, str)
+                or
+                # Accept collections with exactly 2 elements (when validating the whole list)
+                (isinstance(x, (list, tuple, frozenset, set)) and len(x) == 2)
+            ),
+        },
+    }
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
-        """Extract point features from the geo distance feature name."""
+        """Extract point features from either configuration-based options or string parsing."""
 
-        # Extract the source feature part (everything after the prefix)
-        source_part = FeatureChainParser.extract_source_feature(feature_name.name, self.PREFIX_PATTERN)
+        # Try string-based parsing first
+        try:
+            source_part = FeatureChainParser.extract_source_feature(feature_name.name, self.PREFIX_PATTERN)
+            parts = source_part.split("__", 1)
+            if len(parts) == 2:
+                return {Feature(parts[0]), Feature(parts[1])}
+        except ValueError:
+            pass
 
-        # Split the source part by double underscore to get the two point features
-        parts = source_part.split("__", 1)
-        if len(parts) != 2:
+        # Fall back to configuration-based approach
+        source_features = options.get_source_features()
+        if len(source_features) != 2:
             raise ValueError(
-                f"Invalid geo distance feature name format: {feature_name.name}. Expected two point features separated by double underscore."
+                f"Expected exactly 2 source features for geo distance, got {len(source_features)}: {source_features}"
             )
-
-        point1_feature, point2_feature = parts
-
-        return {Feature(point1_feature), Feature(point2_feature)}
+        return set(source_features)
 
     @classmethod
     def get_distance_type(cls, feature_name: str) -> str:
         """Extract the distance type from the feature name."""
-        prefix_part = FeatureChainParser.get_prefix_part(feature_name, cls.PREFIX_PATTERN)
-        if prefix_part is None:
+        distance_type, _ = FeatureChainParser.parse_feature_name(feature_name, cls.PATTERN, [cls.PREFIX_PATTERN])
+        if distance_type is None:
             raise ValueError(f"Invalid geo distance feature name format: {feature_name}")
-        return prefix_part
+
+        # Remove the "_distance" suffix to get just the distance type
+        distance_type = distance_type.replace("_distance", "").strip("_")
+        if distance_type not in cls.DISTANCE_TYPES:
+            raise ValueError(
+                f"Unsupported distance type: {distance_type}. Supported types: {', '.join(cls.DISTANCE_TYPES.keys())}"
+            )
+
+        return distance_type
 
     @classmethod
     def get_point_features(cls, feature_name: str) -> tuple[str, str]:
@@ -108,29 +172,16 @@ class GeoDistanceFeatureGroup(AbstractFeatureGroup):
         options: Options,
         data_access_collection: Optional[Any] = None,
     ) -> bool:
-        """Check if feature name matches the expected pattern and distance type."""
-        if isinstance(feature_name, FeatureName):
-            feature_name = feature_name.name
+        """Check if feature name matches the expected pattern for geo distance features."""
 
-        try:
-            # First validate that this is a valid feature name for this feature group
-            if not FeatureChainParser.validate_feature_name(feature_name, cls.PREFIX_PATTERN):
-                return False
-
-            # Then check if the distance type is supported
-            distance_type = cls.get_distance_type(feature_name)
-            if not cls._supports_distance_type(distance_type):
-                return False
-
-            # Finally check if the feature name has two point features
-            try:
-                cls.get_point_features(feature_name)
-                return True
-            except ValueError:
-                return False
-
-        except ValueError:
-            return False
+        # Use the unified parser with property mapping for full configuration support
+        return FeatureChainParser.match_configuration_feature_chain_parser(
+            feature_name,
+            options,
+            property_mapping=cls.PROPERTY_MAPPING,
+            pattern=cls.PATTERN,
+            prefix_patterns=[cls.PREFIX_PATTERN],
+        )
 
     @classmethod
     def _supports_distance_type(cls, distance_type: str) -> bool:
@@ -143,14 +194,13 @@ class GeoDistanceFeatureGroup(AbstractFeatureGroup):
         Calculate distances between point features.
 
         Processes all requested features, determining the distance type
-        and point features from each feature name.
+        and point features from either string parsing or configuration-based options.
 
         Adds the calculated distances directly to the input data structure.
         """
         # Process each requested feature
-        for feature_name in features.get_all_names():
-            distance_type = cls.get_distance_type(feature_name)
-            point1_feature, point2_feature = cls.get_point_features(feature_name)
+        for feature in features.features:
+            distance_type, point1_feature, point2_feature = cls._extract_geo_distance_parameters(feature)
 
             cls._check_point_features_exist(data, point1_feature, point2_feature)
 
@@ -159,9 +209,55 @@ class GeoDistanceFeatureGroup(AbstractFeatureGroup):
 
             result = cls._calculate_distance(data, distance_type, point1_feature, point2_feature)
 
-            data = cls._add_result_to_data(data, feature_name, result)
+            data = cls._add_result_to_data(data, feature.get_name(), result)
 
         return data
+
+    @classmethod
+    def _extract_geo_distance_parameters(cls, feature: Feature) -> tuple[str, str, str]:
+        """
+        Extract geo distance parameters from a feature.
+
+        Tries string-based parsing first, falls back to configuration-based approach.
+
+        Args:
+            feature: The feature to extract parameters from
+
+        Returns:
+            Tuple of (distance_type, point1_feature, point2_feature)
+
+        Raises:
+            ValueError: If parameters cannot be extracted
+        """
+        # Try string-based parsing first
+        feature_name_str = feature.name.name if hasattr(feature.name, "name") else str(feature.name)
+
+        if cls.PATTERN in feature_name_str:
+            distance_type = cls.get_distance_type(feature_name_str)
+            point1_feature, point2_feature = cls.get_point_features(feature_name_str)
+            return distance_type, point1_feature, point2_feature
+
+        # Fall back to configuration-based approach
+        source_features = feature.options.get_source_features()
+        if len(source_features) != 2:
+            raise ValueError(
+                f"Expected exactly 2 source features for geo distance, got {len(source_features)}: {source_features}"
+            )
+
+        source_feature_names = [sf.get_name() for sf in source_features]
+        point1_feature, point2_feature = source_feature_names
+
+        distance_type = feature.options.get(cls.DISTANCE_TYPE)
+        if distance_type is None:
+            raise ValueError(f"Could not extract distance_type from feature: {feature.name}")
+
+        # Validate distance type
+        if distance_type not in cls.DISTANCE_TYPES:
+            raise ValueError(
+                f"Unsupported distance type: {distance_type}. Supported types: {', '.join(cls.DISTANCE_TYPES.keys())}"
+            )
+
+        return distance_type, point1_feature, point2_feature
 
     @classmethod
     def _check_point_features_exist(cls, data: Any, point1_feature: str, point2_feature: str) -> None:
@@ -208,36 +304,3 @@ class GeoDistanceFeatureGroup(AbstractFeatureGroup):
             The calculated distance
         """
         raise NotImplementedError(f"_calculate_distance not implemented in {cls.__name__}")
-
-    @classmethod
-    def configurable_feature_chain_parser(cls) -> Optional[Type[FeatureChainParserConfiguration]]:
-        """
-        Returns the FeatureChainParserConfiguration class for this feature group.
-
-        This method allows the Engine to automatically create features with the correct
-        naming convention based on configuration options, rather than requiring explicit
-        feature names.
-
-        Returns:
-            A configured FeatureChainParserConfiguration class
-        """
-
-        # Define validation function within the method scope
-        def raise_unsupported_distance_type(distance_type: str) -> bool:
-            """Raise an error for unsupported distance type."""
-            raise ValueError(
-                f"Unsupported distance type: {distance_type}. Supported types: {list(cls.DISTANCE_TYPES.keys())}"
-            )
-
-        # Create and return the configured parser
-        return create_configurable_parser(
-            parse_keys=[
-                cls.DISTANCE_TYPE,
-                cls.POINT1_FEATURE,
-                cls.POINT2_FEATURE,
-            ],
-            feature_name_template="{distance_type}_distance__{point1_feature}__{point2_feature}",
-            validation_rules={
-                cls.DISTANCE_TYPE: lambda x: x in cls.DISTANCE_TYPES or raise_unsupported_distance_type(x),
-            },
-        )

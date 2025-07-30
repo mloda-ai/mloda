@@ -38,14 +38,10 @@ class TestMissingValueFeatureGroupIntegration:
             {MissingValueParserTestDataCreator, PandasMissingValueFeatureGroup}
         )
 
-        parser = MissingValueFeatureGroup.configurable_feature_chain_parser()
-        if parser is None:
-            raise ValueError("Feature chain parser is not available.")
-
         f1 = Feature(
             "x",
             Options(
-                {
+                context={
                     MissingValueFeatureGroup.IMPUTATION_METHOD: "mean",
                     DefaultOptionKeys.mloda_source_feature: "income",
                 }
@@ -53,45 +49,38 @@ class TestMissingValueFeatureGroupIntegration:
         )
 
         f2 = Feature(
-            "x",
+            "x2",
             Options(
-                {
+                context={
                     MissingValueFeatureGroup.IMPUTATION_METHOD: "mode",
                     DefaultOptionKeys.mloda_source_feature: "category",
                 }
             ),
         )
 
-        feature1 = parser.create_feature_without_options(f1)
-        feature2 = parser.create_feature_without_options(f2)
-
-        if feature1 is None or feature2 is None:
-            raise ValueError("Failed to create features using the parser.")
-
         # test with pre parsing the features
         results = mlodaAPI.run_all(
-            [feature1, feature2],
+            [f1, f2],
             compute_frameworks={PandasDataframe},
             plugin_collector=plugin_collector,
         )
-
         assert len(results) == 1
 
         # Find the DataFrame with the imputed features
         imputed_df = None
         for df in results:
-            if "mean_imputed__income" in df.columns and "mode_imputed__category" in df.columns:
+            if "x" in df.columns and "x2" in df.columns:
                 imputed_df = df
                 break
 
         assert imputed_df is not None, "DataFrame with imputed features not found"
 
         # Verify that missing values are imputed
-        assert abs(imputed_df["mean_imputed__income"].iloc[1] - 61666.67) < 1.0
-        assert abs(imputed_df["mean_imputed__income"].iloc[3] - 61666.67) < 1.0
+        assert abs(imputed_df["x"].iloc[1] - 61666.67) < 1.0
+        assert abs(imputed_df["x"].iloc[3] - 61666.67) < 1.0
 
-        assert imputed_df["mode_imputed__category"].iloc[1] == "A"
-        assert imputed_df["mode_imputed__category"].iloc[4] == "A"
+        assert imputed_df["x2"].iloc[1] == "A"
+        assert imputed_df["x2"].iloc[4] == "A"
 
         # test with mloda parsing the features
         results2 = mlodaAPI.run_all(
@@ -110,13 +99,9 @@ class TestMissingValueFeatureGroupIntegration:
             {MissingValueParserTestDataCreator, PandasMissingValueFeatureGroup}
         )
 
-        parser = MissingValueFeatureGroup.configurable_feature_chain_parser()
-        if parser is None:
-            raise ValueError("Feature chain parser is not available.")
-
         # Create a feature with constant imputation
         f1 = Feature(
-            "x",
+            "constant_imputed__category",
             Options(
                 {
                     MissingValueFeatureGroup.IMPUTATION_METHOD: "constant",
@@ -126,13 +111,8 @@ class TestMissingValueFeatureGroupIntegration:
             ),
         )
 
-        feature1 = parser.create_feature_without_options(f1)
-
-        if feature1 is None:
-            raise ValueError("Failed to create feature using the parser.")
-
         # test with pre parsing the features
-        results = mlodaAPI.run_all([feature1], compute_frameworks={PandasDataframe}, plugin_collector=plugin_collector)
+        results = mlodaAPI.run_all([f1], compute_frameworks={PandasDataframe}, plugin_collector=plugin_collector)
 
         assert len(results) == 1
 

@@ -129,8 +129,11 @@ class SklearnArtifact(BaseArtifact):
 
         # Get storage path from options or use default temp directory
         storage_path = None
-        if features.options:
-            storage_path = features.options.data.get("artifact_storage_path")
+
+        options = cls.get_singular_option_from_options(features)
+
+        if options:
+            storage_path = options.data.get("artifact_storage_path")
 
         if storage_path is None:
             storage_path = tempfile.gettempdir()
@@ -141,11 +144,9 @@ class SklearnArtifact(BaseArtifact):
         # Create a hash of the feature configuration for uniqueness
         # Exclude artifact-related keys to ensure consistent hashing
         config_data = {}
-        if features.options:
+        if options:
             config_data = {
-                k: v
-                for k, v in features.options.data.items()
-                if not k.startswith(feature_name) and k != "artifact_storage_path"
+                k: v for k, v in options.data.items() if not k.startswith(feature_name) and k != "artifact_storage_path"
             }
 
         # Convert non-serializable objects for hashing
@@ -215,8 +216,10 @@ class SklearnArtifact(BaseArtifact):
         """
         # Get storage path from options or use default temp directory
         storage_path = None
-        if features.options:
-            storage_path = features.options.data.get("artifact_storage_path")
+
+        options = cls.get_singular_option_from_options(features)
+        if options:
+            storage_path = options.data.get("artifact_storage_path")
 
         if storage_path is None:
             storage_path = tempfile.gettempdir()
@@ -246,18 +249,17 @@ class SklearnArtifact(BaseArtifact):
         except ImportError:
             raise ImportError("joblib is required for SklearnArtifact. Install with: pip install joblib")
 
-        print(f"DEBUG: SklearnArtifact.custom_loader called")
-
         # Get storage path
         storage_path = None
-        if features.options:
-            storage_path = features.options.data.get("artifact_storage_path")
+
+        options = cls.get_singular_option_from_options(features)
+        if options:
+            storage_path = options.data.get("artifact_storage_path")
         if storage_path is None:
             storage_path = tempfile.gettempdir()
 
         storage_dir = Path(storage_path)
         if not storage_dir.exists():
-            print("DEBUG: SklearnArtifact.custom_loader - storage directory does not exist")
             return None
 
         # Find all sklearn artifact files
@@ -272,25 +274,17 @@ class SklearnArtifact(BaseArtifact):
                 if filename.startswith("sklearn_artifact_"):
                     artifact_key = filename[len("sklearn_artifact_") :]
 
-                    print(f"DEBUG: SklearnArtifact.custom_loader - loading {artifact_key} from {file_path}")
-
                     # Load the artifact
                     artifact_data = joblib.load(file_path)
                     loaded_artifacts[artifact_key] = artifact_data
-
-                    print(f"DEBUG: SklearnArtifact.custom_loader - successfully loaded {artifact_key}")
 
             except Exception as e:
                 print(f"Warning: Failed to load artifact from {file_path}: {e}")
                 continue
 
         if loaded_artifacts:
-            print(
-                f"DEBUG: SklearnArtifact.custom_loader - loaded {len(loaded_artifacts)} artifacts: {list(loaded_artifacts.keys())}"
-            )
             return loaded_artifacts
         else:
-            print("DEBUG: SklearnArtifact.custom_loader - no artifacts found")
             return None
 
     @classmethod

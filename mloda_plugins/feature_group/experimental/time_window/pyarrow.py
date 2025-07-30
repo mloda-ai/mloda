@@ -49,7 +49,17 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
     @classmethod
     def _add_result_to_data(cls, data: pa.Table, feature_name: str, result: Any) -> pa.Table:
         """Add the result to the Table."""
-        return data.append_column(feature_name, result)
+        # Check if column already exists
+        if feature_name in data.schema.names:
+            # Column exists, replace it by removing the old one and adding the new one
+            column_index = data.schema.names.index(feature_name)
+            # Remove the existing column
+            data = data.remove_column(column_index)
+            # Add the new column
+            return data.append_column(feature_name, result)
+        else:
+            # Column doesn't exist, add it normally
+            return data.append_column(feature_name, result)
 
     @classmethod
     def _perform_window_operation(

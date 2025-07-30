@@ -1,5 +1,5 @@
 """
-Integration tests for the TimeWindowFeatureGroup with FeatureChainParserConfiguration.
+Integration tests for the TimeWindowFeatureGroup
 """
 
 from typing import Any, Dict
@@ -41,14 +41,10 @@ class TestTimeWindowFeatureParserIntegration:
             {TimeWindowParserTestDataCreator, PandasTimeWindowFeatureGroup}
         )
 
-        parser = TimeWindowFeatureGroup.configurable_feature_chain_parser()
-        if parser is None:
-            raise ValueError("Feature chain parser is not available.")
-
         f1 = Feature(
-            "x",
+            "x1",
             Options(
-                {
+                context={
                     TimeWindowFeatureGroup.WINDOW_FUNCTION: "avg",
                     TimeWindowFeatureGroup.WINDOW_SIZE: 3,
                     TimeWindowFeatureGroup.TIME_UNIT: "day",
@@ -58,9 +54,9 @@ class TestTimeWindowFeatureParserIntegration:
         )
 
         f2 = Feature(
-            "x",
+            "x2",
             Options(
-                {
+                context={
                     TimeWindowFeatureGroup.WINDOW_FUNCTION: "max",
                     TimeWindowFeatureGroup.WINDOW_SIZE: 5,
                     TimeWindowFeatureGroup.TIME_UNIT: "day",
@@ -69,33 +65,26 @@ class TestTimeWindowFeatureParserIntegration:
             ),
         )
 
-        feature1 = parser.create_feature_without_options(f1)
-        feature2 = parser.create_feature_without_options(f2)
-
-        if feature1 is None or feature2 is None:
-            raise ValueError("Failed to create features using the parser.")
-
         # test with pre parsing the features
         results = mlodaAPI.run_all(
-            [feature1, feature2],
+            [f1, f2],
             compute_frameworks={PandasDataframe},
             plugin_collector=plugin_collector,
         )
-
         assert len(results) == 1
 
         # Find the DataFrame with the time window features
         window_df = None
         for df in results:
-            if "avg_3_day_window__temperature" in df.columns and "max_5_day_window__humidity" in df.columns:
+            if "x1" in df.columns and "x2" in df.columns:
                 window_df = df
                 break
 
         assert window_df is not None, "DataFrame with time window features not found"
 
         # Verify that the time window features exist
-        assert "avg_3_day_window__temperature" in window_df.columns
-        assert "max_5_day_window__humidity" in window_df.columns
+        assert "x1" in window_df.columns
+        assert "x2" in window_df.columns
 
         # test with mloda parsing the features
         results2 = mlodaAPI.run_all(
@@ -114,15 +103,11 @@ class TestTimeWindowFeatureParserIntegration:
             {TimeWindowParserTestDataCreator, PandasTimeWindowFeatureGroup}
         )
 
-        parser = TimeWindowFeatureGroup.configurable_feature_chain_parser()
-        if parser is None:
-            raise ValueError("Feature chain parser is not available.")
-
         # Create features with different time units
         f1 = Feature(
-            "x",
+            "x1",
             Options(
-                {
+                context={
                     TimeWindowFeatureGroup.WINDOW_FUNCTION: "sum",
                     TimeWindowFeatureGroup.WINDOW_SIZE: 2,
                     TimeWindowFeatureGroup.TIME_UNIT: "day",
@@ -132,9 +117,9 @@ class TestTimeWindowFeatureParserIntegration:
         )
 
         f2 = Feature(
-            "x",
+            "x2",
             Options(
-                {
+                context={
                     TimeWindowFeatureGroup.WINDOW_FUNCTION: "min",
                     TimeWindowFeatureGroup.WINDOW_SIZE: 1,
                     TimeWindowFeatureGroup.TIME_UNIT: "week",
@@ -143,15 +128,9 @@ class TestTimeWindowFeatureParserIntegration:
             ),
         )
 
-        feature1 = parser.create_feature_without_options(f1)
-        feature2 = parser.create_feature_without_options(f2)
-
-        if feature1 is None or feature2 is None:
-            raise ValueError("Failed to create features using the parser.")
-
         # test with pre parsing the features
         results = mlodaAPI.run_all(
-            [feature1, feature2],
+            [f1, f2],
             compute_frameworks={PandasDataframe},
             plugin_collector=plugin_collector,
         )
@@ -161,15 +140,15 @@ class TestTimeWindowFeatureParserIntegration:
         # Find the DataFrame with the time window features
         window_df = None
         for df in results:
-            if "sum_2_day_window__temperature" in df.columns and "min_1_week_window__humidity" in df.columns:
+            if "x1" in df.columns and "x2" in df.columns:
                 window_df = df
                 break
 
         assert window_df is not None, "DataFrame with time window features not found"
 
         # Verify that the time window features exist
-        assert "sum_2_day_window__temperature" in window_df.columns
-        assert "min_1_week_window__humidity" in window_df.columns
+        assert "x2" in window_df.columns
+        assert "x1" in window_df.columns
 
         # test with mloda parsing the features
         results2 = mlodaAPI.run_all(

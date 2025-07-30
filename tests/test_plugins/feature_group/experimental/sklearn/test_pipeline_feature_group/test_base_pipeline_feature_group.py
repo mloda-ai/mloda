@@ -207,14 +207,6 @@ class TestSklearnPipelineFeatureGroup:
 
         assert not SklearnPipelineFeatureGroup._pipeline_matches_config(mock_pipeline, config)
 
-    def test_configurable_feature_chain_parser(self) -> None:
-        """Test configurable feature chain parser configuration."""
-        parser_config = SklearnPipelineFeatureGroup.configurable_feature_chain_parser()
-
-        assert parser_config is not None
-        # The parser should be a class, not an instance
-        assert hasattr(parser_config, "__call__")
-
     def test_abstract_methods_not_implemented(self) -> None:
         """Test that abstract methods raise NotImplementedError."""
         with pytest.raises(NotImplementedError):

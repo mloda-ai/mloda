@@ -96,7 +96,10 @@ def feature_set_constant() -> FeatureSet:
     """Create a feature set with a constant imputation feature and options."""
     feature_set = FeatureSet()
     feature_set.add(Feature("constant_imputed__category"))
-    feature_set.options = Options({"constant_value": "Unknown"})
+
+    for feature in feature_set.features:
+        feature.options = Options({"constant_value": "Unknown"})
+
     return feature_set
 
 
@@ -105,7 +108,10 @@ def feature_set_grouped() -> FeatureSet:
     """Create a feature set with a grouped imputation feature and options."""
     feature_set = FeatureSet()
     feature_set.add(Feature("mean_imputed__income"))
-    feature_set.options = Options({"group_by_features": ["group"]})
+
+    for feature in feature_set.features:
+        feature.options = Options({"group_by_features": ["group"]})
+
     return feature_set
 
 

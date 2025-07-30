@@ -9,10 +9,6 @@ from typing import Any, Dict, FrozenSet, List, Optional, Set, Type, Union
 
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_chainer.feature_chainer_parser_configuration import (
-    FeatureChainParserConfiguration,
-    create_configurable_parser,
-)
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.options import Options
@@ -44,8 +40,7 @@ class SklearnPipelineFeatureGroup(AbstractFeatureGroup):
 
     ## Configuration-Based Creation
 
-    SklearnPipelineFeatureGroup supports configuration-based creation through the
-    FeatureChainParserConfiguration mechanism. This allows features to be created
+    SklearnPipelineFeatureGroup supports configuration-based. This allows features to be created
     from options rather than explicit feature names.
 
     To create a pipeline feature using configuration:
@@ -81,33 +76,78 @@ class SklearnPipelineFeatureGroup(AbstractFeatureGroup):
     PIPELINE_STEPS = "pipeline_steps"
     PIPELINE_PARAMS = "pipeline_params"
 
+    # Define supported pipeline types
+    PIPELINE_TYPES = {
+        "preprocessing": "Standard preprocessing pipeline with imputation and scaling",
+        "scaling": "Feature scaling pipeline",
+        "imputation": "Missing value imputation pipeline",
+        "feature_engineering": "Feature engineering pipeline",
+    }
+
+    # Property mapping for new configuration-based approach
+    PROPERTY_MAPPING = {
+        PIPELINE_NAME: {
+            **PIPELINE_TYPES,  # All supported pipeline types as valid options
+            DefaultOptionKeys.mloda_context: True,
+            DefaultOptionKeys.mloda_default: None,  # Default is None as steps + params also work
+        },
+        PIPELINE_STEPS: {
+            "explanation": "List of pipeline steps as (name, transformer) tuples",
+            DefaultOptionKeys.mloda_context: True,
+            DefaultOptionKeys.mloda_default: None,  # Default is None as pipeline_types also work
+        },
+        PIPELINE_PARAMS: {
+            "explanation": "Pipeline parameters dictionary",
+            DefaultOptionKeys.mloda_context: True,
+            DefaultOptionKeys.mloda_default: None,  # Default is None as pipeline_types also work
+        },
+        DefaultOptionKeys.mloda_source_feature: {
+            "explanation": "Source features for sklearn pipeline (comma-separated)",
+            DefaultOptionKeys.mloda_context: True,
+        },
+    }
+
+    # Define patterns for parsing
+    PATTERN = "__"
+    PREFIX_PATTERN = r"^sklearn_pipeline_([\w]+)__"
+
     @staticmethod
     def artifact() -> Type[BaseArtifact] | None:
         """Return the artifact class for sklearn pipeline persistence."""
         return SklearnArtifact
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
-        """Extract source features from the pipeline feature name."""
-        mloda_source_features = FeatureChainParser.extract_source_feature(feature_name.name, self.PREFIX_PATTERN)
+        """Extract source features from either configuration-based options or string parsing."""
 
-        # Handle multiple source features separated by commas
-        if "," in mloda_source_features:
-            source_features = [f.strip() for f in mloda_source_features.split(",")]
-        else:
-            source_features = [mloda_source_features]
+        # Try string-based parsing first
+        _, source_features_str = FeatureChainParser.parse_feature_name(
+            feature_name, self.PATTERN, [self.PREFIX_PATTERN]
+        )
+        if source_features_str is not None:
+            # Handle multiple source features separated by commas
+            if "," in source_features_str:
+                source_features = [f.strip() for f in source_features_str.split(",")]
+            else:
+                source_features = [source_features_str]
+            return {Feature(feature_name) for feature_name in source_features}
 
-        return {Feature(feature_name) for feature_name in source_features}
-
-    # Define the prefix pattern for this feature group
-    PREFIX_PATTERN = r"^sklearn_pipeline_([\w]+)__"
+        # Fall back to configuration-based approach
+        _source_features = options.get_source_features()
+        return set(_source_features)
 
     @classmethod
     def get_pipeline_name(cls, feature_name: str) -> str:
         """Extract the pipeline name from the feature name."""
-        prefix_part = FeatureChainParser.get_prefix_part(feature_name, cls.PREFIX_PATTERN)
+        prefix_part, _ = FeatureChainParser.parse_feature_name(feature_name, cls.PATTERN, [cls.PREFIX_PATTERN])
         if prefix_part is None:
             raise ValueError(f"Invalid sklearn pipeline feature name format: {feature_name}")
-        return prefix_part
+
+        # Extract just the pipeline name from "sklearn_pipeline_<pipeline_name>"
+        if prefix_part.startswith("sklearn_pipeline_"):
+            pipeline_name = prefix_part[len("sklearn_pipeline_") :]
+            return pipeline_name
+        else:
+            raise ValueError(f"Invalid sklearn pipeline feature name format: {feature_name}")
 
     @classmethod
     def match_feature_group_criteria(
@@ -116,20 +156,33 @@ class SklearnPipelineFeatureGroup(AbstractFeatureGroup):
         options: Options,
         data_access_collection: Optional[Any] = None,
     ) -> bool:
-        """Check if feature name matches the expected pattern."""
-        if isinstance(feature_name, FeatureName):
-            feature_name = feature_name.name
+        """Check if feature name matches the expected pattern using unified parser with custom validation."""
+        # First, try the unified parser
 
-        try:
-            # Validate that this is a valid feature name for this feature group
-            if not FeatureChainParser.validate_feature_name(feature_name, cls.PREFIX_PATTERN):
+        has_pipeline_name = options.get(cls.PIPELINE_NAME)
+        has_pipeline_steps = options.get(cls.PIPELINE_STEPS)
+
+        feature_name = feature_name.name if isinstance(feature_name, FeatureName) else str(feature_name)
+
+        if has_pipeline_name is None and has_pipeline_steps is None:
+            if "sklearn_pipeline_" not in feature_name:
                 return False
 
-            # Extract pipeline name to ensure it's valid
-            pipeline_name = cls.get_pipeline_name(feature_name)
-            return len(pipeline_name) > 0
-        except ValueError:
+        base_match = FeatureChainParser.match_configuration_feature_chain_parser(
+            feature_name,
+            options,
+            property_mapping=cls.PROPERTY_MAPPING,
+            pattern=cls.PATTERN,
+            prefix_patterns=[cls.PREFIX_PATTERN],
+        )
+
+        if not base_match:
             return False
+
+        # For configuration-based features, must have exactly one of PIPELINE_NAME or PIPELINE_STEPS
+        if has_pipeline_name and has_pipeline_steps:
+            return False
+        return True
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -137,27 +190,20 @@ class SklearnPipelineFeatureGroup(AbstractFeatureGroup):
         Apply scikit-learn pipelines to features.
 
         Processes all requested features, determining the pipeline configuration
-        and source features from each feature name.
+        and source features from either string parsing or configuration-based options.
 
         Adds the pipeline results directly to the input data structure.
         """
         # Process each requested feature
-        for feature_name in features.get_all_names():
-            pipeline_name = cls.get_pipeline_name(feature_name)
-            source_features_str = FeatureChainParser.extract_source_feature(feature_name, cls.PREFIX_PATTERN)
-
-            # Handle multiple source features
-            if "," in source_features_str:
-                source_features = [f.strip() for f in source_features_str.split(",")]
-            else:
-                source_features = [source_features_str]
+        for feature in features.features:
+            pipeline_name, source_features = cls._extract_pipeline_name_and_source_features(feature)
 
             # Check that all source features exist
             for source_feature in source_features:
                 cls._check_source_feature_exists(data, source_feature)
 
             # Get pipeline configuration from options or create default
-            pipeline_config = cls._get_pipeline_config(features, feature_name, pipeline_name)
+            pipeline_config = cls._get_pipeline_config_from_feature(feature, pipeline_name)
 
             # Create unique artifact key for this pipeline
             artifact_key = f"sklearn_pipeline_{pipeline_name}__{','.join(source_features)}"
@@ -189,33 +235,92 @@ class SklearnPipelineFeatureGroup(AbstractFeatureGroup):
             result = cls._apply_pipeline(data, source_features, fitted_pipeline)
 
             # Add result to data
-            data = cls._add_result_to_data(data, feature_name, result)
+            data = cls._add_result_to_data(data, feature.get_name(), result)
 
         return data
 
     @classmethod
-    def _get_pipeline_config(cls, features: FeatureSet, feature_name: str, pipeline_name: str) -> Dict[str, Any]:
+    def _extract_pipeline_name_and_source_features(cls, feature: Feature) -> tuple[str, List[str]]:
         """
-        Get pipeline configuration from options or create default configuration.
+        Extract pipeline name and source features from a feature.
+
+        Tries string-based parsing first, falls back to configuration-based approach.
 
         Args:
-            features: The feature set
-            feature_name: The name of the feature
+            feature: The feature to extract parameters from
+
+        Returns:
+            Tuple of (pipeline_name, source_features_list)
+
+        Raises:
+            ValueError: If parameters cannot be extracted
+        """
+        # Try string-based parsing first
+        feature_name_str = feature.name.name if hasattr(feature.name, "name") else str(feature.name)
+
+        if cls.PATTERN in feature_name_str:
+            pipeline_name = cls.get_pipeline_name(feature_name_str)
+            _, source_features_str = FeatureChainParser.parse_feature_name(
+                feature_name_str, cls.PATTERN, [cls.PREFIX_PATTERN]
+            )
+
+            if source_features_str is not None:
+                # Handle multiple source features
+                if "," in source_features_str:
+                    source_features = [f.strip() for f in source_features_str.split(",")]
+                else:
+                    source_features = [source_features_str]
+
+                return pipeline_name, source_features
+
+        # Fall back to configuration-based approach
+        pipeline_name = feature.options.get(cls.PIPELINE_NAME)
+        pipeline_steps = feature.options.get(cls.PIPELINE_STEPS)
+        source_features_set = feature.options.get_source_features()
+        source_features = [sf.get_name() for sf in source_features_set]
+
+        # Handle mutual exclusivity: either PIPELINE_NAME or PIPELINE_STEPS
+        if pipeline_name is not None:
+            # Using predefined pipeline
+            if not source_features:
+                raise ValueError(f"Could not extract source features from: {feature.name}")
+            return pipeline_name, source_features
+        elif pipeline_steps is not None:
+            # Using custom pipeline steps - use "custom" as pipeline name
+            if not source_features:
+                raise ValueError(f"Could not extract source features from: {feature.name}")
+            return "custom", source_features
+        else:
+            raise ValueError(
+                f"Could not extract pipeline configuration from: {feature.name}. Must provide either PIPELINE_NAME or PIPELINE_STEPS."
+            )
+
+    @classmethod
+    def _get_pipeline_config_from_feature(cls, feature: Feature, pipeline_name: str) -> Dict[str, Any]:
+        """
+        Get pipeline configuration from feature options or create default configuration.
+
+        Args:
+            feature: The feature containing options
             pipeline_name: The name of the pipeline
 
         Returns:
             Pipeline configuration dictionary
         """
-        # Try to get configuration from options
-        if features.options and hasattr(features.options, "data"):
-            pipeline_steps = features.options.data.get(cls.PIPELINE_STEPS)
-            pipeline_params = features.options.data.get(cls.PIPELINE_PARAMS, {})
+        # Try to get configuration from feature options
+        pipeline_steps = feature.options.get(cls.PIPELINE_STEPS)
+        pipeline_params = feature.options.get(cls.PIPELINE_PARAMS) or {}
 
-            if pipeline_steps:
-                # Handle frozenset case due to options - convert back to list for sklearn
-                if isinstance(pipeline_steps, frozenset):
-                    pipeline_steps = cls._reconstruct_pipeline_steps_from_frozenset(pipeline_steps)
-                return {"steps": pipeline_steps, "params": pipeline_params}
+        if pipeline_steps:
+            # Handle frozenset case due to options - convert back to list for sklearn
+            if isinstance(pipeline_steps, frozenset):
+                pipeline_steps = cls._reconstruct_pipeline_steps_from_frozenset(pipeline_steps)
+
+            # Handle frozenset case for pipeline_params - convert back to dict
+            if isinstance(pipeline_params, frozenset):
+                pipeline_params = cls._reconstruct_pipeline_params_from_frozenset(pipeline_params)
+
+            return {"steps": pipeline_steps, "params": pipeline_params}
 
         # Create default configuration based on pipeline name
         return cls._create_default_pipeline_config(pipeline_name)
@@ -251,6 +356,22 @@ class SklearnPipelineFeatureGroup(AbstractFeatureGroup):
         return steps_list
 
     @classmethod
+    def _reconstruct_pipeline_params_from_frozenset(cls, pipeline_params_frozenset: FrozenSet[Any]) -> Dict[str, Any]:
+        """
+        Reconstruct pipeline parameters from frozenset back to dictionary.
+
+        Args:
+            pipeline_params_frozenset: Frozenset containing (key, value) tuples
+
+        Returns:
+            Dictionary of pipeline parameters
+        """
+        params_dict = {}
+        for key, value in pipeline_params_frozenset:
+            params_dict[key] = value
+        return params_dict
+
+    @classmethod
     def _get_transformer_map(cls) -> Dict[str, Any]:
         """
         Get a mapping of transformer class names to transformer instances.
@@ -278,9 +399,15 @@ class SklearnPipelineFeatureGroup(AbstractFeatureGroup):
             # Try to import SimpleImputer from different locations depending on sklearn version
             try:
                 from sklearn.impute import SimpleImputer
+
+                transformer_map["SimpleImputer"] = SimpleImputer(strategy="mean")
             except ImportError:
-                from sklearn.preprocessing import Imputer as SimpleImputer
-            transformer_map["SimpleImputer"] = SimpleImputer(strategy="mean")
+                try:
+                    from sklearn.preprocessing import Imputer
+
+                    transformer_map["SimpleImputer"] = Imputer(strategy="mean")
+                except ImportError:
+                    pass
         except ImportError:
             pass
 
@@ -324,9 +451,12 @@ class SklearnPipelineFeatureGroup(AbstractFeatureGroup):
 
                 components["SimpleImputer"] = SimpleImputer
             except ImportError:
-                from sklearn.preprocessing import Imputer as SimpleImputer
+                try:
+                    from sklearn.preprocessing import Imputer
 
-                components["SimpleImputer"] = SimpleImputer
+                    components["SimpleImputer"] = Imputer
+                except ImportError:
+                    pass
 
         except ImportError:
             raise ImportError(
@@ -348,14 +478,14 @@ class SklearnPipelineFeatureGroup(AbstractFeatureGroup):
         """
         sklearn_components = cls._import_sklearn_components()
         StandardScaler = sklearn_components["StandardScaler"]
-        SimpleImputer = sklearn_components["SimpleImputer"]
+        SimpleImputer = sklearn_components.get("SimpleImputer")
 
         # Define common pipeline configurations
-        if pipeline_name == "preprocessing":
+        if pipeline_name == "preprocessing" and SimpleImputer:
             return {"steps": [("imputer", SimpleImputer(strategy="mean")), ("scaler", StandardScaler())], "params": {}}
         elif pipeline_name == "scaling":
             return {"steps": [("scaler", StandardScaler())], "params": {}}
-        elif pipeline_name == "imputation":
+        elif pipeline_name == "imputation" and SimpleImputer:
             return {"steps": [("imputer", SimpleImputer(strategy="mean"))], "params": {}}
         else:
             # Default to simple scaling
@@ -473,26 +603,3 @@ class SklearnPipelineFeatureGroup(AbstractFeatureGroup):
             The updated data
         """
         raise NotImplementedError(f"_add_result_to_data not implemented in {cls.__name__}")
-
-    @classmethod
-    def configurable_feature_chain_parser(cls) -> Optional[Type[FeatureChainParserConfiguration]]:
-        """
-        Returns the FeatureChainParserConfiguration class for this feature group.
-
-        This method allows the Engine to automatically create features with the correct
-        naming convention based on configuration options, rather than requiring explicit
-        feature names.
-
-        Returns:
-            A configured FeatureChainParserConfiguration class
-        """
-        return create_configurable_parser(
-            parse_keys=[
-                cls.PIPELINE_NAME,
-                DefaultOptionKeys.mloda_source_feature,
-            ],
-            feature_name_template="sklearn_pipeline_{pipeline_name}__{mloda_source_feature}",
-            validation_rules={
-                cls.PIPELINE_NAME: lambda x: isinstance(x, str) and len(x) > 0,
-            },
-        )

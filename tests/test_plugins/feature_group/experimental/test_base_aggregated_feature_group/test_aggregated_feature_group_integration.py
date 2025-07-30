@@ -38,14 +38,10 @@ class TestAggregatedFeatureGroupIntegration:
             {AggregatedParserTestDataCreator, PandasAggregatedFeatureGroup}
         )
 
-        parser = AggregatedFeatureGroup.configurable_feature_chain_parser()
-        if parser is None:
-            raise ValueError("Feature chain parser is not available.")
-
         f1 = Feature(
-            "x",
+            "sum_sales",
             Options(
-                {
+                context={
                     AggregatedFeatureGroup.AGGREGATION_TYPE: "sum",
                     DefaultOptionKeys.mloda_source_feature: "Sales",
                 }
@@ -53,21 +49,18 @@ class TestAggregatedFeatureGroupIntegration:
         )
 
         f2 = Feature(
-            "x",
+            "avg_revenue",
             Options(
-                {AggregatedFeatureGroup.AGGREGATION_TYPE: "avg", DefaultOptionKeys.mloda_source_feature: "Revenue"}
+                context={
+                    AggregatedFeatureGroup.AGGREGATION_TYPE: "avg",
+                    DefaultOptionKeys.mloda_source_feature: "Revenue",
+                }
             ),
         )
 
-        feature1 = parser.create_feature_without_options(f1)
-        feature2 = parser.create_feature_without_options(f2)
-
-        if feature1 is None or feature2 is None:
-            raise ValueError("Failed to create features using the parser.")
-
         # test with pre parsing the features
         results = mlodaAPI.run_all(
-            [feature1, feature2],
+            [f1, f2],
             compute_frameworks={PandasDataframe},
             plugin_collector=plugin_collector,
         )
@@ -77,12 +70,12 @@ class TestAggregatedFeatureGroupIntegration:
         # Find the DataFrame with the aggregated feature
         agg_df = None
         for df in results:
-            if "sum_aggr__Sales" in df.columns and "avg_aggr__Revenue" in df.columns:
+            if "avg_revenue" in df.columns and "sum_sales" in df.columns:
                 agg_df = df
                 break
 
         assert agg_df is not None, "DataFrame with aggregated feature not found"
-        assert agg_df["sum_aggr__Sales"].iloc[0] == 1500  # Sum of [100, 200, 300, 400, 500]
+        assert agg_df["sum_sales"].iloc[0] == 1500  # Sum of [100, 200, 300, 400, 500]
 
         # test with mloda parsing the features
         results2 = mlodaAPI.run_all(

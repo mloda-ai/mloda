@@ -6,7 +6,7 @@
 | Pygments                               | 2.19.2          | BSD License                                                                    |
 | Send2Trash                             | 1.8.3           | BSD License                                                                    |
 | annotated-types                        | 0.7.0           | MIT License                                                                    |
-| anyio                                  | 4.9.0           | MIT License                                                                    |
+| anyio                                  | 4.10.0          | UNKNOWN                                                                        |
 | argon2-cffi                            | 25.1.0          | UNKNOWN                                                                        |
 | argon2-cffi-bindings                   | 25.1.0          | UNKNOWN                                                                        |
 | arrow                                  | 1.3.0           | Apache Software License                                                        |
@@ -18,7 +18,7 @@
 | beautifulsoup4                         | 4.13.4          | MIT License                                                                    |
 | bleach                                 | 6.2.0           | Apache Software License                                                        |
 | cachetools                             | 6.1.0           | MIT License                                                                    |
-| certifi                                | 2025.7.14       | Mozilla Public License 2.0 (MPL 2.0)                                           |
+| certifi                                | 2025.8.3        | Mozilla Public License 2.0 (MPL 2.0)                                           |
 | cffi                                   | 1.17.1          | MIT License                                                                    |
 | chardet                                | 5.2.0           | GNU Lesser General Public License v2 or later (LGPLv2+)                        |
 | charset-normalizer                     | 3.4.2           | MIT License                                                                    |
@@ -43,7 +43,7 @@
 | idna                                   | 3.10            | BSD License                                                                    |
 | importlib_metadata                     | 8.7.0           | Apache Software License                                                        |
 | iniconfig                              | 2.1.0           | MIT License                                                                    |
-| ipykernel                              | 6.30.0          | BSD 3-Clause License                                                           |
+| ipykernel                              | 6.30.1          | BSD 3-Clause License                                                           |
 |                                        |                 |                                                                                |
 |                                        |                 | Copyright (c) 2015, IPython Development Team                                   |
 |                                        |                 |                                                                                |
@@ -98,7 +98,7 @@
 | mistune                                | 3.1.3           | BSD License                                                                    |
 | mktestdocs                             | 0.2.5           | MIT                                                                            |
 | mmh3                                   | 4.1.0           | MIT License                                                                    |
-| mypy                                   | 1.17.0          | MIT License                                                                    |
+| mypy                                   | 1.17.1          | MIT License                                                                    |
 | mypy_extensions                        | 1.1.0           | UNKNOWN                                                                        |
 | nbclient                               | 0.10.2          | BSD License                                                                    |
 | nbconvert                              | 7.16.6          | BSD License                                                                    |
@@ -126,7 +126,7 @@
 | pexpect                                | 4.9.0           | ISC License (ISCL)                                                             |
 | platformdirs                           | 4.3.8           | MIT License                                                                    |
 | pluggy                                 | 1.6.0           | MIT License                                                                    |
-| polars                                 | 1.31.0          | MIT License                                                                    |
+| polars                                 | 1.32.0          | MIT License                                                                    |
 | prometheus_client                      | 0.22.1          | UNKNOWN                                                                        |
 | prompt_toolkit                         | 3.0.51          | BSD License                                                                    |
 | psutil                                 | 7.0.0           | BSD License                                                                    |
@@ -146,9 +146,9 @@
 | python-dateutil                        | 2.9.0.post0     | Apache Software License; BSD License                                           |
 | python-json-logger                     | 3.3.0           | BSD License                                                                    |
 | pytz                                   | 2025.2          | MIT License                                                                    |
-| pyzmq                                  | 27.0.0          | BSD License                                                                    |
+| pyzmq                                  | 27.0.1          | BSD License                                                                    |
 | referencing                            | 0.36.2          | UNKNOWN                                                                        |
-| regex                                  | 2025.7.33       | UNKNOWN                                                                        |
+| regex                                  | 2025.7.34       | UNKNOWN                                                                        |
 | requests                               | 2.32.4          | Apache Software License                                                        |
 | rfc3339-validator                      | 0.1.4           | MIT License                                                                    |
 | rfc3986-validator                      | 0.1.1           | MIT License                                                                    |
@@ -171,7 +171,7 @@
 | threadpoolctl                          | 3.6.0           | BSD License                                                                    |
 | tinycss2                               | 1.4.0           | BSD License                                                                    |
 | tornado                                | 6.5.1           | Apache Software License                                                        |
-| tox                                    | 4.28.3          | MIT License                                                                    |
+| tox                                    | 4.28.4          | MIT License                                                                    |
 | tqdm                                   | 4.67.1          | MIT License; Mozilla Public License 2.0 (MPL 2.0)                              |
 | traitlets                              | 5.14.3          | BSD License                                                                    |
 | typeguard                              | 4.4.4           | UNKNOWN                                                                        |
@@ -184,7 +184,7 @@
 | tzdata                                 | 2025.2          | Apache Software License                                                        |
 | uri-template                           | 1.3.0           | MIT License                                                                    |
 | urllib3                                | 2.5.0           | UNKNOWN                                                                        |
-| virtualenv                             | 20.32.0         | MIT License                                                                    |
+| virtualenv                             | 20.33.0         | MIT License                                                                    |
 | webcolors                              | 24.11.1         | BSD License                                                                    |
 | webencodings                           | 0.5.1           | BSD License                                                                    |
 | websocket-client                       | 1.8.0           | Apache Software License                                                        |

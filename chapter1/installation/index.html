@@ -107,8 +107,6 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../in_depth/feature-group-matching/">Feature Group Matching</a>
                 </li>
-                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/options-architecture/">Options Architecture</a>
-                </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../in_depth/property-mapping/">PROPERTY_MAPPING</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../in_depth/feature-group-testing/">Feature Group Testing</a>
@@ -172,8 +170,8 @@ pip install .
 </code></pre>
 <h2 id="3-verify-installation">3. Verify Installation</h2>
 <p>To verify the installation, run:</p>
-<pre><code class="language-python">import mloda
-mloda.__version__
+<pre><code class="language-python">from importlib import metadata
+print(metadata.version(&quot;mloda&quot;))
 </code></pre>
               
             </div>

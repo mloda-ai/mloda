@@ -15,6 +15,6 @@ pip install .
 ## 3. Verify Installation
 To verify the installation, run:
 ``` python
-import mloda
-mloda.__version__
+from importlib import metadata
+print(metadata.version("mloda"))
 ```

@@ -32,7 +32,6 @@ nav:
     - Feature Groups:
       - Feature Chain Parser: in_depth/feature-chain-parser.md
       - Feature Group Matching: in_depth/feature-group-matching.md
-      - Options Architecture: in_depth/options-architecture.md
       - PROPERTY_MAPPING: in_depth/property-mapping.md
       - Feature Group Testing: in_depth/feature-group-testing.md
       - Feature Group Versioning: in_depth/feature-group-version.md
@@ -47,7 +46,6 @@ nav:
     - Need Help: need-help.md
 
   # todo
-  #- License in Depth: need-help.md
   #- Extender in Depth: need-help.md
 
 theme:

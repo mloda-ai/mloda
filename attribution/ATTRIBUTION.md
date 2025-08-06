@@ -105,7 +105,7 @@
 | nbformat                               | 5.10.4          | BSD License                                                                    |
 | nest-asyncio                           | 1.6.0           | BSD License                                                                    |
 | nltk                                   | 3.9.1           | Apache Software License                                                        |
-| notebook                               | 7.4.4           | BSD License                                                                    |
+| notebook                               | 7.4.5           | BSD License                                                                    |
 | notebook_shim                          | 0.2.4           | BSD License                                                                    |
 | numpy                                  | 2.2.6           | BSD License                                                                    |
 | opentelemetry-api                      | 1.36.0          | UNKNOWN                                                                        |
@@ -184,7 +184,7 @@
 | tzdata                                 | 2025.2          | Apache Software License                                                        |
 | uri-template                           | 1.3.0           | MIT License                                                                    |
 | urllib3                                | 2.5.0           | UNKNOWN                                                                        |
-| virtualenv                             | 20.33.0         | MIT License                                                                    |
+| virtualenv                             | 20.33.1         | MIT License                                                                    |
 | webcolors                              | 24.11.1         | BSD License                                                                    |
 | webencodings                           | 0.5.1           | BSD License                                                                    |
 | websocket-client                       | 1.8.0           | Apache Software License                                                        |

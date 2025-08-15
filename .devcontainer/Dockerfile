@@ -19,23 +19,30 @@ RUN apt-get update && apt-get install -y \
 
 USER vscode
 
-# Copy project files initially into the container
-COPY ../ /workspace
+# Set consistent Python path for build and runtime
+ENV PYTHON_PATH=/usr/local/bin/python3.10
 
-# Set correct permissions
+# Copy project files with correct ownership
+COPY --chown=vscode:vscode ../ /workspace
 RUN sudo chown -R vscode:vscode /workspace
 
 # Add .bashrc to change directory to /workspace
 RUN echo 'cd /workspace' >> /home/vscode/.bashrc
 
-# Install dependencies
-RUN pip install --no-cache-dir -r /workspace/docs/requirements.txt -r /workspace/tests/requirements-test.txt
-RUN pip install --no-cache-dir tox
+RUN $PYTHON_PATH -m pip install --no-cache-dir -r /workspace/docs/requirements.txt \
+     -r /workspace/tests/requirements-test.txt \
+     tox
 
-# run tox -> container starts with tox env already installed
-RUN cd /workspace && ~/.local/bin/tox || tox || echo "Tox failed but continuing..."
+# Set tox work directory in user's home to avoid volume mount conflicts
+ENV TOX_WORK_DIR=/home/vscode/.tox-cache
 
-WORKDIR /workspace 
+# Create tox cache directory with proper ownership
+RUN mkdir -p $TOX_WORK_DIR && chown -R vscode:vscode $TOX_WORK_DIR
+
+# Run tox using the same consistent Python path with custom work directory
+RUN cd /workspace && $PYTHON_PATH -m tox --workdir $TOX_WORK_DIR || echo "Tox failed but continuing..."
+
+WORKDIR /workspace
 
 # Default shell
 CMD ["bash", "-c", "cd /workspace && exec bash"]

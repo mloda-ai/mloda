@@ -1,0 +1,15 @@
+{
+  "name": "mloda Dev Container 2",
+  "dockerComposeFile": ["../../.devcontainer/docker-compose.yml"],
+  "service": "ai-agent-2",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+  "workspaceFolder": "/workspace/.devcontainer/mloda.code-workspace",
+  "postAttachCommand": "cd /workspace",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "overrideCommand": false,
+  "forwardPorts": [8001],
+  "remoteUser": "vscode",
+  "shutdownAction": "stopCompose"
+}

@@ -1,10 +1,22 @@
 services:
-  ki-agent-1:
+  # Base image service - builds the image once
+  mloda-base:
     build:
       context: ..
       dockerfile: .devcontainer/Dockerfile
+    image: mloda-devcontainer:latest
+    command: "true"  # Exit immediately, just used for building
+    networks:
+      - dev-network
+
+  ai-agent-1:
+    image: mloda-devcontainer:latest
+    pull_policy: never
+    depends_on:
+      mloda-base:
+        condition: service_completed_successfully
     volumes:
-      - ki_agent_1_data:/workspace  
+      - ai_agent_1_data:/workspace  
       - ~/.ssh:/home/vscode/.ssh:ro
       - ~/.gitconfig:/home/vscode/.gitconfig:ro
       - ~/.git-credentials:/home/vscode/.git-credentials:ro
@@ -13,16 +25,18 @@ services:
     command: bash -c "cd /workspace && exec bash"  # Change directory to /workspace
     stdin_open: true    # Keep STDIN open for interaction
     tty: true           # Allocate a pseudo-TTY
-    container_name: ki-agent-1
+    container_name: ai-agent-1
     networks:
       - dev-network
 
-  ki-agent-2:
-    build:
-      context: ..
-      dockerfile: .devcontainer/Dockerfile
+  ai-agent-2:
+    image: mloda-devcontainer:latest
+    pull_policy: never
+    depends_on:
+      mloda-base:
+        condition: service_completed_successfully
     volumes:
-      - ki_agent_2_data:/workspace  
+      - ai_agent_2_data:/workspace  
       - ~/.ssh:/home/vscode/.ssh:ro
       - ~/.gitconfig:/home/vscode/.gitconfig:ro
       - ~/.git-credentials:/home/vscode/.git-credentials:ro
@@ -31,13 +45,55 @@ services:
     command: bash -c "cd /workspace && exec bash"  # Change directory to /workspace
     stdin_open: true    # Keep STDIN open for interaction
     tty: true           # Allocate a pseudo-TTY
-    container_name: ki-agent-2
+    container_name: ai-agent-2
+    networks:
+      - dev-network
+
+  ai-agent-3:
+    image: mloda-devcontainer:latest
+    pull_policy: never
+    depends_on:
+      mloda-base:
+        condition: service_completed_successfully
+    volumes:
+      - ai_agent_3_data:/workspace  
+      - ~/.ssh:/home/vscode/.ssh:ro
+      - ~/.gitconfig:/home/vscode/.gitconfig:ro
+      - ~/.git-credentials:/home/vscode/.git-credentials:ro
+    ports:
+      - "8002:8000"
+    command: bash -c "cd /workspace && exec bash"  # Change directory to /workspace
+    stdin_open: true    # Keep STDIN open for interaction
+    tty: true           # Allocate a pseudo-TTY
+    container_name: ai-agent-3
+    networks:
+      - dev-network
+
+  ai-agent-4:
+    image: mloda-devcontainer:latest
+    pull_policy: never
+    depends_on:
+      mloda-base:
+        condition: service_completed_successfully
+    volumes:
+      - ai_agent_4_data:/workspace  
+      - ~/.ssh:/home/vscode/.ssh:ro
+      - ~/.gitconfig:/home/vscode/.gitconfig:ro
+      - ~/.git-credentials:/home/vscode/.git-credentials:ro
+    ports:
+      - "8003:8000"
+    command: bash -c "cd /workspace && exec bash"  # Change directory to /workspace
+    stdin_open: true    # Keep STDIN open for interaction
+    tty: true           # Allocate a pseudo-TTY
+    container_name: ai-agent-4
     networks:
       - dev-network
 
 volumes:
-  ki_agent_1_data:
-  ki_agent_2_data:
+  ai_agent_1_data:
+  ai_agent_2_data:
+  ai_agent_3_data:
+  ai_agent_4_data:
 
 networks:
   dev-network:

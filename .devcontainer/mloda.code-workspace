@@ -1,0 +1,34 @@
+{
+  "folders": [
+    {
+      "name": "mloda",
+      "path": ".."
+    }
+  ],
+  "settings": {
+    "terminal.integrated.cwd": "/workspace",
+    "terminal.integrated.shell.linux": "/bin/bash",
+    "files.exclude": {
+      "**/*egg-info": true,
+      "**/*_cache": true,
+      "**/__pycache__": true
+    },
+    "python.analysis.completeFunctionParens": true,
+    "python.languageServer": "Pylance",
+    "editor.formatOnSave": true,
+    "editor.formatOnPaste": true,
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "markdown-mermaid.languages": [
+      "mermaid"
+    ]
+  },
+  "extensions": {
+    "recommendations": [
+      "ms-python.python",
+      "ms-python.vscode-pylance",
+      "ms-azuretools.vscode-docker",
+      "charliermarsh.ruff",
+      "bierner.markdown-mermaid"
+    ]
+  }
+}

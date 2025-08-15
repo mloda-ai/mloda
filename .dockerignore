@@ -1,0 +1,18 @@
+# Exclude build artifacts and caches
+.tox/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.git/
+
+# Exclude development files
+.vscode/
+.devcontainer/
+
+# Exclude temporary files
+*.tmp
+*.log
+.DS_Store

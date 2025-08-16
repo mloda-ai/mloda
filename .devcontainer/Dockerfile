@@ -19,6 +19,8 @@ RUN apt-get update && apt-get install -y \
 
 USER vscode
 
+RUN curl -fsSL https://claude.ai/install.sh | bash
+
 # Set consistent Python path for build and runtime
 ENV PYTHON_PATH=/usr/local/bin/python3.10
 

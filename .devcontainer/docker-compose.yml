@@ -89,6 +89,12 @@ services:
     networks:
       - dev-network
 
+  context7:
+    # claude mcp add --transport http context7 http://localhost:8765/mcp
+    image: mcp/context7
+    ports:
+      - "8765:8080"
+
 volumes:
   ai_agent_1_data:
   ai_agent_2_data:

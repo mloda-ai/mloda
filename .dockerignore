@@ -6,11 +6,9 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 *.egg-info/
-.git/
 
 # Exclude development files
 .vscode/
-.devcontainer/
 
 # Exclude temporary files
 *.tmp

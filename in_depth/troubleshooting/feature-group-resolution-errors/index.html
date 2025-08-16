@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="../../../img/favicon.ico" />
+    <title>Feature Group Resolution Errors - mloda docs</title>
+    <link rel="stylesheet" href="../../../css/theme.css" />
+    <link rel="stylesheet" href="../../../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Feature Group Resolution Errors";
+        var mkdocs_page_input_path = "in_depth/troubleshooting/feature-group-resolution-errors.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../../../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="../../.." class="icon icon-home"> mloda docs
+        </a>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption"><span class="caption-text">Home</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../..">mloda</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">mloda Concepts</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../../examples/mloda_basics/0_table_of_content/">Table of Content</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../../examples/mloda_basics/1_ml_mloda_intro/">Intro to the core interfaces of mloda</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../../examples/mloda_basics/2_ml_advantage_process_focus/">What makes mloda unique?</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../../examples/mloda_basics/3_ml_data_feature_feature_groups/">Data, Feature, FeatureSets and FeatureGroups in mloda</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../../examples/mloda_basics/4_ml_data_producers_user_owner/">Data Producer, User, Owner in mloda</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Getting Started</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../../chapter1/installation/">Installation</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../../chapter1/api-request/">API Request</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../../chapter1/feature-groups/">Feature Groups</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../../chapter1/compute-frameworks/">Compute Frameworks</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../../chapter1/extender/">Extender</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">In Depth - Basics</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../mloda-api/">mloda API</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../access-feature-data/">(Feature) data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../join_data/">Join data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../filter_data/">Filter data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../artifacts/">Artifacts</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">In Depth - Advanced</span></p>
+              <ul class="current">
+                  <li class="toctree-l1"><a class="reference internal" href="../../data-quality/">Data quality</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../domain/">Domain concept</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../data-access-patterns/">Data Access Patterns</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Compute Frameworks</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../framework-transformers/">Framework Transformers</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../compute-framework-integration/">Compute Framework Integration</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../framework-connection-object/">Framework Connection Object</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../feature-chain-parser/">Feature Chain Parser</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../feature-group-matching/">Feature Group Matching</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../property-mapping/">PROPERTY_MAPPING</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../feature-group-testing/">Feature Group Testing</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../feature-group-version/">Feature Group Versioning</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../multiple_result_columns/">Multiple Result Columns</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Plugin System</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../plugin-loader/">Plugin Loader</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1 current"><a class="reference internal current" >Troubleshooting</a>
+    <ul class="current">
+                <li class="toctree-l2 current"><a class="reference internal current" href="#">Feature Group Resolution Errors</a>
+    <ul class="current">
+    <li class="toctree-l3"><a class="reference internal" href="#multiple-feature-groups-error">Multiple Feature Groups Error</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#the-problem">The Problem</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#solutions">Solutions</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#related-documentation">Related Documentation</a>
+    </li>
+    </ul>
+                </li>
+    </ul>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Development</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../../development/">Contributors</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../../license/">License - Apache 2.0</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../../missing/">Missing</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Need Help?</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../../faq/">FAQ</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../../need-help/">Need Help</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../..">mloda docs</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../../.." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">In Depth - Advanced</li>
+          <li class="breadcrumb-item">Troubleshooting</li>
+      <li class="breadcrumb-item active">Feature Group Resolution Errors</li>
+    <li class="wy-breadcrumbs-aside">
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="feature-group-resolution-errors">Feature Group Resolution Errors</h1>
+<h2 id="multiple-feature-groups-error">Multiple Feature Groups Error</h2>
+<h3 id="the-problem">The Problem</h3>
+<pre><code>ValueError: Multiple feature groups {&lt;feature_groups&gt;} found for feature name: &lt;feature_name&gt;
+</code></pre>
+<p>This error occurs when multiple feature groups claim they can handle the same feature. Each feature must resolve to exactly one feature group to prevent conflicts.</p>
+<p>If you are running this in a notebook, please restart the kernel to clear any cached plugins. 
+If you experience this multiple times, please open an <a href="https://github.com/mloda-ai/mloda/issues/">issue</a> or <a href="mailto:info@mloda.ai">contact the maintainers</a>, so that we prioritize this.</p>
+<h3 id="solutions">Solutions</h3>
+<h4 id="1-use-plugincollector-to-enable-or-disable-feature-groups">1. Use PlugInCollector to enable or disable feature groups</h4>
+<p>Control which feature groups are loaded to prevent conflicts:</p>
+<pre><code class="language-python">from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
+
+# Disable specific conflicting feature groups
+collector = PlugInCollector.disabled_feature_groups({ConflictingFeatureGroupA, ConflictingFeatureGroupB})
+
+# Or enable only specific feature groups you need
+collector = PlugInCollector.enabled_feature_groups({RequiredFeatureGroupA, RequiredFeatureGroupB})
+</code></pre>
+<h4 id="2-avoid-loading-all-plugins">2. Avoid loading all plugins</h4>
+<p>You can load plugins by importing the module as a class.</p>
+<p>But you can also import just plugins from subfolders.</p>
+<pre><code class="language-python">from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
+
+plugin_loader = PluginLoader()
+plugin_loader.load_group(&quot;feature_group&quot;) # load plugins only from mloda_plugins.feature_group
+</code></pre>
+<h4 id="3-use-domains-to-separate-feature-groups">3. Use Domains to Separate Feature Groups</h4>
+<pre><code class="language-python">@classmethod
+def get_domain(cls):
+    return &quot;sales&quot;  # Makes this FG only handle 'sales' domain features
+</code></pre>
+<h2 id="related-documentation">Related Documentation</h2>
+<ul>
+<li><a href="../../feature-group-matching/">Feature Group Matching</a></li>
+<li><a href="../../property-mapping/">PROPERTY_MAPPING Configuration</a></li>
+<li><a href="../../feature-group-testing/">Feature Group Testing</a></li>
+</ul>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../../plugin-loader/" class="btn btn-neutral float-left" title="Plugin Loader"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../../../development/" class="btn btn-neutral float-right" title="Contributors">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+    
+      <span><a href="../../plugin-loader/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../../../development/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../../../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "../../..";</script>
+    <script src="../../../js/theme_extra.js"></script>
+    <script src="../../../js/theme.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

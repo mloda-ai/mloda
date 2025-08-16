@@ -5,15 +5,15 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       <link rel="shortcut icon" href="../../img/favicon.ico" />
-    <title>Feature Group Versioning - mloda docs</title>
+    <title>Plugin Loader - mloda docs</title>
     <link rel="stylesheet" href="../../css/theme.css" />
     <link rel="stylesheet" href="../../css/theme_extra.css" />
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
     
       <script>
         // Current page data
-        var mkdocs_page_name = "Feature Group Versioning";
-        var mkdocs_page_input_path = "in_depth/feature-group-version.md";
+        var mkdocs_page_name = "Plugin Loader";
+        var mkdocs_page_input_path = "in_depth/plugin-loader.md";
         var mkdocs_page_url = null;
       </script>
     
@@ -99,8 +99,8 @@
                 </li>
     </ul>
                   </li>
-                  <li class="toctree-l1 current"><a class="reference internal current" >Feature Groups</a>
-    <ul class="current">
+                  <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
+    <ul>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-chain-parser/">Feature Chain Parser</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-group-matching/">Feature Group Matching</a>
@@ -109,29 +109,39 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-group-testing/">Feature Group Testing</a>
                 </li>
-                <li class="toctree-l2 current"><a class="reference internal current" href="#">Feature Group Versioning</a>
-    <ul class="current">
-    <li class="toctree-l3"><a class="reference internal" href="#overview">Overview</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#key-concepts">Key Concepts</a>
-        <ul>
-    <li class="toctree-l4"><a class="reference internal" href="#composite-version-identifier">Composite Version Identifier</a>
-    </li>
-    <li class="toctree-l4"><a class="reference internal" href="#the-featuregroupversion-class">The FeatureGroupVersion Class</a>
-    </li>
-        </ul>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#benefits">Benefits</a>
-    </li>
-    </ul>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-group-version/">Feature Group Versioning</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../multiple_result_columns/">Multiple Result Columns</a>
                 </li>
     </ul>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" >Plugin System</a>
-    <ul>
-                <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
+                  <li class="toctree-l1 current"><a class="reference internal current" >Plugin System</a>
+    <ul class="current">
+                <li class="toctree-l2 current"><a class="reference internal current" href="#">Plugin Loader</a>
+    <ul class="current">
+    <li class="toctree-l3"><a class="reference internal" href="#quick-start">Quick Start</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#main-methods">Main Methods</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#pluginloaderall">PluginLoader.all()</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#load_groupgroup_name-str">load_group(group_name: str)</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#load_all_plugins">load_all_plugins()</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#list_loaded_modulesplugin_category-optionalstr">list_loaded_modules(plugin_category: Optional[str])</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#display_plugin_graphplugin_category-optionalstr">display_plugin_graph(plugin_category: Optional[str])</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#plugin-groups">Plugin Groups</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#example">Example</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#directory-structure">Directory Structure</a>
+    </li>
+    </ul>
                 </li>
     </ul>
                   </li>
@@ -173,8 +183,8 @@
   <ul class="wy-breadcrumbs">
     <li><a href="../.." class="icon icon-home" aria-label="Docs"></a></li>
           <li class="breadcrumb-item">In Depth - Advanced</li>
-          <li class="breadcrumb-item">Feature Groups</li>
-      <li class="breadcrumb-item active">Feature Group Versioning</li>
+          <li class="breadcrumb-item">Plugin System</li>
+      <li class="breadcrumb-item active">Plugin Loader</li>
     <li class="wy-breadcrumbs-aside">
     </li>
   </ul>
@@ -183,38 +193,86 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
             <div class="section" itemprop="articleBody">
               
-                <h1 id="feature-group-versioning">Feature Group Versioning</h1>
-<h2 id="overview">Overview</h2>
-<p>Feature Group versioning in mloda provides a way to track changes, manage compatibility, and aid debugging. This document explains how the versioning system works and how it's used in feature groups.</p>
-<h2 id="key-concepts">Key Concepts</h2>
-<h3 id="composite-version-identifier">Composite Version Identifier</h3>
-<p>The version identifier is generated by combining:
-- The version of the 'mloda' package
-- The module name where the feature group is defined
-- A SHA-256 hash of the feature group class's source code</p>
-<p>This creates a unique identifier that represents the implementation state of the feature group.</p>
-<h3 id="the-featuregroupversion-class">The FeatureGroupVersion Class</h3>
-<p>The <code>FeatureGroupVersion</code> class handles the versioning logic:</p>
-<pre><code class="language-python">@classmethod
-def version(cls) -&gt; str:
-    &quot;&quot;&quot;
-    Returns a composite version identifier for this feature group.
-    &quot;&quot;&quot;
-    return FeatureGroupVersion.version(cls)
+                <h1 id="pluginloader">PluginLoader</h1>
+<p>The PluginLoader dynamically loads and manages plugins from the <code>mloda_plugins</code> package.</p>
+<h2 id="quick-start">Quick Start</h2>
+<pre><code class="language-python">from mloda_core.abstract_plugins.plugin_loader import PluginLoader
+
+# Load all plugins
+loader = PluginLoader.all()
+
+# Or load specific groups
+loader = PluginLoader()
+loader.load_group(&quot;feature_group&quot;)
 </code></pre>
-<h2 id="benefits">Benefits</h2>
-<ul>
-<li><strong>Change Detection</strong>: Easily detect when a feature group implementation has changed</li>
-<li><strong>Compatibility Management</strong>: Ensure compatibility between different versions</li>
-<li><strong>Debugging</strong>: Trace issues back to specific implementations</li>
-<li><strong>Reproducibility</strong>: Recreate results with the same feature group version</li>
-</ul>
+<h2 id="main-methods">Main Methods</h2>
+<h3 id="pluginloaderall"><code>PluginLoader.all()</code></h3>
+<p>Creates a loader and loads all available plugins.</p>
+<h3 id="load_groupgroup_name-str"><code>load_group(group_name: str)</code></h3>
+<p>Loads plugins from a specific group folder.</p>
+<h3 id="load_all_plugins"><code>load_all_plugins()</code></h3>
+<p>Loads all plugin groups.</p>
+<h3 id="list_loaded_modulesplugin_category-optionalstr"><code>list_loaded_modules(plugin_category: Optional[str])</code></h3>
+<p>Lists loaded plugin modules, optionally filtered by category.</p>
+<h3 id="display_plugin_graphplugin_category-optionalstr"><code>display_plugin_graph(plugin_category: Optional[str])</code></h3>
+<p>Shows plugin dependencies as a graph.</p>
+<h2 id="plugin-groups">Plugin Groups</h2>
+<table>
+<thead>
+<tr>
+<th>Group</th>
+<th>Depends On</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>input_data</code></td>
+<td><code>feature_group</code></td>
+<td>Data input plugins</td>
+</tr>
+<tr>
+<td><code>feature_group</code></td>
+<td>None</td>
+<td>Feature group definitions</td>
+</tr>
+<tr>
+<td><code>compute_framework</code></td>
+<td>None</td>
+<td>Computation frameworks</td>
+</tr>
+<tr>
+<td><code>function_extender</code></td>
+<td>None</td>
+<td>Function extensions</td>
+</tr>
+</tbody>
+</table>
+<h2 id="example">Example</h2>
+<pre><code class="language-python"># Create loader and load plugins
+loader = PluginLoader()
+loader.load_all_plugins()
+
+# List loaded modules
+modules = loader.list_loaded_modules()
+
+# Show dependencies
+graph = loader.display_plugin_graph()
+</code></pre>
+<h2 id="directory-structure">Directory Structure</h2>
+<pre><code>mloda_plugins/
+├── input_data/
+├── feature_group/
+├── compute_framework/
+└── function_extender/
+</code></pre>
+<p>Plugins are automatically discovered from <code>.py</code> files in these directories.</p>
               
             </div>
           </div><footer>
     <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
-        <a href="../feature-group-testing/" class="btn btn-neutral float-left" title="Feature Group Testing"><span class="icon icon-circle-arrow-left"></span> Previous</a>
-        <a href="../multiple_result_columns/" class="btn btn-neutral float-right" title="Multiple Result Columns">Next <span class="icon icon-circle-arrow-right"></span></a>
+        <a href="../multiple_result_columns/" class="btn btn-neutral float-left" title="Multiple Result Columns"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../troubleshooting/feature-group-resolution-errors/" class="btn btn-neutral float-right" title="Feature Group Resolution Errors">Next <span class="icon icon-circle-arrow-right"></span></a>
     </div>
 
   <hr/>
@@ -237,10 +295,10 @@ def version(cls) -&gt; str:
   <span class="rst-current-version" data-toggle="rst-current-version">
     
     
-      <span><a href="../feature-group-testing/" style="color: #fcfcfc">&laquo; Previous</a></span>
+      <span><a href="../multiple_result_columns/" style="color: #fcfcfc">&laquo; Previous</a></span>
     
     
-      <span><a href="../multiple_result_columns/" style="color: #fcfcfc">Next &raquo;</a></span>
+      <span><a href="../troubleshooting/feature-group-resolution-errors/" style="color: #fcfcfc">Next &raquo;</a></span>
     
   </span>
 </div>

@@ -36,6 +36,8 @@ nav:
       - Feature Group Testing: in_depth/feature-group-testing.md
       - Feature Group Versioning: in_depth/feature-group-version.md
       - Multiple Result Columns: in_depth/multiple_result_columns.md
+    - Plugin System:
+      - Plugin Loader: in_depth/plugin-loader.md
     - Troubleshooting:
       - Feature Group Resolution Errors: in_depth/troubleshooting/feature-group-resolution-errors.md
     

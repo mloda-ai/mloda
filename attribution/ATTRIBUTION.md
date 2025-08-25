@@ -15,7 +15,7 @@
 | attrs                                  | 25.3.0          | MIT                                                                            |
 | babel                                  | 2.17.0          | BSD License                                                                    |
 | bandit                                 | 1.8.6           | Apache-2.0                                                                     |
-| beautifulsoup4                         | 4.13.4          | MIT License                                                                    |
+| beautifulsoup4                         | 4.13.5          | MIT License                                                                    |
 | bleach                                 | 6.2.0           | Apache Software License                                                        |
 | cachetools                             | 6.1.0           | MIT License                                                                    |
 | certifi                                | 2025.8.3        | Mozilla Public License 2.0 (MPL 2.0)                                           |
@@ -79,13 +79,13 @@
 | joblib                                 | 1.5.1           | BSD License                                                                    |
 | json5                                  | 0.12.1          | Apache Software License                                                        |
 | jsonpointer                            | 3.0.0           | BSD License                                                                    |
-| jsonschema                             | 4.25.0          | MIT                                                                            |
+| jsonschema                             | 4.25.1          | MIT                                                                            |
 | jsonschema-specifications              | 2025.4.1        | MIT                                                                            |
 | jupyter-events                         | 0.12.0          | BSD License                                                                    |
 | jupyter-lsp                            | 2.2.6           | BSD License                                                                    |
 | jupyter_client                         | 8.6.3           | BSD License                                                                    |
 | jupyter_core                           | 5.8.1           | BSD-3-Clause                                                                   |
-| jupyter_server                         | 2.16.0          | BSD License                                                                    |
+| jupyter_server                         | 2.17.0          | BSD License                                                                    |
 | jupyter_server_terminals               | 0.5.3           | BSD License                                                                    |
 | jupyterlab                             | 4.4.6           | BSD License                                                                    |
 | jupyterlab_pygments                    | 0.3.0           | BSD License                                                                    |
@@ -117,12 +117,11 @@
 | opentelemetry-util-http                | 0.57b0          | Apache Software License                                                        |
 | overrides                              | 7.7.0           | Apache License, Version 2.0                                                    |
 | packaging                              | 25.0            | Apache Software License; BSD License                                           |
-| pandas                                 | 2.3.1           | BSD License                                                                    |
+| pandas                                 | 2.3.2           | BSD License                                                                    |
 | pandera                                | 0.26.0          | MIT License                                                                    |
 | pandocfilters                          | 1.5.1           | BSD License                                                                    |
-| parso                                  | 0.8.4           | MIT License                                                                    |
+| parso                                  | 0.8.5           | MIT License                                                                    |
 | pathspec                               | 0.12.1          | Mozilla Public License 2.0 (MPL 2.0)                                           |
-| pbr                                    | 7.0.0           | Apache-2.0                                                                     |
 | pexpect                                | 4.9.0           | ISC License (ISCL)                                                             |
 | platformdirs                           | 4.3.8           | MIT License                                                                    |
 | pluggy                                 | 1.6.0           | MIT License                                                                    |
@@ -146,16 +145,16 @@
 | python-dateutil                        | 2.9.0.post0     | Apache Software License; BSD License                                           |
 | python-json-logger                     | 3.3.0           | BSD License                                                                    |
 | pytz                                   | 2025.2          | MIT License                                                                    |
-| pyzmq                                  | 27.0.1          | BSD License                                                                    |
+| pyzmq                                  | 27.0.2          | BSD License                                                                    |
 | referencing                            | 0.36.2          | MIT                                                                            |
 | regex                                  | 2025.7.34       | Apache-2.0 AND CNRI-Python                                                     |
-| requests                               | 2.32.4          | Apache Software License                                                        |
+| requests                               | 2.32.5          | Apache Software License                                                        |
 | rfc3339-validator                      | 0.1.4           | MIT License                                                                    |
 | rfc3986-validator                      | 0.1.1           | MIT License                                                                    |
 | rfc3987-syntax                         | 1.1.0           | Apache Software License                                                        |
 | rich                                   | 13.9.4          | MIT License                                                                    |
 | rpds-py                                | 0.27.0          | MIT                                                                            |
-| ruff                                   | 0.12.9          | MIT License                                                                    |
+| ruff                                   | 0.12.10         | MIT License                                                                    |
 | scikit-learn                           | 1.7.1           | BSD-3-Clause                                                                   |
 | scipy                                  | 1.15.3          | BSD License                                                                    |
 | six                                    | 1.17.0          | MIT License                                                                    |
@@ -163,7 +162,7 @@
 | sortedcontainers                       | 2.4.0           | Apache Software License                                                        |
 | soupsieve                              | 2.7             | MIT License                                                                    |
 | stack-data                             | 0.6.3           | MIT License                                                                    |
-| stevedore                              | 5.4.1           | Apache Software License                                                        |
+| stevedore                              | 5.5.0           | Apache Software License                                                        |
 | strictyaml                             | 1.7.3           | MIT License                                                                    |
 | tenacity                               | 8.5.0           | Apache Software License                                                        |
 | terminado                              | 0.18.1          | BSD License                                                                    |
@@ -175,12 +174,12 @@
 | tqdm                                   | 4.67.1          | MIT License; Mozilla Public License 2.0 (MPL 2.0)                              |
 | traitlets                              | 5.14.3          | BSD License                                                                    |
 | typeguard                              | 4.4.4           | MIT                                                                            |
-| types-python-dateutil                  | 2.9.0.20250809  | Apache-2.0                                                                     |
+| types-python-dateutil                  | 2.9.0.20250822  | Apache-2.0                                                                     |
 | types-requests                         | 2.32.4.20250809 | Apache-2.0                                                                     |
 | types-toml                             | 0.10.8.20240310 | Apache Software License                                                        |
 | typing-inspect                         | 0.9.0           | MIT License                                                                    |
 | typing-inspection                      | 0.4.1           | MIT                                                                            |
-| typing_extensions                      | 4.14.1          | PSF-2.0                                                                        |
+| typing_extensions                      | 4.15.0          | PSF-2.0                                                                        |
 | tzdata                                 | 2025.2          | Apache Software License                                                        |
 | uri-template                           | 1.3.0           | MIT License                                                                    |
 | urllib3                                | 2.5.0           | MIT                                                                            |

@@ -1,11 +1,20 @@
 # Project Brief
 
-## Project Goals
+## Core Goal
+mloda: A flexible data/feature engineering framework that focuses on transformations rather than static states.
 
-The mloda project aims to rethink data and feature engineering by offering a flexible, resilient framework that adapts seamlessly to changes. It focuses on defining transformations rather than static states, facilitating smooth transitions between development phases, and reducing redundant work.
+```mermaid
+flowchart LR
+    Input[Input Data] --> FG[Feature Groups]
+    FG --> T[Transformations]
+    T --> CF[Compute Frameworks]
+    CF --> Output[Features]
+    
+    style FG fill:#f9f,stroke:#333,stroke-width:2px
+    style T fill:#bbf,stroke:#333,stroke-width:2px
+```
 
 ## Core Requirements
-
 *   Provide a flexible and resilient framework for data and feature engineering.
 *   Focus on defining transformations rather than static states.
 *   Facilitate smooth transitions between development phases.
@@ -13,4 +22,7 @@ The mloda project aims to rethink data and feature engineering by offering a fle
 *   Maintain high data quality, governance, and scalability.
 *   Enable efficient querying and processing of complex features.
 *   Promote the sharing and reuse of plugins through a centralized repository.
-*   Unify various tools such as data catalogs, feature stores, versioning systems, metadata stores, data contracts, and data lineage tools into one cohesive solution.
+
+- **Plugin-based architecture**: Feature Groups, Compute Frameworks, Extenders
+- **Transformation focus**: Define how data changes, not static states
+- **Automatic plugin selection**: Framework selects appropriate plugins

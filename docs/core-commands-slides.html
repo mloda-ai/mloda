@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>mloda Core Commands: API-First Content Structure</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .slide-container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            width: 1000px;
+            height: 800px;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            margin-bottom: 5px;
+            font-size: 1.8em;
+        }
+        
+        .header p {
+            opacity: 0.8;
+            font-size: 0.9em;
+        }
+        
+        .progress-bar {
+            background: #34495e;
+            height: 4px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            background: #3498db;
+            height: 100%;
+            width: 10%;
+            transition: width 0.3s ease;
+        }
+        
+        .slide {
+            padding: 40px;
+            display: none;
+            height: 620px;
+            overflow-y: auto;
+        }
+        
+        .slide.active {
+            display: block;
+        }
+        
+        .slide h2 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 1.6em;
+            display: flex;
+            align-items: center;
+        }
+        
+        .slide-number {
+            background: #3498db;
+            color: white;
+            border-radius: 50%;
+            width: 35px;
+            height: 35px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+            font-weight: bold;
+            font-size: 0.8em;
+        }
+        
+        .slide p {
+            margin-bottom: 20px;
+            line-height: 1.6;
+            color: #555;
+        }
+        
+        .code-block {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 20px;
+            margin: 20px 0;
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 0.9em;
+            overflow-x: auto;
+            position: relative;
+        }
+        
+        .code-block pre {
+            margin: 0;
+        }
+        
+        .copy-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8em;
+        }
+        
+        .copy-btn:hover {
+            background: #2980b9;
+        }
+        
+        .highlight {
+            background: #fff3cd;
+            padding: 15px;
+            border-left: 4px solid #ffc107;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        
+        .navigation {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .nav-btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: background 0.2s;
+        }
+        
+        .nav-btn:hover:not(:disabled) {
+            background: #2980b9;
+        }
+        
+        .nav-btn:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+        }
+        
+        .slide-indicator {
+            margin: 0 15px;
+            color: #7f8c8d;
+            font-size: 0.9em;
+        }
+        
+        .feature-list {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+        }
+        
+        .feature-list ul {
+            list-style: none;
+            margin-left: 20px;
+        }
+        
+        .feature-list li {
+            margin: 8px 0;
+            position: relative;
+        }
+        
+        .feature-list li:before {
+            content: "▶";
+            color: #3498db;
+            position: absolute;
+            left: -15px;
+        }
+        
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            
+            .slide-container {
+                width: 100vw;
+                height: 60vw;
+                max-height: 500px;
+                max-width: 100vw;
+            }
+            
+            .slide {
+                padding: 20px;
+                height: calc(60vw - 140px);
+                max-height: 360px;
+            }
+            
+            .header h1 {
+                font-size: 1.4em;
+            }
+            
+            .navigation {
+                bottom: 10px;
+            }
+            
+            .nav-btn {
+                padding: 8px 16px;
+                font-size: 0.8em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="slide-container">
+        <div class="header">
+            <h1>mloda Core Commands</h1>
+            <p>API-First Content Structure</p>
+        </div>
+        <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
+        </div>
+        
+        <!-- Slide 1: The Core API Call - Your Starting Point -->
+        <div class="slide active" id="slide-1">
+            <h2><span class="slide-number">1</span>The Core API Call - Your Starting Point</h2>
+            <p><strong>The One Command That Does Everything</strong></p>
+            
+            <div class="code-block">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre># This is the heart of mloda. You describe what you want and mloda tries to resolve the dependencies.
+from mloda_core.api.request import mlodaAPI
+
+result = mlodaAPI.run_all(
+    features=["age", "standard_scaled__weight"]
+)
+
+# That's it! You get processed data back
+data = result[0]
+print(data.head())</pre>
+            </div>
+            
+            <div class="feature-list">
+                <strong>What just happened?</strong>
+                <ul>
+                    <li>mloda found your data automatically</li>
+                    <li>Applied transformations (scaling, encoding)</li>
+                    <li>Returned clean, ready-to-use DataFrame</li>
+                </ul>
+            </div>
+            
+            <div class="highlight">
+                <strong>Key Insight:</strong> As long as the plugins and data accesses exist, mloda can derive any feature automatically.
+            </div>
+        </div>
+        
+        <!-- Slide 2: Setting Up Your Data -->
+        <div class="slide" id="slide-2">
+            <h2><span class="slide-number">2</span>Setting Up Your Data</h2>
+            <p><strong>Using DataCreator - The mloda Way</strong></p>
+            
+            <div class="code-block">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre># Create data using mloda's DataCreator
+from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
+from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
+
+class SampleDataFeature(AbstractFeatureGroup):
+    @classmethod
+    def input_data(cls):
+        return DataCreator({
+            "age", "weight", "state", "income", "target"
+        })
+    
+    @classmethod 
+    def calculate_feature(cls, data, features):
+        # Return sample data that mloda can work with
+        return {
+            'age': [25, 30, 35, None, 45, 28, 33],
+            'weight': [150, 180, None, 200, 165, 140, 175], 
+            'state': ['CA', 'NY', 'TX', 'CA', 'FL', 'NY', 'TX'],
+            'income': [50000, 75000, 85000, 60000, None, 45000, 70000],
+            'target': [1, 0, 1, 0, 1, 0, 1]
+        }</pre>
+            </div>
+            
+            <div class="highlight">
+                <strong>Key Insight:</strong> DataCreator generates data directly within mloda - perfect for testing and demos.
+            </div>
+        </div>
+        
+        <!-- Slide 3: Understanding What You Get Back -->
+        <div class="slide" id="slide-3">
+            <h2><span class="slide-number">3</span>Understanding What You Get Back</h2>
+            <p><strong>The Result Structure</strong></p>
+            
+            <div class="code-block">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre>from mloda_core.api.request import mlodaAPI
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+
+result = mlodaAPI.run_all(features, compute_frameworks={PandasDataframe})
+
+# result is always a LIST of result objects
+data_list = result  
+# Each object matches your compute framework type: pd.DataFrame, spark.DataFrame, etc.
+
+# Access your processed data
+data = result[0]  # Most common case: single result
+print(f"Shape: {data.shape}, Columns: {list(data.columns)}")</pre>
+            </div>
+            
+            <div class="highlight">
+                <strong>Key Insight:</strong> mloda returns a list of results. Most simple cases return a single DataFrame that you access with <code>result[0]</code>.
+            </div>
+        </div>
+        
+        <!-- Slide 4: The Features Parameter -->
+        <div class="slide" id="slide-4">
+            <h2><span class="slide-number">4</span>The Features Parameter</h2>
+            <p><strong>Feature Object Syntax</strong></p>
+            
+            <div class="code-block">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre>from mloda_core.abstract_plugins.components.feature import Feature
+from mloda_core.abstract_plugins.components.options import Options
+from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
+
+PluginLoader.all()
+
+features = [
+    "age",                                    # Simple string
+    Feature(
+            "weight_replaced",
+            options=Options(
+                group={
+                    "imputation_method": "mean",
+                    "mloda_source_feature": "weight",
+                }
+            ),
+        ),
+    "onehot_encoded__state"                  # Chaining syntax
+]</pre>
+            </div>
+            
+            <div class="feature-list">
+                <strong>Three Ways to Define Features:</strong>
+                <ul>
+                    <li><strong>Simple strings:</strong> For basic columns like "age"</li>
+                    <li><strong>Feature objects:</strong> For explicit configuration and advanced options</li>
+                    <li><strong>Chaining syntax:</strong> Convenient shorthand for transformations</li>
+                </ul>
+            </div>
+            
+        </div>
+        
+        <!-- Slide 5: Compute Frameworks -->
+        <div class="slide" id="slide-5">
+            <h2><span class="slide-number">5</span>Compute Frameworks</h2>
+            <p><strong>Choose Your Processing Engine</strong></p>
+            
+            <div class="code-block">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre># <Data></Data>Different processing engines
+
+features = [
+    Feature("age", compute_framework=PandasDataframe.get_class_name()),
+    Feature("weight", compute_framework=PolarsDataframe.get_class_name()),
+]
+
+# Mixed - familiar, extensive ecosystem
+result = mlodaAPI.run_all(features)</pre>
+            </div>
+            
+            <div class="feature-list">
+                <strong>When to Use What:</strong>
+                <ul>
+                    <li><code>PandasDataframe</code>: Familiar, good for prototyping</li>
+                    <li><code>PolarsDataframe</code>: High performance, large datasets</li>
+                    <li><code>PyarrowTable</code>: Memory efficient, interoperability</li>
+                </ul>
+            </div>
+        </div>
+        
+        <!-- Slide 6: Data Access -->
+        <div class="slide" id="slide-6">
+            <h2><span class="slide-number">6</span>Data Access</h2>
+            <p><strong>Tell mloda Where Your Data Lives</strong></p>
+            
+            <div class="code-block">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre>from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
+
+# Configure data sources
+data_access = DataAccessCollection(
+    files={"data/customers.csv"},                    # Specific files
+    folders={"data/archive/"},                       # Entire directories
+    credential_dicts=[{"host": "db.example.com"}]    # Database credentials
+)
+
+result = mlodaAPI.run_all(
+    features=["age", "standard_scaled__income"],
+    compute_frameworks={PandasDataframe},
+    data_access_collection=data_access
+)</pre>
+            </div>
+            
+            <div class="highlight">
+                <strong>Key Insight:</strong> Configure data access once globally, and all features can use it automatically.
+            </div>
+        </div>
+        
+        <!-- Slide 7: Putting It All Together - Complete Example -->
+        <div class="slide" id="slide-7">
+            <h2><span class="slide-number">7</span>Putting It All Together</h2>
+            <p><strong>Real-World Feature Engineering Pipeline</strong></p>
+            
+            <div class="code-block">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre># Complete mlodaAPI call
+result = mlodaAPI.run_all(
+    # What you want
+    features=[
+        "standard_scaled__age",
+        "onehot_encoded__state", 
+        "mean_imputed__income"
+    ],
+    
+    # How to process it
+    compute_frameworks={PandasDataframe},
+    
+    # Where to get it
+    data_access_collection=DataAccessCollection(files={"data/customers.csv"})
+)
+
+# Get your results
+processed_data = result[0]
+print(f"✅ Created {len(processed_data.columns)} features from {len(processed_data)} rows")
+
+# Use in your ML pipeline
+from sklearn.model_selection import train_test_split
+X = processed_data.drop('target', axis=1)
+y = processed_data['target'] 
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)</pre>
+            </div>
+            
+            <div class="highlight">
+                <strong>🎉 You now understand mloda's core workflow!</strong>
+            </div>
+          
+        </div>
+        
+        <div class="navigation">
+            <button class="nav-btn" id="prevBtn" onclick="changeSlide(-1)">← Previous</button>
+            <span class="slide-indicator">
+                <span id="currentSlide">1</span> of <span id="totalSlides">7</span>
+            </span>
+            <button class="nav-btn" id="nextBtn" onclick="changeSlide(1)">Next →</button>
+        </div>
+    </div>
+
+    <script>
+        let currentSlide = 1;
+        const totalSlides = 7;
+        
+        function showSlide(n) {
+            const slides = document.querySelectorAll('.slide');
+            const progressFill = document.getElementById('progressFill');
+            const currentSlideSpan = document.getElementById('currentSlide');
+            const prevBtn = document.getElementById('prevBtn');
+            const nextBtn = document.getElementById('nextBtn');
+            
+            if (n > totalSlides) currentSlide = totalSlides;
+            if (n < 1) currentSlide = 1;
+            
+            slides.forEach(slide => slide.classList.remove('active'));
+            document.getElementById(`slide-${currentSlide}`).classList.add('active');
+            
+            // Update progress bar
+            const progress = (currentSlide / totalSlides) * 100;
+            progressFill.style.width = progress + '%';
+            
+            // Update slide indicator
+            currentSlideSpan.textContent = currentSlide;
+            
+            // Update navigation buttons
+            prevBtn.disabled = currentSlide === 1;
+            nextBtn.disabled = currentSlide === totalSlides;
+        }
+        
+        function changeSlide(n) {
+            currentSlide += n;
+            showSlide(currentSlide);
+        }
+        
+        function copyCode(button) {
+            const codeBlock = button.nextElementSibling;
+            const code = codeBlock.textContent;
+            
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(code).then(() => {
+                    button.textContent = 'Copied!';
+                    setTimeout(() => {
+                        button.textContent = 'Copy';
+                    }, 2000);
+                });
+            } else {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = code;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                
+                button.textContent = 'Copied!';
+                setTimeout(() => {
+                    button.textContent = 'Copy';
+                }, 2000);
+            }
+        }
+        
+        // Keyboard navigation
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'ArrowLeft') {
+                changeSlide(-1);
+            } else if (event.key === 'ArrowRight') {
+                changeSlide(1);
+            }
+        });
+        
+        // Initialize
+        showSlide(currentSlide);
+    </script>
+</body>
+</html>

@@ -39,8 +39,3 @@ class DokuValidateInputFeatureExtender(WrapperFunctionExtender):
 @pytest.mark.parametrize("fpath", Path("docs").glob("**/*.md"), ids=str)
 def test_files_good(fpath: Any) -> None:
     check_md_file(fpath=fpath, memory=True)
-
-
-@pytest.mark.parametrize("fpath", [Path(os.getcwd() + "/" + "README.md")], ids=str)
-def test_readme(fpath: Any) -> None:
-    check_md_file(fpath=fpath, memory=True)

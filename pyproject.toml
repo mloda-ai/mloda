@@ -55,5 +55,8 @@ skips = [
     "B104"  # Possible binding to all interfaces detected.
 ]
 
+[tool.ruff]
+line-length = 120
+
 [project.scripts]
 mloda = "mloda_plugins.feature_group.experimental.llm.cli:main"

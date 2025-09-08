@@ -17,6 +17,13 @@
     "python.languageServer": "Pylance",
     "editor.formatOnSave": true,
     "editor.formatOnPaste": true,
+    "[python]": {
+      "editor.defaultFormatter": "charliermarsh.ruff",
+      "editor.formatOnSave": true,
+      "ruff.format.args": [
+        "--line-length=120"
+      ]
+    },
     "editor.defaultFormatter": "charliermarsh.ruff",
     "markdown-mermaid.languages": [
       "mermaid"
@@ -24,11 +31,23 @@
   },
   "extensions": {
     "recommendations": [
+      //add them settings to Dev › Containers: Default Extensions
       "ms-python.python",
       "ms-python.vscode-pylance",
       "ms-azuretools.vscode-docker",
       "charliermarsh.ruff",
-      "bierner.markdown-mermaid"
-    ]
+      "bierner.markdown-mermaid",
+      "github.copilot",
+      "github.copilot-chat",
+      "ms-python.mypy-type-checker",
+      "ms-python.python",
+      "ms-python.vscode-pylance",
+      "ms-toolsai.jupyter",
+      "ms-toolsai.jupyter-keymap",
+      "ms-toolsai.vscode-jupyter-slideshow",
+      "ms-toolsai.vscode-jupyter-slideshow",
+      "ms-toolsai.vscode-jupyter-slideshow",
+      "saoudrizwan.claude-dev"
+      ]
   }
 }

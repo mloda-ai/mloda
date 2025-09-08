@@ -11,5 +11,14 @@
   "overrideCommand": false,
   "forwardPorts": [8003],
   "remoteUser": "vscode",
-  "shutdownAction": "stopCompose"
+  "shutdownAction": "stopCompose",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "mypy-type-checker.interpreter": [
+          "/home/vscode/.tox-cache/python310/bin/python3"
+        ]
+      }
+    }
+  }
 }

@@ -46,5 +46,7 @@ RUN cd /workspace && $PYTHON_PATH -m tox --workdir $TOX_WORK_DIR || echo "Tox fa
 
 WORKDIR /workspace
 
+RUN echo 'source /home/vscode/.tox-cache/python310/bin/activate' >> /home/vscode/.bashrc
+
 # Default shell
 CMD ["bash", "-c", "cd /workspace && exec bash"]

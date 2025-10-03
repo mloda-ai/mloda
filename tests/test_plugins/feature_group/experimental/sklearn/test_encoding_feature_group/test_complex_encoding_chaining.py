@@ -42,27 +42,7 @@ class ComplexEncodingTestDataCreator(ATestDataCreator):
 class TestComplexEncodingChaining:
     """Complex integration test demonstrating multiple encoding feature chains."""
 
-    def setup_method(self) -> None:
-        """Setup method called before each test method."""
-        # Clean up any existing sklearn artifacts before test
-        artifact_files = glob.glob("/tmp/sklearn_artifact_*.joblib")  # nosec
-        for file_path in artifact_files:
-            try:
-                os.remove(file_path)
-            except OSError:
-                pass  # Ignore if file doesn't exist or can't be removed
-
-    def teardown_method(self) -> None:
-        """Teardown method called after each test method."""
-        # Clean up sklearn artifacts after test
-        artifact_files = glob.glob("/tmp/sklearn_artifact_*.joblib")  # nosec
-        for file_path in artifact_files:
-            try:
-                os.remove(file_path)
-            except OSError:
-                pass  # Ignore if file doesn't exist or can't be removed
-
-    def test_multiple_complex_encoding_chains_with_artifacts(self) -> None:
+    def test_multiple_complex_encoding_chains_with_artifacts(self, tmp_path: Any) -> None:
         """
         Test multiple complex feature chains in a single test, demonstrating the power of mloda's feature chaining.
 
@@ -97,18 +77,19 @@ class TestComplexEncodingChaining:
             }
         )
 
-        # Create multiple complex chained features demonstrating different combinations
+        # Create multiple complex chained features with unique artifact storage path
+        artifact_options = Options({"artifact_storage_path": str(tmp_path)})
         complex_features: Features | List[Feature | str] = [
             # OneHot encoding -> Standard scaling -> Sum aggregation
-            Feature("sum_aggr__standard_scaled__onehot_encoded__category~1"),
+            Feature("sum_aggr__standard_scaled__onehot_encoded__category~1", artifact_options),
             # Label encoding -> Mean aggregation (no scaling)
-            Feature("mean_aggr__label_encoded__region"),
+            Feature("mean_aggr__label_encoded__region", artifact_options),
             # Ordinal encoding -> Count aggregation (no scaling)
-            Feature("count_aggr__ordinal_encoded__category"),
+            Feature("count_aggr__ordinal_encoded__category", artifact_options),
             # Label encoding -> Robust scaling -> Max aggregation
-            Feature("max_aggr__robust_scaled__label_encoded__category"),
+            Feature("max_aggr__robust_scaled__label_encoded__category", artifact_options),
             # OneHot encoding -> Min-Max scaling -> Min aggregation (using different OneHot column)
-            Feature("min_aggr__minmax_scaled__onehot_encoded__category~0"),
+            Feature("min_aggr__minmax_scaled__onehot_encoded__category~0", artifact_options),
         ]
 
         # Phase 1: Train and save artifacts for all complex features
@@ -182,7 +163,7 @@ class TestComplexEncodingChaining:
         complex_features_reuse: Features | List[Feature | str] = [
             Feature(
                 feature.name,  # type: ignore
-                Options(artifacts1),
+                Options({**artifacts1, "artifact_storage_path": str(tmp_path)}),
             )
             for feature in complex_features
         ]

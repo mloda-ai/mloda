@@ -2,11 +2,6 @@ from typing import Any
 from mloda_core.filter.filter_engine import BaseFilterEngine
 from mloda_core.filter.single_filter import SingleFilter
 
-try:
-    import duckdb
-except ImportError:
-    duckdb = None  # type: ignore
-
 
 class DuckDBFilterEngine(BaseFilterEngine):
     @classmethod

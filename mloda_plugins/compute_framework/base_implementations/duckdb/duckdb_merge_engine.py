@@ -7,7 +7,7 @@ from mloda_core.abstract_plugins.components.merge.base_merge_engine import BaseM
 try:
     import duckdb
 except ImportError:
-    duckdb = None  # type: ignore
+    duckdb = None
 
 
 class DuckDBMergeEngine(BaseMergeEngine):

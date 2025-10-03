@@ -5,7 +5,7 @@ from mloda_core.abstract_plugins.components.framework_transformer.base_transform
 try:
     import duckdb
 except ImportError:
-    duckdb = None  # type: ignore
+    duckdb = None
 
 try:
     import pyarrow as pa

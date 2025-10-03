@@ -12,7 +12,7 @@ try:
     import duckdb
 except ImportError:
     logger.warning("DuckDB is not installed. Some tests will be skipped.")
-    duckdb = None  # type: ignore
+    duckdb = None
 
 try:
     import pyarrow as pa

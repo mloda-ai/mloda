@@ -36,7 +36,7 @@ class EncodingIntegrationTestDataCreator(ATestDataCreator):
 class TestEncodingFeatureGroupIntegration:
     """Integration tests for encoding feature groups."""
 
-    def test_label_encoding_with_artifacts(self) -> None:
+    def test_label_encoding_with_artifacts(self, tmp_path: Any) -> None:
         """Test label encoding feature group with artifact save/load."""
         # Skip test if sklearn not available
         try:
@@ -51,8 +51,8 @@ class TestEncodingFeatureGroupIntegration:
             {EncodingIntegrationTestDataCreator, PandasEncodingFeatureGroup}
         )
 
-        # Create label encoding feature
-        label_feature = Feature("label_encoded__category")
+        # Create label encoding feature with unique artifact storage path
+        label_feature = Feature("label_encoded__category", Options({"artifact_storage_path": str(tmp_path)}))
 
         # Phase 1: Train and save artifacts
         api1 = mlodaAPI(
@@ -82,7 +82,7 @@ class TestEncodingFeatureGroupIntegration:
         # Phase 2: Load artifacts and apply to same data (simulating reuse)
         label_feature_reuse = Feature(
             "label_encoded__category",
-            Options(artifacts1),
+            Options({**artifacts1, "artifact_storage_path": str(tmp_path)}),
         )
 
         api2 = mlodaAPI(
@@ -105,7 +105,7 @@ class TestEncodingFeatureGroupIntegration:
         # Values should be identical (artifact was reused)
         assert df1["label_encoded__category"].equals(df2["label_encoded__category"])
 
-    def test_onehot_encoding_with_artifacts(self) -> None:
+    def test_onehot_encoding_with_artifacts(self, tmp_path: Any) -> None:
         """Test one-hot encoding feature group with artifact save/load."""
         # Skip test if sklearn not available
         try:
@@ -120,8 +120,8 @@ class TestEncodingFeatureGroupIntegration:
             {EncodingIntegrationTestDataCreator, PandasEncodingFeatureGroup}
         )
 
-        # Create one-hot encoding feature
-        onehot_feature = Feature("onehot_encoded__category")
+        # Create one-hot encoding feature with unique artifact storage path
+        onehot_feature = Feature("onehot_encoded__category", Options({"artifact_storage_path": str(tmp_path)}))
 
         # Phase 1: Train and save artifacts
         api1 = mlodaAPI(

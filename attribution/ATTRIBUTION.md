@@ -1,5 +1,6 @@
 | Name                                   | Version         | License                                                                        |
 |----------------------------------------|-----------------|--------------------------------------------------------------------------------|
+| CacheControl                           | 0.14.3          | Apache-2.0                                                                     |
 | Jinja2                                 | 3.1.6           | BSD License                                                                    |
 | MarkupSafe                             | 3.0.3           | BSD-3-Clause                                                                   |
 | PyYAML                                 | 6.0.3           | MIT License                                                                    |
@@ -25,6 +26,7 @@
 | click                                  | 8.3.0           | BSD-3-Clause                                                                   |
 | colorama                               | 0.4.6           | BSD License                                                                    |
 | comm                                   | 0.2.3           | BSD License                                                                    |
+| cyclonedx-python-lib                   | 9.1.0           | Apache Software License                                                        |
 | debugpy                                | 1.8.17          | MIT License                                                                    |
 | decorator                              | 5.2.1           | BSD License                                                                    |
 | defusedxml                             | 0.7.1           | Python Software Foundation License                                             |
@@ -98,6 +100,7 @@
 | mistune                                | 3.1.4           | BSD License                                                                    |
 | mktestdocs                             | 0.2.5           | MIT                                                                            |
 | mmh3                                   | 5.2.0           | MIT License                                                                    |
+| msgpack                                | 1.1.1           | Apache 2.0                                                                     |
 | mypy                                   | 1.18.2          | MIT License                                                                    |
 | mypy_extensions                        | 1.1.0           | MIT                                                                            |
 | nbclient                               | 0.10.2          | BSD License                                                                    |
@@ -116,6 +119,7 @@
 | opentelemetry-semantic-conventions     | 0.58b0          | Apache-2.0                                                                     |
 | opentelemetry-util-http                | 0.58b0          | Apache Software License                                                        |
 | overrides                              | 7.7.0           | Apache License, Version 2.0                                                    |
+| packageurl-python                      | 0.17.5          | MIT License                                                                    |
 | packaging                              | 25.0            | Apache Software License; BSD License                                           |
 | pandas                                 | 2.3.3           | BSD License                                                                    |
 | pandera                                | 0.26.1          | MIT License                                                                    |
@@ -123,6 +127,9 @@
 | parso                                  | 0.8.5           | MIT License                                                                    |
 | pathspec                               | 0.12.1          | Mozilla Public License 2.0 (MPL 2.0)                                           |
 | pexpect                                | 4.9.0           | ISC License (ISCL)                                                             |
+| pip-api                                | 0.0.34          | Apache Software License                                                        |
+| pip-requirements-parser                | 32.0.1          | MIT                                                                            |
+| pip_audit                              | 2.9.0           | Apache Software License                                                        |
 | platformdirs                           | 4.4.0           | MIT License                                                                    |
 | pluggy                                 | 1.6.0           | MIT License                                                                    |
 | polars                                 | 1.34.0          | MIT License                                                                    |
@@ -132,9 +139,10 @@
 | psutil                                 | 7.1.0           | BSD-3-Clause                                                                   |
 | ptyprocess                             | 0.7.0           | ISC License (ISCL)                                                             |
 | pure_eval                              | 0.2.3           | MIT License                                                                    |
+| py-serializable                        | 2.1.0           | Apache Software License                                                        |
 | pyarrow                                | 21.0.0          | Apache Software License                                                        |
 | pycparser                              | 2.23            | BSD License                                                                    |
-| pydantic                               | 2.11.9          | MIT License                                                                    |
+| pydantic                               | 2.11.10         | MIT License                                                                    |
 | pydantic_core                          | 2.33.2          | MIT License                                                                    |
 | pyiceberg                              | 0.10.0          | Apache Software License                                                        |
 | pyparsing                              | 3.2.5           | MIT                                                                            |
@@ -171,6 +179,7 @@
 | testbook                               | 0.4.2           | BSD License                                                                    |
 | threadpoolctl                          | 3.6.0           | BSD License                                                                    |
 | tinycss2                               | 1.4.0           | BSD License                                                                    |
+| toml                                   | 0.10.2          | MIT License                                                                    |
 | tornado                                | 6.5.2           | Apache Software License                                                        |
 | tox                                    | 4.30.3          | MIT License                                                                    |
 | tqdm                                   | 4.67.1          | MIT License; Mozilla Public License 2.0 (MPL 2.0)                              |

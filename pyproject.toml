@@ -7,7 +7,7 @@ name = "mloda"
 version = "0.2.13"
 description = "Rethinking Data and Feature Engineering"
 readme = { file = "README.md", content-type = "text/markdown" }
-license = { file = "LICENSE.TXT" }
+license = { text = "Apache-2.0" }
 authors = [
     { name = "Tom Kaltofen", email = "info@mloda.ai" }
 ]
@@ -17,7 +17,6 @@ dependencies = [
 
 requires-python = ">=3.8"
 classifiers = [
-    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3"
 ]
 

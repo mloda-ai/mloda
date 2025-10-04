@@ -9,6 +9,7 @@ __pycache__/
 
 # Exclude development files
 .vscode/
+security-reports/
 
 # Exclude temporary files
 *.tmp

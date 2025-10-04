@@ -15,3 +15,4 @@ types-requests
 types-toml
 scikit-learn
 nltk
+pip-audit

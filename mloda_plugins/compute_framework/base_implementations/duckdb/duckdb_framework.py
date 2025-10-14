@@ -10,7 +10,7 @@ from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_filter_e
 try:
     import duckdb
 except ImportError:
-    duckdb = None
+    duckdb = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 

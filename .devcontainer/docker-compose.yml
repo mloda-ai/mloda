@@ -22,7 +22,14 @@ services:
       - ~/.git-credentials:/home/vscode/.git-credentials:ro
     ports:
       - "8000:8000"
-    command: bash -c "cd /workspace && exec bash"  # Change directory to /workspace
+    command: >
+      bash -c "
+        if [ \"$(stat -c '%U' /workspace)\" != 'vscode' ]; then
+          echo 'Fixing /workspace ownership (was root)...';
+          sudo chown -R vscode:vscode /workspace;
+        fi;
+        cd /workspace;
+        exec bash"
     stdin_open: true    # Keep STDIN open for interaction
     tty: true           # Allocate a pseudo-TTY
     container_name: ai-agent-1
@@ -42,7 +49,14 @@ services:
       - ~/.git-credentials:/home/vscode/.git-credentials:ro
     ports:
       - "8001:8000"
-    command: bash -c "cd /workspace && exec bash"  # Change directory to /workspace
+    command: >
+      bash -c "
+        if [ \"$(stat -c '%U' /workspace)\" != 'vscode' ]; then
+          echo 'Fixing /workspace ownership (was root)...';
+          sudo chown -R vscode:vscode /workspace;
+        fi;
+        cd /workspace;
+        exec bash"
     stdin_open: true    # Keep STDIN open for interaction
     tty: true           # Allocate a pseudo-TTY
     container_name: ai-agent-2
@@ -62,7 +76,14 @@ services:
       - ~/.git-credentials:/home/vscode/.git-credentials:ro
     ports:
       - "8002:8000"
-    command: bash -c "cd /workspace && exec bash"  # Change directory to /workspace
+    command: >
+      bash -c "
+        if [ \"$(stat -c '%U' /workspace)\" != 'vscode' ]; then
+          echo 'Fixing /workspace ownership (was root)...';
+          sudo chown -R vscode:vscode /workspace;
+        fi;
+        cd /workspace;
+        exec bash"
     stdin_open: true    # Keep STDIN open for interaction
     tty: true           # Allocate a pseudo-TTY
     container_name: ai-agent-3
@@ -82,7 +103,14 @@ services:
       - ~/.git-credentials:/home/vscode/.git-credentials:ro
     ports:
       - "8003:8000"
-    command: bash -c "cd /workspace && exec bash"  # Change directory to /workspace
+    command: >
+      bash -c "
+        if [ \"$(stat -c '%U' /workspace)\" != 'vscode' ]; then
+          echo 'Fixing /workspace ownership (was root)...';
+          sudo chown -R vscode:vscode /workspace;
+        fi;
+        cd /workspace;
+        exec bash"
     stdin_open: true    # Keep STDIN open for interaction
     tty: true           # Allocate a pseudo-TTY
     container_name: ai-agent-4

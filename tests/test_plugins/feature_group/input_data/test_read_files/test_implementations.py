@@ -1,5 +1,7 @@
 import json
 import os
+import shutil
+import tempfile
 from typing import Any, List
 import unittest
 import pyarrow as pa
@@ -37,9 +39,7 @@ class TestReadFilesImplementations(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        cls.base_path = "path"
-        if not os.path.exists(cls.base_path):
-            os.makedirs(cls.base_path)
+        cls.base_path = tempfile.mkdtemp(prefix="arrow_test_")
 
         # Create a sample dataset
         cls.table = pa.Table.from_pydict({"col1": [1, 2, 3], "col2": [4, 5, 6]})
@@ -68,7 +68,7 @@ class TestReadFilesImplementations(unittest.TestCase):
         pyarrow_parquet.write_table(cls.table, cls.parquet_file)
 
     def tearDown(self) -> None:
-        os.removedirs(self.base_path)  # type: ignore
+        shutil.rmtree(self.base_path, ignore_errors=True)  # type: ignore
 
     def assert_read_file(self, cls: Any, path: Any, reader: Any, features: FeatureSet) -> None:
         result = cls.load_data(path, features)

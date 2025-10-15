@@ -28,9 +28,11 @@ class mlodaAPI:
         global_filter: Optional[GlobalFilter] = None,
         api_input_data_collection: Optional[ApiInputDataCollection] = None,
         plugin_collector: Optional[PlugInCollector] = None,
+        copy_features: Optional[bool] = True,
     ) -> None:
-        # The features object is potentially changed during the run, so we need to deepcopy it, so that follow up runs with the same object are not affected.
-        _requested_features = deepcopy(requested_features)
+        # The features object is potentially changed during the run, so we need to deepcopy it by default, so that follow up runs with the same object are not affected.
+        # Set copy_features=False to disable deep copying for use cases where features contain non-copyable objects.
+        _requested_features = deepcopy(requested_features) if copy_features else requested_features
 
         self.features = self._process_features(_requested_features, api_input_data_collection)
         self.compute_framework = SetupComputeFramework(compute_frameworks, self.features).compute_frameworks
@@ -72,6 +74,7 @@ class mlodaAPI:
         api_input_data_collection: Optional[ApiInputDataCollection] = None,
         api_data: Optional[Dict[str, Any]] = None,
         plugin_collector: Optional[PlugInCollector] = None,
+        copy_features: Optional[bool] = True,
     ) -> List[Any]:
         """
         This step runs setup engine, batch run and get result in one go.
@@ -84,6 +87,7 @@ class mlodaAPI:
             global_filter,
             api_input_data_collection,
             plugin_collector,
+            copy_features=copy_features,
         )
         return api._execute_batch_run(parallelization_modes, flight_server, function_extender, api_data)
 

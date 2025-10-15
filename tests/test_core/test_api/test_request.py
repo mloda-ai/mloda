@@ -50,3 +50,33 @@ class TestmlodaAPI:
         with patch("mloda_core.core.engine.Engine.create_setup_execution_plan"):
             mloda_api = self.init_with_no_params(features)
             assert isinstance(mloda_api.engine, Engine)
+
+    def test_copy_features_default_behavior(self) -> None:
+        """Test that by default, features are deep copied and mutations don't affect original."""
+        with patch("mloda_core.core.engine.Engine.create_setup_execution_plan"):
+            original_features: list[Union[Feature, str]] = [Feature("test_feature")]
+            original_feature = original_features[0]
+            assert isinstance(original_feature, Feature)
+
+            # Create API with default copy_features=True
+            api_request = mlodaAPI(original_features)
+
+            # Verify the feature in the API is a different object (was deep copied)
+            api_feature = list(api_request.features)[0]
+            assert api_feature is not original_feature
+            assert api_feature.name == original_feature.name
+
+    def test_copy_features_false_no_copy(self) -> None:
+        """Test that copy_features=False does not create a copy."""
+        with patch("mloda_core.core.engine.Engine.create_setup_execution_plan"):
+            original_features: list[Union[Feature, str]] = [Feature("test_feature")]
+            original_feature = original_features[0]
+            assert isinstance(original_feature, Feature)
+
+            # Create API with copy_features=False
+            api_request = mlodaAPI(original_features, copy_features=False)
+
+            # Verify the feature in the API is the same object (was NOT copied)
+            api_feature = list(api_request.features)[0]
+            assert api_feature is original_feature
+            assert api_feature.name == original_feature.name

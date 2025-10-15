@@ -251,7 +251,7 @@ class TestReadFile:
             def suffix(cls) -> Tuple[str, ...]:
                 return (".csv",)
 
-        options = Options(data={"BaseInputData": (TestReadFile, "dummy.csv")})
+        options = Options(group={"BaseInputData": (TestReadFile, "dummy.csv")})
         reader, data_access = TestReadFile().init_reader(options)
         assert isinstance(reader, TestReadFile)
         assert data_access == "dummy.csv"
@@ -270,7 +270,7 @@ class TestReadFile:
             def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
                 return pa.table({"id": [1, 2], "V1": [3, 4], "V2": [5, 6]})
 
-        options = Options(data={"BaseInputData": (TestReadFile, "dummy.csv")})
+        options = Options(group={"BaseInputData": (TestReadFile, "dummy.csv")})
         features = FeatureSet()
         features.add(Feature("id", options=options))
         features.add(Feature("V1", options=options))

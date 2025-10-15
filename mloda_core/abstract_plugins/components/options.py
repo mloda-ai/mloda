@@ -15,6 +15,13 @@ class Options:
     - group: Parameters affecting Feature Group resolution/splitting (used in hashing/equality)
     - context: Metadata parameters that don't affect splitting (excluded from hashing)
 
+    Initialization:
+    - Options() - Empty options (both group and context are empty)
+    - Options({...}) - Positional dict goes to group
+    - Options(group={...}) - Explicit group parameters
+    - Options(context={...}) - Explicit context parameters
+    - Options(group={...}, context={...}) - Both specified
+
     Common Methods:
     - .get(key) - Read value (searches group, then context)
     - .set(key, value) - Write value (auto-placement)
@@ -26,26 +33,38 @@ class Options:
     - .context dict or .add_to_context(key, value)
 
     Constraint: A key cannot exist in both group and context simultaneously.
+
+    Examples:
+        >>> # Basic usage with positional dict (goes to group)
+        >>> opts = Options({"data_source": "prod"})
+        >>> opts.group
+        {'data_source': 'prod'}
+
+        >>> # Explicit group/context separation
+        >>> opts = Options(
+        ...     group={"data_source": "prod"},
+        ...     context={"debug_mode": True}
+        ... )
+        >>> opts.get("data_source")
+        'prod'
+        >>> opts.get("debug_mode")
+        True
+
+        >>> # Using helper methods
+        >>> opts = Options()
+        >>> opts.add_to_group("model_type", "classifier")
+        >>> opts.add_to_context("log_level", "INFO")
+        >>> "model_type" in opts
+        True
     """
 
     def __init__(
         self,
-        data: Optional[dict[str, Any]] = None,
         group: Optional[dict[str, Any]] = None,
         context: Optional[dict[str, Any]] = None,
     ) -> None:
-        # Handle different initialization patterns
-        if data is not None:
-            # Legacy initialization: Options(dict) -> move all to group for backward compatibility
-            if group is not None or context is not None:
-                raise ValueError("Cannot specify both 'data' and 'group'/'context' parameters")
-            self.group = data.copy()
-            self.context = {}
-        else:
-            # New initialization: Options(group=dict, context=dict)
-            self.group = group or {}
-            self.context = context or {}
-
+        self.group = group or {}
+        self.context = context or {}
         self._validate_no_duplicate_keys_in_group_and_context()
 
     def _validate_no_duplicate_keys_in_group_and_context(self) -> None:

@@ -54,10 +54,23 @@ class FeatureSet:
 
     def get_options_key(self, key: str) -> Any:
         """
-        You are only allowed to use this function,
-        if you expect that all options are the same for all resolved features of a feature group.
+        Get a value from the shared options across all features in this FeatureSet.
 
-        If you can, please avoid this function and use the options of the feature directly.
+        This method validates that all features in the set have identical options before
+        returning the requested value. If features have different options, it raises ValueError.
+
+        Args:
+            key: The option key to retrieve
+
+        Returns:
+            The value associated with the key, or None if not found
+
+        Raises:
+            ValueError: If options are not initialized or if features have different options
+
+        Note:
+            Prefer accessing options directly from individual features when possible.
+            Only use this when you need to ensure all features share the same option value.
         """
         if self.options is None:
             raise ValueError("No options set. Call this after adding a feature to ensure Options are initialized.")

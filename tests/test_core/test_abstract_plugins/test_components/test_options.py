@@ -21,10 +21,10 @@ class TestOptions:
         assert options.group == {"data_source": "prod", "environment": "staging"}
         assert options.context == {"aggregation_type": "sum", "debug_mode": True}
 
-    def test_mixed_initialization_error(self) -> None:
-        """Test that mixing legacy and new initialization raises error."""
-        with pytest.raises(ValueError, match="Cannot specify both 'data' and 'group'/'context' parameters"):
-            Options(data={"key": "value"}, group={"other": "value"})
+    def test_unknown_parameter_error(self) -> None:
+        """Test that using unknown parameters raises TypeError."""
+        with pytest.raises(TypeError, match="got an unexpected keyword argument"):
+            Options(data={"key": "value"})  # type: ignore
 
     def test_duplicate_keys_validation(self) -> None:
         """Test that duplicate keys in group and context raise error."""

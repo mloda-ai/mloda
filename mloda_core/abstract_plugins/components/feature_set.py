@@ -52,7 +52,7 @@ class FeatureSet:
     def __str__(self) -> str:
         return f"{self.features}"
 
-    def get_options(self) -> Options:
+    def get_options_key(self, key: str) -> Any:
         """
         You are only allowed to use this function,
         if you expect that all options are the same for all resolved features of a feature group.
@@ -62,18 +62,7 @@ class FeatureSet:
         if self.options is None:
             raise ValueError("No options set. Call this after adding a feature to ensure Options are initialized.")
         self.validate_equal_options()
-        return self.options
-
-    def get_options_key(self, key: str) -> Any:
-        """
-        You are only allowed to use this function,
-        if you expect that all options are the same for all resolved features of a feature group.
-
-        If you can, please avoid this function and use the options of the feature directly.
-        """
-
-        self.validate_equal_options()
-        return self.get_options().data.get(key, None)
+        return self.options.data.get(key, None)
 
     def validate_equal_options(self) -> None:
         """Checks if all features have the same options."""

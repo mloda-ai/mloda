@@ -868,7 +868,7 @@ class ExecutionPlan:
             raise ValueError(f"Feature group {feature_group} has no matching api data class for feature.")
 
         matching_cls_initialized = matching_cls(
-            api_input_name, feature_set.get_name_of_one_feature().name, feature_set.get_options()
+            api_input_name, feature_set.get_name_of_one_feature().name, feature_set.options
         )
 
         return matching_cls_initialized

@@ -33,7 +33,7 @@ class Features:
         self, features: List[Union[Feature, str]], child_options: Options, child_uuid: Optional[UUID] = None
     ) -> None:
         for feature in features:
-            if child_options.data == {}:
+            if child_options.group == {} and child_options.context == {}:
                 child_options = Options({})
 
             feature = Feature(name=feature, options=child_options) if isinstance(feature, str) else feature
@@ -49,8 +49,8 @@ class Features:
     def merge_options(self, feature_options: Options, child_options: Options) -> None:
         """Merge child_options into feature_options without overwriting existing keys."""
 
-        for key_child, value_child in child_options.data.items():
-            for key_parent, value_parent in feature_options.data.items():
+        for key_child, value_child in child_options.items():
+            for key_parent, value_parent in feature_options.items():
                 if key_child == key_parent:
                     if key_parent == DefaultOptionKeys.mloda_source_feature:
                         continue

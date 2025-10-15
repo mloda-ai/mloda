@@ -48,18 +48,16 @@ mindmap
 - ✅ All Feature Groups modernized to PROPERTY_MAPPING
 - ✅ Sklearn Pipeline with artifact storage
 - ✅ Complete compute framework implementations
+- ✅ **Options.data property deprecated and removed** (October 2025)
 
 ## Known Issues
 
 ```mermaid
 flowchart TD
     Issue1[FeatureSet Creation] --> |Unintuitive| Fix1[feature_set.add syntax]
-    Issue2[Options.data Dictionary] --> |Unhashable| Fix2[JSON serialization workaround]
-    
+
     style Issue1 fill:#fbb,stroke:#333
-    style Issue2 fill:#fbb,stroke:#333
 ```
 
 - **FeatureSet creation**: Requires `FeatureSet()` then `.add(feature)`
-- **Options.data dictionaries**: Can't hash dict values, use JSON serialization
 

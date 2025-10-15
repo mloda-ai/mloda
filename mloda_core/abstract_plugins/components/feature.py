@@ -56,9 +56,9 @@ class Feature:
     ):
         self.name = FeatureName(name) if isinstance(name, str) else name
         self.options = Options(options) if isinstance(options, dict) else options
-        self.domain = self._set_domain(domain, self.options.data.get("domain"))
+        self.domain = self._set_domain(domain, self.options.get("domain"))
 
-        cf = self._set_compute_framework(compute_framework, self.options.data.get("compute_framework"))
+        cf = self._set_compute_framework(compute_framework, self.options.get("compute_framework"))
         self.compute_frameworks = {cf} if cf else None
 
         self.uuid = uuid4()

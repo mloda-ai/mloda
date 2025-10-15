@@ -29,7 +29,7 @@ class OverwrittenReadCsvInputDataTestFeatureGroup(ReadFileFeature):
         feature_list = feature_names.split(",")
 
         # We added this, because else this feature name rule would supersede the other examples.
-        if options.data.get("OverwrittenReadCsvInputDataTestFeatureGroup", None) is None:
+        if options.get("OverwrittenReadCsvInputDataTestFeatureGroup") is None:
             return False
 
         if feature_name in feature_list:

@@ -8,7 +8,7 @@ class TestOptions:
     def test_legacy_initialization(self) -> None:
         """Legacy initialization should move all data to group."""
         options = Options({"key1": "value1", "key2": "value2"})
-        assert options.group == {"key1": "value1", "key2": "value2"} == options.data
+        assert options.group == {"key1": "value1", "key2": "value2"}
         assert options.context == {}
 
     def test_new_initialization(self) -> None:

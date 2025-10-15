@@ -9,21 +9,21 @@ if TYPE_CHECKING:
 
 class Options:
     """
-    Options can be passed into the feature, allowing arbitrary variables to be used.
-    This enables configuration:
-    - at request time
-    - when defining input features of a feature_group.
+    Configuration container for features with group/context separation.
 
-    At-request options are forwarded to child features. This allows configuring children features by:
-    - request feature options
-    - defining input features of the feature_group.
+    Architecture:
+    - group: Parameters affecting Feature Group resolution/splitting (used in hashing/equality)
+    - context: Metadata parameters that don't affect splitting (excluded from hashing)
 
-    New Architecture (group/context separation):
-    - group: Parameters that require Feature Groups to have independent resolved feature objects
-    - context: Contextual parameters that don't affect Feature Group resolution/splitting
+    Common Methods:
+    - .get(key) - Read value (searches group, then context)
+    - .set(key, value) - Write value (auto-placement)
+    - .items() / .keys() - Iterate over all options
+    - key in options - Check existence
 
-    During migration: All existing options are moved to 'group' to maintain current behavior.
-    Future optimization: Move appropriate parameters from 'group' to 'context' for better performance.
+    Direct Access (when category matters):
+    - .group dict or .add_to_group(key, value)
+    - .context dict or .add_to_context(key, value)
 
     Constraint: A key cannot exist in both group and context simultaneously.
     """
@@ -53,16 +53,6 @@ class Options:
         duplicate_keys = set(self.group.keys()) & set(self.context.keys())
         if duplicate_keys:
             raise ValueError(f"Keys cannot exist in both group and context: {duplicate_keys}")
-
-    @property
-    def data(self) -> dict[str, Any]:
-        """
-        Legacy property for backward compatibility.
-        Returns group data to maintain existing behavior during migration.
-
-        Note: This will be deprecated once migration to group/context is complete.
-        """
-        return self.group
 
     def add(self, key: str, value: Any) -> None:
         """
@@ -117,12 +107,54 @@ class Options:
 
     def get(self, key: str) -> Any:
         """
-        Legacy method for backward compatibility.
-        Searches group first, then context for the key.
+        Get a value from options, searching group first, then context.
+
+        This is the recommended way to access option values when you don't need
+        to distinguish between group and context parameters.
         """
         if key in self.group:
             return self.group[key]
         return self.context.get(key, None)
+
+    def items(self) -> list[tuple[str, Any]]:
+        """
+        Get all key-value pairs from both group and context.
+
+        Returns a list of tuples containing all options.
+        Group options are returned first, followed by context options.
+        """
+        return list(self.group.items()) + list(self.context.items())
+
+    def keys(self) -> list[str]:
+        """
+        Get all keys from both group and context.
+
+        Returns a list of all option keys.
+        """
+        return list(self.group.keys()) + list(self.context.keys())
+
+    def __contains__(self, key: str) -> bool:
+        """
+        Check if a key exists in either group or context.
+
+        Supports the 'in' operator: 'key' in options
+        """
+        return key in self.group or key in self.context
+
+    def set(self, key: str, value: Any) -> None:
+        """
+        Set a value, automatically placing it in group or context.
+
+        If the key already exists, update it in its current location.
+        If the key is new, add it to group by default.
+        """
+        if key in self.group:
+            self.group[key] = value
+        elif key in self.context:
+            self.context[key] = value
+        else:
+            # New key, add to group by default
+            self.group[key] = value
 
     def get_source_features(self) -> "frozenset[Feature]":
         val = self.get(DefaultOptionKeys.mloda_source_feature)

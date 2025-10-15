@@ -137,10 +137,6 @@ class FeatureChainParser:
             ValueError: If parameter exists in both group and context
         """
 
-        if property_name in options.data:
-            if options.data is not options.group:
-                raise ValueError(f"Parameter '{property_name}' exists in deprecated key. This should not happen.")
-
         if property_name in options.group and property_name in options.context:
             raise ValueError(
                 f"Parameter '{property_name}' exists in both group and context. "

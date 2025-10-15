@@ -49,7 +49,7 @@ class BaseInputData(ABC):
         """
         subclasses = get_all_filtereted_subclasses(BaseInputData, cls)
         for subclass in subclasses:
-            for key, value in options.data.items():
+            for key, value in options.items():
                 _key = cls.deal_with_base_input_data_name_as_cls_or_str(key)
 
                 if _key == subclass.data_access_name():

@@ -101,15 +101,15 @@ class GlobalFilter:
         return matched_filters
 
     def unify_options(self, feat_options: Options, filter_options: Options) -> Options:
-        for key, value in feat_options.data.items():
-            if key not in filter_options.data:
-                filter_options.data[key] = value
+        for key, value in feat_options.items():
+            if key not in filter_options:
+                filter_options.set(key, value)
             else:
-                if filter_options.data[key] == value:
+                if filter_options.get(key) == value:
                     continue
                 else:
                     logger.warning(
-                        f"Options are not the same. {key} is different. {filter_options.data[key]} != {value}"
+                        f"Options are not the same. {key} is different. {filter_options.get(key)} != {value}"
                     )
         return filter_options
 

@@ -26,7 +26,7 @@ class FeatureSet:
             raise ValueError("No options set. Call this after adding a feature to ensure Options are initialized.")
 
         for feature_name in self.get_all_names():
-            if feature_name in self.options.data.keys():
+            if feature_name in self.options.keys():
                 self.artifact_to_load = feature_name
                 return
 
@@ -62,7 +62,7 @@ class FeatureSet:
         if self.options is None:
             raise ValueError("No options set. Call this after adding a feature to ensure Options are initialized.")
         self.validate_equal_options()
-        return self.options.data.get(key, None)
+        return self.options.get(key)
 
     def validate_equal_options(self) -> None:
         """Checks if all features have the same options."""

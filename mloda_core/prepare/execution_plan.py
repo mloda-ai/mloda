@@ -775,7 +775,7 @@ class ExecutionPlan:
         if link_fw[0].left_pointer is None:
             raise ValueError("This should not happen. If one pointer is set, the other should be set as well.")
 
-        for k, v in graph.nodes[uuid].feature.options.data.items():
+        for k, v in graph.nodes[uuid].feature.options.items():
             for _k, _v in pointer_dict.items():
                 if k == _k and v == _v:
                     return True

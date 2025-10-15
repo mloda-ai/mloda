@@ -156,7 +156,7 @@ class TestForecastingFeatureGroup(unittest.TestCase):
         feature_set2.add(Feature(feature_name))
 
         # Create new options with the saved artifact
-        options2 = Options(self.options.data.copy())
+        options2 = Options(group=self.options.group.copy(), context=self.options.context.copy())
 
         # We need to serialize the artifact before setting it in the options
         # Import the ForecastingArtifact class to use its serialization method
@@ -165,7 +165,7 @@ class TestForecastingFeatureGroup(unittest.TestCase):
         serialized_artifact = ForecastingArtifact._serialize_artifact(saved_artifact)  # type: ignore
 
         # Set the serialized artifact in the options using the feature name as the key
-        options2.data[feature_name] = serialized_artifact
+        options2.add_to_group(feature_name, serialized_artifact)
 
         for feature in feature_set2.features:
             feature.options = options2

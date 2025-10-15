@@ -133,7 +133,7 @@ class SklearnArtifact(BaseArtifact):
         options = cls.get_singular_option_from_options(features)
 
         if options:
-            storage_path = options.data.get("artifact_storage_path")
+            storage_path = options.get("artifact_storage_path")
 
         if storage_path is None:
             storage_path = tempfile.gettempdir()
@@ -146,7 +146,7 @@ class SklearnArtifact(BaseArtifact):
         config_data = {}
         if options:
             config_data = {
-                k: v for k, v in options.data.items() if not k.startswith(feature_name) and k != "artifact_storage_path"
+                k: v for k, v in options.items() if not k.startswith(feature_name) and k != "artifact_storage_path"
             }
 
         # Convert non-serializable objects for hashing
@@ -219,7 +219,7 @@ class SklearnArtifact(BaseArtifact):
 
         options = cls.get_singular_option_from_options(features)
         if options:
-            storage_path = options.data.get("artifact_storage_path")
+            storage_path = options.get("artifact_storage_path")
 
         if storage_path is None:
             storage_path = tempfile.gettempdir()
@@ -254,7 +254,7 @@ class SklearnArtifact(BaseArtifact):
 
         options = cls.get_singular_option_from_options(features)
         if options:
-            storage_path = options.data.get("artifact_storage_path")
+            storage_path = options.get("artifact_storage_path")
         if storage_path is None:
             storage_path = tempfile.gettempdir()
 

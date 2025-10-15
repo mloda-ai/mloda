@@ -74,7 +74,7 @@ class TestForecastingArtifactIntegration:
         feature2 = Feature(feature_name, options=options)
 
         # Add the artifact to the feature's options
-        feature2.options.data[feature_name] = artifacts[feature_name]
+        feature2.options.add_to_group(feature_name, artifacts[feature_name])
 
         # Create a new API with the artifact
         api2 = mlodaAPI(

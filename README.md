@@ -234,6 +234,48 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
 
 > **🎉 You now understand mloda's core workflow!**
 
+### 8. Configuration-Based Feature Definition
+
+**Define Features with JSON Configuration**
+
+Instead of Python code, define features declaratively using JSON configuration:
+
+```json
+[
+    "age",
+    {"name": "scaled_age", "mloda_source": "age", "options": {"method": "standard"}},
+    {"name": "distance", "mloda_sources": ["latitude", "longitude"]}
+]
+```
+
+```python
+from mloda_plugins.config.feature.loader import load_features_from_config
+
+# Load features from JSON
+with open("features.json") as f:
+    config_str = f.read()
+
+features = load_features_from_config(config_str, format="json")
+
+# Use with mlodaAPI
+result = mlodaAPI.run_all(features=features)
+```
+
+**Supported Patterns:**
+- **Simple features**: `"age"`, `"salary"`
+- **Chained features**: `"scaled__imputed__age"`
+- **Feature references**: `"@scaled_age"` (reference other features)
+- **Multiple sources**: `["latitude", "longitude"]` (multi-column features)
+- **Group/context options**: Separate performance and runtime options
+
+**Benefits:**
+- More maintainable than code-based definitions
+- Accessible to non-developers (data scientists, analysts)
+- Version control friendly
+- Easy to share and reuse across projects
+
+See [Feature Configuration Documentation](https://mloda-ai.github.io/mloda/plugins/feature_config/) for details.
+
 ## 📖 Documentation
 
 - **[Getting Started](https://mloda-ai.github.io/mloda/chapter1/installation/)** - Installation and first steps

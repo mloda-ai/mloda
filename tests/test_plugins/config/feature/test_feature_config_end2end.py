@@ -55,11 +55,11 @@ def test_integration_json_file() -> None:
     # Verify mloda_source is in context options
     assert features[2].options.context.get("mloda_source_feature") == "age"
 
-    # Fourth feature: Chained feature with mloda_source
+    # Fourth feature: Chained feature with mloda_source (aggregation on mean imputation)
     assert isinstance(features[3], Feature)
-    assert features[3].name.name == "max_aggr__onehot_encoded__state"
+    assert features[3].name.name == "max_aggr__mean_imputed__weight"
     # Verify mloda_source is in context options
-    assert features[3].options.context.get("mloda_source_feature") == "state"
+    assert features[3].options.context.get("mloda_source_feature") == "weight"
 
     # Fifth feature: Feature with group_options and context_options
     assert isinstance(features[4], Feature)
@@ -524,10 +524,10 @@ def test_complete_integration_json() -> None:
     assert features[2].options.context.get("mloda_source_feature") == "age", "mloda_source should be 'age'"
     validated_patterns["chained_feature"] = True
 
-    # Feature index 3: Another chained feature
+    # Feature index 3: Another chained feature (aggregation on mean imputation)
     assert isinstance(features[3], Feature), "Second chained feature should be a Feature object"
-    assert features[3].name.name == "max_aggr__onehot_encoded__state", "Second chained feature name incorrect"
-    assert features[3].options.context.get("mloda_source_feature") == "state", "mloda_source should be 'state'"
+    assert features[3].name.name == "max_aggr__mean_imputed__weight", "Second chained feature name incorrect"
+    assert features[3].options.context.get("mloda_source_feature") == "weight", "mloda_source should be 'weight'"
 
     # 4. Group/context options separation
     # Feature index 4: production_feature with group_options and context_options

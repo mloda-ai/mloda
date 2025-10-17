@@ -57,7 +57,7 @@
 | jupyter-events                         | 0.12.0          | BSD License                                             |
 | jupyter-lsp                            | 2.3.0           | BSD License                                             |
 | jupyter_client                         | 8.6.3           | BSD License                                             |
-| jupyter_core                           | 5.8.1           | BSD-3-Clause                                            |
+| jupyter_core                           | 5.9.1           | BSD-3-Clause                                            |
 | jupyter_server                         | 2.17.0          | BSD License                                             |
 | jupyter_server_terminals               | 0.5.3           | BSD License                                             |
 | jupyterlab                             | 4.4.9           | BSD License                                             |
@@ -82,13 +82,13 @@
 | notebook                               | 7.4.7           | BSD License                                             |
 | notebook_shim                          | 0.2.4           | BSD License                                             |
 | numpy                                  | 2.2.6           | BSD License                                             |
-| opentelemetry-api                      | 1.37.0          | Apache-2.0                                              |
-| opentelemetry-instrumentation          | 0.58b0          | Apache Software License                                 |
-| opentelemetry-instrumentation-logging  | 0.58b0          | Apache Software License                                 |
-| opentelemetry-instrumentation-requests | 0.58b0          | Apache Software License                                 |
-| opentelemetry-sdk                      | 1.37.0          | Apache-2.0                                              |
-| opentelemetry-semantic-conventions     | 0.58b0          | Apache-2.0                                              |
-| opentelemetry-util-http                | 0.58b0          | Apache Software License                                 |
+| opentelemetry-api                      | 1.38.0          | Apache-2.0                                              |
+| opentelemetry-instrumentation          | 0.59b0          | Apache Software License                                 |
+| opentelemetry-instrumentation-logging  | 0.59b0          | Apache Software License                                 |
+| opentelemetry-instrumentation-requests | 0.59b0          | Apache Software License                                 |
+| opentelemetry-sdk                      | 1.38.0          | Apache-2.0                                              |
+| opentelemetry-semantic-conventions     | 0.59b0          | Apache-2.0                                              |
+| opentelemetry-util-http                | 0.59b0          | Apache Software License                                 |
 | overrides                              | 7.7.0           | Apache License, Version 2.0                             |
 | packageurl-python                      | 0.17.5          | MIT License                                             |
 | packaging                              | 25.0            | Apache Software License; BSD License                    |
@@ -135,7 +135,7 @@
 | rfc3987-syntax                         | 1.1.0           | Apache Software License                                 |
 | rich                                   | 14.2.0          | MIT License                                             |
 | rpds-py                                | 0.27.1          | MIT                                                     |
-| ruff                                   | 0.14.0          | MIT License                                             |
+| ruff                                   | 0.14.1          | MIT License                                             |
 | scikit-learn                           | 1.7.2           | BSD-3-Clause                                            |
 | scipy                                  | 1.15.3          | BSD License                                             |
 | six                                    | 1.17.0          | MIT License                                             |

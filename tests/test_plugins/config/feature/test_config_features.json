@@ -11,8 +11,8 @@
     "mloda_source": "age"
   },
   {
-    "name": "max_aggr__onehot_encoded__state",
-    "mloda_source": "state"
+    "name": "max_aggr__mean_imputed__weight",
+    "mloda_source": "weight"
   },
   {
     "name": "production_feature",

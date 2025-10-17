@@ -70,14 +70,80 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
     These parameters don't affect Feature Group resolution/splitting:
     - `imputation_method`: The type of imputation to perform
     - `mloda_source_feature`: The source feature to impute missing values
+    - `constant_value`: Constant value for constant imputation (optional)
+    - `group_by_features`: Features to group by before imputation (optional)
 
     ### Group Parameters
     Currently none for MissingValueFeatureGroup. Parameters that affect Feature Group
     resolution/splitting would be placed here.
 
+    ## Usage Examples
+
+    ### String-Based Creation
+
+    ```python
+    from mloda_core.abstract_plugins.components.feature import Feature
+
+    # Impute missing income values with mean
+    feature = Feature(name="mean_imputed__income")
+
+    # Impute missing age values with median
+    feature = Feature(name="median_imputed__age")
+
+    # Impute missing category values with mode
+    feature = Feature(name="mode_imputed__category")
+
+    # Forward fill missing temperature values
+    feature = Feature(name="ffill_imputed__temperature")
+    ```
+
+    ### Configuration-Based Creation
+
+    ```python
+    from mloda_core.abstract_plugins.components.feature import Feature
+    from mloda_core.abstract_plugins.components.options import Options
+    from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+
+    # Mean imputation using configuration
+    feature = Feature(
+        name="placeholder",
+        options=Options(
+            context={
+                MissingValueFeatureGroup.IMPUTATION_METHOD: "mean",
+                DefaultOptionKeys.mloda_source_feature: "income",
+            }
+        )
+    )
+
+    # Constant imputation with a specific value
+    feature = Feature(
+        name="placeholder",
+        options=Options(
+            context={
+                MissingValueFeatureGroup.IMPUTATION_METHOD: "constant",
+                DefaultOptionKeys.mloda_source_feature: "status",
+                "constant_value": "unknown",
+            }
+        )
+    )
+
+    # Group-based imputation (e.g., mean by category)
+    feature = Feature(
+        name="placeholder",
+        options=Options(
+            context={
+                MissingValueFeatureGroup.IMPUTATION_METHOD: "mean",
+                DefaultOptionKeys.mloda_source_feature: "price",
+                "group_by_features": ["product_category", "region"],
+            }
+        )
+    )
+    ```
+
     ## Requirements
-    - The input data must contain the source feature to be imputed
-    - For group-based imputation, the grouping features must also be present
+    - Input data must contain the source feature to be imputed
+    - For group-based imputation, grouping features must also be present
+    - For constant imputation, a constant_value must be provided
     """
 
     IMPUTATION_METHOD = "imputation_method"

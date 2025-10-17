@@ -217,6 +217,171 @@ class ClaudeAPI(LLMBaseApi):
 
 
 class ClaudeRequestLoop(RequestLoop):
+    """
+    Base class for integrating Anthropic Claude LLM API into mloda feature pipelines.
+
+    This feature group provides integration with Anthropic's Claude models, handling
+    message formatting, response parsing, tool calling, rate limiting, and multi-turn
+    conversation management for Claude API interactions.
+
+    ## Key Capabilities
+
+    - Multi-turn conversation support with message history
+    - Claude-specific message format handling (role-based)
+    - Tool/function calling with proper tool result formatting
+    - Automatic retry logic with exponential backoff for rate limits
+    - Support for all Claude model versions (e.g., claude-3-opus, claude-3-sonnet)
+    - Integration with mloda's ToolCollection framework
+
+    ## Common Use Cases
+
+    - Complex reasoning and analysis tasks
+    - Multi-step problem solving with tools
+    - Code review and refactoring suggestions
+    - Extended conversations with context preservation
+    - Document analysis and summarization
+    - Interactive AI workflows with tool augmentation
+
+    ## Usage Examples
+
+    ### Basic Text Generation
+
+    ```python
+    from mloda_core.abstract_plugins.components.feature import Feature
+    from mloda_core.abstract_plugins.components.options import Options
+
+    feature = Feature(
+        name="ClaudeRequestLoop",
+        options=Options(
+            context={
+                "model": "claude-3-5-sonnet-20241022",
+                "messages": [
+                    {"role": "user", "content": "Explain how this function works"}
+                ],
+            }
+        )
+    )
+    ```
+
+    ### Multi-Turn Conversation
+
+    ```python
+    messages = [
+        {"role": "user", "content": "What is feature engineering?"},
+        {"role": "assistant", "content": "Feature engineering is..."},
+        {"role": "user", "content": "Give me an example with pandas"},
+    ]
+
+    feature = Feature(
+        name="ClaudeRequestLoop",
+        options=Options(
+            context={
+                "model": "claude-3-5-sonnet-20241022",
+                "messages": messages,
+            }
+        )
+    )
+    ```
+
+    ### Tool-Augmented Workflow
+
+    ```python
+    from mloda_plugins.feature_group.experimental.llm.tools.tool_collection import (
+        ToolCollection
+    )
+
+    feature = Feature(
+        name="ClaudeRequestLoop",
+        options=Options(
+            context={
+                "model": "claude-3-5-sonnet-20241022",
+                "messages": [
+                    {"role": "user", "content": "Read config.py and check for issues"}
+                ],
+                "tools": tool_collection,
+            }
+        )
+    )
+    ```
+
+    ## Parameter Classification
+
+    ### Context Parameters (Default)
+
+    - `model` (required): Claude model name (e.g., "claude-3-5-sonnet-20241022")
+    - `messages` (required): List of message dicts with "role" and "content" keys
+    - `tools`: ToolCollection instance for function calling
+    - `max_tokens`: Maximum tokens in response (default: 1000)
+    - Additional parameters for multi-turn conversations
+
+    ### Group Parameters
+
+    Currently none for ClaudeRequestLoop.
+
+    ## Configuration
+
+    ### Environment Variables
+
+    - `CLAUDE_API_KEY` (required): Anthropic API key for Claude access
+    - `CLAUDE_MAX_RETRIES`: Maximum retry attempts (default: 5)
+    - `CLAUDE_INITIAL_RETRY_DELAY`: Initial retry delay in seconds (default: 10)
+    - `CLAUDE_MAX_RETRY_DELAY`: Maximum retry delay in seconds (default: 60)
+
+    ## Output Format
+
+    Returns generated text from Claude in a DataFrame column named `ClaudeRequestLoop`.
+    For tool calls, returns the tool execution results.
+
+    ## Message Format
+
+    Claude requires a list of message dictionaries:
+    ```python
+    [
+        {"role": "user", "content": "First message"},
+        {"role": "assistant", "content": "AI response"},
+        {"role": "user", "content": "Follow-up message"}
+    ]
+    ```
+
+    ## Rate Limiting
+
+    Implements exponential backoff retry logic:
+    - Detects HTTP 429 rate limit errors
+    - Retries with increasing delays: 10s, 20s, 40s, 60s (capped)
+    - Configurable via environment variables
+    - Raises exception after max retries exceeded
+
+    ## Requirements
+
+    - `anthropic` package installed (`pip install anthropic`)
+    - Valid CLAUDE_API_KEY environment variable
+    - Internet connection for API access
+    - Sufficient API credits/quota
+
+    ## Error Handling
+
+    - Rate limits: Automatic retry with exponential backoff
+    - Invalid API key: Raises ValueError
+    - Missing package: Raises ImportError
+    - Invalid message format: Validates list of dicts (not single string)
+    - Network errors: Propagates exception after retries exhausted
+
+    ## Implementation Notes
+
+    - Claude requires message arrays (not single string prompts like Gemini)
+    - Tool results are added to messages as user role content
+    - Assistant responses are tracked separately
+    - Response parsing handles ToolUseBlock objects from Anthropic SDK
+    - Inherits core functionality from RequestLoop base class
+
+    ## Related Classes
+
+    - `ClaudeAPI`: Low-level API wrapper for Claude requests
+    - `RequestLoop`: Base class providing request/response loop logic
+    - `ToolCollection`: Manages available tools for function calling
+    - `GeminiRequestLoop`: Alternative LLM provider with different message format
+    """
+
     @classmethod
     def api(cls) -> Any:
         return ClaudeAPI

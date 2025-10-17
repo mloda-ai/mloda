@@ -189,6 +189,162 @@ class GeminiAPI(LLMBaseApi):
 
 
 class GeminiRequestLoop(RequestLoop):
+    """
+    Base class for integrating Google Gemini LLM API into mloda feature pipelines.
+
+    This feature group provides a bridge between mloda's feature engineering framework
+    and Google's Gemini generative AI models. It handles request formatting, response
+    parsing, tool calling, rate limiting, and error handling for Gemini API interactions.
+
+    ## Key Capabilities
+
+    - Send prompts to Gemini models and receive generated text
+    - Support for multiple Gemini model versions (e.g., gemini-2.0-flash-exp)
+    - Automatic retry logic with exponential backoff for rate limits
+    - Tool/function calling support for interactive workflows
+    - Integration with mloda's ToolCollection framework
+    - Response parsing and validation
+
+    ## Common Use Cases
+
+    - Natural language processing and text generation
+    - Code analysis and generation
+    - File content analysis for intelligent selection
+    - Multi-turn conversations with context preservation
+    - Tool-augmented AI workflows (function calling)
+    - Automated documentation generation
+
+    ## Usage Examples
+
+    ### Basic Text Generation
+
+    ```python
+    from mloda_core.abstract_plugins.components.feature import Feature
+    from mloda_core.abstract_plugins.components.options import Options
+
+    feature = Feature(
+        name="GeminiRequestLoop",
+        options=Options(
+            context={
+                "model": "gemini-2.0-flash-exp",
+                "prompt": "Explain what this code does",
+                "mloda_source_feature": frozenset(["CodeContentFeature"]),
+            }
+        )
+    )
+    ```
+
+    ### File Analysis with LLM
+
+    ```python
+    from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+    from mloda_plugins.feature_group.input_data.read_context_files import (
+        ConcatenatedFileContent
+    )
+
+    feature = Feature(
+        name="GeminiRequestLoop",
+        options=Options(
+            context={
+                "model": "gemini-2.0-flash-exp",
+                "prompt": "List the file paths that contain authentication logic",
+                DefaultOptionKeys.mloda_source_feature: frozenset([
+                    ConcatenatedFileContent.get_class_name()
+                ]),
+                "target_folder": frozenset(["/workspace/src"]),
+                "file_type": "py",
+            }
+        )
+    )
+    ```
+
+    ### Tool-Augmented Workflow
+
+    ```python
+    from mloda_plugins.feature_group.experimental.llm.tools.tool_collection import (
+        ToolCollection
+    )
+
+    # Assuming tools are configured
+    feature = Feature(
+        name="GeminiRequestLoop",
+        options=Options(
+            context={
+                "model": "gemini-2.0-flash-exp",
+                "prompt": "Read file.py and suggest improvements",
+                "tools": tool_collection,  # ToolCollection instance
+            }
+        )
+    )
+    ```
+
+    ## Parameter Classification
+
+    ### Context Parameters (Default)
+
+    - `model` (required): Gemini model name (e.g., "gemini-2.0-flash-exp")
+    - `prompt` (required): Single string prompt for the LLM
+    - `mloda_source_feature`: Frozenset of upstream feature dependencies
+    - `model_parameters`: Dict of generation config (temperature, top_p, etc.)
+    - `tools`: ToolCollection instance for function calling
+    - Additional parameters passed to upstream features (target_folder, file_type, etc.)
+
+    ### Group Parameters
+
+    Currently none for GeminiRequestLoop.
+
+    ## Configuration
+
+    ### Environment Variables
+
+    - `GEMINI_API_KEY` (required): Google API key for Gemini access
+    - `GEMINI_MAX_RETRIES`: Maximum retry attempts (default: 5)
+    - `GEMINI_INITIAL_RETRY_DELAY`: Initial retry delay in seconds (default: 10)
+    - `GEMINI_MAX_RETRY_DELAY`: Maximum retry delay in seconds (default: 60)
+
+    ## Output Format
+
+    Returns generated text from Gemini in a DataFrame column named `GeminiRequestLoop`.
+    If tools are used, returns the tool execution results.
+
+    ## Rate Limiting
+
+    Implements exponential backoff retry logic:
+    - Detects HTTP 429 rate limit errors
+    - Retries with increasing delays: 10s, 20s, 40s, 60s (capped)
+    - Configurable via environment variables
+    - Raises exception after max retries exceeded
+
+    ## Requirements
+
+    - `google.generativeai` package installed (`pip install google-generativeai`)
+    - Valid GEMINI_API_KEY environment variable
+    - Internet connection for API access
+    - Sufficient API quota/credits
+
+    ## Error Handling
+
+    - Rate limits: Automatic retry with exponential backoff
+    - Invalid API key: Raises ValueError
+    - Missing package: Raises ImportError
+    - Network errors: Propagates exception after retries exhausted
+    - Invalid prompts: Validates single string prompt (no list support)
+
+    ## Implementation Notes
+
+    - Gemini only supports single string prompts (not message arrays)
+    - Tool functions are converted from ToolFunctionDeclaration format
+    - Response parsing handles both text and function call responses
+    - Inherits core functionality from RequestLoop base class
+
+    ## Related Classes
+
+    - `GeminiAPI`: Low-level API wrapper for Gemini requests
+    - `RequestLoop`: Base class providing request/response loop logic
+    - `ToolCollection`: Manages available tools for function calling
+    - `LLMFileSelector`: Example feature using GeminiRequestLoop
+    """
+
     @classmethod
     def api(cls) -> Any:
         return GeminiAPI

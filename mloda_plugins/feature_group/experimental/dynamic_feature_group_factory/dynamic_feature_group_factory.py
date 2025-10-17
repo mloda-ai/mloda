@@ -12,7 +12,172 @@ from mloda_core.abstract_plugins.components.input_data.base_input_data import Ba
 
 class DynamicFeatureGroupCreator:
     """
-    A class to dynamically create AbstractFeatureGroup subclasses based on a dictionary of properties.
+    Base class for dynamically creating AbstractFeatureGroup subclasses at runtime.
+
+    This factory enables programmatic creation of feature groups by specifying their
+    behavior through a properties dictionary. It's useful for generating feature groups
+    on-the-fly without writing explicit class definitions, particularly in scenarios
+    requiring dynamic behavior based on runtime conditions.
+
+    ## Key Capabilities
+
+    - Create feature group classes at runtime without explicit class definitions
+    - Override specific methods (calculate_feature, match_feature_group_criteria, etc.)
+    - Inherit from any AbstractFeatureGroup subclass (e.g., ReadFileFeature, SourceInputFeature)
+    - Cache created classes to avoid duplicate definitions
+    - Support full feature group lifecycle customization
+
+    ## Common Use Cases
+
+    - Creating file-specific reader feature groups dynamically
+    - Building feature groups with computed matching criteria
+    - Generating temporary feature groups for joins or transformations
+    - Extending existing feature groups with custom behavior
+
+    ## Available Method Overrides
+
+    All methods from AbstractFeatureGroup can be overridden via the properties dictionary:
+
+    - `set_feature_name`: Customize feature name resolution
+    - `match_feature_group_criteria`: Define custom matching logic
+    - `input_data`: Specify input data sources
+    - `validate_input_features`: Add input validation logic
+    - `calculate_feature`: Define feature calculation logic
+    - `validate_output_features`: Add output validation logic
+    - `artifact`: Specify artifact types
+    - `compute_framework_rule`: Define compute framework compatibility
+    - `return_data_type_rule`: Specify return data types
+    - `input_features`: Define input feature dependencies
+    - `index_columns`: Specify index column requirements
+    - `supports_index`: Define index support logic
+
+    ## Usage Examples
+
+    ### Basic Dynamic Feature Group
+
+    ```python
+    from mloda_plugins.feature_group.experimental.dynamic_feature_group_factory import (
+        DynamicFeatureGroupCreator
+    )
+    from mloda_core.abstract_plugins.components.feature_name import FeatureName
+
+    # Define custom behavior
+    properties = {
+        "calculate_feature": lambda cls, data, features: data * 2,
+        "match_feature_group_criteria": lambda cls, feature_name, options, dac: (
+            feature_name == FeatureName("double_value")
+        ),
+    }
+
+    # Create the dynamic feature group class
+    DoubleValueFG = DynamicFeatureGroupCreator.create(
+        properties=properties,
+        class_name="DoubleValueFeatureGroup"
+    )
+
+    # Use like any other feature group
+    # The class is now registered and can match "double_value" features
+    ```
+
+    ### Dynamic File Reader Feature Group
+
+    ```python
+    from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
+    from mloda_plugins.feature_group.input_data.read_files.text_file_reader import PyFileReader
+
+    properties = {
+        "input_data": lambda: PyFileReader(),
+        "calculate_feature": lambda cls, data, features: process_file_content(data),
+        "match_feature_group_criteria": lambda cls, fn, opts, dac: (
+            fn == FeatureName("my_file_reader")
+        ),
+    }
+
+    # Inherit from ReadFileFeature for file reading capabilities
+    MyFileReaderFG = DynamicFeatureGroupCreator.create(
+        properties=properties,
+        class_name="MyFileReaderFeatureGroup",
+        feature_group_cls=ReadFileFeature
+    )
+    ```
+
+    ### Dynamic Join Feature Group
+
+    ```python
+    from mloda_plugins.feature_group.experimental.source_input_feature import SourceInputFeature
+
+    def calculate_join(cls, data, features):
+        # Combine columns from joined data
+        data["combined"] = data[data.columns]
+        return data
+
+    properties = {
+        "calculate_feature": calculate_join,
+    }
+
+    # Create a join feature group
+    JoinFG = DynamicFeatureGroupCreator.create(
+        properties=properties,
+        class_name="DynamicJoinFeatureGroup",
+        feature_group_cls=SourceInputFeature
+    )
+    ```
+
+    ### Complex Custom Logic
+
+    ```python
+    from mloda_core.abstract_plugins.components.feature import Feature
+
+    def custom_input_features(self, options, feature_name):
+        # Return dynamically determined input features
+        return {Feature(name="computed_input_feature")}
+
+    def custom_match_criteria(cls, feature_name, options, dac):
+        # Match based on runtime conditions
+        if isinstance(feature_name, FeatureName):
+            feature_name = feature_name.name
+        return "custom_prefix" in feature_name
+
+    properties = {
+        "match_feature_group_criteria": custom_match_criteria,
+        "input_features": custom_input_features,
+        "compute_framework_rule": lambda: {PandasDataframe},
+    }
+
+    CustomFG = DynamicFeatureGroupCreator.create(
+        properties=properties,
+        class_name="CustomLogicFeatureGroup"
+    )
+    ```
+
+    ## Parameters
+
+    ### create() Method Parameters
+
+    - `properties`: Dictionary mapping method names to callable implementations
+    - `class_name`: Name for the dynamically created class (used for caching)
+    - `feature_group_cls`: Base class to inherit from (default: AbstractFeatureGroup)
+
+    ## Implementation Details
+
+    - Created classes are cached in `_created_classes` dictionary
+    - Requesting the same `class_name` twice returns the cached class
+    - Properties use lambda functions or regular functions as method implementations
+    - Method signatures must match the original AbstractFeatureGroup signatures
+    - Unspecified methods fall back to parent class implementations
+
+    ## Requirements
+
+    - Properties dictionary with valid method names from AbstractFeatureGroup
+    - Callable implementations matching expected method signatures
+    - Unique class_name for each distinct feature group type
+    - Base class must be AbstractFeatureGroup or its subclass
+
+    ## Real-World Example
+
+    See `ConcatenatedFileContent` in `read_context_files.py` for a production
+    example that uses DynamicFeatureGroupCreator to create file-reading feature
+    groups on-the-fly for joining multiple files.
     """
 
     _created_classes: Dict[str, Type[AbstractFeatureGroup]] = {}  # Store created classes

@@ -12,6 +12,150 @@ from mloda_plugins.feature_group.input_data.read_db import ReadDB
 
 
 class SQLITEReader(ReadDB):
+    """
+    Base class for SQLite database reading feature groups.
+
+    This feature group enables reading data from SQLite database files, providing
+    a flexible mechanism for loading features from local database files. It handles
+    connection management, query building, and data conversion to PyArrow format.
+
+    ## Supported Operations
+
+    - `database_connection`: Connect to SQLite database files using file paths
+    - `query_building`: Automatically build SQL queries based on requested features
+    - `table_discovery`: Automatically discover and match features to tables
+    - `data_conversion`: Convert SQLite results to PyArrow tables
+
+    ## Feature Creation Methods
+
+    ### 1. String-Based Creation
+
+    Features reference column names from SQLite database tables:
+
+    Examples:
+    ```python
+    features = [
+        "customer_id",      # Column from customers table
+        "order_total",      # Column from orders table
+        "product_name"      # Column from products table
+    ]
+    ```
+
+    ### 2. Configuration-Based Creation
+
+    Uses Options with database credentials and configuration:
+
+    ```python
+    from mloda_core.abstract_plugins.components.feature import Feature
+    from mloda_core.abstract_plugins.components.options import Options
+    from mloda_core.abstract_plugins.components.hashable_dict import HashableDict
+
+    feature = Feature(
+        name="customer_name",
+        options=Options(
+            context={
+                "BaseInputData": (
+                    SQLITEReader,
+                    HashableDict({"sqlite": "/path/to/database.db"})
+                )
+            }
+        )
+    )
+    ```
+
+    ## Usage Examples
+
+    ### Basic SQLite Feature Access
+
+    ```python
+    from mloda_core.abstract_plugins.components.feature import Feature
+    from mloda_core.abstract_plugins.components.hashable_dict import HashableDict
+
+    # Simple column reference from SQLite database
+    feature = Feature(
+        name="user_email",
+        options=Options(
+            context={
+                "BaseInputData": (
+                    SQLITEReader,
+                    HashableDict({"sqlite": "users.db"})
+                )
+            }
+        )
+    )
+    ```
+
+    ### Multiple Features from Same Database
+
+    ```python
+    # Load multiple columns from the same database
+    feature1 = Feature(
+        name="customer_id",
+        options=Options(
+            context={
+                "BaseInputData": (
+                    SQLITEReader,
+                    HashableDict({"sqlite": "sales.db"})
+                )
+            }
+        )
+    )
+
+    feature2 = Feature(
+        name="purchase_amount",
+        options=Options(
+            context={
+                "BaseInputData": (
+                    SQLITEReader,
+                    HashableDict({"sqlite": "sales.db"})
+                )
+            }
+        )
+    )
+    ```
+
+    ### Using DataAccessCollection
+
+    ```python
+    from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
+
+    # Configure database access at the collection level
+    data_access = DataAccessCollection(
+        credential_dicts=HashableDict({"sqlite": "/data/analytics.db"})
+    )
+
+    # Features will automatically use the configured database
+    feature = Feature(name="revenue")
+    ```
+
+    ## Parameter Classification
+
+    ### Context Parameters (Default)
+    These parameters don't affect Feature Group resolution/splitting:
+    - `sqlite`: File path to the SQLite database file
+    - `table_name`: Automatically determined based on feature name lookup
+
+    ### Group Parameters
+    Currently none for SQLITEReader. Parameters that affect Feature Group
+    resolution/splitting would be placed here.
+
+    ## Requirements
+
+    - SQLite database file must exist at the specified path
+    - Database must be readable and accessible
+    - Feature names must match column names in the database tables
+    - All features must use the same database file
+    - PyArrow library must be installed for data conversion
+
+    ## Additional Notes
+
+    - The reader automatically discovers which table contains requested columns
+    - Built queries use SELECT statements for requested columns
+    - Results are converted to PyArrow Table format for efficient processing
+    - Connection validation occurs before attempting to read data
+    - Table names are automatically cached after first feature lookup
+    """
+
     @classmethod
     def db_path(cls) -> str:
         return "sqlite"

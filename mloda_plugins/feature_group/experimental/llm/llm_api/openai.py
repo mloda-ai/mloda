@@ -219,6 +219,197 @@ class OpenAIAPI(LLMBaseApi):
 
 
 class OpenAIRequestLoop(RequestLoop):
+    """
+    Base class for integrating OpenAI LLM API into mloda feature pipelines.
+
+    This feature group provides integration with OpenAI-compatible APIs (including
+    Gemini's OpenAI compatibility layer), handling chat completion formatting,
+    response parsing, function calling, rate limiting, and conversation management.
+
+    ## Key Capabilities
+
+    - Chat completions with message history
+    - Function/tool calling with strict schema validation
+    - Automatic retry logic with exponential backoff for rate limits
+    - Support for OpenAI-compatible endpoints (including Gemini proxy)
+    - Multi-turn conversation support
+    - Integration with mloda's ToolCollection framework
+
+    ## Common Use Cases
+
+    - Chat-based interactions and conversations
+    - Function calling for structured outputs
+    - Code generation and analysis
+    - Question answering with context
+    - Multi-step reasoning with tool use
+    - API-agnostic LLM integration (works with compatible providers)
+
+    ## Usage Examples
+
+    ### Basic Chat Completion
+
+    ```python
+    from mloda_core.abstract_plugins.components.feature import Feature
+    from mloda_core.abstract_plugins.components.options import Options
+
+    feature = Feature(
+        name="OpenAIRequestLoop",
+        options=Options(
+            context={
+                "model": "gpt-4",
+                "messages": [
+                    {"role": "user", "content": "Explain this code snippet"}
+                ],
+            }
+        )
+    )
+    ```
+
+    ### Multi-Turn Conversation
+
+    ```python
+    messages = [
+        {"role": "system", "content": "You are a helpful coding assistant"},
+        {"role": "user", "content": "How do I read a CSV file?"},
+        {"role": "assistant", "content": "You can use pandas.read_csv()..."},
+        {"role": "user", "content": "Show me an example"},
+    ]
+
+    feature = Feature(
+        name="OpenAIRequestLoop",
+        options=Options(
+            context={
+                "model": "gpt-4",
+                "messages": messages,
+            }
+        )
+    )
+    ```
+
+    ### Function Calling
+
+    ```python
+    from mloda_plugins.feature_group.experimental.llm.tools.tool_collection import (
+        ToolCollection
+    )
+
+    feature = Feature(
+        name="OpenAIRequestLoop",
+        options=Options(
+            context={
+                "model": "gpt-4",
+                "messages": [
+                    {"role": "user", "content": "What's the weather in NYC?"}
+                ],
+                "tools": tool_collection,  # Contains weather functions
+            }
+        )
+    )
+    ```
+
+    ### Using Gemini via OpenAI Compatibility
+
+    ```python
+    # Note: This implementation uses Gemini's OpenAI-compatible endpoint
+    feature = Feature(
+        name="OpenAIRequestLoop",
+        options=Options(
+            context={
+                "model": "gemini-1.5-flash",
+                "messages": [
+                    {"role": "user", "content": "Analyze this data"}
+                ],
+            }
+        )
+    )
+    ```
+
+    ## Parameter Classification
+
+    ### Context Parameters (Default)
+
+    - `model` (required): Model name (e.g., "gpt-4", "gemini-1.5-flash")
+    - `messages` (required): List of message dicts with "role" and "content"
+    - `tools`: ToolCollection instance for function calling
+    - Additional OpenAI chat completion parameters
+
+    ### Group Parameters
+
+    Currently none for OpenAIRequestLoop.
+
+    ## Configuration
+
+    ### Environment Variables
+
+    - `GEMINI_API_KEY` (required): API key (defaults to Gemini endpoint)
+    - `OPENAI_MAX_RETRIES`: Maximum retry attempts (default: 5)
+    - `OPENAI_INITIAL_RETRY_DELAY`: Initial retry delay in seconds (default: 10)
+    - `OPENAI_MAX_RETRY_DELAY`: Maximum retry delay in seconds (default: 60)
+
+    ### Base URL
+
+    Defaults to Gemini's OpenAI-compatible endpoint:
+    `https://generativelanguage.googleapis.com/v1beta/openai/`
+
+    Can be modified to use OpenAI or other compatible endpoints.
+
+    ## Output Format
+
+    Returns chat completion text in a DataFrame column named `OpenAIRequestLoop`.
+    For function calls, returns the tool execution results.
+
+    ## Message Format
+
+    OpenAI chat completion format with roles:
+    ```python
+    [
+        {"role": "system", "content": "System prompt"},
+        {"role": "user", "content": "User message"},
+        {"role": "assistant", "content": "AI response"}
+    ]
+    ```
+
+    ## Rate Limiting
+
+    Implements exponential backoff retry logic:
+    - Detects HTTP 429 rate limit errors
+    - Retries with increasing delays: 10s, 20s, 40s, 60s (capped)
+    - Configurable via environment variables
+    - Raises exception after max retries exceeded
+
+    ## Requirements
+
+    - `openai` package installed (`pip install openai`)
+    - Valid API key in GEMINI_API_KEY (or OPENAI_API_KEY for OpenAI)
+    - Internet connection for API access
+    - Sufficient API credits/quota
+
+    ## Error Handling
+
+    - Rate limits: Automatic retry with exponential backoff
+    - Invalid API key: Raises ValueError
+    - Missing package: Raises ImportError (if openai package not installed)
+    - Invalid message format: Validates list of dicts (not single string)
+    - Network errors: Propagates exception after retries exhausted
+
+    ## Implementation Notes
+
+    - Uses OpenAI SDK's chat.completions.create() interface
+    - Tool schemas use strict=True for validation
+    - Function arguments are JSON-parsed from response
+    - Multiple tool calls in single response are supported
+    - Inherits core functionality from RequestLoop base class
+    - Default configuration points to Gemini's OpenAI-compatible endpoint
+
+    ## Related Classes
+
+    - `OpenAIAPI`: Low-level API wrapper for OpenAI requests
+    - `RequestLoop`: Base class providing request/response loop logic
+    - `ToolCollection`: Manages available tools for function calling
+    - `ClaudeRequestLoop`: Alternative provider with native SDK
+    - `GeminiRequestLoop`: Native Gemini API (non-OpenAI compatible)
+    """
+
     @classmethod
     def api(cls) -> Any:
         return OpenAIAPI

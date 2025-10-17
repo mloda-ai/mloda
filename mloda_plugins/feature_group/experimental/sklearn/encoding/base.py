@@ -23,55 +23,134 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
     Base class for scikit-learn encoding feature groups.
 
     The EncodingFeatureGroup provides categorical encoding transformations for granular control
-    over categorical data preprocessing, demonstrating mloda's fine-grained transformation capabilities.
+    over categorical data preprocessing, using scikit-learn's encoding implementations. Supports
+    various encoding strategies for converting categorical variables to numerical representations.
 
-    ## Feature Naming Convention
+    ## Supported Operations
 
-    Encoding features follow this naming pattern:
-    `{encoder_type}_encoded__{mloda_source_feature}`
+    - `onehot`: OneHotEncoder - creates binary columns for each category
+    - `label`: LabelEncoder - converts categories to integer labels
+    - `ordinal`: OrdinalEncoder - converts categories to ordinal integers
 
-    The encoder type determines which sklearn encoder to use, and the source feature
-    is extracted from the feature name and used as input for the encoder.
+    ## Feature Creation Methods
+
+    ### 1. String-Based Creation
+
+    Encoding features follow the naming pattern: `{encoder_type}_encoded__{source_feature}`
 
     Examples:
-    - `onehot_encoded__category`: Apply OneHotEncoder to category feature
-    - `label_encoded__status`: Apply LabelEncoder to status feature
-    - `ordinal_encoded__priority`: Apply OrdinalEncoder to priority feature
+    ```python
+    features = [
+        "onehot_encoded__category",     # OneHot encode the category feature
+        "label_encoded__status",        # Label encode the status feature
+        "ordinal_encoded__priority"     # Ordinal encode the priority feature
+    ]
+    ```
 
-    ## Supported Encoders
+    ### 2. Configuration-Based Creation
 
-    - **onehot**: OneHotEncoder (creates binary columns for each category)
-    - **label**: LabelEncoder (converts categories to integer labels)
-    - **ordinal**: OrdinalEncoder (converts categories to ordinal integers)
+    Uses Options with proper group/context parameter separation:
 
-    ## Multiple Result Columns
+    ```python
+    from mloda_core.abstract_plugins.components.feature import Feature
+    from mloda_core.abstract_plugins.components.options import Options
+    from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+
+    feature = Feature(
+        name="placeholder",
+        options=Options(
+            context={
+                EncodingFeatureGroup.ENCODER_TYPE: "onehot",
+                DefaultOptionKeys.mloda_source_feature: "category",
+            }
+        )
+    )
+    ```
+
+    ## Usage Examples
+
+    ### String-Based Creation
+
+    ```python
+    from mloda_core.abstract_plugins.components.feature import Feature
+
+    # OneHot encoding - creates multiple binary columns
+    feature = Feature(name="onehot_encoded__product_category")
+    # Results in: onehot_encoded__product_category~cat1,
+    #             onehot_encoded__product_category~cat2, ...
+
+    # Label encoding - converts to single integer column
+    feature = Feature(name="label_encoded__customer_segment")
+
+    # Ordinal encoding - assigns ordered integer values
+    feature = Feature(name="ordinal_encoded__education_level")
+    ```
+
+    ### Configuration-Based Creation
+
+    ```python
+    from mloda_core.abstract_plugins.components.feature import Feature
+    from mloda_core.abstract_plugins.components.options import Options
+
+    # OneHot encoding using configuration
+    feature = Feature(
+        name="placeholder",
+        options=Options(
+            context={
+                EncodingFeatureGroup.ENCODER_TYPE: "onehot",
+                DefaultOptionKeys.mloda_source_feature: "department",
+            }
+        )
+    )
+
+    # Label encoding with configuration
+    feature = Feature(
+        name="placeholder",
+        options=Options(
+            context={
+                EncodingFeatureGroup.ENCODER_TYPE: "label",
+                DefaultOptionKeys.mloda_source_feature: "risk_level",
+            }
+        )
+    )
+    ```
+
+    ### Multiple Result Columns
 
     For encoders that produce multiple output columns (like OneHotEncoder), the feature group
     uses mloda's multiple result columns pattern with the `~` separator:
 
-    - `onehot_encoded__category~feature1`
-    - `onehot_encoded__category~feature2`
-    - `onehot_encoded__category~feature3`
-
-    ## Configuration-Based Creation
-
-    EncodingFeatureGroup supports configuration-based creation. This allows features to be created
-    from options rather than explicit feature names.
-
-    To create an encoding feature using configuration:
-
     ```python
-    feature = Feature(
-        "PlaceHolder",  # Placeholder name, will be replaced
-        Options({
-            EncodingFeatureGroup.ENCODER_TYPE: "onehot",
-            DefaultOptionKeys.mloda_source_feature: "category"
-        })
-    )
-
-    # The Engine will automatically parse this into a feature with name
-    # "onehot_encoded__category"
+    # OneHot encoding of 'category' with 3 unique values produces:
+    # - onehot_encoded__category~value1
+    # - onehot_encoded__category~value2
+    # - onehot_encoded__category~value3
     ```
+
+    ## Parameter Classification
+
+    ### Context Parameters (Default)
+    These parameters don't affect Feature Group resolution/splitting:
+    - `encoder_type`: Type of encoder to use (onehot, label, or ordinal)
+    - `mloda_source_feature`: Source feature to encode
+
+    ### Group Parameters
+    Currently none for EncodingFeatureGroup. Parameters that affect Feature Group
+    resolution/splitting would be placed here.
+
+    ## Requirements
+
+    - Input data must contain the source feature to be encoded
+    - Source feature should contain categorical data
+    - Scikit-learn library must be installed
+    - For OneHotEncoder, all categories must be known during fitting
+
+    ## Additional Notes
+
+    - Encoding models are persisted as artifacts for consistent train/test encoding
+    - OneHotEncoder handles unknown categories during prediction
+    - LabelEncoder assigns integers in alphabetical order by default
+    - OrdinalEncoder preserves ordinal relationships if categories are properly ordered
     """
 
     # Option keys for encoding configuration

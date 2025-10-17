@@ -16,14 +16,22 @@ services:
       mloda-base:
         condition: service_completed_successfully
     volumes:
-      - ai_agent_1_data:/workspace  
-      - ~/.ssh:/home/vscode/.ssh:ro
-      - ~/.gitconfig:/home/vscode/.gitconfig:ro
-      - ~/.git-credentials:/home/vscode/.git-credentials:ro
+      - ai_agent_1_data:/workspace
+      - ~/.gitconfig:/tmp/host-gitconfig:ro
+      - ~/.git-credentials:/tmp/host-git-credentials:ro
     ports:
       - "8000:8000"
     command: >
       bash -c "
+        if [ -f /tmp/host-gitconfig ] && [ ! -d /tmp/host-gitconfig ]; then
+          cp /tmp/host-gitconfig /home/vscode/.gitconfig;
+          echo 'Copied .gitconfig from host';
+        fi;
+        if [ -f /tmp/host-git-credentials ] && [ ! -d /tmp/host-git-credentials ]; then
+          cp /tmp/host-git-credentials /home/vscode/.git-credentials;
+          chmod 600 /home/vscode/.git-credentials;
+          echo 'Copied .git-credentials from host';
+        fi;
         if [ \"$(stat -c '%U' /workspace)\" != 'vscode' ]; then
           echo 'Fixing /workspace ownership (was root)...';
           sudo chown -R vscode:vscode /workspace;
@@ -43,14 +51,22 @@ services:
       mloda-base:
         condition: service_completed_successfully
     volumes:
-      - ai_agent_2_data:/workspace  
-      - ~/.ssh:/home/vscode/.ssh:ro
-      - ~/.gitconfig:/home/vscode/.gitconfig:ro
-      - ~/.git-credentials:/home/vscode/.git-credentials:ro
+      - ai_agent_2_data:/workspace
+      - ~/.gitconfig:/tmp/host-gitconfig:ro
+      - ~/.git-credentials:/tmp/host-git-credentials:ro
     ports:
       - "8001:8000"
     command: >
       bash -c "
+        if [ -f /tmp/host-gitconfig ] && [ ! -d /tmp/host-gitconfig ]; then
+          cp /tmp/host-gitconfig /home/vscode/.gitconfig;
+          echo 'Copied .gitconfig from host';
+        fi;
+        if [ -f /tmp/host-git-credentials ] && [ ! -d /tmp/host-git-credentials ]; then
+          cp /tmp/host-git-credentials /home/vscode/.git-credentials;
+          chmod 600 /home/vscode/.git-credentials;
+          echo 'Copied .git-credentials from host';
+        fi;
         if [ \"$(stat -c '%U' /workspace)\" != 'vscode' ]; then
           echo 'Fixing /workspace ownership (was root)...';
           sudo chown -R vscode:vscode /workspace;
@@ -70,14 +86,22 @@ services:
       mloda-base:
         condition: service_completed_successfully
     volumes:
-      - ai_agent_3_data:/workspace  
-      - ~/.ssh:/home/vscode/.ssh:ro
-      - ~/.gitconfig:/home/vscode/.gitconfig:ro
-      - ~/.git-credentials:/home/vscode/.git-credentials:ro
+      - ai_agent_3_data:/workspace
+      - ~/.gitconfig:/tmp/host-gitconfig:ro
+      - ~/.git-credentials:/tmp/host-git-credentials:ro
     ports:
       - "8002:8000"
     command: >
       bash -c "
+        if [ -f /tmp/host-gitconfig ] && [ ! -d /tmp/host-gitconfig ]; then
+          cp /tmp/host-gitconfig /home/vscode/.gitconfig;
+          echo 'Copied .gitconfig from host';
+        fi;
+        if [ -f /tmp/host-git-credentials ] && [ ! -d /tmp/host-git-credentials ]; then
+          cp /tmp/host-git-credentials /home/vscode/.git-credentials;
+          chmod 600 /home/vscode/.git-credentials;
+          echo 'Copied .git-credentials from host';
+        fi;
         if [ \"$(stat -c '%U' /workspace)\" != 'vscode' ]; then
           echo 'Fixing /workspace ownership (was root)...';
           sudo chown -R vscode:vscode /workspace;
@@ -97,14 +121,22 @@ services:
       mloda-base:
         condition: service_completed_successfully
     volumes:
-      - ai_agent_4_data:/workspace  
-      - ~/.ssh:/home/vscode/.ssh:ro
-      - ~/.gitconfig:/home/vscode/.gitconfig:ro
-      - ~/.git-credentials:/home/vscode/.git-credentials:ro
+      - ai_agent_4_data:/workspace
+      - ~/.gitconfig:/tmp/host-gitconfig:ro
+      - ~/.git-credentials:/tmp/host-git-credentials:ro
     ports:
       - "8003:8000"
     command: >
       bash -c "
+        if [ -f /tmp/host-gitconfig ] && [ ! -d /tmp/host-gitconfig ]; then
+          cp /tmp/host-gitconfig /home/vscode/.gitconfig;
+          echo 'Copied .gitconfig from host';
+        fi;
+        if [ -f /tmp/host-git-credentials ] && [ ! -d /tmp/host-git-credentials ]; then
+          cp /tmp/host-git-credentials /home/vscode/.git-credentials;
+          chmod 600 /home/vscode/.git-credentials;
+          echo 'Copied .git-credentials from host';
+        fi;
         if [ \"$(stat -c '%U' /workspace)\" != 'vscode' ]; then
           echo 'Fixing /workspace ownership (was root)...';
           sudo chown -R vscode:vscode /workspace;

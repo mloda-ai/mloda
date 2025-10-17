@@ -101,8 +101,8 @@ def test_load_multiple_sources_as_frozenset() -> None:
     assert result[0].name.name == "distance_from_center"
 
     # mloda_sources should be converted to frozenset and stored in context
-    # Note: Using a string key since DefaultOptionKeys.mloda_source_features doesn't exist yet
-    mloda_sources = result[0].options.context.get("mloda_source_features")
+    # Note: Using DefaultOptionKeys.mloda_source_feature (singular)
+    mloda_sources = result[0].options.context.get(DefaultOptionKeys.mloda_source_feature)
     assert isinstance(mloda_sources, frozenset)
     assert mloda_sources == frozenset({"latitude", "longitude"})
 
@@ -114,7 +114,7 @@ def test_load_multiple_sources_as_frozenset() -> None:
     assert result[1].name.name == "area_calculation"
 
     # mloda_sources should be converted to frozenset and stored in context
-    mloda_sources_2 = result[1].options.context.get("mloda_source_features")
+    mloda_sources_2 = result[1].options.context.get(DefaultOptionKeys.mloda_source_feature)
     assert isinstance(mloda_sources_2, frozenset)
     assert mloda_sources_2 == frozenset({"width", "height"})
 

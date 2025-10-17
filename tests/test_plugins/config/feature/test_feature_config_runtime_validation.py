@@ -13,6 +13,7 @@ from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import Pand
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import PandasMissingValueFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.geo_distance.pandas import PandasGeoDistanceFeatureGroup
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
 
@@ -32,6 +33,9 @@ class IntegrationDataCreator(ATestDataCreator):
             "sales": [1000, 1500, 2000, 2500, 3000],
             "revenue": [1200, 1800, 2400, 3000, 3600],
             "profit": [200, 300, 400, 500, 600],
+            # Point features for geo distance (latitude, longitude)
+            "customer_location": [(37.7, -122.4), (40.7, -74.0), (29.7, -95.3), (34.0, -118.2), (41.8, -87.6)],
+            "store_location": [(37.8, -122.5), (40.8, -74.1), (29.8, -95.4), (34.1, -118.3), (41.9, -87.7)],
         }
 
 
@@ -42,31 +46,26 @@ def test_features_runtime_one_by_one() -> None:
     This test validates that features not only parse correctly,
     but also execute successfully through the full mloda pipeline.
     """
-    # Load integration JSON
+
     json_path = Path(__file__).parent / "test_config_features.json"
     with open(json_path) as f:
         config_str = f.read()
 
     features = load_features_from_config(config_str, format="json")
 
-    # Features to test - FINAL STATE
-    # SUCCESS: 3/12 features work (25%)
-    # ROOT CAUSE: mloda requires feature names to follow {operation}__{source} convention
-    # Custom names like "scaled_age", "distance_feature" cannot be resolved to feature groups
-
     features_to_test = [
         features[0],  # ✅ Feature 0: "age" - simple string
         features[1],  # ✅ Feature 1: "weight" (with options) - object with flat options
         features[2],  # ✅ Feature 2: "standard_scaled__mean_imputed__age" - chained feature
         features[3],  # ✅ Feature 3: "max_aggr__mean_imputed__weight" - aggregation on single column
-        # features[4],   # ❌ SKIPPED: "production_feature" - no implementation (docs example)
-        # features[5],   # ❌ SKIPPED: "onehot_encoded__state" column_index: 0 - missing mloda_source
-        # features[6],   # ❌ SKIPPED: "onehot_encoded__state" column_index: 1 - missing mloda_source
-        # features[7],   # ❌ SKIPPED: "scaled_age" - custom name not supported
-        # features[8],   # ❌ SKIPPED: "derived_from_scaled" - custom name not supported
-        # features[9],   # ❌ SKIPPED: "nested_reference" - custom name not supported
-        # features[10],  # ❌ SKIPPED: "distance_feature" - custom name not supported
-        # features[11],  # ❌ SKIPPED: "multi_source_aggregation" - custom name not supported
+        features[4],  # ✅ Feature 4: "min_aggr__mean_imputed__weight" - min aggregation with timewindow
+        features[5],  # ✅ Feature 5: "onehot_encoded__state~0" - column selector with mloda_source
+        features[6],  # ✅ Feature 6: "onehot_encoded__state~1" - column selector with mloda_source
+        features[7],  # ✅ Feature 7: "minmaxscaledage" - minmax scaling with mloda_source_feature in options
+        features[8],  # ✅ Feature 8: "max_aggr__age" - aggregation with mloda_source and window_size option
+        features[9],  # ✅ Feature 9: "min_max" - scaling with mloda_source_feature in options
+        features[10],  # ✅ Feature 10: "haversine_distance__customer_location__store_location" - geo distance feature
+        features[11],  # ✅ Feature 11: "custom_geo_distance" - config-based geo distance with mloda_sources and options
     ]
 
     # Required plugins (expand as needed)
@@ -76,6 +75,7 @@ def test_features_runtime_one_by_one() -> None:
         PandasMissingValueFeatureGroup,
         PandasEncodingFeatureGroup,
         PandasAggregatedFeatureGroup,
+        PandasGeoDistanceFeatureGroup,
         # Add more plugins as features require them
     }
 
@@ -110,8 +110,6 @@ def test_features_runtime_one_by_one() -> None:
             if feature_name in df.columns:
                 assert not df[feature_name].isna().all(), f"Feature {i}: {feature_name} has all NaN values"
                 break
-
-    print(f"\n✓ Successfully tested {len(features_to_test)} features with mlodaAPI.run_all")
 
 
 def test_feature_3_step1_onehot_encoding() -> None:
@@ -181,5 +179,3 @@ def test_feature_3_step1_onehot_encoding() -> None:
         f"Feature 'max_aggr__onehot_encoded__state~0' not found in any result DataFrame. "
         f"Result DataFrames: {[df.columns.tolist() for df in results]}"
     )
-
-    print(f"\n✓ Successfully created chained feature 'max_aggr__onehot_encoded__state~0'")

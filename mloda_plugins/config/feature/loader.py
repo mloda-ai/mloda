@@ -54,7 +54,7 @@ def load_features_from_config(config_str: str, format: str = "json") -> List[Uni
                 context = item.context_options or {}
                 # Handle mloda_sources if present
                 if item.mloda_sources:
-                    context[DefaultOptionKeys.mloda_source_features] = frozenset(item.mloda_sources)
+                    context[DefaultOptionKeys.mloda_source_feature] = frozenset(item.mloda_sources)
                 options = Options(group=item.group_options or {}, context=context)
                 feature = Feature(name=feature_name, options=options)
                 features.append(feature)
@@ -63,7 +63,7 @@ def load_features_from_config(config_str: str, format: str = "json") -> List[Uni
             elif item.mloda_sources:
                 # Convert mloda_sources list to frozenset
                 options = Options(
-                    group=item.options, context={DefaultOptionKeys.mloda_source_features: frozenset(item.mloda_sources)}
+                    group=item.options, context={DefaultOptionKeys.mloda_source_feature: frozenset(item.mloda_sources)}
                 )
                 feature = Feature(name=feature_name, options=options)
                 features.append(feature)

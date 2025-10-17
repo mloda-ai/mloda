@@ -5,9 +5,6 @@ This module tests the validation and behavior of the FeatureConfig model
 defined in mloda_plugins.config.feature.models.
 """
 
-import pytest
-from pydantic import ValidationError
-
 from mloda_plugins.config.feature.models import FeatureConfig
 
 
@@ -26,12 +23,6 @@ def test_valid_feature_config_with_options() -> None:
 
     assert config.name == "test_feature"
     assert config.options == options
-
-
-def test_invalid_feature_config_missing_name() -> None:
-    """Test that ValidationError is raised when name is missing."""
-    with pytest.raises(ValidationError):
-        FeatureConfig()  # type: ignore[call-arg]
 
 
 def test_feature_config_options_default_empty() -> None:

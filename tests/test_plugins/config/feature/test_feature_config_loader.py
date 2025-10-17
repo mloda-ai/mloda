@@ -8,6 +8,7 @@ import pytest
 
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_plugins.config.feature.loader import load_features_from_config
+from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 
 def test_load_features_string_only() -> None:
@@ -36,7 +37,7 @@ def test_load_features_with_objects() -> None:
     assert isinstance(result[0], Feature)
     assert isinstance(result[1], Feature)
     assert result[0].name.name == "feature1"
-    assert result[0].options.get("enabled") == True
+    assert result[0].options.get("enabled") is True
     assert result[1].name.name == "feature2"
     assert result[1].options.get("threshold") == 0.8
 
@@ -82,7 +83,7 @@ def test_load_features_preserves_options() -> None:
     assert result[0].name.name == "feature_with_options"
     assert result[0].options.get("key1") == "value1"
     assert result[0].options.get("key2") == 42
-    assert result[0].options.get("key3") == True
+    assert result[0].options.get("key3") is True
 
 
 def test_load_features_with_mloda_source() -> None:
@@ -205,7 +206,6 @@ def test_load_features_with_group_context_options() -> None:
     2. Place group_options in Options.group
     3. Place context_options in Options.context
     """
-    from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
     config_str = """[
         {
@@ -344,7 +344,6 @@ def test_load_appends_tilde_syntax_to_name() -> None:
     The tilde syntax should always be appended when column_index is present, regardless of
     what other fields are in the configuration.
     """
-    from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
     config_str = """[
         {
@@ -408,7 +407,6 @@ def test_load_detects_feature_references() -> None:
     This test verifies the detection mechanism exists, though full resolution
     will be tested in test_load_resolves_references_to_feature_objects.
     """
-    from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
     config_str = """[
         {
@@ -453,7 +451,6 @@ def test_load_resolves_references_to_feature_objects() -> None:
         Input: {"name": "scaled", "mloda_source": "@age"}
         Output: Feature.options.context[mloda_source_feature] = Feature(name="age")
     """
-    from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
     config_str = """[
         "age",
@@ -509,7 +506,6 @@ def test_load_handles_forward_references() -> None:
             {"name": "base", "options": {...}}              # Defined later
         ]
     """
-    from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
     config_str = """[
         {
@@ -562,7 +558,7 @@ def test_load_features_with_multiple_mloda_sources() -> None:
     source feature names, the loader should:
     1. Parse the mloda_sources array from the JSON configuration
     2. Convert the list to a frozenset for immutability and set-like behavior
-    3. Store the frozenset in options.context[DefaultOptionKeys.mloda_source_features] (note: plural "features")
+    3. Store the frozenset in options.context[DefaultOptionKeys.mloda_source_feature] (singular key)
     4. Preserve any regular options in options.group
 
     This is useful for features that require multiple source features, such as:
@@ -572,9 +568,8 @@ def test_load_features_with_multiple_mloda_sources() -> None:
 
     Example:
         Input: {"name": "distance", "mloda_sources": ["latitude", "longitude"]}
-        Output: Feature with context[mloda_source_features] = frozenset({"latitude", "longitude"})
+        Output: Feature with context[mloda_source_feature] = frozenset({"latitude", "longitude"})
     """
-    from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
     config_str = """[
         {
@@ -590,8 +585,8 @@ def test_load_features_with_multiple_mloda_sources() -> None:
     assert isinstance(result[0], Feature)
     assert result[0].name.name == "distance_feature"
 
-    # mloda_sources should be converted to frozenset in options.context with plural key name
-    mloda_sources_value = result[0].options.context.get(DefaultOptionKeys.mloda_source_features)
+    # mloda_sources should be converted to frozenset in options.context with singular key name
+    mloda_sources_value = result[0].options.context.get(DefaultOptionKeys.mloda_source_feature)
     assert isinstance(mloda_sources_value, frozenset), "mloda_sources should be converted to frozenset"
     assert mloda_sources_value == frozenset({"latitude", "longitude"})
 
@@ -612,7 +607,6 @@ def test_load_creates_frozenset_for_mloda_sources() -> None:
     - Duplicate sources in the array (should be deduplicated)
     - Empty mloda_sources array (edge case)
     """
-    from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
     config_str = """[
         {
@@ -634,7 +628,7 @@ def test_load_creates_frozenset_for_mloda_sources() -> None:
     # First feature: multiple sources
     assert isinstance(result[0], Feature)
     assert result[0].name.name == "multi_source_aggregation"
-    mloda_sources_1 = result[0].options.context.get(DefaultOptionKeys.mloda_source_features)
+    mloda_sources_1 = result[0].options.context.get(DefaultOptionKeys.mloda_source_feature)
     assert isinstance(mloda_sources_1, frozenset), "Should be frozenset"
     assert mloda_sources_1 == frozenset({"sales", "revenue", "profit"})
     assert result[0].options.group.get("aggregation") == "sum"
@@ -642,7 +636,7 @@ def test_load_creates_frozenset_for_mloda_sources() -> None:
     # Second feature: duplicates should be deduplicated by frozenset
     assert isinstance(result[1], Feature)
     assert result[1].name.name == "duplicate_sources"
-    mloda_sources_2 = result[1].options.context.get(DefaultOptionKeys.mloda_source_features)
+    mloda_sources_2 = result[1].options.context.get(DefaultOptionKeys.mloda_source_feature)
     assert isinstance(mloda_sources_2, frozenset), "Should be frozenset"
     # frozenset automatically handles duplicates - should contain 2 items, not 3
     assert mloda_sources_2 == frozenset({"feature1", "feature2"})
@@ -653,18 +647,13 @@ def test_load_creates_frozenset_for_mloda_sources() -> None:
 def test_load_adds_mloda_sources_to_mloda_source_features_option() -> None:
     """Test that mloda_sources are stored in the correct context option key.
 
-    The loader should distinguish between:
-    - mloda_source (singular): Stored in DefaultOptionKeys.mloda_source_feature (singular)
-    - mloda_sources (plural): Stored in DefaultOptionKeys.mloda_source_features (plural)
+    The loader uses DefaultOptionKeys.mloda_source_feature (singular) for both:
+    - mloda_source (singular): Stored as a string
+    - mloda_sources (plural): Stored as a frozenset
 
-    This distinction allows the system to handle both:
-    1. Single-source transformations (e.g., scaling a single feature)
-    2. Multi-source transformations (e.g., calculating distance from multiple coordinates)
-
-    The test verifies that the plural form mloda_sources is stored with the plural key name
-    mloda_source_features in options.context, NOT the singular mloda_source_feature key.
+    This unified approach allows Options.get_source_features() to handle both
+    single-source and multi-source transformations consistently.
     """
-    from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
     config_str = """[
         {
@@ -683,22 +672,18 @@ def test_load_adds_mloda_sources_to_mloda_source_features_option() -> None:
 
     assert len(result) == 2
 
-    # First feature: single source - should use singular key
+    # First feature: single source - stored as string in mloda_source_feature
     assert isinstance(result[0], Feature)
     assert result[0].name.name == "single_source_feature"
     # Should have mloda_source_feature (singular) in context
     assert DefaultOptionKeys.mloda_source_feature in result[0].options.context
     assert result[0].options.context.get(DefaultOptionKeys.mloda_source_feature) == "age"
-    # Should NOT have mloda_source_features (plural) in context
-    assert DefaultOptionKeys.mloda_source_features not in result[0].options.context
 
-    # Second feature: multiple sources - should use plural key
+    # Second feature: multiple sources - stored as frozenset in mloda_source_feature
     assert isinstance(result[1], Feature)
     assert result[1].name.name == "multi_source_feature"
-    # Should have mloda_source_features (plural) in context
-    assert DefaultOptionKeys.mloda_source_features in result[1].options.context
-    mloda_sources_value = result[1].options.context.get(DefaultOptionKeys.mloda_source_features)
+    # Should have mloda_source_feature (singular) in context (unified key for both single and multiple)
+    assert DefaultOptionKeys.mloda_source_feature in result[1].options.context
+    mloda_sources_value = result[1].options.context.get(DefaultOptionKeys.mloda_source_feature)
     assert isinstance(mloda_sources_value, frozenset)
     assert mloda_sources_value == frozenset({"latitude", "longitude"})
-    # Should NOT have mloda_source_feature (singular) in context
-    assert DefaultOptionKeys.mloda_source_feature not in result[1].options.context

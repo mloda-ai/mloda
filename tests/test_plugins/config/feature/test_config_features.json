@@ -15,56 +15,48 @@
     "mloda_source": "weight"
   },
   {
-    "name": "production_feature",
-    "group_options": {
-      "data_source": "production"
-    },
-    "context_options": {
-      "aggregation_type": "sum",
-      "window_size": 7
+    "name": "min_aggr__mean_imputed__weight",
+    "mloda_source": "weight",
+    "options": {
+      "timewindow": 3
     }
   },
   {
     "name": "onehot_encoded__state",
+    "mloda_source": "state",
     "column_index": 0
   },
   {
     "name": "onehot_encoded__state",
+    "mloda_source": "state",
     "column_index": 1
   },
   {
-    "name": "scaled_age",
-    "mloda_source": "age",
+    "name": "minmaxscaledage",
     "options": {
-      "scaling_method": "standard"
+      "scaler_type": "minmax",
+      "mloda_source_feature": "age"
     }
   },
   {
-    "name": "derived_from_scaled",
-    "mloda_source": "@scaled_age",
+    "name": "max_aggr__age",
+    "mloda_source": "minmaxscaledage"
+  },
+  {
+    "name": "min_max",
     "options": {
-      "transformation": "log"
+      "scaler_type": "minmax",
+      "mloda_source_feature": "max_aggr__age"
     }
   },
   {
-    "name": "nested_reference",
-    "mloda_source": "@derived_from_scaled",
-    "options": {
-      "normalization": "minmax"
-    }
+    "name": "haversine_distance__customer_location__store_location"
   },
   {
-    "name": "distance_feature",
-    "mloda_sources": ["latitude", "longitude"],
-    "options": {
+    "name": "custom_geo_distance",
+    "mloda_sources": ["customer_location", "store_location"],
+    "context_options": {
       "distance_type": "euclidean"
-    }
-  },
-  {
-    "name": "multi_source_aggregation",
-    "mloda_sources": ["sales", "revenue", "profit"],
-    "options": {
-      "aggregation": "sum"
     }
   }
 ]

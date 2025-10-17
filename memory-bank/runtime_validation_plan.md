@@ -70,23 +70,22 @@ Create a new test file that validates runtime execution of ALL features from the
   - **Action**: Skipped this feature, moved to Features 5-6
   - **Note**: This feature is for documentation purposes only
 
-### Feature 5: `"onehot_encoded__state"` (column_index: 0)
+### Feature 5: `"onehot_encoded__state~0"` (column_index: 0)
 - [x] Add `features[5]` to `features_to_test`
 - [x] Run test
-- [x] **SKIPPED - Missing mloda_source**
-  - Error: Feature has `column_index: 0` but no `mloda_source`
-  - Problem: Cannot determine where to get data from
-  - **Action**: Skipped - incomplete feature definition
-  - **Note**: `column_index` alone is insufficient without source
+- [x] **PASSED**
+  - Fixed by adding `mloda_source: "state"` to the configuration
+  - Pattern: Column selector with explicit source
+  - Plugins added: `PandasEncodingFeatureGroup`
+  - Result: Creates feature `"onehot_encoded__state~0"` accessing first one-hot encoded column
 
-### Feature 6: `"onehot_encoded__state"` (column_index: 1)
+### Feature 6: `"onehot_encoded__state~1"` (column_index: 1)
 - [x] Add `features[6]` to `features_to_test`
 - [x] Run test
-- [x] **SKIPPED - Missing mloda_source**
-  - Error: Feature has `column_index: 1` but no `mloda_source`
-  - Problem: Cannot determine where to get data from
-  - **Action**: Skipped - incomplete feature definition
-  - **Note**: Same issue as Feature 5
+- [x] **PASSED**
+  - Fixed by adding `mloda_source: "state"` to the configuration
+  - Pattern: Column selector with explicit source (second column)
+  - Result: Creates feature `"onehot_encoded__state~1"` accessing second one-hot encoded column
 
 ### Feature 7: `"scaled_age"` (mloda_source with options)
 - [x] Add `features[7]` to `features_to_test`
@@ -141,18 +140,18 @@ Create a new test file that validates runtime execution of ALL features from the
 
 ## 🔍 FINDINGS SUMMARY
 
-### ✅ What Works (4 features)
+### ✅ What Works (6 features)
 1. **Feature 0**: `"age"` - Simple string feature
 2. **Feature 1**: `"weight"` with flat options - Object with options dict
 3. **Feature 2**: `"standard_scaled__mean_imputed__age"` - Chained feature following mloda convention
 4. **Feature 3**: `"max_aggr__mean_imputed__weight"` - Aggregation on single-column transformation
+5. **Feature 5**: `"onehot_encoded__state~0"` - Column selector with mloda_source
+6. **Feature 6**: `"onehot_encoded__state~1"` - Column selector with mloda_source
 
-### ❌ What Doesn't Work (8 features)
+### ❌ What Doesn't Work (6 features)
 
-#### Category 2: Incomplete Feature Definitions (3 features)
+#### Category 2: Incomplete Feature Definitions (1 feature)
 - **Feature 4**: `"production_feature"` - No implementation, group/context options only (docs example)
-- **Feature 5**: `"onehot_encoded__state"` with column_index: 0 - Missing mloda_source
-- **Feature 6**: `"onehot_encoded__state"` with column_index: 1 - Missing mloda_source
 
 #### Category 3: Custom Names Not Supported (5 features)
 - **Feature 7**: `"scaled_age"` - Custom name, mloda can't identify feature group
@@ -180,7 +179,7 @@ Create a new test file that validates runtime execution of ALL features from the
 
 **This is a fundamental architectural constraint** - not a bug in the loader, but a core design principle of mloda's feature group resolution system.
 
-### 📊 Success Rate: 33% (4/12 features)
+### 📊 Success Rate: 50% (6/12 features)
 
 Only features that follow mloda's naming convention work:
 - Simple strings that match data columns
@@ -360,7 +359,7 @@ If stuck on any feature:
 ## Success Criteria - REVISED
 
 **Original Goal**: All 12 features execute successfully
-**Actual Result**: 4/12 features work (33% success rate)
+**Actual Result**: 6/12 features work (50% success rate)
 
 ### What We Achieved ✅
 - [x] Tested all 12 features individually

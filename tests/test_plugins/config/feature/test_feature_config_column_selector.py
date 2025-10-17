@@ -5,10 +5,10 @@ This module tests the `~` syntax for accessing specific columns from
 multi-output transformations (e.g., one-hot encoding that produces multiple columns).
 """
 
-import pytest
-
 from mloda_plugins.config.feature.models import FeatureConfig
 from mloda_plugins.config.feature.parser import parse_json
+from mloda_plugins.config.feature.loader import load_features_from_config
+from mloda_core.abstract_plugins.components.feature import Feature
 
 
 def test_parse_feature_with_column_index() -> None:
@@ -49,8 +49,6 @@ def test_parse_feature_with_tilde_syntax() -> None:
     This test verifies that the loader modifies the feature name to include
     the tilde syntax (e.g., "onehot_encoded__state" becomes "onehot_encoded__state~0").
     """
-    from mloda_plugins.config.feature.loader import load_features_from_config
-    from mloda_core.abstract_plugins.components.feature import Feature
 
     config_str = """[
         {
@@ -88,8 +86,6 @@ def test_load_column_selector_feature() -> None:
         Input: {"name": "onehot_encoded__state", "column_index": 2, "options": {"drop_first": true}}
         Output: Feature with name "onehot_encoded__state~2" and options preserved
     """
-    from mloda_plugins.config.feature.loader import load_features_from_config
-    from mloda_core.abstract_plugins.components.feature import Feature
 
     config_str = """[
         {

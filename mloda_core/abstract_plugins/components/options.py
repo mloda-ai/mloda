@@ -125,11 +125,11 @@ class Options:
         return self.context.get(key, None)
 
     def get_source_features(self) -> "frozenset[Feature]":
-        val = self.get(DefaultOptionKeys.mloda_source_feature)
+        val = self.get(DefaultOptionKeys.mloda_source_features)
 
         if not val:
             raise ValueError(
-                f"Source feature not found in options. Please ensure that the key '{DefaultOptionKeys.mloda_source_feature}' is set."
+                f"Source feature not found in options. Please ensure that the key '{DefaultOptionKeys.mloda_source_features}' is set."
             )
 
         def _convert_to_feature(item: Any) -> "Feature":
@@ -181,15 +181,15 @@ class Options:
 
     def update_considering_mloda_source(self, other: "Options") -> None:
         """
-        Updates the options object with data from another Options object, excluding the mloda_source_feature key.
+        Updates the options object with data from another Options object, excluding the mloda_source_features key.
 
-        The mloda_source_feature key is excluded to preserve the parent feature source, as it is not relevant to the child feature.
+        The mloda_source_features key is excluded to preserve the parent feature source, as it is not relevant to the child feature.
 
         During migration: Updates group parameters to maintain existing behavior.
         """
 
-        # Case mloda_source_feature
-        exclude_keys = set([DefaultOptionKeys.mloda_source_feature])
+        # Case mloda_source_features
+        exclude_keys = set([DefaultOptionKeys.mloda_source_features])
 
         # Case mloda_feature_chainer_parser_key
         if self.get(DefaultOptionKeys.mloda_feature_chainer_parser_key):

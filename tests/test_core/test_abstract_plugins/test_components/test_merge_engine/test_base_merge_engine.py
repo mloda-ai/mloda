@@ -45,7 +45,7 @@ class GroupedAppendMergeTestFeature(AbstractFeatureGroup):
 
         run_uuid = uuid.uuid4()
 
-        source_features = options.get(DefaultOptionKeys.mloda_source_feature)
+        source_features = options.get(DefaultOptionKeys.mloda_source_features)
         left_links_cls = options.get("left_link_cls")
         right_links_cls = options.get("right_link_cls")
         features = set()
@@ -84,7 +84,7 @@ class Call2GroupedAppendMergeTestFeature(AbstractFeatureGroup):
             name=GroupedAppendMergeTestFeature.get_class_name(),
             index=Index((GroupedAppendMergeTestFeature.get_class_name(),)),
             options={
-                DefaultOptionKeys.mloda_source_feature: features,
+                DefaultOptionKeys.mloda_source_features: features,
                 "left_link_cls": AppendMergeTestFeature,
                 "right_link_cls": AppendMergeTestFeature,
             },
@@ -95,7 +95,7 @@ class Call2GroupedAppendMergeTestFeature(AbstractFeatureGroup):
             name=GroupedAppendMergeTestFeature.get_class_name(),
             index=Index((f"{GroupedAppendMergeTestFeature.get_class_name()}2",)),
             options={
-                DefaultOptionKeys.mloda_source_feature: features2,
+                DefaultOptionKeys.mloda_source_features: features2,
                 "left_link_cls": SecondAppendMergeTestFeature,
                 "right_link_cls": SecondAppendMergeTestFeature,
             },
@@ -127,7 +127,7 @@ class TestBaseMergeEngine:
         feature = Feature(
             name=GroupedAppendMergeTestFeature.get_class_name(),
             options={
-                DefaultOptionKeys.mloda_source_feature.value: features,
+                DefaultOptionKeys.mloda_source_features.value: features,
                 "left_link_cls": AppendMergeTestFeature,
                 "right_link_cls": AppendMergeTestFeature,
             },
@@ -165,7 +165,7 @@ class TestBaseMergeEngine:
         feature = Feature(
             name=feature_name,
             options={
-                DefaultOptionKeys.mloda_source_feature: features,
+                DefaultOptionKeys.mloda_source_features: features,
                 "left_link_cls": AppendMergeTestFeature,
                 "right_link_cls": AppendMergeTestFeature,
             },
@@ -175,7 +175,7 @@ class TestBaseMergeEngine:
         feature2 = Feature(
             name=feature_name,
             options={
-                DefaultOptionKeys.mloda_source_feature: features2,
+                DefaultOptionKeys.mloda_source_features: features2,
                 "left_link_cls": SecondAppendMergeTestFeature,
                 "right_link_cls": SecondAppendMergeTestFeature,
             },

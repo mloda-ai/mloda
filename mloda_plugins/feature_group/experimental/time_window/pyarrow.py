@@ -41,10 +41,10 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
             )
 
     @classmethod
-    def _check_source_feature_exists(cls, data: pa.Table, mloda_source_feature: str) -> None:
+    def _check_source_feature_exists(cls, data: pa.Table, mloda_source_features: str) -> None:
         """Check if the source feature exists in the Table."""
-        if mloda_source_feature not in data.schema.names:
-            raise ValueError(f"Source feature '{mloda_source_feature}' not found in data")
+        if mloda_source_features not in data.schema.names:
+            raise ValueError(f"Source feature '{mloda_source_features}' not found in data")
 
     @classmethod
     def _add_result_to_data(cls, data: pa.Table, feature_name: str, result: Any) -> pa.Table:
@@ -68,7 +68,7 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         window_function: str,
         window_size: int,
         time_unit: str,
-        mloda_source_feature: str,
+        mloda_source_features: str,
         time_filter_feature: Optional[str] = None,
     ) -> pa.Array:
         """
@@ -79,7 +79,7 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
             window_function: The type of window function to perform
             window_size: The size of the window
             time_unit: The time unit for the window
-            mloda_source_feature: The name of the source feature
+            mloda_source_features: The name of the source feature
             time_filter_feature: The name of the time filter feature to use for time-based operations.
                                 If None, uses the value from get_time_filter_feature().
 
@@ -92,7 +92,7 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
 
         # Get the time and source columns
         time_column = data.column(time_filter_feature)
-        source_column = data.column(mloda_source_feature)
+        source_column = data.column(mloda_source_features)
 
         # Sort the data by time
         # First create indices sorted by time

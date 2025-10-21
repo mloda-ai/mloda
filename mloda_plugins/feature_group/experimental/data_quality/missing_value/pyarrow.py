@@ -44,7 +44,7 @@ class PyArrowMissingValueFeatureGroup(MissingValueFeatureGroup):
         cls,
         data: pa.Table,
         imputation_method: str,
-        mloda_source_feature: str,
+        mloda_source_features: str,
         constant_value: Optional[Any] = None,
         group_by_features: Optional[List[str]] = None,
     ) -> pa.Array:
@@ -54,7 +54,7 @@ class PyArrowMissingValueFeatureGroup(MissingValueFeatureGroup):
         Args:
             data: The PyArrow Table
             imputation_method: The type of imputation to perform
-            mloda_source_feature: The name of the source feature to impute
+            mloda_source_features: The name of the source feature to impute
             constant_value: The constant value to use for imputation (if method is 'constant')
             group_by_features: Optional list of features to group by before imputation
 
@@ -62,7 +62,7 @@ class PyArrowMissingValueFeatureGroup(MissingValueFeatureGroup):
             The result of the imputation as a PyArrow Array
         """
         # Get the source column
-        source_column = data.column(mloda_source_feature)
+        source_column = data.column(mloda_source_features)
 
         # If there are no missing values, return the original column
         if pc.count(pc.is_null(source_column)).as_py() == 0:
@@ -71,7 +71,7 @@ class PyArrowMissingValueFeatureGroup(MissingValueFeatureGroup):
         # If group_by_features is provided, perform grouped imputation
         if group_by_features:
             return cls._perform_grouped_imputation(
-                data, imputation_method, mloda_source_feature, constant_value, group_by_features
+                data, imputation_method, mloda_source_features, constant_value, group_by_features
             )
 
         # Perform non-grouped imputation
@@ -121,7 +121,7 @@ class PyArrowMissingValueFeatureGroup(MissingValueFeatureGroup):
         cls,
         data: pa.Table,
         imputation_method: str,
-        mloda_source_feature: str,
+        mloda_source_features: str,
         constant_value: Optional[Any],
         group_by_features: List[str],
     ) -> pa.Array:
@@ -139,7 +139,7 @@ class PyArrowMissingValueFeatureGroup(MissingValueFeatureGroup):
             The result of the grouped imputation as a PyArrow Array
         """
         # Get the source column
-        source_column = data.column(mloda_source_feature)
+        source_column = data.column(mloda_source_features)
 
         if imputation_method == "constant":
             # Constant imputation is the same regardless of groups

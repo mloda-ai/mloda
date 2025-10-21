@@ -140,7 +140,7 @@ class TestGeoDistancePandasIntegration:
             Options(
                 context={
                     GeoDistanceFeatureGroup.DISTANCE_TYPE: "haversine",
-                    DefaultOptionKeys.mloda_source_feature: frozenset(["sf", "nyc"]),
+                    DefaultOptionKeys.mloda_source_features: frozenset(["sf", "nyc"]),
                 }
             ),
         )
@@ -150,7 +150,7 @@ class TestGeoDistancePandasIntegration:
             Options(
                 context={
                     GeoDistanceFeatureGroup.DISTANCE_TYPE: "euclidean",
-                    DefaultOptionKeys.mloda_source_feature: frozenset(["point1", "point2"]),
+                    DefaultOptionKeys.mloda_source_features: frozenset(["point1", "point2"]),
                 }
             ),
         )
@@ -160,7 +160,7 @@ class TestGeoDistancePandasIntegration:
             Options(
                 context={
                     GeoDistanceFeatureGroup.DISTANCE_TYPE: "manhattan",
-                    DefaultOptionKeys.mloda_source_feature: frozenset(["point1", "point2"]),
+                    DefaultOptionKeys.mloda_source_features: frozenset(["point1", "point2"]),
                 }
             ),
         )

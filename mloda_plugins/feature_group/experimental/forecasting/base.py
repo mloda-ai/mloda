@@ -30,7 +30,7 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
 
     ### 1. String-Based Creation
 
-    Features follow the naming pattern: `{algorithm}_forecast_{horizon}{time_unit}__{mloda_source_feature}`
+    Features follow the naming pattern: `{algorithm}_forecast_{horizon}{time_unit}__{mloda_source_features}`
 
     Examples:
     ```python
@@ -53,7 +53,7 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
                 ForecastingFeatureGroup.ALGORITHM: "linear",
                 ForecastingFeatureGroup.HORIZON: 7,
                 ForecastingFeatureGroup.TIME_UNIT: "day",
-                DefaultOptionKeys.mloda_source_feature: "sales",
+                DefaultOptionKeys.mloda_source_features: "sales",
             }
         )
     )
@@ -66,7 +66,7 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
     - `algorithm`: The forecasting algorithm to use
     - `horizon`: The forecast horizon (number of time units)
     - `time_unit`: The time unit for the horizon
-    - `mloda_source_feature`: The source feature to generate forecasts for
+    - `mloda_source_features`: The source feature to generate forecasts for
 
     ### Group Parameters
     Currently none for ForecastingFeatureGroup. Parameters that affect Feature Group
@@ -150,7 +150,7 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
             DefaultOptionKeys.mloda_context: True,
             DefaultOptionKeys.mloda_strict_validation: True,
         },
-        DefaultOptionKeys.mloda_source_feature: {
+        DefaultOptionKeys.mloda_source_features: {
             "explanation": "Source feature to generate forecasts for",
             DefaultOptionKeys.mloda_context: True,
             DefaultOptionKeys.mloda_strict_validation: False,
@@ -238,7 +238,7 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
         if len(parts) < 3 or parts[1] != "forecast":
             raise ValueError(
                 f"Invalid forecast feature name format: {feature_name}. "
-                f"Expected format: {{algorithm}}_forecast_{{horizon}}{{time_unit}}__{{mloda_source_feature}}"
+                f"Expected format: {{algorithm}}_forecast_{{horizon}}{{time_unit}}__{{mloda_source_features}}"
             )
 
         algorithm = parts[0]
@@ -328,9 +328,9 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
 
         # Process each requested feature with the original clean data
         for feature in features.features:
-            algorithm, horizon, time_unit, mloda_source_feature = cls._extract_forecasting_parameters(feature)
+            algorithm, horizon, time_unit, mloda_source_features = cls._extract_forecasting_parameters(feature)
 
-            cls._check_source_feature_exists(original_data, mloda_source_feature)
+            cls._check_source_feature_exists(original_data, mloda_source_features)
 
             # Check if we have a trained model in the artifact
             model_artifact = None
@@ -341,7 +341,7 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
 
             # Perform forecasting using the original clean data
             result, updated_artifact = cls._perform_forecasting(
-                original_data, algorithm, horizon, time_unit, mloda_source_feature, time_filter_feature, model_artifact
+                original_data, algorithm, horizon, time_unit, mloda_source_features, time_filter_feature, model_artifact
             )
 
             # Save the updated artifact if needed
@@ -441,13 +441,13 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
         raise NotImplementedError(f"_check_time_filter_feature_is_datetime not implemented in {cls.__name__}")
 
     @classmethod
-    def _check_source_feature_exists(cls, data: Any, mloda_source_feature: str) -> None:
+    def _check_source_feature_exists(cls, data: Any, mloda_source_features: str) -> None:
         """
         Check if the source feature exists in the data.
 
         Args:
             data: The input data
-            mloda_source_feature: The name of the source feature
+            mloda_source_features: The name of the source feature
 
         Raises:
             ValueError: If the source feature does not exist in the data
@@ -476,7 +476,7 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
         algorithm: str,
         horizon: int,
         time_unit: str,
-        mloda_source_feature: str,
+        mloda_source_features: str,
         time_filter_feature: str,
         model_artifact: Optional[Any] = None,
     ) -> tuple[Any, Optional[Any]]:
@@ -488,7 +488,7 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
             algorithm: The forecasting algorithm to use
             horizon: The forecast horizon
             time_unit: The time unit for the horizon
-            mloda_source_feature: The name of the source feature
+            mloda_source_features: The name of the source feature
             time_filter_feature: The name of the time filter feature
             model_artifact: Optional artifact containing a trained model
 

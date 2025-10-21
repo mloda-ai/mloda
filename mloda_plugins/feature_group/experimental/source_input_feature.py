@@ -21,14 +21,14 @@ Further, it allows defining:
 
 **Usage:**
    - The `SourceInputFeature` class should be either inherited or used as a mixin.
-   - Input features are defined with a `frozenset` in the `mloda_source_feature` option in the feature options.
+   - Input features are defined with a `frozenset` in the `mloda_source_features` option in the feature options.
    - The elements of the `frozenset` can be strings(simple feature name) or `SourceTuple`(complex feature definition).
 
    **Example of defining input features:**
         ```python
         Feature(name="target_feature",
                 options={
-                    DefaultOptionKeys.mloda_source_feature: frozenset(["source_feature_1",
+                    DefaultOptionKeys.mloda_source_features: frozenset(["source_feature_1",
                      SourceTuple(feature_name="source_feature_2",
                                   source_class=MyFeatureGroup,
                                   source_value="value"
@@ -58,7 +58,7 @@ class SourceInputFeature(AbstractFeatureGroup):
         2. **Mixin:**  Use `SourceInputFeatureComposite` as a mixin to add input feature handling to another class.
 
     **Key Requirement:**
-        - Your feature options must include `DefaultOptionKeys.mloda_source_feature`, which
+        - Your feature options must include `DefaultOptionKeys.mloda_source_features`, which
           specifies the source feature(s).
 
     **Source Definition:**
@@ -72,7 +72,7 @@ class SourceInputFeature(AbstractFeatureGroup):
     ```python
     Feature(name="target_feature",
             options={
-                DefaultOptionKeys.mloda_source_feature: frozenset(["source_feature_1", "source_feature_2"])
+                DefaultOptionKeys.mloda_source_features: frozenset(["source_feature_1", "source_feature_2"])
             })
     ```
 
@@ -135,13 +135,13 @@ class SourceInputFeatureComposite:
              A set of Feature objects representing the input features, or None if no input features are defined.
 
         Raises:
-            ValueError: If the `mloda_source_feature` option is missing.
+            ValueError: If the `mloda_source_features` option is missing.
             ValueError: If a source tuple is invalid.
         """
 
-        mloda_source = options.get(DefaultOptionKeys.mloda_source_feature)
+        mloda_source = options.get(DefaultOptionKeys.mloda_source_features)
         if mloda_source is None:
-            raise ValueError(f"Option '{DefaultOptionKeys.mloda_source_feature}' is required for this feature.")
+            raise ValueError(f"Option '{DefaultOptionKeys.mloda_source_features}' is required for this feature.")
 
         features = set()
         for source in mloda_source:

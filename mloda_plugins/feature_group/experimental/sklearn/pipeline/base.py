@@ -54,7 +54,7 @@ class SklearnPipelineFeatureGroup(AbstractFeatureGroup):
                 ("scaler", StandardScaler()),
                 ("imputer", SimpleImputer())
             ],
-            DefaultOptionKeys.mloda_source_feature: "raw_features"
+            DefaultOptionKeys.mloda_source_features: "raw_features"
         })
     )
 
@@ -101,7 +101,7 @@ class SklearnPipelineFeatureGroup(AbstractFeatureGroup):
             DefaultOptionKeys.mloda_context: True,
             DefaultOptionKeys.mloda_default: None,  # Default is None as pipeline_types also work
         },
-        DefaultOptionKeys.mloda_source_feature: {
+        DefaultOptionKeys.mloda_source_features: {
             "explanation": "Source features for sklearn pipeline (comma-separated)",
             DefaultOptionKeys.mloda_context: True,
         },

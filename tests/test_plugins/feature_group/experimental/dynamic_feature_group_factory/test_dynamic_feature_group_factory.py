@@ -188,10 +188,10 @@ class TestDynamicFeatureGroupFactory:
             properties, class_name="DynamicTestSourceInputFeatureGroup", feature_group_cls=SourceInputFeature
         )
 
-        # Define options including mloda_source_feature
+        # Define options including mloda_source_features
         options = Options(
             {
-                DefaultOptionKeys.mloda_source_feature: frozenset(["source_feature_1"]),
+                DefaultOptionKeys.mloda_source_features: frozenset(["source_feature_1"]),
                 "initial_requested_data": True,
             }
         )
@@ -227,10 +227,10 @@ class TestDynamicFeatureGroupFactory:
         class ConcreteFeatureGroup(DynamicTestFeatureGroup):  # type: ignore
             pass
 
-        # Define options including mloda_source_feature
+        # Define options including mloda_source_features
         options = Options(
             {
-                DefaultOptionKeys.mloda_source_feature: frozenset(
+                DefaultOptionKeys.mloda_source_features: frozenset(
                     [
                         SourceTuple(
                             feature_name="source_feature_1", source_class=ReadFileFeature, source_value="test.csv"

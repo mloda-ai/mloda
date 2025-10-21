@@ -28,7 +28,7 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
     ## Feature Naming Convention
 
     Encoding features follow this naming pattern:
-    `{encoder_type}_encoded__{mloda_source_feature}`
+    `{encoder_type}_encoded__{mloda_source_features}`
 
     The encoder type determines which sklearn encoder to use, and the source feature
     is extracted from the feature name and used as input for the encoder.
@@ -65,7 +65,7 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
         "PlaceHolder",  # Placeholder name, will be replaced
         Options({
             EncodingFeatureGroup.ENCODER_TYPE: "onehot",
-            DefaultOptionKeys.mloda_source_feature: "category"
+            DefaultOptionKeys.mloda_source_features: "category"
         })
     )
 
@@ -95,7 +95,7 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
             DefaultOptionKeys.mloda_context: True,  # Context parameter
             DefaultOptionKeys.mloda_strict_validation: True,  # Enable strict validation
         },
-        DefaultOptionKeys.mloda_source_feature: {
+        DefaultOptionKeys.mloda_source_features: {
             "explanation": "Source feature to encode",
             DefaultOptionKeys.mloda_context: True,  # Context parameter
             DefaultOptionKeys.mloda_strict_validation: False,  # Flexible validation

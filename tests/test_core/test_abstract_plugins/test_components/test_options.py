@@ -140,17 +140,17 @@ class TestOptions:
         from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
         options1 = Options(group={"key1": "value1"})
-        options2 = Options(group={"key2": "value2", DefaultOptionKeys.mloda_source_feature: "source1"})
+        options2 = Options(group={"key2": "value2", DefaultOptionKeys.mloda_source_features: "source1"})
 
-        # Update should work normally - mloda_source_feature is included when only one has it
+        # Update should work normally - mloda_source_features is included when only one has it
         options1.update_considering_mloda_source(options2)
         assert options1.group == {"key1": "value1", "key2": "value2"}
 
-        # mloda_source_feature should be excluded when both have it
-        options3 = Options(group={"key3": "value3", DefaultOptionKeys.mloda_source_feature: "source2"})
+        # mloda_source_features should be excluded when both have it
+        options3 = Options(group={"key3": "value3", DefaultOptionKeys.mloda_source_features: "source2"})
         options2.update_considering_mloda_source(options3)
-        # The existing mloda_source_feature should be preserved
-        assert options2.group[DefaultOptionKeys.mloda_source_feature] == "source1"
+        # The existing mloda_source_features should be preserved
+        assert options2.group[DefaultOptionKeys.mloda_source_features] == "source1"
         assert options2.group["key3"] == "value3"
 
     def test_update_conflict_detection(self) -> None:
@@ -185,7 +185,7 @@ class TestOptions:
             group={
                 "data_source": "prod",
                 "aggregation_type": "sum",
-                "mloda_source_feature": "sales_data",
+                "mloda_source_features": "sales_data",
                 "debug_mode": True,
             }
         )
@@ -203,7 +203,7 @@ class TestOptions:
             group={"data_source": "prod"},  # Only isolation-requiring parameters
             context={  # Metadata parameters
                 "aggregation_type": "sum",
-                "mloda_source_feature": "sales_data",
+                "mloda_source_features": "sales_data",
                 "debug_mode": True,
             },
         )

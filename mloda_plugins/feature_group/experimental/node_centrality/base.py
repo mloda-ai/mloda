@@ -32,7 +32,7 @@ class NodeCentralityFeatureGroup(AbstractFeatureGroup):
     Node centrality features follow this naming pattern:
     `{centrality_type}_centrality__{node_feature}`
 
-    The node feature (mloda_source_feature) is extracted from the feature name and used
+    The node feature (mloda_source_features) is extracted from the feature name and used
     as the node identifier for centrality calculations. Note the double underscore before 
     the node feature.
 
@@ -53,7 +53,7 @@ class NodeCentralityFeatureGroup(AbstractFeatureGroup):
         "PlaceHolder",  # Placeholder name, will be replaced
         Options({
             NodeCentralityFeatureGroup.CENTRALITY_TYPE: "degree",
-            DefaultOptionKeys.mloda_source_feature: "user"
+            DefaultOptionKeys.mloda_source_features: "user"
         })
     )
 
@@ -71,7 +71,7 @@ class NodeCentralityFeatureGroup(AbstractFeatureGroup):
         "placeholder",
         Options({
             NodeCentralityFeatureGroup.CENTRALITY_TYPE: "degree",
-            DefaultOptionKeys.mloda_source_feature: "source",
+            DefaultOptionKeys.mloda_source_features: "source",
             NodeCentralityFeatureGroup.GRAPH_TYPE: "undirected",
         })
     )
@@ -80,7 +80,7 @@ class NodeCentralityFeatureGroup(AbstractFeatureGroup):
         "placeholder",
         Options({
             NodeCentralityFeatureGroup.CENTRALITY_TYPE: "degree",
-            DefaultOptionKeys.mloda_source_feature: "target",  # Different source feature
+            DefaultOptionKeys.mloda_source_features: "target",  # Different source feature
             NodeCentralityFeatureGroup.GRAPH_TYPE: "directed",
         })
     )
@@ -152,7 +152,7 @@ class NodeCentralityFeatureGroup(AbstractFeatureGroup):
             DefaultOptionKeys.mloda_context: True,
             DefaultOptionKeys.mloda_default: None,
         },
-        DefaultOptionKeys.mloda_source_feature: {
+        DefaultOptionKeys.mloda_source_features: {
             "explanation": "Source feature representing the nodes for centrality calculation",
             DefaultOptionKeys.mloda_context: True,
         },
@@ -204,7 +204,7 @@ class NodeCentralityFeatureGroup(AbstractFeatureGroup):
         if len(parts) != 2 or parts[1] != "centrality":
             raise ValueError(
                 f"Invalid centrality feature name format: {feature_name}. "
-                f"Expected format: {{centrality_type}}_centrality__{{mloda_source_feature}}"
+                f"Expected format: {{centrality_type}}_centrality__{{mloda_source_features}}"
             )
 
         centrality_type = parts[0]

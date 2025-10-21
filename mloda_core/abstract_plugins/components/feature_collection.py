@@ -52,7 +52,7 @@ class Features:
         for key_child, value_child in child_options.data.items():
             for key_parent, value_parent in feature_options.data.items():
                 if key_child == key_parent:
-                    if key_parent == DefaultOptionKeys.mloda_source_feature:
+                    if key_parent == DefaultOptionKeys.mloda_source_features:
                         continue
 
                     if value_child != value_parent:

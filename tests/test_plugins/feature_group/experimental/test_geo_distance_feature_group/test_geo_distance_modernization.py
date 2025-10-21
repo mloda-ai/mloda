@@ -102,7 +102,7 @@ class TestGeoDistanceModernization:
                 options=Options(
                     context={
                         GeoDistanceFeatureGroup.DISTANCE_TYPE: "haversine",
-                        DefaultOptionKeys.mloda_source_feature: frozenset(["sf_location", "la_location"]),
+                        DefaultOptionKeys.mloda_source_features: frozenset(["sf_location", "la_location"]),
                     }
                 ),
             ),
@@ -111,7 +111,7 @@ class TestGeoDistanceModernization:
                 options=Options(
                     context={
                         GeoDistanceFeatureGroup.DISTANCE_TYPE: "euclidean",
-                        DefaultOptionKeys.mloda_source_feature: frozenset(["point_a", "point_b"]),
+                        DefaultOptionKeys.mloda_source_features: frozenset(["point_a", "point_b"]),
                     }
                 ),
             ),
@@ -120,7 +120,7 @@ class TestGeoDistanceModernization:
                 options=Options(
                     context={
                         GeoDistanceFeatureGroup.DISTANCE_TYPE: "manhattan",
-                        DefaultOptionKeys.mloda_source_feature: frozenset(["origin", "destination"]),
+                        DefaultOptionKeys.mloda_source_features: frozenset(["origin", "destination"]),
                     }
                 ),
             ),
@@ -166,7 +166,7 @@ class TestGeoDistanceModernization:
             options=Options(
                 context={
                     GeoDistanceFeatureGroup.DISTANCE_TYPE: "euclidean",
-                    DefaultOptionKeys.mloda_source_feature: frozenset(["point_a", "point_b"]),
+                    DefaultOptionKeys.mloda_source_features: frozenset(["point_a", "point_b"]),
                 }
             ),
         )
@@ -208,7 +208,7 @@ class TestGeoDistanceModernization:
                 options=Options(
                     context={
                         GeoDistanceFeatureGroup.DISTANCE_TYPE: "invalid_distance_type",
-                        DefaultOptionKeys.mloda_source_feature: frozenset(["point_a", "point_b"]),
+                        DefaultOptionKeys.mloda_source_features: frozenset(["point_a", "point_b"]),
                     }
                 ),
             )
@@ -222,7 +222,7 @@ class TestGeoDistanceModernization:
                 options=Options(
                     context={
                         GeoDistanceFeatureGroup.DISTANCE_TYPE: "euclidean",
-                        DefaultOptionKeys.mloda_source_feature: frozenset(["point_a"]),  # Only 1 feature
+                        DefaultOptionKeys.mloda_source_features: frozenset(["point_a"]),  # Only 1 feature
                     }
                 ),
             )
@@ -236,7 +236,7 @@ class TestGeoDistanceModernization:
                 options=Options(
                     context={
                         GeoDistanceFeatureGroup.DISTANCE_TYPE: "euclidean",
-                        DefaultOptionKeys.mloda_source_feature: frozenset(
+                        DefaultOptionKeys.mloda_source_features: frozenset(
                             ["point_a", "point_b", "origin"]
                         ),  # 3 features
                     }
@@ -267,7 +267,7 @@ class TestGeoDistanceModernization:
                 options=Options(
                     context={
                         GeoDistanceFeatureGroup.DISTANCE_TYPE: distance_type,
-                        DefaultOptionKeys.mloda_source_feature: source_features,
+                        DefaultOptionKeys.mloda_source_features: source_features,
                     }
                 ),
             )
@@ -302,7 +302,7 @@ class TestGeoDistanceModernization:
             options=Options(
                 context={
                     GeoDistanceFeatureGroup.DISTANCE_TYPE: "haversine",
-                    DefaultOptionKeys.mloda_source_feature: frozenset(["sf_location", "nyc_location"]),
+                    DefaultOptionKeys.mloda_source_features: frozenset(["sf_location", "nyc_location"]),
                 }
             ),
         )
@@ -312,7 +312,7 @@ class TestGeoDistanceModernization:
             options=Options(
                 context={
                     GeoDistanceFeatureGroup.DISTANCE_TYPE: "euclidean",  # Different distance type (context parameter)
-                    DefaultOptionKeys.mloda_source_feature: frozenset(
+                    DefaultOptionKeys.mloda_source_features: frozenset(
                         [
                             "point_a",
                             "point_b",
@@ -344,7 +344,7 @@ class TestGeoDistanceModernization:
         config_options = Options(
             context={
                 GeoDistanceFeatureGroup.DISTANCE_TYPE: "euclidean",
-                DefaultOptionKeys.mloda_source_feature: frozenset(["point_a", "point_b"]),
+                DefaultOptionKeys.mloda_source_features: frozenset(["point_a", "point_b"]),
             }
         )
 
@@ -354,7 +354,7 @@ class TestGeoDistanceModernization:
         invalid_config_options = Options(
             context={
                 GeoDistanceFeatureGroup.DISTANCE_TYPE: "invalid_distance_type",
-                DefaultOptionKeys.mloda_source_feature: frozenset(["point_a", "point_b"]),
+                DefaultOptionKeys.mloda_source_features: frozenset(["point_a", "point_b"]),
             }
         )
 
@@ -391,7 +391,7 @@ class TestGeoDistanceModernization:
                 options=Options(
                     context={
                         GeoDistanceFeatureGroup.DISTANCE_TYPE: "manhattan",
-                        DefaultOptionKeys.mloda_source_feature: frozenset(["origin", "destination"]),
+                        DefaultOptionKeys.mloda_source_features: frozenset(["origin", "destination"]),
                     }
                 ),
             ),
@@ -400,7 +400,7 @@ class TestGeoDistanceModernization:
                 options=Options(
                     context={
                         GeoDistanceFeatureGroup.DISTANCE_TYPE: "haversine",
-                        DefaultOptionKeys.mloda_source_feature: frozenset(["nyc_location", "la_location"]),
+                        DefaultOptionKeys.mloda_source_features: frozenset(["nyc_location", "la_location"]),
                     }
                 ),
             ),
@@ -445,7 +445,7 @@ class TestGeoDistanceModernization:
         config_feature_name = FeatureName("some_feat")
         config_options = Options(
             context={
-                DefaultOptionKeys.mloda_source_feature: frozenset(["point_a", "point_b"]),
+                DefaultOptionKeys.mloda_source_features: frozenset(["point_a", "point_b"]),
             }
         )
 

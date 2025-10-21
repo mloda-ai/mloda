@@ -149,7 +149,7 @@ features = [
             options=Options(
                 group={
                     "imputation_method": "mean",
-                    "mloda_source_feature": "weight",
+                    "mloda_source_features": "weight",
                 }
             ),
         ),

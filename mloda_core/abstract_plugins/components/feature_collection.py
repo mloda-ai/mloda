@@ -47,23 +47,48 @@ class Features:
             self.collection.append(feature)
 
     def merge_options(self, feature_options: Options, child_options: Options) -> None:
-        """Merge child_options into feature_options without overwriting existing keys."""
+        """
+        Merge child_options into feature_options, respecting protected keys.
 
+        Protected keys allow parent and child features to maintain different values
+        without conflicts. This is essential for feature chaining where each level
+        needs its own configuration for certain parameters.
+
+        Protected keys are determined dynamically by reading:
+        - mloda_source_feature (always protected)
+        - Keys listed in feature_options.get(mloda_feature_chainer_parser_key)
+
+        Args:
+            feature_options: Parent feature's options (will be updated)
+            child_options: Child feature's options to merge in
+
+        Raises:
+            ValueError: If non-protected keys have conflicting values
+        """
+        # Get protected keys dynamically from the feature options
+        protected_keys = {DefaultOptionKeys.mloda_source_feature}
+        if feature_options.get(DefaultOptionKeys.mloda_feature_chainer_parser_key):
+            protected_keys.update(feature_options.get(DefaultOptionKeys.mloda_feature_chainer_parser_key))
+
+        # Check for conflicts in non-protected keys only
         for key_child, value_child in child_options.items():
             for key_parent, value_parent in feature_options.items():
                 if key_child == key_parent:
-                    if key_parent == DefaultOptionKeys.mloda_source_feature:
+                    # Skip protected keys - they're allowed to differ
+                    if key_parent in protected_keys:
                         continue
 
+                    # Non-protected keys must match
                     if value_child != value_parent:
-                        # The child options property should not overwrite the parent options, as it was set intentionally.
-                        if key_parent in feature_options.get(DefaultOptionKeys.mloda_feature_chainer_parser_key) or []:
-                            continue
+                        raise ValueError(
+                            f"Duplicate key '{key_child}' found with conflicting values. "
+                            f"Parent has '{value_parent}', child has '{value_child}'. "
+                            f"Protected keys that can differ: {protected_keys}"
+                        )
 
-                        raise ValueError(f"Duplicate keys found in options: {key_child}")
-
-        # Merge the child_options data into feature_options data
-        feature_options.update_considering_mloda_source(child_options)
+        # Merge child options into parent, excluding protected keys
+        # update_with_protected_keys will read mloda_feature_chainer_parser_key dynamically
+        feature_options.update_with_protected_keys(child_options)
 
     def check_duplicate_feature(self, feature: Feature) -> None:
         if feature in self.collection:

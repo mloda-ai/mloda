@@ -1,4 +1,6 @@
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from __future__ import annotations
+
+from typing import Any, Dict, Optional, Set, TYPE_CHECKING
 from copy import deepcopy
 
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
@@ -230,32 +232,55 @@ class Options:
     def __str__(self) -> str:
         return f"Options(group={self.group}, context={self.context})"
 
-    def update_considering_mloda_source(self, other: "Options") -> None:
+    def update_with_protected_keys(self, other: "Options", protected_keys: Set[str] | None = None) -> None:
         """
-        Updates the options object with data from another Options object, excluding the mloda_source_feature key.
+        Updates this Options object with data from another Options object, respecting protected keys.
 
-        The mloda_source_feature key is excluded to preserve the parent feature source, as it is not relevant to the child feature.
+        Protected keys allow parent and child features in a chain to maintain different values
+        without raising conflicts. This is essential for feature chaining where each level
+        needs its own configuration for certain parameters.
 
-        During migration: Updates group parameters to maintain existing behavior.
+        Protected keys can be specified in two ways:
+        1. Explicitly passed as the protected_keys parameter
+        2. Dynamically read from self.get(mloda_feature_chainer_parser_key) for backward compatibility
+
+        Mechanism:
+        - Protected keys in 'other' are NOT merged into 'self'
+        - This preserves the parent's (self) configuration for those keys
+        - Child features can have different values for protected keys without conflict
+
+        Example:
+            Parent feature has: mloda_source_feature="parent_source"
+            Child feature has:  mloda_source_feature="child_source"
+
+            Without protection: ERROR (duplicate key conflict)
+            With protection: Both keep their own values (no merge, no error)
+
+        Args:
+            other: The Options object to merge from (typically child options)
+            protected_keys: Set of keys to protect from merging.
+                          If None, uses mloda_source_feature + any keys from mloda_feature_chainer_parser_key
+
+        Raises:
+            ValueError: If non-protected keys conflict between group and context
         """
+        # Build protected keys set
+        if protected_keys is None:
+            # Default: always protect mloda_source_feature
+            protected_keys = {DefaultOptionKeys.mloda_source_feature}
 
-        # Case mloda_source_feature
-        exclude_keys = set([DefaultOptionKeys.mloda_source_feature])
+            # Dynamic: read additional protected keys from mloda_feature_chainer_parser_key
+            # This allows feature groups to specify which keys should be protected
+            if self.get(DefaultOptionKeys.mloda_feature_chainer_parser_key):
+                for key in self.get(DefaultOptionKeys.mloda_feature_chainer_parser_key):
+                    protected_keys.add(key)
 
-        # Case mloda_feature_chainer_parser_key
-        if self.get(DefaultOptionKeys.mloda_feature_chainer_parser_key):
-            # If the feature chainer parser key is set, we should not update the group with the source feature.
-            for _key in self.get(DefaultOptionKeys.mloda_feature_chainer_parser_key):
-                exclude_keys.add(_key)
-
-        # Update group parameters (maintaining existing behavior)
-        # We drop here the keys, so that we do not overwrite the excluded keys.
-        # That means that given configuration of child features do not overwrite the parent feature configuration.
+        # Create a copy of other.group excluding protected keys
+        # Protected keys are intentionally skipped to preserve parent's configuration
         other_group_copy = other.group.copy()
-        for exclude_key in exclude_keys:
-            if exclude_key in other_group_copy:  # and exclude_key in self.group:       -> maybe a bug somewhere else
-                # if exclude_key in other_group_copy and exclude_key in self.group:
-                del other_group_copy[exclude_key]
+        for protected_key in protected_keys:
+            if protected_key in other_group_copy:
+                del other_group_copy[protected_key]
 
         # Check for conflicts before updating
         conflicting_keys = set(other_group_copy.keys()) & set(self.context.keys())

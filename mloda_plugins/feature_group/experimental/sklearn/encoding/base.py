@@ -196,7 +196,7 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
         _, source_feature = FeatureChainParser.parse_feature_name(feature_name, self.PATTERN, [self.PREFIX_PATTERN])
         if source_feature is not None:
             # Remove ~suffix if present (for OneHot column patterns like category~1)
-            base_feature = source_feature.split("~")[0]
+            base_feature = self.get_column_base_feature(source_feature)
             return {Feature(base_feature)}
 
         # Fall back to configuration-based approach
@@ -255,7 +255,7 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
             encoder_type, source_feature = cls._extract_encoder_type_and_source_feature(feature)
 
             # Remove ~suffix if present (for OneHot column patterns like category~1)
-            base_source_feature = source_feature.split("~")[0]
+            base_source_feature = cls.get_column_base_feature(source_feature)
 
             # Check that source feature exists
             cls._check_source_feature_exists(data, base_source_feature)

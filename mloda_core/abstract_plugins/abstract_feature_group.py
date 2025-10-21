@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, List, Optional, Set, Type, Union, final
+from typing import Any, Callable, Dict, List, Optional, Set, Type, Union, final
 from abc import ABC
 
 from mloda_core.abstract_plugins.components.base_artifact import BaseArtifact
@@ -141,6 +141,43 @@ class AbstractFeatureGroup(ABC):
         custom logic for feature name modification.
         """
         return feature_name
+
+    @staticmethod
+    def apply_naming_convention(
+        result: Any, feature_name: str, suffix_generator: Optional[Callable[[int], str]] = None
+    ) -> Dict[str, Any]:
+        """
+        Applies naming convention to multi-column results.
+
+        For 2D arrays with multiple columns, creates a dictionary mapping
+        column names to column data using the pattern: feature_name~0, feature_name~1, etc.
+        """
+        if hasattr(result, "shape") and len(result.shape) > 1 and result.shape[1] > 1:
+            output = {}
+            for col_idx in range(result.shape[1]):
+                suffix = suffix_generator(col_idx) if suffix_generator else str(col_idx)
+                col_name = f"{feature_name}~{suffix}"
+                output[col_name] = result[:, col_idx]
+            return output
+        return {}
+
+    @staticmethod
+    def get_column_base_feature(column_name: str) -> str:
+        """
+        Extracts the base feature name from a column name by stripping the ~N suffix.
+
+        Returns the original name if no ~N suffix exists.
+        """
+        return column_name.split("~")[0]
+
+    @staticmethod
+    def expand_feature_columns(feature_name: str, num_columns: int) -> List[str]:
+        """
+        Generates a list of column names with ~N suffixes.
+
+        Returns a list of column names following the pattern: ["feature~0", "feature~1", ...]
+        """
+        return [f"{feature_name}~{i}" for i in range(num_columns)]
 
     @classmethod
     def return_data_type_rule(cls, feature: Feature) -> Optional[DataType]:

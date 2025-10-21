@@ -69,9 +69,9 @@ class PandasDimensionalityReductionFeatureGroup(DimensionalityReductionFeatureGr
         """
         # Add individual dimension columns using the multiple result columns pattern
         algorithm, dimension = cls.parse_reduction_prefix(feature_name)
-        for i in range(dimension):
-            column_name = f"{feature_name}~dim{i + 1}"
-            data[column_name] = result[:, i]
+        named_columns = cls.apply_naming_convention(result, feature_name, suffix_generator=lambda i: f"dim{i + 1}")
+        for col_name, col_data in named_columns.items():
+            data[col_name] = col_data
 
         return data
 

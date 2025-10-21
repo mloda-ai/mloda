@@ -43,9 +43,9 @@ class PandasSklearnPipelineFeatureGroup(SklearnPipelineFeatureGroup):
                 data[feature_name] = result.flatten()
             else:
                 # Multiple columns - use naming convention with ~ separator
-                for i in range(result.shape[1]):
-                    column_name = f"{feature_name}~{i}"
-                    data[column_name] = result[:, i]
+                named_columns = cls.apply_naming_convention(result, feature_name)
+                for col_name, col_data in named_columns.items():
+                    data[col_name] = col_data
         elif hasattr(result, "shape") and len(result.shape) == 1:
             # Single dimensional result
             data[feature_name] = result

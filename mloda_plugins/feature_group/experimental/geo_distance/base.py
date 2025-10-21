@@ -4,7 +4,7 @@ Base implementation for geo distance feature groups.
 
 from __future__ import annotations
 
-from typing import Any, Optional, Set, Type, Union
+from typing import Any, Optional, Set, Union
 
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
@@ -49,7 +49,7 @@ class GeoDistanceFeatureGroup(AbstractFeatureGroup):
         options=Options(
             context={
                 GeoDistanceFeatureGroup.DISTANCE_TYPE: "haversine",
-                DefaultOptionKeys.mloda_source_feature: ["customer_location", "store_location"],
+                DefaultOptionKeys.mloda_source_features: ["customer_location", "store_location"],
             }
         )
     )
@@ -60,7 +60,7 @@ class GeoDistanceFeatureGroup(AbstractFeatureGroup):
     ### Context Parameters (Default)
     These parameters don't affect Feature Group resolution/splitting:
     - `distance_type`: The type of distance calculation (haversine, euclidean, manhattan)
-    - `mloda_source_feature`: The source features (list of exactly 2 point features)
+    - `mloda_source_features`: The source features (list of exactly 2 point features)
 
     ### Group Parameters
     Currently none for GeoDistanceFeatureGroup. Parameters that affect Feature Group
@@ -100,7 +100,7 @@ class GeoDistanceFeatureGroup(AbstractFeatureGroup):
             DefaultOptionKeys.mloda_context: True,
             DefaultOptionKeys.mloda_strict_validation: True,
         },
-        DefaultOptionKeys.mloda_source_feature: {
+        DefaultOptionKeys.mloda_source_features: {
             "explanation": "Source features (exactly 2 point features required)",
             DefaultOptionKeys.mloda_context: True,
             DefaultOptionKeys.mloda_strict_validation: True,

@@ -30,9 +30,9 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
     ## Feature Naming Convention
 
     Time window features follow this naming pattern:
-    `{window_function}_{window_size}_{time_unit}_window__{mloda_source_feature}`
+    `{window_function}_{window_size}_{time_unit}_window__{mloda_source_features}`
 
-    The source feature (mloda_source_feature) is extracted from the feature name and used
+    The source feature (mloda_source_features) is extracted from the feature name and used
     as input for the time window operation. Note the double underscore before the source feature.
 
     Examples:
@@ -140,7 +140,7 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
             DefaultOptionKeys.mloda_strict_validation: True,  # Enable strict validation
         },
         # Source feature parameter (context parameter)
-        DefaultOptionKeys.mloda_source_feature: {
+        DefaultOptionKeys.mloda_source_features: {
             "explanation": "Source feature to apply time window operation to",
             DefaultOptionKeys.mloda_context: True,  # Mark as context parameter
             DefaultOptionKeys.mloda_strict_validation: False,  # Flexible validation
@@ -201,7 +201,7 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
         if len(parts) != 4 or parts[3] != "window":
             raise ValueError(
                 f"Invalid time window feature name format: {feature_name}. "
-                f"Expected format: {{window_function}}_{{window_size}}_{{time_unit}}_window__{{mloda_source_feature}}"
+                f"Expected format: {{window_function}}_{{window_size}}_{{time_unit}}_window__{{mloda_source_features}}"
             )
 
         window_function, window_size_str, time_unit = parts[0], parts[1], parts[2]
@@ -291,11 +291,11 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
             feature_name = feature.get_name()
 
             # Try string-based parsing first (for legacy features)
-            parsed_params, mloda_source_feature = FeatureChainParser.parse_feature_name(
+            parsed_params, mloda_source_features = FeatureChainParser.parse_feature_name(
                 feature_name, cls.PREFIX_PATTERN, [cls.PREFIX_PATTERN]
             )
 
-            if mloda_source_feature is not None:
+            if mloda_source_features is not None:
                 # String-based approach succeeded
                 window_function, window_size, time_unit = cls.parse_time_window_prefix(feature_name)
             else:
@@ -318,7 +318,7 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
                         f"Expected exactly one source feature, but found {len(source_features)}: {source_features}"
                     )
                 source_feature = next(iter(source_features))
-                mloda_source_feature = source_feature.get_name()
+                mloda_source_features = source_feature.get_name()
 
                 # Extract parameters from options
                 window_function = feature.options.get(cls.WINDOW_FUNCTION)
@@ -329,10 +329,10 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
                 if isinstance(window_size, str):
                     window_size = int(window_size)
 
-            cls._check_source_feature_exists(data, mloda_source_feature)
+            cls._check_source_feature_exists(data, mloda_source_features)
 
             result = cls._perform_window_operation(
-                data, window_function, window_size, time_unit, mloda_source_feature, time_filter_feature
+                data, window_function, window_size, time_unit, mloda_source_features, time_filter_feature
             )
 
             data = cls._add_result_to_data(data, feature.get_name(), result)
@@ -368,13 +368,13 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
         raise NotImplementedError(f"_check_time_filter_feature_is_datetime not implemented in {cls.__name__}")
 
     @classmethod
-    def _check_source_feature_exists(cls, data: Any, mloda_source_feature: str) -> None:
+    def _check_source_feature_exists(cls, data: Any, mloda_source_features: str) -> None:
         """
         Check if the source feature exists in the data.
 
         Args:
             data: The input data
-            mloda_source_feature: The name of the source feature
+            mloda_source_features: The name of the source feature
 
         Raises:
             ValueError: If the source feature does not exist in the data
@@ -403,7 +403,7 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
         window_function: str,
         window_size: int,
         time_unit: str,
-        mloda_source_feature: str,
+        mloda_source_features: str,
         time_filter_feature: Optional[str] = None,
     ) -> Any:
         """
@@ -414,7 +414,7 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
             window_function: The type of window function to perform
             window_size: The size of the window
             time_unit: The time unit for the window
-            mloda_source_feature: The name of the source feature
+            mloda_source_features: The name of the source feature
             time_filter_feature: The name of the time filter feature to use for time-based operations.
                                 If None, uses the value from get_time_filter_feature().
 

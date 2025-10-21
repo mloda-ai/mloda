@@ -57,7 +57,7 @@ class TextCleaningFeatureGroup(AbstractFeatureGroup):
                 )
             ),
         },
-        DefaultOptionKeys.mloda_source_feature: {
+        DefaultOptionKeys.mloda_source_features: {
             "explanation": "Source feature to apply text cleaning operations to",
             DefaultOptionKeys.mloda_context: True,
         },
@@ -73,9 +73,9 @@ class TextCleaningFeatureGroup(AbstractFeatureGroup):
     ## Feature Naming Convention
 
     Text cleaning features follow this naming pattern:
-    `cleaned_text__{mloda_source_feature}`
+    `cleaned_text__{mloda_source_features}`
 
-    The source feature (mloda_source_feature) is extracted from the feature name and used
+    The source feature (mloda_source_features) is extracted from the feature name and used
     as input for the text cleaning operations. Note the double underscore before the source feature.
 
     Examples:
@@ -94,7 +94,7 @@ class TextCleaningFeatureGroup(AbstractFeatureGroup):
         "PlaceHolder",  # Placeholder name, will be replaced
         Options({
             TextCleaningFeatureGroup.CLEANING_OPERATIONS: ("normalize", "remove_stopwords", "remove_punctuation"),
-            DefaultOptionKeys.mloda_source_feature: "review"
+            DefaultOptionKeys.mloda_source_features: "review"
         })
     )
 

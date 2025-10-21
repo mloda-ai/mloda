@@ -31,33 +31,33 @@ class PandasAggregatedFeatureGroup(AggregatedFeatureGroup):
         return data
 
     @classmethod
-    def _perform_aggregation(cls, data: Any, aggregation_type: str, mloda_source_feature: str) -> Any:
+    def _perform_aggregation(cls, data: Any, aggregation_type: str, mloda_source_features: str) -> Any:
         """
         Perform the aggregation using Pandas.
 
         Args:
             data: The Pandas DataFrame
             aggregation_type: The type of aggregation to perform
-            mloda_source_feature: The name of the source feature to aggregate
+            mloda_source_features: The name of the source feature to aggregate
 
         Returns:
             The result of the aggregation
         """
         if aggregation_type == "sum":
-            return data[mloda_source_feature].sum()
+            return data[mloda_source_features].sum()
         elif aggregation_type == "min":
-            return data[mloda_source_feature].min()
+            return data[mloda_source_features].min()
         elif aggregation_type == "max":
-            return data[mloda_source_feature].max()
+            return data[mloda_source_features].max()
         elif aggregation_type in ["avg", "mean"]:
-            return data[mloda_source_feature].mean()
+            return data[mloda_source_features].mean()
         elif aggregation_type == "count":
-            return data[mloda_source_feature].count()
+            return data[mloda_source_features].count()
         elif aggregation_type == "std":
-            return data[mloda_source_feature].std()
+            return data[mloda_source_features].std()
         elif aggregation_type == "var":
-            return data[mloda_source_feature].var()
+            return data[mloda_source_features].var()
         elif aggregation_type == "median":
-            return data[mloda_source_feature].median()
+            return data[mloda_source_features].median()
         else:
             raise ValueError(f"Unsupported aggregation type: {aggregation_type}")

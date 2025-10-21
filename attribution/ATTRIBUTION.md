@@ -10,7 +10,7 @@
 | anyio                                  | 4.11.0          | MIT                                                     |
 | argon2-cffi                            | 25.1.0          | MIT                                                     |
 | argon2-cffi-bindings                   | 25.1.0          | MIT                                                     |
-| arrow                                  | 1.3.0           | Apache Software License                                 |
+| arrow                                  | 1.4.0           | Apache Software License                                 |
 | asttokens                              | 3.0.0           | Apache 2.0                                              |
 | async-lru                              | 2.0.5           | MIT License                                             |
 | attrs                                  | 25.4.0          | MIT                                                     |
@@ -44,7 +44,7 @@
 | httpx                                  | 0.28.1          | BSD License                                             |
 | idna                                   | 3.11            | BSD-3-Clause                                            |
 | importlib_metadata                     | 8.7.0           | Apache Software License                                 |
-| iniconfig                              | 2.1.0           | MIT License                                             |
+| iniconfig                              | 2.3.0           | MIT                                                     |
 | ipykernel                              | 7.0.1           | BSD-3-Clause                                            |
 | ipython                                | 8.37.0          | BSD License                                             |
 | isoduration                            | 20.11.0         | ISC License (ISCL)                                      |
@@ -57,7 +57,7 @@
 | jupyter-events                         | 0.12.0          | BSD License                                             |
 | jupyter-lsp                            | 2.3.0           | BSD License                                             |
 | jupyter_client                         | 8.6.3           | BSD License                                             |
-| jupyter_core                           | 5.8.1           | BSD-3-Clause                                            |
+| jupyter_core                           | 5.9.1           | BSD-3-Clause                                            |
 | jupyter_server                         | 2.17.0          | BSD License                                             |
 | jupyter_server_terminals               | 0.5.3           | BSD License                                             |
 | jupyterlab                             | 4.4.9           | BSD License                                             |
@@ -82,13 +82,13 @@
 | notebook                               | 7.4.7           | BSD License                                             |
 | notebook_shim                          | 0.2.4           | BSD License                                             |
 | numpy                                  | 2.2.6           | BSD License                                             |
-| opentelemetry-api                      | 1.37.0          | Apache-2.0                                              |
-| opentelemetry-instrumentation          | 0.58b0          | Apache Software License                                 |
-| opentelemetry-instrumentation-logging  | 0.58b0          | Apache Software License                                 |
-| opentelemetry-instrumentation-requests | 0.58b0          | Apache Software License                                 |
-| opentelemetry-sdk                      | 1.37.0          | Apache-2.0                                              |
-| opentelemetry-semantic-conventions     | 0.58b0          | Apache-2.0                                              |
-| opentelemetry-util-http                | 0.58b0          | Apache Software License                                 |
+| opentelemetry-api                      | 1.38.0          | Apache-2.0                                              |
+| opentelemetry-instrumentation          | 0.59b0          | Apache Software License                                 |
+| opentelemetry-instrumentation-logging  | 0.59b0          | Apache Software License                                 |
+| opentelemetry-instrumentation-requests | 0.59b0          | Apache Software License                                 |
+| opentelemetry-sdk                      | 1.38.0          | Apache-2.0                                              |
+| opentelemetry-semantic-conventions     | 0.59b0          | Apache-2.0                                              |
+| opentelemetry-util-http                | 0.59b0          | Apache Software License                                 |
 | overrides                              | 7.7.0           | Apache License, Version 2.0                             |
 | packageurl-python                      | 0.17.5          | MIT License                                             |
 | packaging                              | 25.0            | Apache Software License; BSD License                    |
@@ -107,13 +107,13 @@
 | polars-runtime-32                      | 1.34.0          | MIT License                                             |
 | prometheus_client                      | 0.23.1          | Apache-2.0 AND BSD-2-Clause                             |
 | prompt_toolkit                         | 3.0.52          | BSD License                                             |
-| psutil                                 | 7.1.0           | BSD-3-Clause                                            |
+| psutil                                 | 7.1.1           | BSD-3-Clause                                            |
 | ptyprocess                             | 0.7.0           | ISC License (ISCL)                                      |
 | pure_eval                              | 0.2.3           | MIT License                                             |
 | py-serializable                        | 2.1.0           | Apache Software License                                 |
 | pyarrow                                | 21.0.0          | Apache Software License                                 |
 | pycparser                              | 2.23            | BSD License                                             |
-| pydantic                               | 2.12.2          | MIT                                                     |
+| pydantic                               | 2.12.3          | MIT                                                     |
 | pydantic_core                          | 2.41.4          | MIT                                                     |
 | pyiceberg                              | 0.10.0          | Apache Software License                                 |
 | pyparsing                              | 3.2.5           | MIT                                                     |
@@ -128,14 +128,14 @@
 | pytz                                   | 2025.2          | MIT License                                             |
 | pyzmq                                  | 27.1.0          | BSD License                                             |
 | referencing                            | 0.37.0          | MIT                                                     |
-| regex                                  | 2025.9.18       | Apache-2.0 AND CNRI-Python                              |
+| regex                                  | 2025.10.23      | Apache-2.0 AND CNRI-Python                              |
 | requests                               | 2.32.5          | Apache Software License                                 |
 | rfc3339-validator                      | 0.1.4           | MIT License                                             |
 | rfc3986-validator                      | 0.1.1           | MIT License                                             |
 | rfc3987-syntax                         | 1.1.0           | Apache Software License                                 |
 | rich                                   | 14.2.0          | MIT License                                             |
 | rpds-py                                | 0.27.1          | MIT                                                     |
-| ruff                                   | 0.14.0          | MIT License                                             |
+| ruff                                   | 0.14.1          | MIT License                                             |
 | scikit-learn                           | 1.7.2           | BSD-3-Clause                                            |
 | scipy                                  | 1.15.3          | BSD License                                             |
 | six                                    | 1.17.0          | MIT License                                             |
@@ -156,7 +156,6 @@
 | tqdm                                   | 4.67.1          | MIT License; Mozilla Public License 2.0 (MPL 2.0)       |
 | traitlets                              | 5.14.3          | BSD License                                             |
 | typeguard                              | 4.4.4           | MIT                                                     |
-| types-python-dateutil                  | 2.9.0.20251008  | Apache-2.0                                              |
 | types-requests                         | 2.32.4.20250913 | Apache-2.0                                              |
 | types-toml                             | 0.10.8.20240310 | Apache Software License                                 |
 | typing-inspect                         | 0.9.0           | MIT License                                             |

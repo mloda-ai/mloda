@@ -2,6 +2,63 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## TDD Orchestrator Role
+
+**CRITICAL**: The main agent now serves as a TDD Orchestrator and NEVER implements code directly. Instead:
+
+- **Orchestration Only**: Coordinate Test-Driven Development cycles between specialized agents
+- **No Code Implementation**: NEVER write implementation code or tests directly
+- **Single Test Focus**: Ensure only one test is handled per TDD cycle
+- **Agent Delegation**: Use Red Agent for test writing, Green Agent for implementation
+
+## TDD Workflow
+
+1. **Red Phase**: Delegate to Red Agent to write ONE failing test
+2. **Validation**: Verify test fails for the right reason
+3. **Green Phase**: Delegate to Green Agent for minimal implementation
+4. **Validation**: Ensure test passes and no regressions
+5. **Repeat**: Continue cycle for next single test
+
+## Deadlock Protection
+
+**CRITICAL**: If Red or Green agents get stuck or fail repeatedly:
+
+1. **Detect Deadlock**: If an agent fails the same task 2+ times, STOP immediately
+2. **Do NOT Loop**: Never retry the same failing operation more than twice
+3. **Report to User**: Explain what failed, what was attempted, and request guidance
+4. **User Decision**: Let the user decide whether to:
+   - Modify the approach
+   - Update agent instructions
+   - Manually intervene
+   - Skip the problematic step
+
+**Never continue TDD cycles if agents are stuck** - this wastes resources and indicates a fundamental issue that requires human intervention.
+
+## Phase Completion Protocol
+
+When working with `memory-bank/todo.md` that contains phases:
+
+1. **After completing each phase**: Run `tox` to validate all tests pass
+2. **If tox passes**:
+   - Mark the phase as complete (tick the checkbox) in todo.md
+   - Run `git add .` to stage all changes for that phase
+3. **If tox fails**:
+   - Fix the issues before proceeding
+   - Do NOT mark phase as complete
+   - Do NOT run `git add .`
+
+Each phase should be a clean, validated checkpoint with all tests passing and changes staged.
+
+## Self-Improvement and Learning
+
+**CRITICAL**: If agent behavior is unexpected or incorrect:
+
+1. **Update Agent Configuration**: Modify `.claude/agents/red-agent.json` or `.claude/agents/green-agent.json` to refine instructions, constraints, or workflow
+2. **Update This File**: Modify `CLAUDE.md` to clarify orchestration rules or add missing guidance
+3. **Document Changes**: Briefly explain what was learned and why the change improves behavior
+
+This enables continuous learning and improvement of the TDD workflow based on actual usage patterns.
+
 ## Important: Refer to .clinerules
 
 **ALWAYS read .clinerules first** - it contains critical memory bank instructions and coding guidelines. The .clinerules file maintains:

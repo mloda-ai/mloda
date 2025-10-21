@@ -16,7 +16,7 @@ PROPERTY_MAPPING = {
         DefaultOptionKeys.mloda_context: True,  # Parameter classification
         DefaultOptionKeys.mloda_strict_validation: True,  # Validation mode
     },
-    DefaultOptionKeys.mloda_source_feature: {
+    DefaultOptionKeys.mloda_source_features: {
         "explanation": "Source feature description",
         DefaultOptionKeys.mloda_context: True,
         DefaultOptionKeys.mloda_strict_validation: False,  # Flexible validation
@@ -80,7 +80,7 @@ class MyFeatureGroup(AbstractFeatureGroup):
             DefaultOptionKeys.mloda_context: True,
             DefaultOptionKeys.mloda_strict_validation: True,
         },
-        DefaultOptionKeys.mloda_source_feature: {
+        DefaultOptionKeys.mloda_source_features: {
             "explanation": "Source feature",
             DefaultOptionKeys.mloda_context: True,
         },
@@ -103,5 +103,5 @@ Options(context={"operation_type": "sum"})
 Options(context={"operation_type": "custom"})  # Raises ValueError
 
 # Valid with flexible validation - any value allowed
-Options(context={"mloda_source_feature": "any_feature_name"})
+Options(context={"mloda_source_features": "any_feature_name"})
 ```

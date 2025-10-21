@@ -40,7 +40,7 @@ class PandasMissingValueFeatureGroup(MissingValueFeatureGroup):
         cls,
         data: pd.DataFrame,
         imputation_method: str,
-        mloda_source_feature: str,
+        mloda_source_features: str,
         constant_value: Optional[Any] = None,
         group_by_features: Optional[List[str]] = None,
     ) -> pd.Series:
@@ -58,7 +58,7 @@ class PandasMissingValueFeatureGroup(MissingValueFeatureGroup):
             The result of the imputation as a Pandas Series
         """
         # Create a copy of the source feature to avoid modifying the original
-        result = data[mloda_source_feature].copy()
+        result = data[mloda_source_features].copy()
 
         # If there are no missing values, return the original series
         if not result.isna().any():
@@ -67,7 +67,7 @@ class PandasMissingValueFeatureGroup(MissingValueFeatureGroup):
         # If group_by_features is provided, perform grouped imputation
         if group_by_features:
             return cls._perform_grouped_imputation(
-                data, imputation_method, mloda_source_feature, constant_value, group_by_features
+                data, imputation_method, mloda_source_features, constant_value, group_by_features
             )
 
         # Perform non-grouped imputation
@@ -93,7 +93,7 @@ class PandasMissingValueFeatureGroup(MissingValueFeatureGroup):
         cls,
         data: pd.DataFrame,
         imputation_method: str,
-        mloda_source_feature: str,
+        mloda_source_features: str,
         constant_value: Optional[Any],
         group_by_features: List[str],
     ) -> pd.Series:
@@ -111,7 +111,7 @@ class PandasMissingValueFeatureGroup(MissingValueFeatureGroup):
             The result of the grouped imputation as a Pandas Series
         """
         # Create a copy of the source feature to avoid modifying the original
-        result = data[mloda_source_feature].copy()
+        result = data[mloda_source_features].copy()
 
         if imputation_method == "constant":
             # Constant imputation is the same regardless of groups
@@ -122,17 +122,17 @@ class PandasMissingValueFeatureGroup(MissingValueFeatureGroup):
 
         if imputation_method == "mean":
             # Calculate mean for each group
-            group_means = grouped[mloda_source_feature].transform("mean")
+            group_means = grouped[mloda_source_features].transform("mean")
             # For groups with all NaN values, group_means will have NaN
             # Fall back to the overall mean for those groups
-            overall_mean = data[mloda_source_feature].mean()
+            overall_mean = data[mloda_source_features].mean()
             return result.fillna(group_means).fillna(overall_mean)
         elif imputation_method == "median":
             # Calculate median for each group
-            group_medians = grouped[mloda_source_feature].transform("median")
+            group_medians = grouped[mloda_source_features].transform("median")
             # For groups with all NaN values, group_medians will have NaN
             # Fall back to the overall median for those groups
-            overall_median = data[mloda_source_feature].median()
+            overall_median = data[mloda_source_features].median()
             return result.fillna(group_medians).fillna(overall_median)
         elif imputation_method == "mode":
             # Mode is more complex - we need to find the mode for each group
@@ -141,7 +141,7 @@ class PandasMissingValueFeatureGroup(MissingValueFeatureGroup):
                 # Get indices for this group
                 group_indices = group.index
                 # Get the mode for this group
-                group_mode = group[mloda_source_feature].mode()
+                group_mode = group[mloda_source_features].mode()
                 if not group_mode.empty:
                     mode_value = group_mode.iloc[0]
                     # Apply the mode to missing values in this group
@@ -149,9 +149,9 @@ class PandasMissingValueFeatureGroup(MissingValueFeatureGroup):
             return result
         elif imputation_method == "ffill":
             # Forward fill within groups
-            return grouped[mloda_source_feature].transform(lambda x: x.ffill())
+            return grouped[mloda_source_features].transform(lambda x: x.ffill())
         elif imputation_method == "bfill":
             # Backward fill within groups
-            return grouped[mloda_source_feature].transform(lambda x: x.bfill())
+            return grouped[mloda_source_features].transform(lambda x: x.bfill())
         else:
             raise ValueError(f"Unsupported imputation method: {imputation_method}")

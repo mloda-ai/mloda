@@ -40,7 +40,7 @@ class AggregatedFeatureGroup(AbstractFeatureGroup):
 
     ### 1. String-Based Creation
 
-    Features follow the naming pattern: `{aggregation_type}_aggr__{mloda_source_feature}`
+    Features follow the naming pattern: `{aggregation_type}_aggr__{mloda_source_features}`
 
     Examples:
     ```python
@@ -62,7 +62,7 @@ class AggregatedFeatureGroup(AbstractFeatureGroup):
         options=Options(
             context={
                 AggregatedFeatureGroup.AGGREGATION_TYPE: "sum",
-                DefaultOptionKeys.mloda_source_feature: "sales",
+                DefaultOptionKeys.mloda_source_features: "sales",
             }
         )
     )
@@ -73,7 +73,7 @@ class AggregatedFeatureGroup(AbstractFeatureGroup):
     ### Context Parameters (Default)
     These parameters don't affect Feature Group resolution/splitting:
     - `aggregation_type`: The type of aggregation to perform
-    - `mloda_source_feature`: The source feature to aggregate
+    - `mloda_source_features`: The source feature to aggregate
 
     ### Group Parameters
     Currently none for AggregatedFeatureGroup. Parameters that affect Feature Group
@@ -106,7 +106,7 @@ class AggregatedFeatureGroup(AbstractFeatureGroup):
             DefaultOptionKeys.mloda_context: True,  # Mark as context parameter
             DefaultOptionKeys.mloda_strict_validation: True,  # Enable strict validation
         },
-        DefaultOptionKeys.mloda_source_feature: {
+        DefaultOptionKeys.mloda_source_features: {
             "explanation": "Source feature to aggregate",
             DefaultOptionKeys.mloda_context: True,  # Mark as context parameter
             DefaultOptionKeys.mloda_strict_validation: False,  # Flexible validation
@@ -262,14 +262,14 @@ class AggregatedFeatureGroup(AbstractFeatureGroup):
         raise NotImplementedError(f"_add_result_to_data not implemented in {cls.__name__}")
 
     @classmethod
-    def _perform_aggregation(cls, data: Any, aggregation_type: str, mloda_source_feature: str) -> Any:
+    def _perform_aggregation(cls, data: Any, aggregation_type: str, mloda_source_features: str) -> Any:
         """
         Method to perform the aggregation. Should be implemented by subclasses.
 
         Args:
             data: The input data
             aggregation_type: The type of aggregation to perform
-            mloda_source_feature: The name of the source feature to aggregate
+            mloda_source_features: The name of the source feature to aggregate
 
         Returns:
             The result of the aggregation

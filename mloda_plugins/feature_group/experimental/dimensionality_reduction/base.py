@@ -58,7 +58,7 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
             context={
                 DimensionalityReductionFeatureGroup.ALGORITHM: "pca",
                 DimensionalityReductionFeatureGroup.DIMENSION: 2,
-                DefaultOptionKeys.mloda_source_feature: "customer_metrics",
+                DefaultOptionKeys.mloda_source_features: "customer_metrics",
             }
         )
     )
@@ -76,7 +76,7 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
     These parameters don't affect Feature Group resolution/splitting:
     - `algorithm`: The dimensionality reduction algorithm to use
     - `dimension`: Target dimension for the reduction
-    - `mloda_source_feature`: Source features to reduce
+    - `mloda_source_features`: Source features to reduce
 
     ### Group Parameters
     Currently none for DimensionalityReductionFeatureGroup. Parameters that affect Feature Group
@@ -119,7 +119,7 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
             and str(value).isdigit()
             and int(value) > 0,
         },
-        DefaultOptionKeys.mloda_source_feature: {
+        DefaultOptionKeys.mloda_source_features: {
             "explanation": "Source features to use for dimensionality reduction",
             DefaultOptionKeys.mloda_context: True,
             DefaultOptionKeys.mloda_strict_validation: False,

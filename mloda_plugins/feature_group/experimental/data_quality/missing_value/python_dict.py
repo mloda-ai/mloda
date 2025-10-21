@@ -55,7 +55,7 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
         cls,
         data: List[Dict[str, Any]],
         imputation_method: str,
-        mloda_source_feature: str,
+        mloda_source_features: str,
         constant_value: Optional[Any] = None,
         group_by_features: Optional[List[str]] = None,
     ) -> List[Any]:
@@ -65,7 +65,7 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
         Args:
             data: The List[Dict] data structure
             imputation_method: The type of imputation to perform
-            mloda_source_feature: The name of the source feature to impute
+            mloda_source_features: The name of the source feature to impute
             constant_value: The constant value to use for imputation (if method is 'constant')
             group_by_features: Optional list of features to group by before imputation
 
@@ -73,7 +73,7 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
             The result of the imputation as a list of values
         """
         # Extract the source feature values
-        source_values = [row.get(mloda_source_feature) for row in data]
+        source_values = [row.get(mloda_source_features) for row in data]
 
         # If there are no missing values, return the original values
         if not any(value is None for value in source_values):
@@ -82,7 +82,7 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
         # If group_by_features is provided, perform grouped imputation
         if group_by_features:
             return cls._perform_grouped_imputation(
-                data, imputation_method, mloda_source_feature, constant_value, group_by_features
+                data, imputation_method, mloda_source_features, constant_value, group_by_features
             )
 
         # Perform non-grouped imputation
@@ -106,7 +106,7 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
         cls,
         data: List[Dict[str, Any]],
         imputation_method: str,
-        mloda_source_feature: str,
+        mloda_source_features: str,
         constant_value: Optional[Any],
         group_by_features: List[str],
     ) -> List[Any]:
@@ -116,7 +116,7 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
         Args:
             data: The List[Dict] data structure
             imputation_method: The type of imputation to perform
-            mloda_source_feature: The name of the source feature to impute
+            mloda_source_features: The name of the source feature to impute
             constant_value: The constant value to use for imputation (if method is 'constant')
             group_by_features: List of features to group by before imputation
 
@@ -132,7 +132,7 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
             groups[group_key].append(i)
 
         # Initialize result with original values
-        result = [row.get(mloda_source_feature) for row in data]
+        result = [row.get(mloda_source_features) for row in data]
 
         if imputation_method == "constant":
             # Constant imputation is the same regardless of groups

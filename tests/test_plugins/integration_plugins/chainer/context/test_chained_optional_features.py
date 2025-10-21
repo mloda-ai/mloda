@@ -36,7 +36,7 @@ class TestChainedFeatures:
         feature1 = Feature(
             name="placeholder1",
             options={
-                DefaultOptionKeys.mloda_source_feature: "Sales",
+                DefaultOptionKeys.mloda_source_features: "Sales",
                 "ident": "identifier1",
                 "property2": "value1",
                 "property3": "opt_val1",  # Include optional property
@@ -46,7 +46,7 @@ class TestChainedFeatures:
         feature2 = Feature(
             name="placeholder2",
             options={
-                DefaultOptionKeys.mloda_source_feature: feature1,
+                DefaultOptionKeys.mloda_source_features: feature1,
                 "ident": "identifier2",
                 "property2": "value2",
                 # property3 omitted - should still work since it's optional
@@ -56,7 +56,7 @@ class TestChainedFeatures:
         feature3 = Feature(
             name="placeholder3",
             options={
-                DefaultOptionKeys.mloda_source_feature: frozenset([feature2]),
+                DefaultOptionKeys.mloda_source_features: frozenset([feature2]),
                 "ident": "identifier1",
                 "property2": "value1",
                 "property3": "opt_val2",  # Include optional property
@@ -66,7 +66,7 @@ class TestChainedFeatures:
         feature4 = Feature(
             name="placeholder4",
             options={
-                DefaultOptionKeys.mloda_source_feature: frozenset([feature2]),
+                DefaultOptionKeys.mloda_source_features: frozenset([feature2]),
                 "ident": "identifier2",
                 "property2": "value1",
                 # property3 omitted - should still work since it's optional

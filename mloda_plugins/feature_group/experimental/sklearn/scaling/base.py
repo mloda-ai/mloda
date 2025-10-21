@@ -28,7 +28,7 @@ class ScalingFeatureGroup(AbstractFeatureGroup):
     ## Feature Naming Convention
 
     Scaling features follow this naming pattern:
-    `{scaler_type}_scaled__{mloda_source_feature}`
+    `{scaler_type}_scaled__{mloda_source_features}`
 
     The scaler type determines which sklearn scaler to use, and the source feature
     is extracted from the feature name and used as input for the scaler.
@@ -58,7 +58,7 @@ class ScalingFeatureGroup(AbstractFeatureGroup):
         "PlaceHolder",  # Placeholder name, will be replaced
         Options({
             ScalingFeatureGroup.SCALER_TYPE: "standard",
-            DefaultOptionKeys.mloda_source_feature: "income"
+            DefaultOptionKeys.mloda_source_features: "income"
         })
     )
 
@@ -89,7 +89,7 @@ class ScalingFeatureGroup(AbstractFeatureGroup):
             DefaultOptionKeys.mloda_context: True,  # Context parameter
             DefaultOptionKeys.mloda_strict_validation: True,  # Enable strict validation
         },
-        DefaultOptionKeys.mloda_source_feature: {
+        DefaultOptionKeys.mloda_source_features: {
             "explanation": "Source feature to scale",
             DefaultOptionKeys.mloda_context: True,  # Context parameter
             DefaultOptionKeys.mloda_strict_validation: False,  # Flexible validation

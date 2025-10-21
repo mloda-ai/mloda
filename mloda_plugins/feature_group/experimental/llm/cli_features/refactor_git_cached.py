@@ -133,7 +133,7 @@ class RunRefactorDiffCached:
             options={
                 "model": model,
                 "prompt": prompt,
-                DefaultOptionKeys.mloda_source_feature: frozenset([ConcatenatedFileContent.get_class_name()]),
+                DefaultOptionKeys.mloda_source_features: frozenset([ConcatenatedFileContent.get_class_name()]),
                 "file_paths": frozenset(files),
                 "project_meta_data": True,
                 "tools": tool_collection,
@@ -200,7 +200,7 @@ class RunRefactorDiffCached:
             options={
                 "model": "gemini-2.0-flash-exp",  # Choose your desired model
                 "prompt": prompt,
-                DefaultOptionKeys.mloda_source_feature: frozenset([ConcatenatedFileContent.get_class_name()]),
+                DefaultOptionKeys.mloda_source_features: frozenset([ConcatenatedFileContent.get_class_name()]),
                 "file_paths": frozenset(files),
                 "project_meta_data": True,
             },

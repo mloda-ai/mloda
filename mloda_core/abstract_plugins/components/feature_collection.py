@@ -55,7 +55,7 @@ class Features:
         needs its own configuration for certain parameters.
 
         Protected keys are determined dynamically by reading:
-        - mloda_source_feature (always protected)
+        - mloda_source_features (always protected)
         - Keys listed in feature_options.get(mloda_feature_chainer_parser_key)
 
         Args:
@@ -66,7 +66,7 @@ class Features:
             ValueError: If non-protected keys have conflicting values
         """
         # Get protected keys dynamically from the feature options
-        protected_keys = {DefaultOptionKeys.mloda_source_feature}
+        protected_keys = {DefaultOptionKeys.mloda_source_features}
         if feature_options.get(DefaultOptionKeys.mloda_feature_chainer_parser_key):
             protected_keys.update(feature_options.get(DefaultOptionKeys.mloda_feature_chainer_parser_key))
 

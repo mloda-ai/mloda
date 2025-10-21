@@ -26,7 +26,7 @@ class TestModernizedAggregatedFeatureGroup:
                 },
                 context={
                     AggregatedFeatureGroup.AGGREGATION_TYPE: "sum",
-                    DefaultOptionKeys.mloda_source_feature: "sales",
+                    DefaultOptionKeys.mloda_source_features: "sales",
                 },
             ),
         )
@@ -61,7 +61,7 @@ class TestModernizedAggregatedFeatureGroup:
             options=Options(
                 context={
                     AggregatedFeatureGroup.AGGREGATION_TYPE: "avg",
-                    DefaultOptionKeys.mloda_source_feature: "price",
+                    DefaultOptionKeys.mloda_source_features: "price",
                 }
             ),
         )
@@ -73,7 +73,7 @@ class TestModernizedAggregatedFeatureGroup:
             options=Options(
                 context={
                     AggregatedFeatureGroup.AGGREGATION_TYPE: "invalid_type",
-                    DefaultOptionKeys.mloda_source_feature: "price",
+                    DefaultOptionKeys.mloda_source_features: "price",
                 }
             ),
         )
@@ -92,7 +92,7 @@ class TestModernizedAggregatedFeatureGroup:
             options=Options(
                 context={
                     AggregatedFeatureGroup.AGGREGATION_TYPE: "max",
-                    DefaultOptionKeys.mloda_source_feature: "temperature",
+                    DefaultOptionKeys.mloda_source_features: "temperature",
                 }
             ),
         )
@@ -105,7 +105,7 @@ class TestModernizedAggregatedFeatureGroup:
                     AggregatedFeatureGroup.AGGREGATION_TYPE: "max",
                 },
                 context={
-                    DefaultOptionKeys.mloda_source_feature: "temperature",
+                    DefaultOptionKeys.mloda_source_features: "temperature",
                 },
             ),
         )
@@ -127,7 +127,7 @@ class TestModernizedAggregatedFeatureGroup:
         # Create source feature
         source_feature = Feature("sales")
 
-        options = Options(context={DefaultOptionKeys.mloda_source_feature: frozenset([source_feature])})
+        options = Options(context={DefaultOptionKeys.mloda_source_features: frozenset([source_feature])})
 
         feature_group = AggregatedFeatureGroup()
         input_features = feature_group.input_features(options, FeatureName("placeholder"))
@@ -143,7 +143,7 @@ class TestModernizedAggregatedFeatureGroup:
                 options=Options(
                     context={
                         AggregatedFeatureGroup.AGGREGATION_TYPE: agg_type,
-                        DefaultOptionKeys.mloda_source_feature: "test_feature",
+                        DefaultOptionKeys.mloda_source_features: "test_feature",
                     }
                 ),
             )

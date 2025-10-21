@@ -87,7 +87,7 @@ class TestInputFeatures:
             Feature(
                 name=self._requested_name,
                 options={
-                    DefaultOptionKeys.mloda_source_feature: frozenset(["FeatureInputFeatureTest"]),
+                    DefaultOptionKeys.mloda_source_features: frozenset(["FeatureInputFeatureTest"]),
                     "initial_requested_data": True,
                 },
             )
@@ -130,7 +130,7 @@ class TestInputFeatures:
             Feature(
                 name=self._requested_name,
                 options={
-                    DefaultOptionKeys.mloda_source_feature: frozenset(["FeatureInputAPITest"]),
+                    DefaultOptionKeys.mloda_source_features: frozenset(["FeatureInputAPITest"]),
                     "initial_requested_data": True,
                 },
             )
@@ -157,7 +157,7 @@ class TestInputFeatures:
             Feature(
                 name=self._requested_name,
                 options={
-                    DefaultOptionKeys.mloda_source_feature: frozenset(["FeatureInputCreatorTest"]),
+                    DefaultOptionKeys.mloda_source_features: frozenset(["FeatureInputCreatorTest"]),
                     "initial_requested_data": True,
                 },
             )
@@ -184,7 +184,7 @@ class TestInputFeatures:
             Feature(
                 name=self._requested_name,
                 options={
-                    DefaultOptionKeys.mloda_source_feature: frozenset([("FeatureInputCsv", CsvReader, file_path)]),
+                    DefaultOptionKeys.mloda_source_features: frozenset([("FeatureInputCsv", CsvReader, file_path)]),
                     "initial_requested_data": True,
                 },
             )
@@ -209,7 +209,7 @@ class TestInputFeatures:
             Feature(
                 name=self._requested_name,
                 options={
-                    DefaultOptionKeys.mloda_source_feature: frozenset(["FeatureInputCsv"]),
+                    DefaultOptionKeys.mloda_source_features: frozenset(["FeatureInputCsv"]),
                     "initial_requested_data": True,
                 },
             )
@@ -236,7 +236,7 @@ class TestInputFeatures:
             Feature(
                 name=self._requested_name,
                 options={
-                    DefaultOptionKeys.mloda_source_feature: frozenset(["FeatureInputCsv"]),
+                    DefaultOptionKeys.mloda_source_features: frozenset(["FeatureInputCsv"]),
                     "initial_requested_data": True,
                 },
             )
@@ -247,7 +247,7 @@ class TestInputFeatures:
             Feature(
                 name=self._requested_name,
                 options={
-                    DefaultOptionKeys.mloda_source_feature: frozenset([("FeatureInputCsv2", CsvReader, file_path)]),
+                    DefaultOptionKeys.mloda_source_features: frozenset([("FeatureInputCsv2", CsvReader, file_path)]),
                     "initial_requested_data": True,
                 },
             )
@@ -258,7 +258,7 @@ class TestInputFeatures:
             Feature(
                 name=self._requested_name,
                 options={
-                    DefaultOptionKeys.mloda_source_feature: frozenset(["FeatureInputCreatorTest"]),
+                    DefaultOptionKeys.mloda_source_features: frozenset(["FeatureInputCreatorTest"]),
                     "initial_requested_data": True,
                 },
             )
@@ -274,7 +274,7 @@ class TestInputFeatures:
             Feature(
                 name=self._requested_name,
                 options={
-                    DefaultOptionKeys.mloda_source_feature: frozenset(["FeatureInputAPITest"]),
+                    DefaultOptionKeys.mloda_source_features: frozenset(["FeatureInputAPITest"]),
                     "initial_requested_data": True,
                 },
             )
@@ -285,7 +285,7 @@ class TestInputFeatures:
             Feature(
                 name=self._requested_name,
                 options={
-                    DefaultOptionKeys.mloda_source_feature: frozenset(["FeatureInputFeatureTest"]),
+                    DefaultOptionKeys.mloda_source_features: frozenset(["FeatureInputFeatureTest"]),
                     "initial_requested_data": True,
                 },
             )
@@ -313,7 +313,7 @@ class TestInputFeatures:
             Feature(
                 name=requested_feature,
                 options={
-                    DefaultOptionKeys.mloda_source_feature: frozenset(
+                    DefaultOptionKeys.mloda_source_features: frozenset(
                         [
                             (
                                 "FeatureInputCsv",
@@ -368,7 +368,7 @@ class TestInputFeatures:
             Feature(
                 name=requested_feature,
                 options={
-                    DefaultOptionKeys.mloda_source_feature: frozenset(
+                    DefaultOptionKeys.mloda_source_features: frozenset(
                         [
                             (
                                 "FeatureInputCsv",

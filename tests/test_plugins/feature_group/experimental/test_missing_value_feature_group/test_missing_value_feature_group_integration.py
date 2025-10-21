@@ -43,7 +43,7 @@ class TestMissingValueFeatureGroupIntegration:
             Options(
                 context={
                     MissingValueFeatureGroup.IMPUTATION_METHOD: "mean",
-                    DefaultOptionKeys.mloda_source_feature: "income",
+                    DefaultOptionKeys.mloda_source_features: "income",
                 }
             ),
         )
@@ -53,7 +53,7 @@ class TestMissingValueFeatureGroupIntegration:
             Options(
                 context={
                     MissingValueFeatureGroup.IMPUTATION_METHOD: "mode",
-                    DefaultOptionKeys.mloda_source_feature: "category",
+                    DefaultOptionKeys.mloda_source_features: "category",
                 }
             ),
         )
@@ -105,7 +105,7 @@ class TestMissingValueFeatureGroupIntegration:
             Options(
                 {
                     MissingValueFeatureGroup.IMPUTATION_METHOD: "constant",
-                    DefaultOptionKeys.mloda_source_feature: "category",
+                    DefaultOptionKeys.mloda_source_features: "category",
                     "constant_value": "Unknown",
                 }
             ),

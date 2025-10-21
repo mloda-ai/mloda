@@ -41,10 +41,10 @@ class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
             )
 
     @classmethod
-    def _check_source_feature_exists(cls, data: pd.DataFrame, mloda_source_feature: str) -> None:
+    def _check_source_feature_exists(cls, data: pd.DataFrame, mloda_source_features: str) -> None:
         """Check if the source feature exists in the DataFrame."""
-        if mloda_source_feature not in data.columns:
-            raise ValueError(f"Source feature '{mloda_source_feature}' not found in data")
+        if mloda_source_features not in data.columns:
+            raise ValueError(f"Source feature '{mloda_source_features}' not found in data")
 
     @classmethod
     def _add_result_to_data(cls, data: pd.DataFrame, feature_name: str, result: Any) -> pd.DataFrame:
@@ -59,7 +59,7 @@ class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         window_function: str,
         window_size: int,
         time_unit: str,
-        mloda_source_feature: str,
+        mloda_source_features: str,
         time_filter_feature: Optional[str] = None,
     ) -> Any:
         """
@@ -70,7 +70,7 @@ class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
             window_function: The type of window function to perform
             window_size: The size of the window
             time_unit: The time unit for the window
-            mloda_source_feature: The name of the source feature
+            mloda_source_features: The name of the source feature
             time_filter_feature: The name of the time filter feature to use for time-based operations.
                                 If None, uses the value from get_time_filter_feature().
 
@@ -85,7 +85,7 @@ class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         # This is necessary for time-based rolling operations
         df_with_time_index = data.set_index(time_filter_feature).sort_index()
 
-        rolling_window = df_with_time_index[mloda_source_feature].rolling(window=window_size, min_periods=1)
+        rolling_window = df_with_time_index[mloda_source_features].rolling(window=window_size, min_periods=1)
 
         if window_function == "sum":
             result = rolling_window.sum()

@@ -47,14 +47,14 @@ class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
         return data.with_columns(result.alias(feature_name))
 
     @classmethod
-    def _perform_aggregation(cls, data: Any, aggregation_type: str, mloda_source_feature: str) -> Any:
+    def _perform_aggregation(cls, data: Any, aggregation_type: str, mloda_source_features: str) -> Any:
         """
         Perform the aggregation using Polars lazy expressions.
 
         Args:
             data: The Polars LazyFrame
             aggregation_type: The type of aggregation to perform
-            mloda_source_feature: The name of the source feature to aggregate
+            mloda_source_features: The name of the source feature to aggregate
 
         Returns:
             A Polars expression representing the aggregation
@@ -63,7 +63,7 @@ class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
             raise ImportError("Polars is not installed. To be able to use this framework, please install polars.")
 
         # Get the column to aggregate
-        column = pl.col(mloda_source_feature)
+        column = pl.col(mloda_source_features)
 
         # Return the aggregation expression based on type
         if aggregation_type == "sum":

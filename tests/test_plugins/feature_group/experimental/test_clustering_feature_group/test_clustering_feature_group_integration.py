@@ -156,7 +156,7 @@ class TestClusteringFeatureGroupIntegration:
                 context={
                     ClusteringFeatureGroup.ALGORITHM: "kmeans",
                     ClusteringFeatureGroup.K_VALUE: 2,
-                    DefaultOptionKeys.mloda_source_feature: "feature1,feature2",
+                    DefaultOptionKeys.mloda_source_features: "feature1,feature2",
                 }
             ),
         )
@@ -167,7 +167,7 @@ class TestClusteringFeatureGroupIntegration:
                 context={
                     ClusteringFeatureGroup.ALGORITHM: "dbscan",
                     ClusteringFeatureGroup.K_VALUE: "auto",
-                    DefaultOptionKeys.mloda_source_feature: "feature1,feature2",
+                    DefaultOptionKeys.mloda_source_features: "feature1,feature2",
                 }
             ),
         )
@@ -178,7 +178,7 @@ class TestClusteringFeatureGroupIntegration:
                 context={
                     ClusteringFeatureGroup.ALGORITHM: "hierarchical",
                     ClusteringFeatureGroup.K_VALUE: 2,
-                    DefaultOptionKeys.mloda_source_feature: "feature1,feature2",
+                    DefaultOptionKeys.mloda_source_features: "feature1,feature2",
                 }
             ),
         )

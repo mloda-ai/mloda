@@ -37,7 +37,7 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
 
     ### 1. String-Based Creation
 
-    Features follow the naming pattern: `{imputation_method}_imputed__{mloda_source_feature}`
+    Features follow the naming pattern: `{imputation_method}_imputed__{mloda_source_features}`
 
     Examples:
     ```python
@@ -58,7 +58,7 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
         options=Options(
             context={
                 MissingValueFeatureGroup.IMPUTATION_METHOD: "mean",
-                DefaultOptionKeys.mloda_source_feature: "income",
+                DefaultOptionKeys.mloda_source_features: "income",
             }
         )
     )
@@ -69,7 +69,7 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
     ### Context Parameters (Default)
     These parameters don't affect Feature Group resolution/splitting:
     - `imputation_method`: The type of imputation to perform
-    - `mloda_source_feature`: The source feature to impute missing values
+    - `mloda_source_features`: The source feature to impute missing values
     - `constant_value`: Constant value for constant imputation (optional)
     - `group_by_features`: Features to group by before imputation (optional)
 
@@ -110,7 +110,7 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
         options=Options(
             context={
                 MissingValueFeatureGroup.IMPUTATION_METHOD: "mean",
-                DefaultOptionKeys.mloda_source_feature: "income",
+                DefaultOptionKeys.mloda_source_features: "income",
             }
         )
     )
@@ -121,7 +121,7 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
         options=Options(
             context={
                 MissingValueFeatureGroup.IMPUTATION_METHOD: "constant",
-                DefaultOptionKeys.mloda_source_feature: "status",
+                DefaultOptionKeys.mloda_source_features: "status",
                 "constant_value": "unknown",
             }
         )
@@ -133,7 +133,7 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
         options=Options(
             context={
                 MissingValueFeatureGroup.IMPUTATION_METHOD: "mean",
-                DefaultOptionKeys.mloda_source_feature: "price",
+                DefaultOptionKeys.mloda_source_features: "price",
                 "group_by_features": ["product_category", "region"],
             }
         )
@@ -165,7 +165,7 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
             **IMPUTATION_METHODS,
             DefaultOptionKeys.mloda_context: True,
         },
-        DefaultOptionKeys.mloda_source_feature: {
+        DefaultOptionKeys.mloda_source_features: {
             "explanation": "Source feature to impute missing values",
             DefaultOptionKeys.mloda_context: True,
         },
@@ -350,7 +350,7 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
         cls,
         data: Any,
         imputation_method: str,
-        mloda_source_feature: str,
+        mloda_source_features: str,
         constant_value: Optional[Any] = None,
         group_by_features: Optional[List[str]] = None,
     ) -> Any:
@@ -360,7 +360,7 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
         Args:
             data: The input data
             imputation_method: The type of imputation to perform
-            mloda_source_feature: The name of the source feature to impute
+            mloda_source_features: The name of the source feature to impute
             constant_value: The constant value to use for imputation (if method is 'constant')
             group_by_features: Optional list of features to group by before imputation
 

@@ -1,0 +1,76 @@
+[
+  "age",
+  {
+    "name": "weight",
+    "options": {
+      "imputation_method": "mean"
+    }
+  },
+  {
+    "name": "standard_scaled__mean_imputed__age"
+  },
+  {
+    "name": "max_aggr__mean_imputed__weight"
+  },
+  {
+    "name": "min_aggr__mean_imputed__weight",
+    "options": {
+      "timewindow": 3
+    }
+  },
+  {
+    "name": "onehot_encoded__state",
+    "column_index": 0
+  },
+  {
+    "name": "onehot_encoded__state",
+    "column_index": 1
+  },
+  {
+    "name": "minmaxscaledage",
+    "options": {
+      "scaler_type": "minmax",
+      "mloda_source_features": "age"
+    }
+  },
+  {
+    "name": "max_aggr__age",
+    "mloda_sources": ["minmaxscaledage"]
+  },
+  {
+    "name": "min_max",
+    "options": {
+      "scaler_type": "minmax",
+      "mloda_source_features": "max_aggr__age"
+    }
+  },
+  {
+    "name": "haversine_distance__customer_location__store_location"
+  },
+  {
+    "name": "custom_geo_distance",
+    "mloda_sources": ["customer_location", "store_location"],
+    "context_options": {
+      "distance_type": "euclidean"
+    }
+  },
+  {
+    "name": "min_max_nested",
+    "options": {
+      "scaler_type": "minmax",
+      "mloda_source_features": {
+        "name": "max_aggregated",
+        "options": {
+          "aggregation_function": "max",
+          "mloda_source_features": {
+            "name": "minmaxscaledweght",
+            "options": {
+              "scaler_type": "minmax",
+              "mloda_source_features": "weight"
+            }
+          }
+        }
+      }
+    }
+  }
+]

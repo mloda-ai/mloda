@@ -32,6 +32,9 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
     - `label`: LabelEncoder - converts categories to integer labels
     - `ordinal`: OrdinalEncoder - converts categories to ordinal integers
 
+    Encoding features follow this naming pattern:
+    `{encoder_type}_encoded__{mloda_source_features}`
+
     ## Feature Creation Methods
 
     ### 1. String-Based Creation
@@ -61,7 +64,7 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
         options=Options(
             context={
                 EncodingFeatureGroup.ENCODER_TYPE: "onehot",
-                DefaultOptionKeys.mloda_source_feature: "category",
+                DefaultOptionKeys.mloda_source_features: "category",
             }
         )
     )
@@ -98,7 +101,7 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
         options=Options(
             context={
                 EncodingFeatureGroup.ENCODER_TYPE: "onehot",
-                DefaultOptionKeys.mloda_source_feature: "department",
+                DefaultOptionKeys.mloda_source_features: "department",
             }
         )
     )
@@ -109,7 +112,7 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
         options=Options(
             context={
                 EncodingFeatureGroup.ENCODER_TYPE: "label",
-                DefaultOptionKeys.mloda_source_feature: "risk_level",
+                DefaultOptionKeys.mloda_source_features: "risk_level",
             }
         )
     )
@@ -132,7 +135,7 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
     ### Context Parameters (Default)
     These parameters don't affect Feature Group resolution/splitting:
     - `encoder_type`: Type of encoder to use (onehot, label, or ordinal)
-    - `mloda_source_feature`: Source feature to encode
+    - `mloda_source_features`: Source feature to encode
 
     ### Group Parameters
     Currently none for EncodingFeatureGroup. Parameters that affect Feature Group
@@ -174,7 +177,7 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
             DefaultOptionKeys.mloda_context: True,  # Context parameter
             DefaultOptionKeys.mloda_strict_validation: True,  # Enable strict validation
         },
-        DefaultOptionKeys.mloda_source_feature: {
+        DefaultOptionKeys.mloda_source_features: {
             "explanation": "Source feature to encode",
             DefaultOptionKeys.mloda_context: True,  # Context parameter
             DefaultOptionKeys.mloda_strict_validation: False,  # Flexible validation

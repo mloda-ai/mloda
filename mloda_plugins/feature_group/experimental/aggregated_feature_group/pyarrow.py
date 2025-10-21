@@ -44,7 +44,7 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
         return data.append_column(feature_name, repeated_result)
 
     @classmethod
-    def _perform_aggregation(cls, data: Any, aggregation_type: str, mloda_source_feature: str) -> Any:
+    def _perform_aggregation(cls, data: Any, aggregation_type: str, mloda_source_features: str) -> Any:
         """
         Perform the aggregation using PyArrow compute functions.
 
@@ -57,7 +57,7 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
             The result of the aggregation
         """
         # Get the column to aggregate
-        column = data.column(mloda_source_feature)
+        column = data.column(mloda_source_features)
 
         if aggregation_type == "sum":
             return pc.sum(column).as_py()

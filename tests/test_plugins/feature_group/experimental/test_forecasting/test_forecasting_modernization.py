@@ -90,7 +90,7 @@ class TestForecastingModernization:
                     ForecastingFeatureGroup.ALGORITHM: "linear",
                     ForecastingFeatureGroup.HORIZON: 7,
                     ForecastingFeatureGroup.TIME_UNIT: "day",
-                    DefaultOptionKeys.mloda_source_feature: "sales",
+                    DefaultOptionKeys.mloda_source_features: "sales",
                 },
             ),
         )
@@ -131,7 +131,7 @@ class TestForecastingModernization:
                     ForecastingFeatureGroup.ALGORITHM: "linear",
                     ForecastingFeatureGroup.HORIZON: 7,
                     ForecastingFeatureGroup.TIME_UNIT: "day",
-                    DefaultOptionKeys.mloda_source_feature: "sales",
+                    DefaultOptionKeys.mloda_source_features: "sales",
                 },
             ),
         )
@@ -170,7 +170,7 @@ class TestForecastingModernization:
                         ForecastingFeatureGroup.ALGORITHM: "invalid_algorithm",
                         ForecastingFeatureGroup.HORIZON: 7,
                         ForecastingFeatureGroup.TIME_UNIT: "day",
-                        DefaultOptionKeys.mloda_source_feature: "sales",
+                        DefaultOptionKeys.mloda_source_features: "sales",
                     }
                 ),
             )
@@ -186,7 +186,7 @@ class TestForecastingModernization:
                         ForecastingFeatureGroup.ALGORITHM: "linear",
                         ForecastingFeatureGroup.HORIZON: 7,
                         ForecastingFeatureGroup.TIME_UNIT: "invalid_unit",
-                        DefaultOptionKeys.mloda_source_feature: "sales",
+                        DefaultOptionKeys.mloda_source_features: "sales",
                     }
                 ),
             )
@@ -202,7 +202,7 @@ class TestForecastingModernization:
                         ForecastingFeatureGroup.ALGORITHM: "linear",
                         ForecastingFeatureGroup.HORIZON: -1,
                         ForecastingFeatureGroup.TIME_UNIT: "day",
-                        DefaultOptionKeys.mloda_source_feature: "sales",
+                        DefaultOptionKeys.mloda_source_features: "sales",
                     }
                 ),
             )
@@ -228,7 +228,7 @@ class TestForecastingModernization:
                         ForecastingFeatureGroup.ALGORITHM: algorithm,
                         ForecastingFeatureGroup.HORIZON: 5,
                         ForecastingFeatureGroup.TIME_UNIT: "day",
-                        DefaultOptionKeys.mloda_source_feature: "sales",
+                        DefaultOptionKeys.mloda_source_features: "sales",
                     },
                 ),
             )
@@ -261,7 +261,7 @@ class TestForecastingModernization:
                     ForecastingFeatureGroup.ALGORITHM: "linear",
                     ForecastingFeatureGroup.HORIZON: 7,
                     ForecastingFeatureGroup.TIME_UNIT: "day",
-                    DefaultOptionKeys.mloda_source_feature: "sales",
+                    DefaultOptionKeys.mloda_source_features: "sales",
                 },
             ),
         )
@@ -274,7 +274,7 @@ class TestForecastingModernization:
                     ForecastingFeatureGroup.ALGORITHM: "ridge",  # Different algorithm (context parameter)
                     ForecastingFeatureGroup.HORIZON: 14,  # Different horizon (context parameter)
                     ForecastingFeatureGroup.TIME_UNIT: "day",
-                    DefaultOptionKeys.mloda_source_feature: "sales",
+                    DefaultOptionKeys.mloda_source_features: "sales",
                 },
             ),
         )
@@ -303,7 +303,7 @@ class TestForecastingModernization:
                 ForecastingFeatureGroup.ALGORITHM: "linear",
                 ForecastingFeatureGroup.HORIZON: 7,
                 ForecastingFeatureGroup.TIME_UNIT: "day",
-                DefaultOptionKeys.mloda_source_feature: "sales",
+                DefaultOptionKeys.mloda_source_features: "sales",
             }
         )
 
@@ -315,7 +315,7 @@ class TestForecastingModernization:
                 ForecastingFeatureGroup.ALGORITHM: "invalid_algorithm",
                 ForecastingFeatureGroup.HORIZON: 7,
                 ForecastingFeatureGroup.TIME_UNIT: "day",
-                DefaultOptionKeys.mloda_source_feature: "sales",
+                DefaultOptionKeys.mloda_source_features: "sales",
             }
         )
 

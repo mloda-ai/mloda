@@ -59,7 +59,7 @@ class TestTextCleaningFeatureGroupIntegration:
             Options(
                 context={
                     TextCleaningFeatureGroup.CLEANING_OPERATIONS: ("normalize",),
-                    DefaultOptionKeys.mloda_source_feature: "text1",
+                    DefaultOptionKeys.mloda_source_features: "text1",
                 }
             ),
         )
@@ -69,7 +69,7 @@ class TestTextCleaningFeatureGroupIntegration:
             Options(
                 context={
                     TextCleaningFeatureGroup.CLEANING_OPERATIONS: ("normalize", "remove_punctuation"),
-                    DefaultOptionKeys.mloda_source_feature: "text2",
+                    DefaultOptionKeys.mloda_source_features: "text2",
                 }
             ),
         )

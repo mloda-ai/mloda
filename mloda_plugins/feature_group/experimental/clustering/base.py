@@ -52,7 +52,7 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
             context={
                 ClusteringFeatureGroup.ALGORITHM: "kmeans",
                 ClusteringFeatureGroup.K_VALUE: 5,
-                DefaultOptionKeys.mloda_source_feature: "customer_behavior",
+                DefaultOptionKeys.mloda_source_features: "customer_behavior",
             }
         )
     )
@@ -66,7 +66,7 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
     These parameters don't affect Feature Group resolution/splitting:
     - `algorithm`: The clustering algorithm to use
     - `k_value`: The number of clusters or 'auto' for automatic determination
-    - `mloda_source_feature`: The source features to use for clustering
+    - `mloda_source_features`: The source features to use for clustering
 
     ### Group Parameters
     Currently none for ClusteringFeatureGroup. Parameters that affect Feature Group
@@ -118,7 +118,7 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
             DefaultOptionKeys.mloda_validation_function: lambda value: value == "auto"
             or (isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0),
         },
-        DefaultOptionKeys.mloda_source_feature: {
+        DefaultOptionKeys.mloda_source_features: {
             "explanation": "Source features to use for clustering",
             DefaultOptionKeys.mloda_context: True,  # Mark as context parameter
             DefaultOptionKeys.mloda_strict_validation: False,  # Flexible validation

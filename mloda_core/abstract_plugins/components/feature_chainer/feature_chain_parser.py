@@ -19,7 +19,7 @@ class FeatureChainParser:
 
     Feature chaining allows feature groups to be composed, where the output of one
     feature group becomes the input to another. This is reflected in the feature name
-    using a double underscore pattern: prefix__mloda_source_feature.
+    using a double underscore pattern: prefix__mloda_source_features.
 
     For example:
     - max_aggr__sum_7_day_window__mean_imputed__price

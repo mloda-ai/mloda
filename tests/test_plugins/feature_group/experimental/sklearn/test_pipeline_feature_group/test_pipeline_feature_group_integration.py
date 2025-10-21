@@ -179,7 +179,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
             Options(
                 {
                     SklearnPipelineFeatureGroup.PIPELINE_NAME: "scaling",
-                    DefaultOptionKeys.mloda_source_feature: "income",
+                    DefaultOptionKeys.mloda_source_features: "income",
                 }
             ),
         )
@@ -256,7 +256,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
                             ("minmax__feature_range", (0, 1)),
                         ]
                     ),
-                    DefaultOptionKeys.mloda_source_feature: "income",
+                    DefaultOptionKeys.mloda_source_features: "income",
                 }
             ),
         )

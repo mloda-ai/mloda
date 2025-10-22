@@ -91,6 +91,14 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
     ALGORITHM = "algorithm"
     DIMENSION = "dimension"
 
+    # Algorithm-specific option keys
+    TSNE_MAX_ITER = "tsne_max_iter"
+    TSNE_N_ITER_WITHOUT_PROGRESS = "tsne_n_iter_without_progress"
+    TSNE_METHOD = "tsne_method"
+    PCA_SVD_SOLVER = "pca_svd_solver"
+    ICA_MAX_ITER = "ica_max_iter"
+    ISOMAP_N_NEIGHBORS = "isomap_n_neighbors"
+
     # Define supported dimensionality reduction algorithms
     REDUCTION_ALGORITHMS = {
         "pca": "Principal Component Analysis",
@@ -123,6 +131,64 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
             "explanation": "Source features to use for dimensionality reduction",
             DefaultOptionKeys.mloda_context: True,
             DefaultOptionKeys.mloda_strict_validation: False,
+        },
+        # t-SNE specific parameters
+        TSNE_MAX_ITER: {
+            "explanation": "Maximum number of iterations for t-SNE optimization",
+            DefaultOptionKeys.mloda_context: True,
+            DefaultOptionKeys.mloda_strict_validation: False,
+            "default": 250,
+            DefaultOptionKeys.mloda_validation_function: lambda value: isinstance(value, (int, str))
+            and str(value).isdigit()
+            and int(value) > 0,
+        },
+        TSNE_N_ITER_WITHOUT_PROGRESS: {
+            "explanation": "Maximum iterations without progress before early stopping (t-SNE)",
+            DefaultOptionKeys.mloda_context: True,
+            DefaultOptionKeys.mloda_strict_validation: False,
+            "default": 50,
+            DefaultOptionKeys.mloda_validation_function: lambda value: isinstance(value, (int, str))
+            and str(value).isdigit()
+            and int(value) > 0,
+        },
+        TSNE_METHOD: {
+            "barnes_hut": "Barnes-Hut approximation (faster, O(n log n))",
+            "exact": "Exact method (slower, O(n^2))",
+            "explanation": "t-SNE computation method",
+            DefaultOptionKeys.mloda_context: True,
+            DefaultOptionKeys.mloda_strict_validation: False,
+            "default": "barnes_hut",
+        },
+        # PCA specific parameters
+        PCA_SVD_SOLVER: {
+            "auto": "Automatically choose solver based on data shape",
+            "full": "Full SVD using LAPACK",
+            "arpack": "Truncated SVD using ARPACK",
+            "randomized": "Randomized SVD",
+            "explanation": "SVD solver algorithm for PCA",
+            DefaultOptionKeys.mloda_context: True,
+            DefaultOptionKeys.mloda_strict_validation: False,
+            "default": "auto",
+        },
+        # ICA specific parameters
+        ICA_MAX_ITER: {
+            "explanation": "Maximum number of iterations for ICA",
+            DefaultOptionKeys.mloda_context: True,
+            DefaultOptionKeys.mloda_strict_validation: False,
+            "default": 200,
+            DefaultOptionKeys.mloda_validation_function: lambda value: isinstance(value, (int, str))
+            and str(value).isdigit()
+            and int(value) > 0,
+        },
+        # Isomap specific parameters
+        ISOMAP_N_NEIGHBORS: {
+            "explanation": "Number of neighbors for Isomap",
+            DefaultOptionKeys.mloda_context: True,
+            DefaultOptionKeys.mloda_strict_validation: False,
+            "default": 5,
+            DefaultOptionKeys.mloda_validation_function: lambda value: isinstance(value, (int, str))
+            and str(value).isdigit()
+            and int(value) > 0,
         },
     }
 
@@ -231,9 +297,9 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
         return result
 
     @classmethod
-    def _extract_algorithm_dimension_and_source_features(cls, feature: Feature) -> tuple[str, int, list[str]]:
+    def _extract_algorithm_dimension_and_source_features(cls, feature: Feature) -> tuple[str, int, list[str], Options]:
         """
-        Extract algorithm, dimension, and source features from a feature.
+        Extract algorithm, dimension, source features, and algorithm-specific options from a feature.
 
         Tries string-based parsing first, falls back to configuration-based approach.
 
@@ -241,7 +307,7 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
             feature: The feature to extract parameters from
 
         Returns:
-            Tuple of (algorithm, dimension, source_features_list)
+            Tuple of (algorithm, dimension, source_features_list, algorithm_options)
 
         Raises:
             ValueError: If parameters cannot be extracted
@@ -257,7 +323,8 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
             algorithm, dimension = cls.parse_reduction_prefix(feature_name_str)
             source_features_str = FeatureChainParser.extract_source_feature(feature_name_str, cls.PREFIX_PATTERN)
             source_features = [feature.strip() for feature in source_features_str.split(",")]
-            return algorithm, dimension, source_features
+            # For string-based features, still extract algorithm-specific options from feature.options
+            return algorithm, dimension, source_features, feature.options
 
         # Fall back to configuration-based approach
         source_features_set = feature.options.get_source_features()
@@ -283,7 +350,7 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
         if dimension <= 0:
             raise ValueError(f"Invalid dimension: {dimension}. Must be a positive integer.")
 
-        return algorithm, dimension, source_features
+        return algorithm, dimension, source_features, feature.options
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -298,14 +365,16 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
 
         # Process each requested feature
         for feature in features.features:
-            algorithm, dimension, source_features = cls._extract_algorithm_dimension_and_source_features(feature)
+            algorithm, dimension, source_features, options = cls._extract_algorithm_dimension_and_source_features(
+                feature
+            )
 
             # Check if all source features exist
             for source_feature in source_features:
                 cls._check_source_feature_exists(data, source_feature)
 
             # Perform dimensionality reduction
-            result = cls._perform_reduction(data, algorithm, dimension, source_features)
+            result = cls._perform_reduction(data, algorithm, dimension, source_features, options)
 
             # Add the result to the data
             data = cls._add_result_to_data(data, feature.get_name(), result)
@@ -347,6 +416,7 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
         algorithm: str,
         dimension: int,
         source_features: list[str],
+        options: Options,
     ) -> Any:
         """
         Method to perform the dimensionality reduction. Should be implemented by subclasses.
@@ -356,6 +426,7 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
             algorithm: The dimensionality reduction algorithm to use
             dimension: The target dimension for the reduction
             source_features: The list of source features to use for dimensionality reduction
+            options: Options containing algorithm-specific parameters
 
         Returns:
             The result of the dimensionality reduction (typically the reduced features)

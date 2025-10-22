@@ -92,8 +92,9 @@ class TestPandasDimensionalityReductionFeatureGroup:
 
     def test_perform_tsne_reduction(self, sample_data: pd.DataFrame) -> None:
         """Test the _perform_tsne_reduction method."""
-        # Extract features (use fewer samples for t-SNE to speed up the test)
-        X = sample_data[["feature0", "feature1", "feature2"]].iloc[:20].values
+        # Extract features (use minimal samples for t-SNE - this is just a unit test)
+        # Use only 10 samples to ensure fast execution even in parallel
+        X = sample_data[["feature0", "feature1", "feature2"]].iloc[:10].values
 
         # Standardize the features
         from sklearn.preprocessing import StandardScaler
@@ -101,11 +102,13 @@ class TestPandasDimensionalityReductionFeatureGroup:
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X)
 
-        # Perform t-SNE reduction
-        result = PandasDimensionalityReductionFeatureGroup._perform_tsne_reduction(X_scaled, 2)
+        # Perform t-SNE reduction with minimal iterations for unit test
+        result = PandasDimensionalityReductionFeatureGroup._perform_tsne_reduction(
+            X_scaled, 2, max_iter=250, n_iter_without_progress=30, method="barnes_hut"
+        )
 
         # Check that the result has the expected shape
-        assert result.shape == (20, 2)
+        assert result.shape == (10, 2)
 
     def test_perform_ica_reduction(self, sample_data: pd.DataFrame) -> None:
         """Test the _perform_ica_reduction method."""
@@ -234,3 +237,96 @@ class TestPandasDimensionalityReductionFeatureGroup:
         assert not PandasDimensionalityReductionFeatureGroup.match_feature_group_criteria(
             "unsupported_2d__feature0,feature1", Options()
         )
+
+    def test_tsne_with_custom_parameters(self, sample_data: pd.DataFrame) -> None:
+        """Test t-SNE with custom configurable parameters."""
+        from mloda_plugins.feature_group.experimental.dimensionality_reduction.base import (
+            DimensionalityReductionFeatureGroup,
+        )
+
+        # Create a feature set with custom t-SNE parameters
+        # Use only 10 samples - this is just a unit test to verify parameters work
+        small_sample = sample_data.iloc[:10].copy()
+        feature = Feature(
+            "tsne_2d__feature0,feature1,feature2",
+            Options(
+                {
+                    DimensionalityReductionFeatureGroup.TSNE_MAX_ITER: 250,  # Minimal for unit test
+                    DimensionalityReductionFeatureGroup.TSNE_N_ITER_WITHOUT_PROGRESS: 30,  # Minimal for unit test
+                    DimensionalityReductionFeatureGroup.TSNE_METHOD: "barnes_hut",
+                }
+            ),
+        )
+        feature_set = FeatureSet()
+        feature_set.add(feature)
+
+        # Calculate the feature
+        result = PandasDimensionalityReductionFeatureGroup.calculate_feature(small_sample, feature_set)
+
+        # Check that the result has the expected columns
+        assert "tsne_2d__feature0,feature1,feature2~dim1" in result.columns
+        assert "tsne_2d__feature0,feature1,feature2~dim2" in result.columns
+
+    def test_pca_with_custom_svd_solver(self, sample_data: pd.DataFrame) -> None:
+        """Test PCA with custom SVD solver parameter."""
+        from mloda_plugins.feature_group.experimental.dimensionality_reduction.base import (
+            DimensionalityReductionFeatureGroup,
+        )
+
+        # Create a feature set with custom PCA parameters
+        feature = Feature(
+            "pca_2d__feature0,feature1,feature2",
+            Options({DimensionalityReductionFeatureGroup.PCA_SVD_SOLVER: "full"}),
+        )
+        feature_set = FeatureSet()
+        feature_set.add(feature)
+
+        # Calculate the feature
+        result = PandasDimensionalityReductionFeatureGroup.calculate_feature(sample_data, feature_set)
+
+        # Check that the result has the expected columns
+        assert "pca_2d__feature0,feature1,feature2~dim1" in result.columns
+        assert "pca_2d__feature0,feature1,feature2~dim2" in result.columns
+
+    def test_ica_with_custom_max_iter(self, sample_data: pd.DataFrame) -> None:
+        """Test ICA with custom max_iter parameter."""
+        from mloda_plugins.feature_group.experimental.dimensionality_reduction.base import (
+            DimensionalityReductionFeatureGroup,
+        )
+
+        # Create a feature set with custom ICA parameters
+        feature = Feature(
+            "ica_2d__feature0,feature1,feature2",
+            Options({DimensionalityReductionFeatureGroup.ICA_MAX_ITER: 300}),
+        )
+        feature_set = FeatureSet()
+        feature_set.add(feature)
+
+        # Calculate the feature
+        result = PandasDimensionalityReductionFeatureGroup.calculate_feature(sample_data, feature_set)
+
+        # Check that the result has the expected columns
+        assert "ica_2d__feature0,feature1,feature2~dim1" in result.columns
+        assert "ica_2d__feature0,feature1,feature2~dim2" in result.columns
+
+    def test_isomap_with_custom_n_neighbors(self, sample_data: pd.DataFrame) -> None:
+        """Test Isomap with custom n_neighbors parameter."""
+        from mloda_plugins.feature_group.experimental.dimensionality_reduction.base import (
+            DimensionalityReductionFeatureGroup,
+        )
+
+        # Create a feature set with custom Isomap parameters (use small sample)
+        small_sample = sample_data.iloc[:20].copy()
+        feature = Feature(
+            "isomap_2d__feature0,feature1,feature2",
+            Options({DimensionalityReductionFeatureGroup.ISOMAP_N_NEIGHBORS: 3}),
+        )
+        feature_set = FeatureSet()
+        feature_set.add(feature)
+
+        # Calculate the feature
+        result = PandasDimensionalityReductionFeatureGroup.calculate_feature(small_sample, feature_set)
+
+        # Check that the result has the expected columns
+        assert "isomap_2d__feature0,feature1,feature2~dim1" in result.columns
+        assert "isomap_2d__feature0,feature1,feature2~dim2" in result.columns

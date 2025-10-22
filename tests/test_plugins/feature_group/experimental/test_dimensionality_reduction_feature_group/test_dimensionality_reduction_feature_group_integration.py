@@ -31,7 +31,8 @@ class DimensionalityReductionFeatureTestDataCreator(ATestDataCreator):
         """Return the raw data as a dictionary with features for dimensionality reduction."""
         # Create data with some structure for dimensionality reduction
         np.random.seed(42)
-        n_samples = 100
+        # Use minimal samples for unit tests - only need to verify functionality works
+        n_samples = 10
         n_features = 10
 
         # Create data with some structure

@@ -83,7 +83,7 @@ class TestPandasMissingValueFeatureGroup:
 
     def test_perform_imputation_mean(self, sample_dataframe_with_missing: pd.DataFrame) -> None:
         """Test _perform_imputation method with mean imputation."""
-        result = PandasMissingValueFeatureGroup._perform_imputation(sample_dataframe_with_missing, "mean", "income")
+        result = PandasMissingValueFeatureGroup._perform_imputation(sample_dataframe_with_missing, "mean", ["income"])
         # Mean of [50000, NaN, 75000, NaN, 60000] = 61666.67
         assert abs(result.iloc[1] - 61666.67) < 0.1
         assert abs(result.iloc[3] - 61666.67) < 0.1
@@ -94,7 +94,7 @@ class TestPandasMissingValueFeatureGroup:
 
     def test_perform_imputation_median(self, sample_dataframe_with_missing: pd.DataFrame) -> None:
         """Test _perform_imputation method with median imputation."""
-        result = PandasMissingValueFeatureGroup._perform_imputation(sample_dataframe_with_missing, "median", "income")
+        result = PandasMissingValueFeatureGroup._perform_imputation(sample_dataframe_with_missing, "median", ["income"])
         # Median of [50000, NaN, 75000, NaN, 60000] = 60000
         assert result.iloc[1] == 60000
         assert result.iloc[3] == 60000
@@ -105,7 +105,7 @@ class TestPandasMissingValueFeatureGroup:
 
     def test_perform_imputation_mode(self, sample_dataframe_with_missing: pd.DataFrame) -> None:
         """Test _perform_imputation method with mode imputation."""
-        result = PandasMissingValueFeatureGroup._perform_imputation(sample_dataframe_with_missing, "mode", "category")
+        result = PandasMissingValueFeatureGroup._perform_imputation(sample_dataframe_with_missing, "mode", ["category"])
         # Mode of ["A", None, "B", "A", None] = "A"
         assert result.iloc[1] == "A"
         assert result.iloc[4] == "A"
@@ -117,7 +117,7 @@ class TestPandasMissingValueFeatureGroup:
     def test_perform_imputation_constant(self, sample_dataframe_with_missing: pd.DataFrame) -> None:
         """Test _perform_imputation method with constant imputation."""
         result = PandasMissingValueFeatureGroup._perform_imputation(
-            sample_dataframe_with_missing, "constant", "category", constant_value="Unknown"
+            sample_dataframe_with_missing, "constant", ["category"], constant_value="Unknown"
         )
         # Constant imputation with "Unknown"
         assert result.iloc[1] == "Unknown"
@@ -131,7 +131,7 @@ class TestPandasMissingValueFeatureGroup:
         """Test _perform_imputation method with forward fill imputation."""
         # Sort by index to ensure consistent fill direction
         sorted_df = sample_dataframe_with_missing.sort_index()
-        result = PandasMissingValueFeatureGroup._perform_imputation(sorted_df, "ffill", "temperature")
+        result = PandasMissingValueFeatureGroup._perform_imputation(sorted_df, "ffill", ["temperature"])
         # Forward fill ["A", None, "B", "A", None] -> ["A", "A", "B", "A", "A"]
         assert result.iloc[0] == 72.5
         assert result.iloc[1] == 68.3
@@ -143,7 +143,7 @@ class TestPandasMissingValueFeatureGroup:
         """Test _perform_imputation method with backward fill imputation."""
         # Sort by index to ensure consistent fill direction
         sorted_df = sample_dataframe_with_missing.sort_index()
-        result = PandasMissingValueFeatureGroup._perform_imputation(sorted_df, "bfill", "temperature")
+        result = PandasMissingValueFeatureGroup._perform_imputation(sorted_df, "bfill", ["temperature"])
         # Backward fill [72.5, 68.3, None, None, 70.1] -> [72.5, 68.3, 70.1, 70.1, 70.1]
         assert result.iloc[0] == 72.5
         assert result.iloc[1] == 68.3
@@ -154,7 +154,7 @@ class TestPandasMissingValueFeatureGroup:
     def test_perform_imputation_invalid(self, sample_dataframe_with_missing: pd.DataFrame) -> None:
         """Test _perform_imputation method with invalid imputation type."""
         with pytest.raises(ValueError):
-            PandasMissingValueFeatureGroup._perform_imputation(sample_dataframe_with_missing, "invalid", "income")
+            PandasMissingValueFeatureGroup._perform_imputation(sample_dataframe_with_missing, "invalid", ["income"])
 
     def test_perform_grouped_imputation_mean(self, sample_dataframe_with_missing: pd.DataFrame) -> None:
         """Test _perform_grouped_imputation method with mean imputation by group."""
@@ -265,7 +265,7 @@ class TestPandasMissingValueFeatureGroup:
         feature_set = FeatureSet()
         feature_set.add(Feature("mean_imputed__missing"))
 
-        with pytest.raises(ValueError, match="Source feature 'missing' not found in data"):
+        with pytest.raises(ValueError, match="Source features not found in data"):
             PandasMissingValueFeatureGroup.calculate_feature(sample_dataframe_with_missing, feature_set)
 
     def test_calculate_feature_constant_without_value(self, sample_dataframe_with_missing: pd.DataFrame) -> None:

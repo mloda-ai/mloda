@@ -4,7 +4,7 @@ Polars Lazy implementation for aggregated feature groups.
 
 from __future__ import annotations
 
-from typing import Any, Set, Type, Union
+from typing import Any, List, Set, Type, Union
 
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 
@@ -31,12 +31,33 @@ class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
         return {PolarsLazyDataframe}
 
     @classmethod
-    def _check_source_feature_exists(cls, data: Any, feature_name: str) -> None:
-        """Check if the feature exists in the LazyFrame schema."""
+    def _get_available_columns(cls, data: Any) -> Set[str]:
+        """Get the set of available column names from the LazyFrame schema."""
+        if hasattr(data, "collect_schema"):
+            return set(data.collect_schema().names())
+        else:
+            raise ValueError("Data does not have a collect_schema method, cannot get available columns.")
+
+    @classmethod
+    def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
+        """
+        Check if the resolved features exist in the LazyFrame schema.
+
+        Args:
+            data: The Polars LazyFrame
+            feature_names: List of resolved feature names (may contain ~N suffixes)
+
+        Raises:
+            ValueError: If none of the resolved features exist in the data
+        """
         if hasattr(data, "collect_schema"):
             schema_names = set(data.collect_schema().names())
-            if feature_name not in schema_names:
-                raise ValueError(f"Source feature '{feature_name}' not found in data")
+            missing_features = [name for name in feature_names if name not in schema_names]
+            if len(missing_features) == len(feature_names):
+                raise ValueError(
+                    f"None of the source features {feature_names} found in data. "
+                    f"Available columns: {list(schema_names)}"
+                )
         else:
             raise ValueError("Data does not have a collect_schema method, cannot check feature existence.")
 
@@ -47,14 +68,18 @@ class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
         return data.with_columns(result.alias(feature_name))
 
     @classmethod
-    def _perform_aggregation(cls, data: Any, aggregation_type: str, mloda_source_features: str) -> Any:
+    def _perform_aggregation(cls, data: Any, aggregation_type: str, mloda_source_features: List[str]) -> Any:
         """
         Perform the aggregation using Polars lazy expressions.
+
+        Supports both single-column and multi-column aggregation:
+        - Single column: aggregates values within the column
+        - Multi-column: aggregates across columns using horizontal operations
 
         Args:
             data: The Polars LazyFrame
             aggregation_type: The type of aggregation to perform
-            mloda_source_features: The name of the source feature to aggregate
+            mloda_source_features: List of source feature names (may be single or multiple columns)
 
         Returns:
             A Polars expression representing the aggregation
@@ -62,25 +87,54 @@ class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
         if pl is None:
             raise ImportError("Polars is not installed. To be able to use this framework, please install polars.")
 
-        # Get the column to aggregate
-        column = pl.col(mloda_source_features)
-
-        # Return the aggregation expression based on type
-        if aggregation_type == "sum":
-            return column.sum()
-        elif aggregation_type == "min":
-            return column.min()
-        elif aggregation_type == "max":
-            return column.max()
-        elif aggregation_type in ["avg", "mean"]:
-            return column.mean()
-        elif aggregation_type == "count":
-            return column.count()
-        elif aggregation_type == "std":
-            return column.std()
-        elif aggregation_type == "var":
-            return column.var()
-        elif aggregation_type == "median":
-            return column.median()
+        # For multi-column features, use horizontal aggregation (across columns)
+        # For single-column features, use vertical aggregation (within column)
+        if len(mloda_source_features) > 1:
+            # Multi-column: aggregate across columns horizontally
+            columns = [pl.col(name) for name in mloda_source_features]
+            if aggregation_type == "sum":
+                return pl.sum_horizontal(*columns)
+            elif aggregation_type == "min":
+                return pl.min_horizontal(*columns)
+            elif aggregation_type == "max":
+                return pl.max_horizontal(*columns)
+            elif aggregation_type in ["avg", "mean"]:
+                return pl.mean_horizontal(*columns)
+            elif aggregation_type == "count":
+                # Count non-null values across columns
+                return pl.sum_horizontal(*[col.is_not_null().cast(pl.Int64) for col in columns])
+            elif aggregation_type == "std":
+                # Polars doesn't have horizontal std, compute manually
+                mean_val = pl.mean_horizontal(*columns)
+                variance = pl.mean_horizontal(*[(col - mean_val).pow(2) for col in columns])
+                return variance.sqrt()
+            elif aggregation_type == "var":
+                # Polars doesn't have horizontal var, compute manually
+                mean_val = pl.mean_horizontal(*columns)
+                return pl.mean_horizontal(*[(col - mean_val).pow(2) for col in columns])
+            elif aggregation_type == "median":
+                # Polars doesn't have horizontal median, use concat and median
+                raise ValueError("Median aggregation across multiple columns is not supported in Polars")
+            else:
+                raise ValueError(f"Unsupported aggregation type: {aggregation_type}")
         else:
-            raise ValueError(f"Unsupported aggregation type: {aggregation_type}")
+            # Single column: vertical aggregation
+            column = pl.col(mloda_source_features[0])
+            if aggregation_type == "sum":
+                return column.sum()
+            elif aggregation_type == "min":
+                return column.min()
+            elif aggregation_type == "max":
+                return column.max()
+            elif aggregation_type in ["avg", "mean"]:
+                return column.mean()
+            elif aggregation_type == "count":
+                return column.count()
+            elif aggregation_type == "std":
+                return column.std()
+            elif aggregation_type == "var":
+                return column.var()
+            elif aggregation_type == "median":
+                return column.median()
+            else:
+                raise ValueError(f"Unsupported aggregation type: {aggregation_type}")

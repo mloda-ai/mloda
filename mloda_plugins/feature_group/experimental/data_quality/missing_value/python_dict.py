@@ -27,15 +27,29 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
         return {PythonDictFramework}
 
     @classmethod
-    def _check_source_feature_exists(cls, data: List[Dict[str, Any]], feature_name: str) -> None:
-        """Check if the feature exists in the data."""
+    def _get_available_columns(cls, data: List[Dict[str, Any]]) -> Set[str]:
+        """Get the set of available column names from the data."""
+        if not data:
+            return set()
+        # Collect all keys from all dictionaries
+        all_keys: set[str] = set()
+        for row in data:
+            all_keys.update(row.keys())
+        return all_keys
+
+    @classmethod
+    def _check_source_features_exist(cls, data: List[Dict[str, Any]], feature_names: List[str]) -> None:
+        """Check if the resolved source features exist in the data."""
         if not data:
             raise ValueError("Data cannot be empty")
 
-        # Check if feature exists in any row
-        feature_exists = any(feature_name in row for row in data)
-        if not feature_exists:
-            raise ValueError(f"Source feature '{feature_name}' not found in data")
+        # Get all available features
+        available_features = cls._get_available_columns(data)
+
+        # Check which features are missing
+        missing_features = [f for f in feature_names if f not in available_features]
+        if missing_features:
+            raise ValueError(f"Source features not found in data: {missing_features}")
 
     @classmethod
     def _add_result_to_data(
@@ -55,58 +69,100 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
         cls,
         data: List[Dict[str, Any]],
         imputation_method: str,
-        mloda_source_features: str,
+        mloda_source_features: List[str],
         constant_value: Optional[Any] = None,
         group_by_features: Optional[List[str]] = None,
     ) -> List[Any]:
         """
         Perform the imputation using pure Python operations.
 
+        Supports both single-column and multi-column imputation:
+        - Single column: [feature_name] - imputes values within the column
+        - Multi-column: [feature~0, feature~1, ...] - imputes across columns
+
         Args:
             data: The List[Dict] data structure
             imputation_method: The type of imputation to perform
-            mloda_source_features: The name of the source feature to impute
+            mloda_source_features: List of resolved source feature names to impute
             constant_value: The constant value to use for imputation (if method is 'constant')
             group_by_features: Optional list of features to group by before imputation
 
         Returns:
             The result of the imputation as a list of values
         """
-        # Extract the source feature values
-        source_values = [row.get(mloda_source_features) for row in data]
+        # Handle single column case (backward compatibility)
+        if len(mloda_source_features) == 1:
+            source_feature = mloda_source_features[0]
+            # Extract the source feature values
+            source_values = [row.get(source_feature) for row in data]
 
-        # If there are no missing values, return the original values
-        if not any(value is None for value in source_values):
-            return source_values
+            # If there are no missing values, return the original values
+            if not any(value is None for value in source_values):
+                return source_values
 
-        # If group_by_features is provided, perform grouped imputation
-        if group_by_features:
-            return cls._perform_grouped_imputation(
-                data, imputation_method, mloda_source_features, constant_value, group_by_features
-            )
+            # If group_by_features is provided, perform grouped imputation
+            if group_by_features:
+                return cls._perform_grouped_imputation(
+                    data, imputation_method, source_feature, constant_value, group_by_features
+                )
 
-        # Perform non-grouped imputation
-        if imputation_method == "mean":
-            return cls._impute_mean(source_values)
-        elif imputation_method == "median":
-            return cls._impute_median(source_values)
-        elif imputation_method == "mode":
-            return cls._impute_mode(source_values)
-        elif imputation_method == "constant":
-            return cls._impute_constant(source_values, constant_value)
-        elif imputation_method == "ffill":
-            return cls._impute_ffill(source_values)
-        elif imputation_method == "bfill":
-            return cls._impute_bfill(source_values)
+            # Perform non-grouped imputation
+            if imputation_method == "mean":
+                return cls._impute_mean(source_values)
+            elif imputation_method == "median":
+                return cls._impute_median(source_values)
+            elif imputation_method == "mode":
+                return cls._impute_mode(source_values)
+            elif imputation_method == "constant":
+                return cls._impute_constant(source_values, constant_value)
+            elif imputation_method == "ffill":
+                return cls._impute_ffill(source_values)
+            elif imputation_method == "bfill":
+                return cls._impute_bfill(source_values)
+            else:
+                raise ValueError(f"Unsupported imputation method: {imputation_method}")
         else:
-            raise ValueError(f"Unsupported imputation method: {imputation_method}")
+            # Multi-column case: impute across columns (row-wise)
+            # For multi-column features, we compute imputation values across columns for each row
+            result = []
+            for row in data:
+                row_values = [row.get(col) for col in mloda_source_features]
+
+                if imputation_method == "mean":
+                    non_null = [v for v in row_values if v is not None]
+                    result.append(statistics.mean(non_null) if non_null else None)
+                elif imputation_method == "median":
+                    non_null = [v for v in row_values if v is not None]
+                    result.append(statistics.median(non_null) if non_null else None)
+                elif imputation_method == "mode":
+                    non_null = [v for v in row_values if v is not None]
+                    if non_null:
+                        counter = Counter(non_null)
+                        result.append(counter.most_common(1)[0][0])
+                    else:
+                        result.append(None)
+                elif imputation_method == "constant":
+                    result.append(constant_value)
+                elif imputation_method == "sum":
+                    non_null = [v for v in row_values if v is not None]
+                    result.append(sum(non_null) if non_null else None)
+                elif imputation_method == "min":
+                    non_null = [v for v in row_values if v is not None]
+                    result.append(min(non_null) if non_null else None)
+                elif imputation_method == "max":
+                    non_null = [v for v in row_values if v is not None]
+                    result.append(max(non_null) if non_null else None)
+                else:
+                    raise ValueError(f"Unsupported imputation method for multi-column: {imputation_method}")
+
+            return result
 
     @classmethod
     def _perform_grouped_imputation(
         cls,
         data: List[Dict[str, Any]],
         imputation_method: str,
-        mloda_source_features: str,
+        mloda_source_features: str,  # Note: grouped imputation only supports single column
         constant_value: Optional[Any],
         group_by_features: List[str],
     ) -> List[Any]:

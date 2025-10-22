@@ -226,16 +226,67 @@ PROPERTY_MAPPING = {
 
 ## Multiple Result Columns with ~ Pattern
 
-Some feature groups produce multiple result columns from a single input feature. The `~` pattern allows accessing individual columns:
+Some feature groups produce multiple result columns from a single input feature. mloda provides utilities to work with these patterns seamlessly.
+
+### Producer Side: Creating Multi-Column Outputs
+
+Use `apply_naming_convention()` to create properly named columns:
 
 ``` python
-# OneHot encoding creates multiple columns
+from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
+
+class MultiColumnProducer(AbstractFeatureGroup):
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        # Compute results (e.g., from sklearn OneHotEncoder)
+        result = encoder.transform(data)  # Returns 2D numpy array (n_samples, n_features)
+
+        # Automatically apply naming convention
+        feature_name = features.get_name_of_one_feature().name
+        named_columns = cls.apply_naming_convention(result, feature_name)
+        # Returns: {"onehot_encoded__category~0": data, "~1": data, "~2": data}
+
+        return named_columns
+```
+
+### Consumer Side: Discovering Multi-Column Features
+
+Use `resolve_multi_column_feature()` to automatically discover columns:
+
+``` python
+class MultiColumnConsumer(AbstractFeatureGroup):
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+        # Request base feature without ~N suffix
+        return {Feature("onehot_encoded__category")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        # Automatically discover all matching columns
+        columns = cls.resolve_multi_column_feature(
+            "onehot_encoded__category",
+            set(data.columns)
+        )
+        # Returns: ["onehot_encoded__category~0", "~1", "~2"]
+
+        # Process all discovered columns
+        result = sum(data[col] for col in columns)
+
+        feature_name = features.get_name_of_one_feature().name
+        return {feature_name: result}
+```
+
+### Manual Column Access (Legacy)
+
+For backwards compatibility, you can still access specific columns:
+
+``` python
+# Manual specification of specific columns
 base_feature = "onehot_encoded__category"  # Creates all columns
 specific_column = "onehot_encoded__category~0"  # Access first column
 another_column = "onehot_encoded__category~1"  # Access second column
 ```
 
-**Implementation Note**: Feature groups handle this pattern in their `input_features()` method to extract the base feature name, and in `calculate_feature()` to create the appropriately named result columns.
+**Recommended**: Use automatic discovery (`resolve_multi_column_feature`) instead of manual enumeration for cleaner, more maintainable code.
 
 ## Benefits
 

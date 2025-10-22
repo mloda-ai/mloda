@@ -4,7 +4,7 @@ Base implementation for aggregated feature groups.
 
 from __future__ import annotations
 
-from typing import Any, Optional, Set, Union
+from typing import Any, List, Optional, Set, Union
 
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
@@ -215,36 +215,59 @@ class AggregatedFeatureGroup(AbstractFeatureGroup):
         Processes all requested features, determining the aggregation type
         and source feature from either string parsing or configuration-based options.
 
+        Supports multi-column features by using resolve_multi_column_feature() to
+        automatically discover columns matching the pattern feature_name~N.
+
         Adds the aggregated results directly to the input data structure.
         """
         # Process each requested feature
         for feature in features.features:
             aggregation_type, source_feature_name = cls._extract_aggr_and_source_feature(feature)
 
-            cls._check_source_feature_exists(data, source_feature_name)
+            # Resolve multi-column features automatically
+            # If source_feature_name is "onehot_encoded__product", this discovers
+            # ["onehot_encoded__product~0", "onehot_encoded__product~1", ...]
+            available_columns = cls._get_available_columns(data)
+            resolved_columns = cls.resolve_multi_column_feature(source_feature_name, available_columns)
+
+            # Check that resolved columns exist
+            cls._check_source_features_exist(data, resolved_columns)
 
             if aggregation_type not in cls.AGGREGATION_TYPES:
                 raise ValueError(f"Unsupported aggregation type: {aggregation_type}")
 
-            result = cls._perform_aggregation(data, aggregation_type, source_feature_name)
+            result = cls._perform_aggregation(data, aggregation_type, resolved_columns)
 
             data = cls._add_result_to_data(data, feature.get_name(), result)
 
         return data
 
     @classmethod
-    def _check_source_feature_exists(cls, data: Any, feature_name: str) -> None:
+    def _get_available_columns(cls, data: Any) -> Set[str]:
         """
-        Check if the source feature exists in the data.
+        Get the set of available column names from the data.
 
         Args:
             data: The input data
-            feature_name: The name of the feature to check
+
+        Returns:
+            Set of column names available in the data
+        """
+        raise NotImplementedError(f"_get_available_columns not implemented in {cls.__name__}")
+
+    @classmethod
+    def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
+        """
+        Check if the resolved source features exist in the data.
+
+        Args:
+            data: The input data
+            feature_names: List of resolved feature names (may contain ~N suffixes)
 
         Raises:
-            ValueError: If the feature does not exist in the data
+            ValueError: If none of the features exist in the data
         """
-        raise NotImplementedError(f"_check_source_feature_exists not implemented in {cls.__name__}")
+        raise NotImplementedError(f"_check_source_features_exist not implemented in {cls.__name__}")
 
     @classmethod
     def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
@@ -262,14 +285,18 @@ class AggregatedFeatureGroup(AbstractFeatureGroup):
         raise NotImplementedError(f"_add_result_to_data not implemented in {cls.__name__}")
 
     @classmethod
-    def _perform_aggregation(cls, data: Any, aggregation_type: str, mloda_source_features: str) -> Any:
+    def _perform_aggregation(cls, data: Any, aggregation_type: str, mloda_source_features: List[str]) -> Any:
         """
         Method to perform the aggregation. Should be implemented by subclasses.
+
+        Supports both single-column and multi-column aggregation:
+        - Single column: [feature_name] - aggregates values within the column
+        - Multi-column: [feature~0, feature~1, ...] - aggregates across columns
 
         Args:
             data: The input data
             aggregation_type: The type of aggregation to perform
-            mloda_source_features: The name of the source feature to aggregate
+            mloda_source_features: List of resolved source feature names to aggregate
 
         Returns:
             The result of the aggregation

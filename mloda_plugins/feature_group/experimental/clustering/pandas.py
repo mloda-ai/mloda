@@ -4,7 +4,7 @@ Pandas implementation for clustering feature groups.
 
 from __future__ import annotations
 
-from typing import Any, List, Union, cast
+from typing import Any, List, Set, Union, cast
 
 
 try:
@@ -37,19 +37,27 @@ class PandasClusteringFeatureGroup(ClusteringFeatureGroup):
         return {PandasDataframe}
 
     @classmethod
-    def _check_source_feature_exists(cls, data: pd.DataFrame, feature_name: str) -> None:
+    def _get_available_columns(cls, data: pd.DataFrame) -> Set[str]:
+        """Get the set of available column names from the DataFrame."""
+        return set(data.columns)
+
+    @classmethod
+    def _check_source_features_exist(cls, data: pd.DataFrame, feature_names: List[str]) -> None:
         """
-        Check if the source feature exists in the DataFrame.
+        Check if the resolved features exist in the DataFrame.
 
         Args:
-            data: The pandas DataFrame
-            feature_name: The name of the feature to check
+            data: The Pandas DataFrame
+            feature_names: List of resolved feature names (may contain ~N suffixes)
 
         Raises:
-            ValueError: If the feature does not exist in the DataFrame
+            ValueError: If none of the resolved features exist in the data
         """
-        if feature_name not in data.columns:
-            raise ValueError(f"Feature '{feature_name}' not found in the data")
+        missing_features = [name for name in feature_names if name not in data.columns]
+        if len(missing_features) == len(feature_names):
+            raise ValueError(
+                f"None of the source features {feature_names} found in data. Available columns: {list(data.columns)}"
+            )
 
     @classmethod
     def _add_result_to_data(cls, data: pd.DataFrame, feature_name: str, result: np.ndarray) -> pd.DataFrame:  # type: ignore
@@ -298,3 +306,218 @@ class PandasClusteringFeatureGroup(ClusteringFeatureGroup):
                 best_k = k
 
         return best_k
+
+    @classmethod
+    def _perform_clustering_with_probabilities(
+        cls,
+        data: Any,
+        algorithm: str,
+        k_value: Union[int, str],
+        source_features: List[str],
+    ) -> tuple[np.ndarray, np.ndarray]:  # type: ignore
+        """
+        Perform clustering and return both labels and probabilities/distances.
+
+        For each algorithm, we compute cluster probabilities or distances:
+        - KMeans: Uses transform() to get distances to cluster centers, then converts to probabilities
+        - Hierarchical/Agglomerative: Computes distances to cluster centroids
+        - DBSCAN: Returns binary membership (1 for assigned cluster, 0 for others)
+        - Spectral: Computes distances to cluster centroids
+        - Affinity: Returns binary membership based on exemplar assignment
+
+        Args:
+            data: The pandas DataFrame
+            algorithm: The clustering algorithm to use
+            k_value: The number of clusters (or 'auto' for algorithms that determine this automatically)
+            source_features: The list of source features to use for clustering
+
+        Returns:
+            A tuple of (cluster_labels, probabilities) where probabilities[i, j] is the
+            probability/distance of sample i belonging to cluster j
+        """
+        # Cast data to pandas DataFrame
+        df = cast(pd.DataFrame, data)
+
+        # Extract the features to use for clustering
+        X = df[source_features].copy()
+
+        # Handle missing values (replace with mean)
+        for col in X.columns:
+            if X[col].isna().any():
+                X[col] = X[col].fillna(X[col].mean())
+
+        # Convert to numpy array
+        X_array = X.values
+
+        # Standardize the features
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X_array)
+
+        # Perform clustering based on the algorithm
+        if algorithm == "kmeans":
+            return cls._perform_kmeans_clustering_with_probabilities(X_scaled, k_value)
+        elif algorithm == "hierarchical" or algorithm == "agglomerative":
+            return cls._perform_hierarchical_clustering_with_probabilities(X_scaled, k_value)
+        elif algorithm == "dbscan":
+            return cls._perform_dbscan_clustering_with_probabilities(X_scaled, k_value)
+        elif algorithm == "spectral":
+            return cls._perform_spectral_clustering_with_probabilities(X_scaled, k_value)
+        elif algorithm == "affinity":
+            return cls._perform_affinity_clustering_with_probabilities(X_scaled, k_value)
+        else:
+            raise ValueError(f"Unsupported clustering algorithm: {algorithm}")
+
+    @classmethod
+    def _perform_kmeans_clustering_with_probabilities(
+        cls,
+        X: np.ndarray[Any, Any],
+        k_value: Union[int, str],
+    ) -> tuple[np.ndarray[Any, Any], np.ndarray[Any, Any]]:
+        """
+        Perform K-means clustering and return probabilities based on distances to centroids.
+        """
+        if k_value == "auto":
+            k_value = cls._find_optimal_k(X, algorithm="kmeans")
+
+        k = int(k_value)
+        kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+        labels = kmeans.fit_predict(X)
+
+        # Get distances to cluster centers
+        distances = kmeans.transform(X)
+
+        # Convert distances to probabilities using softmax-like transformation
+        # Smaller distance = higher probability
+        # Use negative distances and apply softmax
+        neg_distances = -distances
+        # Normalize using softmax to get probabilities
+        exp_neg_dist = np.exp(neg_distances - np.max(neg_distances, axis=1, keepdims=True))
+        probabilities = exp_neg_dist / np.sum(exp_neg_dist, axis=1, keepdims=True)
+
+        return labels, probabilities
+
+    @classmethod
+    def _perform_hierarchical_clustering_with_probabilities(
+        cls,
+        X: np.ndarray[Any, Any],
+        k_value: Union[int, str],
+    ) -> tuple[np.ndarray[Any, Any], np.ndarray[Any, Any]]:
+        """
+        Perform hierarchical clustering and compute distances to cluster centroids.
+        """
+        if k_value == "auto":
+            k_value = cls._find_optimal_k(X, algorithm="hierarchical")
+
+        k = int(k_value)
+        hierarchical = AgglomerativeClustering(n_clusters=k)
+        labels = hierarchical.fit_predict(X)
+
+        # Compute cluster centroids
+        centroids = np.array([X[labels == i].mean(axis=0) for i in range(k)])
+
+        # Compute distances from each point to each centroid
+        from scipy.spatial.distance import cdist
+
+        distances = cdist(X, centroids, metric="euclidean")
+
+        # Convert distances to probabilities
+        neg_distances = -distances
+        exp_neg_dist = np.exp(neg_distances - np.max(neg_distances, axis=1, keepdims=True))
+        probabilities = exp_neg_dist / np.sum(exp_neg_dist, axis=1, keepdims=True)
+
+        return labels, probabilities
+
+    @classmethod
+    def _perform_dbscan_clustering_with_probabilities(
+        cls,
+        X: np.ndarray[Any, Any],
+        k_value: Union[int, str],
+    ) -> tuple[np.ndarray[Any, Any], np.ndarray[Any, Any]]:
+        """
+        Perform DBSCAN clustering. For probabilities, returns binary membership.
+        """
+        # DBSCAN doesn't provide probabilities, so we use binary membership
+        if k_value == "auto":
+            dbscan = DBSCAN(eps=0.5, min_samples=5)
+        else:
+            k = int(k_value)
+            eps = 1.0 / k
+            dbscan = DBSCAN(eps=eps, min_samples=5)
+
+        labels = dbscan.fit_predict(X)
+
+        # Get unique cluster labels (excluding noise label -1)
+        unique_labels = np.unique(labels[labels >= 0])
+        n_clusters = len(unique_labels)
+
+        # Create binary membership matrix
+        probabilities = np.zeros((len(X), max(n_clusters, 1)))
+        for i, label in enumerate(labels):
+            if label >= 0:
+                # Find the index of this cluster in the unique labels
+                cluster_idx = np.where(unique_labels == label)[0][0]
+                probabilities[i, cluster_idx] = 1.0
+
+        return labels, probabilities
+
+    @classmethod
+    def _perform_spectral_clustering_with_probabilities(
+        cls,
+        X: np.ndarray[Any, Any],
+        k_value: Union[int, str],
+    ) -> tuple[np.ndarray[Any, Any], np.ndarray[Any, Any]]:
+        """
+        Perform spectral clustering and compute distances to cluster centroids.
+        """
+        if k_value == "auto":
+            k_value = cls._find_optimal_k(X, algorithm="spectral")
+
+        k = int(k_value)
+        spectral = SpectralClustering(n_clusters=k, assign_labels="discretize", random_state=42)
+        labels = spectral.fit_predict(X)
+
+        # Compute cluster centroids
+        centroids = np.array([X[labels == i].mean(axis=0) for i in range(k)])
+
+        # Compute distances from each point to each centroid
+        from scipy.spatial.distance import cdist
+
+        distances = cdist(X, centroids, metric="euclidean")
+
+        # Convert distances to probabilities
+        neg_distances = -distances
+        exp_neg_dist = np.exp(neg_distances - np.max(neg_distances, axis=1, keepdims=True))
+        probabilities = exp_neg_dist / np.sum(exp_neg_dist, axis=1, keepdims=True)
+
+        return labels, probabilities
+
+    @classmethod
+    def _perform_affinity_clustering_with_probabilities(
+        cls,
+        X: np.ndarray[Any, Any],
+        k_value: Union[int, str],
+    ) -> tuple[np.ndarray[Any, Any], np.ndarray[Any, Any]]:
+        """
+        Perform affinity propagation clustering. Returns binary membership based on exemplar assignment.
+        """
+        from sklearn.cluster import AffinityPropagation
+
+        if k_value == "auto":
+            affinity = AffinityPropagation(random_state=42)
+        else:
+            k = int(k_value)
+            damping = 0.5 + 0.3 * (1.0 / k)
+            damping = min(0.99, max(0.5, damping))
+            affinity = AffinityPropagation(damping=damping, random_state=42)
+
+        labels = affinity.fit_predict(X)
+
+        # Get the number of clusters
+        n_clusters = len(np.unique(labels))
+
+        # Create binary membership matrix
+        probabilities = np.zeros((len(X), n_clusters))
+        for i, label in enumerate(labels):
+            probabilities[i, label] = 1.0
+
+        return labels, probabilities

@@ -4,7 +4,7 @@ PyArrow implementation for time window feature groups.
 
 from __future__ import annotations
 
-from typing import Any, Optional, Set, Type, Union
+from typing import Any, List, Optional, Set, Type, Union
 import datetime
 
 import pyarrow as pa
@@ -41,10 +41,28 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
             )
 
     @classmethod
-    def _check_source_feature_exists(cls, data: pa.Table, mloda_source_features: str) -> None:
-        """Check if the source feature exists in the Table."""
-        if mloda_source_features not in data.schema.names:
-            raise ValueError(f"Source feature '{mloda_source_features}' not found in data")
+    def _get_available_columns(cls, data: pa.Table) -> Set[str]:
+        """Get the set of available column names from the Table schema."""
+        return set(data.schema.names)
+
+    @classmethod
+    def _check_source_features_exist(cls, data: pa.Table, feature_names: List[str]) -> None:
+        """
+        Check if the resolved features exist in the Table.
+
+        Args:
+            data: The PyArrow Table
+            feature_names: List of resolved feature names (may contain ~N suffixes)
+
+        Raises:
+            ValueError: If none of the resolved features exist in the data
+        """
+        schema_names = set(data.schema.names)
+        missing_features = [name for name in feature_names if name not in schema_names]
+        if len(missing_features) == len(feature_names):
+            raise ValueError(
+                f"None of the source features {feature_names} found in data. Available columns: {list(schema_names)}"
+            )
 
     @classmethod
     def _add_result_to_data(cls, data: pa.Table, feature_name: str, result: Any) -> pa.Table:
@@ -68,18 +86,22 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         window_function: str,
         window_size: int,
         time_unit: str,
-        mloda_source_features: str,
+        mloda_source_features: List[str],
         time_filter_feature: Optional[str] = None,
     ) -> pa.Array:
         """
         Perform the time window operation using PyArrow compute functions.
+
+        Supports both single-column and multi-column window operations:
+        - Single column: aggregates values within the column over time
+        - Multi-column: aggregates across columns for each time window row
 
         Args:
             data: The PyArrow Table
             window_function: The type of window function to perform
             window_size: The size of the window
             time_unit: The time unit for the window
-            mloda_source_features: The name of the source feature
+            mloda_source_features: List of source feature names (may be single or multiple columns)
             time_filter_feature: The name of the time filter feature to use for time-based operations.
                                 If None, uses the value from get_time_filter_feature().
 
@@ -90,59 +112,92 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         if time_filter_feature is None:
             time_filter_feature = cls.get_time_filter_feature()
 
-        # Get the time and source columns
+        # Get the time column
         time_column = data.column(time_filter_feature)
-        source_column = data.column(mloda_source_features)
+
+        # Get the source columns
+        source_columns = [data.column(name) for name in mloda_source_features]
 
         # Sort the data by time
         # First create indices sorted by time
         sorted_indices = pc.sort_indices(time_column)
 
-        # Get the sorted source values
-        sorted_source = pc.take(source_column, sorted_indices)
+        # Get the sorted source values for each column
+        sorted_sources = [pc.take(col, sorted_indices) for col in source_columns]
 
         # Create a list to store the results
         results = []
 
         # For each row, calculate the window operation using a fixed-size window
         # This matches the pandas implementation which uses rolling(window=window_size, min_periods=1)
-        for i in range(len(sorted_source)):
+        for i in range(len(sorted_sources[0])):
             # Get the window values (current and previous values up to window_size)
             start_idx = max(0, i - window_size + 1)
             window_indices = pa.array(range(start_idx, i + 1))
-            window_values = pc.take(sorted_source, window_indices)
+
+            # Get window values for all columns
+            all_window_values = [pc.take(col, window_indices) for col in sorted_sources]
 
             # Apply the window function
-            if len(window_values) == 0:
+            if len(all_window_values[0]) == 0:
                 # If no values in window, use the current value
-                results.append(sorted_source[i].as_py())
+                results.append(sorted_sources[0][i].as_py())
             else:
-                # Apply the appropriate window function
-                if window_function == "sum":
-                    results.append(pc.sum(window_values).as_py())
-                elif window_function == "min":
-                    results.append(pc.min(window_values).as_py())
-                elif window_function == "max":
-                    results.append(pc.max(window_values).as_py())
-                elif window_function in ["avg", "mean"]:
-                    results.append(pc.mean(window_values).as_py())
-                elif window_function == "count":
-                    results.append(pc.count(window_values).as_py())
-                elif window_function == "std":
-                    results.append(pc.stddev(window_values).as_py())
-                elif window_function == "var":
-                    results.append(pc.variance(window_values).as_py())
-                elif window_function == "median":
-                    # PyArrow doesn't have a direct median function
-                    # We can approximate it using quantile with q=0.5
-                    result = pc.quantile(window_values, q=0.5)
-                    results.append(result[0].as_py())
-                elif window_function == "first":
-                    results.append(window_values[0].as_py())
-                elif window_function == "last":
-                    results.append(window_values[-1].as_py())
+                # For multi-column, first compute rolling window per column, then aggregate across columns
+                column_results = []
+                for window_values in all_window_values:
+                    if window_function == "sum":
+                        column_results.append(pc.sum(window_values).as_py())
+                    elif window_function == "min":
+                        column_results.append(pc.min(window_values).as_py())
+                    elif window_function == "max":
+                        column_results.append(pc.max(window_values).as_py())
+                    elif window_function in ["avg", "mean"]:
+                        column_results.append(pc.mean(window_values).as_py())
+                    elif window_function == "count":
+                        column_results.append(pc.count(window_values).as_py())
+                    elif window_function == "std":
+                        column_results.append(pc.stddev(window_values).as_py())
+                    elif window_function == "var":
+                        column_results.append(pc.variance(window_values).as_py())
+                    elif window_function == "median":
+                        # PyArrow doesn't have a direct median function
+                        # We can approximate it using quantile with q=0.5
+                        result = pc.quantile(window_values, q=0.5)
+                        column_results.append(result[0].as_py())
+                    elif window_function == "first":
+                        column_results.append(window_values[0].as_py())
+                    elif window_function == "last":
+                        column_results.append(window_values[-1].as_py())
+                    else:
+                        raise ValueError(f"Unsupported window function: {window_function}")
+
+                # If multi-column, aggregate across columns
+                if len(mloda_source_features) > 1:
+                    import numpy as np
+
+                    column_array = np.array(column_results)
+                    if window_function == "sum":
+                        results.append(np.sum(column_array))
+                    elif window_function == "min":
+                        results.append(np.min(column_array))
+                    elif window_function == "max":
+                        results.append(np.max(column_array))
+                    elif window_function in ["avg", "mean"]:
+                        results.append(np.mean(column_array))
+                    elif window_function == "count":
+                        results.append(np.sum(~np.isnan(column_array)))
+                    elif window_function == "std":
+                        results.append(np.std(column_array))
+                    elif window_function == "var":
+                        results.append(np.var(column_array))
+                    elif window_function == "median":
+                        results.append(np.median(column_array))
+                    elif window_function in ["first", "last"]:
+                        results.append(np.mean(column_array))  # Use mean as aggregation for first/last
                 else:
-                    raise ValueError(f"Unsupported window function: {window_function}")
+                    # Single column: use the result directly
+                    results.append(column_results[0])
 
         # We need to reorder the results to match the original order
         # Create a mapping from sorted indices to original indices

@@ -73,7 +73,7 @@ class TestForecastingFeatureGroup(unittest.TestCase):
         """Test forecasting with the Pandas implementation."""
         # Perform forecasting
         result, artifact = PandasForecastingFeatureGroup._perform_forecasting(
-            self.df, "linear", 7, "day", "sales", "time_filter", None
+            self.df, "linear", 7, "day", ["sales"], "time_filter", None
         )
 
         # Check that the result is a pandas Series
@@ -90,7 +90,7 @@ class TestForecastingFeatureGroup(unittest.TestCase):
 
         # Test with a pre-trained model
         result2, artifact2 = PandasForecastingFeatureGroup._perform_forecasting(
-            self.df, "linear", 7, "day", "sales", "time_filter", artifact
+            self.df, "linear", 7, "day", ["sales"], "time_filter", artifact
         )
 
         # Check that the result is a pandas Series
@@ -113,7 +113,7 @@ class TestForecastingFeatureGroup(unittest.TestCase):
                 algorithm,
                 3,  # Use a smaller horizon for faster tests
                 "day",
-                "sales",
+                ["sales"],
                 "time_filter",
                 None,
             )

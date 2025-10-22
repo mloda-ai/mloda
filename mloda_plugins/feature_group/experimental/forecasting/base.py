@@ -4,7 +4,7 @@ Base implementation for forecasting feature groups.
 
 from __future__ import annotations
 
-from typing import Any, Optional, Set, Type, Union
+from typing import Any, List, Optional, Set, Type, Union
 
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.base_artifact import BaseArtifact
@@ -102,6 +102,7 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
     ALGORITHM = "algorithm"
     HORIZON = "horizon"
     TIME_UNIT = "time_unit"
+    OUTPUT_CONFIDENCE_INTERVALS = "output_confidence_intervals"
 
     # Define supported forecasting algorithms
     FORECASTING_ALGORITHMS = {
@@ -154,6 +155,13 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
             "explanation": "Source feature to generate forecasts for",
             DefaultOptionKeys.mloda_context: True,
             DefaultOptionKeys.mloda_strict_validation: False,
+        },
+        OUTPUT_CONFIDENCE_INTERVALS: {
+            "explanation": "Whether to output confidence intervals as separate columns using ~lower and ~upper suffix pattern",
+            DefaultOptionKeys.mloda_context: True,
+            DefaultOptionKeys.mloda_strict_validation: False,
+            DefaultOptionKeys.mloda_default: False,  # Default is False (don't output confidence intervals)
+            DefaultOptionKeys.mloda_validation_function: lambda value: isinstance(value, bool),
         },
     }
 
@@ -285,13 +293,27 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
         """Check if feature name matches the expected pattern for forecasting features."""
 
         # Use the unified parser with property mapping for full configuration support
-        return FeatureChainParser.match_configuration_feature_chain_parser(
+        result = FeatureChainParser.match_configuration_feature_chain_parser(
             feature_name,
             options,
             property_mapping=cls.PROPERTY_MAPPING,
             pattern=cls.PATTERN,
             prefix_patterns=[cls.PREFIX_PATTERN],
         )
+
+        # If it matches and it's a string-based feature, validate with our custom logic
+        if result:
+            feature_name_str = feature_name.name if isinstance(feature_name, FeatureName) else feature_name
+
+            # Check if this is a string-based feature (contains the pattern)
+            if cls.PATTERN in feature_name_str:
+                try:
+                    # Use existing validation logic that validates algorithm, horizon, and time_unit
+                    cls.parse_forecast_prefix(feature_name_str)
+                except ValueError:
+                    # If validation fails, this feature doesn't match
+                    return False
+        return result
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -330,7 +352,14 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
         for feature in features.features:
             algorithm, horizon, time_unit, mloda_source_features = cls._extract_forecasting_parameters(feature)
 
-            cls._check_source_feature_exists(original_data, mloda_source_features)
+            # Resolve multi-column features automatically
+            # If mloda_source_features is "onehot_encoded__product", this discovers
+            # ["onehot_encoded__product~0", "onehot_encoded__product~1", ...]
+            available_columns = cls._get_available_columns(original_data)
+            resolved_columns = cls.resolve_multi_column_feature(mloda_source_features, available_columns)
+
+            # Check that resolved columns exist
+            cls._check_source_features_exist(original_data, resolved_columns)
 
             # Check if we have a trained model in the artifact
             model_artifact = None
@@ -339,17 +368,40 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
                 if model_artifact is None:
                     raise ValueError("No artifact to load although it was requested.")
 
-            # Perform forecasting using the original clean data
-            result, updated_artifact = cls._perform_forecasting(
-                original_data, algorithm, horizon, time_unit, mloda_source_features, time_filter_feature, model_artifact
+            # Check if we should output confidence intervals
+            output_confidence_intervals = (
+                feature.options.get(cls.OUTPUT_CONFIDENCE_INTERVALS)
+                if feature.options.get(cls.OUTPUT_CONFIDENCE_INTERVALS) is not None
+                else False
             )
 
-            # Save the updated artifact if needed
-            if features.artifact_to_save and updated_artifact and not features.artifact_to_load:
-                features.save_artifact = updated_artifact
+            # Perform forecasting using the original clean data
+            if output_confidence_intervals:
+                # Get forecast, lower bound, and upper bound
+                result, lower_bound, upper_bound, updated_artifact = cls._perform_forecasting_with_confidence(
+                    original_data, algorithm, horizon, time_unit, resolved_columns, time_filter_feature, model_artifact
+                )
 
-            # Store the result for later addition
-            results.append((feature.get_name(), result))
+                # Save the updated artifact if needed
+                if features.artifact_to_save and updated_artifact and not features.artifact_to_load:
+                    features.save_artifact = updated_artifact
+
+                # Store the results for later addition (main forecast + confidence bounds)
+                results.append((feature.get_name(), result))
+                results.append((f"{feature.get_name()}~lower", lower_bound))
+                results.append((f"{feature.get_name()}~upper", upper_bound))
+            else:
+                # Original behavior: only output point forecast
+                result, updated_artifact = cls._perform_forecasting(
+                    original_data, algorithm, horizon, time_unit, resolved_columns, time_filter_feature, model_artifact
+                )
+
+                # Save the updated artifact if needed
+                if features.artifact_to_save and updated_artifact and not features.artifact_to_load:
+                    features.save_artifact = updated_artifact
+
+                # Store the result for later addition
+                results.append((feature.get_name(), result))
 
         # Add all results to the data at once
         for feature_name, result in results:
@@ -441,18 +493,31 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
         raise NotImplementedError(f"_check_time_filter_feature_is_datetime not implemented in {cls.__name__}")
 
     @classmethod
-    def _check_source_feature_exists(cls, data: Any, mloda_source_features: str) -> None:
+    def _get_available_columns(cls, data: Any) -> Set[str]:
         """
-        Check if the source feature exists in the data.
+        Get the set of available column names from the data.
 
         Args:
             data: The input data
-            mloda_source_features: The name of the source feature
+
+        Returns:
+            Set of column names available in the data
+        """
+        raise NotImplementedError(f"_get_available_columns not implemented in {cls.__name__}")
+
+    @classmethod
+    def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
+        """
+        Check if the resolved source features exist in the data.
+
+        Args:
+            data: The input data
+            feature_names: List of resolved feature names (may contain ~N suffixes)
 
         Raises:
-            ValueError: If the source feature does not exist in the data
+            ValueError: If none of the features exist in the data
         """
-        raise NotImplementedError(f"_check_source_feature_exists not implemented in {cls.__name__}")
+        raise NotImplementedError(f"_check_source_features_exist not implemented in {cls.__name__}")
 
     @classmethod
     def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
@@ -476,19 +541,23 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
         algorithm: str,
         horizon: int,
         time_unit: str,
-        mloda_source_features: str,
+        mloda_source_features: List[str],
         time_filter_feature: str,
         model_artifact: Optional[Any] = None,
     ) -> tuple[Any, Optional[Any]]:
         """
         Method to perform the forecasting. Should be implemented by subclasses.
 
+        Supports both single-column and multi-column forecasting:
+        - Single column: [feature_name] - forecasts a single time series
+        - Multi-column: [feature~0, feature~1, ...] - forecasts multiple time series
+
         Args:
             data: The input data
             algorithm: The forecasting algorithm to use
             horizon: The forecast horizon
             time_unit: The time unit for the horizon
-            mloda_source_features: The name of the source feature
+            mloda_source_features: List of resolved source feature names to forecast
             time_filter_feature: The name of the time filter feature
             model_artifact: Optional artifact containing a trained model
 
@@ -496,3 +565,37 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
             A tuple containing (forecast_result, updated_artifact)
         """
         raise NotImplementedError(f"_perform_forecasting not implemented in {cls.__name__}")
+
+    @classmethod
+    def _perform_forecasting_with_confidence(
+        cls,
+        data: Any,
+        algorithm: str,
+        horizon: int,
+        time_unit: str,
+        mloda_source_features: List[str],
+        time_filter_feature: str,
+        model_artifact: Optional[Any] = None,
+    ) -> tuple[Any, Any, Any, Optional[Any]]:
+        """
+        Method to perform forecasting and return point forecast plus confidence intervals.
+
+        Should be implemented by subclasses to provide confidence intervals for forecasts.
+
+        Args:
+            data: The input data
+            algorithm: The forecasting algorithm to use
+            horizon: The forecast horizon
+            time_unit: The time unit for the horizon
+            mloda_source_features: List of resolved source feature names to forecast
+            time_filter_feature: The name of the time filter feature
+            model_artifact: Optional artifact containing a trained model
+
+        Returns:
+            A tuple containing (point_forecast, lower_bound, upper_bound, updated_artifact)
+            - point_forecast: The point forecast values
+            - lower_bound: The lower confidence bound
+            - upper_bound: The upper confidence bound
+            - updated_artifact: The updated artifact (or None)
+        """
+        raise NotImplementedError(f"_perform_forecasting_with_confidence not implemented in {cls.__name__}")

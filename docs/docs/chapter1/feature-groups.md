@@ -75,4 +75,4 @@ For more in-depth information about feature groups, check out these advanced top
 - [Feature Group Testing](../in_depth/feature-group-testing.md) - Best practices for testing feature groups
 - [Feature Group Versioning](../in_depth/feature-group-version.md) - How versioning works in feature groups
 - [Compute Framework Integration](../in_depth/compute-framework-integration.md) - How feature groups integrate with compute frameworks
-- [Multiple Result Columns](../in_depth/multiple_result_columns.md) - How feature groups can return multiple related columns
+- [Multiple Result Columns](../in_depth/multiple_result_columns.md) - Working with multi-column features using automatic discovery utilities

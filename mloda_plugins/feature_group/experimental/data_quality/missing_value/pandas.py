@@ -24,10 +24,16 @@ class PandasMissingValueFeatureGroup(MissingValueFeatureGroup):
         return {PandasDataframe}
 
     @classmethod
-    def _check_source_feature_exists(cls, data: pd.DataFrame, feature_name: str) -> None:
-        """Check if the feature exists in the DataFrame."""
-        if feature_name not in data.columns:
-            raise ValueError(f"Source feature '{feature_name}' not found in data")
+    def _get_available_columns(cls, data: pd.DataFrame) -> Set[str]:
+        """Get the set of available column names from the DataFrame."""
+        return set(data.columns)
+
+    @classmethod
+    def _check_source_features_exist(cls, data: pd.DataFrame, feature_names: List[str]) -> None:
+        """Check if the resolved source features exist in the DataFrame."""
+        missing_features = [f for f in feature_names if f not in data.columns]
+        if missing_features:
+            raise ValueError(f"Source features not found in data: {missing_features}")
 
     @classmethod
     def _add_result_to_data(cls, data: pd.DataFrame, feature_name: str, result: Any) -> pd.DataFrame:
@@ -40,53 +46,88 @@ class PandasMissingValueFeatureGroup(MissingValueFeatureGroup):
         cls,
         data: pd.DataFrame,
         imputation_method: str,
-        mloda_source_features: str,
+        mloda_source_features: List[str],
         constant_value: Optional[Any] = None,
         group_by_features: Optional[List[str]] = None,
     ) -> pd.Series:
         """
         Perform the imputation using Pandas.
 
+        Supports both single-column and multi-column imputation:
+        - Single column: [feature_name] - imputes values within the column
+        - Multi-column: [feature~0, feature~1, ...] - imputes across columns
+
         Args:
             data: The Pandas DataFrame
             imputation_method: The type of imputation to perform
-            source_feature: The name of the source feature to impute
+            mloda_source_features: List of resolved source feature names to impute
             constant_value: The constant value to use for imputation (if method is 'constant')
             group_by_features: Optional list of features to group by before imputation
 
         Returns:
             The result of the imputation as a Pandas Series
         """
-        # Create a copy of the source feature to avoid modifying the original
-        result = data[mloda_source_features].copy()
+        # Handle single column case (backward compatibility)
+        if len(mloda_source_features) == 1:
+            source_feature = mloda_source_features[0]
+            # Create a copy of the source feature to avoid modifying the original
+            result = data[source_feature].copy()
 
-        # If there are no missing values, return the original series
-        if not result.isna().any():
-            return result
+            # If there are no missing values, return the original series
+            if not result.isna().any():
+                return result
 
-        # If group_by_features is provided, perform grouped imputation
-        if group_by_features:
-            return cls._perform_grouped_imputation(
-                data, imputation_method, mloda_source_features, constant_value, group_by_features
-            )
+            # If group_by_features is provided, perform grouped imputation
+            if group_by_features:
+                return cls._perform_grouped_imputation(
+                    data, imputation_method, source_feature, constant_value, group_by_features
+                )
 
-        # Perform non-grouped imputation
-        if imputation_method == "mean":
-            return result.fillna(result.mean())
-        elif imputation_method == "median":
-            return result.fillna(result.median())
-        elif imputation_method == "mode":
-            # Get the most frequent value (first mode if multiple)
-            mode_value = result.mode().iloc[0] if not result.mode().empty else None
-            return result.fillna(mode_value)
-        elif imputation_method == "constant":
-            return result.fillna(constant_value)
-        elif imputation_method == "ffill":
-            return result.ffill()
-        elif imputation_method == "bfill":
-            return result.bfill()
+            # Perform non-grouped imputation
+            if imputation_method == "mean":
+                return result.fillna(result.mean())
+            elif imputation_method == "median":
+                return result.fillna(result.median())
+            elif imputation_method == "mode":
+                # Get the most frequent value (first mode if multiple)
+                mode_value = result.mode().iloc[0] if not result.mode().empty else None
+                return result.fillna(mode_value)
+            elif imputation_method == "constant":
+                return result.fillna(constant_value)
+            elif imputation_method == "ffill":
+                return result.ffill()
+            elif imputation_method == "bfill":
+                return result.bfill()
+            else:
+                raise ValueError(f"Unsupported imputation method: {imputation_method}")
         else:
-            raise ValueError(f"Unsupported imputation method: {imputation_method}")
+            # Multi-column case: impute across columns (row-wise)
+            # For multi-column features, we compute imputation values across columns for each row
+            # and return a single Series with one value per row
+            df_subset = data[mloda_source_features]
+
+            if imputation_method == "mean":
+                return df_subset.mean(axis=1)
+            elif imputation_method == "median":
+                return df_subset.median(axis=1)
+            elif imputation_method == "mode":
+                # Get the most frequent value for each row
+                return (
+                    df_subset.mode(axis=1).iloc[:, 0]
+                    if not df_subset.mode(axis=1).empty
+                    else pd.Series([None] * len(df_subset))
+                )
+            elif imputation_method == "constant":
+                # For constant, return the constant value for all rows
+                return pd.Series([constant_value] * len(df_subset), index=df_subset.index)
+            elif imputation_method == "sum":
+                return df_subset.sum(axis=1)
+            elif imputation_method == "min":
+                return df_subset.min(axis=1)
+            elif imputation_method == "max":
+                return df_subset.max(axis=1)
+            else:
+                raise ValueError(f"Unsupported imputation method for multi-column: {imputation_method}")
 
     @classmethod
     def _perform_grouped_imputation(

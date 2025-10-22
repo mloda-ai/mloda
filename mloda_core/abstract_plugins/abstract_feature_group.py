@@ -179,6 +179,25 @@ class AbstractFeatureGroup(ABC):
         """
         return [f"{feature_name}~{i}" for i in range(num_columns)]
 
+    @staticmethod
+    def resolve_multi_column_feature(feature_name: str, available_columns: Set[str]) -> List[str]:
+        """
+        Resolves a feature name to its corresponding column(s) in the available columns.
+
+        If the exact feature_name exists in available_columns, returns [feature_name].
+        Otherwise, finds all columns matching the pattern {feature_name}~* and returns them sorted.
+        If no matches found, returns [feature_name] (caller will handle the error).
+        """
+        if feature_name in available_columns:
+            return [feature_name]
+
+        matching_columns = [col for col in available_columns if col.startswith(f"{feature_name}~")]
+
+        if matching_columns:
+            return sorted(matching_columns)
+
+        return [feature_name]
+
     @classmethod
     def return_data_type_rule(cls, feature: Feature) -> Optional[DataType]:
         """

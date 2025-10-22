@@ -73,15 +73,57 @@ flowchart LR
 class AbstractFeatureGroup:
     # Required Implementation
     def calculate_feature(features: FeatureCollection) -> DataCreator
-    
+
     # Meta Methods
     def description() -> str
     def version() -> str
     def match_feature_group_criteria(feature_name, options) -> bool
-    
+
     # Configuration
     def input_features(options, feature_name) -> Set[Feature]
     def compute_framework_rule() -> Set[ComputeFramework]
+```
+
+### Multi-Column Utilities
+
+AbstractFeatureGroup provides utilities for working with multi-column features (pattern: `feature~0`, `~1`, `~2`):
+
+```python
+class AbstractFeatureGroup:
+    # Producer utilities - creating multi-column outputs
+    @staticmethod
+    def apply_naming_convention(result, feature_name, suffix_generator=None) -> Dict[str, Any]
+    @staticmethod
+    def expand_feature_columns(feature_name, num_columns) -> List[str]
+
+    # Consumer utilities - discovering multi-column inputs
+    @staticmethod
+    def resolve_multi_column_feature(feature_name, available_columns) -> List[str]
+
+    # Parsing utilities
+    @staticmethod
+    def get_column_base_feature(column_name) -> str
+```
+
+**Usage Pattern**:
+- **Producer**: Use `apply_naming_convention()` to create `~N` suffixed columns from numpy arrays
+- **Consumer**: Use `resolve_multi_column_feature()` to auto-discover all matching columns
+- **Both**: Use `get_column_base_feature()` to strip suffixes when needed
+
+**Example Flow**:
+```python
+# Producer creates multi-column output
+result = encoder.transform(data)  # 2D array
+named_cols = cls.apply_naming_convention(result, "onehot_encoded__state")
+# Returns: {"onehot_encoded__state~0": [data], "~1": [data], "~2": [data]}
+
+# Consumer discovers columns automatically
+cols = cls.resolve_multi_column_feature("onehot_encoded__state", data.columns)
+# Returns: ["onehot_encoded__state~0", "~1", "~2"]
+
+# Process all discovered columns
+for col in cols:
+    process(data[col])
 ```
 
 ## Feature Patterns

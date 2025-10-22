@@ -59,57 +59,57 @@ class TestPyArrowAggregatedFeatureGroup:
 
     def test_perform_aggregation_sum(self, sample_table: pa.Table) -> None:
         """Test _perform_aggregation method with sum aggregation."""
-        result = PyArrowAggregatedFeatureGroup._perform_aggregation(sample_table, "sum", "sales")
+        result = PyArrowAggregatedFeatureGroup._perform_aggregation(sample_table, "sum", ["sales"])
         assert result == 1500  # Sum of [100, 200, 300, 400, 500]
 
     def test_perform_aggregation_min(self, sample_table: pa.Table) -> None:
         """Test _perform_aggregation method with min aggregation."""
-        result = PyArrowAggregatedFeatureGroup._perform_aggregation(sample_table, "min", "sales")
+        result = PyArrowAggregatedFeatureGroup._perform_aggregation(sample_table, "min", ["sales"])
         assert result == 100  # Min of [100, 200, 300, 400, 500]
 
     def test_perform_aggregation_max(self, sample_table: pa.Table) -> None:
         """Test _perform_aggregation method with max aggregation."""
-        result = PyArrowAggregatedFeatureGroup._perform_aggregation(sample_table, "max", "sales")
+        result = PyArrowAggregatedFeatureGroup._perform_aggregation(sample_table, "max", ["sales"])
         assert result == 500  # Max of [100, 200, 300, 400, 500]
 
     def test_perform_aggregation_avg(self, sample_table: pa.Table) -> None:
         """Test _perform_aggregation method with avg aggregation."""
-        result = PyArrowAggregatedFeatureGroup._perform_aggregation(sample_table, "avg", "sales")
+        result = PyArrowAggregatedFeatureGroup._perform_aggregation(sample_table, "avg", ["sales"])
         assert result == 300  # Avg of [100, 200, 300, 400, 500]
 
     def test_perform_aggregation_mean(self, sample_table: pa.Table) -> None:
         """Test _perform_aggregation method with mean aggregation."""
-        result = PyArrowAggregatedFeatureGroup._perform_aggregation(sample_table, "mean", "sales")
+        result = PyArrowAggregatedFeatureGroup._perform_aggregation(sample_table, "mean", ["sales"])
         assert result == 300  # Mean of [100, 200, 300, 400, 500]
 
     def test_perform_aggregation_count(self, sample_table: pa.Table) -> None:
         """Test _perform_aggregation method with count aggregation."""
-        result = PyArrowAggregatedFeatureGroup._perform_aggregation(sample_table, "count", "sales")
+        result = PyArrowAggregatedFeatureGroup._perform_aggregation(sample_table, "count", ["sales"])
         assert result == 5  # Count of [100, 200, 300, 400, 500]
 
     def test_perform_aggregation_std(self, sample_table: pa.Table) -> None:
         """Test _perform_aggregation method with std aggregation."""
-        result = PyArrowAggregatedFeatureGroup._perform_aggregation(sample_table, "std", "sales")
+        result = PyArrowAggregatedFeatureGroup._perform_aggregation(sample_table, "std", ["sales"])
         # PyArrow uses a different formula for standard deviation than Pandas
         # PyArrow uses the population standard deviation (n), while Pandas uses the sample standard deviation (n-1)
         assert abs(result - 141.42) < 0.1  # Std of [100, 200, 300, 400, 500] with population formula
 
     def test_perform_aggregation_var(self, sample_table: pa.Table) -> None:
         """Test _perform_aggregation method with var aggregation."""
-        result = PyArrowAggregatedFeatureGroup._perform_aggregation(sample_table, "var", "sales")
+        result = PyArrowAggregatedFeatureGroup._perform_aggregation(sample_table, "var", ["sales"])
         # PyArrow uses a different formula for variance than Pandas
         # PyArrow uses the population variance (n), while Pandas uses the sample variance (n-1)
         assert abs(result - 20000) < 0.1  # Var of [100, 200, 300, 400, 500] with population formula
 
     def test_perform_aggregation_median(self, sample_table: pa.Table) -> None:
         """Test _perform_aggregation method with median aggregation."""
-        result = PyArrowAggregatedFeatureGroup._perform_aggregation(sample_table, "median", "sales")
+        result = PyArrowAggregatedFeatureGroup._perform_aggregation(sample_table, "median", ["sales"])
         assert result == 300  # Median of [100, 200, 300, 400, 500]
 
     def test_perform_aggregation_invalid(self, sample_table: pa.Table) -> None:
         """Test _perform_aggregation method with invalid aggregation type."""
         with pytest.raises(ValueError):
-            PyArrowAggregatedFeatureGroup._perform_aggregation(sample_table, "invalid", "sales")
+            PyArrowAggregatedFeatureGroup._perform_aggregation(sample_table, "invalid", ["sales"])
 
     def test_calculate_feature_single(self, sample_table: pa.Table, feature_set_sum: FeatureSet) -> None:
         """Test calculate_feature method with a single aggregation."""
@@ -155,7 +155,7 @@ class TestPyArrowAggregatedFeatureGroup:
         feature_set = FeatureSet()
         feature_set.add(Feature("sum_aggr__missing"))
 
-        with pytest.raises(ValueError, match="Source feature 'missing' not found in data"):
+        with pytest.raises(ValueError, match="None of the source features"):
             PyArrowAggregatedFeatureGroup.calculate_feature(sample_table, feature_set)
 
     def test_calculate_feature_invalid_aggregation(self, sample_table: pa.Table) -> None:

@@ -295,40 +295,61 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
         for feature in features.features:
             imputation_method, source_feature = cls._extract_imputation_method_and_source_feature(feature)
 
+            # Resolve multi-column features automatically
+            # If source_feature is "onehot_encoded__product", this discovers
+            # ["onehot_encoded__product~0", "onehot_encoded__product~1", ...]
+            available_columns = cls._get_available_columns(data)
+            resolved_columns = cls.resolve_multi_column_feature(source_feature, available_columns)
+
             constant_value = feature.options.get("constant_value")
             group_by_features = feature.options.get("group_by_features")
 
-            cls._check_source_feature_exists(data, source_feature)
+            cls._check_source_features_exist(data, resolved_columns)
 
             # Validate group by features if provided
             if group_by_features:
                 for group_feature in group_by_features:
-                    cls._check_source_feature_exists(data, group_feature)
+                    cls._check_source_features_exist(data, [group_feature])
 
             # Validate constant value is provided for constant imputation
             if imputation_method == "constant" and constant_value is None:
                 raise ValueError("Constant value must be provided for constant imputation method")
 
             # Apply the appropriate imputation function
-            result = cls._perform_imputation(data, imputation_method, source_feature, constant_value, group_by_features)
+            result = cls._perform_imputation(
+                data, imputation_method, resolved_columns, constant_value, group_by_features
+            )
 
             # Add the result to the data
             data = cls._add_result_to_data(data, feature.get_name(), result)
         return data
 
     @classmethod
-    def _check_source_feature_exists(cls, data: Any, feature_name: str) -> None:
+    def _get_available_columns(cls, data: Any) -> Set[str]:
         """
-        Check if the source feature exists in the data.
+        Get the set of available column names from the data.
 
         Args:
             data: The input data
-            feature_name: The name of the feature to check
+
+        Returns:
+            Set of column names available in the data
+        """
+        raise NotImplementedError(f"_get_available_columns not implemented in {cls.__name__}")
+
+    @classmethod
+    def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
+        """
+        Check if the resolved source features exist in the data.
+
+        Args:
+            data: The input data
+            feature_names: List of resolved feature names (may contain ~N suffixes)
 
         Raises:
-            ValueError: If the feature does not exist in the data
+            ValueError: If none of the features exist in the data
         """
-        raise NotImplementedError(f"_check_source_feature_exists not implemented in {cls.__name__}")
+        raise NotImplementedError(f"_check_source_features_exist not implemented in {cls.__name__}")
 
     @classmethod
     def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
@@ -350,17 +371,21 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
         cls,
         data: Any,
         imputation_method: str,
-        mloda_source_features: str,
+        mloda_source_features: List[str],
         constant_value: Optional[Any] = None,
         group_by_features: Optional[List[str]] = None,
     ) -> Any:
         """
         Method to perform the imputation. Should be implemented by subclasses.
 
+        Supports both single-column and multi-column imputation:
+        - Single column: [feature_name] - imputes values within the column
+        - Multi-column: [feature~0, feature~1, ...] - imputes across columns
+
         Args:
             data: The input data
             imputation_method: The type of imputation to perform
-            mloda_source_features: The name of the source feature to impute
+            mloda_source_features: List of resolved source feature names to impute
             constant_value: The constant value to use for imputation (if method is 'constant')
             group_by_features: Optional list of features to group by before imputation
 

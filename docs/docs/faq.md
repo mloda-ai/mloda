@@ -32,11 +32,11 @@ Feature Groups define dependencies and calculations. To create your first Featur
 
 ## Features and Functionality
 
-#### What are Feature Groups in mloda and why are they important? 
+#### What are Feature Groups in mloda and why are they important?
 
 Feature Groups are inspired by the concept of feature stores, where they represent logical groupings of reusable features. With mloda, Feature Groups define how features are calculated rather than stored, enabling hierarchical relationships between features that are resolved automatically—simplifying both creation and use.
 
-#### How does mloda handle feature dependencies? 
+#### How does mloda handle feature dependencies?
 
 mloda automatically manages feature dependencies, ensuring transformations are handled efficiently without manual intervention.
 
@@ -46,7 +46,7 @@ The Core Engine orchestrates dependencies between Feature Groups, compute framew
 
 The Core Engine creates an execution plan based on these dependencies and then runs the plan to execute feature calculations. This approach has the side effect that users describe the solution rather than the programm the solution itself. It is in that regard closer to databases paradigm than database paradigm.
 
-#### How does mloda ensure data governance and quality control? 
+#### How does mloda ensure data governance and quality control?
 
 mloda uses multiple mechanisms for governance and quality control. The extender feature logs relevant technical details, and users can incorporate data quality checks directly into feature definitions. Unit and integration testing are also simple to set up, enhancing reliability.
 
@@ -55,6 +55,10 @@ mloda uses multiple mechanisms for governance and quality control. The extender 
 mloda automatically selects the appropriate plug-ins for a given feature. 
 
 Users can develop custom plug-ins to extend the platform's capabilities, and contributions are always welcome—feedback and design critiques are also greatly appreciated!
+
+#### How do I join a feature group with itself (self-join)?
+
+When you need to use the same feature group on both sides of a join, you'll need to use pointer fields to distinguish between the left and right instances. See the [Join data guide - Self-Joins section](in_depth/join_data.md#self-joins-with-pointer-fields) for details and examples.
 
 ## Technical and Integration
 

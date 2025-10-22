@@ -30,22 +30,40 @@ class JoinType(Enum):
 
 
 class Link:
+    """
+    Defines a join relationship between two feature groups.
+
+    Args:
+        jointype: Type of join operation (inner, left, right, outer, append, union).
+        left: Tuple of (FeatureGroup class, Index) for the left side.
+        right: Tuple of (FeatureGroup class, Index) for the right side.
+        left_pointer: Optional dict to distinguish left instance in self-joins.
+            Must match key-value pairs in the left feature's options.
+        right_pointer: Optional dict to distinguish right instance in self-joins.
+            Must match key-value pairs in the right feature's options.
+
+    Example:
+        >>> # Normal join
+        >>> Link("inner", (UserFG, user_idx), (OrderFG, order_idx))
+        >>>
+        >>> # Self-join with pointers
+        >>> Link("inner", (UserFG, idx), (UserFG, idx),
+        ...      left_pointer={"side": "manager"},
+        ...      right_pointer={"side": "employee"})
+    """
     def __init__(
         self,
         jointype: Union[JoinType, str],
         left: Tuple[Type[Any], Index],  # Any is AbstractFeatureGroup
         right: Tuple[Type[Any], Index],  # Any is AbstractFeatureGroup
-        # Currently, the pointers are only used for the case that the feature group is used twice in the same join.
-        left_pointer: Optional[Dict[str, Any]] = None,  # Use only for special cases
-        right_pointer: Optional[Dict[str, Any]] = None,  # Use only for special cases
+        left_pointer: Optional[Dict[str, Any]] = None,
+        right_pointer: Optional[Dict[str, Any]] = None,
     ) -> None:
         self.jointype = JoinType(jointype) if isinstance(jointype, str) else jointype
         self.left_feature_group = left[0]
         self.right_feature_group = right[0]
         self.left_index = left[1]
         self.right_index = right[1]
-
-        # Only for special cases
         self.left_pointer = left_pointer
         self.right_pointer = right_pointer
 

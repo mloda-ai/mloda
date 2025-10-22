@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Union
 
 from mloda_core.abstract_plugins.components.index.index import Index
 from mloda_core.abstract_plugins.components.link import JoinType
@@ -37,11 +37,15 @@ class PandasMergeEngine(BaseMergeEngine):
     def join_logic(
         self, join_type: str, left_data: Any, right_data: Any, left_index: Index, right_index: Index, jointype: JoinType
     ) -> Any:
+        left_idx: Union[str, list[str]]
+        right_idx: Union[str, list[str]]
         if left_index.is_multi_index() or right_index.is_multi_index():
-            raise ValueError(f"MultiIndex is not yet implemented {self.__class__.__name__}")
+            left_idx = list(left_index.index)
+            right_idx = list(right_index.index)
+        else:
+            left_idx = left_index.index[0]
+            right_idx = right_index.index[0]
 
-        left_idx = left_index.index[0]
-        right_idx = right_index.index[0]
         left_data = self.pd_merge()(left_data, right_data, left_on=left_idx, right_on=right_idx, how=join_type)
         return left_data
 

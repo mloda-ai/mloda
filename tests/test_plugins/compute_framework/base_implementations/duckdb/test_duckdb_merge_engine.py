@@ -1,9 +1,13 @@
-from typing import Any
+from typing import Any, Optional, Type
 import pytest
 
 from mloda_core.abstract_plugins.components.link import JoinType
 from mloda_core.abstract_plugins.components.index.index import Index
+from mloda_core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_merge_engine import DuckDBMergeEngine
+from tests.test_plugins.compute_framework.test_tooling.multi_index.multi_index_test_base import (
+    MultiIndexMergeEngineTestBase,
+)
 
 import logging
 
@@ -165,14 +169,6 @@ class TestDuckDBMergeEngine:
         result = engine.merge_inner(empty_df, empty_df, index_obj, index_obj)
         assert len(result.df()) == 0
 
-    def test_merge_with_multi_index_error(self, connection: Any, left_data: Any, right_data: Any) -> None:
-        """Test that multi-index raises an error."""
-        multi_index = Index(("col1", "col2"))
-        engine = DuckDBMergeEngine(connection)
-
-        with pytest.raises(ValueError, match="MultiIndex is not yet implemented"):
-            engine.merge_inner(left_data, right_data, multi_index, multi_index)
-
     def test_merge_with_complex_data(self, connection: Any) -> None:
         """Test merge with more complex data structures."""
         left_arrow = pa.Table.from_pydict({"id": [1, 2, 3], "name": ["Alice", "Bob", "Charlie"], "age": [25, 30, 35]})
@@ -314,3 +310,31 @@ class TestDuckDBMergeEngine:
         assert engine.column_exists_in_result(data, "col1") is True
         assert engine.column_exists_in_result(data, "col2") is True
         assert engine.column_exists_in_result(data, "nonexistent") is False
+
+
+@pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB or PyArrow is not installed. Skipping this test.")
+class TestDuckDBMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):
+    """Test DuckDBMergeEngine multi-index support using shared test scenarios."""
+
+    @pytest.fixture
+    def connection(self) -> Any:
+        """Create a DuckDB connection for testing."""
+        return duckdb.connect()
+
+    @classmethod
+    def merge_engine_class(cls) -> Type[BaseMergeEngine]:
+        """Return the DuckDBMergeEngine class."""
+        return DuckDBMergeEngine
+
+    @classmethod
+    def framework_type(cls) -> Type[Any]:
+        """Return DuckDB relation type."""
+        if duckdb is None:
+            raise ImportError("DuckDB is not installed")
+        return duckdb.DuckDBPyRelation
+
+    def get_connection(self) -> Optional[Any]:
+        """DuckDB requires a connection object."""
+        if not hasattr(self, "_connection"):
+            self._connection = duckdb.connect()
+        return self._connection

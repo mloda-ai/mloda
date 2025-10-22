@@ -58,6 +58,10 @@ class PythonDictPyarrowTransformer(BaseTransformer):
 
         # Verify all items are dictionaries and have consistent schema
         if data:
+            # First check that the first item is a dict before accessing .keys()
+            if not isinstance(data[0], dict):
+                raise ValueError(f"Expected dict at index 0, got {type(data[0])}")
+
             first_keys = set(data[0].keys())
             for i, item in enumerate(data):
                 if not isinstance(item, dict):

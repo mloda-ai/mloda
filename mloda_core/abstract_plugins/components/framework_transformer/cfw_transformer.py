@@ -1,7 +1,12 @@
-from typing import Any, Dict, Tuple, Type
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 from mloda_core.abstract_plugins.components.framework_transformer.base_transformer import BaseTransformer
 from mloda_core.abstract_plugins.components.utils import get_all_subclasses
+
+try:
+    import pyarrow as pa
+except ImportError:
+    pa = None
 
 
 class ComputeFrameworkTransformer:
@@ -73,3 +78,39 @@ class ComputeFrameworkTransformer:
 
         for transformer in transformers:
             self.add(transformer)
+
+    def get_transformation_chain(
+        self, from_framework: Type[Any], to_framework: Type[Any]
+    ) -> Optional[List[Type[BaseTransformer]]]:
+        """
+        Find a transformation chain between two frameworks.
+
+        If a direct transformer exists, returns a single-element list.
+        If no direct transformer exists, tries to find a path through PyArrow
+        as an intermediate format.
+
+        Args:
+            from_framework: Source framework type
+            to_framework: Target framework type
+
+        Returns:
+            List of transformers to apply in sequence, or None if no path exists
+        """
+        # Try direct transformation first
+        if (from_framework, to_framework) in self.transformer_map:
+            return [self.transformer_map[(from_framework, to_framework)]]
+
+        # If no direct path and PyArrow is available, try chaining through PyArrow
+        if pa is not None:
+            pa_table_type = pa.Table
+            # Check if we can go: from_framework → PyArrow → to_framework
+            if (from_framework, pa_table_type) in self.transformer_map and (
+                pa_table_type,
+                to_framework,
+            ) in self.transformer_map:
+                return [
+                    self.transformer_map[(from_framework, pa_table_type)],
+                    self.transformer_map[(pa_table_type, to_framework)],
+                ]
+
+        return None

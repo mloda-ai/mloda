@@ -28,20 +28,16 @@ class DuckDBFilterEngine(BaseFilterEngine):
 
     @classmethod
     def do_min_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
+        # Handle empty relation edge case
+        try:
+            if len(data.df()) == 0:
+                return data
+        except Exception:
+            pass  # If checking fails, proceed with normal filtering
+
         column_name = filter_feature.name.name
-
-        # Extract the value from the parameter
-        value = None
-        for param in filter_feature.parameter:
-            if param[0] == "value":
-                value = param[1]
-                break
-
-        if value is None:
-            raise ValueError(f"Filter parameter 'value' not found in {filter_feature.parameter}")
-
+        value = cls.get_parameter_value(filter_feature, "value")
         condition = f'"{column_name}" >= {value}'
-
         return data.filter(condition)
 
     @classmethod

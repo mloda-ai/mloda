@@ -76,6 +76,30 @@ class BaseFilterEngine(ABC):
         raise NotImplementedError
 
     @classmethod
+    def get_parameter_value(cls, filter_feature: SingleFilter, key: str, required: bool = True) -> Any:
+        """
+        Extract a single parameter value from the filter parameter tuple.
+
+        Args:
+            filter_feature: The filter to extract parameter from
+            key: The parameter key to look for (e.g., 'value', 'values')
+            required: Whether to raise an error if the key is not found
+
+        Returns:
+            The parameter value, or None if not found and not required
+
+        Raises:
+            ValueError: If required=True and the key is not found
+        """
+        for param in filter_feature.parameter:
+            if param[0] == key:
+                return param[1]
+
+        if required:
+            raise ValueError(f"Filter parameter '{key}' not found in {filter_feature.parameter}")
+        return None
+
+    @classmethod
     def get_min_max_operator(cls, filter_feature: SingleFilter) -> Any:
         """Convenience method to get min, max, and max operator from filter parameters"""
 

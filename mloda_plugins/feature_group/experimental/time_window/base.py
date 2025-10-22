@@ -4,7 +4,7 @@ Base implementation for time window feature groups.
 
 from __future__ import annotations
 
-from typing import Any, Optional, Set, Type, Union
+from typing import Any, List, Optional, Set, Type, Union
 
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
@@ -270,6 +270,9 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
         Processes all requested features, determining the window function, window size,
         time unit, and source feature from each feature name.
 
+        Supports multi-column features by using resolve_multi_column_feature() to
+        automatically discover columns matching the pattern feature_name~N.
+
         Adds the time window results directly to the input data structure.
         """
 
@@ -329,10 +332,17 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
                 if isinstance(window_size, str):
                     window_size = int(window_size)
 
-            cls._check_source_feature_exists(data, mloda_source_features)
+            # Resolve multi-column features automatically
+            # If mloda_source_features is "onehot_encoded__product", this discovers
+            # ["onehot_encoded__product~0", "onehot_encoded__product~1", ...]
+            available_columns = cls._get_available_columns(data)
+            resolved_columns = cls.resolve_multi_column_feature(mloda_source_features, available_columns)
+
+            # Check that resolved columns exist
+            cls._check_source_features_exist(data, resolved_columns)
 
             result = cls._perform_window_operation(
-                data, window_function, window_size, time_unit, mloda_source_features, time_filter_feature
+                data, window_function, window_size, time_unit, resolved_columns, time_filter_feature
             )
 
             data = cls._add_result_to_data(data, feature.get_name(), result)
@@ -368,18 +378,31 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
         raise NotImplementedError(f"_check_time_filter_feature_is_datetime not implemented in {cls.__name__}")
 
     @classmethod
-    def _check_source_feature_exists(cls, data: Any, mloda_source_features: str) -> None:
+    def _get_available_columns(cls, data: Any) -> Set[str]:
         """
-        Check if the source feature exists in the data.
+        Get the set of available column names from the data.
 
         Args:
             data: The input data
-            mloda_source_features: The name of the source feature
+
+        Returns:
+            Set of column names available in the data
+        """
+        raise NotImplementedError(f"_get_available_columns not implemented in {cls.__name__}")
+
+    @classmethod
+    def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
+        """
+        Check if the resolved source features exist in the data.
+
+        Args:
+            data: The input data
+            feature_names: List of resolved feature names (may contain ~N suffixes)
 
         Raises:
-            ValueError: If the source feature does not exist in the data
+            ValueError: If none of the features exist in the data
         """
-        raise NotImplementedError(f"_check_source_feature_exists not implemented in {cls.__name__}")
+        raise NotImplementedError(f"_check_source_features_exist not implemented in {cls.__name__}")
 
     @classmethod
     def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
@@ -403,18 +426,22 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
         window_function: str,
         window_size: int,
         time_unit: str,
-        mloda_source_features: str,
+        mloda_source_features: List[str],
         time_filter_feature: Optional[str] = None,
     ) -> Any:
         """
         Method to perform the time window operation. Should be implemented by subclasses.
+
+        Supports both single-column and multi-column window operations:
+        - Single column: [feature_name] - performs window operation on the column
+        - Multi-column: [feature~0, feature~1, ...] - performs window operation across columns
 
         Args:
             data: The input data
             window_function: The type of window function to perform
             window_size: The size of the window
             time_unit: The time unit for the window
-            mloda_source_features: The name of the source feature
+            mloda_source_features: List of resolved source feature names to perform window operation on
             time_filter_feature: The name of the time filter feature to use for time-based operations.
                                 If None, uses the value from get_time_filter_feature().
 

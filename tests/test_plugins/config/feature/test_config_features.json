@@ -72,5 +72,11 @@
         }
       }
     }
+  },
+  {
+    "name": "onehot_encoded__product"
+  },
+  {
+    "name": "sum_aggr__onehot_encoded__product"
   }
 ]

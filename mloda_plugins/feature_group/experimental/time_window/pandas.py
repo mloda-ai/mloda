@@ -4,7 +4,7 @@ Pandas implementation for time window feature groups.
 
 from __future__ import annotations
 
-from typing import Any, Optional, Set, Type, Union
+from typing import Any, List, Optional, Set, Type, Union
 
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
@@ -41,10 +41,27 @@ class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
             )
 
     @classmethod
-    def _check_source_feature_exists(cls, data: pd.DataFrame, mloda_source_features: str) -> None:
-        """Check if the source feature exists in the DataFrame."""
-        if mloda_source_features not in data.columns:
-            raise ValueError(f"Source feature '{mloda_source_features}' not found in data")
+    def _get_available_columns(cls, data: pd.DataFrame) -> Set[str]:
+        """Get the set of available column names from the DataFrame."""
+        return set(data.columns)
+
+    @classmethod
+    def _check_source_features_exist(cls, data: pd.DataFrame, feature_names: List[str]) -> None:
+        """
+        Check if the resolved features exist in the DataFrame.
+
+        Args:
+            data: The Pandas DataFrame
+            feature_names: List of resolved feature names (may contain ~N suffixes)
+
+        Raises:
+            ValueError: If none of the resolved features exist in the data
+        """
+        missing_features = [name for name in feature_names if name not in data.columns]
+        if len(missing_features) == len(feature_names):
+            raise ValueError(
+                f"None of the source features {feature_names} found in data. Available columns: {list(data.columns)}"
+            )
 
     @classmethod
     def _add_result_to_data(cls, data: pd.DataFrame, feature_name: str, result: Any) -> pd.DataFrame:
@@ -59,18 +76,22 @@ class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         window_function: str,
         window_size: int,
         time_unit: str,
-        mloda_source_features: str,
+        mloda_source_features: List[str],
         time_filter_feature: Optional[str] = None,
     ) -> Any:
         """
         Perform the time window operation using Pandas rolling window functions.
+
+        Supports both single-column and multi-column window operations:
+        - Single column: aggregates values within the column over time
+        - Multi-column: aggregates across columns for each time window row
 
         Args:
             data: The Pandas DataFrame
             window_function: The type of window function to perform
             window_size: The size of the window
             time_unit: The time unit for the window
-            mloda_source_features: The name of the source feature
+            mloda_source_features: List of source feature names (may be single or multiple columns)
             time_filter_feature: The name of the time filter feature to use for time-based operations.
                                 If None, uses the value from get_time_filter_feature().
 
@@ -85,7 +106,15 @@ class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         # This is necessary for time-based rolling operations
         df_with_time_index = data.set_index(time_filter_feature).sort_index()
 
-        rolling_window = df_with_time_index[mloda_source_features].rolling(window=window_size, min_periods=1)
+        # Select the columns to perform window operation on
+        if len(mloda_source_features) == 1:
+            # Single column: extract as Series for simpler window operation
+            selected_data = df_with_time_index[mloda_source_features[0]]
+        else:
+            # Multiple columns: keep as DataFrame
+            selected_data = df_with_time_index[mloda_source_features]
+
+        rolling_window = selected_data.rolling(window=window_size, min_periods=1)
 
         if window_function == "sum":
             result = rolling_window.sum()
@@ -109,6 +138,28 @@ class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
             result = rolling_window.apply(lambda x: x.iloc[-1] if len(x) > 0 else None, raw=False)
         else:
             raise ValueError(f"Unsupported window function: {window_function}")
+
+        # For multi-column, aggregate across columns (axis=1) after rolling window
+        if len(mloda_source_features) > 1:
+            if window_function == "sum":
+                result = result.sum(axis=1)
+            elif window_function == "min":
+                result = result.min(axis=1)
+            elif window_function == "max":
+                result = result.max(axis=1)
+            elif window_function in ["avg", "mean"]:
+                result = result.mean(axis=1)
+            elif window_function == "count":
+                result = result.count(axis=1)
+            elif window_function == "std":
+                result = result.std(axis=1)
+            elif window_function == "var":
+                result = result.var(axis=1)
+            elif window_function == "median":
+                result = result.median(axis=1)
+            elif window_function in ["first", "last"]:
+                # For first/last, already computed on each column, now aggregate across columns
+                result = result.mean(axis=1)  # Use mean as aggregation for first/last
 
         # Convert to numpy array to avoid type issues
         return result.values

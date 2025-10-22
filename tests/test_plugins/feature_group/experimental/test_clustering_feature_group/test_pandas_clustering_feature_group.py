@@ -42,14 +42,18 @@ class TestPandasClusteringFeatureGroup:
 
         return df
 
-    def test_check_source_feature_exists(self, sample_data: pd.DataFrame) -> None:
-        """Test the _check_source_feature_exists method."""
-        # Valid feature
-        PandasClusteringFeatureGroup._check_source_feature_exists(sample_data, "feature1")
+    def test_check_source_features_exist(self, sample_data: pd.DataFrame) -> None:
+        """Test the _check_source_features_exist method."""
+        # Valid features
+        PandasClusteringFeatureGroup._check_source_features_exist(sample_data, ["feature1"])
+        PandasClusteringFeatureGroup._check_source_features_exist(sample_data, ["feature1", "feature2"])
 
-        # Invalid feature
+        # Invalid features - all missing should raise error
         with pytest.raises(ValueError):
-            PandasClusteringFeatureGroup._check_source_feature_exists(sample_data, "invalid_feature")
+            PandasClusteringFeatureGroup._check_source_features_exist(sample_data, ["invalid_feature"])
+
+        # Partial match should NOT raise error (some features exist)
+        PandasClusteringFeatureGroup._check_source_features_exist(sample_data, ["feature1", "invalid_feature"])
 
     def test_add_result_to_data(self, sample_data: pd.DataFrame) -> None:
         """Test the _add_result_to_data method."""

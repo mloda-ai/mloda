@@ -28,6 +28,8 @@ class IntegrationDataCreator(ATestDataCreator):
             "age": [25, 30, 35, 40, 45],
             "weight": [150, 160, 170, 180, 190],
             "state": ["CA", "NY", "TX", "CA", "NY"],
+            "category": ["X", "Y", "Z", "X", "Y"],
+            "product": ["A", "B", "C", "A", "B"],
             "latitude": [37.7, 40.7, 29.7, 34.0, 41.8],
             "longitude": [-122.4, -74.0, -95.3, -118.2, -87.6],
             "sales": [1000, 1500, 2000, 2500, 3000],
@@ -69,6 +71,10 @@ def test_features_runtime_one_by_one() -> None:
         features[
             12
         ],  # ✅ Feature 12: "min_max_nested" - nested mloda_source_features with recursive dependencies (weight -> minmaxscaledweght -> max_aggregated -> min_max_nested)
+        features[13],  # ✅ Feature 13: "onehot_encoded__product" - multi-column producer (creates ~0, ~1, ~2)
+        features[
+            14
+        ],  # ✅ Feature 14: "sum_aggr__onehot_encoded__product" - multi-column consumer using automatic discovery
     ]
 
     # Required plugins (expand as needed)
@@ -82,11 +88,6 @@ def test_features_runtime_one_by_one() -> None:
         # Add more plugins as features require them
     }
 
-    # Skip test if no features to test yet
-    if not features_to_test:
-        print("\n✓ Setup complete - no features to test yet")
-        return
-
     # Create plugin collector
     plugin_collector = PlugInCollector.enabled_feature_groups(plugins)
 
@@ -97,6 +98,9 @@ def test_features_runtime_one_by_one() -> None:
         plugin_collector=plugin_collector,
     )
 
+    for res in results:
+        print(res.columns)
+
     # Verify we got results
     assert len(results) > 0, "Expected at least one result DataFrame"
 
@@ -106,6 +110,10 @@ def test_features_runtime_one_by_one() -> None:
 
         # Check if feature column exists in any result DataFrame
         found = any(feature_name in df.columns for df in results)
+
+        if feature_name == "onehot_encoded__product":
+            continue
+
         assert found, f"Feature {i}: {feature_name} not found in any result DataFrame"
 
         # Additional verification: check data is not all NaN

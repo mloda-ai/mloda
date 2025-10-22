@@ -50,7 +50,9 @@ class MultiColumnFeatureGroup(AbstractFeatureGroup):
 
 ### Consuming Multiple Columns
 
-When consuming features that use this naming convention:
+#### Automatic Column Discovery (Recommended)
+
+Use the `resolve_multi_column_feature()` utility to automatically discover all columns matching the pattern:
 
 ``` python
 class MultiColumnConsumer(AbstractFeatureGroup):
@@ -59,13 +61,43 @@ class MultiColumnConsumer(AbstractFeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        # Access the columns using the naming convention
+        # Automatically discover all columns matching the pattern
+        columns = cls.resolve_multi_column_feature(
+            "MultiColumnFeature",
+            set(data.columns)
+        )
+        # Returns: ["MultiColumnFeature~mean", "MultiColumnFeature~max", "MultiColumnFeature~min"]
+
+        # Process all discovered columns
+        result = sum(data[col] for col in columns)
+
+        feature_name = features.get_name_of_one_feature().name
+        return {feature_name: result}
+```
+
+**Benefits**:
+- No need to manually enumerate column names
+- Automatically adapts if number of columns changes
+- Cleaner, more maintainable code
+
+#### Manual Column Access (Legacy)
+
+For backwards compatibility, you can still access columns manually:
+
+``` python
+class MultiColumnConsumer(AbstractFeatureGroup):
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+        return {Feature.not_typed("MultiColumnFeature")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        # Manual access to specific columns
         mean_values = data["MultiColumnFeature~mean"]
         max_values = data["MultiColumnFeature~max"]
-        
+
         # Perform calculations using these columns
         result = mean_values + max_values
-        
+
         feature_name = features.get_name_of_one_feature().name
         return {feature_name: result}
 ```
@@ -104,7 +136,20 @@ def identify_naming_convention(self, selected_feature_names: Set[FeatureName], c
 
 ## Best Practices
 
-1. **Consistent Naming**: Use consistent suffixes across related feature groups
-2. **Documentation**: Document the meaning of each suffix in your feature group's docstring
-3. **Validation**: Consider validating that all expected columns are present when consuming multiple columns
-4. **Error Handling**: Handle cases where expected columns might be missing
+1. **Use Automatic Discovery**: Prefer `resolve_multi_column_feature()` over manual column enumeration
+2. **Consistent Naming**: Use consistent suffixes across related feature groups
+3. **Use `apply_naming_convention()`**: When producing multi-column outputs, use the utility for consistency
+4. **Documentation**: Document the meaning of each suffix in your feature group's docstring
+5. **Validation**: Consider validating that all expected columns are present when consuming multiple columns
+6. **Error Handling**: Handle cases where expected columns might be missing
+
+## Available Utilities
+
+mloda provides several utilities for working with multi-column features:
+
+| Method | Purpose | Use Case |
+|--------|---------|----------|
+| `apply_naming_convention(result, feature_name)` | Create multi-column outputs | Producer: Generate `~N` suffixed columns from arrays |
+| `resolve_multi_column_feature(feature_name, columns)` | Discover multi-column inputs | Consumer: Auto-find all `~N` columns |
+| `expand_feature_columns(feature_name, num_columns)` | Generate column name list | Producer: Pre-generate expected column names |
+| `get_column_base_feature(column_name)` | Strip suffix from column | Both: Extract base feature from `feature~N` |

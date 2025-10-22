@@ -54,7 +54,7 @@ class TestPyArrowTimeWindowFeatureGroup:
             window_function,
             3,
             "day",
-            "temperature",
+            ["temperature"],
             DefaultOptionKeys.reference_time,
         )
 
@@ -73,7 +73,7 @@ class TestPyArrowTimeWindowFeatureGroup:
                 "invalid",
                 3,
                 "day",
-                "temperature",
+                ["temperature"],
                 DefaultOptionKeys.reference_time,
             )
 
@@ -121,7 +121,7 @@ class TestPyArrowTimeWindowFeatureGroup:
         feature_set = FeatureSet()
         feature_set.add(Feature("avg_3_day_window__missing"))
 
-        with pytest.raises(ValueError, match="Source feature 'missing' not found in data"):
+        with pytest.raises(ValueError, match="None of the source features .* found in data"):
             PyArrowTimeWindowFeatureGroup.calculate_feature(sample_time_table, feature_set)
 
     def test_calculate_feature_missing_time_filter(self) -> None:

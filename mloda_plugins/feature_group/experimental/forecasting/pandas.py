@@ -4,7 +4,7 @@ Pandas implementation for forecasting feature groups.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, Dict, List, Optional, Set, Tuple, cast
 
 from datetime import datetime, timedelta
 
@@ -37,6 +37,11 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
     def compute_framework_rule(cls) -> set[type[ComputeFrameWork]]:
         """Define the compute framework for this feature group."""
         return {PandasDataframe}
+
+    @classmethod
+    def _get_available_columns(cls, data: pd.DataFrame) -> Set[str]:
+        """Get the set of available column names from the DataFrame."""
+        return set(data.columns)
 
     @classmethod
     def _check_time_filter_feature_exists(cls, data: pd.DataFrame, time_filter_feature: str) -> None:
@@ -75,19 +80,22 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
             )
 
     @classmethod
-    def _check_source_feature_exists(cls, data: pd.DataFrame, mloda_source_features: str) -> None:
+    def _check_source_features_exist(cls, data: pd.DataFrame, feature_names: List[str]) -> None:
         """
-        Check if the source feature exists in the DataFrame.
+        Check if the resolved features exist in the DataFrame.
 
         Args:
             data: The pandas DataFrame
-            mloda_source_features: The name of the source feature
+            feature_names: List of resolved feature names (may contain ~N suffixes)
 
         Raises:
-            ValueError: If the source feature does not exist in the DataFrame
+            ValueError: If none of the resolved features exist in the data
         """
-        if mloda_source_features not in data.columns:
-            raise ValueError(f"Source feature '{mloda_source_features}' not found in data")
+        missing_features = [name for name in feature_names if name not in data.columns]
+        if len(missing_features) == len(feature_names):
+            raise ValueError(
+                f"None of the source features {feature_names} found in data. Available columns: {list(data.columns)}"
+            )
 
     @classmethod
     def _add_result_to_data(cls, data: pd.DataFrame, feature_name: str, result: pd.Series) -> pd.DataFrame:
@@ -112,7 +120,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         algorithm: str,
         horizon: int,
         time_unit: str,
-        mloda_source_features: str,
+        mloda_source_features: List[str],
         time_filter_feature: str,
         model_artifact: Optional[Any] = None,
     ) -> Tuple[pd.Series, Dict[str, Any]]:
@@ -125,12 +133,16 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         3. Generates forecasts for the specified horizon
         4. Returns the forecasts and the updated artifact
 
+        Supports both single-column and multi-column forecasting:
+        - Single column: forecasts a single time series
+        - Multi-column: forecasts multiple time series (e.g., from one-hot encoded features)
+
         Args:
             data: The pandas DataFrame
             algorithm: The forecasting algorithm to use
             horizon: The forecast horizon
             time_unit: The time unit for the horizon
-            mloda_source_features: The name of the source feature
+            mloda_source_features: List of resolved source feature names to forecast
             time_filter_feature: The name of the time filter feature
             model_artifact: Optional artifact containing a trained model
 
@@ -158,10 +170,15 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         # Determine appropriate lag features based on horizon, time unit, and data size
         lag_features = cls._determine_lag_features(horizon, time_unit, len(df))
 
+        # For multi-column features, we need to handle each column separately or aggregate them
+        # For now, we'll use the first column for single-column behavior
+        # In the future, this could be extended to forecast multiple columns or aggregated columns
+        source_feature_name = mloda_source_features[0] if len(mloda_source_features) == 1 else mloda_source_features[0]
+
         # Create or load the model
         if model_artifact is None:
             # Create feature matrix for training
-            X, y = cls._create_features(df, mloda_source_features, time_filter_feature, lag_features)
+            X, y = cls._create_features(df, source_feature_name, time_filter_feature, lag_features)
 
             # Train the model
             model, scaler = cls._train_model(X, y, algorithm)
@@ -187,7 +204,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
 
         # Create features for future timestamps
         future_features = cls._create_future_features(
-            df, future_timestamps, mloda_source_features, time_filter_feature, lag_features
+            df, future_timestamps, source_feature_name, time_filter_feature, lag_features
         )
 
         # Scale the features if a scaler is available
@@ -208,13 +225,13 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         forecast_series = pd.Series(
             index=future_timestamps,
             data=forecasts,
-            name=f"{algorithm}_forecast_{horizon}{time_unit}__{mloda_source_features}",
+            name=f"{algorithm}_forecast_{horizon}{time_unit}__{source_feature_name}",
         )
 
         # Combine with the original data's time index
         combined_index = list(df[time_filter_feature]) + future_timestamps
         result = pd.Series(index=combined_index, dtype=float)
-        result.loc[df[time_filter_feature]] = df[mloda_source_features].values
+        result.loc[df[time_filter_feature]] = df[source_feature_name].values
         result.loc[future_timestamps] = forecast_series.values
 
         return result, artifact
@@ -488,3 +505,214 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         model.fit(X_scaled, y)
 
         return model, scaler
+
+    @classmethod
+    def _perform_forecasting_with_confidence(
+        cls,
+        data: pd.DataFrame,
+        algorithm: str,
+        horizon: int,
+        time_unit: str,
+        mloda_source_features: List[str],
+        time_filter_feature: str,
+        model_artifact: Optional[Any] = None,
+    ) -> Tuple[pd.Series, pd.Series, pd.Series, Dict[str, Any]]:
+        """
+        Perform forecasting with confidence intervals.
+
+        This method extends _perform_forecasting to also compute confidence intervals
+        for the forecasts. The confidence intervals are computed based on:
+        - For tree-based models (RandomForest, GBR): Use prediction variance from ensemble
+        - For linear models: Use prediction intervals based on residual standard error
+        - For other models: Use a simple approach based on training error
+
+        Args:
+            data: The pandas DataFrame
+            algorithm: The forecasting algorithm to use
+            horizon: The forecast horizon
+            time_unit: The time unit for the horizon
+            mloda_source_features: List of resolved source feature names to forecast
+            time_filter_feature: The name of the time filter feature
+            model_artifact: Optional artifact containing a trained model
+
+        Returns:
+            A tuple containing (point_forecast, lower_bound, upper_bound, updated_artifact)
+        """
+        # Check if scikit-learn is available
+        if not SKLEARN_AVAILABLE:
+            raise ImportError(
+                "scikit-learn is required for forecasting. Please install it with 'pip install scikit-learn'."
+            )
+
+        # Cast data to pandas DataFrame
+        df = cast(pd.DataFrame, data)
+
+        # Sort data by time
+        df = df.sort_values(by=time_filter_feature).copy()
+
+        # Get the last timestamp in the data
+        last_timestamp = df[time_filter_feature].max()
+
+        # Generate future timestamps for forecasting
+        future_timestamps = cls._generate_future_timestamps(last_timestamp, horizon, time_unit)
+
+        # Determine appropriate lag features based on horizon, time unit, and data size
+        lag_features = cls._determine_lag_features(horizon, time_unit, len(df))
+
+        # For multi-column features, use the first column
+        source_feature_name = mloda_source_features[0] if len(mloda_source_features) == 1 else mloda_source_features[0]
+
+        # Create or load the model
+        if model_artifact is None:
+            # Create feature matrix for training
+            X, y = cls._create_features(df, source_feature_name, time_filter_feature, lag_features)
+
+            # Train the model
+            model, scaler = cls._train_model(X, y, algorithm)
+
+            # Calculate residuals for confidence interval estimation
+            X_scaled = scaler.fit_transform(X) if scaler else X
+            y_pred_train = model.predict(X_scaled)
+            residuals = y - y_pred_train
+            std_error = np.std(residuals)
+
+            # Create the artifact
+            artifact = {
+                "model": model,
+                "scaler": scaler,
+                "last_trained_timestamp": last_timestamp,
+                "feature_names": X.columns.tolist(),
+                "lag_features": lag_features,
+                "std_error": std_error,  # Store for confidence interval calculation
+            }
+        else:
+            # Load the model from the artifact
+            model = model_artifact["model"]
+            scaler = model_artifact["scaler"]
+            feature_names = model_artifact["feature_names"]
+            lag_features = model_artifact["lag_features"]
+            std_error = model_artifact.get("std_error", 0.0)  # Use stored error or default to 0
+
+            # Update the artifact with the new last timestamp
+            artifact = model_artifact.copy()
+            artifact["last_trained_timestamp"] = last_timestamp
+
+        # Create features for future timestamps
+        future_features = cls._create_future_features(
+            df, future_timestamps, source_feature_name, time_filter_feature, lag_features
+        )
+
+        # Scale the features if a scaler is available
+        if scaler is not None:
+            if isinstance(future_features, pd.DataFrame):
+                # Ensure the columns match the training data
+                future_features = future_features[artifact["feature_names"]]
+                future_features_scaled = scaler.transform(future_features)
+            else:
+                future_features_scaled = scaler.transform(future_features.reshape(1, -1))
+        else:
+            future_features_scaled = future_features
+
+        # Generate forecasts
+        forecasts = model.predict(future_features_scaled)
+
+        # Compute confidence intervals based on algorithm
+        if algorithm in ["randomforest", "gbr"]:
+            # For ensemble methods, use prediction variance
+            lower_bound_values, upper_bound_values = cls._compute_ensemble_confidence_intervals(
+                model, future_features_scaled, forecasts, algorithm
+            )
+        elif algorithm in ["linear", "ridge", "lasso"]:
+            # For linear models, use prediction intervals based on standard error
+            # Use 95% confidence interval (approximately 1.96 * std_error)
+            margin = 1.96 * std_error
+            lower_bound_values = forecasts - margin
+            upper_bound_values = forecasts + margin
+        else:
+            # For other models (SVR, KNN), use a simple approach based on training error
+            # Use 95% confidence interval (approximately 1.96 * std_error)
+            margin = 1.96 * std_error
+            lower_bound_values = forecasts - margin
+            upper_bound_values = forecasts + margin
+
+        # Create Series for forecasts and confidence bounds
+        forecast_series = pd.Series(
+            index=future_timestamps,
+            data=forecasts,
+            name=f"{algorithm}_forecast_{horizon}{time_unit}__{source_feature_name}",
+        )
+
+        lower_bound_series = pd.Series(
+            index=future_timestamps,
+            data=lower_bound_values,
+            name=f"{algorithm}_forecast_{horizon}{time_unit}__{source_feature_name}~lower",
+        )
+
+        upper_bound_series = pd.Series(
+            index=future_timestamps,
+            data=upper_bound_values,
+            name=f"{algorithm}_forecast_{horizon}{time_unit}__{source_feature_name}~upper",
+        )
+
+        # Combine with the original data's time index
+        combined_index = list(df[time_filter_feature]) + future_timestamps
+
+        # Create result series for point forecast
+        result = pd.Series(index=combined_index, dtype=float)
+        result.loc[df[time_filter_feature]] = df[source_feature_name].values
+        result.loc[future_timestamps] = forecast_series.values
+
+        # Create result series for lower bound
+        lower_bound = pd.Series(index=combined_index, dtype=float)
+        lower_bound.loc[df[time_filter_feature]] = df[source_feature_name].values
+        lower_bound.loc[future_timestamps] = lower_bound_series.values
+
+        # Create result series for upper bound
+        upper_bound = pd.Series(index=combined_index, dtype=float)
+        upper_bound.loc[df[time_filter_feature]] = df[source_feature_name].values
+        upper_bound.loc[future_timestamps] = upper_bound_series.values
+
+        return result, lower_bound, upper_bound, artifact
+
+    @classmethod
+    def _compute_ensemble_confidence_intervals(
+        cls,
+        model: Any,
+        X: np.ndarray,  # type: ignore
+        predictions: np.ndarray,  # type: ignore
+        algorithm: str,
+    ) -> Tuple[np.ndarray, np.ndarray]:  # type: ignore
+        """
+        Compute confidence intervals for ensemble models (RandomForest, GBR).
+
+        For RandomForest, we use the predictions from individual trees to estimate variance.
+        For GBR, we use a simpler approach based on the training data variance.
+
+        Args:
+            model: The trained ensemble model
+            X: The feature matrix for which to compute predictions
+            predictions: The point predictions
+            algorithm: The algorithm name
+
+        Returns:
+            A tuple of (lower_bounds, upper_bounds)
+        """
+        if algorithm == "randomforest":
+            # Get predictions from all trees in the forest
+            all_predictions = np.array([tree.predict(X) for tree in model.estimators_])
+
+            # Compute standard deviation across tree predictions
+            std_predictions = np.std(all_predictions, axis=0)
+
+            # Use 95% confidence interval (approximately 1.96 * std)
+            margin = 1.96 * std_predictions
+            lower_bounds = predictions - margin
+            upper_bounds = predictions + margin
+        else:  # GBR
+            # For GBR, we don't have individual tree predictions readily available
+            # Use a simple approach: assume 10% margin around predictions
+            margin = 0.1 * np.abs(predictions)
+            lower_bounds = predictions - margin
+            upper_bounds = predictions + margin
+
+        return lower_bounds, upper_bounds

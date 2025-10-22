@@ -21,10 +21,16 @@ class PyArrowMissingValueFeatureGroup(MissingValueFeatureGroup):
         return {PyarrowTable}
 
     @classmethod
-    def _check_source_feature_exists(cls, data: pa.Table, feature_name: str) -> None:
-        """Check if the feature exists in the Table."""
-        if feature_name not in data.schema.names:
-            raise ValueError(f"Source feature '{feature_name}' not found in data")
+    def _get_available_columns(cls, data: pa.Table) -> Set[str]:
+        """Get the set of available column names from the Table."""
+        return set(data.schema.names)
+
+    @classmethod
+    def _check_source_features_exist(cls, data: pa.Table, feature_names: List[str]) -> None:
+        """Check if the resolved source features exist in the Table."""
+        missing_features = [f for f in feature_names if f not in data.schema.names]
+        if missing_features:
+            raise ValueError(f"Source features not found in data: {missing_features}")
 
     @classmethod
     def _add_result_to_data(cls, data: pa.Table, feature_name: str, result: Any) -> pa.Table:
@@ -44,84 +50,123 @@ class PyArrowMissingValueFeatureGroup(MissingValueFeatureGroup):
         cls,
         data: pa.Table,
         imputation_method: str,
-        mloda_source_features: str,
+        mloda_source_features: List[str],
         constant_value: Optional[Any] = None,
         group_by_features: Optional[List[str]] = None,
     ) -> pa.Array:
         """
         Perform the imputation using PyArrow compute functions.
 
+        Supports both single-column and multi-column imputation:
+        - Single column: [feature_name] - imputes values within the column
+        - Multi-column: [feature~0, feature~1, ...] - imputes across columns
+
         Args:
             data: The PyArrow Table
             imputation_method: The type of imputation to perform
-            mloda_source_features: The name of the source feature to impute
+            mloda_source_features: List of resolved source feature names to impute
             constant_value: The constant value to use for imputation (if method is 'constant')
             group_by_features: Optional list of features to group by before imputation
 
         Returns:
             The result of the imputation as a PyArrow Array
         """
-        # Get the source column
-        source_column = data.column(mloda_source_features)
+        # Handle single column case (backward compatibility)
+        if len(mloda_source_features) == 1:
+            source_feature = mloda_source_features[0]
+            # Get the source column
+            source_column = data.column(source_feature)
 
-        # If there are no missing values, return the original column
-        if pc.count(pc.is_null(source_column)).as_py() == 0:
-            return source_column
+            # If there are no missing values, return the original column
+            if pc.count(pc.is_null(source_column)).as_py() == 0:
+                return source_column
 
-        # If group_by_features is provided, perform grouped imputation
-        if group_by_features:
-            return cls._perform_grouped_imputation(
-                data, imputation_method, mloda_source_features, constant_value, group_by_features
-            )
+            # If group_by_features is provided, perform grouped imputation
+            if group_by_features:
+                return cls._perform_grouped_imputation(
+                    data, imputation_method, source_feature, constant_value, group_by_features
+                )
 
-        # Perform non-grouped imputation
-        if imputation_method == "mean":
-            fill_value = pc.mean(source_column).as_py()
-            return pc.fill_null(source_column, fill_value)
-        elif imputation_method == "median":
-            # PyArrow doesn't have a direct median function
-            # We can approximate it using quantile with q=0.5
-            result = pc.quantile(source_column, q=0.5)
-            fill_value = result[0].as_py() if len(result) > 0 else None
-            return pc.fill_null(source_column, fill_value)
-        elif imputation_method == "mode":
-            # PyArrow doesn't have a direct mode function
-            # We need to compute the mode manually
-            value_counts = pc.value_counts(source_column)
-            if len(value_counts) > 0:
-                # Find the index with the maximum count
-                counts = value_counts.field("counts")
-                max_count = pc.max(counts).as_py()
+            # Perform non-grouped imputation
+            if imputation_method == "mean":
+                fill_value = pc.mean(source_column).as_py()
+                return pc.fill_null(source_column, fill_value)
+            elif imputation_method == "median":
+                # PyArrow doesn't have a direct median function
+                # We can approximate it using quantile with q=0.5
+                result = pc.quantile(source_column, q=0.5)
+                fill_value = result[0].as_py() if len(result) > 0 else None
+                return pc.fill_null(source_column, fill_value)
+            elif imputation_method == "mode":
+                # PyArrow doesn't have a direct mode function
+                # We need to compute the mode manually
+                value_counts = pc.value_counts(source_column)
+                if len(value_counts) > 0:
+                    # Find the index with the maximum count
+                    counts = value_counts.field("counts")
+                    max_count = pc.max(counts).as_py()
 
-                # Find all indices where count equals max_count
-                max_indices = []
-                for i in range(len(counts)):
-                    if counts[i].as_py() == max_count:
-                        max_indices.append(i)
+                    # Find all indices where count equals max_count
+                    max_indices = []
+                    for i in range(len(counts)):
+                        if counts[i].as_py() == max_count:
+                            max_indices.append(i)
 
-                # Use the first index with maximum count
-                if max_indices:
-                    mode_value = value_counts.field("values")[max_indices[0]].as_py()
-                    return pc.fill_null(source_column, mode_value)
+                    # Use the first index with maximum count
+                    if max_indices:
+                        mode_value = value_counts.field("values")[max_indices[0]].as_py()
+                        return pc.fill_null(source_column, mode_value)
 
-            return source_column
-        elif imputation_method == "constant":
-            return pc.fill_null(source_column, constant_value)
-        elif imputation_method == "ffill":
-            # Forward fill implementation
-            return cls._perform_fill_direction(source_column, "forward")
-        elif imputation_method == "bfill":
-            # Backward fill implementation
-            return cls._perform_fill_direction(source_column, "backward")
+                return source_column
+            elif imputation_method == "constant":
+                return pc.fill_null(source_column, constant_value)
+            elif imputation_method == "ffill":
+                # Forward fill implementation
+                return cls._perform_fill_direction(source_column, "forward")
+            elif imputation_method == "bfill":
+                # Backward fill implementation
+                return cls._perform_fill_direction(source_column, "backward")
+            else:
+                raise ValueError(f"Unsupported imputation method: {imputation_method}")
         else:
-            raise ValueError(f"Unsupported imputation method: {imputation_method}")
+            # Multi-column case: impute across columns (row-wise)
+            # For multi-column features, we compute imputation values across columns for each row
+            # Convert columns to pandas for easier row-wise operations
+            import pandas as pd
+
+            df_subset = pa.Table.from_arrays(
+                [data.column(col) for col in mloda_source_features], names=mloda_source_features
+            ).to_pandas()
+
+            if imputation_method == "mean":
+                result = df_subset.mean(axis=1)
+            elif imputation_method == "median":
+                result = df_subset.median(axis=1)
+            elif imputation_method == "mode":
+                result = (
+                    df_subset.mode(axis=1).iloc[:, 0]
+                    if not df_subset.mode(axis=1).empty
+                    else pd.Series([None] * len(df_subset))
+                )
+            elif imputation_method == "constant":
+                result = pd.Series([constant_value] * len(df_subset))
+            elif imputation_method == "sum":
+                result = df_subset.sum(axis=1)
+            elif imputation_method == "min":
+                result = df_subset.min(axis=1)
+            elif imputation_method == "max":
+                result = df_subset.max(axis=1)
+            else:
+                raise ValueError(f"Unsupported imputation method for multi-column: {imputation_method}")
+
+            return pa.array(result)
 
     @classmethod
     def _perform_grouped_imputation(
         cls,
         data: pa.Table,
         imputation_method: str,
-        mloda_source_features: str,
+        mloda_source_features: str,  # Note: grouped imputation only supports single column
         constant_value: Optional[Any],
         group_by_features: List[str],
     ) -> pa.Array:

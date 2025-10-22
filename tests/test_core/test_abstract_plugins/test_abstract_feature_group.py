@@ -153,3 +153,25 @@ def test_apply_naming_convention_with_custom_suffix_generator() -> None:
     np.testing.assert_array_equal(output["feature~dim1"], np.array([1.0, 4.0, 7.0]))
     np.testing.assert_array_equal(output["feature~dim2"], np.array([2.0, 5.0, 8.0]))
     np.testing.assert_array_equal(output["feature~dim3"], np.array([3.0, 6.0, 9.0]))
+
+
+def test_resolve_multi_column_feature_discovers_tilde_columns() -> None:
+    """Test that resolve_multi_column_feature discovers multi-column features with ~ pattern.
+
+    Given a feature name and a set of available columns that match the multi-column pattern,
+    the method should return all matching columns sorted by their suffix index.
+
+    For example, if "my_feature~0", "my_feature~1", "my_feature~2" exist in the columns,
+    resolve_multi_column_feature("my_feature", columns) should return all three columns.
+    """
+    # Arrange: Set of available columns containing multi-column feature
+    feature_name = "my_feature"
+    available_columns = {"my_feature~0", "my_feature~1", "my_feature~2"}
+
+    # Act: Resolve multi-column feature
+    result = AbstractFeatureGroup.resolve_multi_column_feature(feature_name, available_columns)
+
+    # Assert: Should return all matching columns sorted
+    assert isinstance(result, list), "Output should be a list"
+    assert len(result) == 3, "Should find all 3 columns"
+    assert result == ["my_feature~0", "my_feature~1", "my_feature~2"], "Should return columns in sorted order"

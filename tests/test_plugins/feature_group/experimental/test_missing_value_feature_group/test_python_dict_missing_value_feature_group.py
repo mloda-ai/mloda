@@ -122,18 +122,18 @@ class TestPythonDictMissingValueFeatureGroup:
         """Test compute_framework_rule method."""
         assert PythonDictMissingValueFeatureGroup.compute_framework_rule() == {PythonDictFramework}
 
-    def test_check_source_feature_exists(self, sample_data_with_missing: List[Dict[str, Any]]) -> None:
-        """Test _check_source_feature_exists method."""
+    def test_check_source_features_exist(self, sample_data_with_missing: List[Dict[str, Any]]) -> None:
+        """Test _check_source_features_exist method."""
         # Feature exists
-        PythonDictMissingValueFeatureGroup._check_source_feature_exists(sample_data_with_missing, "income")
+        PythonDictMissingValueFeatureGroup._check_source_features_exist(sample_data_with_missing, ["income"])
 
         # Feature doesn't exist
-        with pytest.raises(ValueError, match="Source feature 'nonexistent' not found in data"):
-            PythonDictMissingValueFeatureGroup._check_source_feature_exists(sample_data_with_missing, "nonexistent")
+        with pytest.raises(ValueError, match="Source features not found in data"):
+            PythonDictMissingValueFeatureGroup._check_source_features_exist(sample_data_with_missing, ["nonexistent"])
 
         # Empty data
         with pytest.raises(ValueError, match="Data cannot be empty"):
-            PythonDictMissingValueFeatureGroup._check_source_feature_exists([], "income")
+            PythonDictMissingValueFeatureGroup._check_source_features_exist([], ["income"])
 
     def test_add_result_to_data(self, sample_data_with_missing: List[Dict[str, Any]]) -> None:
         """Test _add_result_to_data method."""
@@ -226,7 +226,7 @@ class TestPythonDictMissingValueFeatureGroup:
 
     def test_perform_imputation_mean(self, sample_data_with_missing: List[Dict[str, Any]]) -> None:
         """Test _perform_imputation method with mean imputation."""
-        result = PythonDictMissingValueFeatureGroup._perform_imputation(sample_data_with_missing, "mean", "income")
+        result = PythonDictMissingValueFeatureGroup._perform_imputation(sample_data_with_missing, "mean", ["income"])
 
         # Mean of [50000, 75000, 60000] = 61666.67
         expected_mean = 61666.67
@@ -240,7 +240,7 @@ class TestPythonDictMissingValueFeatureGroup:
     def test_perform_imputation_invalid(self, sample_data_with_missing: List[Dict[str, Any]]) -> None:
         """Test _perform_imputation method with invalid imputation type."""
         with pytest.raises(ValueError, match="Unsupported imputation method: invalid"):
-            PythonDictMissingValueFeatureGroup._perform_imputation(sample_data_with_missing, "invalid", "income")
+            PythonDictMissingValueFeatureGroup._perform_imputation(sample_data_with_missing, "invalid", ["income"])
 
     def test_perform_grouped_imputation_mean(self, sample_data_with_missing: List[Dict[str, Any]]) -> None:
         """Test _perform_grouped_imputation method with mean imputation by group."""
@@ -337,7 +337,7 @@ class TestPythonDictMissingValueFeatureGroup:
         feature_set.add(Feature("mean_imputed__missing"))
 
         data_copy = [row.copy() for row in sample_data_with_missing]
-        with pytest.raises(ValueError, match="Source feature 'missing' not found in data"):
+        with pytest.raises(ValueError, match="Source features not found in data"):
             PythonDictMissingValueFeatureGroup.calculate_feature(data_copy, feature_set)
 
     def test_calculate_feature_constant_without_value(self, sample_data_with_missing: List[Dict[str, Any]]) -> None:

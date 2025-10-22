@@ -39,8 +39,8 @@ def test_integration_json_file() -> None:
     # Parse the features
     features = load_features_from_config(config_str, format="json")
 
-    # Verify we got 13 features (including 2 multi-source features and 1 nested feature)
-    assert len(features) == 13
+    # Verify we got 15 features (including 2 multi-source features, 1 nested feature, and 3 multi-column features)
+    assert len(features) == 15
 
     # First feature: simple string "age"
     assert features[0] == "age"
@@ -485,8 +485,8 @@ def test_complete_integration_json() -> None:
     # Parse all features using load_features_from_config
     features = load_features_from_config(config_str, format="json")
 
-    # Verify we got the expected number of features (13 total, including nested feature)
-    assert len(features) == 13, f"Expected 13 features, got {len(features)}"
+    # Verify we got the expected number of features (15 total, including nested feature and multi-column features)
+    assert len(features) == 15, f"Expected 15 features, got {len(features)}"
 
     # Track which feature types we've validated
     validated_patterns = {

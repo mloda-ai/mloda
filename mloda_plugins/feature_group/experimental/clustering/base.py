@@ -4,7 +4,7 @@ Base implementation for clustering feature groups.
 
 from __future__ import annotations
 
-from typing import Any, Optional, Set, Type, Union
+from typing import Any, List, Optional, Set, Type, Union
 
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
@@ -89,6 +89,7 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
 
     ALGORITHM = "algorithm"
     K_VALUE = "k_value"
+    OUTPUT_PROBABILITIES = "output_probabilities"
 
     # Define supported clustering algorithms
     CLUSTERING_ALGORITHMS = {
@@ -122,6 +123,13 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
             "explanation": "Source features to use for clustering",
             DefaultOptionKeys.mloda_context: True,  # Mark as context parameter
             DefaultOptionKeys.mloda_strict_validation: False,  # Flexible validation
+        },
+        OUTPUT_PROBABILITIES: {
+            "explanation": "Whether to output cluster probabilities/distances as separate columns using ~N suffix pattern",
+            DefaultOptionKeys.mloda_context: True,  # Mark as context parameter
+            DefaultOptionKeys.mloda_strict_validation: False,  # Flexible validation
+            DefaultOptionKeys.mloda_default: False,  # Default is False (don't output probabilities)
+            DefaultOptionKeys.mloda_validation_function: lambda value: isinstance(value, bool),
         },
     }
 
@@ -304,37 +312,84 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
         Processes all requested features, determining the clustering algorithm,
         k_value, and source features from either string parsing or configuration-based options.
 
+        Supports multi-column features by using resolve_multi_column_feature() to
+        automatically discover columns matching the pattern feature_name~N.
+
+        Optionally outputs cluster probabilities/distances as separate columns using
+        the ~N suffix pattern when output_probabilities=True.
+
         Adds the clustering results directly to the input data structure.
         """
         # Process each requested feature
         for feature in features.features:
             algorithm, k_value, source_features = cls._extract_algorithm_k_value_and_source_features(feature)
 
-            # Check if all source features exist
+            # Resolve multi-column features automatically
+            # If source_features contains "onehot_encoded__product", this discovers
+            # ["onehot_encoded__product~0", "onehot_encoded__product~1", ...]
+            available_columns = cls._get_available_columns(data)
+            resolved_features = []
             for source_feature in source_features:
-                cls._check_source_feature_exists(data, source_feature)
+                resolved_columns = cls.resolve_multi_column_feature(source_feature, available_columns)
+                resolved_features.extend(resolved_columns)
+
+            # Check that resolved features exist
+            cls._check_source_features_exist(data, resolved_features)
+
+            # Check if we should output probabilities
+            output_probabilities = (
+                feature.options.get(cls.OUTPUT_PROBABILITIES)
+                if feature.options.get(cls.OUTPUT_PROBABILITIES) is not None
+                else False
+            )
 
             # Perform clustering
-            result = cls._perform_clustering(data, algorithm, k_value, source_features)
+            if output_probabilities:
+                # Get both cluster labels and probabilities
+                result, probabilities = cls._perform_clustering_with_probabilities(
+                    data, algorithm, k_value, resolved_features
+                )
 
-            # Add the result to the data
-            data = cls._add_result_to_data(data, feature.get_name(), result)
+                # Add the cluster labels
+                data = cls._add_result_to_data(data, feature.get_name(), result)
+
+                # Add probability columns using ~N suffix pattern
+                for cluster_idx in range(probabilities.shape[1]):
+                    prob_column_name = f"{feature.get_name()}~{cluster_idx}"
+                    data = cls._add_result_to_data(data, prob_column_name, probabilities[:, cluster_idx])
+            else:
+                # Original behavior: only output cluster labels
+                result = cls._perform_clustering(data, algorithm, k_value, resolved_features)
+                data = cls._add_result_to_data(data, feature.get_name(), result)
 
         return data
 
     @classmethod
-    def _check_source_feature_exists(cls, data: Any, feature_name: str) -> None:
+    def _get_available_columns(cls, data: Any) -> Set[str]:
         """
-        Check if the source feature exists in the data.
+        Get the set of available column names from the data.
 
         Args:
             data: The input data
-            feature_name: The name of the feature to check
+
+        Returns:
+            Set of column names available in the data
+        """
+        raise NotImplementedError(f"_get_available_columns not implemented in {cls.__name__}")
+
+    @classmethod
+    def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
+        """
+        Check if the resolved source features exist in the data.
+
+        Args:
+            data: The input data
+            feature_names: List of resolved feature names (may contain ~N suffixes)
 
         Raises:
-            ValueError: If the feature does not exist in the data
+            ValueError: If none of the features exist in the data
         """
-        raise NotImplementedError(f"_check_source_feature_exists not implemented in {cls.__name__}")
+        raise NotImplementedError(f"_check_source_features_exist not implemented in {cls.__name__}")
 
     @classmethod
     def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
@@ -372,3 +427,28 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
             The result of the clustering (typically cluster assignments)
         """
         raise NotImplementedError(f"_perform_clustering not implemented in {cls.__name__}")
+
+    @classmethod
+    def _perform_clustering_with_probabilities(
+        cls,
+        data: Any,
+        algorithm: str,
+        k_value: Union[int, str],
+        source_features: list[str],
+    ) -> tuple[Any, Any]:
+        """
+        Method to perform clustering and return both labels and probabilities/distances.
+
+        Args:
+            data: The input data
+            algorithm: The clustering algorithm to use
+            k_value: The number of clusters (or 'auto' for algorithms that determine this automatically)
+            source_features: The list of source features to use for clustering
+
+        Returns:
+            A tuple of (cluster_labels, probabilities) where:
+            - cluster_labels: Array of cluster assignments for each sample
+            - probabilities: 2D array where probabilities[i, j] is the probability/distance
+                           of sample i belonging to cluster j
+        """
+        raise NotImplementedError(f"_perform_clustering_with_probabilities not implemented in {cls.__name__}")

@@ -56,7 +56,7 @@ DATA_WITH_NULLS = [
 EMPTY_DATA: List[Dict[str, Any]] = []
 
 # Data with schema but no rows (for frameworks that need schema)
-EMPTY_DATA_WITH_SCHEMA = [
+EMPTY_DATA_WITH_SCHEMA: List[Dict[str, Any]] = [
     # Empty list means no rows, but converter will create schema from STANDARD_DATA structure
 ]
 
@@ -179,7 +179,7 @@ SCENARIOS: Dict[str, FilterScenario] = {
     },
     # Edge case: null values
     "min_with_nulls": {
-        "data": DATA_WITH_NULLS,
+        "data": DATA_WITH_NULLS,  # type: ignore[typeddict-item]
         "feature_name": "age",
         "filter_type": "min",
         "parameter": {"value": 30},

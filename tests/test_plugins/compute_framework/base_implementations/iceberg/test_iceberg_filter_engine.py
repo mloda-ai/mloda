@@ -16,9 +16,9 @@ try:
     from pyiceberg.table import Table as IcebergTable
 except ImportError:
     logger.warning("PyIceberg or PyArrow is not installed. Some tests will be skipped.")
-    pyiceberg = None
+    pyiceberg = None  # type: ignore
     pa = None
-    IcebergTable = None
+    IcebergTable = None  # type: ignore
 
 
 @pytest.mark.skipif(

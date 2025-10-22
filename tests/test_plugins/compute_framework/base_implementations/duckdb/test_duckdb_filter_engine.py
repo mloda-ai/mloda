@@ -14,7 +14,7 @@ try:
     import pyarrow as pa
 except ImportError:
     logger.warning("DuckDB or PyArrow is not installed. Some tests will be skipped.")
-    duckdb = None
+    duckdb = None  # type: ignore
     pa = None
 
 

@@ -13,7 +13,7 @@ try:
     import pandas as pd
 except ImportError:
     logger.warning("Pandas is not installed. Some tests will be skipped.")
-    pd = None  # type: ignore[assignment]
+    pd = None
 
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")

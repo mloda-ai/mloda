@@ -2,7 +2,9 @@ from typing import Any, Optional, Type
 import pytest
 
 from mloda_core.filter.filter_engine import BaseFilterEngine
-from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_filter_engine import PythonDictFilterEngine
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_filter_engine import (
+    PythonDictFilterEngine,
+)
 from tests.test_plugins.compute_framework.test_tooling.filter import FilterEngineTestBase
 
 

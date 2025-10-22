@@ -12,6 +12,7 @@ except ImportError:
     # Fallback for when running tests directly
     import os
     import sys
+
     sys.path.insert(0, os.path.dirname(__file__))
     from conftest import PYSPARK_AVAILABLE, SKIP_REASON  # type: ignore
 
@@ -44,6 +45,7 @@ class TestSparkFilterEngine(FilterEngineTestBase):
         if not PYSPARK_AVAILABLE:
             raise ImportError("PySpark is not available")
         from pyspark.sql import DataFrame
+
         dataframe_type: Type[Any] = DataFrame
         return dataframe_type
 
@@ -53,11 +55,13 @@ class TestSparkFilterEngine(FilterEngineTestBase):
             if not PYSPARK_AVAILABLE:
                 return None
             from pyspark.sql import SparkSession
-            self._spark_session = SparkSession.builder \
-                .appName("FilterEngineTest") \
-                .master("local[1]") \
-                .config("spark.driver.host", "localhost") \
+
+            self._spark_session = (
+                SparkSession.builder.appName("FilterEngineTest")
+                .master("local[1]")
+                .config("spark.driver.host", "localhost")
                 .getOrCreate()
+            )
         return self._spark_session
 
     @pytest.mark.skip(reason="Spark cannot handle empty DataFrames without schema in this context")

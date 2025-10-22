@@ -13,7 +13,7 @@ try:
     import polars as pl
 except ImportError:
     logger.warning("Polars is not installed. Some tests will be skipped.")
-    pl = None
+    pl = None  # type: ignore
 
 
 @pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")

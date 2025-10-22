@@ -23,11 +23,21 @@ class PandasFilterEngine(BaseFilterEngine):
 
     @classmethod
     def do_min_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        return data[data[filter_feature.name] >= filter_feature.parameter]
+        # Handle empty DataFrame edge case
+        if len(data) == 0:
+            return data
+
+        value = cls.get_parameter_value(filter_feature, "value")
+        return data[data[filter_feature.name] >= value]
 
     @classmethod
     def do_max_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        if isinstance(filter_feature.parameter, tuple):
+        # Check if this is a complex parameter with max/max_exclusive or a simple one with value
+        max_param = cls.get_parameter_value(filter_feature, "max", required=False)
+        value_param = cls.get_parameter_value(filter_feature, "value", required=False)
+
+        if max_param is not None:
+            # Complex parameter - use get_min_max_operator
             min_parameter, max_parameter, max_operator = cls.get_min_max_operator(filter_feature)
 
             if min_parameter is not None:
@@ -45,16 +55,22 @@ class PandasFilterEngine(BaseFilterEngine):
                 if max_operator
                 else data[data[filter_feature.name] <= max_parameter]
             )
-        return data[data[filter_feature.name] <= filter_feature.parameter]
+        elif value_param is not None:
+            return data[data[filter_feature.name] <= value_param]
+        else:
+            raise ValueError(f"No valid filter parameter found in {filter_feature.parameter}")
 
     @classmethod
     def do_equal_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        return data[data[filter_feature.name] == filter_feature.parameter]
+        value = cls.get_parameter_value(filter_feature, "value")
+        return data[data[filter_feature.name] == value]
 
     @classmethod
     def do_regex_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        return data[data[filter_feature.name].astype(str).str.match(filter_feature.parameter)]
+        value = cls.get_parameter_value(filter_feature, "value")
+        return data[data[filter_feature.name].astype(str).str.match(value)]
 
     @classmethod
     def do_categorical_inclusion_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        return data[data[filter_feature.name].isin(filter_feature.parameter)]
+        values = cls.get_parameter_value(filter_feature, "values")
+        return data[data[filter_feature.name].isin(values)]

@@ -29,19 +29,8 @@ class DuckDBFilterEngine(BaseFilterEngine):
     @classmethod
     def do_min_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
         column_name = filter_feature.name.name
-
-        # Extract the value from the parameter
-        value = None
-        for param in filter_feature.parameter:
-            if param[0] == "value":
-                value = param[1]
-                break
-
-        if value is None:
-            raise ValueError(f"Filter parameter 'value' not found in {filter_feature.parameter}")
-
+        value = cls.get_parameter_value(filter_feature, "value")
         condition = f'"{column_name}" >= {value}'
-
         return data.filter(condition)
 
     @classmethod

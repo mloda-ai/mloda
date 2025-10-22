@@ -101,7 +101,7 @@ class DuckDBMergeEngine(BaseMergeEngine):
             return column_name in result.columns
         return False
 
-    def handle_empty_data(self, left_data: Any, right_data: Any, left_idx: str, right_idx: str) -> Any:
+    def handle_empty_data(self, left_data: Any, right_data: Any, left_idx: Any, right_idx: Any) -> Any:
         """Handle empty data cases. Override in subclasses for different data types."""
         if self.is_empty_data(left_data) or self.is_empty_data(right_data):
             if self.is_empty_data(left_data) and self.is_empty_data(right_data):
@@ -124,11 +124,9 @@ class DuckDBMergeEngine(BaseMergeEngine):
                 "Framework connection not set. DuckDB merge engine requires a connection from the framework."
             )
 
-        if left_index.is_multi_index() or right_index.is_multi_index():
-            raise ValueError(f"MultiIndex is not yet implemented {self.__class__.__name__}")
-
-        left_idx = left_index.index[0]
-        right_idx = right_index.index[0]
+        # Extract index columns
+        left_idx = left_index.index if left_index.is_multi_index() else left_index.index[0]
+        right_idx = right_index.index if right_index.is_multi_index() else right_index.index[0]
 
         # Handle empty data cases
         empty_result = self.handle_empty_data(left_data, right_data, left_idx, right_idx)
@@ -139,15 +137,22 @@ class DuckDBMergeEngine(BaseMergeEngine):
         left_aliased = left_data.set_alias("left_rel")
         right_aliased = right_data.set_alias("right_rel")
 
-        # Use DuckDB relation's native join method
-        # DuckDB relations support join operations directly
-        if left_idx == right_idx:
-            # Same column names - join on the column
-            join_relation = left_aliased.join(right_aliased, left_idx, how=join_type)
+        # Handle multi-index
+        if left_index.is_multi_index() or right_index.is_multi_index():
+            # Build compound join condition with explicit table aliases
+            conditions = []
+            for left_col, right_col in zip(left_idx, right_idx):
+                conditions.append(f"left_rel.{left_col}=right_rel.{right_col}")
+            join_condition = " AND ".join(conditions)
+            join_relation = left_aliased.join(right_aliased, join_condition, how=join_type)
         else:
-            # Different column names - need to specify the condition
-            # For DuckDB, we might need to use a more explicit approach
-            join_relation = left_aliased.join(right_aliased, f"{left_idx}={right_idx}", how=join_type)
+            # Single column join
+            if left_idx == right_idx:
+                # Same column names - join on the column
+                join_relation = left_aliased.join(right_aliased, left_idx, how=join_type)
+            else:
+                # Different column names - need to specify the condition
+                join_relation = left_aliased.join(right_aliased, f"{left_idx}={right_idx}", how=join_type)
 
         # Return as lazy DuckDB relation
         return join_relation

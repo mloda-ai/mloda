@@ -72,6 +72,7 @@ class TransformFrameworkStep(Step):
         data = self.transform(cfw, data, column_names)
 
         cfw.set_data(data)
+        cfw.set_column_names()
 
         if self.location:
             cfw.upload_finished_data(self.location)
@@ -113,8 +114,32 @@ class TransformFrameworkStep(Step):
         _from_fw = self.from_framework.expected_data_framework()
         _to_fw = self.to_framework.expected_data_framework()
 
-        transformer_cls = self.transformer.transformer_map[(_from_fw, _to_fw)]
-        data = transformer_cls.transform(_from_fw, _to_fw, data, cfw.framework_connection_object)
+        # Try to find a transformation chain (direct or through PyArrow)
+        transformation_chain = self.transformer.get_transformation_chain(_from_fw, _to_fw)
+
+        if transformation_chain is None:
+            raise KeyError(
+                f"No transformation path found from {_from_fw} to {_to_fw}. "
+                f"Available transformers: {list(self.transformer.transformer_map.keys())}"
+            )
+
+        # Apply transformations in sequence
+        current_fw = _from_fw
+        for i, transformer_cls in enumerate(transformation_chain):
+            # Determine target framework for this transformation step
+            if i == len(transformation_chain) - 1:
+                # Last step: transform to final target
+                target_fw = _to_fw
+            else:
+                # Intermediate step: find what this transformer outputs
+                # Look for the transformer in the map to determine its output type
+                for (src, dst), trans in self.transformer.transformer_map.items():
+                    if trans == transformer_cls and src == current_fw:
+                        target_fw = dst
+                        break
+
+            data = transformer_cls.transform(current_fw, target_fw, data, cfw.framework_connection_object)
+            current_fw = target_fw  # Update current framework for next iteration
 
         return data
 

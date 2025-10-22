@@ -125,14 +125,6 @@ class TestPolarsMergeEngine:
         result = engine.merge_inner(empty_df, empty_df, index_obj, index_obj)
         assert len(result) == 0
 
-    def test_merge_with_multi_index_error(self, left_data: Any, right_data: Any) -> None:
-        """Test that multi-index raises an error."""
-        multi_index = Index(("col1", "col2"))
-        engine = PolarsMergeEngine()
-
-        with pytest.raises(ValueError, match="MultiIndex is not yet implemented"):
-            engine.merge_inner(left_data, right_data, multi_index, multi_index)
-
     def test_merge_with_complex_data(self) -> None:
         """Test merge with more complex data structures."""
         left_data = pl.DataFrame({"id": [1, 2, 3], "name": ["Alice", "Bob", "Charlie"], "age": [25, 30, 35]})

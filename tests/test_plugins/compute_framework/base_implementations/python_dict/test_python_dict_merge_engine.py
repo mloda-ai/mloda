@@ -1,10 +1,14 @@
-from typing import Any
+from typing import Any, Optional, Type
 import pytest
 
 from mloda_core.abstract_plugins.components.link import JoinType
 from mloda_core.abstract_plugins.components.index.index import Index
+from mloda_core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_merge_engine import (
     PythonDictMergeEngine,
+)
+from tests.test_plugins.compute_framework.test_tooling.multi_index.multi_index_test_base import (
+    MultiIndexMergeEngineTestBase,
 )
 
 
@@ -115,14 +119,6 @@ class TestPythonDictMergeEngine:
         result = engine.merge_inner([], [], index_obj, index_obj)
         assert result == []
 
-    def test_merge_with_multi_index_error(self, left_data: Any, right_data: Any) -> None:
-        """Test that multi-index raises an error."""
-        multi_index = Index(("col1", "col2"))
-        engine = PythonDictMergeEngine()
-
-        with pytest.raises(ValueError, match="MultiIndex is not yet implemented"):
-            engine.merge_inner(left_data, right_data, multi_index, multi_index)
-
     def test_merge_with_complex_data(self) -> None:
         """Test merge with more complex data structures."""
         left_data = [
@@ -185,3 +181,21 @@ class TestPythonDictMergeEngine:
         result = engine.merge(left_data, right_data, JoinType.LEFT, index_obj, index_obj)
         expected = [{"idx": 1, "col1": "a", "col2": "x"}, {"idx": 3, "col1": "b", "col2": None}]
         assert result == expected
+
+
+class TestPythonDictMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):
+    """Test PythonDictMergeEngine multi-index support using shared test scenarios."""
+
+    @classmethod
+    def merge_engine_class(cls) -> Type[BaseMergeEngine]:
+        """Return the PythonDictMergeEngine class."""
+        return PythonDictMergeEngine
+
+    @classmethod
+    def framework_type(cls) -> Type[Any]:
+        """Return list type (PythonDict uses List[Dict])."""
+        return list
+
+    def get_connection(self) -> Optional[Any]:
+        """PythonDict does not require a connection object."""
+        return None

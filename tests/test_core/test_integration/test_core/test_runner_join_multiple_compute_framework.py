@@ -4,6 +4,9 @@ from mloda_core.abstract_plugins.components.input_data.base_input_data import Ba
 from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataframe
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_core.core.engine import Engine
 from mloda_core.runtime.run import Runner
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
@@ -15,6 +18,12 @@ from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.index.index import Index
 from mloda_core.abstract_plugins.components.link import Link
+
+# Import transformers to ensure they're registered
+import mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_pyarrow_transformer  # noqa: F401
+import mloda_plugins.compute_framework.base_implementations.pandas.pandaspyarrowtransformer  # noqa: F401
+import mloda_plugins.compute_framework.base_implementations.polars.polars_pyarrow_transformer  # noqa: F401
+import mloda_plugins.compute_framework.base_implementations.polars.polars_lazy_pyarrow_transformer  # noqa: F401
 
 
 class SecondCfw(PyarrowTable):
@@ -137,6 +146,111 @@ class Join4CfwTest(Join3CfwTest):
         return {PyarrowTable}
 
 
+class MultiIndexJoinTest1(AbstractFeatureGroup):
+    """Feature group using Pandas framework with 2-column multi-index."""
+
+    @classmethod
+    def input_data(cls) -> Optional[BaseInputData]:
+        return DataCreator({cls.get_class_name()})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {
+            cls.get_class_name(): [100, 200, 300],
+            "id": [1, 2, 3],
+            "timestamp": ["2024-01-01", "2024-01-02", "2024-01-03"],
+        }
+
+    @classmethod
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+        return {PandasDataframe}
+
+
+class MultiIndexJoinTest2(AbstractFeatureGroup):
+    """Feature group using PolarsLazy framework with 2-column multi-index."""
+
+    @classmethod
+    def input_data(cls) -> Optional[BaseInputData]:
+        return DataCreator({cls.get_class_name()})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {
+            cls.get_class_name(): [101, 201, 301],
+            "id": [1, 2, 3],
+            "timestamp": ["2024-01-01", "2024-01-02", "2024-01-03"],
+        }
+
+    @classmethod
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+        return {PolarsLazyDataframe}
+
+
+class MultiIndexJoinTest3(AbstractFeatureGroup):
+    """Feature group using PyArrow framework with 2-column multi-index."""
+
+    @classmethod
+    def input_data(cls) -> Optional[BaseInputData]:
+        return DataCreator({cls.get_class_name()})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {
+            cls.get_class_name(): [102, 202, 302],
+            "id": [1, 2, 3],
+            "timestamp": ["2024-01-01", "2024-01-02", "2024-01-03"],
+        }
+
+    @classmethod
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+        return {PyarrowTable}
+
+
+class MultiIndexJoinTest4(AbstractFeatureGroup):
+    """Feature group using PythonDict framework with 2-column multi-index."""
+
+    @classmethod
+    def input_data(cls) -> Optional[BaseInputData]:
+        return DataCreator({cls.get_class_name()})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {
+            cls.get_class_name(): [103, 203, 303],
+            "id": [1, 2, 3],
+            "timestamp": ["2024-01-01", "2024-01-02", "2024-01-03"],
+        }
+
+    @classmethod
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+        return {PythonDictFramework}
+
+
+class JoinMultiIndexTest(AbstractFeatureGroup):
+    """Consumer feature group that uses all 4 multi-index feature groups."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+        return {
+            Feature.int32_of("MultiIndexJoinTest1"),
+            Feature.int32_of("MultiIndexJoinTest2"),
+            Feature.int32_of("MultiIndexJoinTest3"),
+            Feature.int32_of("MultiIndexJoinTest4"),
+        }
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        # Validate all columns are present
+        data.column("MultiIndexJoinTest1")
+        data.column("MultiIndexJoinTest2")
+        data.column("MultiIndexJoinTest3")
+        data.column("MultiIndexJoinTest4")
+        return {cls.get_class_name(): [999, 888, 777]}
+
+    @classmethod
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+        return {PyarrowTable}
+
+
 @pytest.mark.parametrize(
     "modes",
     [
@@ -157,6 +271,9 @@ class TestEngineMultipleJoinCfw:
             SecondCfw,
             ThirdCfw,
             FourthCfw,
+            PandasDataframe,
+            PolarsLazyDataframe,
+            PythonDictFramework,
         }
 
         engine = Engine(features, compute_framework, links)

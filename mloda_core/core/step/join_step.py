@@ -40,6 +40,7 @@ class JoinStep(Step):
         cfw.data = merge_engine_instance.merge(
             cfw.data, from_cfw_data, self.link.jointype, self.link.left_index, self.link.right_index
         )
+        cfw.set_column_names()
 
     def _upload_data_if_needed(self, cfw: ComputeFrameWork, cfw_register: CfwManager) -> None:
         """Uploads the merged data to Flyway if a location is configured."""

@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Union
 
 from mloda_plugins.compute_framework.base_implementations.polars.polars_merge_engine import PolarsMergeEngine
 
@@ -29,6 +29,8 @@ class PolarsLazyMergeEngine(PolarsMergeEngine):
         """Check if column exists in LazyFrame result using collect_schema()."""
         return column_name in result.collect_schema().names()
 
-    def handle_empty_data(self, left_data: Any, right_data: Any, left_idx: str, right_idx: str) -> Any:
+    def handle_empty_data(
+        self, left_data: Any, right_data: Any, left_idx: Union[str, list[str]], right_idx: Union[str, list[str]]
+    ) -> Any:
         """For LazyFrames, skip empty data handling and let Polars handle it efficiently."""
         return None

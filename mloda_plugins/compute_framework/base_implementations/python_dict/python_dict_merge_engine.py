@@ -1,4 +1,4 @@
-from typing import Any, Set
+from typing import Any, Set, Tuple
 from mloda_core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
 from mloda_core.abstract_plugins.components.index.index import Index
 from mloda_core.abstract_plugins.components.link import JoinType
@@ -52,47 +52,48 @@ class PythonDictMergeEngine(BaseMergeEngine):
         Returns:
             List[Dict]: Joined result
         """
-        if left_index.is_multi_index() or right_index.is_multi_index():
-            raise ValueError(f"MultiIndex is not yet implemented {self.__class__.__name__}")
-
-        left_col = left_index.index[0]
-        right_col = right_index.index[0]
+        left_cols = left_index.index
+        right_cols = right_index.index
 
         if join_type == "inner":
-            return self._inner_join(left_data, right_data, left_col, right_col)
+            return self._inner_join(left_data, right_data, left_cols, right_cols)
         elif join_type == "left":
-            return self._left_join(left_data, right_data, left_col, right_col)
+            return self._left_join(left_data, right_data, left_cols, right_cols)
         elif join_type == "right":
-            return self._right_join(left_data, right_data, left_col, right_col)
+            return self._right_join(left_data, right_data, left_cols, right_cols)
         elif join_type == "outer":
-            return self._outer_join(left_data, right_data, left_col, right_col)
+            return self._outer_join(left_data, right_data, left_cols, right_cols)
         elif join_type == "union":
-            return self._union_join(left_data, right_data, left_col, right_col)
+            return self._union_join(left_data, right_data, left_cols, right_cols)
         else:
             raise ValueError(f"Join type {join_type} is not supported")
 
-    def _inner_join(self, left_data: Any, right_data: Any, left_col: str, right_col: str) -> Any:
+    def _inner_join(
+        self, left_data: Any, right_data: Any, left_cols: Tuple[str, ...], right_cols: Tuple[str, ...]
+    ) -> Any:
         """Performs inner join."""
-        right_index_map = {r.get(right_col): r for r in right_data}
+        right_index_map = {tuple(r.get(col) for col in right_cols): r for r in right_data}
 
         result = []
         for l in left_data:
-            key = l.get(left_col)
+            key = tuple(l.get(col) for col in left_cols)
             if key in right_index_map:
                 merged = {**l, **right_index_map[key]}
                 result.append(merged)
 
         return result
 
-    def _left_join(self, left_data: Any, right_data: Any, left_col: str, right_col: str) -> Any:
+    def _left_join(
+        self, left_data: Any, right_data: Any, left_cols: Tuple[str, ...], right_cols: Tuple[str, ...]
+    ) -> Any:
         """Performs left join."""
-        right_index_map = {r.get(right_col): r for r in right_data}
+        right_index_map = {tuple(r.get(col) for col in right_cols): r for r in right_data}
 
         # Get right columns for null filling
         right_columns = set()
         for r in right_data:
             right_columns.update(r.keys())
-        right_columns = right_columns - {right_col}
+        right_columns = right_columns - set(right_cols)
 
         left_columns = set()
         for l in left_data:
@@ -101,7 +102,7 @@ class PythonDictMergeEngine(BaseMergeEngine):
 
         result = []
         for l in left_data:
-            key = l.get(left_col)
+            key = tuple(l.get(col) for col in left_cols)
             if key in right_index_map:
                 merged = {**l, **right_index_map[key]}
                 result.append(merged)
@@ -113,15 +114,17 @@ class PythonDictMergeEngine(BaseMergeEngine):
 
         return result
 
-    def _right_join(self, left_data: Any, right_data: Any, left_col: str, right_col: str) -> Any:
+    def _right_join(
+        self, left_data: Any, right_data: Any, left_cols: Tuple[str, ...], right_cols: Tuple[str, ...]
+    ) -> Any:
         """Performs right join."""
-        left_index_map = {l.get(left_col): l for l in left_data}
+        left_index_map = {tuple(l.get(col) for col in left_cols): l for l in left_data}
 
         # Get left columns for null filling
         left_columns = set()
         for l in left_data:
             left_columns.update(l.keys())
-        left_columns = left_columns - {left_col}
+        left_columns = left_columns - set(left_cols)
 
         right_columns = set()
         for r in right_data:
@@ -130,7 +133,7 @@ class PythonDictMergeEngine(BaseMergeEngine):
 
         result = []
         for r in right_data:
-            key = r.get(right_col)
+            key = tuple(r.get(col) for col in right_cols)
             if key in left_index_map:
                 merged = {**left_index_map[key], **r}
                 result.append(merged)
@@ -142,10 +145,12 @@ class PythonDictMergeEngine(BaseMergeEngine):
 
         return result
 
-    def _outer_join(self, left_data: Any, right_data: Any, left_col: str, right_col: str) -> Any:
+    def _outer_join(
+        self, left_data: Any, right_data: Any, left_cols: Tuple[str, ...], right_cols: Tuple[str, ...]
+    ) -> Any:
         """Performs outer join."""
-        left_index_map = {l.get(left_col): l for l in left_data}
-        right_index_map = {r.get(right_col): r for r in right_data}
+        left_index_map = {tuple(l.get(col) for col in left_cols): l for l in left_data}
+        right_index_map = {tuple(r.get(col) for col in right_cols): r for r in right_data}
 
         all_keys = set(left_index_map.keys()) | set(right_index_map.keys())
 
@@ -164,44 +169,49 @@ class PythonDictMergeEngine(BaseMergeEngine):
 
             merged = {}
 
-            # Start with the key value
-            if left_col == right_col:
-                merged[left_col] = key
+            # Start with the key values
+            if left_cols == right_cols:
+                for i, col in enumerate(left_cols):
+                    merged[col] = key[i]
             else:
                 if key in left_index_map:
-                    merged[left_col] = key
+                    for i, col in enumerate(left_cols):
+                        merged[col] = key[i]
                 if key in right_index_map:
-                    merged[right_col] = key
+                    for i, col in enumerate(right_cols):
+                        merged[col] = key[i]
 
-            # Add left columns (excluding join column)
+            # Add left columns (excluding join columns)
             for col in left_columns:
-                if col != left_col:
+                if col not in left_cols:
                     merged[col] = left_row.get(col)
 
-            # Add right columns (excluding join column)
+            # Add right columns (excluding join columns)
             for col in right_columns:
-                if col != right_col:
+                if col not in right_cols:
                     merged[col] = right_row.get(col)
 
             result.append(merged)
 
         return result
 
-    def _union_join(self, left_data: Any, right_data: Any, left_col: str, right_col: str) -> Any:
+    def _union_join(
+        self, left_data: Any, right_data: Any, left_cols: Tuple[str, ...], right_cols: Tuple[str, ...]
+    ) -> Any:
         """Performs union (removes duplicates based on join columns)."""
         seen_keys: Set[Any] = set()
         result = []
 
         # Add left rows
         for row in left_data:
-            key = row.get(left_col)
+            key = tuple(row.get(col) for col in left_cols)
             if key not in seen_keys:
                 seen_keys.add(key)
                 result.append(row)
 
         # Add right rows that haven't been seen
         for row in right_data:
-            key = row.get(right_col)
+            key = tuple(row.get(col) for col in right_cols)
             if key not in seen_keys:
                 seen_keys.add(key)
                 result.append(row)

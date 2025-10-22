@@ -330,41 +330,173 @@ def test_feature_group_empty_data():
 
 ### Pattern 3: Integration Testing
 
-Test feature groups with mlodaAPI.
+Test feature groups with mlodaAPI using MlodaTestHelper.
 
 ```python
-from mloda_core.mloda_api import mlodaAPI
 from tests.test_plugins.feature_group.test_tooling.data_generation.generators import DataGenerator
-from tests.test_plugins.feature_group.test_tooling.converters.data_converter import DataConverter
+from tests.test_plugins.feature_group.test_tooling.integration.mloda_test_helper import MlodaTestHelper
 
 def test_feature_group_integration():
     # Generate test data
-    data = DataGenerator.generate_data(
+    test_data = DataGenerator.generate_data(
         n_rows=100,
         numeric_cols=["value1", "value2"],
-        temporal_col="timestamp"
+        categorical_cols=["category"]
     )
-
-    converter = DataConverter()
-    df = converter.to_framework(data, pd.DataFrame)
 
     # Configure mloda
     config = {
-        "feature_groups": [
+        "features": [
             {
-                "name": "my_feature_group",
+                "name": "my_feature",
+                "feature_group": "MyFeatureGroup",
                 # ... feature group config
             }
         ]
     }
 
-    # Run integration
-    results = mlodaAPI.run_all(config, df)
+    # Run integration test using helper
+    helper = MlodaTestHelper()
+    results = helper.run_integration_test(config, test_data)
 
-    # Validate results
-    assert len(results) > 0
-    validate_columns_exist(results[0], ["expected_output_col"])
+    # Validate results using helper methods
+    helper.assert_result_found(results, "my_feature")
+    assert helper.count_results(results) > 0
+
+    # Find specific result
+    result = helper.find_result_with_column(results, "my_feature")
+    assert result is not None
 ```
+
+### Pattern 4: Using Optional Base Class
+
+Simplify common test patterns with FeatureGroupTestBase.
+
+```python
+from tests.test_plugins.feature_group.test_tooling.base.feature_group_test_base import FeatureGroupTestBase
+from tests.test_plugins.feature_group.test_tooling.data_generation.generators import DataGenerator
+import pandas as pd
+
+class TestMyFeatureGroup(FeatureGroupTestBase):
+    """Test suite for MyFeatureGroup using base class utilities."""
+
+    def feature_group_class(self):
+        """Return the feature group class being tested."""
+        return MyFeatureGroup
+
+    def test_basic_functionality(self):
+        # Generate test data
+        data = DataGenerator.generate_data(
+            n_rows=50,
+            numeric_cols=["col1", "col2"]
+        )
+
+        # Use base class utility to convert to pandas
+        df = self.to_pandas(data)
+
+        # Run feature group
+        result = self.feature_group_class().transform(df)
+
+        # Use base class assertion helpers
+        self.assert_row_count(result, 50)
+        self.assert_columns_exist(result, ["output_col"])
+
+    def test_multi_framework(self):
+        # Generate test data
+        data = DataGenerator.generate_data(n_rows=20, numeric_cols=["col1"])
+
+        # Test with pandas
+        df = self.to_framework(data, pd.DataFrame)
+        result = self.feature_group_class().transform(df)
+        self.assert_row_count(result, 20)
+```
+
+---
+
+---
+
+## Integration Helpers
+
+**Location**: `integration/mloda_test_helper.py`
+
+Simplify integration testing with mlodaAPI.
+
+### MlodaTestHelper
+
+```python
+from tests.test_plugins.feature_group.test_tooling.integration.mloda_test_helper import MlodaTestHelper
+
+helper = MlodaTestHelper()
+
+# Create plugin collector for tests
+collector = helper.create_plugin_collector()
+
+# Run integration test
+config = {"features": [...]}
+test_data = {"col1": [1, 2, 3], "col2": [4, 5, 6]}
+results = helper.run_integration_test(config, test_data)
+
+# Find result with specific column
+result = helper.find_result_with_column(results, "output_column")
+
+# Assert result exists
+helper.assert_result_found(results, "output_column")
+
+# Count results
+count = helper.count_results(results)
+```
+
+**Methods**:
+- `create_plugin_collector()` - Create PluginLoader for tests
+- `run_integration_test(config, data)` - Run mlodaAPI with config and data
+- `find_result_with_column(results, column_name)` - Find result containing column
+- `assert_result_found(results, column_name)` - Assert result with column exists
+- `count_results(results)` - Count number of results
+
+---
+
+## Optional Base Classes
+
+**Location**: `base/feature_group_test_base.py`
+
+Optional base class to reduce boilerplate in feature group tests.
+
+### FeatureGroupTestBase
+
+```python
+from tests.test_plugins.feature_group.test_tooling.base.feature_group_test_base import FeatureGroupTestBase
+
+class TestMyFeatureGroup(FeatureGroupTestBase):
+    def feature_group_class(self):
+        """Required: Return the feature group class being tested."""
+        return MyFeatureGroup
+
+    def test_something(self):
+        # Use inherited utility methods
+        df = self.to_pandas(data)
+        result = self.to_framework(data, pd.DataFrame)
+        self.assert_columns_exist(result, ["col1"])
+        self.assert_row_count(result, 10)
+```
+
+**Abstract Methods**:
+- `feature_group_class()` - Return the feature group class (required)
+
+**Utility Methods**:
+- `to_pandas(data)` - Convert data to pandas DataFrame
+- `to_framework(data, framework_type)` - Convert data to target framework
+- `assert_columns_exist(result, columns)` - Assert columns exist
+- `assert_row_count(result, count)` - Assert row count matches
+
+**When to use**:
+- ✅ When you have multiple tests for a single feature group
+- ✅ When you want to reduce boilerplate
+- ✅ When you want consistent patterns across test suites
+
+**When NOT to use**:
+- ❌ For simple, one-off tests
+- ❌ When you need more flexibility
+- ❌ When inheritance doesn't fit your test structure
 
 ---
 
@@ -374,9 +506,14 @@ See the `examples/` directory for complete runnable examples:
 
 - `example_data_generation.py` - Data generation patterns
 - `example_multi_framework.py` - Multi-framework testing
-- `example_integration.py` - Integration test patterns
-- `example_edge_cases.py` - Edge case testing
 - `example_validators.py` - Validator usage
+
+Run examples:
+```bash
+python -m tests.test_plugins.feature_group.test_tooling.examples.example_data_generation
+python -m tests.test_plugins.feature_group.test_tooling.examples.example_multi_framework
+python -m tests.test_plugins.feature_group.test_tooling.examples.example_validators
+```
 
 ---
 

@@ -341,9 +341,53 @@ class ComputeFrameWork(ABC):
     def run_calculate_feature(self, feature_group: Any, features: Any) -> Any:
         extender = self.get_function_extender(WrapperFunctionEnum.FEATURE_GROUP_CALCULATE_FEATURE)
 
-        if extender is None:
-            return feature_group.calculate_feature(self.data, features)
-        return extender(feature_group.calculate_feature, self.data, features)
+        try:
+            if extender is None:
+                return feature_group.calculate_feature(self.data, features)
+            return extender(feature_group.calculate_feature, self.data, features)
+        except KeyError as e:
+            # Provide helpful error message for missing columns
+            self._raise_helpful_missing_column_error(feature_group, e)
+
+    def _raise_helpful_missing_column_error(self, feature_group: Any, error: KeyError) -> None:
+        """
+        Raises a helpful ValueError suggesting the KeyError might be due to missing Links.
+        """
+        feature_name = feature_group.get_class_name()
+        error_str = str(error)
+
+        error_message = f"""
+Feature '{feature_name}' failed with a KeyError: {error_str}
+
+This might be caused by missing Links when your feature has multiple dependencies.
+
+When a feature depends on multiple input features, you must provide explicit Links to specify
+how to merge them. Without Links, the framework cannot determine how to combine the data.
+
+Example:
+    from mloda_core.abstract_plugins.components.link import Link
+    from mloda_core.abstract_plugins.components.index.index import Index
+
+    links = {{
+        Link.inner(
+            left=(RootFeatureA, Index()),
+            right=(RootFeatureB, Index())
+        )
+    }}
+
+    mlodaAPI.run_all(
+        features=[Feature.int32_of("{feature_name}")],
+        links=links,
+        ...
+    )
+
+Available join types:
+- Link.inner(left, right)  - Keep only matching rows from both sides
+- Link.left(left, right)   - Keep all rows from left, matching from right
+- Link.right(left, right)  - Keep all rows from right, matching from left
+- Link.outer(left, right)  - Keep all rows from both sides
+"""
+        raise ValueError(error_message.strip())
 
     @final
     def set_data(self, data: Any) -> None:

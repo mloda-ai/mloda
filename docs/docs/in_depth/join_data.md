@@ -70,8 +70,8 @@ join_type = JoinType.INNER
 
 A Link specifies the relationship of:
 
--   join type, 
--   the feature groups involved, 
+-   join type,
+-   the feature groups involved,
 -   and the indexes to use for the join.
 
 ```python
@@ -99,6 +99,37 @@ link = Link.inner(
     right=(feature_group_b, right_index)
 )
 ```
+
+#### Self-Joins with Pointer Fields
+
+When joining a feature group with itself, you need to distinguish between the left and right instances using **pointer fields**.
+
+**Pointer fields** are optional dictionary parameters (`left_pointer` and `right_pointer`) that match against feature options:
+
+```python
+from mloda_core.abstract_plugins.components.feature import Feature
+
+# Define an example feature group for demonstration
+class UserFeatureGroup(AbstractFeatureGroup):
+    pass
+
+# 1. Create link with pointers
+left = (UserFeatureGroup, Index(("user_id",)))
+right = (UserFeatureGroup, Index(("user_id",)))
+
+link = Link("inner", left, right,
+            left_pointer={"side": "left"},
+            right_pointer={"side": "right"})
+
+# 2. Tag features with matching options
+# Feature names reference the feature from the feature group
+features = {
+    Feature("age", options={"side": "left"}),
+    Feature("age", options={"side": "right"}),
+}
+```
+
+The execution planner validates that the pointer key-value pairs exist in the corresponding feature's options to correctly identify which instance belongs to which side of the join.
 
 #### mlodaAPI
 

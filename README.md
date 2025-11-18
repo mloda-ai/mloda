@@ -1,4 +1,4 @@
-# mloda: Make data and feature engineering shareable
+# mloda: Make data, feature and context engineering shareable
 
 [![Website](https://img.shields.io/badge/website-mloda.ai-blue.svg)](https://mloda.ai)
 [![Documentation](https://img.shields.io/badge/docs-github.io-blue.svg)](https://mloda-ai.github.io/mloda/)

@@ -15,7 +15,7 @@
 | async-lru                              | 2.0.5           | MIT License                                             |
 | attrs                                  | 25.4.0          | MIT                                                     |
 | babel                                  | 2.17.0          | BSD License                                             |
-| bandit                                 | 1.9.1           | Apache-2.0                                              |
+| bandit                                 | 1.9.2           | Apache-2.0                                              |
 | beautifulsoup4                         | 4.14.2          | MIT License                                             |
 | bleach                                 | 6.3.0           | Apache Software License                                 |
 | cachetools                             | 6.2.2           | MIT License                                             |
@@ -32,7 +32,7 @@
 | defusedxml                             | 0.7.1           | Python Software Foundation License                      |
 | distlib                                | 0.4.0           | Python Software Foundation License                      |
 | duckdb                                 | 1.4.2           | MIT License                                             |
-| exceptiongroup                         | 1.3.0           | MIT License                                             |
+| exceptiongroup                         | 1.3.1           | MIT License                                             |
 | execnet                                | 2.1.2           | MIT License                                             |
 | executing                              | 2.2.1           | MIT License                                             |
 | fastjsonschema                         | 2.21.2          | BSD License                                             |
@@ -60,7 +60,7 @@
 | jupyter_core                           | 5.9.1           | BSD-3-Clause                                            |
 | jupyter_server                         | 2.17.0          | BSD License                                             |
 | jupyter_server_terminals               | 0.5.3           | BSD License                                             |
-| jupyterlab                             | 4.4.10          | BSD License                                             |
+| jupyterlab                             | 4.5.0           | BSD License                                             |
 | jupyterlab_pygments                    | 0.3.0           | BSD License                                             |
 | jupyterlab_server                      | 2.28.0          | BSD License                                             |
 | lark                                   | 1.3.1           | MIT License                                             |
@@ -79,7 +79,7 @@
 | nbformat                               | 5.10.4          | BSD License                                             |
 | nest-asyncio                           | 1.6.0           | BSD License                                             |
 | nltk                                   | 3.9.2           | Apache Software License                                 |
-| notebook                               | 7.4.7           | BSD License                                             |
+| notebook                               | 7.5.0           | BSD License                                             |
 | notebook_shim                          | 0.2.4           | BSD License                                             |
 | numpy                                  | 2.2.6           | BSD License                                             |
 | opentelemetry-api                      | 1.38.0          | Apache-2.0                                              |
@@ -90,10 +90,10 @@
 | opentelemetry-semantic-conventions     | 0.59b0          | Apache-2.0                                              |
 | opentelemetry-util-http                | 0.59b0          | Apache Software License                                 |
 | overrides                              | 7.7.0           | Apache License, Version 2.0                             |
-| packageurl-python                      | 0.17.5          | MIT License                                             |
+| packageurl-python                      | 0.17.6          | MIT License                                             |
 | packaging                              | 25.0            | Apache Software License; BSD License                    |
 | pandas                                 | 2.3.3           | BSD License                                             |
-| pandera                                | 0.26.1          | MIT License                                             |
+| pandera                                | 0.27.0          | MIT License                                             |
 | pandocfilters                          | 1.5.1           | BSD License                                             |
 | parso                                  | 0.8.5           | MIT License                                             |
 | pathspec                               | 0.12.1          | Mozilla Public License 2.0 (MPL 2.0)                    |
@@ -113,7 +113,7 @@
 | py-serializable                        | 2.1.0           | Apache Software License                                 |
 | pyarrow                                | 22.0.0          | Apache Software License                                 |
 | pycparser                              | 2.23            | BSD License                                             |
-| pydantic                               | 2.12.4          | MIT                                                     |
+| pydantic                               | 2.12.5          | MIT                                                     |
 | pydantic_core                          | 2.41.5          | MIT                                                     |
 | pyiceberg                              | 0.10.0          | Apache Software License                                 |
 | pyparsing                              | 3.2.5           | MIT                                                     |
@@ -135,7 +135,7 @@
 | rfc3987-syntax                         | 1.1.0           | Apache Software License                                 |
 | rich                                   | 14.2.0          | MIT License                                             |
 | rpds-py                                | 0.29.0          | MIT                                                     |
-| ruff                                   | 0.14.5          | MIT License                                             |
+| ruff                                   | 0.14.6          | MIT License                                             |
 | scikit-learn                           | 1.7.2           | BSD-3-Clause                                            |
 | scipy                                  | 1.15.3          | BSD License                                             |
 | six                                    | 1.17.0          | MIT License                                             |
@@ -143,7 +143,7 @@
 | sortedcontainers                       | 2.4.0           | Apache Software License                                 |
 | soupsieve                              | 2.8             | MIT License                                             |
 | stack-data                             | 0.6.3           | MIT License                                             |
-| stevedore                              | 5.5.0           | Apache Software License                                 |
+| stevedore                              | 5.6.0           | Apache Software License                                 |
 | strictyaml                             | 1.7.3           | MIT License                                             |
 | tenacity                               | 9.1.2           | Apache Software License                                 |
 | terminado                              | 0.18.1          | BSD License                                             |

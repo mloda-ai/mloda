@@ -8,16 +8,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Orchestration Only**: Coordinate Test-Driven Development cycles between specialized agents
 - **No Code Implementation**: NEVER write implementation code or tests directly
-- **Single Test Focus**: Ensure only one test is handled per TDD cycle
 - **Agent Delegation**: Use Red Agent for test writing, Green Agent for implementation
 
 ## TDD Workflow
 
-1. **Red Phase**: Delegate to Red Agent to write ONE failing test
-2. **Validation**: Verify test fails for the right reason
+1. **Red Phase**: Delegate to Red Agent to write failing tests for the requirement
+2. **Validation**: Verify tests fail for the right reasons
 3. **Green Phase**: Delegate to Green Agent for minimal implementation
-4. **Validation**: Ensure test passes and no regressions
-5. **Repeat**: Continue cycle for next single test
+4. **Validation**: Ensure tests pass and no regressions
+5. **Repeat**: Continue cycle for next requirement
 
 ## Deadlock Protection
 
@@ -53,7 +52,7 @@ Each phase should be a clean, validated checkpoint with all tests passing and ch
 
 **CRITICAL**: If agent behavior is unexpected or incorrect:
 
-1. **Update Agent Configuration**: Modify `.claude/agents/red-agent.json` or `.claude/agents/green-agent.json` to refine instructions, constraints, or workflow
+1. **Update Agent Configuration**: Modify `.claude/agents/red-agent.md` or `.claude/agents/green-agent.md` to refine instructions, constraints, or workflow
 2. **Update This File**: Modify `CLAUDE.md` to clarify orchestration rules or add missing guidance
 3. **Document Changes**: Briefly explain what was learned and why the change improves behavior
 

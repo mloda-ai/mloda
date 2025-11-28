@@ -51,6 +51,7 @@ class Link:
         ...      left_pointer={"side": "manager"},
         ...      right_pointer={"side": "employee"})
     """
+
     def __init__(
         self,
         jointype: Union[JoinType, str],

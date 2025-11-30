@@ -37,14 +37,14 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
 
     ### 1. String-Based Creation
 
-    Features follow the naming pattern: `{imputation_method}_imputed__{mloda_source_features}`
+    Features follow the naming pattern: `{mloda_source_features}__{imputation_method}_imputed`
 
     Examples:
     ```python
     features = [
-        "mean_imputed__income",      # Impute missing values in income with the mean
-        "median_imputed__age",       # Impute missing values in age with the median
-        "constant_imputed__category" # Impute missing values in category with a constant value
+        "income__mean_imputed",      # Impute missing values in income with the mean
+        "age__median_imputed",       # Impute missing values in age with the median
+        "category__constant_imputed" # Impute missing values in category with a constant value
     ]
     ```
 
@@ -85,16 +85,16 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
     from mloda_core.abstract_plugins.components.feature import Feature
 
     # Impute missing income values with mean
-    feature = Feature(name="mean_imputed__income")
+    feature = Feature(name="income__mean_imputed")
 
     # Impute missing age values with median
-    feature = Feature(name="median_imputed__age")
+    feature = Feature(name="age__median_imputed")
 
     # Impute missing category values with mode
-    feature = Feature(name="mode_imputed__category")
+    feature = Feature(name="category__mode_imputed")
 
     # Forward fill missing temperature values
-    feature = Feature(name="ffill_imputed__temperature")
+    feature = Feature(name="temperature__ffill_imputed")
     ```
 
     ### Configuration-Based Creation
@@ -158,7 +158,7 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
     }
 
     PATTERN = "__"
-    PREFIX_PATTERN = r"^([\w]+)_imputed__"
+    PREFIX_PATTERN = r".*__([\w]+)_imputed$"
 
     PROPERTY_MAPPING = {
         IMPUTATION_METHOD: {
@@ -187,7 +187,10 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
         source_feature: str | None = None
 
         # Try string-based parsing first
-        _, source_feature = FeatureChainParser.parse_feature_name(feature_name, self.PATTERN, [self.PREFIX_PATTERN])
+        # parse_feature_name returns (operation_config, source_feature)
+        operation_config, source_feature = FeatureChainParser.parse_feature_name(
+            feature_name, self.PATTERN, [self.PREFIX_PATTERN]
+        )
         if source_feature is not None:
             return {Feature(source_feature)}
 
@@ -202,11 +205,16 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
     @classmethod
     def get_imputation_method(cls, feature_name: str) -> str:
         """Extract the imputation method from the feature name."""
-        imputation_method, _ = FeatureChainParser.parse_feature_name(feature_name, cls.PATTERN, [cls.PREFIX_PATTERN])
-        if imputation_method is None:
+        # parse_feature_name returns (operation_config, source_feature)
+        # The operation_config contains the imputation method extracted from the suffix pattern
+        operation_config, _ = FeatureChainParser.parse_feature_name(feature_name, cls.PATTERN, [cls.PREFIX_PATTERN])
+        if operation_config is None:
             raise ValueError(f"Invalid missing value feature name format: {feature_name}")
 
-        imputation_method = imputation_method.replace("imputed", "").strip("_")
+        # The PREFIX_PATTERN captures the method name (e.g., "mean" from "mean_imputed")
+        # So operation_config already contains just the method name
+        imputation_method = operation_config
+
         # Validate imputation method
         if imputation_method not in cls.IMPUTATION_METHODS:
             raise ValueError(
@@ -257,7 +265,9 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
         feature_name_str = feature.name.name if hasattr(feature.name, "name") else str(feature.name)
 
         if cls.PATTERN in feature_name_str:
+            # Use get_imputation_method which already handles parse_feature_name correctly
             imputation_method = cls.get_imputation_method(feature_name_str)
+            # Use extract_source_feature which returns everything before the last __
             source_feature_name = FeatureChainParser.extract_source_feature(feature_name_str, cls.PREFIX_PATTERN)
             return imputation_method, source_feature_name
 
@@ -271,7 +281,7 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
         if imputation_method is None or source_feature_name is None:
             raise ValueError(f"Could not extract imputation method and source feature from: {feature.name}")
 
-        imputation_method = imputation_method.replace("imputed", "").strip("_")
+        # Validate imputation method (no need to strip "imputed" from config-based method)
         if imputation_method not in cls.IMPUTATION_METHODS:
             raise ValueError(
                 f"Unsupported imputation method: {imputation_method}. "

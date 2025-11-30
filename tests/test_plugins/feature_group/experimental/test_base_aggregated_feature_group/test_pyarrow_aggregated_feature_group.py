@@ -35,7 +35,7 @@ def sample_table() -> pa.Table:
 def feature_set_sum() -> FeatureSet:
     """Create a feature set with a sum aggregation feature."""
     feature_set = FeatureSet()
-    feature_set.add(Feature("sum_aggr__sales"))
+    feature_set.add(Feature("sales__sum_aggr"))
     return feature_set
 
 
@@ -43,10 +43,10 @@ def feature_set_sum() -> FeatureSet:
 def feature_set_multiple() -> FeatureSet:
     """Create a feature set with multiple aggregation features."""
     feature_set = FeatureSet()
-    feature_set.add(Feature("sum_aggr__sales"))
-    feature_set.add(Feature("avg_aggr__price"))
-    feature_set.add(Feature("min_aggr__discount"))
-    feature_set.add(Feature("max_aggr__customer_rating"))
+    feature_set.add(Feature("sales__sum_aggr"))
+    feature_set.add(Feature("price__avg_aggr"))
+    feature_set.add(Feature("discount__min_aggr"))
+    feature_set.add(Feature("customer_rating__max_aggr"))
     return feature_set
 
 
@@ -116,8 +116,8 @@ class TestPyArrowAggregatedFeatureGroup:
         result = PyArrowAggregatedFeatureGroup.calculate_feature(sample_table, feature_set_sum)
 
         # Check that the result contains the original data plus the aggregated feature
-        assert "sum_aggr__sales" in result.schema.names
-        assert result.column("sum_aggr__sales")[0].as_py() == 1500  # Sum of [100, 200, 300, 400, 500]
+        assert "sales__sum_aggr" in result.schema.names
+        assert result.column("sales__sum_aggr")[0].as_py() == 1500  # Sum of [100, 200, 300, 400, 500]
 
         # Check that the original data is preserved
         assert "sales" in result.schema.names
@@ -131,17 +131,17 @@ class TestPyArrowAggregatedFeatureGroup:
         result = PyArrowAggregatedFeatureGroup.calculate_feature(sample_table, feature_set_multiple)
 
         # Check that the result contains all aggregated features
-        assert "sum_aggr__sales" in result.schema.names
-        assert result.column("sum_aggr__sales")[0].as_py() == 1500  # Sum of [100, 200, 300, 400, 500]
+        assert "sales__sum_aggr" in result.schema.names
+        assert result.column("sales__sum_aggr")[0].as_py() == 1500  # Sum of [100, 200, 300, 400, 500]
 
-        assert "avg_aggr__price" in result.schema.names
-        assert result.column("avg_aggr__price")[0].as_py() == 9.0  # Avg of [10.0, 9.5, 9.0, 8.5, 8.0]
+        assert "price__avg_aggr" in result.schema.names
+        assert result.column("price__avg_aggr")[0].as_py() == 9.0  # Avg of [10.0, 9.5, 9.0, 8.5, 8.0]
 
-        assert "min_aggr__discount" in result.schema.names
-        assert result.column("min_aggr__discount")[0].as_py() == 0.1  # Min of [0.1, 0.2, 0.15, 0.25, 0.1]
+        assert "discount__min_aggr" in result.schema.names
+        assert result.column("discount__min_aggr")[0].as_py() == 0.1  # Min of [0.1, 0.2, 0.15, 0.25, 0.1]
 
-        assert "max_aggr__customer_rating" in result.schema.names
-        assert result.column("max_aggr__customer_rating")[0].as_py() == 5  # Max of [4, 5, 3, 4, 5]
+        assert "customer_rating__max_aggr" in result.schema.names
+        assert result.column("customer_rating__max_aggr")[0].as_py() == 5  # Max of [4, 5, 3, 4, 5]
 
         # Check that the original data is preserved
         assert "sales" in result.schema.names
@@ -153,7 +153,7 @@ class TestPyArrowAggregatedFeatureGroup:
     def test_calculate_feature_missing_source(self, sample_table: pa.Table) -> None:
         """Test calculate_feature method with missing source feature."""
         feature_set = FeatureSet()
-        feature_set.add(Feature("sum_aggr__missing"))
+        feature_set.add(Feature("missing__sum_aggr"))
 
         with pytest.raises(ValueError, match="None of the source features"):
             PyArrowAggregatedFeatureGroup.calculate_feature(sample_table, feature_set)
@@ -166,7 +166,7 @@ class TestPyArrowAggregatedFeatureGroup:
             AggregatedFeatureGroup.AGGREGATION_TYPES = {"sum": "Sum of values"}
 
             feature_set = FeatureSet()
-            feature_set.add(Feature("min_aggr__sales"))
+            feature_set.add(Feature("sales__min_aggr"))
 
             with pytest.raises(ValueError, match="Unsupported aggregation type: min"):
                 PyArrowAggregatedFeatureGroup.calculate_feature(sample_table, feature_set)
@@ -190,10 +190,10 @@ class TestAggPyArrowIntegration:
         result = mlodaAPI.run_all(
             [
                 "sales",
-                "sum_aggr__sales",
-                "avg_aggr__price",
-                "min_aggr__discount",
-                "max_aggr__customer_rating",
+                "sales__sum_aggr",
+                "price__avg_aggr",
+                "discount__min_aggr",
+                "customer_rating__max_aggr",
             ],
             compute_frameworks={PyarrowTable},
             plugin_collector=plugin_collector,

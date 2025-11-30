@@ -58,8 +58,9 @@ class PandasNodeCentralityFeatureGroup(NodeCentralityFeatureGroup):
 
         # Check if the feature name follows the expected format with a double underscore
         if "__" in feature_name:
-            # Extract the node feature name from the feature name
-            node_feature = feature_name.split("__")[1]
+            # Extract the node feature name from the feature name (L→R format: source__operation)
+            # Get everything BEFORE the last "__"
+            node_feature = feature_name[: feature_name.rfind("__")]
 
             # If the node feature is in the DataFrame, use it to map nodes to scores
             if node_feature in data.columns:

@@ -28,16 +28,16 @@ class ScalingFeatureGroup(AbstractFeatureGroup):
     ## Feature Naming Convention
 
     Scaling features follow this naming pattern:
-    `{scaler_type}_scaled__{mloda_source_features}`
+    `{mloda_source_features}__{scaler_type}_scaled`
 
-    The scaler type determines which sklearn scaler to use, and the source feature
-    is extracted from the feature name and used as input for the scaler.
+    The source feature comes first, followed by the scaling operation.
+    Note the double underscore separating the source feature from the scaler type.
 
     Examples:
-    - `standard_scaled__income`: Apply StandardScaler to income feature
-    - `minmax_scaled__age`: Apply MinMaxScaler to age feature
-    - `robust_scaled__outlier_prone_feature`: Apply RobustScaler to outlier_prone_feature
-    - `normalizer_scaled__feature_vector`: Apply Normalizer to feature_vector
+    - `income__standard_scaled`: Apply StandardScaler to income feature
+    - `age__minmax_scaled`: Apply MinMaxScaler to age feature
+    - `outlier_prone_feature__robust_scaled`: Apply RobustScaler to outlier_prone_feature
+    - `feature_vector__normalizer_scaled`: Apply Normalizer to feature_vector
 
     ## Supported Scalers
 
@@ -80,7 +80,7 @@ class ScalingFeatureGroup(AbstractFeatureGroup):
 
     # Define patterns for parsing
     PATTERN = "__"
-    PREFIX_PATTERN = r"^(standard|minmax|robust|normalizer)_scaled__"
+    PREFIX_PATTERN = r".*__(standard|minmax|robust|normalizer)_scaled$"
 
     # Property mapping for new configuration-based approach
     PROPERTY_MAPPING = {
@@ -168,7 +168,7 @@ class ScalingFeatureGroup(AbstractFeatureGroup):
             cls._check_source_feature_exists(data, source_feature)
 
             # Create unique artifact key for this scaler
-            artifact_key = f"{scaler_type}_scaled__{source_feature}"
+            artifact_key = f"{source_feature}__{scaler_type}_scaled"
 
             # Try to load existing fitted scaler from artifact using helper method
             fitted_scaler = None

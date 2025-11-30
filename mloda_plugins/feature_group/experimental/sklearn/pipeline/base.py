@@ -28,15 +28,15 @@ class SklearnPipelineFeatureGroup(AbstractFeatureGroup):
     ## Feature Naming Convention
 
     Pipeline features follow this naming pattern:
-    `sklearn_pipeline_{pipeline_name}__{mloda_source_features}`
+    `{mloda_source_features}__sklearn_pipeline_{pipeline_name}`
 
-    The source features (mloda_source_features) are extracted from the feature name and used
-    as input for the pipeline. Note the double underscore before the source features.
+    The source features come first, followed by the pipeline operation.
+    Note the double underscore separating the source features from the pipeline name.
 
     Examples:
-    - `sklearn_pipeline_preprocessing__raw_features`: Apply preprocessing pipeline to raw_features
-    - `sklearn_pipeline_feature_engineering__customer_data`: Apply feature engineering to customer_data
-    - `sklearn_pipeline_scaling__income,age`: Apply scaling pipeline to income and age features
+    - `raw_features__sklearn_pipeline_preprocessing`: Apply preprocessing pipeline to raw_features
+    - `customer_data__sklearn_pipeline_feature_engineering`: Apply feature engineering to customer_data
+    - `income,age__sklearn_pipeline_scaling`: Apply scaling pipeline to income and age features
 
     ## Configuration-Based Creation
 
@@ -59,7 +59,7 @@ class SklearnPipelineFeatureGroup(AbstractFeatureGroup):
     )
 
     # The Engine will automatically parse this into a feature with name
-    # "sklearn_pipeline_preprocessing__raw_features"
+    # "raw_features__sklearn_pipeline_preprocessing"
     ```
 
     ## Key Advantages over Traditional Scikit-learn
@@ -109,7 +109,7 @@ class SklearnPipelineFeatureGroup(AbstractFeatureGroup):
 
     # Define patterns for parsing
     PATTERN = "__"
-    PREFIX_PATTERN = r"^sklearn_pipeline_([\w]+)__"
+    PREFIX_PATTERN = r".*__sklearn_pipeline_([\w]+)$"
 
     @staticmethod
     def artifact() -> Type[BaseArtifact] | None:
@@ -142,12 +142,8 @@ class SklearnPipelineFeatureGroup(AbstractFeatureGroup):
         if prefix_part is None:
             raise ValueError(f"Invalid sklearn pipeline feature name format: {feature_name}")
 
-        # Extract just the pipeline name from "sklearn_pipeline_<pipeline_name>"
-        if prefix_part.startswith("sklearn_pipeline_"):
-            pipeline_name = prefix_part[len("sklearn_pipeline_") :]
-            return pipeline_name
-        else:
-            raise ValueError(f"Invalid sklearn pipeline feature name format: {feature_name}")
+        # The regex already extracts just the pipeline name (e.g., "scaling" from "income__sklearn_pipeline_scaling")
+        return prefix_part
 
     @classmethod
     def match_feature_group_criteria(
@@ -205,8 +201,8 @@ class SklearnPipelineFeatureGroup(AbstractFeatureGroup):
             # Get pipeline configuration from options or create default
             pipeline_config = cls._get_pipeline_config_from_feature(feature, pipeline_name)
 
-            # Create unique artifact key for this pipeline
-            artifact_key = f"sklearn_pipeline_{pipeline_name}__{','.join(source_features)}"
+            # Create unique artifact key for this pipeline (using L→R syntax)
+            artifact_key = f"{','.join(source_features)}__sklearn_pipeline_{pipeline_name}"
 
             # Try to load existing fitted pipeline from artifact using helper method
             fitted_pipeline = None

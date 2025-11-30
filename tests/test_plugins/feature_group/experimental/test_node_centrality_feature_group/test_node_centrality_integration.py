@@ -37,11 +37,11 @@ class NodeCentralityTestDataCreator(ATestDataCreator):
 
 # List of node centrality features to test
 NODE_CENTRALITY_FEATURES: List[Feature | str] = [
-    "degree_centrality__source",  # Degree centrality for source nodes
-    "betweenness_centrality__source",  # Betweenness centrality for source nodes
-    "closeness_centrality__source",  # Closeness centrality for source nodes
-    "eigenvector_centrality__source",  # Eigenvector centrality for source nodes
-    "pagerank_centrality__source",  # PageRank centrality for source nodes
+    "source__degree_centrality",  # Degree centrality for source nodes
+    "source__betweenness_centrality",  # Betweenness centrality for source nodes
+    "source__closeness_centrality",  # Closeness centrality for source nodes
+    "source__eigenvector_centrality",  # Eigenvector centrality for source nodes
+    "source__pagerank_centrality",  # PageRank centrality for source nodes
 ]
 
 
@@ -67,9 +67,9 @@ def validate_node_centrality_features(result_df: pd.DataFrame, expected_features
 
         # For normalized centrality measures, verify values are between 0 and 1
         if feature_name in [
-            "closeness_centrality__source",
-            "eigenvector_centrality__source",
-            "pagerank_centrality__source",
+            "source__closeness_centrality",
+            "source__eigenvector_centrality",
+            "source__pagerank_centrality",
         ]:
             assert (result_df[feature_name] <= 1).all(), f"Feature '{feature_name}' has values greater than 1"
 
@@ -91,11 +91,11 @@ class TestNodeCentralityPandasIntegration:
                 "source",  # Source node feature
                 "target",  # Target node feature
                 "weight",  # Edge weight feature
-                "degree_centrality__source",  # Degree centrality
-                "betweenness_centrality__source",  # Betweenness centrality
-                "closeness_centrality__source",  # Closeness centrality
-                "eigenvector_centrality__source",  # Eigenvector centrality
-                "pagerank_centrality__source",  # PageRank centrality
+                "source__degree_centrality",  # Degree centrality
+                "source__betweenness_centrality",  # Betweenness centrality
+                "source__closeness_centrality",  # Closeness centrality
+                "source__eigenvector_centrality",  # Eigenvector centrality
+                "source__pagerank_centrality",  # PageRank centrality
             ],
             compute_frameworks={PandasDataframe},
             plugin_collector=plugin_collector,
@@ -107,7 +107,7 @@ class TestNodeCentralityPandasIntegration:
         # Find the DataFrame with the node centrality features
         centrality_df = None
         for df in result:
-            if "degree_centrality__source" in df.columns:
+            if "source__degree_centrality" in df.columns:
                 centrality_df = df
                 break
 

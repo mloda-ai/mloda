@@ -143,10 +143,10 @@ def cell4_mloda_approach() -> Any:
 
     # Define features as strings (normal mloda usage)
     features = [
-        "standard_scaled__mean_imputed__age",  # Scale imputed age
-        "standard_scaled__mean_imputed__weight",  # Scale imputed weight
-        "onehot_encoded__state",  # One-hot encode state
-        "onehot_encoded__gender",  # One-hot encode gender
+        "age__mean_imputed__standard_scaled",  # Scale imputed age
+        "weight__mean_imputed__standard_scaled",  # Scale imputed weight
+        "state__onehot_encoded",  # One-hot encode state
+        "gender__onehot_encoded",  # One-hot encode gender
     ]
 
     # Execute with mloda
@@ -186,15 +186,15 @@ def cell5_demonstrate_feature_chaining() -> None:
     )
 
     chained_features = [
-        "max_aggr__standard_scaled__mean_imputed__age",  # Step 2: Scale imputed
-        "robust_scaled__mean_imputed__weight",  # Different scaler for weight
-        "onehot_encoded__state~0",  # Access specific one-hot column
+        "age__mean_imputed__standard_scaled__max_aggr",  # Step 2: Scale imputed
+        "weight__mean_imputed__robust_scaled",  # Different scaler for weight
+        "state__onehot_encoded~0",  # Access specific one-hot column
     ]
 
     print("Feature chaining example:")
     print("Original: age")
-    print("Step 1:   mean_imputed__age")
-    print("Step 2:   standard_scaled__mean_imputed__age")
+    print("Step 1:   age__mean_imputed")
+    print("Step 2:   age__mean_imputed__standard_scaled")
     print("\nmloda automatically resolves dependencies!")
 
     result = mlodaAPI.run_all(chained_features, compute_frameworks={PandasDataframe}, plugin_collector=plugin_collector)  # type: ignore
@@ -225,9 +225,9 @@ def cell6_reusability_demo() -> None:
             )
 
     chained_features = [
-        "max_aggr__standard_scaled__mean_imputed__age",  # Step 2: Scale imputed
-        "robust_scaled__mean_imputed__weight",  # Different scaler for weight
-        "onehot_encoded__state~0",  # Access specific one-hot column
+        "age__mean_imputed__standard_scaled__max_aggr",  # Step 2: Scale imputed
+        "weight__mean_imputed__robust_scaled",  # Different scaler for weight
+        "state__onehot_encoded~0",  # Access specific one-hot column
     ]
 
     plugin_collector = PlugInCollector.enabled_feature_groups(

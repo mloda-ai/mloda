@@ -174,6 +174,8 @@ class SparkFramework(ComputeFrameWork):
                     self.set_framework_connection_object()
 
                 spark = self.framework_connection_object
+                if spark is None:
+                    raise RuntimeError("Failed to initialize Spark session")
                 new_data_df = spark.createDataFrame(
                     [(i + 1, val) for i, val in enumerate(data_list)],
                     StructType(

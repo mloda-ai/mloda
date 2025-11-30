@@ -217,7 +217,7 @@ class TestPythonDictTextCleaningFeatureGroup:
         """Test calculate_feature with a single operation."""
         # Create feature with normalize operation
         feature = Feature(
-            FeatureName("cleaned_text__text"),
+            FeatureName("text__cleaned_text"),
             Options(
                 {
                     TextCleaningFeatureGroup.CLEANING_OPERATIONS: ("normalize",),
@@ -232,15 +232,15 @@ class TestPythonDictTextCleaningFeatureGroup:
         result = PythonDictTextCleaningFeatureGroup.calculate_feature(data_copy, feature_set)
 
         # Check results
-        assert "cleaned_text__text" in result[0]
-        assert result[0]["cleaned_text__text"] == "hello world!"
-        assert result[1]["cleaned_text__text"] == "testing text normalization"
+        assert "text__cleaned_text" in result[0]
+        assert result[0]["text__cleaned_text"] == "hello world!"
+        assert result[1]["text__cleaned_text"] == "testing text normalization"
 
     def test_calculate_feature_multiple_operations(self) -> None:
         """Test calculate_feature with multiple operations."""
         # Create feature with multiple operations
         feature = Feature(
-            FeatureName("cleaned_text__text"),
+            FeatureName("text__cleaned_text"),
             Options(
                 {
                     TextCleaningFeatureGroup.CLEANING_OPERATIONS: (
@@ -259,16 +259,16 @@ class TestPythonDictTextCleaningFeatureGroup:
         result = PythonDictTextCleaningFeatureGroup.calculate_feature(data_copy, feature_set)
 
         # Check results
-        assert "cleaned_text__text" in result[0]
-        assert result[0]["cleaned_text__text"] == "hello world"  # Lowercase and no punctuation
-        assert "," not in result[2]["cleaned_text__text"]  # No punctuation
-        assert "   " not in result[2]["cleaned_text__text"]  # No extra spaces
+        assert "text__cleaned_text" in result[0]
+        assert result[0]["text__cleaned_text"] == "hello world"  # Lowercase and no punctuation
+        assert "," not in result[2]["text__cleaned_text"]  # No punctuation
+        assert "   " not in result[2]["text__cleaned_text"]  # No extra spaces
 
     def test_calculate_feature_missing_source(self) -> None:
         """Test calculate_feature with a missing source feature."""
         # Create feature with nonexistent source
         feature = Feature(
-            FeatureName("cleaned_text__nonexistent"),
+            FeatureName("nonexistent__cleaned_text"),
             Options(
                 {
                     TextCleaningFeatureGroup.CLEANING_OPERATIONS: ("normalize",),
@@ -289,7 +289,7 @@ class TestPythonDictTextCleaningFeatureGroup:
         """Test calculate_feature with an invalid operation."""
         # Create feature with invalid operation
         feature = Feature(
-            FeatureName("cleaned_text__text"),
+            FeatureName("text__cleaned_text"),
             Options(
                 {
                     TextCleaningFeatureGroup.CLEANING_OPERATIONS: ("invalid_operation",),
@@ -327,9 +327,9 @@ class TestTextCleaningPythonDictIntegration:
             "text",  # Source data with text content
             "review",
             "description",
-            "cleaned_text__text",  # Text cleaning
-            "cleaned_text__review",  # Text cleaning
-            "cleaned_text__description",  # Text cleaning
+            "text__cleaned_text",  # Text cleaning
+            "review__cleaned_text",  # Text cleaning
+            "description__cleaned_text",  # Text cleaning
         ]
 
         feature_list = [Feature(name=feature, options=options) for feature in feature_str]
@@ -349,14 +349,14 @@ class TestTextCleaningPythonDictIntegration:
         first_row = data[0]  # Get the first row
 
         # Check that cleaning was applied (text should be lowercase and without punctuation)
-        assert first_row["cleaned_text__text"] == "hello world"
-        assert "!" not in first_row["cleaned_text__review"]
-        assert first_row["cleaned_text__review"].islower()
+        assert first_row["text__cleaned_text"] == "hello world"
+        assert "!" not in first_row["review__cleaned_text"]
+        assert first_row["review__cleaned_text"].islower()
 
         # Check that cleaned features are present
-        assert "cleaned_text__text" in first_row
-        assert "cleaned_text__review" in first_row
-        assert "cleaned_text__description" in first_row
+        assert "text__cleaned_text" in first_row
+        assert "review__cleaned_text" in first_row
+        assert "description__cleaned_text" in first_row
 
         data = result[0]
         first_row = data[0]

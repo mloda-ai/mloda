@@ -17,11 +17,11 @@ class TestNodeCentralityFeatureGroup:
     def test_match_feature_group_criteria(self) -> None:
         """Test the match_feature_group_criteria method."""
         # Valid feature names
-        assert NodeCentralityFeatureGroup.match_feature_group_criteria("degree_centrality__user", Options())
-        assert NodeCentralityFeatureGroup.match_feature_group_criteria("betweenness_centrality__product", Options())
-        assert NodeCentralityFeatureGroup.match_feature_group_criteria("closeness_centrality__website", Options())
-        assert NodeCentralityFeatureGroup.match_feature_group_criteria("eigenvector_centrality__node", Options())
-        assert NodeCentralityFeatureGroup.match_feature_group_criteria("pagerank_centrality__page", Options())
+        assert NodeCentralityFeatureGroup.match_feature_group_criteria("user__degree_centrality", Options())
+        assert NodeCentralityFeatureGroup.match_feature_group_criteria("product__betweenness_centrality", Options())
+        assert NodeCentralityFeatureGroup.match_feature_group_criteria("website__closeness_centrality", Options())
+        assert NodeCentralityFeatureGroup.match_feature_group_criteria("node__eigenvector_centrality", Options())
+        assert NodeCentralityFeatureGroup.match_feature_group_criteria("page__pagerank_centrality", Options())
 
         # Invalid feature names
         assert not NodeCentralityFeatureGroup.match_feature_group_criteria("centrality_degree__user", Options())
@@ -29,10 +29,10 @@ class TestNodeCentralityFeatureGroup:
     def test_parse_centrality_prefix(self) -> None:
         """Test the parse_centrality_prefix method."""
         # Valid feature names
-        centrality_type = NodeCentralityFeatureGroup.parse_centrality_prefix("degree_centrality__user")
+        centrality_type = NodeCentralityFeatureGroup.parse_centrality_prefix("user__degree_centrality")
         assert centrality_type == "degree"
 
-        centrality_type = NodeCentralityFeatureGroup.parse_centrality_prefix("betweenness_centrality__product")
+        centrality_type = NodeCentralityFeatureGroup.parse_centrality_prefix("product__betweenness_centrality")
         assert centrality_type == "betweenness"
 
         # Invalid feature names
@@ -50,23 +50,23 @@ class TestNodeCentralityFeatureGroup:
 
     def test_get_centrality_type(self) -> None:
         """Test the get_centrality_type method."""
-        assert NodeCentralityFeatureGroup.get_centrality_type("degree_centrality__user") == "degree"
-        assert NodeCentralityFeatureGroup.get_centrality_type("betweenness_centrality__product") == "betweenness"
-        assert NodeCentralityFeatureGroup.get_centrality_type("closeness_centrality__website") == "closeness"
-        assert NodeCentralityFeatureGroup.get_centrality_type("eigenvector_centrality__node") == "eigenvector"
-        assert NodeCentralityFeatureGroup.get_centrality_type("pagerank_centrality__page") == "pagerank"
+        assert NodeCentralityFeatureGroup.get_centrality_type("user__degree_centrality") == "degree"
+        assert NodeCentralityFeatureGroup.get_centrality_type("product__betweenness_centrality") == "betweenness"
+        assert NodeCentralityFeatureGroup.get_centrality_type("website__closeness_centrality") == "closeness"
+        assert NodeCentralityFeatureGroup.get_centrality_type("node__eigenvector_centrality") == "eigenvector"
+        assert NodeCentralityFeatureGroup.get_centrality_type("page__pagerank_centrality") == "pagerank"
 
     def test_input_features(self) -> None:
         """Test the input_features method."""
         feature_group = NodeCentralityFeatureGroup()
 
         # Test with different centrality types
-        input_features = feature_group.input_features(Options(), FeatureName("degree_centrality__user"))
+        input_features = feature_group.input_features(Options(), FeatureName("user__degree_centrality"))
         assert input_features is not None
         assert len(input_features) == 1
         assert Feature("user") in input_features
 
-        input_features = feature_group.input_features(Options(), FeatureName("betweenness_centrality__product"))
+        input_features = feature_group.input_features(Options(), FeatureName("product__betweenness_centrality"))
         assert input_features is not None
         assert len(input_features) == 1
         assert Feature("product") in input_features

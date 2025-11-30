@@ -57,7 +57,7 @@ def sample_lazy_dataframe() -> Any:
 def feature_set_sum() -> FeatureSet:
     """Create a feature set with a sum aggregation feature."""
     feature_set = FeatureSet()
-    feature_set.add(Feature("sum_aggr__sales"))
+    feature_set.add(Feature("sales__sum_aggr"))
     return feature_set
 
 
@@ -65,10 +65,10 @@ def feature_set_sum() -> FeatureSet:
 def feature_set_multiple() -> FeatureSet:
     """Create a feature set with multiple aggregation features."""
     feature_set = FeatureSet()
-    feature_set.add(Feature("sum_aggr__sales"))
-    feature_set.add(Feature("avg_aggr__price"))
-    feature_set.add(Feature("min_aggr__discount"))
-    feature_set.add(Feature("max_aggr__customer_rating"))
+    feature_set.add(Feature("sales__sum_aggr"))
+    feature_set.add(Feature("price__avg_aggr"))
+    feature_set.add(Feature("discount__min_aggr"))
+    feature_set.add(Feature("customer_rating__max_aggr"))
     return feature_set
 
 
@@ -164,11 +164,11 @@ class TestPolarsLazyAggregatedFeatureGroup:
 
         # Check that the aggregated feature was added to the schema
         schema_names = set(result.collect_schema().names())
-        assert "sum_aggr__sales" in schema_names
+        assert "sales__sum_aggr" in schema_names
 
         # Collect to verify the actual values
         collected = result.collect()
-        assert collected["sum_aggr__sales"][0] == 1500  # Sum of [100, 200, 300, 400, 500]
+        assert collected["sales__sum_aggr"][0] == 1500  # Sum of [100, 200, 300, 400, 500]
 
         # Check that the original data is preserved
         assert "sales" in schema_names
@@ -186,17 +186,17 @@ class TestPolarsLazyAggregatedFeatureGroup:
 
         # Check that all aggregated features were added to the schema
         schema_names = set(result.collect_schema().names())
-        assert "sum_aggr__sales" in schema_names
-        assert "avg_aggr__price" in schema_names
-        assert "min_aggr__discount" in schema_names
-        assert "max_aggr__customer_rating" in schema_names
+        assert "sales__sum_aggr" in schema_names
+        assert "price__avg_aggr" in schema_names
+        assert "discount__min_aggr" in schema_names
+        assert "customer_rating__max_aggr" in schema_names
 
         # Collect to verify the actual values
         collected = result.collect()
-        assert collected["sum_aggr__sales"][0] == 1500  # Sum of [100, 200, 300, 400, 500]
-        assert collected["avg_aggr__price"][0] == 9.0  # Avg of [10.0, 9.5, 9.0, 8.5, 8.0]
-        assert collected["min_aggr__discount"][0] == 0.1  # Min of [0.1, 0.2, 0.15, 0.25, 0.1]
-        assert collected["max_aggr__customer_rating"][0] == 5  # Max of [4, 5, 3, 4, 5]
+        assert collected["sales__sum_aggr"][0] == 1500  # Sum of [100, 200, 300, 400, 500]
+        assert collected["price__avg_aggr"][0] == 9.0  # Avg of [10.0, 9.5, 9.0, 8.5, 8.0]
+        assert collected["discount__min_aggr"][0] == 0.1  # Min of [0.1, 0.2, 0.15, 0.25, 0.1]
+        assert collected["customer_rating__max_aggr"][0] == 5  # Max of [4, 5, 3, 4, 5]
 
         # Check that the original data is preserved
         assert "sales" in schema_names
@@ -208,7 +208,7 @@ class TestPolarsLazyAggregatedFeatureGroup:
     def test_calculate_feature_missing_source(self, sample_lazy_dataframe: Any) -> None:
         """Test calculate_feature method with missing source feature."""
         feature_set = FeatureSet()
-        feature_set.add(Feature("sum_aggr__missing"))
+        feature_set.add(Feature("missing__sum_aggr"))
 
         with pytest.raises(ValueError, match="None of the source features"):
             PolarsLazyAggregatedFeatureGroup.calculate_feature(sample_lazy_dataframe, feature_set)
@@ -221,7 +221,7 @@ class TestPolarsLazyAggregatedFeatureGroup:
             AggregatedFeatureGroup.AGGREGATION_TYPES = {"sum": "Sum of values"}
 
             feature_set = FeatureSet()
-            feature_set.add(Feature("min_aggr__sales"))
+            feature_set.add(Feature("sales__min_aggr"))
 
             with pytest.raises(ValueError, match="Unsupported aggregation type: min"):
                 PolarsLazyAggregatedFeatureGroup.calculate_feature(sample_lazy_dataframe, feature_set)
@@ -246,10 +246,10 @@ class TestPolarsLazyAggregationIntegration:
         result = mlodaAPI.run_all(
             [
                 "sales",
-                "sum_aggr__sales",
-                "avg_aggr__price",
-                "min_aggr__discount",
-                "max_aggr__customer_rating",
+                "sales__sum_aggr",
+                "price__avg_aggr",
+                "discount__min_aggr",
+                "customer_rating__max_aggr",
             ],
             compute_frameworks={PolarsLazyDataframe},
             plugin_collector=plugin_collector,
@@ -281,8 +281,8 @@ class TestPolarsLazyAggregationIntegration:
 
         # Test that we can create aggregated features without immediate execution
         feature_set = FeatureSet()
-        feature_set.add(Feature("sum_aggr__sales"))
-        feature_set.add(Feature("avg_aggr__price"))
+        feature_set.add(Feature("sales__sum_aggr"))
+        feature_set.add(Feature("price__avg_aggr"))
 
         result = PolarsLazyAggregatedFeatureGroup.calculate_feature(lazy_frame, feature_set)
 
@@ -293,5 +293,5 @@ class TestPolarsLazyAggregationIntegration:
         # Only when we collect should we get the actual values
         collected = result.collect()
         assert len(collected) == 1000
-        assert "sum_aggr__sales" in collected.columns
-        assert "avg_aggr__price" in collected.columns
+        assert "sales__sum_aggr" in collected.columns
+        assert "price__avg_aggr" in collected.columns

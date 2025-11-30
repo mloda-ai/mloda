@@ -52,28 +52,28 @@ def test_integration_json_file() -> None:
 
     # Third feature: Chained feature (source inferred from name)
     assert isinstance(features[2], Feature)
-    assert features[2].name.name == "standard_scaled__mean_imputed__age"
-    # No explicit mloda_source - will be inferred from name as "mean_imputed__age"
+    assert features[2].name.name == "age__mean_imputed__standard_scaled"
+    # No explicit mloda_source - will be inferred from name as "age__mean_imputed"
 
     # Fourth feature: Chained feature (source inferred from name)
     assert isinstance(features[3], Feature)
-    assert features[3].name.name == "max_aggr__mean_imputed__weight"
-    # No explicit mloda_source - will be inferred from name as "mean_imputed__weight"
+    assert features[3].name.name == "weight__mean_imputed__max_aggr"
+    # No explicit mloda_source - will be inferred from name as "weight__mean_imputed"
 
     # Fifth feature: Chained feature with options (source inferred from name)
     assert isinstance(features[4], Feature)
-    assert features[4].name.name == "min_aggr__mean_imputed__weight"
-    # No explicit mloda_source - will be inferred from name as "mean_imputed__weight"
+    assert features[4].name.name == "weight__mean_imputed__min_aggr"
+    # No explicit mloda_source - will be inferred from name as "weight__mean_imputed"
     # Verify timewindow option is in group options
     assert features[4].options.group.get("timewindow") == 3
 
     # Sixth feature: Feature with column_index (column selector)
     assert isinstance(features[5], Feature)
-    assert features[5].name.name == "onehot_encoded__state~0"
+    assert features[5].name.name == "state__onehot_encoded~0"
 
     # Seventh feature: Feature with column_index (column selector)
     assert isinstance(features[6], Feature)
-    assert features[6].name.name == "onehot_encoded__state~1"
+    assert features[6].name.name == "state__onehot_encoded~1"
 
     # Eighth feature: minmaxscaledage with mloda_source "age"
     assert isinstance(features[7], Feature)
@@ -81,24 +81,24 @@ def test_integration_json_file() -> None:
     assert features[7].options.group.get("mloda_source_features") == "age"
     assert features[7].options.group.get("scaler_type") == "minmax"
 
-    # Ninth feature: max_aggr__age with mloda_sources=["minmaxscaledage"]
+    # Ninth feature: age__max_aggr with mloda_sources=["minmaxscaledage"]
     assert isinstance(features[8], Feature)
-    assert features[8].name.name == "max_aggr__age"
+    assert features[8].name.name == "age__max_aggr"
     # The mloda_sources should be a frozenset referencing feature 7
     mloda_source_8 = features[8].options.context.get("mloda_source_features")
     assert mloda_source_8 == frozenset({"minmaxscaledage"})
 
-    # Tenth feature: min_max with mloda_source_features="max_aggr__age" in options
+    # Tenth feature: min_max with mloda_source_features="age__max_aggr" in options
     assert isinstance(features[9], Feature)
     assert features[9].name.name == "min_max"
     # The mloda_source_features should be in group options
     mloda_source_9 = features[9].options.group.get("mloda_source_features")
-    assert mloda_source_9 == "max_aggr__age"
+    assert mloda_source_9 == "age__max_aggr"
     assert features[9].options.group.get("scaler_type") == "minmax"
 
-    # Eleventh feature: haversine_distance__customer_location__store_location (geo distance feature)
+    # Eleventh feature: customer_location__store_location__haversine_distance (geo distance feature)
     assert isinstance(features[10], Feature)
-    assert features[10].name.name == "haversine_distance__customer_location__store_location"
+    assert features[10].name.name == "customer_location__store_location__haversine_distance"
 
     # Twelfth feature: custom_geo_distance with mloda_sources (multiple sources)
     assert isinstance(features[11], Feature)
@@ -144,11 +144,11 @@ def test_end2end_chained_features() -> None:
             "age",
             "salary",
             {
-                "name": "mean_imputed__age",
+                "name": "age__mean_imputed",
                 "mloda_sources": ["age"],
             },
             {
-                "name": "standard_scaled__mean_imputed__age",
+                "name": "age__mean_imputed__standard_scaled",
                 "mloda_sources": ["age"],
             },
         ]
@@ -178,18 +178,18 @@ def test_end2end_chained_features() -> None:
     # Find the DataFrame with all features
     result_df = None
     for df in results:
-        if "standard_scaled__mean_imputed__age" in df.columns:
+        if "age__mean_imputed__standard_scaled" in df.columns:
             result_df = df
             break
 
     assert result_df is not None, "DataFrame with chained feature not found"
 
     # Verify the chained feature exists
-    assert "standard_scaled__mean_imputed__age" in result_df.columns
+    assert "age__mean_imputed__standard_scaled" in result_df.columns
 
     # Verify the chained feature has values (basic sanity check)
-    assert len(result_df["standard_scaled__mean_imputed__age"]) == 5
-    assert not result_df["standard_scaled__mean_imputed__age"].isna().any()
+    assert len(result_df["age__mean_imputed__standard_scaled"]) == 5
+    assert not result_df["age__mean_imputed__standard_scaled"].isna().any()
 
 
 def test_end2end_group_context_options() -> None:
@@ -241,15 +241,15 @@ def test_end2end_multi_column_access() -> None:
         [
             "state",
             {
-                "name": "onehot_encoded__state",
+                "name": "state__onehot_encoded",
                 "mloda_sources": ["state"],
             },
             {
-                "name": "onehot_encoded__state",
+                "name": "state__onehot_encoded",
                 "column_index": 0,
             },
             {
-                "name": "onehot_encoded__state",
+                "name": "state__onehot_encoded",
                 "column_index": 1,
             },
         ]
@@ -264,8 +264,8 @@ def test_end2end_multi_column_access() -> None:
     # Verify the column selector features have the tilde syntax in their names
     assert isinstance(features[2], Feature)
     assert isinstance(features[3], Feature)
-    assert features[2].name == "onehot_encoded__state~0"
-    assert features[3].name == "onehot_encoded__state~1"
+    assert features[2].name == "state__onehot_encoded~0"
+    assert features[3].name == "state__onehot_encoded~1"
 
     # Create a test data creator for state data
     class StateTestDataCreator(ATestDataCreator):
@@ -296,22 +296,22 @@ def test_end2end_multi_column_access() -> None:
     # Find the DataFrame with all features
     result_df = None
     for df in results:
-        if "onehot_encoded__state~0" in df.columns and "onehot_encoded__state~1" in df.columns:
+        if "state__onehot_encoded~0" in df.columns and "state__onehot_encoded~1" in df.columns:
             result_df = df
             break
 
     assert result_df is not None, "DataFrame with column selector features not found"
 
     # Verify the column selector features exist
-    assert "onehot_encoded__state~0" in result_df.columns
-    assert "onehot_encoded__state~1" in result_df.columns
+    assert "state__onehot_encoded~0" in result_df.columns
+    assert "state__onehot_encoded~1" in result_df.columns
 
     # Verify the column selector features have values (basic sanity check)
-    assert len(result_df["onehot_encoded__state~0"]) == 5
-    assert len(result_df["onehot_encoded__state~1"]) == 5
+    assert len(result_df["state__onehot_encoded~0"]) == 5
+    assert len(result_df["state__onehot_encoded~1"]) == 5
 
     # Verify they are different columns (one-hot encoded should have different values)
-    assert not (result_df["onehot_encoded__state~0"] == result_df["onehot_encoded__state~1"]).all()
+    assert not (result_df["state__onehot_encoded~0"] == result_df["state__onehot_encoded~1"]).all()
 
 
 def test_end2end_nested_feature_references() -> None:
@@ -512,36 +512,36 @@ def test_complete_integration_json() -> None:
     validated_patterns["feature_with_options"] = True
 
     # 3. Chained features (with __ in name, source inferred from name)
-    # Feature index 2: standard_scaled__mean_imputed__age
+    # Feature index 2: age__mean_imputed__standard_scaled
     assert isinstance(features[2], Feature), "Chained feature should be a Feature object"
-    assert features[2].name.name == "standard_scaled__mean_imputed__age", "Chained feature name incorrect"
-    # No explicit mloda_source - will be inferred from name as "mean_imputed__age"
+    assert features[2].name.name == "age__mean_imputed__standard_scaled", "Chained feature name incorrect"
+    # No explicit mloda_source - will be inferred from name as "age__mean_imputed"
     validated_patterns["chained_feature"] = True
 
     # Feature index 3: Another chained feature (aggregation on mean imputation)
     assert isinstance(features[3], Feature), "Second chained feature should be a Feature object"
-    assert features[3].name.name == "max_aggr__mean_imputed__weight", "Second chained feature name incorrect"
-    # No explicit mloda_source - will be inferred from name as "mean_imputed__weight"
+    assert features[3].name.name == "weight__mean_imputed__max_aggr", "Second chained feature name incorrect"
+    # No explicit mloda_source - will be inferred from name as "weight__mean_imputed"
 
     # 4. Group/context options separation
-    # Feature index 4: min_aggr__mean_imputed__weight with options (source inferred from name)
+    # Feature index 4: weight__mean_imputed__min_aggr with options (source inferred from name)
     assert isinstance(features[4], Feature), "Feature with group/context options should be a Feature object"
-    assert features[4].name.name == "min_aggr__mean_imputed__weight", (
-        "Feature name should be 'min_aggr__mean_imputed__weight'"
+    assert features[4].name.name == "weight__mean_imputed__min_aggr", (
+        "Feature name should be 'weight__mean_imputed__min_aggr'"
     )
-    # No explicit mloda_source - will be inferred from name as "mean_imputed__weight"
+    # No explicit mloda_source - will be inferred from name as "weight__mean_imputed"
     assert features[4].options.group.get("timewindow") == 3, "group option 'timewindow' should be 3"
     validated_patterns["group_context_separation"] = True
 
     # 5. Multi-column access (column_index with ~ syntax)
-    # Feature index 5: onehot_encoded__state~0
+    # Feature index 5: state__onehot_encoded~0
     assert isinstance(features[5], Feature), "Column selector feature should be a Feature object"
-    assert features[5].name.name == "onehot_encoded__state~0", "Column selector feature should have ~0 suffix"
+    assert features[5].name.name == "state__onehot_encoded~0", "Column selector feature should have ~0 suffix"
     validated_patterns["column_selector"] = True
 
-    # Feature index 6: onehot_encoded__state~1
+    # Feature index 6: state__onehot_encoded~1
     assert isinstance(features[6], Feature), "Second column selector feature should be a Feature object"
-    assert features[6].name.name == "onehot_encoded__state~1", "Second column selector should have ~1 suffix"
+    assert features[6].name.name == "state__onehot_encoded~1", "Second column selector should have ~1 suffix"
 
     # 6. Feature references (@syntax)
     # Feature index 7: minmaxscaledage (base feature)
@@ -549,27 +549,27 @@ def test_complete_integration_json() -> None:
     assert features[7].name.name == "minmaxscaledage", "Base feature name should be 'minmaxscaledage'"
     assert features[7].options.group.get("mloda_source_features") == "age", "Base feature mloda_source should be 'age'"
 
-    # Feature index 8: max_aggr__age with mloda_sources=["minmaxscaledage"]
+    # Feature index 8: age__max_aggr with mloda_sources=["minmaxscaledage"]
     assert isinstance(features[8], Feature), "Feature with aggregation should be a Feature object"
-    assert features[8].name.name == "max_aggr__age", "Feature name should be 'max_aggr__age'"
+    assert features[8].name.name == "age__max_aggr", "Feature name should be 'age__max_aggr'"
     mloda_source_8 = features[8].options.context.get("mloda_source_features")
     assert mloda_source_8 == frozenset({"minmaxscaledage"}), "mloda_sources should be frozenset with 'minmaxscaledage'"
     validated_patterns["feature_reference"] = True
 
-    # Feature index 9: min_max with mloda_source_features="max_aggr__age" in options
+    # Feature index 9: min_max with mloda_source_features="age__max_aggr" in options
     assert isinstance(features[9], Feature), "Feature with scaling should be a Feature object"
     assert features[9].name.name == "min_max", "Feature name should be 'min_max'"
     mloda_source_9 = features[9].options.group.get("mloda_source_features")
-    assert mloda_source_9 == "max_aggr__age", "mloda_source_features should be 'max_aggr__age'"
+    assert mloda_source_9 == "age__max_aggr", "mloda_source_features should be 'age__max_aggr'"
     assert features[9].options.group.get("scaler_type") == "minmax", "scaler_type should be 'minmax'"
 
     # 7. Geo distance feature (string-based naming pattern)
-    # Feature index 10: haversine_distance__customer_location__store_location
+    # Feature index 10: customer_location__store_location__haversine_distance
     assert isinstance(features[10], Feature), "Geo distance feature should be a Feature object"
-    assert features[10].name.name == "haversine_distance__customer_location__store_location", (
-        "Feature name should be 'haversine_distance__customer_location__store_location'"
+    assert features[10].name.name == "customer_location__store_location__haversine_distance", (
+        "Feature name should be 'customer_location__store_location__haversine_distance'"
     )
-    # The string-based geo distance feature uses the pattern: {distance_type}_distance__{point1}__{point2}
+    # The string-based geo distance feature uses the pattern: {point1}__{point2}__{distance_type}_distance
     # No mloda_sources or options needed - it's all encoded in the feature name
     validated_patterns["multiple_sources"] = True
 

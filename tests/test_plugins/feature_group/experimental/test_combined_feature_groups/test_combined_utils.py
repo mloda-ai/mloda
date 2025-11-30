@@ -16,9 +16,9 @@ from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCr
 
 # List of features to test in the combined feature chain
 COMBINED_FEATURES: List[Feature | str] = [
-    "mean_imputed__price",  # Step 1: Mean imputation
-    "sum_7_day_window__mean_imputed__price",  # Step 2: 7-day window sum
-    "max_aggr__sum_7_day_window__mean_imputed__price",  # Step 3: Max aggregation
+    "price__mean_imputed",  # Step 1: Mean imputation
+    "price__mean_imputed__sum_7_day_window",  # Step 2: 7-day window sum
+    "price__mean_imputed__sum_7_day_window__max_aggr",  # Step 3: Max aggregation
 ]
 
 
@@ -67,7 +67,7 @@ def validate_combined_features(result: List[Any]) -> None:
             dfs.append(res)
 
     # Find the DataFrame with the final feature
-    final_feature = "max_aggr__sum_7_day_window__mean_imputed__price"
+    final_feature = "price__mean_imputed__sum_7_day_window__max_aggr"
     final_df = None
 
     for df in dfs:
@@ -91,17 +91,17 @@ def validate_combined_features(result: List[Any]) -> None:
 
     # Verify the intermediate features have expected properties
 
-    # Find the DataFrame with mean_imputed__price
+    # Find the DataFrame with price__mean_imputed
     imputed_df = None
     for df in dfs:
-        if "mean_imputed__price" in df.columns:
+        if "price__mean_imputed" in df.columns:
             imputed_df = df
             break
 
-    assert imputed_df is not None, "DataFrame with mean_imputed__price not found"
+    assert imputed_df is not None, "DataFrame with price__mean_imputed not found"
 
     # Verify mean imputation worked (no missing values)
-    assert not imputed_df["mean_imputed__price"].isna().any(), "mean_imputed__price should not have missing values"
+    assert not imputed_df["price__mean_imputed"].isna().any(), "price__mean_imputed should not have missing values"
 
     # Calculate the expected mean value for imputation
     # Original price data: [100.0, None, 90.0, 95.0, None, 105.0, 110.0, None, 100.0, 95.0]
@@ -110,33 +110,33 @@ def validate_combined_features(result: List[Any]) -> None:
 
     # Verify the imputed values are correct
     # The original missing values at indices 1, 4, and 7 should be replaced with the mean
-    assert abs(imputed_df["mean_imputed__price"].iloc[1] - expected_mean) < 0.1, (
+    assert abs(imputed_df["price__mean_imputed"].iloc[1] - expected_mean) < 0.1, (
         f"Expected mean value at index 1 to be {expected_mean}"
     )
-    assert abs(imputed_df["mean_imputed__price"].iloc[4] - expected_mean) < 0.1, (
+    assert abs(imputed_df["price__mean_imputed"].iloc[4] - expected_mean) < 0.1, (
         f"Expected mean value at index 4 to be {expected_mean}"
     )
-    assert abs(imputed_df["mean_imputed__price"].iloc[7] - expected_mean) < 0.1, (
+    assert abs(imputed_df["price__mean_imputed"].iloc[7] - expected_mean) < 0.1, (
         f"Expected mean value at index 7 to be {expected_mean}"
     )
 
     # Verify the non-missing values are preserved
-    assert abs(imputed_df["mean_imputed__price"].iloc[0] - 100.0) < 0.1, "Original value at index 0 should be preserved"
-    assert abs(imputed_df["mean_imputed__price"].iloc[2] - 90.0) < 0.1, "Original value at index 2 should be preserved"
-    assert abs(imputed_df["mean_imputed__price"].iloc[3] - 95.0) < 0.1, "Original value at index 3 should be preserved"
-    assert abs(imputed_df["mean_imputed__price"].iloc[5] - 105.0) < 0.1, "Original value at index 5 should be preserved"
-    assert abs(imputed_df["mean_imputed__price"].iloc[6] - 110.0) < 0.1, "Original value at index 6 should be preserved"
-    assert abs(imputed_df["mean_imputed__price"].iloc[8] - 100.0) < 0.1, "Original value at index 8 should be preserved"
-    assert abs(imputed_df["mean_imputed__price"].iloc[9] - 95.0) < 0.1, "Original value at index 9 should be preserved"
+    assert abs(imputed_df["price__mean_imputed"].iloc[0] - 100.0) < 0.1, "Original value at index 0 should be preserved"
+    assert abs(imputed_df["price__mean_imputed"].iloc[2] - 90.0) < 0.1, "Original value at index 2 should be preserved"
+    assert abs(imputed_df["price__mean_imputed"].iloc[3] - 95.0) < 0.1, "Original value at index 3 should be preserved"
+    assert abs(imputed_df["price__mean_imputed"].iloc[5] - 105.0) < 0.1, "Original value at index 5 should be preserved"
+    assert abs(imputed_df["price__mean_imputed"].iloc[6] - 110.0) < 0.1, "Original value at index 6 should be preserved"
+    assert abs(imputed_df["price__mean_imputed"].iloc[8] - 100.0) < 0.1, "Original value at index 8 should be preserved"
+    assert abs(imputed_df["price__mean_imputed"].iloc[9] - 95.0) < 0.1, "Original value at index 9 should be preserved"
 
     # Find the DataFrame with the time window feature
     window_df = None
     for df in dfs:
-        if "sum_7_day_window__mean_imputed__price" in df.columns:
+        if "price__mean_imputed__sum_7_day_window" in df.columns:
             window_df = df
             break
 
-    assert window_df is not None, "DataFrame with sum_7_day_window__mean_imputed__price not found"
+    assert window_df is not None, "DataFrame with price__mean_imputed__sum_7_day_window not found"
 
     # Calculate expected 7-day window sums
     # After imputation: [100.0, 99.29, 90.0, 95.0, 99.29, 105.0, 110.0, 99.29, 100.0, 95.0]
@@ -155,7 +155,7 @@ def validate_combined_features(result: List[Any]) -> None:
 
     # Verify the window sums are correct (with a small tolerance for floating point differences)
     for i, expected_sum in enumerate(expected_window_sums):
-        assert abs(window_df["sum_7_day_window__mean_imputed__price"].iloc[i] - expected_sum) < 0.5, (
+        assert abs(window_df["price__mean_imputed__sum_7_day_window"].iloc[i] - expected_sum) < 0.5, (
             f"Expected window sum at index {i} to be {expected_sum}"
         )
 

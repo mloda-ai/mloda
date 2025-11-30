@@ -101,7 +101,7 @@ class TestMissingValueFeatureGroupIntegration:
 
         # Create a feature with constant imputation
         f1 = Feature(
-            "constant_imputed__category",
+            "category__constant_imputed",
             Options(
                 {
                     MissingValueFeatureGroup.IMPUTATION_METHOD: "constant",
@@ -119,15 +119,15 @@ class TestMissingValueFeatureGroupIntegration:
         # Find the DataFrame with the imputed features
         imputed_df = None
         for df in results:
-            if "constant_imputed__category" in df.columns:
+            if "category__constant_imputed" in df.columns:
                 imputed_df = df
                 break
 
         assert imputed_df is not None, "DataFrame with imputed features not found"
 
         # Verify that missing values are imputed with the constant value
-        assert imputed_df["constant_imputed__category"].iloc[1] == "Unknown"
-        assert imputed_df["constant_imputed__category"].iloc[4] == "Unknown"
+        assert imputed_df["category__constant_imputed"].iloc[1] == "Unknown"
+        assert imputed_df["category__constant_imputed"].iloc[4] == "Unknown"
 
         # test with mloda parsing the features
         results2 = mlodaAPI.run_all([f1], compute_frameworks={PandasDataframe}, plugin_collector=plugin_collector)

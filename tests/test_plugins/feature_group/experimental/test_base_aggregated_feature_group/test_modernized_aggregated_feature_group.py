@@ -42,7 +42,7 @@ class TestModernizedAggregatedFeatureGroup:
     def test_string_based_feature_still_works(self) -> None:
         """Test that string-based features still work (backward compatibility)."""
 
-        feature = Feature("sum_aggr__sales")
+        feature = Feature("sales__sum_aggr")
 
         # Test that match_feature_group_criteria works
         assert AggregatedFeatureGroup.match_feature_group_criteria(feature.name, feature.options)

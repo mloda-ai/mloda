@@ -211,16 +211,16 @@ class TestPandasNodeCentralityFeatureGroup:
         """Test the calculate_feature method."""
         # Create a feature set
         feature_set = FeatureSet()
-        feature_set.add(Feature("degree_centrality__source"))
+        feature_set.add(Feature("source__degree_centrality"))
 
         # Calculate the feature
         result = PandasNodeCentralityFeatureGroup.calculate_feature(sample_data, feature_set)
 
         # Check that the result has the expected column
-        assert "degree_centrality__source" in result.columns
+        assert "source__degree_centrality" in result.columns
 
         # Check that the centrality values are non-negative
-        assert (result["degree_centrality__source"] >= 0).all()
+        assert (result["source__degree_centrality"] >= 0).all()
         # Note: Centrality values may exceed 1 depending on the normalization method
 
     def test_calculate_feature_multiple(self, sample_data: pd.DataFrame) -> None:
@@ -228,9 +228,9 @@ class TestPandasNodeCentralityFeatureGroup:
         # Create a feature set
         feature_set = FeatureSet()
         features = [
-            Feature("degree_centrality__source"),
-            Feature("betweenness_centrality__source"),
-            Feature("closeness_centrality__source"),
+            Feature("source__degree_centrality"),
+            Feature("source__betweenness_centrality"),
+            Feature("source__closeness_centrality"),
         ]
         for feature in features:
             feature_set.add(feature)
@@ -239,11 +239,11 @@ class TestPandasNodeCentralityFeatureGroup:
         result = PandasNodeCentralityFeatureGroup.calculate_feature(sample_data, feature_set)
 
         # Check that the result has the expected columns
-        assert "degree_centrality__source" in result.columns
-        assert "betweenness_centrality__source" in result.columns
-        assert "closeness_centrality__source" in result.columns
+        assert "source__degree_centrality" in result.columns
+        assert "source__betweenness_centrality" in result.columns
+        assert "source__closeness_centrality" in result.columns
 
         # Check that the centrality values are non-negative
-        for column in ["degree_centrality__source", "betweenness_centrality__source", "closeness_centrality__source"]:
+        for column in ["source__degree_centrality", "source__betweenness_centrality", "source__closeness_centrality"]:
             assert (result[column] >= 0).all()
             # Note: Centrality values may exceed 1 depending on the normalization method

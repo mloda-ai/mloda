@@ -7,23 +7,23 @@
     }
   },
   {
-    "name": "standard_scaled__mean_imputed__age"
+    "name": "age__mean_imputed__standard_scaled"
   },
   {
-    "name": "max_aggr__mean_imputed__weight"
+    "name": "weight__mean_imputed__max_aggr"
   },
   {
-    "name": "min_aggr__mean_imputed__weight",
+    "name": "weight__mean_imputed__min_aggr",
     "options": {
       "timewindow": 3
     }
   },
   {
-    "name": "onehot_encoded__state",
+    "name": "state__onehot_encoded",
     "column_index": 0
   },
   {
-    "name": "onehot_encoded__state",
+    "name": "state__onehot_encoded",
     "column_index": 1
   },
   {
@@ -34,18 +34,18 @@
     }
   },
   {
-    "name": "max_aggr__age",
+    "name": "age__max_aggr",
     "mloda_sources": ["minmaxscaledage"]
   },
   {
     "name": "min_max",
     "options": {
       "scaler_type": "minmax",
-      "mloda_source_features": "max_aggr__age"
+      "mloda_source_features": "age__max_aggr"
     }
   },
   {
-    "name": "haversine_distance__customer_location__store_location"
+    "name": "customer_location__store_location__haversine_distance"
   },
   {
     "name": "custom_geo_distance",
@@ -74,9 +74,9 @@
     }
   },
   {
-    "name": "onehot_encoded__product"
+    "name": "product__onehot_encoded"
   },
   {
-    "name": "sum_aggr__onehot_encoded__product"
+    "name": "product__onehot_encoded__sum_aggr"
   }
 ]

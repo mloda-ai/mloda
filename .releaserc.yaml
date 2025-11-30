@@ -8,6 +8,7 @@ plugins:
         preset: "conventionalcommits",
         releaseRules:
           [
+            { type: "minor", release: "minor" },
             { type: "feat", release: "patch" },
             { type: "impr", release: "patch" },
             { type: "refactor", release: "patch" },
@@ -30,6 +31,7 @@ plugins:
           {
             types:
               [
+                { type: "minor", section: "🎯 Minor Release" },
                 { type: "feat", section: "✨ Features" },
                 { type: "impr", section: "🚀 Improvements" },
                 { type: "refactor", section: "♻️ Improvements" },

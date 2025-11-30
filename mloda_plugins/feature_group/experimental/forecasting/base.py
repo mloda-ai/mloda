@@ -30,14 +30,14 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
 
     ### 1. String-Based Creation
 
-    Features follow the naming pattern: `{algorithm}_forecast_{horizon}{time_unit}__{mloda_source_features}`
+    Features follow the naming pattern: `{mloda_source_features}__{algorithm}_forecast_{horizon}{time_unit}`
 
     Examples:
     ```python
     features = [
-        "linear_forecast_7day__sales",      # 7-day forecast of sales using linear regression
-        "randomforest_forecast_24hr__energy_consumption",  # 24-hour forecast using random forest
-        "svr_forecast_3month__demand"       # 3-month forecast using support vector regression
+        "sales__linear_forecast_7day",      # 7-day forecast of sales using linear regression
+        "energy_consumption__randomforest_forecast_24hr",  # 24-hour forecast using random forest
+        "demand__svr_forecast_3month"       # 3-month forecast using support vector regression
     ]
     ```
 
@@ -127,7 +127,7 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
     }
 
     # Define the prefix pattern for this feature group
-    PREFIX_PATTERN = r"^([\w]+)_forecast_(\d+)([\w]+)__"
+    PREFIX_PATTERN = r".*__([\w]+)_forecast_(\d+)([\w]+)$"
     PATTERN = "__"
 
     # Property mapping for configuration-based features with group/context separation
@@ -219,9 +219,9 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
         return {source_feature_obj, time_filter_feature}
 
     @classmethod
-    def parse_forecast_prefix(cls, feature_name: str) -> tuple[str, int, str]:
+    def parse_forecast_suffix(cls, feature_name: str) -> tuple[str, int, str]:
         """
-        Parse the forecast prefix into its components.
+        Parse the forecast suffix into its components.
 
         Args:
             feature_name: The feature name to parse
@@ -230,23 +230,23 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
             A tuple containing (algorithm, horizon, time_unit)
 
         Raises:
-            ValueError: If the prefix doesn't match the expected pattern
+            ValueError: If the suffix doesn't match the expected pattern
         """
-        # Extract the prefix part (everything before the double underscore)
-        prefix_end = feature_name.find("__")
-        if prefix_end == -1:
+        # Extract the suffix part (everything after the double underscore)
+        suffix_start = feature_name.find("__")
+        if suffix_start == -1:
             raise ValueError(
                 f"Invalid forecast feature name format: {feature_name}. Missing double underscore separator."
             )
 
-        prefix = feature_name[:prefix_end]
+        suffix = feature_name[suffix_start + 2 :]
 
-        # Parse the prefix components
-        parts = prefix.split("_")
+        # Parse the suffix components
+        parts = suffix.split("_")
         if len(parts) < 3 or parts[1] != "forecast":
             raise ValueError(
                 f"Invalid forecast feature name format: {feature_name}. "
-                f"Expected format: {{algorithm}}_forecast_{{horizon}}{{time_unit}}__{{mloda_source_features}}"
+                f"Expected format: {{mloda_source_features}}__{{algorithm}}_forecast_{{horizon}}{{time_unit}}"
             )
 
         algorithm = parts[0]
@@ -309,7 +309,7 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
             if cls.PATTERN in feature_name_str:
                 try:
                     # Use existing validation logic that validates algorithm, horizon, and time_unit
-                    cls.parse_forecast_prefix(feature_name_str)
+                    cls.parse_forecast_suffix(feature_name_str)
                 except ValueError:
                     # If validation fails, this feature doesn't match
                     return False
@@ -429,8 +429,9 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
         feature_name_str = feature.name.name if hasattr(feature.name, "name") else str(feature.name)
 
         if cls.PATTERN in feature_name_str:
-            algorithm, horizon, time_unit = cls.parse_forecast_prefix(feature_name_str)
-            source_feature_name = FeatureChainParser.extract_source_feature(feature_name_str, cls.PREFIX_PATTERN)
+            algorithm, horizon, time_unit = cls.parse_forecast_suffix(feature_name_str)
+            # Extract source feature (everything before the __)
+            source_feature_name = feature_name_str.split(cls.PATTERN)[0]
             return algorithm, horizon, time_unit, source_feature_name
 
         # Fall back to configuration-based approach

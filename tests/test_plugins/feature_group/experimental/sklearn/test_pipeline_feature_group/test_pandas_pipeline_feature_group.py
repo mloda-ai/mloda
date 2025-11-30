@@ -193,17 +193,17 @@ class TestPandasSklearnPipelineFeatureGroup:
 
         # Create feature set with artifact saving enabled
         features = FeatureSet()
-        features.add(Feature("sklearn_pipeline_scaling__feature1"))
+        features.add(Feature("feature1__sklearn_pipeline_scaling"))
 
         # Set up artifact lifecycle flags to trigger saving
-        features.artifact_to_save = "sklearn_pipeline_scaling__feature1"  # This triggers artifact saving
+        features.artifact_to_save = "feature1__sklearn_pipeline_scaling"  # This triggers artifact saving
         features.artifact_to_load = None  # No existing artifact to load
 
         # Calculate feature
         result_df = PandasSklearnPipelineFeatureGroup.calculate_feature(df, features)
 
         # Verify result
-        assert "sklearn_pipeline_scaling__feature1" in result_df.columns
+        assert "feature1__sklearn_pipeline_scaling" in result_df.columns
 
         # Verify that save_artifact was set (this is what triggers the actual saving)
         assert hasattr(features, "save_artifact")
@@ -211,7 +211,7 @@ class TestPandasSklearnPipelineFeatureGroup:
 
         # Verify the artifact data contains expected keys (now in multiple artifact format)
         assert isinstance(features.save_artifact, dict)
-        artifact_key = "sklearn_pipeline_scaling__feature1"
+        artifact_key = "feature1__sklearn_pipeline_scaling"
         assert artifact_key in features.save_artifact
 
         artifact_data = features.save_artifact[artifact_key]
@@ -225,7 +225,7 @@ class TestPandasSklearnPipelineFeatureGroup:
         df = pd.DataFrame({"feature1": [1.0, 2.0, 3.0, 4.0]})
 
         features = FeatureSet()
-        features.add(Feature("sklearn_pipeline_scaling__nonexistent"))
+        features.add(Feature("nonexistent__sklearn_pipeline_scaling"))
 
         with pytest.raises(ValueError, match="Source feature 'nonexistent' not found in data"):
             PandasSklearnPipelineFeatureGroup.calculate_feature(df, features)

@@ -114,12 +114,12 @@ class AbstractFeatureGroup:
 ```python
 # Producer creates multi-column output
 result = encoder.transform(data)  # 2D array
-named_cols = cls.apply_naming_convention(result, "onehot_encoded__state")
-# Returns: {"onehot_encoded__state~0": [data], "~1": [data], "~2": [data]}
+named_cols = cls.apply_naming_convention(result, "state__onehot_encoded")
+# Returns: {"state__onehot_encoded~0": [data], "~1": [data], "~2": [data]}
 
 # Consumer discovers columns automatically
-cols = cls.resolve_multi_column_feature("onehot_encoded__state", data.columns)
-# Returns: ["onehot_encoded__state~0", "~1", "~2"]
+cols = cls.resolve_multi_column_feature("state__onehot_encoded", data.columns)
+# Returns: ["state__onehot_encoded~0", "~1", "~2"]
 
 # Process all discovered columns
 for col in cols:
@@ -130,12 +130,12 @@ for col in cols:
 
 ### 1. Aggregated Pattern
 
-**Convention**: `{aggregation_type}_aggr__{source_feature}`
+**Convention**: `{source_feature}__{aggregation_type}_aggr`
 
 ```mermaid
 graph LR
-    sales[sales] --> |sum| sum_aggr[sum_aggr__sales]
-    price[price] --> |avg| avg_aggr[avg_aggr__price]
+    sales[sales] --> |sum| sum_aggr[sales__sum_aggr]
+    price[price] --> |avg| avg_aggr[price__avg_aggr]
 ```
 
 ```python
@@ -152,12 +152,12 @@ PROPERTY_MAPPING = {
 
 ### 2. Time Window Pattern
 
-**Convention**: `{function}_{size}_{unit}_window__{source_feature}`
+**Convention**: `{source_feature}__{function}_{size}_{unit}_window`
 
 ```mermaid
 graph LR
-    temp[temperature] --> |7-day avg| avg_7[avg_7_day_window__temperature]
-    humid[humidity] --> |5-day max| max_5[max_5_day_window__humidity]
+    temp[temperature] --> |7-day avg| avg_7[temperature__avg_7_day_window]
+    humid[humidity] --> |5-day max| max_5[humidity__max_5_day_window]
 ```
 
 ### 3. Feature Chaining
@@ -166,10 +166,10 @@ Complex features through composition:
 
 ```mermaid
 graph LR
-    price --> |impute| imp[mean_imputed__price]
-    imp --> |window| win[sum_7_day_window__mean_imputed__price]
-    win --> |aggregate| final[max_aggr__sum_7_day_window__mean_imputed__price]
-    
+    price --> |impute| imp[price__mean_imputed]
+    imp --> |window| win[price__mean_imputed__sum_7_day_window]
+    win --> |aggregate| final[price__mean_imputed__sum_7_day_window__max_aggr]
+
     style price fill:#ffd,stroke:#333
     style final fill:#dfd,stroke:#333,stroke-width:2px
 ```
@@ -180,7 +180,7 @@ graph LR
 
 ```python
 # String-based (Legacy)
-feature = Feature("sum_aggr__sales")
+feature = Feature("sales__sum_aggr")
 
 # Configuration-based (Modern)
 feature = Feature(

@@ -21,11 +21,11 @@ from mloda_core.abstract_plugins.components.options import Options
 @classmethod
 def match_feature_group_criteria(cls, feature_name, options, data_access_collection=None):
     return FeatureChainParser.match_configuration_feature_chain_parser(
-        feature_name, 
-        options, 
+        feature_name,
+        options,
         property_mapping=cls.PROPERTY_MAPPING,  # Configuration-based matching
         pattern=cls.PATTERN,                    # String-based matching
-        prefix_patterns=cls.PREFIX_PATTERN
+        suffix_patterns=cls.SUFFIX_PATTERN
     )
 ```
 
@@ -113,9 +113,9 @@ For feature groups not yet modernized, the default matching criteria still apply
 
 ``` python
 # String-based matching
-feature = Feature("sum_aggr__sales")  # Matches via pattern
+feature = Feature("sales__sum_aggr")  # Matches via pattern
 
-# Configuration-based matching  
+# Configuration-based matching
 feature = Feature(
     "placeholder",
     Options(context={

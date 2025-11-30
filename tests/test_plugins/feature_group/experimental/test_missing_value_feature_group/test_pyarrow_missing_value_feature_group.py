@@ -36,7 +36,7 @@ def sample_table_with_missing() -> pa.Table:
 def feature_set_mean() -> FeatureSet:
     """Create a feature set with a mean imputation feature."""
     feature_set = FeatureSet()
-    feature_set.add(Feature("mean_imputed__income"))
+    feature_set.add(Feature("income__mean_imputed"))
     return feature_set
 
 
@@ -44,10 +44,10 @@ def feature_set_mean() -> FeatureSet:
 def feature_set_multiple() -> FeatureSet:
     """Create a feature set with multiple imputation features."""
     feature_set = FeatureSet()
-    feature_set.add(Feature("mean_imputed__income"))
-    feature_set.add(Feature("median_imputed__age"))
-    feature_set.add(Feature("mode_imputed__category"))
-    feature_set.add(Feature("ffill_imputed__temperature"))
+    feature_set.add(Feature("income__mean_imputed"))
+    feature_set.add(Feature("age__median_imputed"))
+    feature_set.add(Feature("category__mode_imputed"))
+    feature_set.add(Feature("temperature__ffill_imputed"))
     return feature_set
 
 
@@ -55,7 +55,7 @@ def feature_set_multiple() -> FeatureSet:
 def feature_set_constant() -> FeatureSet:
     """Create a feature set with a constant imputation feature and options."""
     feature_set = FeatureSet()
-    feature_set.add(Feature("constant_imputed__category"))
+    feature_set.add(Feature("category__constant_imputed"))
 
     for feature in feature_set.features:
         feature.options = Options({"constant_value": "Unknown"})
@@ -67,7 +67,7 @@ def feature_set_constant() -> FeatureSet:
 def feature_set_grouped() -> FeatureSet:
     """Create a feature set with a grouped imputation feature and options."""
     feature_set = FeatureSet()
-    feature_set.add(Feature("mean_imputed__income"))
+    feature_set.add(Feature("income__mean_imputed"))
 
     for feature in feature_set.features:
         feature.options = Options({"group_by_features": ["group"]})
@@ -180,10 +180,10 @@ class TestPyArrowMissingValueFeatureGroup:
         result = PyArrowMissingValueFeatureGroup.calculate_feature(sample_table_with_missing, feature_set_mean)
 
         # Check that the result contains the original data plus the imputed feature
-        assert "mean_imputed__income" in result.schema.names
+        assert "income__mean_imputed" in result.schema.names
         # Check that missing values are imputed
-        assert not pc.is_null(result["mean_imputed__income"][1]).as_py()
-        assert not pc.is_null(result["mean_imputed__income"][3]).as_py()
+        assert not pc.is_null(result["income__mean_imputed"][1]).as_py()
+        assert not pc.is_null(result["income__mean_imputed"][3]).as_py()
 
         # Check that the original data is preserved
         assert "income" in result.schema.names
@@ -199,21 +199,21 @@ class TestPyArrowMissingValueFeatureGroup:
         result = PyArrowMissingValueFeatureGroup.calculate_feature(sample_table_with_missing, feature_set_multiple)
 
         # Check that the result contains all imputed features
-        assert "mean_imputed__income" in result.schema.names
-        assert not pc.is_null(result["mean_imputed__income"][1]).as_py()
-        assert not pc.is_null(result["mean_imputed__income"][3]).as_py()
+        assert "income__mean_imputed" in result.schema.names
+        assert not pc.is_null(result["income__mean_imputed"][1]).as_py()
+        assert not pc.is_null(result["income__mean_imputed"][3]).as_py()
 
-        assert "median_imputed__age" in result.schema.names
-        assert not pc.is_null(result["median_imputed__age"][2]).as_py()
-        assert not pc.is_null(result["median_imputed__age"][4]).as_py()
+        assert "age__median_imputed" in result.schema.names
+        assert not pc.is_null(result["age__median_imputed"][2]).as_py()
+        assert not pc.is_null(result["age__median_imputed"][4]).as_py()
 
-        assert "mode_imputed__category" in result.schema.names
-        assert not pc.is_null(result["mode_imputed__category"][1]).as_py()
-        assert not pc.is_null(result["mode_imputed__category"][4]).as_py()
+        assert "category__mode_imputed" in result.schema.names
+        assert not pc.is_null(result["category__mode_imputed"][1]).as_py()
+        assert not pc.is_null(result["category__mode_imputed"][4]).as_py()
 
-        assert "ffill_imputed__temperature" in result.schema.names
-        assert not pc.is_null(result["ffill_imputed__temperature"][2]).as_py()
-        assert not pc.is_null(result["ffill_imputed__temperature"][3]).as_py()
+        assert "temperature__ffill_imputed" in result.schema.names
+        assert not pc.is_null(result["temperature__ffill_imputed"][2]).as_py()
+        assert not pc.is_null(result["temperature__ffill_imputed"][3]).as_py()
 
         # Check that the original data is preserved
         assert "income" in result.schema.names
@@ -229,9 +229,9 @@ class TestPyArrowMissingValueFeatureGroup:
         result = PyArrowMissingValueFeatureGroup.calculate_feature(sample_table_with_missing, feature_set_constant)
 
         # Check that the result contains the imputed feature
-        assert "constant_imputed__category" in result.schema.names
-        assert result["constant_imputed__category"][1].as_py() == "Unknown"
-        assert result["constant_imputed__category"][4].as_py() == "Unknown"
+        assert "category__constant_imputed" in result.schema.names
+        assert result["category__constant_imputed"][1].as_py() == "Unknown"
+        assert result["category__constant_imputed"][4].as_py() == "Unknown"
 
         # Check that the original data is preserved
         assert "income" in result.schema.names
@@ -247,16 +247,16 @@ class TestPyArrowMissingValueFeatureGroup:
         result = PyArrowMissingValueFeatureGroup.calculate_feature(sample_table_with_missing, feature_set_grouped)
 
         # Check that the result contains the imputed feature
-        assert "mean_imputed__income" in result.schema.names
+        assert "income__mean_imputed" in result.schema.names
 
         # Check that original values are preserved
-        assert result["mean_imputed__income"][0].as_py() == 50000  # Original value in group X
-        assert result["mean_imputed__income"][2].as_py() == 75000  # Original value in group X
-        assert result["mean_imputed__income"][4].as_py() == 60000  # Original value in group X
+        assert result["income__mean_imputed"][0].as_py() == 50000  # Original value in group X
+        assert result["income__mean_imputed"][2].as_py() == 75000  # Original value in group X
+        assert result["income__mean_imputed"][4].as_py() == 60000  # Original value in group X
 
         # Check that missing values are imputed
-        assert not pc.is_null(result["mean_imputed__income"][1]).as_py()  # Should be imputed
-        assert not pc.is_null(result["mean_imputed__income"][3]).as_py()  # Should be imputed
+        assert not pc.is_null(result["income__mean_imputed"][1]).as_py()  # Should be imputed
+        assert not pc.is_null(result["income__mean_imputed"][3]).as_py()  # Should be imputed
 
         # Check that the original data is preserved
         assert "income" in result.schema.names
@@ -268,7 +268,7 @@ class TestPyArrowMissingValueFeatureGroup:
     def test_calculate_feature_missing_source(self, sample_table_with_missing: pa.Table) -> None:
         """Test calculate_feature method with missing source feature."""
         feature_set = FeatureSet()
-        feature_set.add(Feature("mean_imputed__missing"))
+        feature_set.add(Feature("missing__mean_imputed"))
 
         with pytest.raises(ValueError, match="Source features not found in data"):
             PyArrowMissingValueFeatureGroup.calculate_feature(sample_table_with_missing, feature_set)
@@ -276,7 +276,7 @@ class TestPyArrowMissingValueFeatureGroup:
     def test_calculate_feature_constant_without_value(self, sample_table_with_missing: pa.Table) -> None:
         """Test calculate_feature method with constant imputation but no constant value."""
         feature_set = FeatureSet()
-        feature_set.add(Feature("constant_imputed__category"))
+        feature_set.add(Feature("category__constant_imputed"))
 
         with pytest.raises(ValueError, match="Constant value must be provided for constant imputation method"):
             PyArrowMissingValueFeatureGroup.calculate_feature(sample_table_with_missing, feature_set)
@@ -300,11 +300,11 @@ class TestMissingValuePyArrowIntegration:
             "category",
             "temperature",
             "group",
-            "mean_imputed__income",  # Mean imputation
-            "median_imputed__age",  # Median imputation
-            "mode_imputed__category",  # Mode imputation
-            "constant_imputed__category",  # Constant imputation
-            "ffill_imputed__temperature",  # Forward fill imputation
+            "income__mean_imputed",  # Mean imputation
+            "age__median_imputed",  # Median imputation
+            "category__mode_imputed",  # Mode imputation
+            "category__constant_imputed",  # Constant imputation
+            "temperature__ffill_imputed",  # Forward fill imputation
         ]
 
         feature_list: List[str | Feature] = [Feature(name=feature, options=options) for feature in feature_str]

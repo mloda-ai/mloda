@@ -40,15 +40,15 @@ class AggregatedFeatureGroup(AbstractFeatureGroup):
 
     ### 1. String-Based Creation
 
-    Features follow the naming pattern: `{aggregation_type}_aggr__{mloda_source_features}`
+    Features follow the naming pattern: `{mloda_source_features}__{aggregation_type}_aggr`
 
     Examples:
     ```python
     features = [
-        "sum_aggr__sales",           # Sum of sales values
-        "avg_aggr__temperature",     # Average temperature
-        "max_aggr__price",           # Maximum price
-        "count_aggr__transactions"   # Count of transactions
+        "sales__sum_aggr",           # Sum of sales values
+        "temperature__avg_aggr",     # Average temperature
+        "price__max_aggr",           # Maximum price
+        "transactions__count_aggr"   # Count of transactions
     ]
     ```
 
@@ -96,8 +96,8 @@ class AggregatedFeatureGroup(AbstractFeatureGroup):
         "median": "Median value",
     }
 
-    PATTERN = "_aggr__"
-    PREFIX_PATTERN = r"^([\w]+)_aggr__"
+    PATTERN = "__"
+    PREFIX_PATTERN = r".*__([\w]+)_aggr$"
 
     # Property mapping for configuration-based feature creation
     PROPERTY_MAPPING = {

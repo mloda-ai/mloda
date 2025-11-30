@@ -46,11 +46,11 @@ class TestComplexEncodingChaining:
         """
         Test multiple complex feature chains in a single test, demonstrating the power of mloda's feature chaining.
 
-        This test creates and validates multiple complex feature chains:
-        1. sum_aggr__sales__standard_scaled__onehot_encoded__category~0: OneHot -> Scale -> Aggregate
-        2. mean_aggr__revenue__label_encoded__region: Label encode -> Aggregate
-        3. count_aggr__customer_id__ordinal_encoded__category: Ordinal encode -> Aggregate
-        4. max_aggr__sales__robust_scaled__label_encoded__category: Label -> Scale -> Aggregate
+        This test creates and validates multiple complex feature chains (L→R syntax):
+        1. category__onehot_encoded~0__standard_scaled__sum_aggr: OneHot -> Scale -> Aggregate
+        2. region__label_encoded__mean_aggr: Label encode -> Aggregate
+        3. category__ordinal_encoded__count_aggr: Ordinal encode -> Aggregate
+        4. category__label_encoded__robust_scaled__max_aggr: Label -> Scale -> Aggregate
 
         This demonstrates:
         - Multiple encoding types (OneHot, Label, Ordinal)
@@ -80,16 +80,16 @@ class TestComplexEncodingChaining:
         # Create multiple complex chained features with unique artifact storage path
         artifact_options = Options({"artifact_storage_path": str(tmp_path)})
         complex_features: Features | List[Feature | str] = [
-            # OneHot encoding -> Standard scaling -> Sum aggregation
-            Feature("sum_aggr__standard_scaled__onehot_encoded__category~1", artifact_options),
-            # Label encoding -> Mean aggregation (no scaling)
-            Feature("mean_aggr__label_encoded__region", artifact_options),
-            # Ordinal encoding -> Count aggregation (no scaling)
-            Feature("count_aggr__ordinal_encoded__category", artifact_options),
-            # Label encoding -> Robust scaling -> Max aggregation
-            Feature("max_aggr__robust_scaled__label_encoded__category", artifact_options),
-            # OneHot encoding -> Min-Max scaling -> Min aggregation (using different OneHot column)
-            Feature("min_aggr__minmax_scaled__onehot_encoded__category~0", artifact_options),
+            # OneHot encoding -> Standard scaling -> Sum aggregation (L→R)
+            Feature("category__onehot_encoded~1__standard_scaled__sum_aggr", artifact_options),
+            # Label encoding -> Mean aggregation (no scaling) (L→R)
+            Feature("region__label_encoded__mean_aggr", artifact_options),
+            # Ordinal encoding -> Count aggregation (no scaling) (L→R)
+            Feature("category__ordinal_encoded__count_aggr", artifact_options),
+            # Label encoding -> Robust scaling -> Max aggregation (L→R)
+            Feature("category__label_encoded__robust_scaled__max_aggr", artifact_options),
+            # OneHot encoding -> Min-Max scaling -> Min aggregation (using different OneHot column) (L→R)
+            Feature("category__onehot_encoded~0__minmax_scaled__min_aggr", artifact_options),
         ]
 
         # Phase 1: Train and save artifacts for all complex features
@@ -107,11 +107,11 @@ class TestComplexEncodingChaining:
         df1 = results1[0]
 
         expected_columns = [
-            "sum_aggr__standard_scaled__onehot_encoded__category~1",
-            "mean_aggr__label_encoded__region",
-            "count_aggr__ordinal_encoded__category",
-            "max_aggr__robust_scaled__label_encoded__category",
-            "min_aggr__minmax_scaled__onehot_encoded__category~0",
+            "category__onehot_encoded~1__standard_scaled__sum_aggr",
+            "region__label_encoded__mean_aggr",
+            "category__ordinal_encoded__count_aggr",
+            "category__label_encoded__robust_scaled__max_aggr",
+            "category__onehot_encoded~0__minmax_scaled__min_aggr",
         ]
 
         # Check which columns were actually created
@@ -127,12 +127,20 @@ class TestComplexEncodingChaining:
         # Verify artifacts were created for encoding and scaling steps
         assert len(artifacts1) == 7  # 4 encoding + 3 scaling artifacts
 
-        # Check specific artifact types
-        encoding_artifacts = [k for k in artifacts1.keys() if "_encoded__" in k and "_scaled__" not in k]
-        scaling_artifacts = [k for k in artifacts1.keys() if "_scaled__" in k]
+        # Check specific artifact types (L→R format)
+        # Encoding artifacts end with _encoded (without ~digit suffix for base encodings)
+        # e.g., category__onehot_encoded, region__label_encoded, category__ordinal_encoded, category__label_encoded
+        encoding_artifacts = [k for k in artifacts1.keys() if k.endswith("_encoded")]
+        # Scaling artifacts end with _scaled
+        # e.g., category__onehot_encoded~1__standard_scaled, category__label_encoded__robust_scaled
+        scaling_artifacts = [k for k in artifacts1.keys() if k.endswith("_scaled")]
 
-        assert len(encoding_artifacts) == 4, f"Should have 4 encoding artifacts, got {len(encoding_artifacts)}"
-        assert len(scaling_artifacts) == 3, f"Should have 3 scaling artifacts, got {len(scaling_artifacts)}"
+        assert len(encoding_artifacts) == 4, (
+            f"Should have 4 encoding artifacts, got {len(encoding_artifacts)}: {encoding_artifacts}"
+        )
+        assert len(scaling_artifacts) == 3, (
+            f"Should have 3 scaling artifacts, got {len(scaling_artifacts)}: {scaling_artifacts}"
+        )
 
         # Verify all results make sense
         for column in expected_columns:
@@ -151,9 +159,9 @@ class TestComplexEncodingChaining:
                 assert all(val >= 0 for val in values), f"Min should be non-negative for {column}"
 
         # Verify that different encoding types produce different results
-        onehot_result = df1["sum_aggr__standard_scaled__onehot_encoded__category~1"]
-        label_result = df1["max_aggr__robust_scaled__label_encoded__category"]
-        ordinal_result = df1["count_aggr__ordinal_encoded__category"]
+        onehot_result = df1["category__onehot_encoded~1__standard_scaled__sum_aggr"]
+        label_result = df1["category__label_encoded__robust_scaled__max_aggr"]
+        ordinal_result = df1["category__ordinal_encoded__count_aggr"]
 
         # These should be different since they use different encoding and aggregation methods
         assert not onehot_result.equals(label_result), "OneHot and Label encoding results should differ"

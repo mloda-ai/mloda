@@ -38,8 +38,8 @@ class PandasEncodingFeatureGroup(EncodingFeatureGroup):
 
         # Handle different result types from sklearn encoders
         if encoder_type == "onehot":
-            # Check if this is a request for a specific OneHot column (e.g., onehot_encoded__category~1)
-            onehot_column_match = re.match(r"^onehot_encoded__(.+)~(\d+)$", feature_name)
+            # Check if this is a request for a specific OneHot column (e.g., category__onehot_encoded~1)
+            onehot_column_match = re.match(r"^(.+)__onehot_encoded~(\d+)$", feature_name)
 
             # OneHotEncoder returns a sparse matrix or dense array with multiple columns
             if hasattr(result, "toarray"):

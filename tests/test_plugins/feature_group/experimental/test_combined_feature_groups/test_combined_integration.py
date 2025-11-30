@@ -53,9 +53,9 @@ class TestCombinedFeatureGroupsPandas:
         # Define the feature chain
         features: List[Feature | str] = [
             "price",  # Source data with missing values
-            "mean_imputed__price",  # Step 1: Mean imputation
-            "sum_7_day_window__mean_imputed__price",  # Step 2: 7-day window sum
-            "max_aggr__sum_7_day_window__mean_imputed__price",  # Step 3: Max aggregation
+            "price__mean_imputed",  # Step 1: Mean imputation
+            "price__mean_imputed__sum_7_day_window",  # Step 2: 7-day window sum
+            "price__mean_imputed__sum_7_day_window__max_aggr",  # Step 3: Max aggregation
         ]
 
         # Run the API with the feature chain
@@ -69,18 +69,18 @@ class TestCombinedFeatureGroupsPandas:
         validate_combined_features(result)
 
         result2 = mlodaAPI.run_all(
-            ["max_aggr__sum_7_day_window__mean_imputed__price"],
+            ["price__mean_imputed__sum_7_day_window__max_aggr"],
             compute_frameworks={PandasDataframe},
             plugin_collector=plugin_collector,
         )
 
         for res in result:
-            if "max_aggr__sum_7_day_window__mean_imputed__price" in res.columns:
-                res_check = res["max_aggr__sum_7_day_window__mean_imputed__price"]
+            if "price__mean_imputed__sum_7_day_window__max_aggr" in res.columns:
+                res_check = res["price__mean_imputed__sum_7_day_window__max_aggr"]
 
         for res in result2:
-            if "max_aggr__sum_7_day_window__mean_imputed__price" in res.columns:
-                res2_check = res["max_aggr__sum_7_day_window__mean_imputed__price"]
+            if "price__mean_imputed__sum_7_day_window__max_aggr" in res.columns:
+                res2_check = res["price__mean_imputed__sum_7_day_window__max_aggr"]
 
         assert res_check.equals(res2_check)
 
@@ -112,9 +112,9 @@ class TestCombinedFeatureGroupsPyArrow:
         # Define the feature chain
         features: List[Feature | str] = [
             "price",  # Source data with missing values
-            "mean_imputed__price",  # Step 1: Mean imputation
-            "sum_7_day_window__mean_imputed__price",  # Step 2: 7-day window sum
-            "max_aggr__sum_7_day_window__mean_imputed__price",  # Step 3: Max aggregation
+            "price__mean_imputed",  # Step 1: Mean imputation
+            "price__mean_imputed__sum_7_day_window",  # Step 2: 7-day window sum
+            "price__mean_imputed__sum_7_day_window__max_aggr",  # Step 3: Max aggregation
         ]
 
         # Run the API with the feature chain

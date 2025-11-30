@@ -76,7 +76,7 @@ def sample_data_with_missing() -> List[Dict[str, Any]]:
 def feature_set_mean() -> FeatureSet:
     """Create a feature set with a mean imputation feature."""
     feature_set = FeatureSet()
-    feature_set.add(Feature("mean_imputed__income"))
+    feature_set.add(Feature("income__mean_imputed"))
     return feature_set
 
 
@@ -84,10 +84,10 @@ def feature_set_mean() -> FeatureSet:
 def feature_set_multiple() -> FeatureSet:
     """Create a feature set with multiple imputation features."""
     feature_set = FeatureSet()
-    feature_set.add(Feature("mean_imputed__income"))
-    feature_set.add(Feature("median_imputed__age"))
-    feature_set.add(Feature("mode_imputed__category"))
-    feature_set.add(Feature("ffill_imputed__temperature"))
+    feature_set.add(Feature("income__mean_imputed"))
+    feature_set.add(Feature("age__median_imputed"))
+    feature_set.add(Feature("category__mode_imputed"))
+    feature_set.add(Feature("temperature__ffill_imputed"))
     return feature_set
 
 
@@ -95,7 +95,7 @@ def feature_set_multiple() -> FeatureSet:
 def feature_set_constant() -> FeatureSet:
     """Create a feature set with a constant imputation feature and options."""
     feature_set = FeatureSet()
-    feature_set.add(Feature("constant_imputed__category"))
+    feature_set.add(Feature("category__constant_imputed"))
 
     for feature in feature_set.features:
         feature.options = Options({"constant_value": "Unknown"})
@@ -107,7 +107,7 @@ def feature_set_constant() -> FeatureSet:
 def feature_set_grouped() -> FeatureSet:
     """Create a feature set with a grouped imputation feature and options."""
     feature_set = FeatureSet()
-    feature_set.add(Feature("mean_imputed__income"))
+    feature_set.add(Feature("income__mean_imputed"))
 
     for feature in feature_set.features:
         feature.options = Options({"group_by_features": ["group"]})
@@ -265,10 +265,10 @@ class TestPythonDictMissingValueFeatureGroup:
         result = PythonDictMissingValueFeatureGroup.calculate_feature(data_copy, feature_set_mean)
 
         # Check that the result contains the imputed feature
-        assert "mean_imputed__income" in result[0]
+        assert "income__mean_imputed" in result[0]
         expected_mean = 61666.67
-        assert abs(result[1]["mean_imputed__income"] - expected_mean) < 0.1
-        assert abs(result[3]["mean_imputed__income"] - expected_mean) < 0.1
+        assert abs(result[1]["income__mean_imputed"] - expected_mean) < 0.1
+        assert abs(result[3]["income__mean_imputed"] - expected_mean) < 0.1
 
         # Check that the original data is preserved
         assert "income" in result[0]
@@ -283,22 +283,22 @@ class TestPythonDictMissingValueFeatureGroup:
         result = PythonDictMissingValueFeatureGroup.calculate_feature(data_copy, feature_set_multiple)
 
         # Check that all imputed features are present
-        assert "mean_imputed__income" in result[0]
-        assert "median_imputed__age" in result[0]
-        assert "mode_imputed__category" in result[0]
-        assert "ffill_imputed__temperature" in result[0]
+        assert "income__mean_imputed" in result[0]
+        assert "age__median_imputed" in result[0]
+        assert "category__mode_imputed" in result[0]
+        assert "temperature__ffill_imputed" in result[0]
 
         # Check some specific values
         expected_mean = 61666.67
-        assert abs(result[1]["mean_imputed__income"] - expected_mean) < 0.1
+        assert abs(result[1]["income__mean_imputed"] - expected_mean) < 0.1
 
         # Median age of [30, 25, 45] = 30
-        assert result[2]["median_imputed__age"] == 30
-        assert result[4]["median_imputed__age"] == 30
+        assert result[2]["age__median_imputed"] == 30
+        assert result[4]["age__median_imputed"] == 30
 
         # Mode category of ["A", "B", "A"] = "A"
-        assert result[1]["mode_imputed__category"] == "A"
-        assert result[4]["mode_imputed__category"] == "A"
+        assert result[1]["category__mode_imputed"] == "A"
+        assert result[4]["category__mode_imputed"] == "A"
 
     def test_calculate_feature_constant(
         self, sample_data_with_missing: List[Dict[str, Any]], feature_set_constant: FeatureSet
@@ -308,9 +308,9 @@ class TestPythonDictMissingValueFeatureGroup:
         result = PythonDictMissingValueFeatureGroup.calculate_feature(data_copy, feature_set_constant)
 
         # Check that the result contains the imputed feature
-        assert "constant_imputed__category" in result[0]
-        assert result[1]["constant_imputed__category"] == "Unknown"
-        assert result[4]["constant_imputed__category"] == "Unknown"
+        assert "category__constant_imputed" in result[0]
+        assert result[1]["category__constant_imputed"] == "Unknown"
+        assert result[4]["category__constant_imputed"] == "Unknown"
 
     def test_calculate_feature_grouped(
         self, sample_data_with_missing: List[Dict[str, Any]], feature_set_grouped: FeatureSet
@@ -320,21 +320,21 @@ class TestPythonDictMissingValueFeatureGroup:
         result = PythonDictMissingValueFeatureGroup.calculate_feature(data_copy, feature_set_grouped)
 
         # Check that the result contains the imputed feature
-        assert "mean_imputed__income" in result[0]
+        assert "income__mean_imputed" in result[0]
 
         # Group X: [50000, 75000, 60000] -> mean = 61666.67
         # Group Y: [None, None] -> no mean, should get overall mean
         overall_mean = 61666.67
-        assert abs(result[0]["mean_imputed__income"] - 50000) < 0.1  # Original value
-        assert abs(result[1]["mean_imputed__income"] - overall_mean) < 0.1  # Imputed
-        assert abs(result[2]["mean_imputed__income"] - 75000) < 0.1  # Original value
-        assert abs(result[3]["mean_imputed__income"] - overall_mean) < 0.1  # Imputed
-        assert abs(result[4]["mean_imputed__income"] - 60000) < 0.1  # Original value
+        assert abs(result[0]["income__mean_imputed"] - 50000) < 0.1  # Original value
+        assert abs(result[1]["income__mean_imputed"] - overall_mean) < 0.1  # Imputed
+        assert abs(result[2]["income__mean_imputed"] - 75000) < 0.1  # Original value
+        assert abs(result[3]["income__mean_imputed"] - overall_mean) < 0.1  # Imputed
+        assert abs(result[4]["income__mean_imputed"] - 60000) < 0.1  # Original value
 
     def test_calculate_feature_missing_source(self, sample_data_with_missing: List[Dict[str, Any]]) -> None:
         """Test calculate_feature method with missing source feature."""
         feature_set = FeatureSet()
-        feature_set.add(Feature("mean_imputed__missing"))
+        feature_set.add(Feature("missing__mean_imputed"))
 
         data_copy = [row.copy() for row in sample_data_with_missing]
         with pytest.raises(ValueError, match="Source features not found in data"):
@@ -343,7 +343,7 @@ class TestPythonDictMissingValueFeatureGroup:
     def test_calculate_feature_constant_without_value(self, sample_data_with_missing: List[Dict[str, Any]]) -> None:
         """Test calculate_feature method with constant imputation but no constant value."""
         feature_set = FeatureSet()
-        feature_set.add(Feature("constant_imputed__category"))
+        feature_set.add(Feature("category__constant_imputed"))
 
         data_copy = [row.copy() for row in sample_data_with_missing]
         with pytest.raises(ValueError, match="Constant value must be provided for constant imputation method"):
@@ -370,11 +370,11 @@ class TestMissingValuePythonDictIntegration:
             "category",
             "temperature",
             "group",
-            "mean_imputed__income",  # Mean imputation
-            "median_imputed__age",  # Median imputation
-            "mode_imputed__category",  # Mode imputation
-            "constant_imputed__category",  # Constant imputation
-            "ffill_imputed__temperature",  # Forward fill imputation
+            "income__mean_imputed",  # Mean imputation
+            "age__median_imputed",  # Median imputation
+            "category__mode_imputed",  # Mode imputation
+            "category__constant_imputed",  # Constant imputation
+            "temperature__ffill_imputed",  # Forward fill imputation
         ]
 
         feature_list = [Feature(name=feature, options=options) for feature in feature_str]

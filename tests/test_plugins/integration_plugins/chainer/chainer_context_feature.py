@@ -17,8 +17,9 @@ from mloda_plugins.feature_group.experimental.default_options_key import Default
 
 
 class ChainedContextFeatureGroupTest(AbstractFeatureGroup):
-    PATTERN = "_chainer__"
-    PREFIX_PATTERN = [r"^([\w]+)_chainer__"]
+    PATTERN = "__"
+    SUFFIX_PATTERN = [r".*__chainer_([\w]+)$"]
+    OPERATION_ID = "chainer_"  # Used for constructing feature names
 
     PROPERTY_MAPPING = {
         "ident": {
@@ -63,7 +64,7 @@ class ChainedContextFeatureGroupTest(AbstractFeatureGroup):
             options=options,
             property_mapping=cls.PROPERTY_MAPPING,
             pattern=cls.PATTERN,
-            prefix_patterns=cls.PREFIX_PATTERN,
+            prefix_patterns=cls.SUFFIX_PATTERN,  # Using suffix patterns with L→R syntax
         ):
             return False
 
@@ -74,7 +75,7 @@ class ChainedContextFeatureGroupTest(AbstractFeatureGroup):
 
         # String-based feature extraction
         config, string_based_feature = FeatureChainParser.parse_feature_name(
-            feature_name, self.PATTERN, self.PREFIX_PATTERN
+            feature_name, self.PATTERN, self.SUFFIX_PATTERN
         )
         if config is not None and string_based_feature is not None:
             feat = Feature(
@@ -141,19 +142,19 @@ class ChainedContextFeatureGroupTest(AbstractFeatureGroup):
 
         except ValueError:
             # Fall back to string-based approach
-            has_prefix_configuration, source_feature_name = FeatureChainParser.parse_feature_name(
-                feature.name, cls.PATTERN, cls.PREFIX_PATTERN
+            has_suffix_configuration, source_feature_name = FeatureChainParser.parse_feature_name(
+                feature.name, cls.PATTERN, cls.SUFFIX_PATTERN
             )
 
-            if has_prefix_configuration is None or source_feature_name is None:
+            if has_suffix_configuration is None or source_feature_name is None:
                 raise ValueError(f"Could not parse feature name: {feature.name} and no source features in options")
 
             if source_feature_name not in data.columns:
                 raise ValueError(f"Source feature '{source_feature_name}' not found in data.")
 
-            if has_prefix_configuration == "identifier1":
+            if has_suffix_configuration == "identifier1":
                 val = 0
-            elif has_prefix_configuration == "identifier2":
+            elif has_suffix_configuration == "identifier2":
                 val = 1
             else:
                 raise ValueError("does not match the expected property mapping")

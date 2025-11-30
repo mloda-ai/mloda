@@ -16,54 +16,54 @@ class TestDimensionalityReductionFeatureGroup:
     def test_match_feature_group_criteria(self) -> None:
         """Test the match_feature_group_criteria method."""
         # Valid feature names
-        assert DimensionalityReductionFeatureGroup.match_feature_group_criteria("pca_2d__customer_metrics", Options())
-        assert DimensionalityReductionFeatureGroup.match_feature_group_criteria("tsne_3d__product_features", Options())
-        assert DimensionalityReductionFeatureGroup.match_feature_group_criteria("isomap_5d__sensor_readings", Options())
+        assert DimensionalityReductionFeatureGroup.match_feature_group_criteria("customer_metrics__pca_2d", Options())
+        assert DimensionalityReductionFeatureGroup.match_feature_group_criteria("product_features__tsne_3d", Options())
+        assert DimensionalityReductionFeatureGroup.match_feature_group_criteria("sensor_readings__isomap_5d", Options())
 
         # Invalid feature names
         assert not DimensionalityReductionFeatureGroup.match_feature_group_criteria(
-            "invalid_2d__customer_metrics", Options()
+            "customer_metrics__invalid_2d", Options()
         )
         assert not DimensionalityReductionFeatureGroup.match_feature_group_criteria(
-            "pca_invalid__customer_metrics", Options()
+            "customer_metrics__pca_invalid", Options()
         )
         assert not DimensionalityReductionFeatureGroup.match_feature_group_criteria(
-            "pca_2d_customer_metrics", Options()
+            "customer_metrics_pca_2d", Options()
         )
 
-    def test_parse_reduction_prefix(self) -> None:
-        """Test the parse_reduction_prefix method."""
+    def test_parse_reduction_suffix(self) -> None:
+        """Test the parse_reduction_suffix method."""
         # Valid feature names
-        algorithm, dimension = DimensionalityReductionFeatureGroup.parse_reduction_prefix("pca_2d__customer_metrics")
+        algorithm, dimension = DimensionalityReductionFeatureGroup.parse_reduction_suffix("customer_metrics__pca_2d")
         assert algorithm == "pca"
         assert dimension == 2
 
-        algorithm, dimension = DimensionalityReductionFeatureGroup.parse_reduction_prefix("tsne_3d__product_features")
+        algorithm, dimension = DimensionalityReductionFeatureGroup.parse_reduction_suffix("product_features__tsne_3d")
         assert algorithm == "tsne"
         assert dimension == 3
 
         # Invalid feature names
         with pytest.raises(ValueError):
-            DimensionalityReductionFeatureGroup.parse_reduction_prefix("invalid_2d__customer_metrics")
+            DimensionalityReductionFeatureGroup.parse_reduction_suffix("customer_metrics__invalid_2d")
 
         with pytest.raises(ValueError):
-            DimensionalityReductionFeatureGroup.parse_reduction_prefix("pca_invalid__customer_metrics")
+            DimensionalityReductionFeatureGroup.parse_reduction_suffix("customer_metrics__pca_invalid")
 
         with pytest.raises(ValueError):
-            DimensionalityReductionFeatureGroup.parse_reduction_prefix("pca_2d_customer_metrics")
+            DimensionalityReductionFeatureGroup.parse_reduction_suffix("customer_metrics_pca_2d")
 
     def test_input_features(self) -> None:
         """Test the input_features method."""
         feature_group = DimensionalityReductionFeatureGroup()
 
         # Single source feature
-        input_features = feature_group.input_features(Options(), FeatureName("pca_2d__customer_metrics"))
+        input_features = feature_group.input_features(Options(), FeatureName("customer_metrics__pca_2d"))
         assert input_features is not None
         assert len(input_features) == 1
         assert Feature("customer_metrics") in input_features
 
         # Multiple source features (comma-separated)
-        input_features = feature_group.input_features(Options(), FeatureName("pca_2d__feature1,feature2,feature3"))
+        input_features = feature_group.input_features(Options(), FeatureName("feature1,feature2,feature3__pca_2d"))
         assert input_features is not None
         assert len(input_features) == 3
         assert Feature("feature1") in input_features

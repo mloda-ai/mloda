@@ -28,7 +28,7 @@ class TestForecastingFeatureGroup(unittest.TestCase):
 
         # Create a feature set
         self.feature_set = FeatureSet()
-        self.feature_set.add(Feature("linear_forecast_7day__sales"))
+        self.feature_set.add(Feature("sales__linear_forecast_7day"))
 
         # Create options
         self.options = Options({DefaultOptionKeys.reference_time.value: "time_filter"})
@@ -36,8 +36,8 @@ class TestForecastingFeatureGroup(unittest.TestCase):
 
     def test_feature_name_parsing(self) -> None:
         """Test parsing of feature names."""
-        feature_name = "linear_forecast_7day__sales"
-        algorithm, horizon, time_unit = ForecastingFeatureGroup.parse_forecast_prefix(feature_name)
+        feature_name = "sales__linear_forecast_7day"
+        algorithm, horizon, time_unit = ForecastingFeatureGroup.parse_forecast_suffix(feature_name)
 
         self.assertEqual(algorithm, "linear")
         self.assertEqual(horizon, 7)
@@ -46,21 +46,21 @@ class TestForecastingFeatureGroup(unittest.TestCase):
     def test_match_feature_group_criteria(self) -> None:
         """Test matching of feature names to the feature group criteria."""
         # Valid feature names
-        self.assertTrue(ForecastingFeatureGroup.match_feature_group_criteria("linear_forecast_7day__sales", Options()))
+        self.assertTrue(ForecastingFeatureGroup.match_feature_group_criteria("sales__linear_forecast_7day", Options()))
 
         # This test is failing because the feature name doesn't match the expected pattern
         # Let's modify it to use a valid feature name
         self.assertTrue(
-            ForecastingFeatureGroup.match_feature_group_criteria("randomforest_forecast_3day__sales", Options())
+            ForecastingFeatureGroup.match_feature_group_criteria("sales__randomforest_forecast_3day", Options())
         )
 
         # Invalid feature names
         self.assertFalse(ForecastingFeatureGroup.match_feature_group_criteria("invalid_feature_name", Options()))
-        self.assertFalse(ForecastingFeatureGroup.match_feature_group_criteria("linear_7day__sales", Options()))
+        self.assertFalse(ForecastingFeatureGroup.match_feature_group_criteria("sales__linear_7day", Options()))
 
     def test_input_features(self) -> None:
         """Test extraction of input features."""
-        feature_name = "linear_forecast_7day__sales"
+        feature_name = "sales__linear_forecast_7day"
         feature_group = ForecastingFeatureGroup()
 
         input_features = feature_group.input_features(self.options, Feature(feature_name).name)
@@ -132,7 +132,7 @@ class TestForecastingFeatureGroup(unittest.TestCase):
 
     def test_calculate_feature(self) -> None:
         """Test the calculate_feature method."""
-        feature_name = "linear_forecast_7day__sales"
+        feature_name = "sales__linear_forecast_7day"
 
         # Create a feature set with artifact saving enabled
         feature_set = FeatureSet()

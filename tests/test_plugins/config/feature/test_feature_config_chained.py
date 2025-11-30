@@ -12,15 +12,15 @@ from mloda_plugins.config.feature.parser import parse_json
 
 
 def test_parse_simple_chained_feature() -> None:
-    """Test parsing JSON with simple chained feature string like 'scale__age'.
+    """Test parsing JSON with simple chained feature string like 'age__scale'.
 
-    Chained features follow the pattern: operation__source_feature
+    Chained features follow the pattern: source_feature__operation
     This test verifies that the parser recognizes the chained pattern and
     extracts the mloda_sources field correctly.
     """
     config_str = """[
         {
-            "name": "scale__age",
+            "name": "age__scale",
             "mloda_sources": ["age"]
         }
     ]"""
@@ -29,21 +29,21 @@ def test_parse_simple_chained_feature() -> None:
 
     assert len(result) == 1
     assert isinstance(result[0], FeatureConfig)
-    assert result[0].name == "scale__age"
+    assert result[0].name == "age__scale"
     assert result[0].mloda_sources == ["age"]
 
 
 def test_parse_multi_level_chained_feature() -> None:
     """Test parsing JSON with multi-level chained feature.
 
-    Multi-level chained features follow the pattern: op1__op2__source_feature
-    (e.g., "standard_scaled__mean_imputed__age").
+    Multi-level chained features follow the pattern: source_feature__op2__op1
+    (e.g., "age__mean_imputed__standard_scaled").
     This test verifies that the parser correctly extracts the mloda_sources
     from deeply nested chained operations.
     """
     config_str = """[
         {
-            "name": "standard_scaled__mean_imputed__age",
+            "name": "age__mean_imputed__standard_scaled",
             "mloda_sources": ["age"]
         }
     ]"""
@@ -52,14 +52,14 @@ def test_parse_multi_level_chained_feature() -> None:
 
     assert len(result) == 1
     assert isinstance(result[0], FeatureConfig)
-    assert result[0].name == "standard_scaled__mean_imputed__age"
+    assert result[0].name == "age__mean_imputed__standard_scaled"
     assert result[0].mloda_sources == ["age"]
 
 
 def test_load_chained_feature_as_string() -> None:
     """Test loading a chained feature configuration into a Feature object.
 
-    When loading a chained feature config (e.g., "scale__age" with mloda_sources=["age"]),
+    When loading a chained feature config (e.g., "age__scale" with mloda_sources=["age"]),
     the loader should create a Feature object with mloda_source_features added to the
     options context, enabling the mloda runtime to properly resolve the dependency.
 
@@ -74,7 +74,7 @@ def test_load_chained_feature_as_string() -> None:
 
     config_str = """[
         {
-            "name": "scale__age",
+            "name": "age__scale",
             "mloda_sources": ["age"],
             "options": {"param": "value"}
         }
@@ -86,7 +86,7 @@ def test_load_chained_feature_as_string() -> None:
     assert isinstance(result[0], Feature)
 
     feature = result[0]
-    assert feature.name.name == "scale__age"
+    assert feature.name.name == "age__scale"
 
     # The mloda_sources should be added to options as mloda_source_features
     # It should be in the context section, not group, as a frozenset
@@ -105,7 +105,7 @@ def test_load_chained_feature_from_config() -> None:
     containing:
     1. Simple string features (e.g., "age")
     2. Regular features with options (e.g., {"name": "weight", "options": {...}})
-    3. Chained features with mloda_sources (e.g., {"name": "scale__age", "mloda_sources": ["age"]})
+    3. Chained features with mloda_sources (e.g., {"name": "age__scale", "mloda_sources": ["age"]})
 
     The test verifies that:
     - All feature types are loaded correctly
@@ -121,7 +121,7 @@ def test_load_chained_feature_from_config() -> None:
         "age",
         {"name": "weight", "options": {"unit": "kg", "precision": 2}},
         {
-            "name": "scale__age",
+            "name": "age__scale",
             "mloda_sources": ["age"],
             "options": {"method": "standard"}
         }
@@ -146,7 +146,7 @@ def test_load_chained_feature_from_config() -> None:
 
     # Third feature should be a chained Feature with mloda_sources in context as frozenset
     assert isinstance(result[2], Feature)
-    assert result[2].name.name == "scale__age"
+    assert result[2].name.name == "age__scale"
     mloda_sources_value = result[2].options.context.get(DefaultOptionKeys.mloda_source_features)
     assert isinstance(mloda_sources_value, frozenset)
     assert mloda_sources_value == frozenset({"age"})

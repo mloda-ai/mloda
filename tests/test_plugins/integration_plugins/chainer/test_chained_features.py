@@ -33,17 +33,17 @@ class TestChainedFeatures:
     )
 
     def test_chained_features(self) -> None:
-        feature = Feature(f"identifier1{ChainedFeatureGroupTest.PATTERN}Sales")
+        feature = Feature(f"Sales__{ChainedFeatureGroupTest.OPERATION_ID}identifier1")
         feature2 = Feature(
-            f"identifier2{ChainedFeatureGroupTest_B.PATTERN}identifier1{ChainedFeatureGroupTest.PATTERN}Sales",
+            f"Sales__{ChainedFeatureGroupTest.OPERATION_ID}identifier1__{ChainedFeatureGroupTest_B.OPERATION_ID}identifier2",
         )
 
         result = mlodaAPI.run_all(
             [
                 feature,
-                f"identifier2{ChainedFeatureGroupTest.PATTERN}Sales",
+                f"Sales__{ChainedFeatureGroupTest.OPERATION_ID}identifier2",
                 feature2,
-                f"identifier2{ChainedFeatureGroupTest_B.PATTERN}identifier2{ChainedFeatureGroupTest.PATTERN}Sales",
+                f"Sales__{ChainedFeatureGroupTest.OPERATION_ID}identifier2__{ChainedFeatureGroupTest_B.OPERATION_ID}identifier2",
             ],
             compute_frameworks={PandasDataframe},
             plugin_collector=self.plugin_collector,
@@ -51,11 +51,11 @@ class TestChainedFeatures:
         # Currently, we duplicate here the data. This can be changed in the future.
         assert len(result) == 2
 
-    def test_invalid_prefix_configuration(self) -> None:
+    def test_invalid_suffix_configuration(self) -> None:
         with pytest.raises(Exception) as exc_info:
             mlodaAPI.run_all(
-                [f"invalid_prefix{ChainedFeatureGroupTest.PATTERN}Sales"],
+                [f"Sales__{ChainedFeatureGroupTest.OPERATION_ID}invalid_suffix"],
                 compute_frameworks={PandasDataframe},
                 plugin_collector=self.plugin_collector,
             )
-        assert "invalid_prefix" in str(exc_info.value)
+        assert "invalid_suffix" in str(exc_info.value)

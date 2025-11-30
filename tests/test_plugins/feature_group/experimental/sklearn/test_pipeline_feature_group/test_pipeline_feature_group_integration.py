@@ -49,7 +49,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         )
 
         # Create a scaling pipeline feature
-        feature = Feature("sklearn_pipeline_scaling__income")
+        feature = Feature("income__sklearn_pipeline_scaling")
 
         # Test with mloda API
         results = mlodaAPI.run_all(
@@ -63,14 +63,14 @@ class TestSklearnPipelineFeatureGroupIntegration:
         # Find the DataFrame with the scaled feature
         scaled_df = None
         for df in results:
-            if "sklearn_pipeline_scaling__income" in df.columns:
+            if "income__sklearn_pipeline_scaling" in df.columns:
                 scaled_df = df
                 break
 
         assert scaled_df is not None, "DataFrame with scaled features not found"
 
         # Verify that scaling was applied (mean should be close to 0, std close to 1)
-        scaled_values = scaled_df["sklearn_pipeline_scaling__income"]
+        scaled_values = scaled_df["income__sklearn_pipeline_scaling"]
         assert abs(scaled_values.mean()) < 1e-10, "Scaled values should have mean close to 0"
         assert abs(scaled_values.std() - 1.0) < 0.2, "Scaled values should have std close to 1"
 
@@ -88,7 +88,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         )
 
         # Create a preprocessing pipeline feature
-        feature = Feature("sklearn_pipeline_preprocessing__income")
+        feature = Feature("income__sklearn_pipeline_preprocessing")
 
         # Test with mloda API
         results = mlodaAPI.run_all(
@@ -102,14 +102,14 @@ class TestSklearnPipelineFeatureGroupIntegration:
         # Find the DataFrame with the preprocessed feature
         preprocessed_df = None
         for df in results:
-            if "sklearn_pipeline_preprocessing__income" in df.columns:
+            if "income__sklearn_pipeline_preprocessing" in df.columns:
                 preprocessed_df = df
                 break
 
         assert preprocessed_df is not None, "DataFrame with preprocessed features not found"
 
         # Verify that preprocessing was applied (should be scaled after imputation)
-        preprocessed_values = preprocessed_df["sklearn_pipeline_preprocessing__income"]
+        preprocessed_values = preprocessed_df["income__sklearn_pipeline_preprocessing"]
         assert abs(preprocessed_values.mean()) < 1e-10, "Preprocessed values should have mean close to 0"
         assert abs(preprocessed_values.std() - 1.0) < 0.2, "Preprocessed values should have std close to 1"
 
@@ -127,7 +127,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         )
 
         # Create a scaling pipeline feature with multiple source features
-        feature = Feature("sklearn_pipeline_scaling__income,age")
+        feature = Feature("income,age__sklearn_pipeline_scaling")
 
         # Test with mloda API
         results = mlodaAPI.run_all(
@@ -144,7 +144,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         # Look for columns with ~ separator (multiple result columns pattern)
         found_columns = []
         for col in result_df.columns:
-            if col.startswith("sklearn_pipeline_scaling__income,age~"):
+            if col.startswith("income,age__sklearn_pipeline_scaling~"):
                 found_columns.append(col)
 
         assert len(found_columns) == 2, (
@@ -152,8 +152,8 @@ class TestSklearnPipelineFeatureGroupIntegration:
         )
 
         # Verify that we have the expected columns
-        assert "sklearn_pipeline_scaling__income,age~0" in found_columns
-        assert "sklearn_pipeline_scaling__income,age~1" in found_columns
+        assert "income,age__sklearn_pipeline_scaling~0" in found_columns
+        assert "income,age__sklearn_pipeline_scaling~1" in found_columns
 
         # Verify that the scaled features have reasonable values (mean close to 0)
         for col in found_columns:
@@ -300,7 +300,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         )
 
         # Create the same feature twice to test artifact reuse
-        feature = Feature("sklearn_pipeline_scaling__income")
+        feature = Feature("income__sklearn_pipeline_scaling")
 
         # First run - should create and save artifact
         results1 = mlodaAPI.run_all(
@@ -323,11 +323,11 @@ class TestSklearnPipelineFeatureGroupIntegration:
         df1 = results1[0]
         df2 = results2[0]
 
-        assert "sklearn_pipeline_scaling__income" in df1.columns
-        assert "sklearn_pipeline_scaling__income" in df2.columns
+        assert "income__sklearn_pipeline_scaling" in df1.columns
+        assert "income__sklearn_pipeline_scaling" in df2.columns
 
         # Values should be identical
-        assert df1["sklearn_pipeline_scaling__income"].equals(df2["sklearn_pipeline_scaling__income"])
+        assert df1["income__sklearn_pipeline_scaling"].equals(df2["income__sklearn_pipeline_scaling"])
 
     @pytest.mark.parametrize(
         "storage_config",
@@ -362,7 +362,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
 
         try:
             # First run - create feature WITHOUT artifact options (mloda will set artifact_to_save)
-            feature1 = Feature("sklearn_pipeline_scaling__income", Options(feature_options))
+            feature1 = Feature("income__sklearn_pipeline_scaling", Options(feature_options))
 
             api1 = mlodaAPI([feature1], {PandasDataframe}, plugin_collector=plugin_collector)
             api1._batch_run()
@@ -372,17 +372,17 @@ class TestSklearnPipelineFeatureGroupIntegration:
             # Verify we got results and artifacts
             assert len(results1) == 1
             assert len(artifacts1) == 1  # Should be 1 pipeline artifact with unique key
-            assert "sklearn_pipeline_scaling__income" in artifacts1
+            assert "income__sklearn_pipeline_scaling" in artifacts1
 
             # Verify artifact file was created in expected location
             from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import SklearnArtifact
             from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 
             mock_features = FeatureSet()
-            mock_features.add(Feature("sklearn_pipeline_scaling__income", Options(feature_options)))
+            mock_features.add(Feature("income__sklearn_pipeline_scaling", Options(feature_options)))
 
             # Use the new artifact key-based file path method
-            artifact_key = "sklearn_pipeline_scaling__income"
+            artifact_key = "income__sklearn_pipeline_scaling"
             expected_file_path = SklearnArtifact._get_artifact_file_path_for_key(mock_features, artifact_key)
 
             # Verify the file exists
@@ -402,7 +402,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
 
             # Second run - create feature WITH artifact options (mloda will set artifact_to_load)
             combined_options = {**feature_options, **artifacts1}
-            feature2 = Feature("sklearn_pipeline_scaling__income", Options(combined_options))
+            feature2 = Feature("income__sklearn_pipeline_scaling", Options(combined_options))
 
             api2 = mlodaAPI([feature2], {PandasDataframe}, plugin_collector=plugin_collector)
             api2._batch_run()
@@ -416,11 +416,11 @@ class TestSklearnPipelineFeatureGroupIntegration:
             df1 = results1[0]
             df2 = results2[0]
 
-            assert "sklearn_pipeline_scaling__income" in df1.columns
-            assert "sklearn_pipeline_scaling__income" in df2.columns
+            assert "income__sklearn_pipeline_scaling" in df1.columns
+            assert "income__sklearn_pipeline_scaling" in df2.columns
 
             # Values should be identical (artifact was reused)
-            assert df1["sklearn_pipeline_scaling__income"].equals(df2["sklearn_pipeline_scaling__income"])
+            assert df1["income__sklearn_pipeline_scaling"].equals(df2["income__sklearn_pipeline_scaling"])
 
         finally:
             # Clean up: remove test artifacts

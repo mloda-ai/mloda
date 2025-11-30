@@ -28,14 +28,14 @@ class GeoDistanceFeatureGroup(AbstractFeatureGroup):
 
     ### 1. String-Based Creation
 
-    Features follow the naming pattern: `{distance_type}_distance__{point1_feature}__{point2_feature}`
+    Features follow the naming pattern: `{point1_feature}__{point2_feature}__{distance_type}_distance`
 
     Examples:
     ```python
     features = [
-        "haversine_distance__customer_location__store_location",  # Great-circle distance
-        "euclidean_distance__origin__destination",               # Straight-line distance
-        "manhattan_distance__pickup__dropoff"                    # Manhattan distance
+        "customer_location__store_location__haversine_distance",  # Great-circle distance
+        "origin__destination__euclidean_distance",               # Straight-line distance
+        "pickup__dropoff__manhattan_distance"                    # Manhattan distance
     ]
     ```
 
@@ -90,7 +90,7 @@ class GeoDistanceFeatureGroup(AbstractFeatureGroup):
     }
 
     # Define the prefix pattern for this feature group
-    PREFIX_PATTERN = r"^([\w]+)_distance__"
+    PREFIX_PATTERN = r".*__([\w]+)_distance$"
     PATTERN = "__"
 
     # Property mapping for configuration-based features with group/context separation
@@ -119,11 +119,16 @@ class GeoDistanceFeatureGroup(AbstractFeatureGroup):
 
         # Try string-based parsing first
         try:
-            source_part = FeatureChainParser.extract_source_feature(feature_name.name, self.PREFIX_PATTERN)
-            parts = source_part.split("__", 1)
+            # For L__R: "point1__point2__distance_type_distance"
+            # We need to extract everything before the last "__"
+            feature_name_str = feature_name.name if hasattr(feature_name, "name") else str(feature_name)
+            parts = feature_name_str.rsplit("__", 1)
             if len(parts) == 2:
-                return {Feature(parts[0]), Feature(parts[1])}
-        except ValueError:
+                # parts[0] contains "point1__point2", parts[1] contains "distance_type_distance"
+                point_parts = parts[0].rsplit("__", 1)
+                if len(point_parts) == 2:
+                    return {Feature(point_parts[0]), Feature(point_parts[1])}
+        except (ValueError, AttributeError):
             pass
 
         # Fall back to configuration-based approach
@@ -153,17 +158,22 @@ class GeoDistanceFeatureGroup(AbstractFeatureGroup):
     @classmethod
     def get_point_features(cls, feature_name: str) -> tuple[str, str]:
         """Extract the two point features from the feature name."""
-        # Extract the source feature part (everything after the prefix)
-        source_part = FeatureChainParser.extract_source_feature(feature_name, cls.PREFIX_PATTERN)
-
-        # Split the source part by double underscore to get the two point features
-        parts = source_part.split("__", 1)
+        # For L__R: "point1__point2__distance_type_distance"
+        # Split from right to remove the distance suffix
+        parts = feature_name.rsplit("__", 1)
         if len(parts) != 2:
+            raise ValueError(
+                f"Invalid geo distance feature name format: {feature_name}. Missing double underscore separator."
+            )
+
+        # Now split the remaining part to get the two points
+        point_parts = parts[0].rsplit("__", 1)
+        if len(point_parts) != 2:
             raise ValueError(
                 f"Invalid geo distance feature name format: {feature_name}. Expected two point features separated by double underscore."
             )
 
-        return parts[0], parts[1]
+        return point_parts[0], point_parts[1]
 
     @classmethod
     def match_feature_group_criteria(

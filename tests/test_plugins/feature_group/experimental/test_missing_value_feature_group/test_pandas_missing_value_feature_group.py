@@ -35,7 +35,7 @@ def sample_dataframe_with_missing() -> pd.DataFrame:
 def feature_set_mean() -> FeatureSet:
     """Create a feature set with a mean imputation feature."""
     feature_set = FeatureSet()
-    feature_set.add(Feature("mean_imputed__income"))
+    feature_set.add(Feature("income__mean_imputed"))
     return feature_set
 
 
@@ -43,10 +43,10 @@ def feature_set_mean() -> FeatureSet:
 def feature_set_multiple() -> FeatureSet:
     """Create a feature set with multiple imputation features."""
     feature_set = FeatureSet()
-    feature_set.add(Feature("mean_imputed__income"))
-    feature_set.add(Feature("median_imputed__age"))
-    feature_set.add(Feature("mode_imputed__category"))
-    feature_set.add(Feature("ffill_imputed__temperature"))
+    feature_set.add(Feature("income__mean_imputed"))
+    feature_set.add(Feature("age__median_imputed"))
+    feature_set.add(Feature("category__mode_imputed"))
+    feature_set.add(Feature("temperature__ffill_imputed"))
     return feature_set
 
 
@@ -54,7 +54,7 @@ def feature_set_multiple() -> FeatureSet:
 def feature_set_constant() -> FeatureSet:
     """Create a feature set with a constant imputation feature and options."""
     feature_set = FeatureSet()
-    feature_set.add(Feature("constant_imputed__category"))
+    feature_set.add(Feature("category__constant_imputed"))
 
     for feature in feature_set.features:
         feature.options = Options({"constant_value": "Unknown"})
@@ -66,7 +66,7 @@ def feature_set_constant() -> FeatureSet:
 def feature_set_grouped() -> FeatureSet:
     """Create a feature set with a grouped imputation feature and options."""
     feature_set = FeatureSet()
-    feature_set.add(Feature("mean_imputed__income"))
+    feature_set.add(Feature("income__mean_imputed"))
 
     for feature in feature_set.features:
         feature.options = Options({"group_by_features": ["group"]})
@@ -177,9 +177,9 @@ class TestPandasMissingValueFeatureGroup:
         result = PandasMissingValueFeatureGroup.calculate_feature(sample_dataframe_with_missing, feature_set_mean)
 
         # Check that the result contains the original data plus the imputed feature
-        assert "mean_imputed__income" in result.columns
-        assert abs(result["mean_imputed__income"].iloc[1] - 61666.67) < 0.1
-        assert abs(result["mean_imputed__income"].iloc[3] - 61666.67) < 0.1
+        assert "income__mean_imputed" in result.columns
+        assert abs(result["income__mean_imputed"].iloc[1] - 61666.67) < 0.1
+        assert abs(result["income__mean_imputed"].iloc[3] - 61666.67) < 0.1
 
         # Check that the original data is preserved
         assert "income" in result.columns
@@ -195,19 +195,19 @@ class TestPandasMissingValueFeatureGroup:
         result = PandasMissingValueFeatureGroup.calculate_feature(sample_dataframe_with_missing, feature_set_multiple)
 
         # Check that the result contains all imputed features
-        assert "mean_imputed__income" in result.columns
-        assert abs(result["mean_imputed__income"].iloc[1] - 61666.67) < 0.1
-        assert abs(result["mean_imputed__income"].iloc[3] - 61666.67) < 0.1
+        assert "income__mean_imputed" in result.columns
+        assert abs(result["income__mean_imputed"].iloc[1] - 61666.67) < 0.1
+        assert abs(result["income__mean_imputed"].iloc[3] - 61666.67) < 0.1
 
-        assert "median_imputed__age" in result.columns
-        assert result["median_imputed__age"].iloc[2] == 30
-        assert result["median_imputed__age"].iloc[4] == 30
+        assert "age__median_imputed" in result.columns
+        assert result["age__median_imputed"].iloc[2] == 30
+        assert result["age__median_imputed"].iloc[4] == 30
 
-        assert "mode_imputed__category" in result.columns
-        assert result["mode_imputed__category"].iloc[1] == "A"
-        assert result["mode_imputed__category"].iloc[4] == "A"
+        assert "category__mode_imputed" in result.columns
+        assert result["category__mode_imputed"].iloc[1] == "A"
+        assert result["category__mode_imputed"].iloc[4] == "A"
 
-        assert "ffill_imputed__temperature" in result.columns
+        assert "temperature__ffill_imputed" in result.columns
         # Forward fill depends on the order, so we can't assert exact values
 
         # Check that the original data is preserved
@@ -225,9 +225,9 @@ class TestPandasMissingValueFeatureGroup:
         result = PandasMissingValueFeatureGroup.calculate_feature(sample_dataframe_with_missing, feature_set_constant)
 
         # Check that the result contains the imputed feature
-        assert "constant_imputed__category" in result.columns
-        assert result["constant_imputed__category"].iloc[1] == "Unknown"
-        assert result["constant_imputed__category"].iloc[4] == "Unknown"
+        assert "category__constant_imputed" in result.columns
+        assert result["category__constant_imputed"].iloc[1] == "Unknown"
+        assert result["category__constant_imputed"].iloc[4] == "Unknown"
 
         # Check that the original data is preserved
         assert "income" in result.columns
@@ -243,15 +243,15 @@ class TestPandasMissingValueFeatureGroup:
         result = PandasMissingValueFeatureGroup.calculate_feature(sample_dataframe_with_missing, feature_set_grouped)
 
         # Check that the result contains the imputed feature
-        assert "mean_imputed__income" in result.columns
+        assert "income__mean_imputed" in result.columns
         # Group X: [50000, 75000, 60000] -> mean = 61666.67
         # Group Y: [None, None] -> no mean, should remain None
         # But since we're imputing, we should get the overall mean for group Y
-        assert abs(result["mean_imputed__income"].iloc[0] - 50000) < 0.1  # Original value
-        assert abs(result["mean_imputed__income"].iloc[1] - 61666.67) < 0.1  # Imputed with overall mean
-        assert abs(result["mean_imputed__income"].iloc[2] - 75000) < 0.1  # Original value
-        assert abs(result["mean_imputed__income"].iloc[3] - 61666.67) < 0.1  # Imputed with overall mean
-        assert abs(result["mean_imputed__income"].iloc[4] - 60000) < 0.1  # Original value
+        assert abs(result["income__mean_imputed"].iloc[0] - 50000) < 0.1  # Original value
+        assert abs(result["income__mean_imputed"].iloc[1] - 61666.67) < 0.1  # Imputed with overall mean
+        assert abs(result["income__mean_imputed"].iloc[2] - 75000) < 0.1  # Original value
+        assert abs(result["income__mean_imputed"].iloc[3] - 61666.67) < 0.1  # Imputed with overall mean
+        assert abs(result["income__mean_imputed"].iloc[4] - 60000) < 0.1  # Original value
 
         # Check that the original data is preserved
         assert "income" in result.columns
@@ -263,7 +263,7 @@ class TestPandasMissingValueFeatureGroup:
     def test_calculate_feature_missing_source(self, sample_dataframe_with_missing: pd.DataFrame) -> None:
         """Test calculate_feature method with missing source feature."""
         feature_set = FeatureSet()
-        feature_set.add(Feature("mean_imputed__missing"))
+        feature_set.add(Feature("missing__mean_imputed"))
 
         with pytest.raises(ValueError, match="Source features not found in data"):
             PandasMissingValueFeatureGroup.calculate_feature(sample_dataframe_with_missing, feature_set)
@@ -271,7 +271,7 @@ class TestPandasMissingValueFeatureGroup:
     def test_calculate_feature_constant_without_value(self, sample_dataframe_with_missing: pd.DataFrame) -> None:
         """Test calculate_feature method with constant imputation but no constant value."""
         feature_set = FeatureSet()
-        feature_set.add(Feature("constant_imputed__category"))
+        feature_set.add(Feature("category__constant_imputed"))
 
         with pytest.raises(ValueError, match="Constant value must be provided for constant imputation method"):
             PandasMissingValueFeatureGroup.calculate_feature(sample_dataframe_with_missing, feature_set)
@@ -297,11 +297,11 @@ class TestMissingValuePandasIntegration:
             "category",
             "temperature",
             "group",
-            "mean_imputed__income",  # Mean imputation
-            "median_imputed__age",  # Median imputation
-            "mode_imputed__category",  # Mode imputation
-            "constant_imputed__category",  # Constant imputation
-            "ffill_imputed__temperature",  # Forward fill imputation
+            "income__mean_imputed",  # Mean imputation
+            "age__median_imputed",  # Median imputation
+            "category__mode_imputed",  # Mode imputation
+            "category__constant_imputed",  # Constant imputation
+            "temperature__ffill_imputed",  # Forward fill imputation
         ]
 
         feature_list: List[Feature | str] = [Feature(name=feature, options=options) for feature in feature_str]

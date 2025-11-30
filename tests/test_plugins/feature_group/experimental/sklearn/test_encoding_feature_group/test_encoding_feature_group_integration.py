@@ -52,7 +52,7 @@ class TestEncodingFeatureGroupIntegration:
         )
 
         # Create label encoding feature with unique artifact storage path
-        label_feature = Feature("label_encoded__category", Options({"artifact_storage_path": str(tmp_path)}))
+        label_feature = Feature("category__label_encoded", Options({"artifact_storage_path": str(tmp_path)}))
 
         # Phase 1: Train and save artifacts
         api1 = mlodaAPI(
@@ -67,21 +67,21 @@ class TestEncodingFeatureGroupIntegration:
         # Verify encoding feature was created
         assert len(results1) == 1
         df1 = results1[0]
-        assert "label_encoded__category" in df1.columns
+        assert "category__label_encoded" in df1.columns
 
         # Verify artifacts were created for the encoding feature
         assert len(artifacts1) >= 1
-        assert "label_encoded__category" in artifacts1
+        assert "category__label_encoded" in artifacts1
 
         # Verify that encoding was applied (should have numeric values)
-        encoded_values = df1["label_encoded__category"]
+        encoded_values = df1["category__label_encoded"]
         assert all(isinstance(val, (int, float)) for val in encoded_values)
         # Should have 3 unique categories: Premium, Standard, Basic
         assert len(set(encoded_values)) == 3
 
         # Phase 2: Load artifacts and apply to same data (simulating reuse)
         label_feature_reuse = Feature(
-            "label_encoded__category",
+            "category__label_encoded",
             Options({**artifacts1, "artifact_storage_path": str(tmp_path)}),
         )
 
@@ -97,13 +97,13 @@ class TestEncodingFeatureGroupIntegration:
         # Verify results are identical (indicating artifact reuse)
         assert len(results2) == 1
         df2 = results2[0]
-        assert "label_encoded__category" in df2.columns
+        assert "category__label_encoded" in df2.columns
 
         # No new artifacts should be created (reused existing ones)
         assert len(artifacts2) == 0
 
         # Values should be identical (artifact was reused)
-        assert df1["label_encoded__category"].equals(df2["label_encoded__category"])
+        assert df1["category__label_encoded"].equals(df2["category__label_encoded"])
 
     def test_onehot_encoding_with_artifacts(self, tmp_path: Any) -> None:
         """Test one-hot encoding feature group with artifact save/load."""
@@ -121,7 +121,7 @@ class TestEncodingFeatureGroupIntegration:
         )
 
         # Create one-hot encoding feature with unique artifact storage path
-        onehot_feature = Feature("onehot_encoded__category", Options({"artifact_storage_path": str(tmp_path)}))
+        onehot_feature = Feature("category__onehot_encoded", Options({"artifact_storage_path": str(tmp_path)}))
 
         # Phase 1: Train and save artifacts
         api1 = mlodaAPI(
@@ -138,12 +138,12 @@ class TestEncodingFeatureGroupIntegration:
         df1 = results1[0]
 
         # Check that multiple columns were created with ~ separator
-        onehot_columns = [col for col in df1.columns if col.startswith("onehot_encoded__category~")]
+        onehot_columns = [col for col in df1.columns if col.startswith("category__onehot_encoded~")]
         assert len(onehot_columns) >= 2  # Should have multiple categories
 
         # Verify artifacts were created for the encoding feature
         assert len(artifacts1) >= 1
-        assert "onehot_encoded__category" in artifacts1
+        assert "category__onehot_encoded" in artifacts1
 
         # Each row should have exactly one 1 and rest 0s
         for i in range(len(df1)):
@@ -167,8 +167,8 @@ class TestEncodingFeatureGroupIntegration:
         )
 
         # Create specific one-hot encoding features for individual columns
-        onehot_feature_0 = Feature("onehot_encoded__category~0")
-        onehot_feature_1 = Feature("onehot_encoded__category~1")
+        onehot_feature_0 = Feature("category__onehot_encoded~0")
+        onehot_feature_1 = Feature("category__onehot_encoded~1")
 
         # Phase 1: Test individual column access
         api1 = mlodaAPI(
@@ -185,26 +185,26 @@ class TestEncodingFeatureGroupIntegration:
         df1 = results1[0]
 
         # Should have the specific columns we requested
-        assert "onehot_encoded__category~0" in df1.columns
-        assert "onehot_encoded__category~1" in df1.columns
+        assert "category__onehot_encoded~0" in df1.columns
+        assert "category__onehot_encoded~1" in df1.columns
 
         # Verify artifacts were created for the encoding feature
         assert len(artifacts1) >= 1
-        assert "onehot_encoded__category" in artifacts1
+        assert "category__onehot_encoded" in artifacts1
 
         # Verify the columns contain only 0s and 1s
-        assert all(val in [0, 1] for val in df1["onehot_encoded__category~0"])
-        assert all(val in [0, 1] for val in df1["onehot_encoded__category~1"])
+        assert all(val in [0, 1] for val in df1["category__onehot_encoded~0"])
+        assert all(val in [0, 1] for val in df1["category__onehot_encoded~1"])
 
         # Test that the columns are complementary for binary case or part of multi-class
-        col_0_values = df1["onehot_encoded__category~0"].tolist()
-        col_1_values = df1["onehot_encoded__category~1"].tolist()
+        col_0_values = df1["category__onehot_encoded~0"].tolist()
+        col_1_values = df1["category__onehot_encoded~1"].tolist()
 
         # At least one column should have some 1s (not all zeros)
         assert sum(col_0_values) > 0 or sum(col_1_values) > 0
 
         # Phase 2: Test that we can also get the full onehot encoding
-        onehot_full_feature = Feature("onehot_encoded__category")
+        onehot_full_feature = Feature("category__onehot_encoded")
 
         api2 = mlodaAPI(
             [onehot_full_feature],
@@ -219,14 +219,14 @@ class TestEncodingFeatureGroupIntegration:
         df2 = results2[0]
 
         # Should have multiple columns with ~ separator
-        full_onehot_columns = [col for col in df2.columns if col.startswith("onehot_encoded__category~")]
+        full_onehot_columns = [col for col in df2.columns if col.startswith("category__onehot_encoded~")]
         assert len(full_onehot_columns) >= 2  # Should have at least the columns we know exist
 
         # The individual columns we requested should match the corresponding columns in full encoding
-        if "onehot_encoded__category~0" in df2.columns:
-            assert df1["onehot_encoded__category~0"].equals(df2["onehot_encoded__category~0"])
-        if "onehot_encoded__category~1" in df2.columns:
-            assert df1["onehot_encoded__category~1"].equals(df2["onehot_encoded__category~1"])
+        if "category__onehot_encoded~0" in df2.columns:
+            assert df1["category__onehot_encoded~0"].equals(df2["category__onehot_encoded~0"])
+        if "category__onehot_encoded~1" in df2.columns:
+            assert df1["category__onehot_encoded~1"].equals(df2["category__onehot_encoded~1"])
 
     def test_configuration_based_onehot_with_column_suffix(self) -> None:
         """Test configuration-based OneHot encoding with specific column access (~0, ~1)."""
@@ -284,7 +284,7 @@ class TestEncodingFeatureGroupIntegration:
 
         # Verify artifacts were created for the encoding feature
         assert len(artifacts) >= 1
-        assert "onehot_encoded__category" in artifacts
+        assert "category__onehot_encoded" in artifacts
 
         # Verify the columns contain only 0s and 1s
         assert all(val in [0, 1] for val in df["onehot1~1"])
@@ -292,8 +292,8 @@ class TestEncodingFeatureGroupIntegration:
 
         # Test that configuration-based and string-based approaches produce identical results
         # Create equivalent string-based features
-        onehot_string_feature_0 = Feature("onehot_encoded__category~0")
-        onehot_string_feature_1 = Feature("onehot_encoded__category~1")
+        onehot_string_feature_0 = Feature("category__onehot_encoded~0")
+        onehot_string_feature_1 = Feature("category__onehot_encoded~1")
 
         api_string = mlodaAPI(
             [onehot_string_feature_0, onehot_string_feature_1],
@@ -308,8 +308,8 @@ class TestEncodingFeatureGroupIntegration:
         df_string = results_string[0]
 
         # Compare specific column results
-        assert df["onehot1~0"].equals(df_string["onehot_encoded__category~0"])
-        assert df["onehot2~1"].equals(df_string["onehot_encoded__category~1"])
+        assert df["onehot1~0"].equals(df_string["category__onehot_encoded~0"])
+        assert df["onehot2~1"].equals(df_string["category__onehot_encoded~1"])
 
         # At least one column should have some 1s (not all zeros)
         col_0_values = df["onehot1~1"].tolist()

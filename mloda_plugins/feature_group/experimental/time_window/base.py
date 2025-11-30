@@ -30,15 +30,15 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
     ## Feature Naming Convention
 
     Time window features follow this naming pattern:
-    `{window_function}_{window_size}_{time_unit}_window__{mloda_source_features}`
+    `{mloda_source_features}__{window_function}_{window_size}_{time_unit}_window`
 
-    The source feature (mloda_source_features) is extracted from the feature name and used
-    as input for the time window operation. Note the double underscore before the source feature.
+    The source feature (mloda_source_features) comes first, followed by the window operation.
+    Note the double underscore separating the source feature from the operation.
 
     Examples:
-    - `avg_7_day_window__temperature`: 7-day moving average of temperature
-    - `max_3_hour_window__cpu_usage`: 3-hour rolling maximum of CPU usage
-    - `sum_30_minute_window__transactions`: 30-minute cumulative sum of transactions
+    - `temperature__avg_7_day_window`: 7-day moving average of temperature
+    - `cpu_usage__max_3_hour_window`: 3-hour rolling maximum of CPU usage
+    - `transactions__sum_30_minute_window`: 30-minute cumulative sum of transactions
 
     ## Supported Window Functions
 
@@ -147,8 +147,9 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
         },
     }
 
-    # Define the prefix pattern for this feature group
-    PREFIX_PATTERN = r"^([\w]+)_(\d+)_([\w]+)_window__"
+    # Define the pattern separator and regex for this feature group
+    PATTERN = "__"
+    PREFIX_PATTERN = r".*__([\w]+)_(\d+)_([\w]+)_window$"
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         """Extract source feature from either configuration-based options or string parsing."""
@@ -157,7 +158,7 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
 
         # Try string-based parsing first
         _, source_feature = FeatureChainParser.parse_feature_name(
-            feature_name.name, self.PREFIX_PATTERN, [self.PREFIX_PATTERN]
+            feature_name.name, self.PATTERN, [self.PREFIX_PATTERN]
         )
         if source_feature is not None:
             time_filter_feature = Feature(self.get_time_filter_feature(options))
@@ -176,7 +177,7 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
     @classmethod
     def parse_time_window_prefix(cls, feature_name: str) -> tuple[str, int, str]:
         """
-        Parse the time window prefix into its components.
+        Parse the time window suffix into its components.
 
         Args:
             feature_name: The feature name to parse
@@ -185,23 +186,24 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
             A tuple containing (window_function, window_size, time_unit)
 
         Raises:
-            ValueError: If the prefix doesn't match the expected pattern
+            ValueError: If the suffix doesn't match the expected pattern
         """
-        # Extract the prefix part (everything before the double underscore)
-        prefix_end = feature_name.find("__")
-        if prefix_end == -1:
+        # Extract the suffix part (everything after the last double underscore before the window pattern)
+        # Use rfind to support chained features in L->R format (e.g., price__mean_imputed__sum_7_day_window)
+        suffix_start = feature_name.rfind("__")
+        if suffix_start == -1:
             raise ValueError(
                 f"Invalid time window feature name format: {feature_name}. Missing double underscore separator."
             )
 
-        prefix = feature_name[:prefix_end]
+        suffix = feature_name[suffix_start + 2 :]
 
-        # Parse the prefix components
-        parts = prefix.split("_")
+        # Parse the suffix components
+        parts = suffix.split("_")
         if len(parts) != 4 or parts[3] != "window":
             raise ValueError(
                 f"Invalid time window feature name format: {feature_name}. "
-                f"Expected format: {{window_function}}_{{window_size}}_{{time_unit}}_window__{{mloda_source_features}}"
+                f"Expected format: {{mloda_source_features}}__{{window_function}}_{{window_size}}_{{time_unit}}_window"
             )
 
         window_function, window_size_str, time_unit = parts[0], parts[1], parts[2]
@@ -258,7 +260,7 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
             feature_name,
             options,
             property_mapping=cls.PROPERTY_MAPPING,
-            pattern=cls.PREFIX_PATTERN,
+            pattern=cls.PATTERN,
             prefix_patterns=[cls.PREFIX_PATTERN],
         )
 
@@ -295,7 +297,7 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
 
             # Try string-based parsing first (for legacy features)
             parsed_params, mloda_source_features = FeatureChainParser.parse_feature_name(
-                feature_name, cls.PREFIX_PATTERN, [cls.PREFIX_PATTERN]
+                feature_name, cls.PATTERN, [cls.PREFIX_PATTERN]
             )
 
             if mloda_source_features is not None:

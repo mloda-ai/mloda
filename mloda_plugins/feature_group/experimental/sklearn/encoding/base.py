@@ -33,20 +33,20 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
     - `ordinal`: OrdinalEncoder - converts categories to ordinal integers
 
     Encoding features follow this naming pattern:
-    `{encoder_type}_encoded__{mloda_source_features}`
+    `{mloda_source_features}__{encoder_type}_encoded`
 
     ## Feature Creation Methods
 
     ### 1. String-Based Creation
 
-    Encoding features follow the naming pattern: `{encoder_type}_encoded__{source_feature}`
+    Encoding features follow the naming pattern: `{source_feature}__{encoder_type}_encoded`
 
     Examples:
     ```python
     features = [
-        "onehot_encoded__category",     # OneHot encode the category feature
-        "label_encoded__status",        # Label encode the status feature
-        "ordinal_encoded__priority"     # Ordinal encode the priority feature
+        "category__onehot_encoded",     # OneHot encode the category feature
+        "status__label_encoded",        # Label encode the status feature
+        "priority__ordinal_encoded"     # Ordinal encode the priority feature
     ]
     ```
 
@@ -78,15 +78,15 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
     from mloda_core.abstract_plugins.components.feature import Feature
 
     # OneHot encoding - creates multiple binary columns
-    feature = Feature(name="onehot_encoded__product_category")
-    # Results in: onehot_encoded__product_category~cat1,
-    #             onehot_encoded__product_category~cat2, ...
+    feature = Feature(name="product_category__onehot_encoded")
+    # Results in: product_category__onehot_encoded~cat1,
+    #             product_category__onehot_encoded~cat2, ...
 
     # Label encoding - converts to single integer column
-    feature = Feature(name="label_encoded__customer_segment")
+    feature = Feature(name="customer_segment__label_encoded")
 
     # Ordinal encoding - assigns ordered integer values
-    feature = Feature(name="ordinal_encoded__education_level")
+    feature = Feature(name="education_level__ordinal_encoded")
     ```
 
     ### Configuration-Based Creation
@@ -125,9 +125,9 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
 
     ```python
     # OneHot encoding of 'category' with 3 unique values produces:
-    # - onehot_encoded__category~value1
-    # - onehot_encoded__category~value2
-    # - onehot_encoded__category~value3
+    # - category__onehot_encoded~value1
+    # - category__onehot_encoded~value2
+    # - category__onehot_encoded~value3
     ```
 
     ## Parameter Classification
@@ -168,7 +168,7 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
 
     # Define patterns for parsing
     PATTERN = "__"
-    PREFIX_PATTERN = r"^(onehot|label|ordinal)_encoded__"
+    SUFFIX_PATTERN = r".*__(onehot|label|ordinal)_encoded(~\d+)?$"
 
     # Property mapping for new configuration-based approach
     PROPERTY_MAPPING = {
@@ -193,7 +193,7 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
         """Extract source feature from either configuration-based options or string parsing."""
 
         # Try string-based parsing first
-        _, source_feature = FeatureChainParser.parse_feature_name(feature_name, self.PATTERN, [self.PREFIX_PATTERN])
+        _, source_feature = FeatureChainParser.parse_feature_name(feature_name, self.PATTERN, [self.SUFFIX_PATTERN])
         if source_feature is not None:
             # Remove ~suffix if present (for OneHot column patterns like category~1)
             base_feature = self.get_column_base_feature(source_feature)
@@ -210,7 +210,7 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
     @classmethod
     def get_encoder_type(cls, feature_name: str) -> str:
         """Extract the encoder type from the feature name."""
-        encoder_type, _ = FeatureChainParser.parse_feature_name(feature_name, cls.PATTERN, [cls.PREFIX_PATTERN])
+        encoder_type, _ = FeatureChainParser.parse_feature_name(feature_name, cls.PATTERN, [cls.SUFFIX_PATTERN])
         if encoder_type is None:
             raise ValueError(f"Invalid encoding feature name format: {feature_name}")
 
@@ -237,7 +237,7 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
             options,
             property_mapping=cls.PROPERTY_MAPPING,
             pattern=cls.PATTERN,
-            prefix_patterns=[cls.PREFIX_PATTERN],
+            prefix_patterns=[cls.SUFFIX_PATTERN],
         )
 
     @classmethod
@@ -262,7 +262,7 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
 
             # Create unique artifact key that includes encoder type and source feature
             # This ensures different encoders on different features get separate artifacts
-            artifact_key = f"{encoder_type}_encoded__{base_source_feature}"
+            artifact_key = f"{base_source_feature}__{encoder_type}_encoded"
 
             # Try to load existing fitted encoder from artifact using helper method
             fitted_encoder = None
@@ -316,7 +316,7 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
 
         if cls.PATTERN in feature_name_str:
             encoder_type = cls.get_encoder_type(feature_name_str)
-            source_feature_name = FeatureChainParser.extract_source_feature(feature_name_str, cls.PREFIX_PATTERN)
+            source_feature_name = FeatureChainParser.extract_source_feature(feature_name_str, cls.SUFFIX_PATTERN)
             return encoder_type, source_feature_name
 
         # Fall back to configuration-based approach

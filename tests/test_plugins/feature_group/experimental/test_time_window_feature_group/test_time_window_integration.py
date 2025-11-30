@@ -20,10 +20,10 @@ from tests.test_plugins.feature_group.experimental.test_time_window_feature_grou
 
 # List of time window features to test
 TIME_WINDOW_FEATURES: List[Feature | str] = [
-    "avg_3_day_window__temperature",  # 3-day average temperature
-    "max_5_day_window__humidity",  # 5-day maximum humidity
-    "min_2_day_window__pressure",  # 2-day minimum pressure
-    "sum_4_day_window__wind_speed",  # 4-day sum of wind speed
+    "temperature__avg_3_day_window",  # 3-day average temperature
+    "humidity__max_5_day_window",  # 5-day maximum humidity
+    "pressure__min_2_day_window",  # 2-day minimum pressure
+    "wind_speed__sum_4_day_window",  # 4-day sum of wind speed
 ]
 
 
@@ -42,10 +42,10 @@ class TestTimeWindowPandasIntegration:
         result = mlodaAPI.run_all(
             [
                 "temperature",  # Source data
-                "avg_3_day_window__temperature",  # 3-day average temperature
-                "max_5_day_window__humidity",  # 5-day maximum humidity
-                "min_2_day_window__pressure",  # 2-day minimum pressure
-                "sum_4_day_window__wind_speed",  # 4-day sum of wind speed
+                "temperature__avg_3_day_window",  # 3-day average temperature
+                "humidity__max_5_day_window",  # 5-day maximum humidity
+                "pressure__min_2_day_window",  # 2-day minimum pressure
+                "wind_speed__sum_4_day_window",  # 4-day sum of wind speed
             ],
             compute_frameworks={PandasDataframe},
             plugin_collector=plugin_collector,
@@ -57,7 +57,7 @@ class TestTimeWindowPandasIntegration:
         # Find the DataFrame with the time window features
         window_df = None
         for df in result:
-            if "avg_3_day_window__temperature" in df.columns:
+            if "temperature__avg_3_day_window" in df.columns:
                 window_df = df
                 break
 
@@ -82,10 +82,10 @@ class TestTimeWindowPyArrowIntegration:
         result = mlodaAPI.run_all(
             [
                 "temperature",  # Source data
-                "avg_3_day_window__temperature",  # 3-day average temperature
-                "max_5_day_window__humidity",  # 5-day maximum humidity
-                "min_2_day_window__pressure",  # 2-day minimum pressure
-                "sum_4_day_window__wind_speed",  # 4-day sum of wind speed
+                "temperature__avg_3_day_window",  # 3-day average temperature
+                "humidity__max_5_day_window",  # 5-day maximum humidity
+                "pressure__min_2_day_window",  # 2-day minimum pressure
+                "wind_speed__sum_4_day_window",  # 4-day sum of wind speed
             ],
             compute_frameworks={PyarrowTable},
             plugin_collector=plugin_collector,
@@ -97,7 +97,7 @@ class TestTimeWindowPyArrowIntegration:
         # Find the Table with the time window features
         window_table = None
         for table in result:
-            if "avg_3_day_window__temperature" in table.schema.names:
+            if "temperature__avg_3_day_window" in table.schema.names:
                 window_table = table
                 break
 

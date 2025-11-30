@@ -58,23 +58,23 @@ def test_features_runtime_one_by_one() -> None:
     features_to_test = [
         features[0],  # ✅ Feature 0: "age" - simple string
         features[1],  # ✅ Feature 1: "weight" (with options) - object with flat options
-        features[2],  # ✅ Feature 2: "standard_scaled__mean_imputed__age" - chained feature
-        features[3],  # ✅ Feature 3: "max_aggr__mean_imputed__weight" - aggregation on single column
-        features[4],  # ✅ Feature 4: "min_aggr__mean_imputed__weight" - min aggregation with timewindow
-        features[5],  # ✅ Feature 5: "onehot_encoded__state~0" - column selector with mloda_source
-        features[6],  # ✅ Feature 6: "onehot_encoded__state~1" - column selector with mloda_source
+        features[2],  # ✅ Feature 2: "age__mean_imputed__standard_scaled" - chained feature
+        features[3],  # ✅ Feature 3: "weight__mean_imputed__max_aggr" - aggregation on single column
+        features[4],  # ✅ Feature 4: "weight__mean_imputed__min_aggr" - min aggregation with timewindow
+        features[5],  # ✅ Feature 5: "state__onehot_encoded~0" - column selector with mloda_source
+        features[6],  # ✅ Feature 6: "state__onehot_encoded~1" - column selector with mloda_source
         features[7],  # ✅ Feature 7: "minmaxscaledage" - minmax scaling with mloda_source_features in options
-        features[8],  # ✅ Feature 8: "max_aggr__age" - aggregation with mloda_source and window_size option
+        features[8],  # ✅ Feature 8: "age__max_aggr" - aggregation with mloda_source and window_size option
         features[9],  # ✅ Feature 9: "min_max" - scaling with mloda_source_features in options
-        features[10],  # ✅ Feature 10: "haversine_distance__customer_location__store_location" - geo distance feature
+        features[10],  # ✅ Feature 10: "customer_location__store_location__haversine_distance" - geo distance feature
         features[11],  # ✅ Feature 11: "custom_geo_distance" - config-based geo distance with mloda_sources and options
         features[
             12
         ],  # ✅ Feature 12: "min_max_nested" - nested mloda_source_features with recursive dependencies (weight -> minmaxscaledweght -> max_aggregated -> min_max_nested)
-        features[13],  # ✅ Feature 13: "onehot_encoded__product" - multi-column producer (creates ~0, ~1, ~2)
+        features[13],  # ✅ Feature 13: "product__onehot_encoded" - multi-column producer (creates ~0, ~1, ~2)
         features[
             14
-        ],  # ✅ Feature 14: "sum_aggr__onehot_encoded__product" - multi-column consumer using automatic discovery
+        ],  # ✅ Feature 14: "product__onehot_encoded__sum_aggr" - multi-column consumer using automatic discovery
     ]
 
     # Required plugins (expand as needed)
@@ -111,7 +111,7 @@ def test_features_runtime_one_by_one() -> None:
         # Check if feature column exists in any result DataFrame
         found = any(feature_name in df.columns for df in results)
 
-        if feature_name == "onehot_encoded__product":
+        if feature_name == "product__onehot_encoded":
             continue
 
         assert found, f"Feature {i}: {feature_name} not found in any result DataFrame"
@@ -125,35 +125,35 @@ def test_features_runtime_one_by_one() -> None:
 
 def test_feature_3_step1_onehot_encoding() -> None:
     """
-    Test Feature 3 Step 1: Create intermediate "onehot_encoded__state" feature as prerequisite.
+    Test Feature 3 Step 1: Create intermediate "state__onehot_encoded" feature as prerequisite.
 
-    This test validates that we need to first create the "onehot_encoded__state" feature
-    from "state" before we can use it in the chained feature "max_aggr__onehot_encoded__state".
+    This test validates that we need to first create the "state__onehot_encoded" feature
+    from "state" before we can use it in the chained feature "state__onehot_encoded__max_aggr".
 
-    The problem: Feature 3 ("max_aggr__onehot_encoded__state" with mloda_source="state")
+    The problem: Feature 3 ("state__onehot_encoded__max_aggr" with mloda_source="state")
     expects to chain: state -> onehot_encoded -> max_aggr
 
-    But OneHotEncoder creates MULTIPLE columns (onehot_encoded__state~0, ~1, ~2),
-    not a single column named "onehot_encoded__state".
+    But OneHotEncoder creates MULTIPLE columns (state__onehot_encoded~0, ~1, ~2),
+    not a single column named "state__onehot_encoded".
 
     Solution:
-    1. Create "onehot_encoded__state" which produces multiple columns (~0, ~1, ~2)
-    2. Create "max_aggr__onehot_encoded__state~0" targeting a specific OneHot column
+    1. Create "state__onehot_encoded" which produces multiple columns (~0, ~1, ~2)
+    2. Create "state__onehot_encoded~0__max_aggr" targeting a specific OneHot column
        (using string-based feature name for proper parsing)
     """
     from mloda_core.abstract_plugins.components.feature import Feature
     from mloda_core.abstract_plugins.components.options import Options
     from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
-    # Step 1: Create the intermediate feature "onehot_encoded__state" from "state"
-    # This will create multiple columns: onehot_encoded__state~0, ~1, ~2
+    # Step 1: Create the intermediate feature "state__onehot_encoded" from "state"
+    # This will create multiple columns: state__onehot_encoded~0, ~1, ~2
     intermediate_feature = Feature(
-        name="onehot_encoded__state", options=Options(context={DefaultOptionKeys.mloda_source_features: "state"})
+        name="state__onehot_encoded", options=Options(context={DefaultOptionKeys.mloda_source_features: "state"})
     )
 
-    # Step 2: Create the chained feature "max_aggr__onehot_encoded__state~0"
+    # Step 2: Create the chained feature "state__onehot_encoded~0__max_aggr"
     # Use string-based feature name so the aggregation plugin can parse it correctly
-    chained_feature = "max_aggr__onehot_encoded__state~0"
+    chained_feature = "state__onehot_encoded~0__max_aggr"
 
     # Required plugins
     plugins = {
@@ -178,15 +178,15 @@ def test_feature_3_step1_onehot_encoding() -> None:
     # The aggregation result should be in one of the DataFrames
     found_aggregation = False
     for result_df in results:
-        if "max_aggr__onehot_encoded__state~0" in result_df.columns:
+        if "state__onehot_encoded~0__max_aggr" in result_df.columns:
             found_aggregation = True
             # Verify the column has data (not all NaN)
-            assert not result_df["max_aggr__onehot_encoded__state~0"].isna().all(), (
-                "Feature 'max_aggr__onehot_encoded__state~0' has all NaN values"
+            assert not result_df["state__onehot_encoded~0__max_aggr"].isna().all(), (
+                "Feature 'state__onehot_encoded~0__max_aggr' has all NaN values"
             )
             break
 
     assert found_aggregation, (
-        f"Feature 'max_aggr__onehot_encoded__state~0' not found in any result DataFrame. "
+        f"Feature 'state__onehot_encoded~0__max_aggr' not found in any result DataFrame. "
         f"Result DataFrames: {[df.columns.tolist() for df in results]}"
     )

@@ -36,14 +36,14 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
 
     ### 1. String-Based Creation
 
-    Features follow the naming pattern: `{algorithm}_{dimension}d__{mloda_source_features}`
+    Features follow the naming pattern: `{mloda_source_features}__{algorithm}_{dimension}d`
 
     Examples:
     ```python
     features = [
-        "pca_2d__customer_metrics",      # PCA reduction to 2 dimensions
-        "tsne_3d__product_features",     # t-SNE reduction to 3 dimensions
-        "umap_10d__sensor_readings"      # UMAP reduction to 10 dimensions
+        "customer_metrics__pca_2d",      # PCA reduction to 2 dimensions
+        "product_features__tsne_3d",     # t-SNE reduction to 3 dimensions
+        "sensor_readings__umap_10d"      # UMAP reduction to 10 dimensions
     ]
     ```
 
@@ -111,7 +111,7 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
 
     # Define the prefix pattern for this feature group
     PATTERN = "__"
-    PREFIX_PATTERN = r"^([\w]+)_(\d+)d__"
+    PREFIX_PATTERN = r".*__([\w]+)_(\d+)d$"
 
     PROPERTY_MAPPING = {
         ALGORITHM: {
@@ -215,9 +215,9 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
         return set(source_featurez)
 
     @classmethod
-    def parse_reduction_prefix(cls, feature_name: str) -> tuple[str, int]:
+    def parse_reduction_suffix(cls, feature_name: str) -> tuple[str, int]:
         """
-        Parse the dimensionality reduction prefix into its components.
+        Parse the dimensionality reduction suffix into its components.
 
         Args:
             feature_name: The feature name to parse
@@ -226,23 +226,23 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
             A tuple containing (algorithm, dimension)
 
         Raises:
-            ValueError: If the prefix doesn't match the expected pattern
+            ValueError: If the suffix doesn't match the expected pattern
         """
-        # Extract the prefix part (everything before the double underscore)
-        prefix_end = feature_name.find("__")
-        if prefix_end == -1:
+        # Extract the suffix part (everything after the last double underscore)
+        suffix_start = feature_name.rfind("__")
+        if suffix_start == -1:
             raise ValueError(
                 f"Invalid dimensionality reduction feature name format: {feature_name}. Missing double underscore separator."
             )
 
-        prefix = feature_name[:prefix_end]
+        suffix = feature_name[suffix_start + 2 :]  # Skip the "__"
 
-        # Parse the prefix components
-        parts = prefix.split("_")
+        # Parse the suffix components
+        parts = suffix.split("_")
         if len(parts) != 2 or not parts[1].endswith("d"):
             raise ValueError(
                 f"Invalid dimensionality reduction feature name format: {feature_name}. "
-                f"Expected format: {{algorithm}}_{{dimension}}d__{{mloda_source_features}}"
+                f"Expected format: {{mloda_source_features}}__{{algorithm}}_{{dimension}}d"
             )
 
         algorithm = parts[0]
@@ -290,7 +290,7 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
             if cls.PATTERN in feature_name_str:
                 try:
                     # Use existing validation logic that validates algorithm and dimension
-                    cls.parse_reduction_prefix(feature_name_str)
+                    cls.parse_reduction_suffix(feature_name_str)
                 except ValueError:
                     # If validation fails, this feature doesn't match
                     return False
@@ -320,7 +320,7 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
         feature_name_str = feature.name.name if hasattr(feature.name, "name") else str(feature.name)
 
         if cls.PATTERN in feature_name_str:
-            algorithm, dimension = cls.parse_reduction_prefix(feature_name_str)
+            algorithm, dimension = cls.parse_reduction_suffix(feature_name_str)
             source_features_str = FeatureChainParser.extract_source_feature(feature_name_str, cls.PREFIX_PATTERN)
             source_features = [feature.strip() for feature in source_features_str.split(",")]
             # For string-based features, still extract algorithm-specific options from feature.options

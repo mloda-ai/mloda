@@ -121,7 +121,7 @@ class TestPandasTextCleaningFeatureGroup:
         """Test calculate_feature with a single operation."""
         # Create feature with normalize operation
         feature = Feature(
-            FeatureName("cleaned_text__text"),
+            FeatureName("text__cleaned_text"),
             Options(
                 {
                     TextCleaningFeatureGroup.CLEANING_OPERATIONS: ("normalize",),
@@ -135,15 +135,15 @@ class TestPandasTextCleaningFeatureGroup:
         result = PandasTextCleaningFeatureGroup.calculate_feature(self.df.copy(), feature_set)
 
         # Check results
-        assert "cleaned_text__text" in result.columns
-        assert result["cleaned_text__text"].iloc[0] == "hello world!"
-        assert result["cleaned_text__text"].iloc[1] == "testing text normalization"
+        assert "text__cleaned_text" in result.columns
+        assert result["text__cleaned_text"].iloc[0] == "hello world!"
+        assert result["text__cleaned_text"].iloc[1] == "testing text normalization"
 
     def test_calculate_feature_multiple_operations(self) -> None:
         """Test calculate_feature with multiple operations."""
         # Create feature with multiple operations
         feature = Feature(
-            FeatureName("cleaned_text__text"),
+            FeatureName("text__cleaned_text"),
             Options(
                 {
                     TextCleaningFeatureGroup.CLEANING_OPERATIONS: (
@@ -161,16 +161,16 @@ class TestPandasTextCleaningFeatureGroup:
         result = PandasTextCleaningFeatureGroup.calculate_feature(self.df.copy(), feature_set)
 
         # Check results
-        assert "cleaned_text__text" in result.columns
-        assert result["cleaned_text__text"].iloc[0] == "hello world"  # Lowercase and no punctuation
-        assert "," not in result["cleaned_text__text"].iloc[2]  # No punctuation
-        assert "   " not in result["cleaned_text__text"].iloc[2]  # No extra spaces
+        assert "text__cleaned_text" in result.columns
+        assert result["text__cleaned_text"].iloc[0] == "hello world"  # Lowercase and no punctuation
+        assert "," not in result["text__cleaned_text"].iloc[2]  # No punctuation
+        assert "   " not in result["text__cleaned_text"].iloc[2]  # No extra spaces
 
     def test_calculate_feature_missing_source(self) -> None:
         """Test calculate_feature with a missing source feature."""
         # Create feature with nonexistent source
         feature = Feature(
-            FeatureName("cleaned_text__nonexistent"),
+            FeatureName("nonexistent__cleaned_text"),
             Options(
                 {
                     TextCleaningFeatureGroup.CLEANING_OPERATIONS: ("normalize",),
@@ -190,7 +190,7 @@ class TestPandasTextCleaningFeatureGroup:
         """Test calculate_feature with an invalid operation."""
         # Create feature with invalid operation
         feature = Feature(
-            FeatureName("cleaned_text__text"),
+            FeatureName("text__cleaned_text"),
             Options(
                 {
                     TextCleaningFeatureGroup.CLEANING_OPERATIONS: ("invalid_operation",),

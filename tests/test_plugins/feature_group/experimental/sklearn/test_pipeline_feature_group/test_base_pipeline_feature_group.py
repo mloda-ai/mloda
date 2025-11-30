@@ -15,10 +15,10 @@ class TestSklearnPipelineFeatureGroup:
     def test_match_feature_group_criteria_valid_names(self) -> None:
         """Test that valid feature names match the criteria."""
         valid_names = [
-            "sklearn_pipeline_preprocessing__raw_features",
-            "sklearn_pipeline_scaling__income",
-            "sklearn_pipeline_feature_engineering__customer_data",
-            "sklearn_pipeline_imputation__missing_data",
+            "raw_features__sklearn_pipeline_preprocessing",
+            "income__sklearn_pipeline_scaling",
+            "customer_data__sklearn_pipeline_feature_engineering",
+            "missing_data__sklearn_pipeline_imputation",
         ]
 
         for name in valid_names:
@@ -29,9 +29,9 @@ class TestSklearnPipelineFeatureGroup:
     def test_match_feature_group_criteria_invalid_names(self) -> None:
         """Test that invalid feature names don't match the criteria."""
         invalid_names = [
-            "sklearn_preprocessing__raw_features",  # Missing 'pipeline'
-            "pipeline_preprocessing__raw_features",  # Missing 'sklearn'
-            "sklearn_pipeline__raw_features",  # Missing pipeline name
+            "raw_features__sklearn_preprocessing",  # Missing 'pipeline'
+            "raw_features__pipeline_preprocessing",  # Missing 'sklearn'
+            "raw_features__sklearn_pipeline",  # Missing pipeline name
             "sklearn_pipeline_preprocessing",  # Missing source features
             "other_feature_name",  # Completely different pattern
             "",  # Empty string
@@ -45,10 +45,10 @@ class TestSklearnPipelineFeatureGroup:
     def test_get_pipeline_name(self) -> None:
         """Test extraction of pipeline name from feature name."""
         test_cases = [
-            ("sklearn_pipeline_preprocessing__raw_features", "preprocessing"),
-            ("sklearn_pipeline_scaling__income", "scaling"),
-            ("sklearn_pipeline_feature_engineering__customer_data", "feature_engineering"),
-            ("sklearn_pipeline_imputation__missing_data", "imputation"),
+            ("raw_features__sklearn_pipeline_preprocessing", "preprocessing"),
+            ("income__sklearn_pipeline_scaling", "scaling"),
+            ("customer_data__sklearn_pipeline_feature_engineering", "feature_engineering"),
+            ("missing_data__sklearn_pipeline_imputation", "imputation"),
         ]
 
         for feature_name, expected_pipeline_name in test_cases:
@@ -58,7 +58,7 @@ class TestSklearnPipelineFeatureGroup:
     def test_get_pipeline_name_invalid(self) -> None:
         """Test that invalid feature names raise ValueError."""
         invalid_names = [
-            "sklearn_preprocessing__raw_features",
+            "raw_features__sklearn_preprocessing",
             "invalid_feature_name",
             "",
         ]
@@ -69,7 +69,7 @@ class TestSklearnPipelineFeatureGroup:
 
     def test_input_features_single_source(self) -> None:
         """Test input_features method with single source feature."""
-        feature_name = FeatureName("sklearn_pipeline_preprocessing__raw_features")
+        feature_name = FeatureName("raw_features__sklearn_pipeline_preprocessing")
         options = Options({})
 
         result = SklearnPipelineFeatureGroup().input_features(options, feature_name)
@@ -81,7 +81,7 @@ class TestSklearnPipelineFeatureGroup:
 
     def test_input_features_multiple_sources(self) -> None:
         """Test input_features method with multiple source features."""
-        feature_name = FeatureName("sklearn_pipeline_scaling__income,age,salary")
+        feature_name = FeatureName("income,age,salary__sklearn_pipeline_scaling")
         options = Options({})
 
         result = SklearnPipelineFeatureGroup().input_features(options, feature_name)

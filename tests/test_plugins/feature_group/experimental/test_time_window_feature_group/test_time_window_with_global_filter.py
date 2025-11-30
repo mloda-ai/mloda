@@ -98,8 +98,8 @@ class TestTimeWindowWithGlobalFilter:
             [
                 DefaultOptionKeys.reference_time,
                 "temperature",  # Source data
-                "avg_2_day_window__temperature",  # 2-day average temperature
-                "max_3_day_window__humidity",  # 3-day maximum humidity
+                "temperature__avg_2_day_window",  # 2-day average temperature
+                "humidity__max_3_day_window",  # 3-day maximum humidity
             ],
             compute_frameworks={PandasDataframe},
             plugin_collector=plugin_collector,
@@ -146,18 +146,18 @@ class TestTimeWindowWithGlobalFilter:
         # Find the DataFrame with the window features
         window_features_df = None
         for df in result:
-            if "avg_2_day_window__temperature" in df.columns or "max_3_day_window__humidity" in df.columns:
+            if "temperature__avg_2_day_window" in df.columns or "humidity__max_3_day_window" in df.columns:
                 window_features_df = df
                 break
 
         assert window_features_df is not None, "DataFrame with window features not found"
 
         # Verify the window features exist in the DataFrame
-        assert "avg_2_day_window__temperature" in window_features_df.columns, "avg_2_day_window__temperature not found"
-        assert "max_3_day_window__humidity" in window_features_df.columns, "max_3_day_window__humidity not found"
+        assert "temperature__avg_2_day_window" in window_features_df.columns, "temperature__avg_2_day_window not found"
+        assert "humidity__max_3_day_window" in window_features_df.columns, "humidity__max_3_day_window not found"
 
         # Get the window feature values
-        avg_temp_values = window_features_df["avg_2_day_window__temperature"].tolist()
+        avg_temp_values = window_features_df["temperature__avg_2_day_window"].tolist()
 
         assert avg_temp_values == [
             25.0,
@@ -166,15 +166,15 @@ class TestTimeWindowWithGlobalFilter:
             19.0,
             21.0,
             23.0,
-        ], f"Unexpected avg_2_day_window__temperature values: {avg_temp_values}"
-        assert window_features_df["max_3_day_window__humidity"].tolist() == [
+        ], f"Unexpected temperature__avg_2_day_window values: {avg_temp_values}"
+        assert window_features_df["humidity__max_3_day_window"].tolist() == [
             55.0,
             65.0,
             70.0,
             75.0,
             75.0,
             75.0,
-        ], f"Unexpected max_3_day_window__humidity values: {window_features_df['max_3_day_window__humidity'].tolist()}"
+        ], f"Unexpected humidity__max_3_day_window values: {window_features_df['humidity__max_3_day_window'].tolist()}"
 
     def test_time_window_with_custom_time_filter_name(self) -> None:
         """
@@ -232,7 +232,7 @@ class TestTimeWindowWithGlobalFilter:
         )
 
         avg_3_day_window_temperature = Feature(
-            name="avg_3_day_window__temperature", options={DefaultOptionKeys.reference_time: custom_time_filter}
+            name="temperature__avg_3_day_window", options={DefaultOptionKeys.reference_time: custom_time_filter}
         )
         temperature = Feature(name="temperature", options={DefaultOptionKeys.reference_time: custom_time_filter})
 

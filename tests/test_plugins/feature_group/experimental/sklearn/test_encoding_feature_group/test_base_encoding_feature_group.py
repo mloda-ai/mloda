@@ -18,9 +18,9 @@ class TestEncodingFeatureGroup:
     def test_match_feature_group_criteria_valid_onehot(self) -> None:
         """Test that valid onehot encoding feature names match the criteria."""
         valid_names = [
-            "onehot_encoded__category",
-            "onehot_encoded__status",
-            "onehot_encoded__product_type",
+            "category__onehot_encoded",
+            "status__onehot_encoded",
+            "product_type__onehot_encoded",
         ]
 
         for name in valid_names:
@@ -31,9 +31,9 @@ class TestEncodingFeatureGroup:
     def test_match_feature_group_criteria_valid_label(self) -> None:
         """Test that valid label encoding feature names match the criteria."""
         valid_names = [
-            "label_encoded__category",
-            "label_encoded__status",
-            "label_encoded__priority",
+            "category__label_encoded",
+            "status__label_encoded",
+            "priority__label_encoded",
         ]
 
         for name in valid_names:
@@ -44,9 +44,9 @@ class TestEncodingFeatureGroup:
     def test_match_feature_group_criteria_valid_ordinal(self) -> None:
         """Test that valid ordinal encoding feature names match the criteria."""
         valid_names = [
-            "ordinal_encoded__category",
-            "ordinal_encoded__grade",
-            "ordinal_encoded__size",
+            "category__ordinal_encoded",
+            "grade__ordinal_encoded",
+            "size__ordinal_encoded",
         ]
 
         for name in valid_names:
@@ -57,11 +57,11 @@ class TestEncodingFeatureGroup:
     def test_match_feature_group_criteria_invalid(self) -> None:
         """Test that invalid feature names do not match the criteria."""
         invalid_names = [
-            "invalid_encoded__category",
-            "onehot_scaled__category",  # Wrong suffix
-            "category",  # No prefix
-            "encoded__category",  # Missing encoder type
-            "onehot__category",  # Missing 'encoded'
+            "category__invalid_encoded",
+            "category__onehot_scaled",  # Wrong suffix
+            "category",  # No suffix
+            "category__encoded",  # Missing encoder type
+            "category__onehot",  # Missing 'encoded'
             "",  # Empty string
         ]
 
@@ -73,9 +73,9 @@ class TestEncodingFeatureGroup:
     def test_match_feature_group_criteria_unsupported_encoder(self) -> None:
         """Test that unsupported encoder types do not match the criteria."""
         unsupported_names = [
-            "binary_encoded__category",
-            "target_encoded__category",
-            "frequency_encoded__category",
+            "category__binary_encoded",
+            "category__target_encoded",
+            "category__frequency_encoded",
         ]
 
         for name in unsupported_names:
@@ -86,9 +86,9 @@ class TestEncodingFeatureGroup:
     def test_get_encoder_type_valid(self) -> None:
         """Test extraction of encoder type from valid feature names."""
         test_cases = [
-            ("onehot_encoded__category", "onehot"),
-            ("label_encoded__status", "label"),
-            ("ordinal_encoded__priority", "ordinal"),
+            ("category__onehot_encoded", "onehot"),
+            ("status__label_encoded", "label"),
+            ("priority__ordinal_encoded", "ordinal"),
         ]
 
         for feature_name, expected_encoder in test_cases:
@@ -98,28 +98,28 @@ class TestEncodingFeatureGroup:
     def test_get_encoder_type_invalid(self) -> None:
         """Test that invalid feature names raise ValueError when extracting encoder type."""
         invalid_names = [
-            "invalid_encoded__category",
+            "category__invalid_encoded",
             "category",
-            "encoded__category",
+            "category__encoded",
         ]
 
         for name in invalid_names:
             with pytest.raises(ValueError, match="Invalid encoding feature name format"):
                 EncodingFeatureGroup.get_encoder_type(name)
 
-    def test_parse_feature_prefix_valid(self) -> None:
-        """Test parsing of feature prefix from valid feature names."""
+    def test_parse_feature_suffix_valid(self) -> None:
+        """Test parsing of feature suffix from valid feature names."""
         from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
 
         test_cases = [
-            ("onehot_encoded__category", "category"),
-            ("label_encoded__customer_status", "customer_status"),
-            ("ordinal_encoded__product_priority", "product_priority"),
+            ("category__onehot_encoded", "category"),
+            ("customer_status__label_encoded", "customer_status"),
+            ("product_priority__ordinal_encoded", "product_priority"),
         ]
 
         for feature_name, expected_source in test_cases:
             source_feature = FeatureChainParser.extract_source_feature(
-                feature_name, EncodingFeatureGroup.PREFIX_PATTERN
+                feature_name, EncodingFeatureGroup.SUFFIX_PATTERN
             )
             assert source_feature == expected_source, f"Expected {expected_source}, got {source_feature}"
 
@@ -137,15 +137,15 @@ class TestEncodingFeatureGroup:
         """Test that encoder type option key is properly defined."""
         assert EncodingFeatureGroup.ENCODER_TYPE == "encoder_type"
 
-    def test_prefix_pattern(self) -> None:
-        """Test that prefix pattern is properly defined."""
-        expected_pattern = r"^(onehot|label|ordinal)_encoded__"
-        assert EncodingFeatureGroup.PREFIX_PATTERN == expected_pattern
+    def test_suffix_pattern(self) -> None:
+        """Test that suffix pattern is properly defined."""
+        expected_pattern = r".*__(onehot|label|ordinal)_encoded(~\d+)?$"
+        assert EncodingFeatureGroup.SUFFIX_PATTERN == expected_pattern
 
     def test_input_features(self) -> None:
         """Test input_features method extracts correct source features."""
         feature_group = EncodingFeatureGroup()
-        feature_name = FeatureName("onehot_encoded__category")
+        feature_name = FeatureName("category__onehot_encoded")
         options = Options({})
 
         input_features = feature_group.input_features(options, feature_name)

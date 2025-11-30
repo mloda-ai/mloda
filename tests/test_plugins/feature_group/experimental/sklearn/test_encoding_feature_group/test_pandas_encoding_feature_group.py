@@ -128,11 +128,11 @@ class TestPandasEncodingFeatureGroup:
         data = pd.DataFrame({"category": ["A", "B", "C"], "value": [1, 2, 3]})
         result = np.array([0, 1, 2])
 
-        updated_data = PandasEncodingFeatureGroup._add_result_to_data(data, "label_encoded__category", result, "label")
+        updated_data = PandasEncodingFeatureGroup._add_result_to_data(data, "category__label_encoded", result, "label")
 
         # Check that new column was added
-        assert "label_encoded__category" in updated_data.columns
-        assert list(updated_data["label_encoded__category"]) == [0, 1, 2]
+        assert "category__label_encoded" in updated_data.columns
+        assert list(updated_data["category__label_encoded"]) == [0, 1, 2]
 
         # Original data should be preserved
         assert list(updated_data["category"]) == ["A", "B", "C"]
@@ -145,18 +145,18 @@ class TestPandasEncodingFeatureGroup:
         result = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
         updated_data = PandasEncodingFeatureGroup._add_result_to_data(
-            data, "onehot_encoded__category", result, "onehot"
+            data, "category__onehot_encoded", result, "onehot"
         )
 
         # Check that multiple columns were added with ~ separator
-        assert "onehot_encoded__category~0" in updated_data.columns
-        assert "onehot_encoded__category~1" in updated_data.columns
-        assert "onehot_encoded__category~2" in updated_data.columns
+        assert "category__onehot_encoded~0" in updated_data.columns
+        assert "category__onehot_encoded~1" in updated_data.columns
+        assert "category__onehot_encoded~2" in updated_data.columns
 
         # Check values
-        assert list(updated_data["onehot_encoded__category~0"]) == [1, 0, 0]
-        assert list(updated_data["onehot_encoded__category~1"]) == [0, 1, 0]
-        assert list(updated_data["onehot_encoded__category~2"]) == [0, 0, 1]
+        assert list(updated_data["category__onehot_encoded~0"]) == [1, 0, 0]
+        assert list(updated_data["category__onehot_encoded~1"]) == [0, 1, 0]
+        assert list(updated_data["category__onehot_encoded~2"]) == [0, 0, 1]
 
         # Original data should be preserved
         assert list(updated_data["category"]) == ["A", "B", "C"]
@@ -169,12 +169,12 @@ class TestPandasEncodingFeatureGroup:
         result = np.array([[1], [1], [1]])
 
         updated_data = PandasEncodingFeatureGroup._add_result_to_data(
-            data, "onehot_encoded__category", result, "onehot"
+            data, "category__onehot_encoded", result, "onehot"
         )
 
         # Should add single column without ~ separator
-        assert "onehot_encoded__category" in updated_data.columns
-        assert list(updated_data["onehot_encoded__category"]) == [1, 1, 1]
+        assert "category__onehot_encoded" in updated_data.columns
+        assert list(updated_data["category__onehot_encoded"]) == [1, 1, 1]
 
     def test_add_result_to_data_ordinal_encoder(self) -> None:
         """Test adding OrdinalEncoder results to DataFrame."""
@@ -183,12 +183,12 @@ class TestPandasEncodingFeatureGroup:
         result = np.array([[0], [1], [2]])
 
         updated_data = PandasEncodingFeatureGroup._add_result_to_data(
-            data, "ordinal_encoded__category", result, "ordinal"
+            data, "category__ordinal_encoded", result, "ordinal"
         )
 
         # Check that new column was added (flattened from 2D)
-        assert "ordinal_encoded__category" in updated_data.columns
-        assert list(updated_data["ordinal_encoded__category"]) == [0, 1, 2]
+        assert "category__ordinal_encoded" in updated_data.columns
+        assert list(updated_data["category__ordinal_encoded"]) == [0, 1, 2]
 
         # Original data should be preserved
         assert list(updated_data["category"]) == ["A", "B", "C"]
@@ -203,16 +203,16 @@ class TestPandasEncodingFeatureGroup:
         mock_sparse_result.toarray.return_value = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
         updated_data = PandasEncodingFeatureGroup._add_result_to_data(
-            data, "onehot_encoded__category", mock_sparse_result, "onehot"
+            data, "category__onehot_encoded", mock_sparse_result, "onehot"
         )
 
         # Verify toarray was called
         mock_sparse_result.toarray.assert_called_once()
 
         # Check that multiple columns were added
-        assert "onehot_encoded__category~0" in updated_data.columns
-        assert "onehot_encoded__category~1" in updated_data.columns
-        assert "onehot_encoded__category~2" in updated_data.columns
+        assert "category__onehot_encoded~0" in updated_data.columns
+        assert "category__onehot_encoded~1" in updated_data.columns
+        assert "category__onehot_encoded~2" in updated_data.columns
 
     @patch(
         "mloda_plugins.feature_group.experimental.sklearn.encoding.pandas.PandasEncodingFeatureGroup._import_sklearn_components"
@@ -233,16 +233,16 @@ class TestPandasEncodingFeatureGroup:
 
         # Create feature set
         features = FeatureSet()
-        features.add(Feature("label_encoded__category"))
+        features.add(Feature("category__label_encoded"))
 
         # Execute feature calculation
         result_data = PandasEncodingFeatureGroup.calculate_feature(data, features)
 
         # Check that encoded column was added
-        assert "label_encoded__category" in result_data.columns
+        assert "category__label_encoded" in result_data.columns
         # LabelEncoder should assign 0, 1, 2 to A, B, C respectively
         expected_values = [0, 1, 2, 0, 1]  # A=0, B=1, C=2
-        assert list(result_data["label_encoded__category"]) == expected_values
+        assert list(result_data["category__label_encoded"]) == expected_values
 
     @patch(
         "mloda_plugins.feature_group.experimental.sklearn.encoding.pandas.PandasEncodingFeatureGroup._import_sklearn_components"
@@ -263,13 +263,13 @@ class TestPandasEncodingFeatureGroup:
 
         # Create feature set
         features = FeatureSet()
-        features.add(Feature("onehot_encoded__category"))
+        features.add(Feature("category__onehot_encoded"))
 
         # Execute feature calculation
         result_data = PandasEncodingFeatureGroup.calculate_feature(data, features)
 
         # Check that multiple encoded columns were added
-        onehot_columns = [col for col in result_data.columns if col.startswith("onehot_encoded__category~")]
+        onehot_columns = [col for col in result_data.columns if col.startswith("category__onehot_encoded~")]
         assert len(onehot_columns) == 3  # Should have 3 categories
 
         # Each row should have exactly one 1 and two 0s

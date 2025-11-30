@@ -17,7 +17,7 @@ class TestTextCleaningFeatureGroupBase:
     def test_match_feature_group_criteria_valid(self) -> None:
         """Test that valid feature names are accepted."""
         # Valid feature name
-        feature_name = "cleaned_text__review"
+        feature_name = "review__cleaned_text"
         options = Options()
 
         # Test with string
@@ -43,7 +43,7 @@ class TestTextCleaningFeatureGroupBase:
 
     def test_input_features(self) -> None:
         """Test that the feature group correctly extracts source features."""
-        feature_name = FeatureName("cleaned_text__review")
+        feature_name = FeatureName("review__cleaned_text")
         options = Options()
 
         feature_group = TextCleaningFeatureGroup()
@@ -56,7 +56,7 @@ class TestTextCleaningFeatureGroupBase:
     def test_feature_chaining(self) -> None:
         """Test that the feature group works with chained features."""
         # Chained feature name (cleaned_text applied to an aggregated feature)
-        feature_name = FeatureName("cleaned_text__sum_aggr__sales")
+        feature_name = FeatureName("sum_aggr__sales__cleaned_text")
         options = Options()
 
         feature_group = TextCleaningFeatureGroup()

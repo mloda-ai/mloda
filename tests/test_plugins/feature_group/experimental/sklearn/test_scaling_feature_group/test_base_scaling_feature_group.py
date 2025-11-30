@@ -17,55 +17,55 @@ class TestScalingFeatureGroup:
     def test_match_feature_group_criteria(self) -> None:
         """Test the match_feature_group_criteria method."""
         # Valid feature names
-        assert ScalingFeatureGroup.match_feature_group_criteria("standard_scaled__income", Options())
-        assert ScalingFeatureGroup.match_feature_group_criteria("minmax_scaled__age", Options())
-        assert ScalingFeatureGroup.match_feature_group_criteria("robust_scaled__outlier_prone_feature", Options())
-        assert ScalingFeatureGroup.match_feature_group_criteria("normalizer_scaled__feature_vector", Options())
+        assert ScalingFeatureGroup.match_feature_group_criteria("income__standard_scaled", Options())
+        assert ScalingFeatureGroup.match_feature_group_criteria("age__minmax_scaled", Options())
+        assert ScalingFeatureGroup.match_feature_group_criteria("outlier_prone_feature__robust_scaled", Options())
+        assert ScalingFeatureGroup.match_feature_group_criteria("feature_vector__normalizer_scaled", Options())
 
         # Invalid feature names
-        assert not ScalingFeatureGroup.match_feature_group_criteria("scaled_standard__income", Options())
-        assert not ScalingFeatureGroup.match_feature_group_criteria("invalid_scaled__income", Options())
-        assert not ScalingFeatureGroup.match_feature_group_criteria("standard_scale__income", Options())
-        assert not ScalingFeatureGroup.match_feature_group_criteria("standard_scaled_income", Options())
+        assert not ScalingFeatureGroup.match_feature_group_criteria("income__scaled_standard", Options())
+        assert not ScalingFeatureGroup.match_feature_group_criteria("income__invalid_scaled", Options())
+        assert not ScalingFeatureGroup.match_feature_group_criteria("income__standard_scale", Options())
+        assert not ScalingFeatureGroup.match_feature_group_criteria("income_standard_scaled", Options())
 
     def test_get_scaler_type(self) -> None:
         """Test the get_scaler_type method."""
         # Valid feature names
-        assert ScalingFeatureGroup.get_scaler_type("standard_scaled__income") == "standard"
-        assert ScalingFeatureGroup.get_scaler_type("minmax_scaled__age") == "minmax"
-        assert ScalingFeatureGroup.get_scaler_type("robust_scaled__outlier_prone_feature") == "robust"
-        assert ScalingFeatureGroup.get_scaler_type("normalizer_scaled__feature_vector") == "normalizer"
+        assert ScalingFeatureGroup.get_scaler_type("income__standard_scaled") == "standard"
+        assert ScalingFeatureGroup.get_scaler_type("age__minmax_scaled") == "minmax"
+        assert ScalingFeatureGroup.get_scaler_type("outlier_prone_feature__robust_scaled") == "robust"
+        assert ScalingFeatureGroup.get_scaler_type("feature_vector__normalizer_scaled") == "normalizer"
 
         # Invalid feature names
         with pytest.raises(ValueError):
-            ScalingFeatureGroup.get_scaler_type("scaled_standard__income")
+            ScalingFeatureGroup.get_scaler_type("income__scaled_standard")
 
         with pytest.raises(ValueError):
-            ScalingFeatureGroup.get_scaler_type("invalid_scaled__income")
+            ScalingFeatureGroup.get_scaler_type("income__invalid_scaled")
 
         with pytest.raises(ValueError):
-            ScalingFeatureGroup.get_scaler_type("standard_scale__income")
+            ScalingFeatureGroup.get_scaler_type("income__standard_scale")
 
         with pytest.raises(ValueError):
-            ScalingFeatureGroup.get_scaler_type("standard_scaled_income")
+            ScalingFeatureGroup.get_scaler_type("income_standard_scaled")
 
     def test_input_features(self) -> None:
         """Test the input_features method."""
         feature_group = ScalingFeatureGroup()
 
         # Single source feature
-        input_features = feature_group.input_features(Options(), FeatureName("standard_scaled__income"))
+        input_features = feature_group.input_features(Options(), FeatureName("income__standard_scaled"))
         assert input_features is not None
         assert len(input_features) == 1
         assert Feature("income") in input_features
 
         # Different scaler types
-        input_features = feature_group.input_features(Options(), FeatureName("minmax_scaled__age"))
+        input_features = feature_group.input_features(Options(), FeatureName("age__minmax_scaled"))
         assert input_features is not None
         assert len(input_features) == 1
         assert Feature("age") in input_features
 
-        input_features = feature_group.input_features(Options(), FeatureName("robust_scaled__outlier_prone_feature"))
+        input_features = feature_group.input_features(Options(), FeatureName("outlier_prone_feature__robust_scaled"))
         assert input_features is not None
         assert len(input_features) == 1
         assert Feature("outlier_prone_feature") in input_features

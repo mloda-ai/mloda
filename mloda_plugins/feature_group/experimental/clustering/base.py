@@ -27,15 +27,15 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
     ## Feature Naming Convention
 
     Clustering features follow this naming pattern:
-    `cluster_{algorithm}_{k_value}__{mloda_source_features}`
+    `{mloda_source_features}__cluster_{algorithm}_{k_value}`
 
-    The source features (mloda_source_features) are extracted from the feature name and used
-    as input for the clustering algorithm. Note the double underscore before the source features.
+    The source features come first, followed by the clustering operation.
+    Note the double underscore separating the source features from the operation.
 
     Examples:
-    - `cluster_kmeans_5__customer_behavior`: K-means clustering with 5 clusters on customer behavior data
-    - `cluster_hierarchical_3__transaction_patterns`: Hierarchical clustering with 3 clusters on transaction patterns
-    - `cluster_dbscan_auto__sensor_readings`: DBSCAN clustering with automatic cluster detection on sensor readings
+    - `customer_behavior__cluster_kmeans_5`: K-means clustering with 5 clusters on customer behavior data
+    - `transaction_patterns__cluster_hierarchical_3`: Hierarchical clustering with 3 clusters on transaction patterns
+    - `sensor_readings__cluster_dbscan_auto`: DBSCAN clustering with automatic cluster detection on sensor readings
 
     ## Configuration-Based Creation
 
@@ -57,7 +57,7 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
         )
     )
 
-    # The Engine will automatically parse this into a feature with name "cluster_kmeans_5__customer_behavior"
+    # The Engine will automatically parse this into a feature with name "customer_behavior__cluster_kmeans_5"
     ```
 
     ## Parameter Classification
@@ -102,7 +102,7 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
     }
 
     # Define the prefix pattern for this feature group
-    PREFIX_PATTERN = r"^cluster_([\w]+)_([\w]+)__"
+    PREFIX_PATTERN = r".*__cluster_([\w]+)_([\w]+)$"
     PATTERN = "__"
 
     # Property mapping for configuration-based feature creation
@@ -158,7 +158,7 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
     @classmethod
     def parse_clustering_prefix(cls, feature_name: str) -> tuple[str, str]:
         """
-        Parse the clustering prefix into its components.
+        Parse the clustering suffix into its components.
 
         Args:
             feature_name: The feature name to parse
@@ -167,23 +167,23 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
             A tuple containing (algorithm, k_value)
 
         Raises:
-            ValueError: If the prefix doesn't match the expected pattern
+            ValueError: If the suffix doesn't match the expected pattern
         """
-        # Extract the prefix part (everything before the double underscore)
-        prefix_end = feature_name.find("__")
-        if prefix_end == -1:
+        # Extract the suffix part (everything after the double underscore)
+        suffix_start = feature_name.find("__")
+        if suffix_start == -1:
             raise ValueError(
                 f"Invalid clustering feature name format: {feature_name}. Missing double underscore separator."
             )
 
-        prefix = feature_name[:prefix_end]
+        suffix = feature_name[suffix_start + 2 :]
 
-        # Parse the prefix components
-        parts = prefix.split("_")
+        # Parse the suffix components
+        parts = suffix.split("_")
         if len(parts) != 3 or parts[0] != "cluster":
             raise ValueError(
                 f"Invalid clustering feature name format: {feature_name}. "
-                f"Expected format: cluster_{{algorithm}}_{{k_value}}__{{mloda_source_features}}"
+                f"Expected format: {{mloda_source_features}}__cluster_{{algorithm}}_{{k_value}}"
             )
 
         algorithm, k_value = parts[1], parts[2]

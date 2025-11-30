@@ -68,7 +68,7 @@ class PandasDimensionalityReductionFeatureGroup(DimensionalityReductionFeatureGr
             The updated DataFrame with the dimensionality reduction result added as multiple columns
         """
         # Add individual dimension columns using the multiple result columns pattern
-        algorithm, dimension = cls.parse_reduction_prefix(feature_name)
+        algorithm, dimension = cls.parse_reduction_suffix(feature_name)
         named_columns = cls.apply_naming_convention(result, feature_name, suffix_generator=lambda i: f"dim{i + 1}")
         for col_name, col_data in named_columns.items():
             data[col_name] = col_data

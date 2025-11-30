@@ -14,10 +14,10 @@ from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCr
 
 
 AGGREGATION_FEATURES: List[Feature | str] = [
-    "sum_aggr__sales",  # Sum of sales
-    "avg_aggr__price",  # Average price
-    "min_aggr__discount",  # Minimum discount
-    "max_aggr__customer_rating",  # Maximum customer rating
+    "sales__sum_aggr",  # Sum of sales
+    "price__avg_aggr",  # Average price
+    "discount__min_aggr",  # Minimum discount
+    "customer_rating__max_aggr",  # Maximum customer rating
 ]
 
 
@@ -67,7 +67,7 @@ def validate_aggregated_features(result: List[pd.DataFrame]) -> None:
         assert feature_name in agg_df.columns, f"Expected feature '{feature_name}' not found"
 
     # Verify specific aggregation values
-    assert agg_df["sum_aggr__sales"].iloc[0] == 1500  # Sum of [100, 200, 300, 400, 500]
-    assert agg_df["avg_aggr__price"].iloc[0] == 9.0  # Average of [10.0, 9.5, 9.0, 8.5, 8.0]
-    assert agg_df["min_aggr__discount"].iloc[0] == 0.1  # Min of [0.1, 0.2, 0.15, 0.25, 0.1]
-    assert agg_df["max_aggr__customer_rating"].iloc[0] == 5  # Max of [4, 5, 3, 4, 5]
+    assert agg_df["sales__sum_aggr"].iloc[0] == 1500  # Sum of [100, 200, 300, 400, 500]
+    assert agg_df["price__avg_aggr"].iloc[0] == 9.0  # Average of [10.0, 9.5, 9.0, 8.5, 8.0]
+    assert agg_df["discount__min_aggr"].iloc[0] == 0.1  # Min of [0.1, 0.2, 0.15, 0.25, 0.1]
+    assert agg_df["customer_rating__max_aggr"].iloc[0] == 5  # Max of [4, 5, 3, 4, 5]

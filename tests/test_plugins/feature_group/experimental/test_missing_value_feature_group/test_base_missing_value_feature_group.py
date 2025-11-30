@@ -14,7 +14,7 @@ class TestMissingValueFeatureGroup:
     def test_feature_chain_parser_integration(self) -> None:
         """Test integration with FeatureChainParser."""
         # Test valid feature names
-        feature_name = "mean_imputed__income"
+        feature_name = "income__mean_imputed"
 
         # Test that the PREFIX_PATTERN is correctly defined
         assert hasattr(MissingValueFeatureGroup, "PREFIX_PATTERN")
@@ -26,12 +26,12 @@ class TestMissingValueFeatureGroup:
 
     def test_get_imputation_method(self) -> None:
         """Test extraction of imputation method from feature name."""
-        assert MissingValueFeatureGroup.get_imputation_method("mean_imputed__income") == "mean"
-        assert MissingValueFeatureGroup.get_imputation_method("median_imputed__age") == "median"
-        assert MissingValueFeatureGroup.get_imputation_method("mode_imputed__category") == "mode"
-        assert MissingValueFeatureGroup.get_imputation_method("constant_imputed__status") == "constant"
-        assert MissingValueFeatureGroup.get_imputation_method("ffill_imputed__temperature") == "ffill"
-        assert MissingValueFeatureGroup.get_imputation_method("bfill_imputed__humidity") == "bfill"
+        assert MissingValueFeatureGroup.get_imputation_method("income__mean_imputed") == "mean"
+        assert MissingValueFeatureGroup.get_imputation_method("age__median_imputed") == "median"
+        assert MissingValueFeatureGroup.get_imputation_method("category__mode_imputed") == "mode"
+        assert MissingValueFeatureGroup.get_imputation_method("status__constant_imputed") == "constant"
+        assert MissingValueFeatureGroup.get_imputation_method("temperature__ffill_imputed") == "ffill"
+        assert MissingValueFeatureGroup.get_imputation_method("humidity__bfill_imputed") == "bfill"
 
         # Test with invalid feature names
         with pytest.raises(ValueError):
@@ -42,16 +42,16 @@ class TestMissingValueFeatureGroup:
         options = Options()
 
         # Test with valid feature names
-        assert MissingValueFeatureGroup.match_feature_group_criteria("mean_imputed__income", options)
-        assert MissingValueFeatureGroup.match_feature_group_criteria("median_imputed__age", options)
-        assert MissingValueFeatureGroup.match_feature_group_criteria("mode_imputed__category", options)
-        assert MissingValueFeatureGroup.match_feature_group_criteria("constant_imputed__status", options)
-        assert MissingValueFeatureGroup.match_feature_group_criteria("ffill_imputed__temperature", options)
-        assert MissingValueFeatureGroup.match_feature_group_criteria("bfill_imputed__humidity", options)
+        assert MissingValueFeatureGroup.match_feature_group_criteria("income__mean_imputed", options)
+        assert MissingValueFeatureGroup.match_feature_group_criteria("age__median_imputed", options)
+        assert MissingValueFeatureGroup.match_feature_group_criteria("category__mode_imputed", options)
+        assert MissingValueFeatureGroup.match_feature_group_criteria("status__constant_imputed", options)
+        assert MissingValueFeatureGroup.match_feature_group_criteria("temperature__ffill_imputed", options)
+        assert MissingValueFeatureGroup.match_feature_group_criteria("humidity__bfill_imputed", options)
 
         # Test with FeatureName objects
-        assert MissingValueFeatureGroup.match_feature_group_criteria(FeatureName("mean_imputed__income"), options)
-        assert MissingValueFeatureGroup.match_feature_group_criteria(FeatureName("median_imputed__age"), options)
+        assert MissingValueFeatureGroup.match_feature_group_criteria(FeatureName("income__mean_imputed"), options)
+        assert MissingValueFeatureGroup.match_feature_group_criteria(FeatureName("age__median_imputed"), options)
 
         # Test with invalid feature names
         assert not MissingValueFeatureGroup.match_feature_group_criteria("invalid_feature_name", options)
@@ -64,20 +64,20 @@ class TestMissingValueFeatureGroup:
         feature_group = MissingValueFeatureGroup()
 
         # Test with valid feature names
-        input_features = feature_group.input_features(options, FeatureName("mean_imputed__income"))
+        input_features = feature_group.input_features(options, FeatureName("income__mean_imputed"))
         assert input_features == {Feature("income")}
 
-        input_features = feature_group.input_features(options, FeatureName("median_imputed__age"))
+        input_features = feature_group.input_features(options, FeatureName("age__median_imputed"))
         assert input_features == {Feature("age")}
 
-        input_features = feature_group.input_features(options, FeatureName("mode_imputed__category"))
+        input_features = feature_group.input_features(options, FeatureName("category__mode_imputed"))
         assert input_features == {Feature("category")}
 
-        input_features = feature_group.input_features(options, FeatureName("constant_imputed__status"))
+        input_features = feature_group.input_features(options, FeatureName("status__constant_imputed"))
         assert input_features == {Feature("status")}
 
-        input_features = feature_group.input_features(options, FeatureName("ffill_imputed__temperature"))
+        input_features = feature_group.input_features(options, FeatureName("temperature__ffill_imputed"))
         assert input_features == {Feature("temperature")}
 
-        input_features = feature_group.input_features(options, FeatureName("bfill_imputed__humidity"))
+        input_features = feature_group.input_features(options, FeatureName("humidity__bfill_imputed"))
         assert input_features == {Feature("humidity")}

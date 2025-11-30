@@ -18,7 +18,7 @@ class TestTimeWindowFeatureGroup:
     def test_feature_chain_parser_integration(self) -> None:
         """Test integration with FeatureChainParser."""
         # Test valid feature names
-        feature_name = "avg_3_day_window__temperature"
+        feature_name = "temperature__avg_3_day_window"
 
         # Test that the PREFIX_PATTERN is correctly defined
         assert hasattr(TimeWindowFeatureGroup, "PREFIX_PATTERN")
@@ -32,14 +32,14 @@ class TestTimeWindowFeatureGroup:
     def test_parse_time_window_prefix(self) -> None:
         """Test parsing of time window prefix into components."""
         window_function, window_size, time_unit = TimeWindowFeatureGroup.parse_time_window_prefix(
-            "avg_3_day_window__temperature"
+            "temperature__avg_3_day_window"
         )
         assert window_function == "avg"
         assert window_size == 3
         assert time_unit == "day"
 
         window_function, window_size, time_unit = TimeWindowFeatureGroup.parse_time_window_prefix(
-            "max_7_hour_window__humidity"
+            "humidity__max_7_hour_window"
         )
         assert window_function == "max"
         assert window_size == 7
@@ -60,40 +60,40 @@ class TestTimeWindowFeatureGroup:
 
     def test_get_window_function(self) -> None:
         """Test extraction of window function from feature name."""
-        assert TimeWindowFeatureGroup.get_window_function("avg_3_day_window__temperature") == "avg"
-        assert TimeWindowFeatureGroup.get_window_function("max_7_hour_window__humidity") == "max"
-        assert TimeWindowFeatureGroup.get_window_function("min_2_day_window__pressure") == "min"
-        assert TimeWindowFeatureGroup.get_window_function("sum_4_day_window__wind_speed") == "sum"
+        assert TimeWindowFeatureGroup.get_window_function("temperature__avg_3_day_window") == "avg"
+        assert TimeWindowFeatureGroup.get_window_function("humidity__max_7_hour_window") == "max"
+        assert TimeWindowFeatureGroup.get_window_function("pressure__min_2_day_window") == "min"
+        assert TimeWindowFeatureGroup.get_window_function("wind_speed__sum_4_day_window") == "sum"
 
     def test_get_window_size(self) -> None:
         """Test extraction of window size from feature name."""
-        assert TimeWindowFeatureGroup.get_window_size("avg_3_day_window__temperature") == 3
-        assert TimeWindowFeatureGroup.get_window_size("max_7_hour_window__humidity") == 7
-        assert TimeWindowFeatureGroup.get_window_size("min_2_day_window__pressure") == 2
-        assert TimeWindowFeatureGroup.get_window_size("sum_4_day_window__wind_speed") == 4
+        assert TimeWindowFeatureGroup.get_window_size("temperature__avg_3_day_window") == 3
+        assert TimeWindowFeatureGroup.get_window_size("humidity__max_7_hour_window") == 7
+        assert TimeWindowFeatureGroup.get_window_size("pressure__min_2_day_window") == 2
+        assert TimeWindowFeatureGroup.get_window_size("wind_speed__sum_4_day_window") == 4
 
     def test_get_time_unit(self) -> None:
         """Test extraction of time unit from feature name."""
-        assert TimeWindowFeatureGroup.get_time_unit("avg_3_day_window__temperature") == "day"
-        assert TimeWindowFeatureGroup.get_time_unit("max_7_hour_window__humidity") == "hour"
-        assert TimeWindowFeatureGroup.get_time_unit("min_2_minute_window__pressure") == "minute"
-        assert TimeWindowFeatureGroup.get_time_unit("sum_4_second_window__wind_speed") == "second"
+        assert TimeWindowFeatureGroup.get_time_unit("temperature__avg_3_day_window") == "day"
+        assert TimeWindowFeatureGroup.get_time_unit("humidity__max_7_hour_window") == "hour"
+        assert TimeWindowFeatureGroup.get_time_unit("pressure__min_2_minute_window") == "minute"
+        assert TimeWindowFeatureGroup.get_time_unit("wind_speed__sum_4_second_window") == "second"
 
     def test_match_feature_group_criteria(self) -> None:
         """Test match_feature_group_criteria method."""
         options = Options()
 
         # Test with valid feature names
-        assert TimeWindowFeatureGroup.match_feature_group_criteria("avg_3_day_window__temperature", options)
-        assert TimeWindowFeatureGroup.match_feature_group_criteria("max_7_hour_window__humidity", options)
-        assert TimeWindowFeatureGroup.match_feature_group_criteria("min_2_day_window__pressure", options)
-        assert TimeWindowFeatureGroup.match_feature_group_criteria("sum_4_day_window__wind_speed", options)
+        assert TimeWindowFeatureGroup.match_feature_group_criteria("temperature__avg_3_day_window", options)
+        assert TimeWindowFeatureGroup.match_feature_group_criteria("humidity__max_7_hour_window", options)
+        assert TimeWindowFeatureGroup.match_feature_group_criteria("pressure__min_2_day_window", options)
+        assert TimeWindowFeatureGroup.match_feature_group_criteria("wind_speed__sum_4_day_window", options)
 
         # Test with FeatureName objects
         assert TimeWindowFeatureGroup.match_feature_group_criteria(
-            FeatureName("avg_3_day_window__temperature"), options
+            FeatureName("temperature__avg_3_day_window"), options
         )
-        assert TimeWindowFeatureGroup.match_feature_group_criteria(FeatureName("max_7_hour_window__humidity"), options)
+        assert TimeWindowFeatureGroup.match_feature_group_criteria(FeatureName("humidity__max_7_hour_window"), options)
 
         # Test with invalid feature names
         assert not TimeWindowFeatureGroup.match_feature_group_criteria("invalid_feature_name", options)
@@ -106,19 +106,19 @@ class TestTimeWindowFeatureGroup:
         feature_group = TimeWindowFeatureGroup()
 
         # Test with valid feature names
-        input_features = feature_group.input_features(options, FeatureName("avg_3_day_window__temperature"))
+        input_features = feature_group.input_features(options, FeatureName("temperature__avg_3_day_window"))
         assert input_features == {
             Feature("temperature"),
             Feature(DefaultOptionKeys.reference_time),
         }
 
-        input_features = feature_group.input_features(options, FeatureName("max_7_hour_window__humidity"))
+        input_features = feature_group.input_features(options, FeatureName("humidity__max_7_hour_window"))
         assert input_features == {Feature("humidity"), Feature(DefaultOptionKeys.reference_time)}
 
-        input_features = feature_group.input_features(options, FeatureName("min_2_day_window__pressure"))
+        input_features = feature_group.input_features(options, FeatureName("pressure__min_2_day_window"))
         assert input_features == {Feature("pressure"), Feature(DefaultOptionKeys.reference_time)}
 
-        input_features = feature_group.input_features(options, FeatureName("sum_4_day_window__wind_speed"))
+        input_features = feature_group.input_features(options, FeatureName("wind_speed__sum_4_day_window"))
         assert input_features == {
             Feature("wind_speed"),
             Feature(DefaultOptionKeys.reference_time),

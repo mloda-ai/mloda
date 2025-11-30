@@ -52,7 +52,7 @@ class TestScalingFeatureGroupIntegration:
         )
 
         # Create features: aggregated feature and scaling of that aggregated feature
-        scaling_feature = Feature("standard_scaled__sum_aggr__Sales")
+        scaling_feature = Feature("Sales__sum_aggr__standard_scaled")
 
         # Phase 1: Train and save artifacts
         api1 = mlodaAPI(
@@ -67,14 +67,14 @@ class TestScalingFeatureGroupIntegration:
         # Verify scaling feature was created
         assert len(results1) == 1
         df1 = results1[0]
-        assert "standard_scaled__sum_aggr__Sales" in df1.columns
+        assert "Sales__sum_aggr__standard_scaled" in df1.columns
 
         # Verify artifacts were created for the scaling feature
         assert len(artifacts1) >= 1
-        assert "standard_scaled__sum_aggr__Sales" in artifacts1
+        assert "Sales__sum_aggr__standard_scaled" in artifacts1
 
         # Verify that scaling was applied (all values are 0 since source is constant)
-        scaled_values = df1["standard_scaled__sum_aggr__Sales"]
+        scaled_values = df1["Sales__sum_aggr__standard_scaled"]
         assert abs(scaled_values.mean()) < 0.1
         # Since the aggregated feature is constant (all 1500), scaling results in all 0s
         assert scaled_values.std() == 0.0
@@ -84,7 +84,7 @@ class TestScalingFeatureGroupIntegration:
 
         # Create features with artifact options for reuse
         scaling_feature_reuse = Feature(
-            "standard_scaled__sum_aggr__Sales",
+            "Sales__sum_aggr__standard_scaled",
             Options(artifacts1),
         )
 
@@ -100,10 +100,10 @@ class TestScalingFeatureGroupIntegration:
         # Verify results are identical (indicating artifact reuse)
         assert len(results2) == 1
         df2 = results2[0]
-        assert "standard_scaled__sum_aggr__Sales" in df2.columns
+        assert "Sales__sum_aggr__standard_scaled" in df2.columns
 
         # No new artifacts should be created (reused existing ones)
         assert len(artifacts2) == 0
 
         # Values should be identical (artifact was reused)
-        assert df1["standard_scaled__sum_aggr__Sales"].equals(df2["standard_scaled__sum_aggr__Sales"])
+        assert df1["Sales__sum_aggr__standard_scaled"].equals(df2["Sales__sum_aggr__standard_scaled"])

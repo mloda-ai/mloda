@@ -78,8 +78,8 @@ def validate_dimensionality_reduction_results(result: List) -> None:  # type: ig
             dfs.append(res)
 
     # Find the DataFrame with the dimensionality reduction features
-    pca_feature = "pca_2d__feature0,feature1,feature2"
-    tsne_feature = "tsne_2d__feature0,feature1,feature2"
+    pca_feature = "feature0,feature1,feature2__pca_2d"
+    tsne_feature = "feature0,feature1,feature2__tsne_2d"
 
     # Check that all features exist in the results
     result_df = None
@@ -116,8 +116,8 @@ class TestDimensionalityReductionFeatureGroupIntegration:
             "feature0",
             "feature1",
             "feature2",
-            "pca_2d__feature0,feature1,feature2",
-            "tsne_2d__feature0,feature1,feature2",
+            "feature0,feature1,feature2__pca_2d",
+            "feature0,feature1,feature2__tsne_2d",
         ]
 
         # Run the API
@@ -177,9 +177,9 @@ class TestDimensionalityReductionFeatureGroupIntegration:
             "feature0",
             "feature1",
             "feature2",
-            "pca_2d__feature0,feature1,feature2",
-            "ica_2d__feature0,feature1,feature2",
-            "isomap_2d__feature0,feature1,feature2",
+            "feature0,feature1,feature2__pca_2d",
+            "feature0,feature1,feature2__ica_2d",
+            "feature0,feature1,feature2__isomap_2d",
         ]
 
         # Run the API
@@ -197,9 +197,9 @@ class TestDimensionalityReductionFeatureGroupIntegration:
                 dfs.append(res)
 
         # Find the DataFrame with the dimensionality reduction features
-        pca_feature = "pca_2d__feature0,feature1,feature2"
-        ica_feature = "ica_2d__feature0,feature1,feature2"
-        isomap_feature = "isomap_2d__feature0,feature1,feature2"
+        pca_feature = "feature0,feature1,feature2__pca_2d"
+        ica_feature = "feature0,feature1,feature2__ica_2d"
+        isomap_feature = "feature0,feature1,feature2__isomap_2d"
 
         # Check that all features exist in the results
         result_df = None

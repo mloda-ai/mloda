@@ -22,27 +22,28 @@ class ChainedFeatureGroupTest(ChainedContextFeatureGroupTest):
         3. Add the result to the data with a new feature name.
         """
 
-        has_prefix_configuration, source_feature = FeatureChainParser.parse_feature_name(
-            feature.name, cls.PATTERN, cls.PREFIX_PATTERN
+        has_suffix_configuration, source_feature = FeatureChainParser.parse_feature_name(
+            feature.name, cls.PATTERN, cls.SUFFIX_PATTERN
         )
 
-        if has_prefix_configuration is None or source_feature is None:
+        if has_suffix_configuration is None or source_feature is None:
             raise ValueError(f"Could not parse feature name: {feature.name}")
 
         if source_feature not in data.columns:
             raise ValueError(f"Source feature '{source_feature}' not found in data.")
 
-        if has_prefix_configuration == "identifier1":
+        if has_suffix_configuration == "identifier1":
             val = 0
-        elif has_prefix_configuration == "identifier2":
+        elif has_suffix_configuration == "identifier2":
             val = 1
         else:
-            raise ValueError("Invalid prefix configuration")
+            raise ValueError("Invalid suffix configuration")
 
-        data[f"{has_prefix_configuration}{cls.PATTERN}{source_feature}"] = data[source_feature] * 2 + val
+        data[f"{source_feature}__{cls.OPERATION_ID}{has_suffix_configuration}"] = data[source_feature] * 2 + val
         return data
 
 
 class ChainedFeatureGroupTest_B(ChainedFeatureGroupTest):
-    PATTERN = "_chainer_b__"
-    PREFIX_PATTERN = [r"^([\w]+)_chainer_b__"]
+    PATTERN = "__"
+    SUFFIX_PATTERN = [r".*__chainer_b_([\w]+)$"]
+    OPERATION_ID = "chainer_b_"  # Used for constructing feature names

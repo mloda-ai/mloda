@@ -17,7 +17,7 @@ from mloda_plugins.feature_group.experimental.clustering.base import ClusteringF
 from mloda_core.abstract_plugins.components.options import Options
 
 # Test valid and invalid feature names
-assert ClusteringFeatureGroup.match_feature_group_criteria("cluster_kmeans_5__customer_behavior", Options())
+assert ClusteringFeatureGroup.match_feature_group_criteria("customer_behavior__cluster_kmeans_5", Options())
 assert not ClusteringFeatureGroup.match_feature_group_criteria("invalid_name", Options())
 ```
 
@@ -28,7 +28,7 @@ Test that your feature group correctly extracts source features from feature nam
 **Example:**
 ``` python
 # Test extracting source features from a feature name
-input_features = feature_group.input_features(Options(), FeatureName("sum_aggr__sales"))
+input_features = feature_group.input_features(Options(), FeatureName("sales__sum_aggr"))
 assert Feature("sales") in input_features
 ```
 
@@ -44,9 +44,9 @@ from mloda_plugins.feature_group.experimental.clustering.pandas import PandasClu
 
 # Test calculation with sample data
 feature_set = FeatureSet()
-feature_set.add(Feature("cluster_kmeans_2__feature1,feature2"))
+feature_set.add(Feature("feature1,feature2__cluster_kmeans_2"))
 result = PandasClusteringFeatureGroup.calculate_feature(sample_data, feature_set)
-assert "cluster_kmeans_2__feature1,feature2" in result.columns
+assert "feature1,feature2__cluster_kmeans_2" in result.columns
 ```
 
 ### 4. Configuration-Based Feature Creation
@@ -61,7 +61,7 @@ options = Options({
     "mloda_source_features": "sales"
 })
 feature_name = parser_config.parse_from_options(options)
-assert feature_name == "sum_aggr__sales"
+assert feature_name == "sales__sum_aggr"
 ```
 
 ### 5. Integration with mloda API
@@ -73,9 +73,9 @@ Test that your feature group works correctly with the mloda API.
 from mloda_core.api.request import mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
 
-features = ["source_feature", "my_operation__source_feature"]
+features = ["source_feature", "source_feature__my_operation"]
 result = mlodaAPI.run_all(features, compute_frameworks={PandasDataframe})
-assert "my_operation__source_feature" in result[0].columns
+assert "source_feature__my_operation" in result[0].columns
 ```
 
 ## Test Organization

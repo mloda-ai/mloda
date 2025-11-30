@@ -31,7 +31,7 @@ class TextCleaningFeatureGroup(AbstractFeatureGroup):
 
     # Define prefix pattern and pattern
     PATTERN = "__"
-    PREFIX_PATTERN = r"^cleaned_text__"
+    PREFIX_PATTERN = r".*__cleaned_text$"
 
     # Property mapping for configuration-based features
     PROPERTY_MAPPING = {
@@ -73,14 +73,14 @@ class TextCleaningFeatureGroup(AbstractFeatureGroup):
     ## Feature Naming Convention
 
     Text cleaning features follow this naming pattern:
-    `cleaned_text__{mloda_source_features}`
+    `{mloda_source_features}__cleaned_text`
 
-    The source feature (mloda_source_features) is extracted from the feature name and used
-    as input for the text cleaning operations. Note the double underscore before the source feature.
+    The source feature comes first, followed by the cleaning operation.
+    Note the double underscore separating the source feature from the operation.
 
     Examples:
-    - `cleaned_text__review`: Apply text cleaning operations to the "review" feature
-    - `cleaned_text__description`: Apply text cleaning operations to the "description" feature
+    - `review__cleaned_text`: Apply text cleaning operations to the "review" feature
+    - `description__cleaned_text`: Apply text cleaning operations to the "description" feature
 
     ## Configuration-Based Creation
 
@@ -98,7 +98,7 @@ class TextCleaningFeatureGroup(AbstractFeatureGroup):
         })
     )
 
-    # The Engine will automatically parse this into a feature with name "cleaned_text__review"
+    # The Engine will automatically parse this into a feature with name "review__cleaned_text"
     ```
 
     ## Supported Cleaning Operations

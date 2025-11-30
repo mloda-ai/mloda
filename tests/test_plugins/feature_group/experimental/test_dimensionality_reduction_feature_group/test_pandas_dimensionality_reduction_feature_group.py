@@ -63,15 +63,15 @@ class TestPandasDimensionalityReductionFeatureGroup:
 
         # Add the result to the data
         updated_data = PandasDimensionalityReductionFeatureGroup._add_result_to_data(
-            sample_data, "pca_2d__feature0,feature1", result
+            sample_data, "feature0,feature1__pca_2d", result
         )
 
         # Check that the result was added
-        assert "pca_2d__feature0,feature1~dim1" in updated_data.columns
-        assert "pca_2d__feature0,feature1~dim2" in updated_data.columns
-        assert len(updated_data["pca_2d__feature0,feature1~dim1"]) == len(sample_data)
-        assert (updated_data["pca_2d__feature0,feature1~dim1"].values == result[:, 0]).all()
-        assert (updated_data["pca_2d__feature0,feature1~dim2"].values == result[:, 1]).all()
+        assert "feature0,feature1__pca_2d~dim1" in updated_data.columns
+        assert "feature0,feature1__pca_2d~dim2" in updated_data.columns
+        assert len(updated_data["feature0,feature1__pca_2d~dim1"]) == len(sample_data)
+        assert (updated_data["feature0,feature1__pca_2d~dim1"].values == result[:, 0]).all()
+        assert (updated_data["feature0,feature1__pca_2d~dim2"].values == result[:, 1]).all()
 
     def test_perform_pca_reduction(self, sample_data: pd.DataFrame) -> None:
         """Test the _perform_pca_reduction method."""
@@ -166,51 +166,51 @@ class TestPandasDimensionalityReductionFeatureGroup:
         """Test the calculate_feature method with PCA."""
         # Create a feature set
         feature_set = FeatureSet()
-        feature_set.add(Feature("pca_2d__feature0,feature1,feature2"))
+        feature_set.add(Feature("feature0,feature1,feature2__pca_2d"))
 
         # Calculate the feature
         result = PandasDimensionalityReductionFeatureGroup.calculate_feature(sample_data, feature_set)
 
         # Check that the result has the expected columns
-        assert "pca_2d__feature0,feature1,feature2~dim1" in result.columns
-        assert "pca_2d__feature0,feature1,feature2~dim2" in result.columns
+        assert "feature0,feature1,feature2__pca_2d~dim1" in result.columns
+        assert "feature0,feature1,feature2__pca_2d~dim2" in result.columns
 
     # def test_calculate_feature_tsne(self, sample_data: pd.DataFrame) -> None:
     #    """Test the calculate_feature method with t-SNE."""
     # Create a feature set (use a small subset for t-SNE to speed up the test)
     #    small_sample = sample_data.iloc[:20].copy()
     #    feature_set = FeatureSet()
-    #    feature_set.add(Feature("tsne_2d__feature0,feature1,feature2"))
+    #    feature_set.add(Feature("feature0,feature1,feature2__tsne_2d"))
 
     # Calculate the feature
     #    result = PandasDimensionalityReductionFeatureGroup.calculate_feature(small_sample, feature_set)
 
     #    # Check that the result has the expected columns
-    #    assert "tsne_2d__feature0,feature1,feature2~dim1" in result.columns
-    #    assert "tsne_2d__feature0,feature1,feature2~dim2" in result.columns
+    #    assert "feature0,feature1,feature2__tsne_2d~dim1" in result.columns
+    #    assert "feature0,feature1,feature2__tsne_2d~dim2" in result.columns
 
     def test_calculate_feature_multiple(self, sample_data: pd.DataFrame) -> None:
         """Test the calculate_feature method with multiple dimensionality reduction features."""
         # Create a feature set (use a small subset to speed up the test)
         small_sample = sample_data.iloc[:20].copy()
         feature_set = FeatureSet()
-        feature_set.add(Feature("pca_2d__feature0,feature1,feature2"))
-        feature_set.add(Feature("ica_2d__feature0,feature1,feature2"))
+        feature_set.add(Feature("feature0,feature1,feature2__pca_2d"))
+        feature_set.add(Feature("feature0,feature1,feature2__ica_2d"))
 
         # Calculate the features
         result = PandasDimensionalityReductionFeatureGroup.calculate_feature(small_sample, feature_set)
 
         # Check that the result has the expected columns
-        assert "pca_2d__feature0,feature1,feature2~dim1" in result.columns
-        assert "pca_2d__feature0,feature1,feature2~dim2" in result.columns
-        assert "ica_2d__feature0,feature1,feature2~dim1" in result.columns
-        assert "ica_2d__feature0,feature1,feature2~dim2" in result.columns
+        assert "feature0,feature1,feature2__pca_2d~dim1" in result.columns
+        assert "feature0,feature1,feature2__pca_2d~dim2" in result.columns
+        assert "feature0,feature1,feature2__ica_2d~dim1" in result.columns
+        assert "feature0,feature1,feature2__ica_2d~dim2" in result.columns
 
     def test_invalid_dimension(self, sample_data: pd.DataFrame) -> None:
         """Test with an invalid dimension (too large)."""
         # Create a feature set with a dimension that's too large
         feature_set = FeatureSet()
-        feature_set.add(Feature("pca_20d__feature0,feature1,feature2"))  # Only 3 features, but asking for 20 dimensions
+        feature_set.add(Feature("feature0,feature1,feature2__pca_20d"))  # Only 3 features, but asking for 20 dimensions
 
         # Calculate the feature (should raise an error)
         with pytest.raises(ValueError, match="Target dimension .* must be less than the number of source features"):
@@ -220,7 +220,7 @@ class TestPandasDimensionalityReductionFeatureGroup:
         """Test with a missing source feature."""
         # Create a feature set with a missing source feature
         feature_set = FeatureSet()
-        feature_set.add(Feature("pca_2d__missing_feature"))
+        feature_set.add(Feature("missing_feature__pca_2d"))
 
         # Calculate the feature (should raise an error)
         with pytest.raises(ValueError, match="Feature 'missing_feature' not found in the data"):
@@ -231,11 +231,11 @@ class TestPandasDimensionalityReductionFeatureGroup:
         # This test should pass because the base class validation should catch this before
         # it gets to the pandas implementation
         feature_set = FeatureSet()
-        feature_set.add(Feature("unsupported_2d__feature0,feature1"))
+        feature_set.add(Feature("feature0,feature1__unsupported_2d"))
 
         # The match_feature_group_criteria method should return False for this feature
         assert not PandasDimensionalityReductionFeatureGroup.match_feature_group_criteria(
-            "unsupported_2d__feature0,feature1", Options()
+            "feature0,feature1__unsupported_2d", Options()
         )
 
     def test_tsne_with_custom_parameters(self, sample_data: pd.DataFrame) -> None:
@@ -248,7 +248,7 @@ class TestPandasDimensionalityReductionFeatureGroup:
         # Use only 10 samples - this is just a unit test to verify parameters work
         small_sample = sample_data.iloc[:10].copy()
         feature = Feature(
-            "tsne_2d__feature0,feature1,feature2",
+            "feature0,feature1,feature2__tsne_2d",
             Options(
                 {
                     DimensionalityReductionFeatureGroup.TSNE_MAX_ITER: 250,  # Minimal for unit test
@@ -264,8 +264,8 @@ class TestPandasDimensionalityReductionFeatureGroup:
         result = PandasDimensionalityReductionFeatureGroup.calculate_feature(small_sample, feature_set)
 
         # Check that the result has the expected columns
-        assert "tsne_2d__feature0,feature1,feature2~dim1" in result.columns
-        assert "tsne_2d__feature0,feature1,feature2~dim2" in result.columns
+        assert "feature0,feature1,feature2__tsne_2d~dim1" in result.columns
+        assert "feature0,feature1,feature2__tsne_2d~dim2" in result.columns
 
     def test_pca_with_custom_svd_solver(self, sample_data: pd.DataFrame) -> None:
         """Test PCA with custom SVD solver parameter."""
@@ -275,7 +275,7 @@ class TestPandasDimensionalityReductionFeatureGroup:
 
         # Create a feature set with custom PCA parameters
         feature = Feature(
-            "pca_2d__feature0,feature1,feature2",
+            "feature0,feature1,feature2__pca_2d",
             Options({DimensionalityReductionFeatureGroup.PCA_SVD_SOLVER: "full"}),
         )
         feature_set = FeatureSet()
@@ -285,8 +285,8 @@ class TestPandasDimensionalityReductionFeatureGroup:
         result = PandasDimensionalityReductionFeatureGroup.calculate_feature(sample_data, feature_set)
 
         # Check that the result has the expected columns
-        assert "pca_2d__feature0,feature1,feature2~dim1" in result.columns
-        assert "pca_2d__feature0,feature1,feature2~dim2" in result.columns
+        assert "feature0,feature1,feature2__pca_2d~dim1" in result.columns
+        assert "feature0,feature1,feature2__pca_2d~dim2" in result.columns
 
     def test_ica_with_custom_max_iter(self, sample_data: pd.DataFrame) -> None:
         """Test ICA with custom max_iter parameter."""
@@ -296,7 +296,7 @@ class TestPandasDimensionalityReductionFeatureGroup:
 
         # Create a feature set with custom ICA parameters
         feature = Feature(
-            "ica_2d__feature0,feature1,feature2",
+            "feature0,feature1,feature2__ica_2d",
             Options({DimensionalityReductionFeatureGroup.ICA_MAX_ITER: 300}),
         )
         feature_set = FeatureSet()
@@ -306,8 +306,8 @@ class TestPandasDimensionalityReductionFeatureGroup:
         result = PandasDimensionalityReductionFeatureGroup.calculate_feature(sample_data, feature_set)
 
         # Check that the result has the expected columns
-        assert "ica_2d__feature0,feature1,feature2~dim1" in result.columns
-        assert "ica_2d__feature0,feature1,feature2~dim2" in result.columns
+        assert "feature0,feature1,feature2__ica_2d~dim1" in result.columns
+        assert "feature0,feature1,feature2__ica_2d~dim2" in result.columns
 
     def test_isomap_with_custom_n_neighbors(self, sample_data: pd.DataFrame) -> None:
         """Test Isomap with custom n_neighbors parameter."""
@@ -318,7 +318,7 @@ class TestPandasDimensionalityReductionFeatureGroup:
         # Create a feature set with custom Isomap parameters (use small sample)
         small_sample = sample_data.iloc[:20].copy()
         feature = Feature(
-            "isomap_2d__feature0,feature1,feature2",
+            "feature0,feature1,feature2__isomap_2d",
             Options({DimensionalityReductionFeatureGroup.ISOMAP_N_NEIGHBORS: 3}),
         )
         feature_set = FeatureSet()
@@ -328,5 +328,5 @@ class TestPandasDimensionalityReductionFeatureGroup:
         result = PandasDimensionalityReductionFeatureGroup.calculate_feature(small_sample, feature_set)
 
         # Check that the result has the expected columns
-        assert "isomap_2d__feature0,feature1,feature2~dim1" in result.columns
-        assert "isomap_2d__feature0,feature1,feature2~dim2" in result.columns
+        assert "feature0,feature1,feature2__isomap_2d~dim1" in result.columns
+        assert "feature0,feature1,feature2__isomap_2d~dim2" in result.columns

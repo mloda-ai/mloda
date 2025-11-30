@@ -35,23 +35,24 @@ class FeatureChainParser:
         """Internal method for parsing feature names - used by match_configuration_feature_chain_parser."""
         _feature_name: str = feature_name.name if isinstance(feature_name, FeatureName) else feature_name
 
-        parts = _feature_name.split("__", 1)
-        itself = parts[0] + "__"  # Ensure we have the prefix part with double underscore
+        parts = _feature_name.rsplit(pattern, 1)
+        source_feature = parts[0] if len(parts) > 1 else ""
+        operation_part = parts[1] if len(parts) > 1 else parts[0]
 
-        remainder = ""
-        if len(parts) > 1:
-            remainder = parts[1]
-
-        for prefix_pattern in prefix_patterns:
-            if re.match(prefix_pattern, itself) is None:
+        for suffix_pattern in prefix_patterns:
+            if re.match(suffix_pattern, _feature_name) is None:
                 continue
 
-            if len(parts) == 1:
+            if len(parts) == 1 or not source_feature:
                 raise ValueError(f"Matches the pattern {pattern}, but has no source feature: {_feature_name}")
 
-            source_feature = remainder
-            has_prefix_configuration = itself.split(pattern, 1)[0]
-            return has_prefix_configuration, source_feature
+            match = re.match(suffix_pattern, _feature_name)
+            if match and match.groups():
+                operation_config = match.group(1)
+            else:
+                operation_config = operation_part.split("_")[0]
+
+            return operation_config, source_feature
 
         return None, None
 
@@ -286,13 +287,13 @@ class FeatureChainParser:
         return False
 
     @classmethod
-    def extract_source_feature(cls, feature_name: str, prefix_pattern: str) -> str:
+    def extract_source_feature(cls, feature_name: str, suffix_pattern: str) -> str:
         """
-        Extract the source feature from a feature name based on the prefix pattern.
+        Extract the source feature from a feature name based on the suffix pattern.
 
         Args:
             feature_name: The feature name to parse
-            prefix_pattern: Regex pattern for the prefix (e.g., r"^([w]+)_aggr__")
+            suffix_pattern: Regex pattern for the suffix (e.g., r"^.+__([w]+)$")
 
         Returns:
             The source feature part of the name
@@ -300,14 +301,14 @@ class FeatureChainParser:
         Raises:
             ValueError: If the feature name doesn't match the expected pattern
         """
-        match = re.match(prefix_pattern, feature_name)
+        match = re.match(suffix_pattern, feature_name)
         if not match:
             raise ValueError(f"Invalid feature name format: {feature_name}")
 
-        # Extract the prefix part (everything before the double underscore)
-        prefix_end = feature_name.find("__")
-        if prefix_end == -1:
+        # For L→R: source is everything BEFORE the last __
+        suffix_start = feature_name.rfind("__")
+        if suffix_start == -1:
             raise ValueError(f"Invalid feature name format: {feature_name}. Missing double underscore separator.")
 
-        # Return everything after the double underscore
-        return feature_name[prefix_end + 2 :]
+        # Return everything BEFORE the last double underscore (the source)
+        return feature_name[:suffix_start]

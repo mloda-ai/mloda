@@ -11,12 +11,12 @@ The Feature Chain Parser system enables feature groups to work with both traditi
 Feature chaining allows feature groups to be composed, where the output of one feature group becomes the input to another. This is reflected in the feature name using a double underscore pattern:
 
 ```
-{operation}__{source_feature}
+{source_feature}__{operation}
 ```
 
 For example:
-- `sum_aggr__sales` - Simple feature
-- `max_aggr__sum_7_day_window__mean_imputed__price` - Chained feature
+- `sales__sum_aggr` - Simple feature
+- `price__mean_imputed__sum_7_day_window__max_aggr` - Chained feature
 
 ### Unified Parser Architecture
 
@@ -58,7 +58,7 @@ from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.options import Options
 
 # Traditional string-based approach:
-feature = Feature("sum_aggr__sales")
+feature = Feature("sales__sum_aggr")
 
 # Modern configuration-based approach:
 feature = Feature(
@@ -85,7 +85,7 @@ from mloda_core.abstract_plugins.components.feature_name import FeatureName
 
 class MyFeatureGroup(AbstractFeatureGroup):
     PATTERN = "__"
-    PREFIX_PATTERN = [r"^([a-zA-Z_]+)_operation__"]
+    SUFFIX_PATTERN = [r"__([a-zA-Z_]+)_operation$"]
     
     PROPERTY_MAPPING = {
         # Feature-specific parameter
@@ -113,11 +113,11 @@ Replace old pattern-only matching with unified parser:
 @classmethod
 def match_feature_group_criteria(cls, feature_name, options, data_access_collection=None):
     return FeatureChainParser.match_configuration_feature_chain_parser(
-        feature_name, 
-        options, 
+        feature_name,
+        options,
         property_mapping=cls.PROPERTY_MAPPING,
-        pattern=cls.PATTERN, 
-        prefix_patterns=cls.PREFIX_PATTERN
+        pattern=cls.PATTERN,
+        suffix_patterns=cls.SUFFIX_PATTERN
     )
 ```
 
@@ -128,10 +128,10 @@ Handle both string-based and configuration-based features:
 ``` python
 def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
     """Extract source feature from either configuration-based options or string parsing."""
-    
+
     # Try string-based parsing first
     _, source_feature = FeatureChainParser.parse_feature_name(
-        feature_name, self.PATTERN, self.PREFIX_PATTERN
+        feature_name, self.PATTERN, self.SUFFIX_PATTERN
     )
     if source_feature is not None:
         return {Feature(source_feature)}
@@ -164,7 +164,7 @@ def calculate_feature(self, features, options):
         except (ValueError, StopIteration):
             # Fall back to string-based approach for legacy features
             operation_type, source_feature_name = FeatureChainParser.parse_feature_name(
-                feature.name, self.PATTERN, self.PREFIX_PATTERN
+                feature.name, self.PATTERN, self.SUFFIX_PATTERN
             )
         
         # Process using extracted values
@@ -244,7 +244,7 @@ class MultiColumnProducer(AbstractFeatureGroup):
         # Automatically apply naming convention
         feature_name = features.get_name_of_one_feature().name
         named_columns = cls.apply_naming_convention(result, feature_name)
-        # Returns: {"onehot_encoded__category~0": data, "~1": data, "~2": data}
+        # Returns: {"category__onehot_encoded~0": data, "~1": data, "~2": data}
 
         return named_columns
 ```
@@ -257,16 +257,16 @@ Use `resolve_multi_column_feature()` to automatically discover columns:
 class MultiColumnConsumer(AbstractFeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         # Request base feature without ~N suffix
-        return {Feature("onehot_encoded__category")}
+        return {Feature("category__onehot_encoded")}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         # Automatically discover all matching columns
         columns = cls.resolve_multi_column_feature(
-            "onehot_encoded__category",
+            "category__onehot_encoded",
             set(data.columns)
         )
-        # Returns: ["onehot_encoded__category~0", "~1", "~2"]
+        # Returns: ["category__onehot_encoded~0", "~1", "~2"]
 
         # Process all discovered columns
         result = sum(data[col] for col in columns)
@@ -281,9 +281,9 @@ For backwards compatibility, you can still access specific columns:
 
 ``` python
 # Manual specification of specific columns
-base_feature = "onehot_encoded__category"  # Creates all columns
-specific_column = "onehot_encoded__category~0"  # Access first column
-another_column = "onehot_encoded__category~1"  # Access second column
+base_feature = "category__onehot_encoded"  # Creates all columns
+specific_column = "category__onehot_encoded~0"  # Access first column
+another_column = "category__onehot_encoded~1"  # Access second column
 ```
 
 **Recommended**: Use automatic discovery (`resolve_multi_column_feature`) instead of manual enumeration for cleaner, more maintainable code.

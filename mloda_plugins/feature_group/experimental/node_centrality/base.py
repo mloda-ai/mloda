@@ -30,16 +30,15 @@ class NodeCentralityFeatureGroup(AbstractFeatureGroup):
     ## Feature Naming Convention
 
     Node centrality features follow this naming pattern:
-    `{centrality_type}_centrality__{node_feature}`
+    `{node_feature}__{centrality_type}_centrality`
 
-    The node feature (mloda_source_features) is extracted from the feature name and used
-    as the node identifier for centrality calculations. Note the double underscore before 
-    the node feature.
+    The node feature comes first, followed by the centrality operation.
+    Note the double underscore separating the source feature from the operation.
 
     Examples:
-    - `degree_centrality__user`: Degree centrality for user nodes
-    - `betweenness_centrality__product`: Betweenness centrality for product nodes
-    - `pagerank_centrality__website`: PageRank centrality for website nodes
+    - `user__degree_centrality`: Degree centrality for user nodes
+    - `product__betweenness_centrality`: Betweenness centrality for product nodes
+    - `website__pagerank_centrality`: PageRank centrality for website nodes
 
     ## Configuration-Based Creation
 
@@ -57,7 +56,7 @@ class NodeCentralityFeatureGroup(AbstractFeatureGroup):
         })
     )
 
-    # The Engine will automatically parse this into a feature with name "degree_centrality__user"
+    # The Engine will automatically parse this into a feature with name "user__degree_centrality"
     ```
 
     ### Important Note on Multiple Features
@@ -86,8 +85,8 @@ class NodeCentralityFeatureGroup(AbstractFeatureGroup):
     )
     ```
 
-    In this case, the result will contain two separate DataFrames: one with "degree_centrality__source"
-    and another with "degree_centrality__target". This behavior occurs because features with different
+    In this case, the result will contain two separate DataFrames: one with "source__degree_centrality"
+    and another with "target__degree_centrality". This behavior occurs because features with different
     source features are processed by different feature groups.
 
     ## Supported Centrality Types
@@ -129,8 +128,8 @@ class NodeCentralityFeatureGroup(AbstractFeatureGroup):
         "undirected": "A graph where edges have no direction",
     }
 
-    # Define the prefix pattern for this feature group
-    PREFIX_PATTERN = r"^([\w]+)_centrality__"
+    # Define the suffix pattern for this feature group (L→R format: source__operation)
+    PREFIX_PATTERN = r".*__([\w]+)_centrality$"
     PATTERN = "__"
 
     # Property mapping for configuration-based feature creation
@@ -179,32 +178,32 @@ class NodeCentralityFeatureGroup(AbstractFeatureGroup):
     @classmethod
     def parse_centrality_prefix(cls, feature_name: str) -> str:
         """
-        Parse the centrality prefix to extract the centrality type.
+        Parse the centrality suffix to extract the centrality type.
 
         Args:
-            feature_name: The feature name to parse
+            feature_name: The feature name to parse (format: {source}__{centrality_type}_centrality)
 
         Returns:
             The centrality type
 
         Raises:
-            ValueError: If the prefix doesn't match the expected pattern
+            ValueError: If the suffix doesn't match the expected pattern
         """
-        # Extract the prefix part (everything before the double underscore)
-        prefix_end = feature_name.find("__")
-        if prefix_end == -1:
+        # Extract the suffix part (everything after the LAST double underscore for L→R format)
+        suffix_start = feature_name.rfind("__")
+        if suffix_start == -1:
             raise ValueError(
                 f"Invalid centrality feature name format: {feature_name}. Missing double underscore separator."
             )
 
-        prefix = feature_name[:prefix_end]
+        suffix = feature_name[suffix_start + 2 :]
 
-        # Parse the prefix components
-        parts = prefix.split("_")
+        # Parse the suffix components
+        parts = suffix.split("_")
         if len(parts) != 2 or parts[1] != "centrality":
             raise ValueError(
                 f"Invalid centrality feature name format: {feature_name}. "
-                f"Expected format: {{centrality_type}}_centrality__{{mloda_source_features}}"
+                f"Expected format: {{source}}__{{centrality_type}}_centrality"
             )
 
         centrality_type = parts[0]
@@ -297,15 +296,16 @@ class NodeCentralityFeatureGroup(AbstractFeatureGroup):
         source_feature_name: str | None = None
 
         # Try string-based parsing first
-        prefix_part, source_feature_name = FeatureChainParser.parse_feature_name(
+        # Note: parse_feature_name returns (operation_config, source_feature) for L→R format
+        # The operation_config is already extracted by the regex group (e.g., "degree" from "degree_centrality")
+        suffix_part, source_feature_name = FeatureChainParser.parse_feature_name(
             feature.name, cls.PATTERN, [cls.PREFIX_PATTERN]
         )
-        if prefix_part is not None and source_feature_name is not None:
-            # Extract centrality type from the prefix (e.g., "degree_centrality" -> "degree")
-            if prefix_part.endswith("_centrality"):
-                centrality_type = prefix_part[: -len("_centrality")]
-                if centrality_type in cls.CENTRALITY_TYPES:
-                    return centrality_type, source_feature_name
+        if source_feature_name is not None and suffix_part is not None:
+            # The suffix_part is already the centrality type (extracted by regex group)
+            centrality_type = suffix_part
+            if centrality_type in cls.CENTRALITY_TYPES:
+                return centrality_type, source_feature_name
 
         # Fall back to configuration-based approach
         source_features = feature.options.get_source_features()

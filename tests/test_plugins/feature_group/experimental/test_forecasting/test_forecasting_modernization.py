@@ -52,7 +52,7 @@ class TestForecastingModernization:
         )
 
         # Create a string-based feature
-        feature_name = "linear_forecast_7day__sales"
+        feature_name = "sales__linear_forecast_7day"
         feature = Feature(feature_name)
 
         # Set reference time option
@@ -119,7 +119,7 @@ class TestForecastingModernization:
         )
 
         # Create string-based feature
-        string_feature = Feature("linear_forecast_7day__sales")
+        string_feature = Feature("sales__linear_forecast_7day")
         string_feature.options = Options({DefaultOptionKeys.reference_time.value: "time_filter"})
 
         # Create configuration-based feature
@@ -146,7 +146,7 @@ class TestForecastingModernization:
         results2 = api2.get_result()
 
         # Both should produce results with their respective feature names
-        assert "linear_forecast_7day__sales" in results1[0].columns
+        assert "sales__linear_forecast_7day" in results1[0].columns
         assert "config_forecast" in results2[0].columns
 
         # Results should have the same structure (though feature names differ)
@@ -292,7 +292,7 @@ class TestForecastingModernization:
     def test_match_feature_group_criteria_with_property_mapping(self) -> None:
         """Test that match_feature_group_criteria works with the new PROPERTY_MAPPING approach."""
         # Test string-based feature matching
-        string_feature_name = "linear_forecast_7day__sales"
+        string_feature_name = "sales__linear_forecast_7day"
         string_options = Options({DefaultOptionKeys.reference_time.value: "time_filter"})
 
         assert ForecastingFeatureGroup.match_feature_group_criteria(string_feature_name, string_options) is True

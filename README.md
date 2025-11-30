@@ -68,7 +68,7 @@ result = mlodaAPI.run_all(
     features=[
         "customer_id",                    # Original column
         "age",                            # Original column
-        "standard_scaled__income"         # Transform: scale income to mean=0, std=1
+        "income__standard_scaled"         # Transform: scale income to mean=0, std=1
     ],
     compute_frameworks={PandasDataframe}
 )
@@ -85,54 +85,54 @@ print(data.head())
 3. **mlodaAPI.run_all()** - Executed the feature pipeline:
    - Got data from `SampleData`
    - Extracted `customer_id` and `age` as-is
-   - Applied StandardScaler to `income` → `standard_scaled__income`
+   - Applied StandardScaler to `income` → `income__standard_scaled`
 4. **result[0]** - Retrieved the processed pandas DataFrame
 
-> **Key Insight**: The syntax `standard_scaled__income` is mloda's **feature chaining**. Behind the scenes, mloda creates a chain of **feature group** objects (`StandardScalingFeatureGroup` → `SourceFeatureGroup`), automatically resolving dependencies. See [Section 2](#2-understanding-feature-chaining-transformations) for full explanation of chaining syntax and [Section 4](#4-advanced-feature-objects-for-complex-configurations) to learn about the underlying feature group architecture.
+> **Key Insight**: The syntax `income__standard_scaled` is mloda's **feature chaining**. Behind the scenes, mloda creates a chain of **feature group** objects (`SourceFeatureGroup` → `StandardScalingFeatureGroup`), automatically resolving dependencies. See [Section 2](#2-understanding-feature-chaining-transformations) for full explanation of chaining syntax and [Section 4](#4-advanced-feature-objects-for-complex-configurations) to learn about the underlying feature group architecture.
 
 ### 2. Understanding Feature Chaining (Transformations)
 
 **The Power of Double Underscore `__` Syntax**
 
-As mentioned in Section 1, feature chaining (like `standard_scaled__income`) is syntactic sugar that mloda converts into a chain of **feature group objects**. Each transformation (`standard_scaled`, `mean_imputed`, etc.) corresponds to a specific feature group class.
+As mentioned in Section 1, feature chaining (like `income__standard_scaled`) is syntactic sugar that mloda converts into a chain of **feature group objects**. Each transformation (`standard_scaled`, `mean_imputed`, etc.) corresponds to a specific feature group class.
 
 mloda's chaining syntax lets you compose transformations using `__` as a separator:
 
 ```python
 # Pattern examples (these show the syntax):
-#   "standard_scaled__income"                     # Scale income column
-#   "mean_imputed__age"                           # Fill missing age values with mean
-#   "onehot_encoded__category"                    # One-hot encode category column
+#   "income__standard_scaled"                     # Scale income column
+#   "age__mean_imputed"                           # Fill missing age values with mean
+#   "category__onehot_encoded"                    # One-hot encode category column
 #
 # You can chain transformations!
-# Pattern: {transform2}__{transform1}__{source}
-#   "standard_scaled__mean_imputed__income"       # First impute, then scale
+# Pattern: {source}__{transform1}__{transform2}
+#   "income__mean_imputed__standard_scaled"       # First impute, then scale
 
 # Real working example:
-_ = ["standard_scaled__income", "mean_imputed__age"]  # Valid feature names
+_ = ["income__standard_scaled", "age__mean_imputed"]  # Valid feature names
 ```
 
 **Available Transformations:**
 
 | Transformation | Purpose | Example |
 |---------------|---------|---------|
-| `standard_scaled__` | StandardScaler (mean=0, std=1) | `standard_scaled__income` |
-| `minmax_scaled__` | MinMaxScaler (range [0,1]) | `minmax_scaled__age` |
-| `robust_scaled__` | RobustScaler (median-based, handles outliers) | `robust_scaled__price` |
-| `mean_imputed__` | Fill missing values with mean | `mean_imputed__salary` |
-| `median_imputed__` | Fill missing values with median | `median_imputed__age` |
-| `mode_imputed__` | Fill missing values with mode | `mode_imputed__category` |
-| `onehot_encoded__` | One-hot encoding | `onehot_encoded__state` |
-| `label_encoded__` | Label encoding | `label_encoded__priority` |
+| `__standard_scaled` | StandardScaler (mean=0, std=1) | `income__standard_scaled` |
+| `__minmax_scaled` | MinMaxScaler (range [0,1]) | `age__minmax_scaled` |
+| `__robust_scaled` | RobustScaler (median-based, handles outliers) | `price__robust_scaled` |
+| `__mean_imputed` | Fill missing values with mean | `salary__mean_imputed` |
+| `__median_imputed` | Fill missing values with median | `age__median_imputed` |
+| `__mode_imputed` | Fill missing values with mode | `category__mode_imputed` |
+| `__onehot_encoded` | One-hot encoding | `state__onehot_encoded` |
+| `__label_encoded` | Label encoding | `priority__label_encoded` |
 
-> **Key Insight**: Transformations are read right-to-left. `standard_scaled__mean_imputed__income` means: take `income` → apply mean imputation → apply standard scaling.
+> **Key Insight**: Transformations are read left-to-right. `income__mean_imputed__standard_scaled` means: take `income` → apply mean imputation → apply standard scaling.
 
 **When You Need More Control**
 
 Most of the time, simple string syntax is enough:
 ```python
 # Example feature list (simple strings)
-example_features = ["customer_id", "standard_scaled__income", "onehot_encoded__region"]
+example_features = ["customer_id", "income__standard_scaled", "region__onehot_encoded"]
 ```
 
 But for advanced configurations, you can explicitly create `Feature` objects with custom options (covered in Section 3).
@@ -141,11 +141,11 @@ But for advanced configurations, you can explicitly create `Feature` objects wit
 
 **Understanding the Feature Group Architecture**
 
-Behind the scenes, chaining like `standard_scaled__income` creates feature group objects:
+Behind the scenes, chaining like `income__standard_scaled` creates feature group objects:
 
 ```python
 # When you write this string:
-"standard_scaled__income"
+"income__standard_scaled"
 
 # mloda creates this chain of feature groups:
 # StandardScalingFeatureGroup (reads from) → IncomeSourceFeatureGroup
@@ -217,7 +217,7 @@ mloda supports multiple data access patterns depending on your use case:
 # )
 #
 # result = mlodaAPI.run_all(
-#     features=["customer_id", "standard_scaled__income"],
+#     features=["customer_id", "income__standard_scaled"],
 #     compute_frameworks={PandasDataframe},
 #     data_access_collection=data_access
 # )
@@ -235,7 +235,7 @@ mloda supports multiple data access patterns depending on your use case:
 # )
 #
 # result = mlodaAPI.run_all(
-#     features=["customer_id", "standard_scaled__age"],
+#     features=["customer_id", "age__standard_scaled"],
 #     compute_frameworks={PandasDataframe},
 #     api_input_data_collection=api_input_data_collection,
 #     api_data=api_data
@@ -254,7 +254,7 @@ mloda supports multiple compute frameworks (pandas, polars, pyarrow, etc.). Most
 # Using the SampleData class from Section 1
 # Default: Everything processes with pandas
 result = mlodaAPI.run_all(
-    features=["customer_id", "standard_scaled__income"],
+    features=["customer_id", "income__standard_scaled"],
     compute_frameworks={PandasDataframe}  # Use pandas for all features
 )
 
@@ -315,12 +315,12 @@ from sklearn.metrics import accuracy_score
 result = mlodaAPI.run_all(
     features=[
         "customer_id",
-        "standard_scaled__age",
-        "standard_scaled__income",
-        "robust_scaled__account_balance",
-        "label_encoded__subscription_tier",
-        "label_encoded__region",
-        "label_encoded__customer_segment",
+        "age__standard_scaled",
+        "income__standard_scaled",
+        "account_balance__robust_scaled",
+        "subscription_tier__label_encoded",
+        "region__label_encoded",
+        "customer_segment__label_encoded",
         "churned"
     ],
     compute_frameworks={PandasDataframe}

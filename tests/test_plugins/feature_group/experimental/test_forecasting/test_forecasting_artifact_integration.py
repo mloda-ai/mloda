@@ -46,7 +46,7 @@ class TestForecastingArtifactIntegration:
         )
 
         # Create a feature for linear forecasting with 7-day horizon
-        feature_name = "linear_forecast_7day__sales"
+        feature_name = "sales__linear_forecast_7day"
         feature = Feature(feature_name)
 
         # Set reference time option

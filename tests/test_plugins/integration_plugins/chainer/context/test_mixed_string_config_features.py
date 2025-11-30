@@ -25,7 +25,7 @@ class TestMixedStringConfigFeatures:
         """Test mixing string-based features with config-based features."""
 
         # String-based feature: parsed from feature name
-        string_feature_name = f"identifier1{ChainedContextFeatureGroupTest.PATTERN}Sales"
+        string_feature_name = f"Sales__{ChainedContextFeatureGroupTest.OPERATION_ID}identifier1"
 
         # Config-based feature 1: uses string-based feature as source
         config_feature1 = Feature(
@@ -109,7 +109,7 @@ class TestMixedStringConfigFeatures:
         """Test string-based feature feeding into config-based feature."""
 
         # String-based source feature
-        string_source = f"identifier1{ChainedContextFeatureGroupTest.PATTERN}Sales"
+        string_source = f"Sales__{ChainedContextFeatureGroupTest.OPERATION_ID}identifier1"
 
         # Config-based feature using string source
         config_target = Feature(
@@ -145,7 +145,7 @@ class TestMixedStringConfigFeatures:
         """Test that group/context separation works correctly with mixed feature types."""
 
         # String-based feature (group parameters extracted from name)
-        string_feature = f"identifier1{ChainedContextFeatureGroupTest.PATTERN}Sales"
+        string_feature = f"Sales__{ChainedContextFeatureGroupTest.OPERATION_ID}identifier1"
 
         # Config-based feature with same effective group parameters
         config_feature_same_group = Feature(

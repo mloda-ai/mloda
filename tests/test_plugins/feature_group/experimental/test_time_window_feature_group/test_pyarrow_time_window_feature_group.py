@@ -82,15 +82,15 @@ class TestPyArrowTimeWindowFeatureGroup:
         result = PyArrowTimeWindowFeatureGroup.calculate_feature(sample_time_table, feature_set_avg_window)
 
         # Check that the result contains the original data plus the time window feature
-        assert "avg_3_day_window__temperature" in result.schema.names
+        assert "temperature__avg_3_day_window" in result.schema.names
 
         # Check the values of the time window feature
         # First value should be the temperature itself (20)
         # Second value should be average of first two days (20+22)/2 = 21
         # Third value should be average of first three days (20+22+19)/3 = 20.33
-        assert result.column("avg_3_day_window__temperature")[0].as_py() == 20
-        assert abs(result.column("avg_3_day_window__temperature")[1].as_py() - 21) < 0.1
-        assert abs(result.column("avg_3_day_window__temperature")[2].as_py() - 20.33) < 0.1
+        assert result.column("temperature__avg_3_day_window")[0].as_py() == 20
+        assert abs(result.column("temperature__avg_3_day_window")[1].as_py() - 21) < 0.1
+        assert abs(result.column("temperature__avg_3_day_window")[2].as_py() - 20.33) < 0.1
 
         # Check that the original data is preserved
         assert "temperature" in result.schema.names
@@ -105,10 +105,10 @@ class TestPyArrowTimeWindowFeatureGroup:
         result = PyArrowTimeWindowFeatureGroup.calculate_feature(sample_time_table, feature_set_multiple_windows)
 
         # Check that the result contains all time window features
-        assert "avg_3_day_window__temperature" in result.schema.names
-        assert "max_5_day_window__humidity" in result.schema.names
-        assert "min_2_day_window__pressure" in result.schema.names
-        assert "sum_4_day_window__wind_speed" in result.schema.names
+        assert "temperature__avg_3_day_window" in result.schema.names
+        assert "humidity__max_5_day_window" in result.schema.names
+        assert "pressure__min_2_day_window" in result.schema.names
+        assert "wind_speed__sum_4_day_window" in result.schema.names
 
         # Check that the original data is preserved
         assert "temperature" in result.schema.names
@@ -119,7 +119,7 @@ class TestPyArrowTimeWindowFeatureGroup:
     def test_calculate_feature_missing_source(self, sample_time_table: pa.Table) -> None:
         """Test calculate_feature method with missing source feature."""
         feature_set = FeatureSet()
-        feature_set.add(Feature("avg_3_day_window__missing"))
+        feature_set.add(Feature("missing__avg_3_day_window"))
 
         with pytest.raises(ValueError, match="None of the source features .* found in data"):
             PyArrowTimeWindowFeatureGroup.calculate_feature(sample_time_table, feature_set)
@@ -135,7 +135,7 @@ class TestPyArrowTimeWindowFeatureGroup:
         )
 
         feature_set = FeatureSet()
-        feature_set.add(Feature("avg_3_day_window__temperature"))
+        feature_set.add(Feature("temperature__avg_3_day_window"))
 
         with pytest.raises(
             ValueError,
@@ -154,7 +154,7 @@ class TestPyArrowTimeWindowFeatureGroup:
         )
 
         feature_set = FeatureSet()
-        feature_set.add(Feature("avg_3_day_window__temperature"))
+        feature_set.add(Feature("temperature__avg_3_day_window"))
 
         with pytest.raises(
             ValueError,

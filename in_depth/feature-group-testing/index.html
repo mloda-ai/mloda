@@ -198,14 +198,14 @@
 from mloda_core.abstract_plugins.components.options import Options
 
 # Test valid and invalid feature names
-assert ClusteringFeatureGroup.match_feature_group_criteria(&quot;cluster_kmeans_5__customer_behavior&quot;, Options())
+assert ClusteringFeatureGroup.match_feature_group_criteria(&quot;customer_behavior__cluster_kmeans_5&quot;, Options())
 assert not ClusteringFeatureGroup.match_feature_group_criteria(&quot;invalid_name&quot;, Options())
 </code></pre>
 <h3 id="2-input-feature-extraction">2. Input Feature Extraction</h3>
 <p>Test that your feature group correctly extracts source features from feature names.</p>
 <p><strong>Example:</strong></p>
 <pre><code class="language-python"># Test extracting source features from a feature name
-input_features = feature_group.input_features(Options(), FeatureName(&quot;sum_aggr__sales&quot;))
+input_features = feature_group.input_features(Options(), FeatureName(&quot;sales__sum_aggr&quot;))
 assert Feature(&quot;sales&quot;) in input_features
 </code></pre>
 <h3 id="3-calculation-logic">3. Calculation Logic</h3>
@@ -217,9 +217,9 @@ from mloda_plugins.feature_group.experimental.clustering.pandas import PandasClu
 
 # Test calculation with sample data
 feature_set = FeatureSet()
-feature_set.add(Feature(&quot;cluster_kmeans_2__feature1,feature2&quot;))
+feature_set.add(Feature(&quot;feature1,feature2__cluster_kmeans_2&quot;))
 result = PandasClusteringFeatureGroup.calculate_feature(sample_data, feature_set)
-assert &quot;cluster_kmeans_2__feature1,feature2&quot; in result.columns
+assert &quot;feature1,feature2__cluster_kmeans_2&quot; in result.columns
 </code></pre>
 <h3 id="4-configuration-based-feature-creation">4. Configuration-Based Feature Creation</h3>
 <p>Test that your feature group correctly parses features from configuration options.</p>
@@ -227,10 +227,10 @@ assert &quot;cluster_kmeans_2__feature1,feature2&quot; in result.columns
 <pre><code class="language-python"># Test creating features from options
 options = Options({
     &quot;aggregation_type&quot;: &quot;sum&quot;,
-    &quot;mloda_source_feature&quot;: &quot;sales&quot;
+    &quot;mloda_source_features&quot;: &quot;sales&quot;
 })
 feature_name = parser_config.parse_from_options(options)
-assert feature_name == &quot;sum_aggr__sales&quot;
+assert feature_name == &quot;sales__sum_aggr&quot;
 </code></pre>
 <h3 id="5-integration-with-mloda-api">5. Integration with mloda API</h3>
 <p>Test that your feature group works correctly with the mloda API.</p>
@@ -238,9 +238,9 @@ assert feature_name == &quot;sum_aggr__sales&quot;
 <pre><code class="language-python">from mloda_core.api.request import mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
 
-features = [&quot;source_feature&quot;, &quot;my_operation__source_feature&quot;]
+features = [&quot;source_feature&quot;, &quot;source_feature__my_operation&quot;]
 result = mlodaAPI.run_all(features, compute_frameworks={PandasDataframe})
-assert &quot;my_operation__source_feature&quot; in result[0].columns
+assert &quot;source_feature__my_operation&quot; in result[0].columns
 </code></pre>
 <h2 id="test-organization">Test Organization</h2>
 <p>Organize tests into three categories:</p>

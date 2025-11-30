@@ -135,11 +135,7 @@
     </li>
         </ul>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#plugin-groups">Plugin Groups</a>
-    </li>
     <li class="toctree-l3"><a class="reference internal" href="#example">Example</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#directory-structure">Directory Structure</a>
     </li>
     </ul>
                 </li>
@@ -196,7 +192,7 @@
                 <h1 id="pluginloader">PluginLoader</h1>
 <p>The PluginLoader dynamically loads and manages plugins from the <code>mloda_plugins</code> package.</p>
 <h2 id="quick-start">Quick Start</h2>
-<pre><code class="language-python">from mloda_core.abstract_plugins.plugin_loader import PluginLoader
+<pre><code class="language-python">from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 
 # Load all plugins
 loader = PluginLoader.all()
@@ -216,38 +212,6 @@ loader.load_group(&quot;feature_group&quot;)
 <p>Lists loaded plugin modules, optionally filtered by category.</p>
 <h3 id="display_plugin_graphplugin_category-optionalstr"><code>display_plugin_graph(plugin_category: Optional[str])</code></h3>
 <p>Shows plugin dependencies as a graph.</p>
-<h2 id="plugin-groups">Plugin Groups</h2>
-<table>
-<thead>
-<tr>
-<th>Group</th>
-<th>Depends On</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>input_data</code></td>
-<td><code>feature_group</code></td>
-<td>Data input plugins</td>
-</tr>
-<tr>
-<td><code>feature_group</code></td>
-<td>None</td>
-<td>Feature group definitions</td>
-</tr>
-<tr>
-<td><code>compute_framework</code></td>
-<td>None</td>
-<td>Computation frameworks</td>
-</tr>
-<tr>
-<td><code>function_extender</code></td>
-<td>None</td>
-<td>Function extensions</td>
-</tr>
-</tbody>
-</table>
 <h2 id="example">Example</h2>
 <pre><code class="language-python"># Create loader and load plugins
 loader = PluginLoader()
@@ -258,13 +222,6 @@ modules = loader.list_loaded_modules()
 
 # Show dependencies
 graph = loader.display_plugin_graph()
-</code></pre>
-<h2 id="directory-structure">Directory Structure</h2>
-<pre><code>mloda_plugins/
-├── input_data/
-├── feature_group/
-├── compute_framework/
-└── function_extender/
 </code></pre>
 <p>Plugins are automatically discovered from <code>.py</code> files in these directories.</p>
               

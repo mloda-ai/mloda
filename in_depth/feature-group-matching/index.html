@@ -211,11 +211,11 @@ from mloda_core.abstract_plugins.components.options import Options
 @classmethod
 def match_feature_group_criteria(cls, feature_name, options, data_access_collection=None):
     return FeatureChainParser.match_configuration_feature_chain_parser(
-        feature_name, 
-        options, 
+        feature_name,
+        options,
         property_mapping=cls.PROPERTY_MAPPING,  # Configuration-based matching
         pattern=cls.PATTERN,                    # String-based matching
-        prefix_patterns=cls.PREFIX_PATTERN
+        suffix_patterns=cls.SUFFIX_PATTERN
     )
 </code></pre>
 <h3 id="2-property_mapping-configuration">2. PROPERTY_MAPPING Configuration</h3>
@@ -228,7 +228,7 @@ def match_feature_group_criteria(cls, feature_name, options, data_access_collect
         DefaultOptionKeys.mloda_context: True,
         DefaultOptionKeys.mloda_strict_validation: True,
     },
-    DefaultOptionKeys.mloda_source_feature: {
+    DefaultOptionKeys.mloda_source_features: {
         &quot;explanation&quot;: &quot;Source feature for aggregation&quot;,
         DefaultOptionKeys.mloda_context: True,
         DefaultOptionKeys.mloda_strict_validation: False,
@@ -247,8 +247,8 @@ options = Options(context={&quot;aggregation_type&quot;: &quot;custom&quot;})  #
 <h4 id="flexible-validation">Flexible Validation</h4>
 <p>When <code>mloda_strict_validation: False</code> (default), any value is accepted:</p>
 <pre><code class="language-python"># Both will match
-options = Options(context={&quot;mloda_source_feature&quot;: &quot;sales&quot;})      # Any value OK
-options = Options(context={&quot;mloda_source_feature&quot;: &quot;custom_feature&quot;})  # Any value OK
+options = Options(context={&quot;mloda_source_features&quot;: &quot;sales&quot;})      # Any value OK
+options = Options(context={&quot;mloda_source_features&quot;: &quot;custom_feature&quot;})  # Any value OK
 </code></pre>
 <h4 id="custom-validation-functions">Custom Validation Functions</h4>
 <p>For complex validation beyond simple value lists:</p>
@@ -286,14 +286,14 @@ options = Options(context={&quot;mloda_source_feature&quot;: &quot;custom_featur
 <h2 id="matching-examples">Matching Examples</h2>
 <h3 id="modern-feature-group-aggregation">Modern Feature Group (Aggregation)</h3>
 <pre><code class="language-python"># String-based matching
-feature = Feature(&quot;sum_aggr__sales&quot;)  # Matches via pattern
+feature = Feature(&quot;sales__sum_aggr&quot;)  # Matches via pattern
 
-# Configuration-based matching  
+# Configuration-based matching
 feature = Feature(
     &quot;placeholder&quot;,
     Options(context={
         &quot;aggregation_type&quot;: &quot;sum&quot;,
-        &quot;mloda_source_feature&quot;: &quot;sales&quot;
+        &quot;mloda_source_features&quot;: &quot;sales&quot;
     })
 )  # Matches via PROPERTY_MAPPING validation
 </code></pre>
@@ -302,23 +302,23 @@ feature = Feature(
 <pre><code class="language-python"># These create different Feature Group instances (different group parameters)
 feature1 = Feature(&quot;placeholder&quot;, Options(
     group={&quot;data_source&quot;: &quot;production&quot;},
-    context={&quot;aggregation_type&quot;: &quot;sum&quot;, &quot;mloda_source_feature&quot;: &quot;sales&quot;}
+    context={&quot;aggregation_type&quot;: &quot;sum&quot;, &quot;mloda_source_features&quot;: &quot;sales&quot;}
 ))
 
 feature2 = Feature(&quot;placeholder&quot;, Options(
     group={&quot;data_source&quot;: &quot;staging&quot;},  # Different group parameter
-    context={&quot;aggregation_type&quot;: &quot;sum&quot;, &quot;mloda_source_feature&quot;: &quot;sales&quot;}
+    context={&quot;aggregation_type&quot;: &quot;sum&quot;, &quot;mloda_source_features&quot;: &quot;sales&quot;}
 ))
 
 # These create the same Feature Group instance (same group, different context)
 feature3 = Feature(&quot;placeholder&quot;, Options(
     group={&quot;data_source&quot;: &quot;production&quot;},
-    context={&quot;aggregation_type&quot;: &quot;sum&quot;, &quot;mloda_source_feature&quot;: &quot;sales&quot;}
+    context={&quot;aggregation_type&quot;: &quot;sum&quot;, &quot;mloda_source_features&quot;: &quot;sales&quot;}
 ))
 
 feature4 = Feature(&quot;placeholder&quot;, Options(
     group={&quot;data_source&quot;: &quot;production&quot;},  # Same group parameter
-    context={&quot;aggregation_type&quot;: &quot;avg&quot;, &quot;mloda_source_feature&quot;: &quot;revenue&quot;}  # Different context
+    context={&quot;aggregation_type&quot;: &quot;avg&quot;, &quot;mloda_source_features&quot;: &quot;revenue&quot;}  # Different context
 ))
 </code></pre>
 <h2 id="migration-path">Migration Path</h2>

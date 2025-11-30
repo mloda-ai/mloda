@@ -407,8 +407,8 @@ from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 
-# Set this variable as convention
-_mloda_source = &quot;mloda_source&quot;
+# Set this variable as convention (internal key name)
+_mloda_source_features = &quot;mloda_source_features&quot;
 
 
 # First, we create a class, which uses input features from another class
@@ -418,9 +418,9 @@ class AInputFeatureGroup(AbstractFeatureGroup):
 
         # We use the source to make this feature flexible.
         # One could give here different feature names via the configuration.
-        mloda_source = options.get(_mloda_source)
+        mloda_source = options.get(_mloda_source_features)
         if mloda_source is None:
-            raise ValueError(f&quot;Option '{_mloda_source}' is required.&quot;)
+            raise ValueError(f&quot;Option '{_mloda_source_features}' is required.&quot;)
 
         features = set()
         for source in mloda_source:
@@ -438,7 +438,7 @@ class AInputFeatureGroup(AbstractFeatureGroup):
 
 feature_list = []
 feature_list.append(
-    Feature(name=&quot;AInputFeatureGroup&quot;, options={_mloda_source: frozenset([&quot;AFeatureInputCreator&quot;])})
+    Feature(name=&quot;AInputFeatureGroup&quot;, options={_mloda_source_features: frozenset([&quot;AFeatureInputCreator&quot;])})
 )
 
 result = mlodaAPI.run_all(

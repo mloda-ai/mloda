@@ -82,6 +82,8 @@
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#link">Link</a>
     </li>
+    <li class="toctree-l2"><a class="reference internal" href="#self-joins-with-pointer-fields">Self-Joins with Pointer Fields</a>
+    </li>
     <li class="toctree-l2"><a class="reference internal" href="#mlodaapi">mlodaAPI</a>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#merging-data-in-the-compute-framework">Merging Data in the Compute Framework</a>
@@ -239,8 +241,8 @@ join_type = JoinType.INNER
 <h4 id="link">Link</h4>
 <p>A Link specifies the relationship of:</p>
 <ul>
-<li>join type, </li>
-<li>the feature groups involved, </li>
+<li>join type,</li>
+<li>the feature groups involved,</li>
 <li>and the indexes to use for the join.</li>
 </ul>
 <pre><code class="language-python">from mloda_core.abstract_plugins.components.link import Link
@@ -267,6 +269,31 @@ link = Link.inner(
     right=(feature_group_b, right_index)
 )
 </code></pre>
+<h4 id="self-joins-with-pointer-fields">Self-Joins with Pointer Fields</h4>
+<p>When joining a feature group with itself, you need to distinguish between the left and right instances using <strong>pointer fields</strong>.</p>
+<p><strong>Pointer fields</strong> are optional dictionary parameters (<code>left_pointer</code> and <code>right_pointer</code>) that match against feature options:</p>
+<pre><code class="language-python">from mloda_core.abstract_plugins.components.feature import Feature
+
+# Define an example feature group for demonstration
+class UserFeatureGroup(AbstractFeatureGroup):
+    pass
+
+# 1. Create link with pointers
+left = (UserFeatureGroup, Index((&quot;user_id&quot;,)))
+right = (UserFeatureGroup, Index((&quot;user_id&quot;,)))
+
+link = Link(&quot;inner&quot;, left, right,
+            left_pointer={&quot;side&quot;: &quot;left&quot;},
+            right_pointer={&quot;side&quot;: &quot;right&quot;})
+
+# 2. Tag features with matching options
+# Feature names reference the feature from the feature group
+features = {
+    Feature(&quot;age&quot;, options={&quot;side&quot;: &quot;left&quot;}),
+    Feature(&quot;age&quot;, options={&quot;side&quot;: &quot;right&quot;}),
+}
+</code></pre>
+<p>The execution planner validates that the pointer key-value pairs exist in the corresponding feature's options to correctly identify which instance belongs to which side of the join.</p>
 <h4 id="mlodaapi">mlodaAPI</h4>
 <pre><code class="language-python">from mloda_core.api.request import mlodaAPI
 

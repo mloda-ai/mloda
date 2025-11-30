@@ -132,6 +132,14 @@
         </ul>
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#multiple-result-columns-with-pattern">Multiple Result Columns with ~ Pattern</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#producer-side-creating-multi-column-outputs">Producer Side: Creating Multi-Column Outputs</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#consumer-side-discovering-multi-column-features">Consumer Side: Discovering Multi-Column Features</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#manual-column-access-legacy">Manual Column Access (Legacy)</a>
+    </li>
+        </ul>
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#benefits">Benefits</a>
     </li>
@@ -209,11 +217,11 @@
 <h2 id="key-concepts">Key Concepts</h2>
 <h3 id="feature-chaining">Feature Chaining</h3>
 <p>Feature chaining allows feature groups to be composed, where the output of one feature group becomes the input to another. This is reflected in the feature name using a double underscore pattern:</p>
-<pre><code>{operation}__{source_feature}
+<pre><code>{source_feature}__{operation}
 </code></pre>
 <p>For example:
-- <code>sum_aggr__sales</code> - Simple feature
-- <code>max_aggr__sum_7_day_window__mean_imputed__price</code> - Chained feature</p>
+- <code>sales__sum_aggr</code> - Simple feature
+- <code>price__mean_imputed__sum_7_day_window__max_aggr</code> - Chained feature</p>
 <h3 id="unified-parser-architecture">Unified Parser Architecture</h3>
 <p>The modernized <code>FeatureChainParser</code> provides a unified approach through the <code>match_configuration_feature_chain_parser</code> method that handles:</p>
 <ul>
@@ -237,7 +245,7 @@ options = Options(
     },
     context={
         &quot;aggregation_type&quot;: &quot;sum&quot;,    # Doesn't affect splitting
-        &quot;mloda_source_feature&quot;: &quot;sales&quot;
+        &quot;mloda_source_features&quot;: &quot;sales&quot;
     }
 )
 </code></pre>
@@ -247,7 +255,7 @@ options = Options(
 from mloda_core.abstract_plugins.components.options import Options
 
 # Traditional string-based approach:
-feature = Feature(&quot;sum_aggr__sales&quot;)
+feature = Feature(&quot;sales__sum_aggr&quot;)
 
 # Modern configuration-based approach:
 feature = Feature(
@@ -255,7 +263,7 @@ feature = Feature(
     Options(
         context={
             &quot;aggregation_type&quot;: &quot;sum&quot;,
-            &quot;mloda_source_feature&quot;: &quot;sales&quot;
+            &quot;mloda_source_features&quot;: &quot;sales&quot;
         }
     )
 )
@@ -269,7 +277,7 @@ from mloda_core.abstract_plugins.components.feature_name import FeatureName
 
 class MyFeatureGroup(AbstractFeatureGroup):
     PATTERN = &quot;__&quot;
-    PREFIX_PATTERN = [r&quot;^([a-zA-Z_]+)_operation__&quot;]
+    SUFFIX_PATTERN = [r&quot;__([a-zA-Z_]+)_operation$&quot;]
 
     PROPERTY_MAPPING = {
         # Feature-specific parameter
@@ -281,7 +289,7 @@ class MyFeatureGroup(AbstractFeatureGroup):
             DefaultOptionKeys.mloda_strict_validation: True,  # Strict validation
         },
         # Source feature parameter
-        DefaultOptionKeys.mloda_source_feature: {
+        DefaultOptionKeys.mloda_source_features: {
             &quot;explanation&quot;: &quot;Source feature for the operation&quot;,
             DefaultOptionKeys.mloda_context: True,  # Context parameter
             DefaultOptionKeys.mloda_strict_validation: False,  # Flexible validation
@@ -293,11 +301,11 @@ class MyFeatureGroup(AbstractFeatureGroup):
 <pre><code class="language-python">@classmethod
 def match_feature_group_criteria(cls, feature_name, options, data_access_collection=None):
     return FeatureChainParser.match_configuration_feature_chain_parser(
-        feature_name, 
-        options, 
+        feature_name,
+        options,
         property_mapping=cls.PROPERTY_MAPPING,
-        pattern=cls.PATTERN, 
-        prefix_patterns=cls.PREFIX_PATTERN
+        pattern=cls.PATTERN,
+        suffix_patterns=cls.SUFFIX_PATTERN
     )
 </code></pre>
 <h3 id="3-modernize-input_features-method">3. Modernize input_features Method</h3>
@@ -307,7 +315,7 @@ def match_feature_group_criteria(cls, feature_name, options, data_access_collect
 
     # Try string-based parsing first
     _, source_feature = FeatureChainParser.parse_feature_name(
-        feature_name, self.PATTERN, self.PREFIX_PATTERN
+        feature_name, self.PATTERN, self.SUFFIX_PATTERN
     )
     if source_feature is not None:
         return {Feature(source_feature)}
@@ -336,7 +344,7 @@ def match_feature_group_criteria(cls, feature_name, options, data_access_collect
         except (ValueError, StopIteration):
             # Fall back to string-based approach for legacy features
             operation_type, source_feature_name = FeatureChainParser.parse_feature_name(
-                feature.name, self.PATTERN, self.PREFIX_PATTERN
+                feature.name, self.PATTERN, self.SUFFIX_PATTERN
             )
 
         # Process using extracted values
@@ -384,13 +392,54 @@ def match_feature_group_criteria(cls, feature_name, options, data_access_collect
 }
 </code></pre>
 <h2 id="multiple-result-columns-with-pattern">Multiple Result Columns with ~ Pattern</h2>
-<p>Some feature groups produce multiple result columns from a single input feature. The <code>~</code> pattern allows accessing individual columns:</p>
-<pre><code class="language-python"># OneHot encoding creates multiple columns
-base_feature = &quot;onehot_encoded__category&quot;  # Creates all columns
-specific_column = &quot;onehot_encoded__category~0&quot;  # Access first column
-another_column = &quot;onehot_encoded__category~1&quot;  # Access second column
+<p>Some feature groups produce multiple result columns from a single input feature. mloda provides utilities to work with these patterns seamlessly.</p>
+<h3 id="producer-side-creating-multi-column-outputs">Producer Side: Creating Multi-Column Outputs</h3>
+<p>Use <code>apply_naming_convention()</code> to create properly named columns:</p>
+<pre><code class="language-python">from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
+
+class MultiColumnProducer(AbstractFeatureGroup):
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:
+        # Compute results (e.g., from sklearn OneHotEncoder)
+        result = encoder.transform(data)  # Returns 2D numpy array (n_samples, n_features)
+
+        # Automatically apply naming convention
+        feature_name = features.get_name_of_one_feature().name
+        named_columns = cls.apply_naming_convention(result, feature_name)
+        # Returns: {&quot;category__onehot_encoded~0&quot;: data, &quot;~1&quot;: data, &quot;~2&quot;: data}
+
+        return named_columns
 </code></pre>
-<p><strong>Implementation Note</strong>: Feature groups handle this pattern in their <code>input_features()</code> method to extract the base feature name, and in <code>calculate_feature()</code> to create the appropriately named result columns.</p>
+<h3 id="consumer-side-discovering-multi-column-features">Consumer Side: Discovering Multi-Column Features</h3>
+<p>Use <code>resolve_multi_column_feature()</code> to automatically discover columns:</p>
+<pre><code class="language-python">class MultiColumnConsumer(AbstractFeatureGroup):
+    def input_features(self, options: Options, feature_name: FeatureName) -&gt; Optional[Set[Feature]]:
+        # Request base feature without ~N suffix
+        return {Feature(&quot;category__onehot_encoded&quot;)}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:
+        # Automatically discover all matching columns
+        columns = cls.resolve_multi_column_feature(
+            &quot;category__onehot_encoded&quot;,
+            set(data.columns)
+        )
+        # Returns: [&quot;category__onehot_encoded~0&quot;, &quot;~1&quot;, &quot;~2&quot;]
+
+        # Process all discovered columns
+        result = sum(data[col] for col in columns)
+
+        feature_name = features.get_name_of_one_feature().name
+        return {feature_name: result}
+</code></pre>
+<h3 id="manual-column-access-legacy">Manual Column Access (Legacy)</h3>
+<p>For backwards compatibility, you can still access specific columns:</p>
+<pre><code class="language-python"># Manual specification of specific columns
+base_feature = &quot;category__onehot_encoded&quot;  # Creates all columns
+specific_column = &quot;category__onehot_encoded~0&quot;  # Access first column
+another_column = &quot;category__onehot_encoded~1&quot;  # Access second column
+</code></pre>
+<p><strong>Recommended</strong>: Use automatic discovery (<code>resolve_multi_column_feature</code>) instead of manual enumeration for cleaner, more maintainable code.</p>
 <h2 id="benefits">Benefits</h2>
 <ul>
 <li><strong>Consistent Naming</strong>: Enforces naming conventions across feature groups</li>

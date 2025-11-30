@@ -173,6 +173,8 @@
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#how-do-plug-ins-work-in-mloda-and-can-i-develop-my-own-plug-ins">How do plug-ins work in mloda, and can I develop my own plug-ins?</a>
     </li>
+    <li class="toctree-l3"><a class="reference internal" href="#how-do-i-join-a-feature-group-with-itself-self-join">How do I join a feature group with itself (self-join)?</a>
+    </li>
         </ul>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#technical-and-integration">Technical and Integration</a>
@@ -241,6 +243,8 @@
 <h4 id="how-do-plug-ins-work-in-mloda-and-can-i-develop-my-own-plug-ins">How do plug-ins work in mloda, and can I develop my own plug-ins?</h4>
 <p>mloda automatically selects the appropriate plug-ins for a given feature. </p>
 <p>Users can develop custom plug-ins to extend the platform's capabilities, and contributions are always welcome—feedback and design critiques are also greatly appreciated!</p>
+<h4 id="how-do-i-join-a-feature-group-with-itself-self-join">How do I join a feature group with itself (self-join)?</h4>
+<p>When you need to use the same feature group on both sides of a join, you'll need to use pointer fields to distinguish between the left and right instances. See the <a href="../in_depth/join_data/#self-joins-with-pointer-fields">Join data guide - Self-Joins section</a> for details and examples.</p>
 <h2 id="technical-and-integration">Technical and Integration</h2>
 <h4 id="how-do-i-integrate-mloda-into-my-existing-data-infrastructure">How do I integrate mloda into my existing data infrastructure?</h4>
 <p>mloda is a straightforward Python module. You can install it and run it within your existing projects, or you can create a microservice that exposes the mloda API for broader integration.</p>

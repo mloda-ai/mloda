@@ -29,7 +29,7 @@ AbstractFeatureGroup
   └── BaseFeatureGroup (e.g., ClusteringFeatureGroup)
         ├── PandasImplementation
         ├── PyArrowImplementation
-        └── PythonDictImplementation
+        └── PythonDictFrameworkImplementation
 ```
 
 ## Implementation Pattern

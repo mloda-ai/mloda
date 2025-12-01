@@ -33,17 +33,16 @@ Expected Error when running.
 
 ``` python
 mlodaAPI.run_all(
-    feature_list,       
+    feature_list,
     data_access_collection=data_access_collection
 )
 
-ValueError: Multiple feature groups 
-{<class 'ReadCsv'>: {<class 'PyarrowTable'>}, 
-<class 'ReadCsvPandas'>: {<class 'PandasDataframe'>}
+ValueError: Multiple feature groups
+{<class 'CsvReader'>: {<class 'PyarrowTable'>, <class 'PandasDataframe'>}
 .... found for feature name: id.
 ```
 
-In this case, the framework finds multiple feature groups (like **ReadCsv** and **ReadCsvPandas**) that can handle the same file, but use different compute frameworks (**PyarrowTable** vs. **PandasDataframe** vs. **PythonDict**). Without explicitly specifying a compute framework, mloda doesn't know which one to use, leading to ambiguity.
+In this case, the framework finds multiple compute frameworks (like **PyarrowTable** and **PandasDataframe**) that can handle the same file through the **CsvReader** feature group. Without explicitly specifying a compute framework, mloda doesn't know which one to use, leading to ambiguity.
 
 This might seem counterintuitive, but it’s actually a **feature**, allowing you to compare different technologies and computation methods, particularly useful in scenarios such as:
 
@@ -132,7 +131,7 @@ In this case, the feature group ExampleB will only run on the PyarrowTable frame
 | **DuckDBFramework** | DuckDB Relations | SQL interface, fast analytics, OLAP queries | Analytical workloads, SQL-based transformations, data warehousing | duckdb |
 | **IcebergFramework** | Apache Iceberg Tables | Schema evolution, time travel, data lake management | Data lake scenarios, versioned datasets, large-scale analytics | pyiceberg, pyarrow |
 | **SparkFramework** | Apache Spark DataFrames | Distributed processing, scalability, fault tolerance | Big data, distributed computing, production clusters | pyspark, Java 8+ |
-| **PythonDict** | List[Dict[str, Any]] | Zero dependencies, simple, lightweight | Minimal environments, education, prototyping | None (Python stdlib only) |
+| **PythonDictFramework** | List[Dict[str, Any]] | Zero dependencies, simple, lightweight | Minimal environments, education, prototyping | None (Python stdlib only) |
 
 ##### Automatic Dependency Detection
 
@@ -145,11 +144,11 @@ This means you can:
 
 For example, if `polars` is not installed, `PolarsDataframe` will not be available as a compute framework option, and mloda will automatically work with the remaining available frameworks.
 
-Example using PythonDict framework:
+Example using PythonDictFramework:
 ``` python
 from mloda_core.abstract_plugins.components.feature import Feature
 
-feature = Feature("id", options={"compute_framework": "PythonDict"})
+feature = Feature("id", options={"compute_framework": "PythonDictFramework"})
 
 result = mlodaAPI.run_all(
     [feature], 

@@ -9,7 +9,7 @@ graph TD
     subgraph Frameworks
         PD[PandasDataframe]
         PA[PyarrowTable]
-        PY[PythonDict]
+        PY[PythonDictFramework]
         PL[PolarsDataframe]
         DB[DuckDBFramework]
         IC[IcebergFramework]
@@ -33,7 +33,7 @@ graph TD
 ### Core Frameworks
 - **PandasDataframe**: Rich data manipulation, good for development
 - **PyarrowTable**: Memory-efficient columnar format, production-ready
-- **PythonDict**: Dependency-free, List[Dict] structure
+- **PythonDictFramework**: Dependency-free, List[Dict] structure
 
 ### Advanced Frameworks
 - **PolarsDataframe**: High-performance Rust-based, lazy evaluation

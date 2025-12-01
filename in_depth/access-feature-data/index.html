@@ -86,6 +86,8 @@
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#input-features">Input features</a>
     </li>
+    <li class="toctree-l2"><a class="reference internal" href="#combining-data-sources-with-links">Combining Data Sources with Links</a>
+    </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../join_data/">Join data</a>
@@ -318,11 +320,11 @@ print(result)
 We might want to give data to the framework. 
 For this purpose, we have the ApiData.</p>
 <h4 id="apidata">ApiData</h4>
-<p>The ApiData can read data given to mlodaAPI at request time.</p>
+<p>The ApiData can read data given to mlodaAPI at request time. The built-in <code>ApiInputDataFeature</code> handles this - it receives data from the <code>ApiInputDataCollection</code> and makes it available as features.</p>
 <p>Use cases:</p>
 <ul>
 <li>web requests</li>
-<li>real-time prediction </li>
+<li>real-time prediction</li>
 <li>features as parameters</li>
 </ul>
 <p>The following example shows a simple ApiData setup.</p>
@@ -459,6 +461,37 @@ AInputFeatureGroup
 .......
 </code></pre>
 <p>As the input features can be fulfilled by <strong>multiple other features</strong>, we can have the same processes running in different environments, migrations and processes.</p>
+<h4 id="combining-data-sources-with-links">Combining Data Sources with Links</h4>
+<p>When input features come from different sources (e.g., ApiData and DataCreator), you can join them using Links. Create a <code>Link</code> in <code>input_features()</code> and attach it to a <code>Feature</code>:</p>
+<pre><code class="language-python">from mloda_core.abstract_plugins.components.link import Link
+from mloda_core.abstract_plugins.components.index.index import Index
+from mloda_plugins.feature_group.input_data.api_data.api_data import ApiInputDataFeature
+
+class JoinedFeature(AbstractFeatureGroup):
+
+    def input_features(self, options: Options, feature_name: FeatureName) -&gt; Optional[Set[Feature]]:
+        # Create a LEFT join between API data and Creator data
+        link = Link.left(
+            (ApiInputDataFeature, Index((&quot;api_id&quot;,))),
+            (CreatorDataFeature, Index((&quot;creator_id&quot;,)))
+        )
+
+        # Attach link to one feature, set index on both
+        return {
+            Feature(name=&quot;api_value&quot;, link=link, index=Index((&quot;api_id&quot;,))),
+            Feature(name=&quot;creator_value&quot;, index=Index((&quot;creator_id&quot;,))),
+        }
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:
+        # Data from both sources is now joined
+        data[&quot;JoinedFeature&quot;] = data[&quot;api_value&quot;] + &quot;_&quot; + data[&quot;creator_value&quot;]
+        return data
+</code></pre>
+<p>Available join methods: <code>Link.left()</code>, <code>Link.inner()</code>, <code>Link.outer()</code>, <code>Link.append()</code>, <code>Link.union()</code>.</p>
+<blockquote>
+<p>See <code>tests/test_plugins/integration_plugins/test_api_link_join.py</code> for a complete working example.</p>
+</blockquote>
               
             </div>
           </div><footer>

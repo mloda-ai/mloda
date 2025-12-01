@@ -220,16 +220,15 @@ feature_list = [&quot;id&quot;,&quot;V1&quot;,&quot;V2&quot;,&quot;V3&quot;]
 </code></pre>
 <p>Expected Error when running.</p>
 <pre><code class="language-python">mlodaAPI.run_all(
-    feature_list,       
+    feature_list,
     data_access_collection=data_access_collection
 )
 
-ValueError: Multiple feature groups 
-{&lt;class 'ReadCsv'&gt;: {&lt;class 'PyarrowTable'&gt;}, 
-&lt;class 'ReadCsvPandas'&gt;: {&lt;class 'PandasDataframe'&gt;}
+ValueError: Multiple feature groups
+{&lt;class 'CsvReader'&gt;: {&lt;class 'PyarrowTable'&gt;, &lt;class 'PandasDataframe'&gt;}
 .... found for feature name: id.
 </code></pre>
-<p>In this case, the framework finds multiple feature groups (like <strong>ReadCsv</strong> and <strong>ReadCsvPandas</strong>) that can handle the same file, but use different compute frameworks (<strong>PyarrowTable</strong> vs. <strong>PandasDataframe</strong> vs. <strong>PythonDict</strong>). Without explicitly specifying a compute framework, mloda doesn't know which one to use, leading to ambiguity.</p>
+<p>In this case, the framework finds multiple compute frameworks (like <strong>PyarrowTable</strong> and <strong>PandasDataframe</strong>) that can handle the same file through the <strong>CsvReader</strong> feature group. Without explicitly specifying a compute framework, mloda doesn't know which one to use, leading to ambiguity.</p>
 <p>This might seem counterintuitive, but it’s actually a <strong>feature</strong>, allowing you to compare different technologies and computation methods, particularly useful in scenarios such as:</p>
 <ul>
 <li><strong>Migrations</strong>: Moving from one environment to another.</li>
@@ -360,7 +359,7 @@ result[0]
 <td>pyspark, Java 8+</td>
 </tr>
 <tr>
-<td><strong>PythonDict</strong></td>
+<td><strong>PythonDictFramework</strong></td>
 <td>List[Dict[str, Any]]</td>
 <td>Zero dependencies, simple, lightweight</td>
 <td>Minimal environments, education, prototyping</td>
@@ -375,10 +374,10 @@ result[0]
 - Deploy mloda in minimal environments without all compute framework dependencies
 - Avoid import errors when optional dependencies are missing</p>
 <p>For example, if <code>polars</code> is not installed, <code>PolarsDataframe</code> will not be available as a compute framework option, and mloda will automatically work with the remaining available frameworks.</p>
-<p>Example using PythonDict framework:</p>
+<p>Example using PythonDictFramework:</p>
 <pre><code class="language-python">from mloda_core.abstract_plugins.components.feature import Feature
 
-feature = Feature(&quot;id&quot;, options={&quot;compute_framework&quot;: &quot;PythonDict&quot;})
+feature = Feature(&quot;id&quot;, options={&quot;compute_framework&quot;: &quot;PythonDictFramework&quot;})
 
 result = mlodaAPI.run_all(
     [feature], 

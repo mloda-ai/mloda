@@ -212,7 +212,7 @@ example_feature_list = [f&quot;Example_{f}&quot; for f in feature_list]
         return multiplied_table
 </code></pre>
 <h4 id="3-execute-the-request-using-the-new-feature-group">3. Execute the Request Using the New Feature Group</h4>
-<p>To use the newly defined feature group, simply add the <strong>"Example_"</strong> prefix to each feature name. mloda will automatically resolve the dependency between the <strong>ReadCsvFeatureGroup</strong> and the <strong>ExampleFeatureGroup</strong>.</p>
+<p>To use the newly defined feature group, simply add the <strong>"Example_"</strong> prefix to each feature name. mloda will automatically resolve the dependency between the <strong>CsvReader</strong> and the <strong>Example</strong> feature group.</p>
 <pre><code class="language-python">from mloda_core.api.request import mlodaAPI
 
 result = mlodaAPI.run_all(

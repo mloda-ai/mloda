@@ -107,7 +107,11 @@
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#key-concepts">Key Concepts</a>
         <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#separator-system">Separator System</a>
+    </li>
     <li class="toctree-l4"><a class="reference internal" href="#feature-chaining">Feature Chaining</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#multi-feature-input">Multi-Feature Input</a>
     </li>
     <li class="toctree-l4"><a class="reference internal" href="#unified-parser-architecture">Unified Parser Architecture</a>
     </li>
@@ -215,13 +219,59 @@
 <h2 id="overview">Overview</h2>
 <p>The Feature Chain Parser system enables feature groups to work with both traditional string-based feature names and modern configuration-based feature creation. This unified approach provides flexibility while maintaining backward compatibility.</p>
 <h2 id="key-concepts">Key Concepts</h2>
+<h3 id="separator-system">Separator System</h3>
+<p>mloda uses three separator characters in feature names, each with a specific purpose:</p>
+<table>
+<thead>
+<tr>
+<th>Separator</th>
+<th>Constant</th>
+<th>Purpose</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>__</code></td>
+<td><code>CHAIN_SEPARATOR</code></td>
+<td>Separates chained transformations (source→suffix)</td>
+<td><code>price__mean_imputed</code></td>
+</tr>
+<tr>
+<td><code>~</code></td>
+<td><code>COLUMN_SEPARATOR</code></td>
+<td>Separates multi-column output index</td>
+<td><code>feature__pca~0</code></td>
+</tr>
+<tr>
+<td><code>&amp;</code></td>
+<td><code>INPUT_SEPARATOR</code></td>
+<td>Separates multiple input features</td>
+<td><code>point1&amp;point2__distance</code></td>
+</tr>
+</tbody>
+</table>
+<p>These constants are defined in <code>mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser</code>:</p>
+<pre><code class="language-python">from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
+    CHAIN_SEPARATOR,    # &quot;__&quot;
+    COLUMN_SEPARATOR,   # &quot;~&quot;
+    INPUT_SEPARATOR,    # &quot;&amp;&quot;
+)
+</code></pre>
 <h3 id="feature-chaining">Feature Chaining</h3>
-<p>Feature chaining allows feature groups to be composed, where the output of one feature group becomes the input to another. This is reflected in the feature name using a double underscore pattern:</p>
+<p>Feature chaining allows feature groups to be composed, where the output of one feature group becomes the input to another. This is reflected in the feature name using the chain separator (<code>__</code>):</p>
 <pre><code>{source_feature}__{operation}
 </code></pre>
 <p>For example:
 - <code>sales__sum_aggr</code> - Simple feature
 - <code>price__mean_imputed__sum_7_day_window__max_aggr</code> - Chained feature</p>
+<h3 id="multi-feature-input">Multi-Feature Input</h3>
+<p>Some feature groups require multiple input features. These are separated using the input separator (<code>&amp;</code>):</p>
+<pre><code>{feature1}&amp;{feature2}__{operation}
+</code></pre>
+<p>For example:
+- <code>point1&amp;point2__haversine_distance</code> - GeoDistance with two points
+- <code>age&amp;income&amp;score__cluster_kmeans_3</code> - Clustering with multiple features</p>
 <h3 id="unified-parser-architecture">Unified Parser Architecture</h3>
 <p>The modernized <code>FeatureChainParser</code> provides a unified approach through the <code>match_configuration_feature_chain_parser</code> method that handles:</p>
 <ul>
@@ -276,8 +326,7 @@ from mloda_plugins.feature_group.experimental.default_options_key import Default
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 
 class MyFeatureGroup(AbstractFeatureGroup):
-    PATTERN = &quot;__&quot;
-    SUFFIX_PATTERN = [r&quot;__([a-zA-Z_]+)_operation$&quot;]
+    PREFIX_PATTERN = r&quot;__([a-zA-Z_]+)_operation$&quot;
 
     PROPERTY_MAPPING = {
         # Feature-specific parameter
@@ -304,8 +353,7 @@ def match_feature_group_criteria(cls, feature_name, options, data_access_collect
         feature_name,
         options,
         property_mapping=cls.PROPERTY_MAPPING,
-        pattern=cls.PATTERN,
-        suffix_patterns=cls.SUFFIX_PATTERN
+        prefix_patterns=[cls.PREFIX_PATTERN],
     )
 </code></pre>
 <h3 id="3-modernize-input_features-method">3. Modernize input_features Method</h3>
@@ -315,7 +363,7 @@ def match_feature_group_criteria(cls, feature_name, options, data_access_collect
 
     # Try string-based parsing first
     _, source_feature = FeatureChainParser.parse_feature_name(
-        feature_name, self.PATTERN, self.SUFFIX_PATTERN
+        feature_name, [self.PREFIX_PATTERN]
     )
     if source_feature is not None:
         return {Feature(source_feature)}
@@ -344,7 +392,7 @@ def match_feature_group_criteria(cls, feature_name, options, data_access_collect
         except (ValueError, StopIteration):
             # Fall back to string-based approach for legacy features
             operation_type, source_feature_name = FeatureChainParser.parse_feature_name(
-                feature.name, self.PATTERN, self.SUFFIX_PATTERN
+                feature.name, [cls.PREFIX_PATTERN]
             )
 
         # Process using extracted values

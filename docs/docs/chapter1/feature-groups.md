@@ -39,7 +39,7 @@ class Example(AbstractFeatureGroup):
 ```
 
 #### 3. Execute the Request Using the New Feature Group
-To use the newly defined feature group, simply add the **"Example_"** prefix to each feature name. mloda will automatically resolve the dependency between the **ReadCsvFeatureGroup** and the **ExampleFeatureGroup**.
+To use the newly defined feature group, simply add the **"Example_"** prefix to each feature name. mloda will automatically resolve the dependency between the **CsvReader** and the **Example** feature group.
 
 ```python
 from mloda_core.api.request import mlodaAPI

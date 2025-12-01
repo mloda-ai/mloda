@@ -31,7 +31,7 @@ Other frameworks don't require connection objects:
 - **Pandas**: Operations are performed on in-memory DataFrames
 - **PyArrow**: Tables are self-contained data structures
 - **Polars**: DataFrames and LazyFrames are independent objects
-- **PythonDict**: Simple Python data structures
+- **PythonDictFramework**: Simple Python data structures
 
 ## How it Works
 

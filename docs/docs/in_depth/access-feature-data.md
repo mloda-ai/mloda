@@ -157,12 +157,12 @@ For this purpose, we have the ApiData.
 
 #### ApiData
 
-The ApiData can read data given to mlodaAPI at request time.
+The ApiData can read data given to mlodaAPI at request time. The built-in `ApiInputDataFeature` handles this - it receives data from the `ApiInputDataCollection` and makes it available as features.
 
 Use cases:
-    
+
 - web requests
-- real-time prediction 
+- real-time prediction
 - features as parameters
 
 The following example shows a simple ApiData setup.
@@ -323,3 +323,38 @@ AInputFeatureGroup
 ```
 
 As the input features can be fulfilled by **multiple other features**, we can have the same processes running in different environments, migrations and processes.
+
+#### Combining Data Sources with Links
+
+When input features come from different sources (e.g., ApiData and DataCreator), you can join them using Links. Create a `Link` in `input_features()` and attach it to a `Feature`:
+
+```python
+from mloda_core.abstract_plugins.components.link import Link
+from mloda_core.abstract_plugins.components.index.index import Index
+from mloda_plugins.feature_group.input_data.api_data.api_data import ApiInputDataFeature
+
+class JoinedFeature(AbstractFeatureGroup):
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+        # Create a LEFT join between API data and Creator data
+        link = Link.left(
+            (ApiInputDataFeature, Index(("api_id",))),
+            (CreatorDataFeature, Index(("creator_id",)))
+        )
+
+        # Attach link to one feature, set index on both
+        return {
+            Feature(name="api_value", link=link, index=Index(("api_id",))),
+            Feature(name="creator_value", index=Index(("creator_id",))),
+        }
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        # Data from both sources is now joined
+        data["JoinedFeature"] = data["api_value"] + "_" + data["creator_value"]
+        return data
+```
+
+Available join methods: `Link.left()`, `Link.inner()`, `Link.outer()`, `Link.append()`, `Link.union()`.
+
+> See `tests/test_plugins/integration_plugins/test_api_link_join.py` for a complete working example.

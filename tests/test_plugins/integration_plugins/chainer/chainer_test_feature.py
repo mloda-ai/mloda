@@ -23,7 +23,7 @@ class ChainedFeatureGroupTest(ChainedContextFeatureGroupTest):
         """
 
         has_suffix_configuration, source_feature = FeatureChainParser.parse_feature_name(
-            feature.name, cls.PATTERN, cls.SUFFIX_PATTERN
+            feature.name, cls.SUFFIX_PATTERN
         )
 
         if has_suffix_configuration is None or source_feature is None:
@@ -44,6 +44,5 @@ class ChainedFeatureGroupTest(ChainedContextFeatureGroupTest):
 
 
 class ChainedFeatureGroupTest_B(ChainedFeatureGroupTest):
-    PATTERN = "__"
     SUFFIX_PATTERN = [r".*__chainer_b_([\w]+)$"]
     OPERATION_ID = "chainer_b_"  # Used for constructing feature names

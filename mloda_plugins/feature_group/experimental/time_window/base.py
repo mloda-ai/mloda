@@ -157,9 +157,7 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
         source_feature: str | None = None
 
         # Try string-based parsing first
-        _, source_feature = FeatureChainParser.parse_feature_name(
-            feature_name.name, self.PATTERN, [self.PREFIX_PATTERN]
-        )
+        _, source_feature = FeatureChainParser.parse_feature_name(feature_name.name, [self.PREFIX_PATTERN])
         if source_feature is not None:
             time_filter_feature = Feature(self.get_time_filter_feature(options))
             return {Feature(source_feature), time_filter_feature}
@@ -260,7 +258,6 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
             feature_name,
             options,
             property_mapping=cls.PROPERTY_MAPPING,
-            pattern=cls.PATTERN,
             prefix_patterns=[cls.PREFIX_PATTERN],
         )
 
@@ -297,7 +294,7 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
 
             # Try string-based parsing first (for legacy features)
             parsed_params, mloda_source_features = FeatureChainParser.parse_feature_name(
-                feature_name, cls.PATTERN, [cls.PREFIX_PATTERN]
+                feature_name, [cls.PREFIX_PATTERN]
             )
 
             if mloda_source_features is not None:

@@ -193,7 +193,7 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
         """Extract source feature from either configuration-based options or string parsing."""
 
         # Try string-based parsing first
-        _, source_feature = FeatureChainParser.parse_feature_name(feature_name, self.PATTERN, [self.SUFFIX_PATTERN])
+        _, source_feature = FeatureChainParser.parse_feature_name(feature_name, [self.SUFFIX_PATTERN])
         if source_feature is not None:
             # Remove ~suffix if present (for OneHot column patterns like category~1)
             base_feature = self.get_column_base_feature(source_feature)
@@ -210,7 +210,7 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
     @classmethod
     def get_encoder_type(cls, feature_name: str) -> str:
         """Extract the encoder type from the feature name."""
-        encoder_type, _ = FeatureChainParser.parse_feature_name(feature_name, cls.PATTERN, [cls.SUFFIX_PATTERN])
+        encoder_type, _ = FeatureChainParser.parse_feature_name(feature_name, [cls.SUFFIX_PATTERN])
         if encoder_type is None:
             raise ValueError(f"Invalid encoding feature name format: {feature_name}")
 
@@ -236,7 +236,6 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
             feature_name,
             options,
             property_mapping=cls.PROPERTY_MAPPING,
-            pattern=cls.PATTERN,
             prefix_patterns=[cls.SUFFIX_PATTERN],
         )
 
@@ -314,7 +313,7 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
         # Try string-based parsing first
         feature_name_str = feature.name.name if hasattr(feature.name, "name") else str(feature.name)
 
-        if cls.PATTERN in feature_name_str:
+        if FeatureChainParser.is_chained_feature(feature_name_str):
             encoder_type = cls.get_encoder_type(feature_name_str)
             source_feature_name = FeatureChainParser.extract_source_feature(feature_name_str, cls.SUFFIX_PATTERN)
             return encoder_type, source_feature_name

@@ -96,9 +96,9 @@ def test_integration_json_file() -> None:
     assert mloda_source_9 == "age__max_aggr"
     assert features[9].options.group.get("scaler_type") == "minmax"
 
-    # Eleventh feature: customer_location__store_location__haversine_distance (geo distance feature)
+    # Eleventh feature: customer_location&store_location__haversine_distance (geo distance feature)
     assert isinstance(features[10], Feature)
-    assert features[10].name.name == "customer_location__store_location__haversine_distance"
+    assert features[10].name.name == "customer_location&store_location__haversine_distance"
 
     # Twelfth feature: custom_geo_distance with mloda_sources (multiple sources)
     assert isinstance(features[11], Feature)
@@ -564,12 +564,12 @@ def test_complete_integration_json() -> None:
     assert features[9].options.group.get("scaler_type") == "minmax", "scaler_type should be 'minmax'"
 
     # 7. Geo distance feature (string-based naming pattern)
-    # Feature index 10: customer_location__store_location__haversine_distance
+    # Feature index 10: customer_location&store_location__haversine_distance
     assert isinstance(features[10], Feature), "Geo distance feature should be a Feature object"
-    assert features[10].name.name == "customer_location__store_location__haversine_distance", (
-        "Feature name should be 'customer_location__store_location__haversine_distance'"
+    assert features[10].name.name == "customer_location&store_location__haversine_distance", (
+        "Feature name should be 'customer_location&store_location__haversine_distance'"
     )
-    # The string-based geo distance feature uses the pattern: {point1}__{point2}__{distance_type}_distance
+    # The string-based geo distance feature uses the pattern: {point1}&{point2}__{distance_type}_distance
     # No mloda_sources or options needed - it's all encoded in the feature name
     validated_patterns["multiple_sources"] = True
 

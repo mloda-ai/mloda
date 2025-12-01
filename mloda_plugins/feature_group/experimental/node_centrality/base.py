@@ -130,7 +130,6 @@ class NodeCentralityFeatureGroup(AbstractFeatureGroup):
 
     # Define the suffix pattern for this feature group (L→R format: source__operation)
     PREFIX_PATTERN = r".*__([\w]+)_centrality$"
-    PATTERN = "__"
 
     # Property mapping for configuration-based feature creation
     PROPERTY_MAPPING = {
@@ -163,7 +162,7 @@ class NodeCentralityFeatureGroup(AbstractFeatureGroup):
         source_feature: str | None = None
 
         # string based
-        _, source_feature = FeatureChainParser.parse_feature_name(feature_name, self.PATTERN, [self.PREFIX_PATTERN])
+        _, source_feature = FeatureChainParser.parse_feature_name(feature_name, [self.PREFIX_PATTERN])
         if source_feature is not None:
             return {Feature(source_feature)}
 
@@ -237,7 +236,6 @@ class NodeCentralityFeatureGroup(AbstractFeatureGroup):
             feature_name,
             options,
             property_mapping=cls.PROPERTY_MAPPING,
-            pattern=cls.PATTERN,
             prefix_patterns=[cls.PREFIX_PATTERN],
         )
 
@@ -298,9 +296,7 @@ class NodeCentralityFeatureGroup(AbstractFeatureGroup):
         # Try string-based parsing first
         # Note: parse_feature_name returns (operation_config, source_feature) for L→R format
         # The operation_config is already extracted by the regex group (e.g., "degree" from "degree_centrality")
-        suffix_part, source_feature_name = FeatureChainParser.parse_feature_name(
-            feature.name, cls.PATTERN, [cls.PREFIX_PATTERN]
-        )
+        suffix_part, source_feature_name = FeatureChainParser.parse_feature_name(feature.name, [cls.PREFIX_PATTERN])
         if source_feature_name is not None and suffix_part is not None:
             # The suffix_part is already the centrality type (extracted by regex group)
             centrality_type = suffix_part

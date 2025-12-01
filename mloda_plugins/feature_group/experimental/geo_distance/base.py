@@ -28,14 +28,14 @@ class GeoDistanceFeatureGroup(AbstractFeatureGroup):
 
     ### 1. String-Based Creation
 
-    Features follow the naming pattern: `{point1_feature}__{point2_feature}__{distance_type}_distance`
+    Features follow the naming pattern: `{point1_feature}&{point2_feature}__{distance_type}_distance`
 
     Examples:
     ```python
     features = [
-        "customer_location__store_location__haversine_distance",  # Great-circle distance
-        "origin__destination__euclidean_distance",               # Straight-line distance
-        "pickup__dropoff__manhattan_distance"                    # Manhattan distance
+        "customer_location&store_location__haversine_distance",  # Great-circle distance
+        "origin&destination__euclidean_distance",               # Straight-line distance
+        "pickup&dropoff__manhattan_distance"                    # Manhattan distance
     ]
     ```
 
@@ -91,7 +91,6 @@ class GeoDistanceFeatureGroup(AbstractFeatureGroup):
 
     # Define the prefix pattern for this feature group
     PREFIX_PATTERN = r".*__([\w]+)_distance$"
-    PATTERN = "__"
 
     # Property mapping for configuration-based features with group/context separation
     PROPERTY_MAPPING = {
@@ -119,13 +118,13 @@ class GeoDistanceFeatureGroup(AbstractFeatureGroup):
 
         # Try string-based parsing first
         try:
-            # For L__R: "point1__point2__distance_type_distance"
+            # For L->R: "point1&point2__distance_type_distance"
             # We need to extract everything before the last "__"
             feature_name_str = feature_name.name if hasattr(feature_name, "name") else str(feature_name)
             parts = feature_name_str.rsplit("__", 1)
             if len(parts) == 2:
-                # parts[0] contains "point1__point2", parts[1] contains "distance_type_distance"
-                point_parts = parts[0].rsplit("__", 1)
+                # parts[0] contains "point1&point2", parts[1] contains "distance_type_distance"
+                point_parts = parts[0].split("&", 1)
                 if len(point_parts) == 2:
                     return {Feature(point_parts[0]), Feature(point_parts[1])}
         except (ValueError, AttributeError):
@@ -142,7 +141,7 @@ class GeoDistanceFeatureGroup(AbstractFeatureGroup):
     @classmethod
     def get_distance_type(cls, feature_name: str) -> str:
         """Extract the distance type from the feature name."""
-        distance_type, _ = FeatureChainParser.parse_feature_name(feature_name, cls.PATTERN, [cls.PREFIX_PATTERN])
+        distance_type, _ = FeatureChainParser.parse_feature_name(feature_name, [cls.PREFIX_PATTERN])
         if distance_type is None:
             raise ValueError(f"Invalid geo distance feature name format: {feature_name}")
 
@@ -158,7 +157,7 @@ class GeoDistanceFeatureGroup(AbstractFeatureGroup):
     @classmethod
     def get_point_features(cls, feature_name: str) -> tuple[str, str]:
         """Extract the two point features from the feature name."""
-        # For L__R: "point1__point2__distance_type_distance"
+        # For L->R: "point1&point2__distance_type_distance"
         # Split from right to remove the distance suffix
         parts = feature_name.rsplit("__", 1)
         if len(parts) != 2:
@@ -166,11 +165,11 @@ class GeoDistanceFeatureGroup(AbstractFeatureGroup):
                 f"Invalid geo distance feature name format: {feature_name}. Missing double underscore separator."
             )
 
-        # Now split the remaining part to get the two points
-        point_parts = parts[0].rsplit("__", 1)
+        # Now split the remaining part to get the two points using & separator
+        point_parts = parts[0].split("&", 1)
         if len(point_parts) != 2:
             raise ValueError(
-                f"Invalid geo distance feature name format: {feature_name}. Expected two point features separated by double underscore."
+                f"Invalid geo distance feature name format: {feature_name}. Expected two point features separated by ampersand (&)."
             )
 
         return point_parts[0], point_parts[1]
@@ -189,7 +188,6 @@ class GeoDistanceFeatureGroup(AbstractFeatureGroup):
             feature_name,
             options,
             property_mapping=cls.PROPERTY_MAPPING,
-            pattern=cls.PATTERN,
             prefix_patterns=[cls.PREFIX_PATTERN],
         )
 
@@ -242,7 +240,7 @@ class GeoDistanceFeatureGroup(AbstractFeatureGroup):
         # Try string-based parsing first
         feature_name_str = feature.name.name if hasattr(feature.name, "name") else str(feature.name)
 
-        if cls.PATTERN in feature_name_str:
+        if FeatureChainParser.is_chained_feature(feature_name_str):
             distance_type = cls.get_distance_type(feature_name_str)
             point1_feature, point2_feature = cls.get_point_features(feature_name_str)
             return distance_type, point1_feature, point2_feature

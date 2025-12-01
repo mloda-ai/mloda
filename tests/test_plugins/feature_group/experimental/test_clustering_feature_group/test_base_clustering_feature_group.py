@@ -84,9 +84,9 @@ class TestClusteringFeatureGroup:
         assert len(input_features) == 1
         assert Feature("customer_behavior") in input_features
 
-        # Multiple source features (comma-separated)
+        # Multiple source features (ampersand-separated)
         input_features = feature_group.input_features(
-            Options(), FeatureName("feature1,feature2,feature3__cluster_kmeans_5")
+            Options(), FeatureName("feature1&feature2&feature3__cluster_kmeans_5")
         )
         assert input_features is not None
         assert len(input_features) == 3

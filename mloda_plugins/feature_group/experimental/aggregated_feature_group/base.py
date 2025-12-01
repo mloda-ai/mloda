@@ -96,7 +96,6 @@ class AggregatedFeatureGroup(AbstractFeatureGroup):
         "median": "Median value",
     }
 
-    PATTERN = "__"
     PREFIX_PATTERN = r".*__([\w]+)_aggr$"
 
     # Property mapping for configuration-based feature creation
@@ -119,7 +118,7 @@ class AggregatedFeatureGroup(AbstractFeatureGroup):
         source_feature: str | None = None
 
         # string based
-        _, source_feature = FeatureChainParser.parse_feature_name(feature_name, self.PATTERN, [self.PREFIX_PATTERN])
+        _, source_feature = FeatureChainParser.parse_feature_name(feature_name, [self.PREFIX_PATTERN])
         if source_feature is not None:
             return {Feature(source_feature)}
 
@@ -134,7 +133,7 @@ class AggregatedFeatureGroup(AbstractFeatureGroup):
     @classmethod
     def get_aggregation_type(cls, feature_name: str) -> str:
         """Extract the aggregation type from the feature name."""
-        prefix_part, _ = FeatureChainParser.parse_feature_name(feature_name, cls.PATTERN, [cls.PREFIX_PATTERN])
+        prefix_part, _ = FeatureChainParser.parse_feature_name(feature_name, [cls.PREFIX_PATTERN])
         if prefix_part is None:
             raise ValueError(f"Could not extract aggregation type from feature name: {feature_name}")
         return prefix_part
@@ -153,7 +152,6 @@ class AggregatedFeatureGroup(AbstractFeatureGroup):
             feature_name,
             options,
             property_mapping=cls.PROPERTY_MAPPING,
-            pattern=cls.PATTERN,
             prefix_patterns=[cls.PREFIX_PATTERN],
         )
 
@@ -178,7 +176,7 @@ class AggregatedFeatureGroup(AbstractFeatureGroup):
 
         # string based
         aggregation_type, source_feature_name = FeatureChainParser.parse_feature_name(
-            feature.name, cls.PATTERN, [cls.PREFIX_PATTERN]
+            feature.name, [cls.PREFIX_PATTERN]
         )
         if aggregation_type is not None and source_feature_name is not None:
             return aggregation_type, source_feature_name

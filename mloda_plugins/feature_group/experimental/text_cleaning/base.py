@@ -121,7 +121,7 @@ class TextCleaningFeatureGroup(AbstractFeatureGroup):
         source_feature: str | None = None
 
         # Try string-based parsing first
-        _, source_feature = FeatureChainParser.parse_feature_name(feature_name, self.PATTERN, [self.PREFIX_PATTERN])
+        _, source_feature = FeatureChainParser.parse_feature_name(feature_name, [self.PREFIX_PATTERN])
         if source_feature is not None:
             return {Feature(source_feature)}
 
@@ -147,7 +147,6 @@ class TextCleaningFeatureGroup(AbstractFeatureGroup):
             feature_name,
             options,
             property_mapping=cls.PROPERTY_MAPPING,
-            pattern=cls.PATTERN,
             prefix_patterns=[cls.PREFIX_PATTERN],
         )
 
@@ -173,10 +172,8 @@ class TextCleaningFeatureGroup(AbstractFeatureGroup):
         # Try string-based parsing first
         feature_name_str = feature.name.name if hasattr(feature.name, "name") else str(feature.name)
 
-        if cls.PATTERN in feature_name_str:
-            _, source_feature_name = FeatureChainParser.parse_feature_name(
-                feature_name_str, cls.PATTERN, [cls.PREFIX_PATTERN]
-            )
+        if FeatureChainParser.is_chained_feature(feature_name_str):
+            _, source_feature_name = FeatureChainParser.parse_feature_name(feature_name_str, [cls.PREFIX_PATTERN])
             # For string-based features, get operations from options
             operations = feature.options.get(cls.CLEANING_OPERATIONS) or ()
             if source_feature_name is None:

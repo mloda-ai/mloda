@@ -6,9 +6,29 @@ The Feature Chain Parser system enables feature groups to work with both traditi
 
 ## Key Concepts
 
+### Separator System
+
+mloda uses three separator characters in feature names, each with a specific purpose:
+
+| Separator | Constant | Purpose | Example |
+|-----------|----------|---------|---------|
+| `__` | `CHAIN_SEPARATOR` | Separates chained transformations (source→suffix) | `price__mean_imputed` |
+| `~` | `COLUMN_SEPARATOR` | Separates multi-column output index | `feature__pca~0` |
+| `&` | `INPUT_SEPARATOR` | Separates multiple input features | `point1&point2__distance` |
+
+These constants are defined in `mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser`:
+
+```python
+from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
+    CHAIN_SEPARATOR,    # "__"
+    COLUMN_SEPARATOR,   # "~"
+    INPUT_SEPARATOR,    # "&"
+)
+```
+
 ### Feature Chaining
 
-Feature chaining allows feature groups to be composed, where the output of one feature group becomes the input to another. This is reflected in the feature name using a double underscore pattern:
+Feature chaining allows feature groups to be composed, where the output of one feature group becomes the input to another. This is reflected in the feature name using the chain separator (`__`):
 
 ```
 {source_feature}__{operation}
@@ -17,6 +37,18 @@ Feature chaining allows feature groups to be composed, where the output of one f
 For example:
 - `sales__sum_aggr` - Simple feature
 - `price__mean_imputed__sum_7_day_window__max_aggr` - Chained feature
+
+### Multi-Feature Input
+
+Some feature groups require multiple input features. These are separated using the input separator (`&`):
+
+```
+{feature1}&{feature2}__{operation}
+```
+
+For example:
+- `point1&point2__haversine_distance` - GeoDistance with two points
+- `age&income&score__cluster_kmeans_3` - Clustering with multiple features
 
 ### Unified Parser Architecture
 
@@ -84,9 +116,8 @@ from mloda_plugins.feature_group.experimental.default_options_key import Default
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 
 class MyFeatureGroup(AbstractFeatureGroup):
-    PATTERN = "__"
-    SUFFIX_PATTERN = [r"__([a-zA-Z_]+)_operation$"]
-    
+    PREFIX_PATTERN = r"__([a-zA-Z_]+)_operation$"
+
     PROPERTY_MAPPING = {
         # Feature-specific parameter
         "operation_type": {
@@ -116,8 +147,7 @@ def match_feature_group_criteria(cls, feature_name, options, data_access_collect
         feature_name,
         options,
         property_mapping=cls.PROPERTY_MAPPING,
-        pattern=cls.PATTERN,
-        suffix_patterns=cls.SUFFIX_PATTERN
+        prefix_patterns=[cls.PREFIX_PATTERN],
     )
 ```
 
@@ -131,7 +161,7 @@ def input_features(self, options: Options, feature_name: FeatureName) -> Optiona
 
     # Try string-based parsing first
     _, source_feature = FeatureChainParser.parse_feature_name(
-        feature_name, self.PATTERN, self.SUFFIX_PATTERN
+        feature_name, [self.PREFIX_PATTERN]
     )
     if source_feature is not None:
         return {Feature(source_feature)}
@@ -164,7 +194,7 @@ def calculate_feature(self, features, options):
         except (ValueError, StopIteration):
             # Fall back to string-based approach for legacy features
             operation_type, source_feature_name = FeatureChainParser.parse_feature_name(
-                feature.name, self.PATTERN, self.SUFFIX_PATTERN
+                feature.name, [cls.PREFIX_PATTERN]
             )
         
         # Process using extracted values

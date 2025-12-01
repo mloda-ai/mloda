@@ -157,57 +157,57 @@ class TestPandasClusteringFeatureGroup:
         """Test the calculate_feature method with K-means clustering."""
         # Create a feature set
         feature_set = FeatureSet()
-        feature_set.add(Feature("feature1,feature2__cluster_kmeans_2"))
+        feature_set.add(Feature("feature1&feature2__cluster_kmeans_2"))
 
         # Calculate the feature
         result = PandasClusteringFeatureGroup.calculate_feature(sample_data, feature_set)
 
         # Check that the result has the expected column
-        assert "feature1,feature2__cluster_kmeans_2" in result.columns
+        assert "feature1&feature2__cluster_kmeans_2" in result.columns
 
         # Check that there are exactly 2 unique clusters
-        assert len(np.unique(result["feature1,feature2__cluster_kmeans_2"])) == 2
+        assert len(np.unique(result["feature1&feature2__cluster_kmeans_2"])) == 2
 
     def test_calculate_feature_dbscan(self, sample_data: pd.DataFrame) -> None:
         """Test the calculate_feature method with DBSCAN clustering."""
         # Create a feature set
         feature_set = FeatureSet()
-        feature_set.add(Feature("feature1,feature2__cluster_dbscan_auto"))
+        feature_set.add(Feature("feature1&feature2__cluster_dbscan_auto"))
 
         # Calculate the feature
         result = PandasClusteringFeatureGroup.calculate_feature(sample_data, feature_set)
 
         # Check that the result has the expected column
-        assert "feature1,feature2__cluster_dbscan_auto" in result.columns
+        assert "feature1&feature2__cluster_dbscan_auto" in result.columns
 
         # DBSCAN may have noise points (labeled as -1)
         # So we check that there is at least 1 unique cluster (excluding noise)
-        unique_clusters = np.unique(result["feature1,feature2__cluster_dbscan_auto"])
+        unique_clusters = np.unique(result["feature1&feature2__cluster_dbscan_auto"])
         assert len(unique_clusters[unique_clusters >= 0]) >= 1
 
     def test_calculate_feature_hierarchical(self, sample_data: pd.DataFrame) -> None:
         """Test the calculate_feature method with hierarchical clustering."""
         # Create a feature set
         feature_set = FeatureSet()
-        feature_set.add(Feature("feature1,feature2__cluster_hierarchical_2"))
+        feature_set.add(Feature("feature1&feature2__cluster_hierarchical_2"))
 
         # Calculate the feature
         result = PandasClusteringFeatureGroup.calculate_feature(sample_data, feature_set)
 
         # Check that the result has the expected column
-        assert "feature1,feature2__cluster_hierarchical_2" in result.columns
+        assert "feature1&feature2__cluster_hierarchical_2" in result.columns
 
         # Check that there are exactly 2 unique clusters
-        assert len(np.unique(result["feature1,feature2__cluster_hierarchical_2"])) == 2
+        assert len(np.unique(result["feature1&feature2__cluster_hierarchical_2"])) == 2
 
     def test_calculate_feature_multiple(self, sample_data: pd.DataFrame) -> None:
         """Test the calculate_feature method with multiple clustering features."""
         # Create a feature set
         feature_set = FeatureSet()
         x = [
-            Feature("feature1,feature2__cluster_kmeans_2"),
-            Feature("feature1,feature2__cluster_dbscan_auto"),
-            Feature("feature1,feature2__cluster_hierarchical_2"),
+            Feature("feature1&feature2__cluster_kmeans_2"),
+            Feature("feature1&feature2__cluster_dbscan_auto"),
+            Feature("feature1&feature2__cluster_hierarchical_2"),
         ]
         for i in x:
             feature_set.add(i)
@@ -216,6 +216,6 @@ class TestPandasClusteringFeatureGroup:
         result = PandasClusteringFeatureGroup.calculate_feature(sample_data, feature_set)
 
         # Check that the result has the expected columns
-        assert "feature1,feature2__cluster_kmeans_2" in result.columns
-        assert "feature1,feature2__cluster_dbscan_auto" in result.columns
-        assert "feature1,feature2__cluster_hierarchical_2" in result.columns
+        assert "feature1&feature2__cluster_kmeans_2" in result.columns
+        assert "feature1&feature2__cluster_dbscan_auto" in result.columns
+        assert "feature1&feature2__cluster_hierarchical_2" in result.columns

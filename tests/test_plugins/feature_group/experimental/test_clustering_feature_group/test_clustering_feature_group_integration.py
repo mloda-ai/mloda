@@ -71,9 +71,9 @@ def validate_clustering_results(result: List) -> None:  # type: ignore
             dfs.append(res)
 
     # Find the DataFrame with the clustering features
-    kmeans_feature = "feature1,feature2__cluster_kmeans_2"
-    dbscan_feature = "feature1,feature2__cluster_dbscan_auto"
-    hierarchical_feature = "feature1,feature2__cluster_hierarchical_2"
+    kmeans_feature = "feature1&feature2__cluster_kmeans_2"
+    dbscan_feature = "feature1&feature2__cluster_dbscan_auto"
+    hierarchical_feature = "feature1&feature2__cluster_hierarchical_2"
 
     # Check that all features exist in the results
     kmeans_df = None
@@ -124,9 +124,9 @@ class TestClusteringFeatureGroupIntegration:
         features: List[Feature | str] = [
             "feature1",
             "feature2",
-            "feature1,feature2__cluster_kmeans_2",
-            "feature1,feature2__cluster_dbscan_auto",
-            "feature1,feature2__cluster_hierarchical_2",
+            "feature1&feature2__cluster_kmeans_2",
+            "feature1&feature2__cluster_dbscan_auto",
+            "feature1&feature2__cluster_hierarchical_2",
         ]
 
         # Run the API
@@ -151,7 +151,7 @@ class TestClusteringFeatureGroupIntegration:
 
         # Create features using the parser configuration
         kmeans_feature = Feature(
-            "feature1,feature2__cluster_kmeans_2",
+            "feature1&feature2__cluster_kmeans_2",
             Options(
                 context={
                     ClusteringFeatureGroup.ALGORITHM: "kmeans",
@@ -162,7 +162,7 @@ class TestClusteringFeatureGroupIntegration:
         )
 
         dbscan_feature = Feature(
-            "feature1,feature2__cluster_dbscan_auto",
+            "feature1&feature2__cluster_dbscan_auto",
             Options(
                 context={
                     ClusteringFeatureGroup.ALGORITHM: "dbscan",
@@ -173,7 +173,7 @@ class TestClusteringFeatureGroupIntegration:
         )
 
         hierarchical_feature = Feature(
-            "feature1,feature2__cluster_hierarchical_2",
+            "feature1&feature2__cluster_hierarchical_2",
             Options(
                 context={
                     ClusteringFeatureGroup.ALGORITHM: "hierarchical",
@@ -215,9 +215,9 @@ class TestClusteringFeatureGroupIntegration:
         features: List[str | Feature] = [
             "feature1",
             "feature2",
-            "feature1,feature2__cluster_kmeans_2",
-            "feature1,feature2__cluster_spectral_2",
-            "feature1,feature2__cluster_agglomerative_2",
+            "feature1&feature2__cluster_kmeans_2",
+            "feature1&feature2__cluster_spectral_2",
+            "feature1&feature2__cluster_agglomerative_2",
         ]
 
         # Run the API
@@ -239,9 +239,9 @@ class TestClusteringFeatureGroupIntegration:
                 dfs.append(res)
 
         # Find the DataFrame with the clustering features
-        kmeans_feature = "feature1,feature2__cluster_kmeans_2"
-        spectral_feature = "feature1,feature2__cluster_spectral_2"
-        agglomerative_feature = "feature1,feature2__cluster_agglomerative_2"
+        kmeans_feature = "feature1&feature2__cluster_kmeans_2"
+        spectral_feature = "feature1&feature2__cluster_spectral_2"
+        agglomerative_feature = "feature1&feature2__cluster_agglomerative_2"
 
         # Check that all features exist in the results
         kmeans_df = None

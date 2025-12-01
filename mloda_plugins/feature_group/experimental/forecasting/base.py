@@ -9,7 +9,10 @@ from typing import Any, List, Optional, Set, Type, Union
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.base_artifact import BaseArtifact
 from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
+from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
+    CHAIN_SEPARATOR,
+    FeatureChainParser,
+)
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.options import Options
@@ -128,7 +131,6 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
 
     # Define the prefix pattern for this feature group
     PREFIX_PATTERN = r".*__([\w]+)_forecast_(\d+)([\w]+)$"
-    PATTERN = "__"
 
     # Property mapping for configuration-based features with group/context separation
     PROPERTY_MAPPING = {
@@ -202,7 +204,7 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
         source_feature: str | None = None
 
         # Try string-based parsing first
-        _, source_feature = FeatureChainParser.parse_feature_name(feature_name, self.PATTERN, [self.PREFIX_PATTERN])
+        _, source_feature = FeatureChainParser.parse_feature_name(feature_name, [self.PREFIX_PATTERN])
         if source_feature is not None:
             time_filter_feature = Feature(self.get_time_filter_feature(options))
             return {Feature(source_feature), time_filter_feature}
@@ -297,7 +299,6 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
             feature_name,
             options,
             property_mapping=cls.PROPERTY_MAPPING,
-            pattern=cls.PATTERN,
             prefix_patterns=[cls.PREFIX_PATTERN],
         )
 
@@ -306,7 +307,7 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
             feature_name_str = feature_name.name if isinstance(feature_name, FeatureName) else feature_name
 
             # Check if this is a string-based feature (contains the pattern)
-            if cls.PATTERN in feature_name_str:
+            if FeatureChainParser.is_chained_feature(feature_name_str):
                 try:
                     # Use existing validation logic that validates algorithm, horizon, and time_unit
                     cls.parse_forecast_suffix(feature_name_str)
@@ -428,10 +429,11 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
         # Try string-based parsing first
         feature_name_str = feature.name.name if hasattr(feature.name, "name") else str(feature.name)
 
-        if cls.PATTERN in feature_name_str:
+        if FeatureChainParser.is_chained_feature(feature_name_str):
             algorithm, horizon, time_unit = cls.parse_forecast_suffix(feature_name_str)
-            # Extract source feature (everything before the __)
-            source_feature_name = feature_name_str.split(cls.PATTERN)[0]
+
+            # Extract source feature name (everything before the last double underscore)
+            source_feature_name = feature_name_str.rsplit(CHAIN_SEPARATOR, 1)[0]
             return algorithm, horizon, time_unit, source_feature_name
 
         # Fall back to configuration-based approach

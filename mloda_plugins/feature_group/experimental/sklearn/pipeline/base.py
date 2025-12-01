@@ -120,9 +120,7 @@ class SklearnPipelineFeatureGroup(AbstractFeatureGroup):
         """Extract source features from either configuration-based options or string parsing."""
 
         # Try string-based parsing first
-        _, source_features_str = FeatureChainParser.parse_feature_name(
-            feature_name, self.PATTERN, [self.PREFIX_PATTERN]
-        )
+        _, source_features_str = FeatureChainParser.parse_feature_name(feature_name, [self.PREFIX_PATTERN])
         if source_features_str is not None:
             # Handle multiple source features separated by commas
             if "," in source_features_str:
@@ -138,7 +136,7 @@ class SklearnPipelineFeatureGroup(AbstractFeatureGroup):
     @classmethod
     def get_pipeline_name(cls, feature_name: str) -> str:
         """Extract the pipeline name from the feature name."""
-        prefix_part, _ = FeatureChainParser.parse_feature_name(feature_name, cls.PATTERN, [cls.PREFIX_PATTERN])
+        prefix_part, _ = FeatureChainParser.parse_feature_name(feature_name, [cls.PREFIX_PATTERN])
         if prefix_part is None:
             raise ValueError(f"Invalid sklearn pipeline feature name format: {feature_name}")
 
@@ -168,7 +166,6 @@ class SklearnPipelineFeatureGroup(AbstractFeatureGroup):
             feature_name,
             options,
             property_mapping=cls.PROPERTY_MAPPING,
-            pattern=cls.PATTERN,
             prefix_patterns=[cls.PREFIX_PATTERN],
         )
 
@@ -254,11 +251,9 @@ class SklearnPipelineFeatureGroup(AbstractFeatureGroup):
         # Try string-based parsing first
         feature_name_str = feature.name.name if hasattr(feature.name, "name") else str(feature.name)
 
-        if cls.PATTERN in feature_name_str:
+        if FeatureChainParser.is_chained_feature(feature_name_str):
             pipeline_name = cls.get_pipeline_name(feature_name_str)
-            _, source_features_str = FeatureChainParser.parse_feature_name(
-                feature_name_str, cls.PATTERN, [cls.PREFIX_PATTERN]
-            )
+            _, source_features_str = FeatureChainParser.parse_feature_name(feature_name_str, [cls.PREFIX_PATTERN])
 
             if source_features_str is not None:
                 # Handle multiple source features

@@ -45,7 +45,7 @@
     }
   },
   {
-    "name": "customer_location__store_location__haversine_distance"
+    "name": "customer_location&store_location__haversine_distance"
   },
   {
     "name": "custom_geo_distance",

@@ -19,9 +19,9 @@ from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCr
 
 # List of geo distance features to test
 GEO_DISTANCE_FEATURES: List[Feature | str] = [
-    "sf__nyc__haversine_distance",  # Haversine distance between San Francisco and New York
-    "point1__point2__euclidean_distance",  # Euclidean distance between point1 and point2
-    "point1__point2__manhattan_distance",  # Manhattan distance between point1 and point2
+    "sf&nyc__haversine_distance",  # Haversine distance between San Francisco and New York
+    "point1&point2__euclidean_distance",  # Euclidean distance between point1 and point2
+    "point1&point2__manhattan_distance",  # Manhattan distance between point1 and point2
 ]
 
 
@@ -68,21 +68,19 @@ def validate_geo_distance_features(df: pd.DataFrame, expected_features: List[Fea
         assert feature_name in df.columns, f"Expected feature '{feature_name}' not found"
 
     # Validate specific distance calculations for the first row
-    if "sf__nyc__haversine_distance" in df.columns:
+    if "sf&nyc__haversine_distance" in df.columns:
         # Expected distance is approximately 4130 km
-        assert abs(df["sf__nyc__haversine_distance"].iloc[0] - 4130) < 100, (
-            "Haversine distance calculation is incorrect"
-        )
+        assert abs(df["sf&nyc__haversine_distance"].iloc[0] - 4130) < 100, "Haversine distance calculation is incorrect"
 
-    if "point1__point2__euclidean_distance" in df.columns:
+    if "point1&point2__euclidean_distance" in df.columns:
         # Expected distance is 5.0 for the first row
-        assert abs(df["point1__point2__euclidean_distance"].iloc[0] - 5.0) < 0.1, (
+        assert abs(df["point1&point2__euclidean_distance"].iloc[0] - 5.0) < 0.1, (
             "Euclidean distance calculation is incorrect"
         )
 
-    if "point1__point2__manhattan_distance" in df.columns:
+    if "point1&point2__manhattan_distance" in df.columns:
         # Expected distance is 7 for the first row
-        assert df["point1__point2__manhattan_distance"].iloc[0] == 7, "Manhattan distance calculation is incorrect"
+        assert df["point1&point2__manhattan_distance"].iloc[0] == 7, "Manhattan distance calculation is incorrect"
 
 
 class TestGeoDistancePandasIntegration:
@@ -103,9 +101,9 @@ class TestGeoDistancePandasIntegration:
                 "nyc",  # Source data - New York coordinates
                 "point1",  # Source data - Point 1
                 "point2",  # Source data - Point 2
-                "sf__nyc__haversine_distance",  # Haversine distance between SF and NYC
-                "point1__point2__euclidean_distance",  # Euclidean distance between point1 and point2
-                "point1__point2__manhattan_distance",  # Manhattan distance between point1 and point2
+                "sf&nyc__haversine_distance",  # Haversine distance between SF and NYC
+                "point1&point2__euclidean_distance",  # Euclidean distance between point1 and point2
+                "point1&point2__manhattan_distance",  # Manhattan distance between point1 and point2
             ],
             compute_frameworks={PandasDataframe},
             plugin_collector=plugin_collector,
@@ -117,7 +115,7 @@ class TestGeoDistancePandasIntegration:
         # Find the DataFrame with the geo distance features
         distance_df = None
         for df in result:
-            if "sf__nyc__haversine_distance" in df.columns:
+            if "sf&nyc__haversine_distance" in df.columns:
                 distance_df = df
                 break
 

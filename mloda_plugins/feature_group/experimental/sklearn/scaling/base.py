@@ -105,7 +105,7 @@ class ScalingFeatureGroup(AbstractFeatureGroup):
         """Extract source feature from either configuration-based options or string parsing."""
 
         # Try string-based parsing first
-        _, source_feature = FeatureChainParser.parse_feature_name(feature_name, self.PATTERN, [self.PREFIX_PATTERN])
+        _, source_feature = FeatureChainParser.parse_feature_name(feature_name, [self.PREFIX_PATTERN])
         if source_feature is not None:
             return {Feature(source_feature)}
 
@@ -120,7 +120,7 @@ class ScalingFeatureGroup(AbstractFeatureGroup):
     @classmethod
     def get_scaler_type(cls, feature_name: str) -> str:
         """Extract the scaler type from the feature name."""
-        scaler_type, _ = FeatureChainParser.parse_feature_name(feature_name, cls.PATTERN, [cls.PREFIX_PATTERN])
+        scaler_type, _ = FeatureChainParser.parse_feature_name(feature_name, [cls.PREFIX_PATTERN])
         if scaler_type is None:
             raise ValueError(f"Invalid scaling feature name format: {feature_name}")
 
@@ -146,7 +146,6 @@ class ScalingFeatureGroup(AbstractFeatureGroup):
             feature_name,
             options,
             property_mapping=cls.PROPERTY_MAPPING,
-            pattern=cls.PATTERN,
             prefix_patterns=[cls.PREFIX_PATTERN],
         )
 
@@ -220,7 +219,7 @@ class ScalingFeatureGroup(AbstractFeatureGroup):
         # Try string-based parsing first
         feature_name_str = feature.name.name if hasattr(feature.name, "name") else str(feature.name)
 
-        if cls.PATTERN in feature_name_str:
+        if FeatureChainParser.is_chained_feature(feature_name_str):
             scaler_type = cls.get_scaler_type(feature_name_str)
             source_feature_name = FeatureChainParser.extract_source_feature(feature_name_str, cls.PREFIX_PATTERN)
             return scaler_type, source_feature_name

@@ -36,18 +36,14 @@ class PyArrowFilterEngine(BaseFilterEngine):
 
     @classmethod
     def do_min_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
+        # Handle empty table edge case
+        if len(data) == 0:
+            return data
+
         # Get the string name from the FeatureName object
         column_name = str(filter_feature.name)
 
-        # Extract the value from the parameter
-        value = None
-        for param in filter_feature.parameter:
-            if param[0] == "value":
-                value = param[1]
-                break
-
-        if value is None:
-            raise ValueError(f"Filter parameter 'value' not found in {filter_feature.parameter}")
+        value = cls.get_parameter_value(filter_feature, "value")
 
         # Create boolean mask for min filter
         mask = pc.greater_equal(data[column_name], value)

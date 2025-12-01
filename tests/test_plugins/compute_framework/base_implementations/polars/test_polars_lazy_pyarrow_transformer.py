@@ -1,9 +1,12 @@
 import pytest
-from typing import Optional
+from typing import Any, Optional, Type
 from unittest.mock import patch
 
 from mloda_plugins.compute_framework.base_implementations.polars.polars_lazy_pyarrow_transformer import (
     PolarsLazyPyarrowTransformer,
+)
+from tests.test_plugins.compute_framework.test_tooling.transformer.transformer_test_base import (
+    TransformerTestBase,
 )
 
 import logging
@@ -40,62 +43,31 @@ class TestPolarsLazyPyarrowTransformerAvailability:
 
 
 @pytest.mark.skipif(pl is None or pa is None, reason="Polars or PyArrow is not installed. Skipping this test.")
-class TestPolarsLazyPyarrowTransformer:
-    if pl and pa:
-        test_data = {"column1": [1, 2, 3], "column2": [4, 5, 6]}
-        lazy_frame = pl.LazyFrame(test_data)
-        arrow_table = pa.table(test_data)
+class TestPolarsLazyPyarrowTransformer(TransformerTestBase):
+    @classmethod
+    def transformer_class(cls) -> Type[Any]:
+        """Return the PolarsLazyPyarrowTransformer class."""
+        return PolarsLazyPyarrowTransformer
 
-    def test_framework(self) -> None:
-        assert PolarsLazyPyarrowTransformer.framework() == pl.LazyFrame
+    @classmethod
+    def framework_type(cls) -> Type[Any]:
+        """Return pl.LazyFrame as the framework type."""
+        return pl.LazyFrame
 
-    def test_other_framework(self) -> None:
-        assert PolarsLazyPyarrowTransformer.other_framework() == pa.Table
-
-    def test_transform_lazy_frame_to_arrow_table(self) -> None:
-        """Test transformation from LazyFrame to PyArrow Table"""
-        result = PolarsLazyPyarrowTransformer.transform_fw_to_other_fw(self.lazy_frame)
-
-        # Result should be a PyArrow Table
-        assert isinstance(result, pa.Table)
-
-        # Verify data integrity
-        expected_df = pl.DataFrame(self.test_data)
-        result_df = pl.from_arrow(result)
-        assert result_df.equals(expected_df)  # type: ignore
-
-    def test_transform_arrow_table_to_lazy_frame(self) -> None:
-        """Test transformation from PyArrow Table to LazyFrame"""
-        result = PolarsLazyPyarrowTransformer.transform_other_fw_to_fw(self.arrow_table)
-
-        # Result should be a LazyFrame
-        assert isinstance(result, pl.LazyFrame)
-
-        # Verify data integrity by collecting and comparing
-        result_df = result.collect()
-        expected_df = pl.DataFrame(self.test_data)
-        assert result_df.equals(expected_df)
-
-    def test_round_trip_transformation(self) -> None:
-        """Test LazyFrame -> PyArrow -> LazyFrame round trip"""
-        # LazyFrame to PyArrow
-        arrow_result = PolarsLazyPyarrowTransformer.transform_fw_to_other_fw(self.lazy_frame)
-
-        # PyArrow back to LazyFrame
-        lazy_result = PolarsLazyPyarrowTransformer.transform_other_fw_to_fw(arrow_result)
-
-        # Should be equivalent to original
-        original_df = self.lazy_frame.collect()
-        result_df = lazy_result.collect()
-        assert result_df.equals(original_df)
+    def get_connection(self) -> Optional[Any]:
+        """Polars Lazy doesn't require a connection."""
+        return None
 
     def test_transform_other_fw_to_fw_missing_polars(self) -> None:
         """Test error handling when polars is not available"""
+        test_data = {"column1": [1, 2, 3], "column2": [4, 5, 6]}
+        arrow_table = pa.table(test_data)
+
         with patch(
             "mloda_plugins.compute_framework.base_implementations.polars.polars_lazy_pyarrow_transformer.pl", None
         ):
             with pytest.raises(ImportError, match="Polars is not installed"):
-                PolarsLazyPyarrowTransformer.transform_other_fw_to_fw(self.arrow_table)
+                PolarsLazyPyarrowTransformer.transform_other_fw_to_fw(arrow_table)
 
 
 @pytest.mark.skipif(pl is None or pa is None, reason="Polars or PyArrow is not installed. Skipping this test.")
@@ -111,15 +83,12 @@ class TestPolarsLazyPyarrowTransformerEquivalence:
             PolarsPyarrowTransformer,
         )
 
-        # Create equivalent data
         df = pl.DataFrame(self.test_data)
         lazy_df = df.lazy()
 
-        # Transform using both transformers
         eager_result = PolarsPyarrowTransformer.transform_fw_to_other_fw(df)
         lazy_result = PolarsLazyPyarrowTransformer.transform_fw_to_other_fw(lazy_df)
 
-        # Results should be equivalent
         assert eager_result.equals(lazy_result)
 
     def test_lazy_vs_eager_polars_conversion(self) -> None:
@@ -128,13 +97,10 @@ class TestPolarsLazyPyarrowTransformerEquivalence:
             PolarsPyarrowTransformer,
         )
 
-        # Create PyArrow table
         arrow_table = pa.table(self.test_data)
 
-        # Transform using both transformers
         eager_result = PolarsPyarrowTransformer.transform_other_fw_to_fw(arrow_table, None)
         lazy_result = PolarsLazyPyarrowTransformer.transform_other_fw_to_fw(arrow_table)
 
-        # Collect lazy result and compare
         lazy_collected = lazy_result.collect()
         assert lazy_collected.equals(eager_result)

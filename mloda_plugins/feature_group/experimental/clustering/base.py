@@ -103,7 +103,6 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
 
     # Define the prefix pattern for this feature group
     PREFIX_PATTERN = r".*__cluster_([\w]+)_([\w]+)$"
-    PATTERN = "__"
 
     # Property mapping for configuration-based feature creation
     PROPERTY_MAPPING = {
@@ -138,14 +137,12 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
 
         # string based
         source_features_str: str | None = None
-        _, source_features_str = FeatureChainParser.parse_feature_name(
-            feature_name, self.PATTERN, [self.PREFIX_PATTERN]
-        )
+        _, source_features_str = FeatureChainParser.parse_feature_name(feature_name, [self.PREFIX_PATTERN])
 
         if source_features_str is not None:
-            # Handle multiple source features (comma-separated)
+            # Handle multiple source features (ampersand-separated)
             source_features = set()
-            for feature in source_features_str.split(","):
+            for feature in source_features_str.split("&"):
                 source_features.add(Feature(feature.strip()))
             return source_features
 
@@ -229,7 +226,6 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
             feature_name,
             options,
             property_mapping=cls.PROPERTY_MAPPING,
-            pattern=cls.PATTERN,
             prefix_patterns=[cls.PREFIX_PATTERN],
         )
 
@@ -238,7 +234,7 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
             feature_name_str = feature_name.name if isinstance(feature_name, FeatureName) else feature_name
 
             # Check if this is a string-based feature (contains the pattern)
-            if cls.PATTERN in feature_name_str:
+            if FeatureChainParser.is_chained_feature(feature_name_str):
                 try:
                     # Use existing validation logic that validates algorithm and k_value
                     cls.parse_clustering_prefix(feature_name_str)
@@ -268,9 +264,7 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
         source_features = None
 
         # string based
-        algorithm_str, source_features_str = FeatureChainParser.parse_feature_name(
-            feature.name, cls.PATTERN, [cls.PREFIX_PATTERN]
-        )
+        algorithm_str, source_features_str = FeatureChainParser.parse_feature_name(feature.name, [cls.PREFIX_PATTERN])
         if algorithm_str is not None and source_features_str is not None:
             # Parse the algorithm and k_value from the prefix
             algorithm, k_value_str = cls.parse_clustering_prefix(feature.get_name())
@@ -281,8 +275,8 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
             else:
                 k_value = int(k_value_str)
 
-            # Parse source features (comma-separated)
-            source_features = [feature.strip() for feature in source_features_str.split(",")]
+            # Parse source features (ampersand-separated)
+            source_features = [feature.strip() for feature in source_features_str.split("&")]
 
             return algorithm, k_value, source_features
 

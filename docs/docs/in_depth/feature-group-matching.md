@@ -24,8 +24,7 @@ def match_feature_group_criteria(cls, feature_name, options, data_access_collect
         feature_name,
         options,
         property_mapping=cls.PROPERTY_MAPPING,  # Configuration-based matching
-        pattern=cls.PATTERN,                    # String-based matching
-        suffix_patterns=cls.SUFFIX_PATTERN
+        prefix_patterns=[cls.PREFIX_PATTERN],   # String-based matching (pattern defaults to CHAIN_SEPARATOR)
     )
 ```
 

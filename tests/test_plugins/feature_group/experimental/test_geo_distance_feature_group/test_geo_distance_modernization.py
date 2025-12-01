@@ -59,9 +59,9 @@ class TestGeoDistanceModernization:
 
         # Create string-based features
         features: Features | List[str | Feature] = [
-            Feature("sf_location__nyc_location__haversine_distance"),
-            Feature("point_a__point_b__euclidean_distance"),
-            Feature("origin__destination__manhattan_distance"),
+            Feature("sf_location&nyc_location__haversine_distance"),
+            Feature("point_a&point_b__euclidean_distance"),
+            Feature("origin&destination__manhattan_distance"),
         ]
 
         # Run the API
@@ -78,14 +78,14 @@ class TestGeoDistanceModernization:
         assert len(results) == 1
         result_df = results[0]
 
-        assert "sf_location__nyc_location__haversine_distance" in result_df.columns
-        assert "point_a__point_b__euclidean_distance" in result_df.columns
-        assert "origin__destination__manhattan_distance" in result_df.columns
+        assert "sf_location&nyc_location__haversine_distance" in result_df.columns
+        assert "point_a&point_b__euclidean_distance" in result_df.columns
+        assert "origin&destination__manhattan_distance" in result_df.columns
         assert len(result_df) > 0  # Should have data
 
         # Verify reasonable distance values
         # Haversine distance between SF and NYC should be around 4130 km
-        haversine_distances = result_df["sf_location__nyc_location__haversine_distance"]
+        haversine_distances = result_df["sf_location&nyc_location__haversine_distance"]
         assert all(distance > 4000 and distance < 4300 for distance in haversine_distances)
 
     def test_configuration_based_feature_creation(self) -> None:
@@ -158,7 +158,7 @@ class TestGeoDistanceModernization:
         )
 
         # Create string-based feature
-        string_feature = Feature("point_a__point_b__euclidean_distance")
+        string_feature = Feature("point_a&point_b__euclidean_distance")
 
         # Create configuration-based feature with same parameters
         config_feature = Feature(
@@ -181,14 +181,14 @@ class TestGeoDistanceModernization:
         results2 = api2.get_result()
 
         # Both should produce results with their respective feature names
-        assert "point_a__point_b__euclidean_distance" in results1[0].columns
+        assert "point_a&point_b__euclidean_distance" in results1[0].columns
         assert "config_euclidean" in results2[0].columns
 
         # Results should have the same structure and values (same calculation)
         assert len(results1[0]) == len(results2[0])
 
         # The calculated distances should be identical
-        string_distances = results1[0]["point_a__point_b__euclidean_distance"].values
+        string_distances = results1[0]["point_a&point_b__euclidean_distance"].values
         config_distances = results2[0]["config_euclidean"].values
 
         # Allow for small floating point differences
@@ -335,7 +335,7 @@ class TestGeoDistanceModernization:
     def test_match_feature_group_criteria_with_property_mapping(self) -> None:
         """Test that match_feature_group_criteria works with the new PROPERTY_MAPPING approach."""
         # Test string-based feature matching
-        string_feature_name = "sf_location__nyc_location__haversine_distance"
+        string_feature_name = "sf_location&nyc_location__haversine_distance"
         string_options = Options({})
 
         assert GeoDistanceFeatureGroup.match_feature_group_criteria(string_feature_name, string_options) is True
@@ -383,8 +383,8 @@ class TestGeoDistanceModernization:
         # Mix string-based and configuration-based features
         features: Features | List[str | Feature] = [
             # String-based features
-            Feature("sf_location__la_location__haversine_distance"),
-            Feature("point_a__point_b__euclidean_distance"),
+            Feature("sf_location&la_location__haversine_distance"),
+            Feature("point_a&point_b__euclidean_distance"),
             # Configuration-based features
             Feature(
                 name="config_manhattan",
@@ -416,8 +416,8 @@ class TestGeoDistanceModernization:
         result_df = results[0]
 
         # Check that all features are present
-        assert "sf_location__la_location__haversine_distance" in result_df.columns
-        assert "point_a__point_b__euclidean_distance" in result_df.columns
+        assert "sf_location&la_location__haversine_distance" in result_df.columns
+        assert "point_a&point_b__euclidean_distance" in result_df.columns
         assert "config_manhattan" in result_df.columns
         assert "config_haversine" in result_df.columns
 
@@ -431,7 +431,7 @@ class TestGeoDistanceModernization:
         # Test string-based approach
         from mloda_core.abstract_plugins.components.feature_name import FeatureName
 
-        string_feature_name = FeatureName("sf_location__nyc_location__haversine_distance")
+        string_feature_name = FeatureName("sf_location&nyc_location__haversine_distance")
         string_options = Options({})
 
         input_features = feature_group.input_features(string_options, string_feature_name)

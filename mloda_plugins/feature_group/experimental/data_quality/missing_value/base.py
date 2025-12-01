@@ -157,7 +157,6 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
         "bfill": "Backward fill (use the next valid value)",
     }
 
-    PATTERN = "__"
     PREFIX_PATTERN = r".*__([\w]+)_imputed$"
 
     PROPERTY_MAPPING = {
@@ -188,9 +187,7 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
 
         # Try string-based parsing first
         # parse_feature_name returns (operation_config, source_feature)
-        operation_config, source_feature = FeatureChainParser.parse_feature_name(
-            feature_name, self.PATTERN, [self.PREFIX_PATTERN]
-        )
+        operation_config, source_feature = FeatureChainParser.parse_feature_name(feature_name, [self.PREFIX_PATTERN])
         if source_feature is not None:
             return {Feature(source_feature)}
 
@@ -207,7 +204,7 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
         """Extract the imputation method from the feature name."""
         # parse_feature_name returns (operation_config, source_feature)
         # The operation_config contains the imputation method extracted from the suffix pattern
-        operation_config, _ = FeatureChainParser.parse_feature_name(feature_name, cls.PATTERN, [cls.PREFIX_PATTERN])
+        operation_config, _ = FeatureChainParser.parse_feature_name(feature_name, [cls.PREFIX_PATTERN])
         if operation_config is None:
             raise ValueError(f"Invalid missing value feature name format: {feature_name}")
 
@@ -238,7 +235,6 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
             feature_name,
             options,
             property_mapping=cls.PROPERTY_MAPPING,
-            pattern=cls.PATTERN,
             prefix_patterns=[cls.PREFIX_PATTERN],
         )
 
@@ -264,7 +260,7 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
         # Try string-based parsing first
         feature_name_str = feature.name.name if hasattr(feature.name, "name") else str(feature.name)
 
-        if cls.PATTERN in feature_name_str:
+        if FeatureChainParser.is_chained_feature(feature_name_str):
             # Use get_imputation_method which already handles parse_feature_name correctly
             imputation_method = cls.get_imputation_method(feature_name_str)
             # Use extract_source_feature which returns everything before the last __

@@ -110,7 +110,6 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
     }
 
     # Define the prefix pattern for this feature group
-    PATTERN = "__"
     PREFIX_PATTERN = r".*__([\w]+)_(\d+)d$"
 
     PROPERTY_MAPPING = {
@@ -198,7 +197,7 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
         source_feature: str | None = None
 
         # Try string-based parsing first
-        _, source_feature = FeatureChainParser.parse_feature_name(feature_name, self.PATTERN, [self.PREFIX_PATTERN])
+        _, source_feature = FeatureChainParser.parse_feature_name(feature_name, [self.PREFIX_PATTERN])
         if source_feature is not None:
             # Handle multiple source features (comma-separated)
             source_features = set()
@@ -278,7 +277,6 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
             feature_name,
             options,
             property_mapping=cls.PROPERTY_MAPPING,
-            pattern=cls.PATTERN,
             prefix_patterns=[cls.PREFIX_PATTERN],
         )
 
@@ -287,7 +285,7 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
             feature_name_str = feature_name.name if isinstance(feature_name, FeatureName) else feature_name
 
             # Check if this is a string-based feature (contains the pattern)
-            if cls.PATTERN in feature_name_str:
+            if FeatureChainParser.is_chained_feature(feature_name_str):
                 try:
                     # Use existing validation logic that validates algorithm and dimension
                     cls.parse_reduction_suffix(feature_name_str)
@@ -319,7 +317,7 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
         # Try string-based parsing first
         feature_name_str = feature.name.name if hasattr(feature.name, "name") else str(feature.name)
 
-        if cls.PATTERN in feature_name_str:
+        if FeatureChainParser.is_chained_feature(feature_name_str):
             algorithm, dimension = cls.parse_reduction_suffix(feature_name_str)
             source_features_str = FeatureChainParser.extract_source_feature(feature_name_str, cls.PREFIX_PATTERN)
             source_features = [feature.strip() for feature in source_features_str.split(",")]

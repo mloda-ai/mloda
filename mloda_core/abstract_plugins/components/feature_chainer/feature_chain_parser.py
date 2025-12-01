@@ -12,6 +12,11 @@ from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
+# Separator constants for feature name parsing
+CHAIN_SEPARATOR = "__"  # Separates chained transformations (source→suffix)
+COLUMN_SEPARATOR = "~"  # Separates multi-column output index
+INPUT_SEPARATOR = "&"  # Separates multiple input features
+
 
 class FeatureChainParser:
     """
@@ -19,18 +24,39 @@ class FeatureChainParser:
 
     Feature chaining allows feature groups to be composed, where the output of one
     feature group becomes the input to another. This is reflected in the feature name
-    using a double underscore pattern: prefix__mloda_source_features.
+    using separators defined as module constants:
 
-    For example:
-    - max_aggr__sum_7_day_window__mean_imputed__price
+    Separators:
+        - CHAIN_SEPARATOR ("__"): Separates chained transformations (source→suffix)
+          Example: price__mean_imputed__sum_7_day_window__max_aggr
+          (L→R: price is source, each suffix transforms the previous result)
+        - COLUMN_SEPARATOR ("~"): Separates multi-column output index
+          Example: feature__pca~0, feature__pca~1
+        - INPUT_SEPARATOR ("&"): Separates multiple input features
+          Example: point1&point2__haversine_distance
 
     Each feature group in the chain extracts its relevant portion and passes the
     rest to the next feature group in the chain.
     """
 
     @classmethod
+    def is_chained_feature(cls, feature_name: str) -> bool:
+        """Check if feature name contains the chain separator.
+
+        Args:
+            feature_name: The feature name to check
+
+        Returns:
+            True if the feature name contains CHAIN_SEPARATOR, False otherwise
+        """
+        return CHAIN_SEPARATOR in feature_name
+
+    @classmethod
     def parse_feature_name(
-        cls, feature_name: FeatureName | str, pattern: str, prefix_patterns: List[str]
+        cls,
+        feature_name: FeatureName | str,
+        prefix_patterns: List[str],
+        pattern: str = CHAIN_SEPARATOR,
     ) -> Tuple[str | None, str | None]:
         """Internal method for parsing feature names - used by match_configuration_feature_chain_parser."""
         _feature_name: str = feature_name.name if isinstance(feature_name, FeatureName) else feature_name
@@ -58,13 +84,16 @@ class FeatureChainParser:
 
     @classmethod
     def _match_pattern_based_feature(
-        cls, feature_name: str | FeatureName, pattern: str, prefix_patterns: List[str]
+        cls,
+        feature_name: str | FeatureName,
+        prefix_patterns: List[str],
+        pattern: str = CHAIN_SEPARATOR,
     ) -> bool:
         """Internal method for matching pattern-based features - used by match_configuration_feature_chain_parser."""
         _feature_name: FeatureName = FeatureName(feature_name) if isinstance(feature_name, str) else feature_name
 
         try:
-            has_prefix_configuration, source_feature = cls.parse_feature_name(_feature_name, pattern, prefix_patterns)
+            has_prefix_configuration, source_feature = cls.parse_feature_name(_feature_name, prefix_patterns, pattern)
             if has_prefix_configuration is None or source_feature is None:
                 return False
         except ValueError:
@@ -256,8 +285,8 @@ class FeatureChainParser:
         feature_name: str | FeatureName,
         options: Options,
         property_mapping: Optional[Dict[str, Any]] = None,
-        pattern: Optional[str] = None,
         prefix_patterns: Optional[List[str]] = None,
+        pattern: str = CHAIN_SEPARATOR,
     ) -> bool:
         """
         Unified method for matching features using either configuration-based or pattern-based parsing.
@@ -266,16 +295,16 @@ class FeatureChainParser:
             feature_name: The feature name to match
             options: Options object containing configuration
             property_mapping: Optional property mapping for configuration-based parsing
-            pattern: Optional pattern string for pattern-based parsing
             prefix_patterns: Optional prefix patterns for pattern-based parsing
+            pattern: Pattern string for pattern-based parsing (defaults to CHAIN_SEPARATOR)
 
         Returns:
             True if the feature matches either pattern-based or configuration-based parsing, False otherwise
         """
 
         # string based matching
-        if pattern is not None and prefix_patterns is not None:
-            if cls._match_pattern_based_feature(feature_name, pattern, prefix_patterns):
+        if prefix_patterns is not None:
+            if cls._match_pattern_based_feature(feature_name, prefix_patterns, pattern):
                 return True
 
         # configuration-based
@@ -305,10 +334,12 @@ class FeatureChainParser:
         if not match:
             raise ValueError(f"Invalid feature name format: {feature_name}")
 
-        # For L→R: source is everything BEFORE the last __
-        suffix_start = feature_name.rfind("__")
+        # For L→R: source is everything BEFORE the last CHAIN_SEPARATOR
+        suffix_start = feature_name.rfind(CHAIN_SEPARATOR)
         if suffix_start == -1:
-            raise ValueError(f"Invalid feature name format: {feature_name}. Missing double underscore separator.")
+            raise ValueError(
+                f"Invalid feature name format: {feature_name}. Missing chain separator '{CHAIN_SEPARATOR}'."
+            )
 
         # Return everything BEFORE the last double underscore (the source)
         return feature_name[:suffix_start]

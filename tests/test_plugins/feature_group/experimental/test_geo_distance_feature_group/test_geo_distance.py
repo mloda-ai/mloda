@@ -20,9 +20,9 @@ class TestGeoDistanceFeatureGroup(unittest.TestCase):
     def test_feature_name_parsing(self) -> None:
         """Test parsing of feature names."""
         # Test valid feature names
-        self.assertEqual(GeoDistanceFeatureGroup.get_distance_type("point1__point2__haversine_distance"), "haversine")
+        self.assertEqual(GeoDistanceFeatureGroup.get_distance_type("point1&point2__haversine_distance"), "haversine")
 
-        point1, point2 = GeoDistanceFeatureGroup.get_point_features("point1__point2__haversine_distance")
+        point1, point2 = GeoDistanceFeatureGroup.get_point_features("point1&point2__haversine_distance")
         self.assertEqual(point1, "point1")
         self.assertEqual(point2, "point2")
 
@@ -37,23 +37,23 @@ class TestGeoDistanceFeatureGroup(unittest.TestCase):
         """Test matching of feature names to feature group criteria."""
         # Test valid feature names
         self.assertTrue(
-            GeoDistanceFeatureGroup.match_feature_group_criteria("point1__point2__haversine_distance", Options())
+            GeoDistanceFeatureGroup.match_feature_group_criteria("point1&point2__haversine_distance", Options())
         )
         self.assertTrue(
-            GeoDistanceFeatureGroup.match_feature_group_criteria("point1__point2__euclidean_distance", Options())
+            GeoDistanceFeatureGroup.match_feature_group_criteria("point1&point2__euclidean_distance", Options())
         )
         self.assertTrue(
-            GeoDistanceFeatureGroup.match_feature_group_criteria("point1__point2__manhattan_distance", Options())
+            GeoDistanceFeatureGroup.match_feature_group_criteria("point1&point2__manhattan_distance", Options())
         )
 
         self.assertFalse(
-            GeoDistanceFeatureGroup.match_feature_group_criteria("point1__point2__haversine_invalid", Options())
+            GeoDistanceFeatureGroup.match_feature_group_criteria("point1&point2__haversine_invalid", Options())
         )
 
     def test_input_features(self) -> None:
         """Test extraction of input features."""
         feature_group = GeoDistanceFeatureGroup()
-        feature_name = FeatureName("point1__point2__haversine_distance")
+        feature_name = FeatureName("point1&point2__haversine_distance")
 
         input_features = feature_group.input_features(Options(), feature_name)
         # Raise an exception if input_features is None
@@ -135,32 +135,32 @@ class TestPandasGeoDistanceFeatureGroup(unittest.TestCase):
         """Test calculation of features."""
         # Create a feature set with haversine distance feature
         feature_set = FeatureSet()
-        feature_set.add(Feature("sf__nyc__haversine_distance"))
+        feature_set.add(Feature("sf&nyc__haversine_distance"))
 
         # Calculate the feature
         result_df = PandasGeoDistanceFeatureGroup.calculate_feature(self.df.copy(), feature_set)
 
         # Check if the feature was added to the DataFrame
-        self.assertTrue("sf__nyc__haversine_distance" in result_df.columns)
+        self.assertTrue("sf&nyc__haversine_distance" in result_df.columns)
 
         # Check if the distance is approximately correct
-        self.assertAlmostEqual(result_df["sf__nyc__haversine_distance"][0], 4130, delta=100)
+        self.assertAlmostEqual(result_df["sf&nyc__haversine_distance"][0], 4130, delta=100)
 
         # Test with multiple features
         feature_set = FeatureSet()
-        feature_set.add(Feature("sf__nyc__haversine_distance"))
-        feature_set.add(Feature("point1__point2__euclidean_distance"))
-        feature_set.add(Feature("point1__point2__manhattan_distance"))
+        feature_set.add(Feature("sf&nyc__haversine_distance"))
+        feature_set.add(Feature("point1&point2__euclidean_distance"))
+        feature_set.add(Feature("point1&point2__manhattan_distance"))
 
         # Calculate the features
         result_df = PandasGeoDistanceFeatureGroup.calculate_feature(self.df.copy(), feature_set)
 
         # Check if all features were added to the DataFrame
-        self.assertTrue("sf__nyc__haversine_distance" in result_df.columns)
-        self.assertTrue("point1__point2__euclidean_distance" in result_df.columns)
-        self.assertTrue("point1__point2__manhattan_distance" in result_df.columns)
+        self.assertTrue("sf&nyc__haversine_distance" in result_df.columns)
+        self.assertTrue("point1&point2__euclidean_distance" in result_df.columns)
+        self.assertTrue("point1&point2__manhattan_distance" in result_df.columns)
 
         # Check if the distances are approximately correct
-        self.assertAlmostEqual(result_df["sf__nyc__haversine_distance"][0], 4130, delta=100)
-        self.assertAlmostEqual(result_df["point1__point2__euclidean_distance"][0], 5.0, delta=0.01)
-        self.assertEqual(result_df["point1__point2__manhattan_distance"][0], 7)
+        self.assertAlmostEqual(result_df["sf&nyc__haversine_distance"][0], 4130, delta=100)
+        self.assertAlmostEqual(result_df["point1&point2__euclidean_distance"][0], 5.0, delta=0.01)
+        self.assertEqual(result_df["point1&point2__manhattan_distance"][0], 7)

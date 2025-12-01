@@ -135,7 +135,7 @@
 | rfc3986-validator                      | 0.1.1           | MIT License                                             |
 | rfc3987-syntax                         | 1.1.0           | Apache Software License                                 |
 | rich                                   | 14.2.0          | MIT License                                             |
-| rpds-py                                | 0.29.0          | MIT                                                     |
+| rpds-py                                | 0.30.0          | MIT                                                     |
 | ruff                                   | 0.14.7          | MIT License                                             |
 | scikit-learn                           | 1.7.2           | BSD-3-Clause                                            |
 | scipy                                  | 1.15.3          | BSD License                                             |

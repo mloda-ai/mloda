@@ -52,7 +52,9 @@ class BaseArtifact(ABC):
         """
 
         options = cls.get_singular_option_from_options(features)
-        return options.get(features.name_of_one_feature.name)  # type: ignore
+        if options is None or features.name_of_one_feature is None:
+            return None
+        return options.get(features.name_of_one_feature.name)
 
     @classmethod
     def get_singular_option_from_options(cls, features: FeatureSet) -> Options | None:

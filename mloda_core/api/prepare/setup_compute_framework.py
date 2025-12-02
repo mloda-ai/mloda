@@ -1,4 +1,4 @@
-from typing import Optional, Set, Type, Union
+from typing import Optional, Set, Type, Union, cast
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 from mloda_core.abstract_plugins.components.feature_collection import Features
 from mloda_core.abstract_plugins.components.utils import get_all_subclasses
@@ -16,7 +16,7 @@ class SetupComputeFramework:
             if isinstance(user_compute_frameworks, list):
                 user_set_compute_frameworks: set[str | Type[ComputeFrameWork]] = set(user_compute_frameworks)
             else:
-                user_set_compute_frameworks = user_compute_frameworks  # type: ignore
+                user_set_compute_frameworks = cast(set[str | Type[ComputeFrameWork]], user_compute_frameworks)
 
             available_compute_frameworks = self.filter_user_set_in_available_sub_classes(
                 user_set_compute_frameworks, available_compute_frameworks

@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import logging
 import multiprocessing
 import time
 import traceback
-from typing import Any, Union
+from typing import Any, Set, Union
 from uuid import UUID
 from queue import Empty
 
@@ -16,16 +18,16 @@ from mloda_core.core.step.transform_frame_work_step import TransformFrameworkSte
 logger = logging.getLogger(__name__)
 
 
-def _handle_stop_command(command_queue: multiprocessing.Queue) -> None:  # type: ignore
+def _handle_stop_command(command_queue: multiprocessing.Queue[Any]) -> None:
     """Puts a 'STOP' command in the command queue."""
     if command_queue:
         command_queue.put("STOP", block=False)
 
 
 def _handle_data_dropping(
-    command_queue: multiprocessing.Queue,  # type: ignore
+    command_queue: multiprocessing.Queue[Any],
     cfw: ComputeFrameWork,
-    command: set,  # type: ignore
+    command: Set[Any],
     location: str,
 ) -> bool:
     """Handles dropping already calculated data based on the provided command."""
@@ -46,7 +48,7 @@ def _execute_command(
     """Executes a given command based on its type."""
     if isinstance(command, JoinStep):
         # Left framework here, because it is already transformed beforehand
-        from_cfw = cfw_register.get_cfw_uuid(command.left_framework.get_class_name(), command.link.uuid)  # type: ignore
+        from_cfw = cfw_register.get_cfw_uuid(command.left_framework.get_class_name(), command.link.uuid)  # type: ignore[assignment]
 
         if from_cfw is None:
             from_cfw = cfw_register.get_cfw_uuid(
@@ -74,7 +76,7 @@ def _handle_command_result(
     cfw: ComputeFrameWork,
     location: str,
     data: Any,
-    result_queue: multiprocessing.Queue,  # type: ignore
+    result_queue: multiprocessing.Queue[Any],
 ) -> None:
     """Handles the result of a command execution, including uploading data if necessary."""
     if not isinstance(data, str) and isinstance(command, FeatureGroupStep):
@@ -89,8 +91,8 @@ def _handle_command_result(
 
 
 def worker(
-    command_queue: multiprocessing.Queue,  # type: ignore
-    result_queue: multiprocessing.Queue,  # type: ignore
+    command_queue: multiprocessing.Queue[Any],
+    result_queue: multiprocessing.Queue[Any],
     cfw_register: CfwManager,
     cfw: ComputeFrameWork,
     from_cfw: UUID,
@@ -135,7 +137,7 @@ def worker(
         time.sleep(0.0001)
 
 
-def error_out(cfw_register: CfwManager, command_queue: multiprocessing.Queue) -> None:  # type: ignore
+def error_out(cfw_register: CfwManager, command_queue: multiprocessing.Queue[Any]) -> None:
     msg = """This is a critical error, the location should not be None."""
     logging.error(msg)
     exc_info = traceback.format_exc()

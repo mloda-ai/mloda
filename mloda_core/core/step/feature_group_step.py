@@ -83,7 +83,8 @@ class FeatureGroupStep(Step):
                 cfw_register.set_artifact_to_save(artifact_key, artifact_path)
         else:
             # Single artifact case (legacy behavior)
-            cfw_register.set_artifact_to_save(features.artifact_to_save, artifact_or_meta_information)  # type: ignore
+            assert features.artifact_to_save is not None  # validated in validate_set_artifact_to_save
+            cfw_register.set_artifact_to_save(features.artifact_to_save, artifact_or_meta_information)
 
     def validate_set_artifact_to_save(self, features: FeatureSet) -> None | Type[BaseArtifact]:
         if features.artifact_to_save is None:

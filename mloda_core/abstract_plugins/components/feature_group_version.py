@@ -3,7 +3,7 @@ from __future__ import annotations
 import importlib.metadata
 import inspect
 import hashlib
-from typing import Type
+from typing import Any, Type
 from abc import ABC
 
 
@@ -20,7 +20,7 @@ class FeatureGroupVersion(ABC):
             return "0.0.0"
 
     @classmethod
-    def class_source_hash(cls, target_class: Type) -> str:  # type: ignore
+    def class_source_hash(cls, target_class: Type[Any]) -> str:
         """
         Returns a SHA-256 hash of the target class's source code.
         """
@@ -35,14 +35,14 @@ class FeatureGroupVersion(ABC):
         return hashlib.sha256(source.encode("utf-8")).hexdigest()
 
     @classmethod
-    def module_name(cls, target_class: Type) -> str:  # type: ignore
+    def module_name(cls, target_class: Type[Any]) -> str:
         """
         Returns the module name of the target class.
         """
         return target_class.__module__
 
     @classmethod
-    def version(cls, target_class: Type) -> str:  # type: ignore
+    def version(cls, target_class: Type[Any]) -> str:
         """
         Returns a composite version string.
 

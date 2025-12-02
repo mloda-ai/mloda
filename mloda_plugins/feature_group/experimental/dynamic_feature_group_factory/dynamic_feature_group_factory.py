@@ -202,70 +202,70 @@ class DynamicFeatureGroupCreator:
         if class_name in DynamicFeatureGroupCreator._created_classes:
             return DynamicFeatureGroupCreator._created_classes[class_name]
 
-        def set_feature_name(self, config: Options, feature_name: FeatureName) -> FeatureName:  # type: ignore
+        def set_feature_name(self, config: Options, feature_name: FeatureName) -> FeatureName:  # type: ignore[no-untyped-def]
             if "set_feature_name" in properties:
-                return properties["set_feature_name"](self, config, feature_name)  # type: ignore
+                return properties["set_feature_name"](self, config, feature_name)  # type: ignore[no-any-return]
             return feature_name
 
-        def match_feature_group_criteria(  # type: ignore
+        def match_feature_group_criteria(  # type: ignore[no-untyped-def]
             cls,
             feature_name: Union[FeatureName, str],
             options: Options,
             data_access_collection: Optional[DataAccessCollection] = None,
         ) -> bool:
             if "match_feature_group_criteria" in properties:
-                return properties["match_feature_group_criteria"](cls, feature_name, options, data_access_collection)  # type: ignore
-            return super(new_class, cls).match_feature_group_criteria(feature_name, options, data_access_collection)  # type: ignore
+                return properties["match_feature_group_criteria"](cls, feature_name, options, data_access_collection)  # type: ignore[no-any-return]
+            return super(new_class, cls).match_feature_group_criteria(feature_name, options, data_access_collection)  # type: ignore[misc, arg-type, no-any-return]
 
-        def input_data(cls) -> Optional[BaseInputData]:  # type: ignore
+        def input_data(cls) -> Optional[BaseInputData]:  # type: ignore[no-untyped-def]
             if "input_data" in properties:
-                return properties["input_data"]()  # type: ignore
-            return super(new_class, cls).input_data()  # type: ignore
+                return properties["input_data"]()  # type: ignore[no-any-return]
+            return super(new_class, cls).input_data()  # type: ignore[misc, arg-type, no-any-return]
 
-        def validate_input_features(cls, data: Any, features: FeatureSet) -> Optional[bool]:  # type: ignore
+        def validate_input_features(cls, data: Any, features: FeatureSet) -> Optional[bool]:  # type: ignore[no-untyped-def]
             if "validate_input_features" in properties:
-                return properties["validate_input_features"](cls, data, features)  # type: ignore
-            return super(new_class, cls).validate_input_features(data, features)  # type: ignore
+                return properties["validate_input_features"](cls, data, features)  # type: ignore[no-any-return]
+            return super(new_class, cls).validate_input_features(data, features)  # type: ignore[misc, arg-type, no-any-return]
 
-        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:  # type: ignore
+        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:  # type: ignore[no-untyped-def]
             if "calculate_feature" in properties:
                 return properties["calculate_feature"](cls, data, features)
-            return super(new_class, cls).calculate_feature(data, features)  # type: ignore
+            return super(new_class, cls).calculate_feature(data, features)  # type: ignore[misc, arg-type]
 
-        def validate_output_features(cls, data: Any, features: FeatureSet) -> Optional[bool]:  # type: ignore
+        def validate_output_features(cls, data: Any, features: FeatureSet) -> Optional[bool]:  # type: ignore[no-untyped-def]
             if "validate_output_features" in properties:
-                return properties["validate_output_features"](cls, data, features)  # type: ignore
-            return super(new_class, cls).validate_output_features(data, features)  # type: ignore
+                return properties["validate_output_features"](cls, data, features)  # type: ignore[no-any-return]
+            return super(new_class, cls).validate_output_features(data, features)  # type: ignore[misc, arg-type, no-any-return]
 
-        def artifact(cls) -> Optional[Type[Any]]:  # type: ignore
+        def artifact(cls) -> Optional[Type[Any]]:  # type: ignore[no-untyped-def]
             if "artifact" in properties:
-                return properties["artifact"]()  # type: ignore
-            return super(new_class, cls).artifact()  # type: ignore
+                return properties["artifact"]()  # type: ignore[no-any-return]
+            return super(new_class, cls).artifact()  # type: ignore[misc, arg-type, no-any-return]
 
-        def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:  # type: ignore
+        def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:  # type: ignore[no-untyped-def]
             if "compute_framework_rule" in properties:
-                return properties["compute_framework_rule"]()  # type: ignore
-            return super(new_class, cls).compute_framework_rule()  # type: ignore
+                return properties["compute_framework_rule"]()  # type: ignore[no-any-return]
+            return super(new_class, cls).compute_framework_rule()  # type: ignore[misc, arg-type, no-any-return]
 
-        def return_data_type_rule(cls, feature: Any) -> Optional[DataType]:  # type: ignore
+        def return_data_type_rule(cls, feature: Any) -> Optional[DataType]:  # type: ignore[no-untyped-def]
             if "return_data_type_rule" in properties:
-                return properties["return_data_type_rule"](cls, feature)  # type: ignore
-            return super(new_class, cls).return_data_type_rule(feature)  # type: ignore
+                return properties["return_data_type_rule"](cls, feature)  # type: ignore[no-any-return]
+            return super(new_class, cls).return_data_type_rule(feature)  # type: ignore[misc, arg-type, no-any-return]
 
-        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Any]]:  # type: ignore
+        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Any]]:  # type: ignore[no-untyped-def]
             if "input_features" in properties:
-                return properties["input_features"](self, options, feature_name)  # type: ignore
-            return super(new_class, self).input_features(options, feature_name)  # type: ignore
+                return properties["input_features"](self, options, feature_name)  # type: ignore[no-any-return]
+            return super(new_class, self).input_features(options, feature_name)  # type: ignore[misc, arg-type, no-any-return]
 
-        def index_columns(cls) -> Optional[List[Index]]:  # type: ignore
+        def index_columns(cls) -> Optional[List[Index]]:  # type: ignore[no-untyped-def]
             if "index_columns" in properties:
-                return properties["index_columns"]()  # type: ignore
-            return super(new_class, cls).index_columns()  # type: ignore
+                return properties["index_columns"]()  # type: ignore[no-any-return]
+            return super(new_class, cls).index_columns()  # type: ignore[misc, arg-type, no-any-return]
 
-        def supports_index(cls, index: Index) -> Optional[bool]:  # type: ignore
+        def supports_index(cls, index: Index) -> Optional[bool]:  # type: ignore[no-untyped-def]
             if "supports_index" in properties:
-                return properties["supports_index"](cls, index)  # type: ignore
-            return super(new_class, cls).supports_index(index)  # type: ignore
+                return properties["supports_index"](cls, index)  # type: ignore[no-any-return]
+            return super(new_class, cls).supports_index(index)  # type: ignore[misc, arg-type, no-any-return]
 
         new_class = type(
             class_name,

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from collections import defaultdict
 import multiprocessing
 import queue
@@ -59,10 +61,10 @@ class Runner:
         # multiprocessing
         self.location: Optional[str] = None
         self.tasks: List[Union[threading.Thread, multiprocessing.Process]] = []
-        self.process_register: Dict[  # type: ignore
-            UUID, Tuple[multiprocessing.Process, multiprocessing.Queue, multiprocessing.Queue]
+        self.process_register: Dict[
+            UUID, Tuple[multiprocessing.Process, multiprocessing.Queue[Any], multiprocessing.Queue[Any]]
         ] = defaultdict()
-        self.result_queues_collection: Set[multiprocessing.Queue] = set()  # type: ignore
+        self.result_queues_collection: Set[multiprocessing.Queue[Any]] = set()
         self.result_uuids_collection: Set[UUID] = set()
 
         # Initialize framework transformer
@@ -524,7 +526,7 @@ class Runner:
         """
         MyManager.register("CfwManager", CfwManager)
         self.manager = MyManager().__enter__()
-        self.cfw_register = self.manager.CfwManager(parallelization_modes, function_extender)  # type: ignore
+        self.cfw_register = self.manager.CfwManager(parallelization_modes, function_extender)  # type: ignore[attr-defined]
 
         if self.flight_server:
             if self.flight_server.flight_server_process is None:
@@ -587,7 +589,7 @@ class Runner:
 
     def _get_execution_function(
         self, mode_by_cfw_register: Set[ParallelizationModes], mode_by_step: Set[ParallelizationModes]
-    ) -> Callable:  # type: ignore
+    ) -> Callable[[Any], None]:
         """
         Identifies the execution mode and returns the corresponding execute step function.
 

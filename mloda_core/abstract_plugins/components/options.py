@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Set, TYPE_CHECKING
+from typing import Any, Dict, Optional, Set, TYPE_CHECKING, cast
 from copy import deepcopy
 
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
@@ -188,7 +188,7 @@ class Options:
         def _convert_to_feature(item: Any) -> "Feature":
             """Convert item to Feature object if possible."""
             if hasattr(item, "get_name"):  # Already a Feature object
-                return item  # type: ignore
+                return cast("Feature", item)
             elif isinstance(item, str):
                 # Import Feature locally to avoid circular import
                 from mloda_core.abstract_plugins.components.feature import Feature

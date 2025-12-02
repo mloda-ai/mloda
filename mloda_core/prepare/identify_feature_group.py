@@ -1,4 +1,5 @@
 from typing import Optional, Set, Tuple, Type
+
 from mloda_core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
@@ -145,14 +146,20 @@ class IdentifyFeatureGroupClass:
         Check if the code is running in a notebook environment.
         """
         try:
-            from IPython import get_ipython  # type: ignore
+            from IPython import get_ipython  # type: ignore[attr-defined]
 
-            shell = get_ipython().__class__.__name__  # type: ignore
+            ipython_instance = get_ipython()  # type: ignore[no-untyped-call]
+            if ipython_instance is None:
+                return ""
+            shell: str = ipython_instance.__class__.__name__
             if shell == "ZMQInteractiveShell":
-                return """If you are running this in a notebook, please restart the kernel to clear any cached plugins. 
+                return """If you are running this in a notebook, please restart the kernel to clear any cached plugins.
                           If you experience this multiple times, please open an issue or contact the maintainers for prioritization.
                           https://github.com/mloda-ai/mloda/issues
                 """
+        except ImportError:
+            # IPython not installed
+            pass
         except Exception:
             # An exception here means we are not in a notebook environment.
             pass  # nosec B110

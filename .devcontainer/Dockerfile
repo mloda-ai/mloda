@@ -33,7 +33,7 @@ RUN echo 'cd /workspace' >> /home/vscode/.bashrc
 
 # Install only build tools globally; project deps go into tox env
 RUN $PYTHON_PATH -m pip install --no-cache-dir --upgrade pip wheel virtualenv tox \
-  && $PYTHON_PATH -m pip install "virtualenv==20.35.3"
+  && $PYTHON_PATH -m pip install virtualenv==20.35.4
 
 # Set tox work directory in user's home to avoid volume mount conflicts
 ENV TOX_WORK_DIR=/home/vscode/.tox-cache

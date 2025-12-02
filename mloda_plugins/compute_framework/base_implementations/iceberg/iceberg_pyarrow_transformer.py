@@ -5,7 +5,7 @@ try:
     from pyiceberg.table import Table as IcebergTable
     import pyarrow as pa
 except ImportError:
-    IcebergTable = None  # type: ignore
+    IcebergTable = None  # type: ignore[assignment,misc]
     pa = None
 
 

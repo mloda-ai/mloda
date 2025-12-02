@@ -82,7 +82,7 @@ class PythonDictFramework(ComputeFrameWork):
 
         transformed_data = self.apply_compute_framework_transformer(data)
         if transformed_data is not None:
-            return transformed_data  # type: ignore
+            return transformed_data  # type: ignore[no-any-return]
 
         if isinstance(data, dict):
             """Initial data: Transform columnar dict to row-based list of dicts"""

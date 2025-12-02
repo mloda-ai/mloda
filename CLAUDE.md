@@ -40,11 +40,9 @@ When working with `memory-bank/todo.md` that contains phases:
 1. **After completing each phase**: Run `tox` to validate all tests pass
 2. **If tox passes**:
    - Mark the phase as complete (tick the checkbox) in todo.md
-   - Run `git add .` to stage all changes for that phase
 3. **If tox fails**:
    - Fix the issues before proceeding
    - Do NOT mark phase as complete
-   - Do NOT run `git add .`
 
 Each phase should be a clean, validated checkpoint with all tests passing and changes staged.
 

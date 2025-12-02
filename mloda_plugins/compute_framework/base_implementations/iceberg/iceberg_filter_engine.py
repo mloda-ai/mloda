@@ -6,13 +6,13 @@ try:
     from pyiceberg.table import Table as IcebergTable
     from pyiceberg.expressions import GreaterThan, LessThan, GreaterThanOrEqual, LessThanOrEqual, EqualTo, And
 except ImportError:
-    IcebergTable: Optional[Type] = None  # type: ignore
-    GreaterThan: Optional[Type] = None  # type: ignore
-    LessThan: Optional[Type] = None  # type: ignore
-    GreaterThanOrEqual: Optional[Type] = None  # type: ignore
-    LessThanOrEqual: Optional[Type] = None  # type: ignore
-    EqualTo: Optional[Type] = None  # type: ignore
-    And: Optional[Type] = None  # type: ignore
+    IcebergTable: Optional[Type[Any]] = None  # type: ignore[no-redef]
+    GreaterThan: Optional[Type[Any]] = None  # type: ignore[no-redef]
+    LessThan: Optional[Type[Any]] = None  # type: ignore[no-redef]
+    GreaterThanOrEqual: Optional[Type[Any]] = None  # type: ignore[no-redef]
+    LessThanOrEqual: Optional[Type[Any]] = None  # type: ignore[no-redef]
+    EqualTo: Optional[Type[Any]] = None  # type: ignore[no-redef]
+    And: Optional[Type[Any]] = None  # type: ignore[no-redef]
 
 
 class IcebergFilterEngine(BaseFilterEngine):
@@ -111,7 +111,7 @@ class IcebergFilterEngine(BaseFilterEngine):
                 max_expr = (
                     LessThan(column_name, max_param) if is_max_exclusive else LessThanOrEqual(column_name, max_param)
                 )
-                expressions.append(max_expr)  # type: ignore
+                expressions.append(max_expr)  # type: ignore[arg-type]
 
             if len(expressions) == 1:
                 return expressions[0]

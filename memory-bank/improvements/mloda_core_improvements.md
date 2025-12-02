@@ -14,7 +14,7 @@ This document identifies 10 high-impact code improvements for mloda_core. These 
 - [ ] 6. Replace mlodaAPI 8-parameter constructor with builder/config pattern
 - [ ] 7. Use NamedTuple/dataclass for Link tuple parameters
 - [ ] 8. Replace Options dual-category dict with explicit factory methods
-- [ ] 9. Eliminate type: ignore suppressions with proper typing
+- [x] 9. Eliminate type: ignore suppressions with proper typing
 - [ ] 10. Extract validation logic into separate validator classes
 
 ---
@@ -168,25 +168,6 @@ The Options class uses an implicit dual-category system (group vs context dicts)
 - Breaking change for all Options usage
 - More verbose than dict-style construction
 - Requires updating all existing Options instantiations
-
----
-
-## 9. Eliminate type: ignore Suppressions
-
-**Files:** Multiple (42 occurrences)
-
-The codebase has 42 `type: ignore` comments, particularly around multiprocessing Queue types, Union parameters, and Any usages. These suppressions hide real type safety issues and reduce the value of static type checking. Properly typing these areas would catch bugs at development time, improve IDE support, enable safer refactoring, and provide better documentation through types. Key areas include multiprocessing types in run.py and Union parameters throughout the API.
-
-**Pros:**
-- Catches bugs at development time
-- Better IDE support and autocomplete
-- Safer refactoring with type checker validation
-- Types serve as documentation
-
-**Cons:**
-- Significant effort to properly type complex areas
-- May require restructuring to make types expressible
-- Some multiprocessing types genuinely difficult to express
 
 ---
 

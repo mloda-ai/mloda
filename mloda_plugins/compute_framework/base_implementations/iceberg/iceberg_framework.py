@@ -10,8 +10,8 @@ try:
     from pyiceberg.table import Table as IcebergTable
     import pyarrow as pa
 except ImportError:
-    Catalog = None  # type: ignore
-    IcebergTable = None  # type: ignore
+    Catalog = None  # type: ignore[assignment,misc]
+    IcebergTable = None  # type: ignore[assignment,misc]
     pa = None
 
 

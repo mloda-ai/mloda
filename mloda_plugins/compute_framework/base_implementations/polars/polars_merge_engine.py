@@ -7,7 +7,7 @@ from mloda_core.abstract_plugins.components.merge.base_merge_engine import BaseM
 try:
     import polars as pl
 except ImportError:
-    pl = None  # type: ignore
+    pl = None  # type: ignore[assignment]
 
 
 class PolarsMergeEngine(BaseMergeEngine):

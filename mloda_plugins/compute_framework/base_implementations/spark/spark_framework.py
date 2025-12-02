@@ -119,14 +119,14 @@ class SparkFramework(ComputeFrameWork):
 
             # Handle empty dict
             if not data:
-                return spark.createDataFrame([], StructType([]))  # type: ignore
+                return spark.createDataFrame([], StructType([]))  # type: ignore[union-attr]
 
             # Infer schema from the first row of data
             first_key = next(iter(data.keys()))
             if not data[first_key]:  # Empty list
                 schema_fields = [StructField(col, StringType(), True) for col in data.keys()]
                 schema = StructType(schema_fields)
-                return spark.createDataFrame([], schema)  # type: ignore
+                return spark.createDataFrame([], schema)  # type: ignore[union-attr]
 
             # Create schema based on first values
             schema_fields = []
@@ -146,9 +146,9 @@ class SparkFramework(ComputeFrameWork):
                 for i in range(num_rows):
                     row = tuple(data[col][i] for col in data.keys())
                     rows.append(row)
-                return spark.createDataFrame(rows, schema)  # type: ignore
+                return spark.createDataFrame(rows, schema)  # type: ignore[union-attr]
             else:
-                return spark.createDataFrame([], schema)  # type: ignore
+                return spark.createDataFrame([], schema)  # type: ignore[union-attr]
 
         if hasattr(data, "__iter__") and not isinstance(data, (str, bytes, DataFrame)):
             """Added data: Add column to DataFrame"""

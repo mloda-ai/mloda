@@ -9,7 +9,7 @@ from mloda_plugins.compute_framework.base_implementations.polars.polars_filter_e
 try:
     import polars as pl
 except ImportError:
-    pl = None  # type: ignore
+    pl = None  # type: ignore[assignment]
 
 
 class PolarsDataframe(ComputeFrameWork):

@@ -5,7 +5,7 @@ from mloda_plugins.compute_framework.base_implementations.polars.polars_merge_en
 try:
     import polars as pl
 except ImportError:
-    pl = None  # type: ignore
+    pl = None  # type: ignore[assignment]
 
 
 class PolarsLazyMergeEngine(PolarsMergeEngine):

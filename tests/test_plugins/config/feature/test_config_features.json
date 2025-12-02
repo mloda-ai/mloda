@@ -30,7 +30,7 @@
     "name": "minmaxscaledage",
     "options": {
       "scaler_type": "minmax",
-      "mloda_source_features": "age"
+      "in_features": "age"
     }
   },
   {
@@ -41,7 +41,7 @@
     "name": "min_max",
     "options": {
       "scaler_type": "minmax",
-      "mloda_source_features": "age__max_aggr"
+      "in_features": "age__max_aggr"
     }
   },
   {
@@ -58,15 +58,15 @@
     "name": "min_max_nested",
     "options": {
       "scaler_type": "minmax",
-      "mloda_source_features": {
+      "in_features": {
         "name": "max_aggregated",
         "options": {
           "aggregation_function": "max",
-          "mloda_source_features": {
+          "in_features": {
             "name": "minmaxscaledweght",
             "options": {
               "scaler_type": "minmax",
-              "mloda_source_features": "weight"
+              "in_features": "weight"
             }
           }
         }

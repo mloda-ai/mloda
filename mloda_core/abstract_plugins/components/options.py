@@ -177,12 +177,12 @@ class Options:
             # New key, add to group by default
             self.group[key] = value
 
-    def get_source_features(self) -> "frozenset[Feature]":
-        val = self.get(DefaultOptionKeys.mloda_source_features)
+    def get_in_features(self) -> "frozenset[Feature]":
+        val = self.get(DefaultOptionKeys.in_features)
 
         if not val:
             raise ValueError(
-                f"Source feature not found in options. Please ensure that the key '{DefaultOptionKeys.mloda_source_features}' is set."
+                f"Input features not found in options. Please ensure that the key '{DefaultOptionKeys.in_features}' is set."
             )
 
         def _convert_to_feature(item: Any) -> "Feature":
@@ -250,8 +250,8 @@ class Options:
         - Child features can have different values for protected keys without conflict
 
         Example:
-            Parent feature has: mloda_source_features="parent_source"
-            Child feature has:  mloda_source_features="child_source"
+            Parent feature has: in_features="parent_source"
+            Child feature has:  in_features="child_source"
 
             Without protection: ERROR (duplicate key conflict)
             With protection: Both keep their own values (no merge, no error)
@@ -259,15 +259,15 @@ class Options:
         Args:
             other: The Options object to merge from (typically child options)
             protected_keys: Set of keys to protect from merging.
-                          If None, uses mloda_source_features + any keys from mloda_feature_chainer_parser_key
+                          If None, uses in_features + any keys from mloda_feature_chainer_parser_key
 
         Raises:
             ValueError: If non-protected keys conflict between group and context
         """
         # Build protected keys set
         if protected_keys is None:
-            # Default: always protect mloda_source_features
-            protected_keys = {DefaultOptionKeys.mloda_source_features}
+            # Default: always protect in_features
+            protected_keys = {DefaultOptionKeys.in_features}
 
             # Dynamic: read additional protected keys from mloda_feature_chainer_parser_key
             # This allows feature groups to specify which keys should be protected

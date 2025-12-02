@@ -58,7 +58,7 @@ class TestSingleTools:
                     "model": "gemini-2.0-flash-exp",
                     "prompt": prompt,
                     "tools": tool_collection,
-                    DefaultOptionKeys.mloda_source_features: frozenset([ConcatenatedFileContent.get_class_name()]),
+                    DefaultOptionKeys.in_features: frozenset([ConcatenatedFileContent.get_class_name()]),
                     "target_folder": frozenset(target_folder),
                     "disallowed_files": frozenset(
                         [

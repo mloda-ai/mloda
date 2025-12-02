@@ -48,7 +48,7 @@ class TestTimeWindowFeatureParserIntegration:
                     TimeWindowFeatureGroup.WINDOW_FUNCTION: "avg",
                     TimeWindowFeatureGroup.WINDOW_SIZE: 3,
                     TimeWindowFeatureGroup.TIME_UNIT: "day",
-                    DefaultOptionKeys.mloda_source_features: "temperature",
+                    DefaultOptionKeys.in_features: "temperature",
                 }
             ),
         )
@@ -60,7 +60,7 @@ class TestTimeWindowFeatureParserIntegration:
                     TimeWindowFeatureGroup.WINDOW_FUNCTION: "max",
                     TimeWindowFeatureGroup.WINDOW_SIZE: 5,
                     TimeWindowFeatureGroup.TIME_UNIT: "day",
-                    DefaultOptionKeys.mloda_source_features: "humidity",
+                    DefaultOptionKeys.in_features: "humidity",
                 }
             ),
         )
@@ -111,7 +111,7 @@ class TestTimeWindowFeatureParserIntegration:
                     TimeWindowFeatureGroup.WINDOW_FUNCTION: "sum",
                     TimeWindowFeatureGroup.WINDOW_SIZE: 2,
                     TimeWindowFeatureGroup.TIME_UNIT: "day",
-                    DefaultOptionKeys.mloda_source_features: "temperature",
+                    DefaultOptionKeys.in_features: "temperature",
                 }
             ),
         )
@@ -123,7 +123,7 @@ class TestTimeWindowFeatureParserIntegration:
                     TimeWindowFeatureGroup.WINDOW_FUNCTION: "min",
                     TimeWindowFeatureGroup.WINDOW_SIZE: 1,
                     TimeWindowFeatureGroup.TIME_UNIT: "week",
-                    DefaultOptionKeys.mloda_source_features: "humidity",
+                    DefaultOptionKeys.in_features: "humidity",
                 }
             ),
         )

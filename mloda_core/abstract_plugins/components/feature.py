@@ -149,16 +149,16 @@ class Feature:
 
         child_options = copy.deepcopy(self.child_options)
         if child_options:
-            if child_options.get(DefaultOptionKeys.mloda_source_features):
-                val = child_options.get(DefaultOptionKeys.mloda_source_features)
+            if child_options.get(DefaultOptionKeys.in_features):
+                val = child_options.get(DefaultOptionKeys.in_features)
 
                 if isinstance(val, frozenset):
                     for v in val:
                         if isinstance(v, Feature):
-                            child_options.group[DefaultOptionKeys.mloda_source_features] = v.name.name
+                            child_options.group[DefaultOptionKeys.in_features] = v.name.name
 
                 if isinstance(val, Feature):
-                    child_options.group[DefaultOptionKeys.mloda_source_features] = val.name.name
+                    child_options.group[DefaultOptionKeys.in_features] = val.name.name
 
         return hash((self.name, self.options, self.domain, compute_frameworks_hashable, self.data_type, child_options))
 

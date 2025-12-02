@@ -63,14 +63,14 @@ def test_features_runtime_one_by_one() -> None:
         features[4],  # ✅ Feature 4: "weight__mean_imputed__min_aggr" - min aggregation with timewindow
         features[5],  # ✅ Feature 5: "state__onehot_encoded~0" - column selector with mloda_source
         features[6],  # ✅ Feature 6: "state__onehot_encoded~1" - column selector with mloda_source
-        features[7],  # ✅ Feature 7: "minmaxscaledage" - minmax scaling with mloda_source_features in options
+        features[7],  # ✅ Feature 7: "minmaxscaledage" - minmax scaling with in_features in options
         features[8],  # ✅ Feature 8: "age__max_aggr" - aggregation with mloda_source and window_size option
-        features[9],  # ✅ Feature 9: "min_max" - scaling with mloda_source_features in options
+        features[9],  # ✅ Feature 9: "min_max" - scaling with in_features in options
         features[10],  # ✅ Feature 10: "customer_location__store_location__haversine_distance" - geo distance feature
         features[11],  # ✅ Feature 11: "custom_geo_distance" - config-based geo distance with mloda_sources and options
         features[
             12
-        ],  # ✅ Feature 12: "min_max_nested" - nested mloda_source_features with recursive dependencies (weight -> minmaxscaledweght -> max_aggregated -> min_max_nested)
+        ],  # ✅ Feature 12: "min_max_nested" - nested in_features with recursive dependencies (weight -> minmaxscaledweght -> max_aggregated -> min_max_nested)
         features[13],  # ✅ Feature 13: "product__onehot_encoded" - multi-column producer (creates ~0, ~1, ~2)
         features[
             14
@@ -148,7 +148,7 @@ def test_feature_3_step1_onehot_encoding() -> None:
     # Step 1: Create the intermediate feature "state__onehot_encoded" from "state"
     # This will create multiple columns: state__onehot_encoded~0, ~1, ~2
     intermediate_feature = Feature(
-        name="state__onehot_encoded", options=Options(context={DefaultOptionKeys.mloda_source_features: "state"})
+        name="state__onehot_encoded", options=Options(context={DefaultOptionKeys.in_features: "state"})
     )
 
     # Step 2: Create the chained feature "state__onehot_encoded~0__max_aggr"

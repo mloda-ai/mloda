@@ -33,7 +33,7 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
 
     ### 1. String-Based Creation
 
-    Features follow the naming pattern: `{mloda_source_features}__{algorithm}_forecast_{horizon}{time_unit}`
+    Features follow the naming pattern: `{in_features}__{algorithm}_forecast_{horizon}{time_unit}`
 
     Examples:
     ```python
@@ -56,7 +56,7 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
                 ForecastingFeatureGroup.ALGORITHM: "linear",
                 ForecastingFeatureGroup.HORIZON: 7,
                 ForecastingFeatureGroup.TIME_UNIT: "day",
-                DefaultOptionKeys.mloda_source_features: "sales",
+                DefaultOptionKeys.in_features: "sales",
             }
         )
     )
@@ -69,7 +69,7 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
     - `algorithm`: The forecasting algorithm to use
     - `horizon`: The forecast horizon (number of time units)
     - `time_unit`: The time unit for the horizon
-    - `mloda_source_features`: The source feature to generate forecasts for
+    - `in_features`: The source feature to generate forecasts for
 
     ### Group Parameters
     Currently none for ForecastingFeatureGroup. Parameters that affect Feature Group
@@ -153,7 +153,7 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
             DefaultOptionKeys.mloda_context: True,
             DefaultOptionKeys.mloda_strict_validation: True,
         },
-        DefaultOptionKeys.mloda_source_features: {
+        DefaultOptionKeys.in_features: {
             "explanation": "Source feature to generate forecasts for",
             DefaultOptionKeys.mloda_context: True,
             DefaultOptionKeys.mloda_strict_validation: False,
@@ -210,7 +210,7 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
             return {Feature(source_feature), time_filter_feature}
 
         # Fall back to configuration-based approach
-        source_features = options.get_source_features()
+        source_features = options.get_in_features()
         if len(source_features) != 1:
             raise ValueError(
                 f"Expected exactly one source feature, but found {len(source_features)}: {source_features}"
@@ -248,7 +248,7 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
         if len(parts) < 3 or parts[1] != "forecast":
             raise ValueError(
                 f"Invalid forecast feature name format: {feature_name}. "
-                f"Expected format: {{mloda_source_features}}__{{algorithm}}_forecast_{{horizon}}{{time_unit}}"
+                f"Expected format: {{in_features}}__{{algorithm}}_forecast_{{horizon}}{{time_unit}}"
             )
 
         algorithm = parts[0]
@@ -351,13 +351,13 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
 
         # Process each requested feature with the original clean data
         for feature in features.features:
-            algorithm, horizon, time_unit, mloda_source_features = cls._extract_forecasting_parameters(feature)
+            algorithm, horizon, time_unit, in_features = cls._extract_forecasting_parameters(feature)
 
             # Resolve multi-column features automatically
-            # If mloda_source_features is "onehot_encoded__product", this discovers
+            # If in_features is "onehot_encoded__product", this discovers
             # ["onehot_encoded__product~0", "onehot_encoded__product~1", ...]
             available_columns = cls._get_available_columns(original_data)
-            resolved_columns = cls.resolve_multi_column_feature(mloda_source_features, available_columns)
+            resolved_columns = cls.resolve_multi_column_feature(in_features, available_columns)
 
             # Check that resolved columns exist
             cls._check_source_features_exist(original_data, resolved_columns)
@@ -437,7 +437,7 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
             return algorithm, horizon, time_unit, source_feature_name
 
         # Fall back to configuration-based approach
-        source_features = feature.options.get_source_features()
+        source_features = feature.options.get_in_features()
         source_feature = next(iter(source_features))
         source_feature_name = source_feature.get_name()
 
@@ -544,7 +544,7 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
         algorithm: str,
         horizon: int,
         time_unit: str,
-        mloda_source_features: List[str],
+        in_features: List[str],
         time_filter_feature: str,
         model_artifact: Optional[Any] = None,
     ) -> tuple[Any, Optional[Any]]:
@@ -560,7 +560,7 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
             algorithm: The forecasting algorithm to use
             horizon: The forecast horizon
             time_unit: The time unit for the horizon
-            mloda_source_features: List of resolved source feature names to forecast
+            in_features: List of resolved source feature names to forecast
             time_filter_feature: The name of the time filter feature
             model_artifact: Optional artifact containing a trained model
 
@@ -576,7 +576,7 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
         algorithm: str,
         horizon: int,
         time_unit: str,
-        mloda_source_features: List[str],
+        in_features: List[str],
         time_filter_feature: str,
         model_artifact: Optional[Any] = None,
     ) -> tuple[Any, Any, Any, Optional[Any]]:
@@ -590,7 +590,7 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
             algorithm: The forecasting algorithm to use
             horizon: The forecast horizon
             time_unit: The time unit for the horizon
-            mloda_source_features: List of resolved source feature names to forecast
+            in_features: List of resolved source feature names to forecast
             time_filter_feature: The name of the time filter feature
             model_artifact: Optional artifact containing a trained model
 

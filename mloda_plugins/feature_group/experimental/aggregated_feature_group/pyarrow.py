@@ -62,7 +62,7 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
         return data.append_column(feature_name, repeated_result)
 
     @classmethod
-    def _perform_aggregation(cls, data: pa.Table, aggregation_type: str, mloda_source_features: List[str]) -> Any:
+    def _perform_aggregation(cls, data: pa.Table, aggregation_type: str, in_features: List[str]) -> Any:
         """
         Perform the aggregation using PyArrow compute functions.
 
@@ -73,15 +73,15 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
         Args:
             data: The PyArrow Table
             aggregation_type: The type of aggregation to perform
-            mloda_source_features: List of source feature names (may be single or multiple columns)
+            in_features: List of source feature names (may be single or multiple columns)
 
         Returns:
             The result of the aggregation (scalar for single-column, array for multi-column)
         """
-        if len(mloda_source_features) > 1:
+        if len(in_features) > 1:
             # Multi-column: aggregate across columns row-wise
             # PyArrow doesn't have direct horizontal operations, need to implement manually
-            columns = [data.column(name) for name in mloda_source_features]
+            columns = [data.column(name) for name in in_features]
 
             # Convert columns to numpy for easier row-wise operations
             import numpy as np
@@ -112,7 +112,7 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
             return result
         else:
             # Single column: vertical aggregation (returns scalar)
-            column = data.column(mloda_source_features[0])
+            column = data.column(in_features[0])
 
             if aggregation_type == "sum":
                 return pc.sum(column).as_py()

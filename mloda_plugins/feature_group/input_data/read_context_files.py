@@ -114,7 +114,7 @@ class ConcatenatedFileContent(AbstractFeatureGroup):
         return {
             Feature(
                 name=self.join_feature_name,
-                options={DefaultOptionKeys.mloda_source_features: frozenset(set_source_tuples)},
+                options={DefaultOptionKeys.in_features: frozenset(set_source_tuples)},
             )
         }
 

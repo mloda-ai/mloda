@@ -29,7 +29,7 @@ class TestChainedFeatures:
                     "property2": "value1",  # Group parameter by default (not marked as context)
                 },
                 context={
-                    DefaultOptionKeys.mloda_source_features: "Sales",  # Context by default
+                    DefaultOptionKeys.in_features: "Sales",  # Context by default
                     "ident": "identifier1",  # Context by default
                     "property3": "opt_val1",  # Context by default
                 },
@@ -44,7 +44,7 @@ class TestChainedFeatures:
                     "property2": "value2",  # Same group parameter as feature1
                 },
                 context={
-                    DefaultOptionKeys.mloda_source_features: feature1,
+                    DefaultOptionKeys.in_features: feature1,
                     "ident": "identifier1",  # Different context parameter (shouldn't affect resolution)
                     # property3 omitted (optional context parameter)
                 },
@@ -60,7 +60,7 @@ class TestChainedFeatures:
                     "ident": "identifier1",  # USER OVERRIDE: context parameter forced to group
                 },
                 context={
-                    DefaultOptionKeys.mloda_source_features: frozenset([feature2]),
+                    DefaultOptionKeys.in_features: frozenset([feature2]),
                     "property3": "opt_val2",  # Context parameter
                 },
             ),
@@ -74,7 +74,7 @@ class TestChainedFeatures:
                     "property2": "value1",  # Different group parameter
                 },
                 context={
-                    DefaultOptionKeys.mloda_source_features: frozenset([feature2]),
+                    DefaultOptionKeys.in_features: frozenset([feature2]),
                     "ident": "identifier2",  # Context parameter
                     # property3 omitted (optional)
                 },
@@ -104,7 +104,7 @@ class TestChainedFeatures:
                     "property2": "specific_val_3_test",  # Different group parameter
                 },
                 context={
-                    DefaultOptionKeys.mloda_source_features: frozenset([feature2]),
+                    DefaultOptionKeys.in_features: frozenset([feature2]),
                     "ident": "identifier2",  # Context parameter
                 },
             ),
@@ -119,7 +119,7 @@ class TestChainedFeatures:
                     "property2": "value1",  # Different group parameter
                 },
                 context={
-                    DefaultOptionKeys.mloda_source_features: frozenset([feature2]),
+                    DefaultOptionKeys.in_features: frozenset([feature2]),
                     "ident": "identifier1",  # Context parameter
                     # property3 omitted (optional)
                 },

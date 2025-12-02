@@ -131,7 +131,7 @@ class TestNodeCentralityPandasIntegration:
             Options(
                 context={
                     NodeCentralityFeatureGroup.CENTRALITY_TYPE: "degree",
-                    DefaultOptionKeys.mloda_source_features: "source",
+                    DefaultOptionKeys.in_features: "source",
                     NodeCentralityFeatureGroup.GRAPH_TYPE: "undirected",
                     NodeCentralityFeatureGroup.WEIGHT_COLUMN: "weight",
                 }
@@ -144,7 +144,7 @@ class TestNodeCentralityPandasIntegration:
             Options(
                 context={
                     NodeCentralityFeatureGroup.CENTRALITY_TYPE: "betweenness",
-                    DefaultOptionKeys.mloda_source_features: "source",
+                    DefaultOptionKeys.in_features: "source",
                     NodeCentralityFeatureGroup.GRAPH_TYPE: "undirected",
                     NodeCentralityFeatureGroup.WEIGHT_COLUMN: "weight",
                 }
@@ -193,7 +193,7 @@ class TestNodeCentralityPandasIntegration:
             Options(
                 context={
                     NodeCentralityFeatureGroup.CENTRALITY_TYPE: "degree",
-                    DefaultOptionKeys.mloda_source_features: "source",  # Use source for undirected
+                    DefaultOptionKeys.in_features: "source",  # Use source for undirected
                     NodeCentralityFeatureGroup.GRAPH_TYPE: "undirected",
                     NodeCentralityFeatureGroup.WEIGHT_COLUMN: "weight",
                 }
@@ -205,7 +205,7 @@ class TestNodeCentralityPandasIntegration:
             Options(
                 context={
                     NodeCentralityFeatureGroup.CENTRALITY_TYPE: "degree",
-                    DefaultOptionKeys.mloda_source_features: "target",  # Use target for directed
+                    DefaultOptionKeys.in_features: "target",  # Use target for directed
                     NodeCentralityFeatureGroup.GRAPH_TYPE: "directed",
                     NodeCentralityFeatureGroup.WEIGHT_COLUMN: "weight",
                 }

@@ -76,7 +76,7 @@ class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         window_function: str,
         window_size: int,
         time_unit: str,
-        mloda_source_features: List[str],
+        in_features: List[str],
         time_filter_feature: Optional[str] = None,
     ) -> Any:
         """
@@ -91,7 +91,7 @@ class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
             window_function: The type of window function to perform
             window_size: The size of the window
             time_unit: The time unit for the window
-            mloda_source_features: List of source feature names (may be single or multiple columns)
+            in_features: List of source feature names (may be single or multiple columns)
             time_filter_feature: The name of the time filter feature to use for time-based operations.
                                 If None, uses the value from get_time_filter_feature().
 
@@ -107,12 +107,12 @@ class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         df_with_time_index = data.set_index(time_filter_feature).sort_index()
 
         # Select the columns to perform window operation on
-        if len(mloda_source_features) == 1:
+        if len(in_features) == 1:
             # Single column: extract as Series for simpler window operation
-            selected_data = df_with_time_index[mloda_source_features[0]]
+            selected_data = df_with_time_index[in_features[0]]
         else:
             # Multiple columns: keep as DataFrame
-            selected_data = df_with_time_index[mloda_source_features]
+            selected_data = df_with_time_index[in_features]
 
         rolling_window = selected_data.rolling(window=window_size, min_periods=1)
 
@@ -140,7 +140,7 @@ class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
             raise ValueError(f"Unsupported window function: {window_function}")
 
         # For multi-column, aggregate across columns (axis=1) after rolling window
-        if len(mloda_source_features) > 1:
+        if len(in_features) > 1:
             if window_function == "sum":
                 result = result.sum(axis=1)
             elif window_function == "min":

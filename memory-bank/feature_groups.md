@@ -59,7 +59,7 @@ flowchart LR
 
 **Context Parameters** (Don't affect resolution):
 - Algorithm parameters (aggregation_type, window_function)
-- Source features (mloda_source_features)
+- Source features (in_features)
 - Configuration settings
 
 **Group Parameters** (Affect resolution):
@@ -144,7 +144,7 @@ PROPERTY_MAPPING = {
         **AGGREGATION_TYPES_DICT,
         DefaultOptionKeys.mloda_context: True,  # Context parameter
     },
-    DefaultOptionKeys.mloda_source_features: {
+    DefaultOptionKeys.in_features: {
         DefaultOptionKeys.mloda_context: True,
     },
 }
@@ -187,7 +187,7 @@ feature = Feature(
     "placeholder",
     Options(context={
         "aggregation_type": "sum",
-        DefaultOptionKeys.mloda_source_features: "sales"
+        DefaultOptionKeys.in_features: "sales"
     })
 )
 ```

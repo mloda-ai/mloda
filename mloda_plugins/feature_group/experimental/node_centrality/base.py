@@ -52,7 +52,7 @@ class NodeCentralityFeatureGroup(AbstractFeatureGroup):
         "PlaceHolder",  # Placeholder name, will be replaced
         Options({
             NodeCentralityFeatureGroup.CENTRALITY_TYPE: "degree",
-            DefaultOptionKeys.mloda_source_features: "user"
+            DefaultOptionKeys.in_features: "user"
         })
     )
 
@@ -70,7 +70,7 @@ class NodeCentralityFeatureGroup(AbstractFeatureGroup):
         "placeholder",
         Options({
             NodeCentralityFeatureGroup.CENTRALITY_TYPE: "degree",
-            DefaultOptionKeys.mloda_source_features: "source",
+            DefaultOptionKeys.in_features: "source",
             NodeCentralityFeatureGroup.GRAPH_TYPE: "undirected",
         })
     )
@@ -79,7 +79,7 @@ class NodeCentralityFeatureGroup(AbstractFeatureGroup):
         "placeholder",
         Options({
             NodeCentralityFeatureGroup.CENTRALITY_TYPE: "degree",
-            DefaultOptionKeys.mloda_source_features: "target",  # Different source feature
+            DefaultOptionKeys.in_features: "target",  # Different source feature
             NodeCentralityFeatureGroup.GRAPH_TYPE: "directed",
         })
     )
@@ -150,7 +150,7 @@ class NodeCentralityFeatureGroup(AbstractFeatureGroup):
             DefaultOptionKeys.mloda_context: True,
             DefaultOptionKeys.mloda_default: None,
         },
-        DefaultOptionKeys.mloda_source_features: {
+        DefaultOptionKeys.in_features: {
             "explanation": "Source feature representing the nodes for centrality calculation",
             DefaultOptionKeys.mloda_context: True,
         },
@@ -167,7 +167,7 @@ class NodeCentralityFeatureGroup(AbstractFeatureGroup):
             return {Feature(source_feature)}
 
         # configuration based
-        source_features = options.get_source_features()
+        source_features = options.get_in_features()
         if len(source_features) != 1:
             raise ValueError(
                 f"Expected exactly one source feature, but found {len(source_features)}: {source_features}"
@@ -304,7 +304,7 @@ class NodeCentralityFeatureGroup(AbstractFeatureGroup):
                 return centrality_type, source_feature_name
 
         # Fall back to configuration-based approach
-        source_features = feature.options.get_source_features()
+        source_features = feature.options.get_in_features()
         if len(source_features) != 1:
             raise ValueError(
                 f"Expected exactly one source feature, but found {len(source_features)}: {source_features}"

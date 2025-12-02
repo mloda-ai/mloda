@@ -166,7 +166,7 @@ For truly custom configurations, you can use `Feature` objects:
 #         "custom_feature",
 #         options=Options({
 #             "custom_param": "value",
-#             "mloda_source_features": "source_column",
+#             "in_features": "source_column",
 #         })
 #     ),
 # ]

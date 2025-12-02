@@ -40,16 +40,14 @@ class TestParameterResolutionUnit:
                 DefaultOptionKeys.mloda_default: "opt_val1",  # Default value
                 DefaultOptionKeys.mloda_context: True,  # Mark as context parameter
             },
-            DefaultOptionKeys.mloda_source_features: {
+            DefaultOptionKeys.in_features: {
                 "explanation": "explanation",
                 DefaultOptionKeys.mloda_context: True,  # Mark as context parameter
             },
         }
 
         # Test: Missing required context parameter 'ident'
-        options_missing_ident = Options(
-            group={"property2": "value1"}, context={DefaultOptionKeys.mloda_source_features: "Sales"}
-        )
+        options_missing_ident = Options(group={"property2": "value1"}, context={DefaultOptionKeys.in_features: "Sales"})
 
         result = FeatureChainParser.match_configuration_feature_chain_parser(
             "test_feature", options_missing_ident, property_mapping
@@ -60,7 +58,7 @@ class TestParameterResolutionUnit:
         options_missing_optional = Options(
             group={"property2": "value1"},
             context={
-                DefaultOptionKeys.mloda_source_features: "Sales",
+                DefaultOptionKeys.in_features: "Sales",
                 "ident": "identifier1",
                 # property3 omitted - should still work since it's optional
             },
@@ -78,7 +76,7 @@ class TestParameterResolutionUnit:
         # Test: Invalid 'ident' value (not identifier1 or identifier2)
         options_invalid_ident = Options(
             group={"property2": "value1"},
-            context={DefaultOptionKeys.mloda_source_features: "Sales", "ident": "invalid_identifier"},
+            context={DefaultOptionKeys.in_features: "Sales", "ident": "invalid_identifier"},
         )
 
         with pytest.raises(ValueError, match="Property value 'invalid_identifier' not found in mapping for 'ident'"):
@@ -90,7 +88,7 @@ class TestParameterResolutionUnit:
         options_property3_unlisted = Options(
             group={"property2": "value1"},
             context={
-                DefaultOptionKeys.mloda_source_features: "Sales",
+                DefaultOptionKeys.in_features: "Sales",
                 "ident": "identifier1",
                 "property3": "unlisted_optional_value",  # Should be allowed since property3 is non-strict
             },
@@ -109,7 +107,7 @@ class TestParameterResolutionUnit:
         source_feature = Feature(name="source", options=Options())
         options_with_feature = Options(
             group={"property2": "value1"},
-            context={DefaultOptionKeys.mloda_source_features: source_feature, "ident": "identifier1"},
+            context={DefaultOptionKeys.in_features: source_feature, "ident": "identifier1"},
         )
 
         result = FeatureChainParser.match_configuration_feature_chain_parser(
@@ -123,7 +121,7 @@ class TestParameterResolutionUnit:
         )
         options_with_frozenset = Options(
             group={"property2": "value1"},
-            context={DefaultOptionKeys.mloda_source_features: source_features, "ident": "identifier1"},
+            context={DefaultOptionKeys.in_features: source_features, "ident": "identifier1"},
         )
 
         result = FeatureChainParser.match_configuration_feature_chain_parser(
@@ -134,7 +132,7 @@ class TestParameterResolutionUnit:
         # Test: String values for various parameters
         options_with_strings = Options(
             group={"property2": "value2"},
-            context={DefaultOptionKeys.mloda_source_features: "Sales", "ident": "identifier2", "property3": "opt_val1"},
+            context={DefaultOptionKeys.in_features: "Sales", "ident": "identifier2", "property3": "opt_val1"},
         )
 
         result = FeatureChainParser.match_configuration_feature_chain_parser(
@@ -184,7 +182,7 @@ class TestParameterResolutionUnit:
         options_optional_present = Options(
             group={"property2": "value1"},
             context={
-                DefaultOptionKeys.mloda_source_features: "Sales",
+                DefaultOptionKeys.in_features: "Sales",
                 "ident": "identifier1",
                 "property3": "opt_val1",  # Optional parameter present
             },
@@ -199,7 +197,7 @@ class TestParameterResolutionUnit:
         options_optional_absent = Options(
             group={"property2": "value1"},
             context={
-                DefaultOptionKeys.mloda_source_features: "Sales",
+                DefaultOptionKeys.in_features: "Sales",
                 "ident": "identifier1",
                 # property3 omitted
             },
@@ -228,10 +226,8 @@ class TestParameterResolutionUnit:
         is_context_property3 = FeatureChainParser._is_context_parameter(property_mapping["property3"])
         assert is_context_property3 is True, "property3 should be identified as context parameter"
 
-        is_context_source = FeatureChainParser._is_context_parameter(
-            property_mapping[DefaultOptionKeys.mloda_source_features]
-        )
-        assert is_context_source is True, "mloda_source_features should be identified as context parameter"
+        is_context_source = FeatureChainParser._is_context_parameter(property_mapping[DefaultOptionKeys.in_features])
+        assert is_context_source is True, "in_features should be identified as context parameter"
 
         # Test: Parameters not marked as context (group parameters)
         is_context_property2 = FeatureChainParser._is_context_parameter(property_mapping["property2"])
@@ -244,7 +240,7 @@ class TestParameterResolutionUnit:
         # Test: Empty frozenset for source features
         options_empty_frozenset = Options(
             group={"property2": "value1"},
-            context={DefaultOptionKeys.mloda_source_features: frozenset(), "ident": "identifier1"},
+            context={DefaultOptionKeys.in_features: frozenset(), "ident": "identifier1"},
         )
 
         # This should fail because empty frozenset means no source features
@@ -256,7 +252,7 @@ class TestParameterResolutionUnit:
         # Test: Special test value for property2
         options_special_value = Options(
             group={"property2": "specific_val_3_test"},  # Special test value
-            context={DefaultOptionKeys.mloda_source_features: "Sales", "ident": "identifier1"},
+            context={DefaultOptionKeys.in_features: "Sales", "ident": "identifier1"},
         )
 
         result = FeatureChainParser.match_configuration_feature_chain_parser(
@@ -297,7 +293,7 @@ class TestParameterResolutionUnit:
         property_tracker_valid = {
             "ident": {"identifier1"},
             "property2": {"value1"},
-            DefaultOptionKeys.mloda_source_features: {"Sales"},
+            DefaultOptionKeys.in_features: {"Sales"},
             "property3": set(),  # Optional, can be empty
         }
 
@@ -308,7 +304,7 @@ class TestParameterResolutionUnit:
         property_tracker_missing_required = {
             "ident": None,  # Required property missing
             "property2": {"value1"},
-            DefaultOptionKeys.mloda_source_features: {"Sales"},
+            DefaultOptionKeys.in_features: {"Sales"},
             "property3": set(),
         }
 
@@ -319,7 +315,7 @@ class TestParameterResolutionUnit:
         property_tracker_missing_optional = {
             "ident": {"identifier1"},
             "property2": {"value1"},
-            DefaultOptionKeys.mloda_source_features: {"Sales"},
+            DefaultOptionKeys.in_features: {"Sales"},
             "property3": None,  # Optional property missing
         }
 
@@ -344,7 +340,7 @@ class TestParameterResolutionUnit:
             "default_flexible_param": {
                 DefaultOptionKeys.mloda_context: True,
             },
-            DefaultOptionKeys.mloda_source_features: {
+            DefaultOptionKeys.in_features: {
                 DefaultOptionKeys.mloda_context: True,
             },
         }
@@ -355,7 +351,7 @@ class TestParameterResolutionUnit:
                 "strict_param": "allowed_value1",
                 "flexible_param": "suggested_value1",
                 "default_flexible_param": "value1",
-                DefaultOptionKeys.mloda_source_features: "Sales",
+                DefaultOptionKeys.in_features: "Sales",
             }
         )
 
@@ -370,7 +366,7 @@ class TestParameterResolutionUnit:
                 "strict_param": "invalid_value",  # Not in mapping, should fail
                 "flexible_param": "suggested_value1",
                 "default_flexible_param": "value1",
-                DefaultOptionKeys.mloda_source_features: "Sales",
+                DefaultOptionKeys.in_features: "Sales",
             }
         )
 
@@ -385,7 +381,7 @@ class TestParameterResolutionUnit:
                 "strict_param": "allowed_value1",
                 "flexible_param": "unlisted_value",  # Not in mapping but should be allowed
                 "default_flexible_param": "value1",
-                DefaultOptionKeys.mloda_source_features: "Sales",
+                DefaultOptionKeys.in_features: "Sales",
             }
         )
 
@@ -400,7 +396,7 @@ class TestParameterResolutionUnit:
                 "strict_param": "allowed_value1",
                 "flexible_param": "suggested_value1",
                 "default_flexible_param": "unlisted_default_value",  # Not in mapping but should be allowed
-                DefaultOptionKeys.mloda_source_features: "Sales",
+                DefaultOptionKeys.in_features: "Sales",
             }
         )
 
@@ -409,20 +405,20 @@ class TestParameterResolutionUnit:
         )
         assert result is True, "Should pass validation when default flexible parameter has unlisted value"
 
-        # Test: mloda_source_features with default flexible validation should allow any value
+        # Test: in_features with default flexible validation should allow any value
         options_flexible_source = Options(
             context={
                 "strict_param": "allowed_value1",
                 "flexible_param": "suggested_value1",
                 "default_flexible_param": "value1",
-                DefaultOptionKeys.mloda_source_features: "any_source_feature_name",  # Should be allowed
+                DefaultOptionKeys.in_features: "any_source_feature_name",  # Should be allowed
             }
         )
 
         result = FeatureChainParser.match_configuration_feature_chain_parser(
             "test_feature", options_flexible_source, property_mapping_mixed
         )
-        assert result is True, "Should pass validation when mloda_source_features has default flexible validation"
+        assert result is True, "Should pass validation when in_features has default flexible validation"
 
     def test_strict_validation_helper_methods(self) -> None:
         """Test the _is_strict_validation helper method with default non-strict behavior."""
@@ -488,7 +484,7 @@ class TestParameterResolutionUnit:
                 DefaultOptionKeys.mloda_strict_validation: False,  # Explicit flexible validation
                 DefaultOptionKeys.mloda_context: True,
             },
-            DefaultOptionKeys.mloda_source_features: {
+            DefaultOptionKeys.in_features: {
                 "explanation": "explanation",
                 # No strict_validation flag -> defaults to False (flexible)
                 DefaultOptionKeys.mloda_context: True,
@@ -501,7 +497,7 @@ class TestParameterResolutionUnit:
             context={
                 "algorithm_type": "custom_algorithm",  # Default flexible, unlisted value
                 "debug_mode": "verbose",  # Explicit flexible, unlisted value
-                DefaultOptionKeys.mloda_source_features: "any_feature",  # Default flexible
+                DefaultOptionKeys.in_features: "any_feature",  # Default flexible
             },
         )
 
@@ -516,7 +512,7 @@ class TestParameterResolutionUnit:
             context={
                 "algorithm_type": "custom_algorithm",  # Default flexible, should be fine
                 "debug_mode": "verbose",  # Explicit flexible, should be fine
-                DefaultOptionKeys.mloda_source_features: "any_feature",  # Default flexible
+                DefaultOptionKeys.in_features: "any_feature",  # Default flexible
             },
         )
 
@@ -531,7 +527,7 @@ class TestParameterResolutionUnit:
             context={
                 "algorithm_type": "neural_network",  # Default flexible, unlisted
                 "debug_mode": "trace",  # Explicit flexible, unlisted
-                DefaultOptionKeys.mloda_source_features: "custom_feature",  # Default flexible, unlisted
+                DefaultOptionKeys.in_features: "custom_feature",  # Default flexible, unlisted
             },
         )
 

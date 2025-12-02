@@ -28,7 +28,7 @@ class SklearnPipelineFeatureGroup(AbstractFeatureGroup):
     ## Feature Naming Convention
 
     Pipeline features follow this naming pattern:
-    `{mloda_source_features}__sklearn_pipeline_{pipeline_name}`
+    `{in_features}__sklearn_pipeline_{pipeline_name}`
 
     The source features come first, followed by the pipeline operation.
     Note the double underscore separating the source features from the pipeline name.
@@ -54,7 +54,7 @@ class SklearnPipelineFeatureGroup(AbstractFeatureGroup):
                 ("scaler", StandardScaler()),
                 ("imputer", SimpleImputer())
             ],
-            DefaultOptionKeys.mloda_source_features: "raw_features"
+            DefaultOptionKeys.in_features: "raw_features"
         })
     )
 
@@ -101,7 +101,7 @@ class SklearnPipelineFeatureGroup(AbstractFeatureGroup):
             DefaultOptionKeys.mloda_context: True,
             DefaultOptionKeys.mloda_default: None,  # Default is None as pipeline_types also work
         },
-        DefaultOptionKeys.mloda_source_features: {
+        DefaultOptionKeys.in_features: {
             "explanation": "Source features for sklearn pipeline (comma-separated)",
             DefaultOptionKeys.mloda_context: True,
         },
@@ -130,7 +130,7 @@ class SklearnPipelineFeatureGroup(AbstractFeatureGroup):
             return {Feature(feature_name) for feature_name in source_features}
 
         # Fall back to configuration-based approach
-        _source_features = options.get_source_features()
+        _source_features = options.get_in_features()
         return set(_source_features)
 
     @classmethod
@@ -267,7 +267,7 @@ class SklearnPipelineFeatureGroup(AbstractFeatureGroup):
         # Fall back to configuration-based approach
         pipeline_name = feature.options.get(cls.PIPELINE_NAME)
         pipeline_steps = feature.options.get(cls.PIPELINE_STEPS)
-        source_features_set = feature.options.get_source_features()
+        source_features_set = feature.options.get_in_features()
         source_features = [sf.get_name() for sf in source_features_set]
 
         # Handle mutual exclusivity: either PIPELINE_NAME or PIPELINE_STEPS

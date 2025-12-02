@@ -41,7 +41,7 @@ PROPERTY_MAPPING = {
         DefaultOptionKeys.mloda_context: True,
         DefaultOptionKeys.mloda_strict_validation: True,
     },
-    DefaultOptionKeys.mloda_source_features: {
+    DefaultOptionKeys.in_features: {
         "explanation": "Source feature for aggregation",
         DefaultOptionKeys.mloda_context: True,
         DefaultOptionKeys.mloda_strict_validation: False,
@@ -67,8 +67,8 @@ When `mloda_strict_validation: False` (default), any value is accepted:
 
 ```python
 # Both will match
-options = Options(context={"mloda_source_features": "sales"})      # Any value OK
-options = Options(context={"mloda_source_features": "custom_feature"})  # Any value OK
+options = Options(context={"in_features": "sales"})      # Any value OK
+options = Options(context={"in_features": "custom_feature"})  # Any value OK
 ```
 
 #### Custom Validation Functions
@@ -119,7 +119,7 @@ feature = Feature(
     "placeholder",
     Options(context={
         "aggregation_type": "sum",
-        "mloda_source_features": "sales"
+        "in_features": "sales"
     })
 )  # Matches via PROPERTY_MAPPING validation
 ```
@@ -132,23 +132,23 @@ The group/context parameter separation affects matching behavior:
 # These create different Feature Group instances (different group parameters)
 feature1 = Feature("placeholder", Options(
     group={"data_source": "production"},
-    context={"aggregation_type": "sum", "mloda_source_features": "sales"}
+    context={"aggregation_type": "sum", "in_features": "sales"}
 ))
 
 feature2 = Feature("placeholder", Options(
     group={"data_source": "staging"},  # Different group parameter
-    context={"aggregation_type": "sum", "mloda_source_features": "sales"}
+    context={"aggregation_type": "sum", "in_features": "sales"}
 ))
 
 # These create the same Feature Group instance (same group, different context)
 feature3 = Feature("placeholder", Options(
     group={"data_source": "production"},
-    context={"aggregation_type": "sum", "mloda_source_features": "sales"}
+    context={"aggregation_type": "sum", "in_features": "sales"}
 ))
 
 feature4 = Feature("placeholder", Options(
     group={"data_source": "production"},  # Same group parameter
-    context={"aggregation_type": "avg", "mloda_source_features": "revenue"}  # Different context
+    context={"aggregation_type": "avg", "in_features": "revenue"}  # Different context
 ))
 ```
 

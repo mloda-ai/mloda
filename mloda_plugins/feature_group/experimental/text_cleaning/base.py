@@ -57,7 +57,7 @@ class TextCleaningFeatureGroup(AbstractFeatureGroup):
                 )
             ),
         },
-        DefaultOptionKeys.mloda_source_features: {
+        DefaultOptionKeys.in_features: {
             "explanation": "Source feature to apply text cleaning operations to",
             DefaultOptionKeys.mloda_context: True,
         },
@@ -73,7 +73,7 @@ class TextCleaningFeatureGroup(AbstractFeatureGroup):
     ## Feature Naming Convention
 
     Text cleaning features follow this naming pattern:
-    `{mloda_source_features}__cleaned_text`
+    `{in_features}__cleaned_text`
 
     The source feature comes first, followed by the cleaning operation.
     Note the double underscore separating the source feature from the operation.
@@ -94,7 +94,7 @@ class TextCleaningFeatureGroup(AbstractFeatureGroup):
         "PlaceHolder",  # Placeholder name, will be replaced
         Options({
             TextCleaningFeatureGroup.CLEANING_OPERATIONS: ("normalize", "remove_stopwords", "remove_punctuation"),
-            DefaultOptionKeys.mloda_source_features: "review"
+            DefaultOptionKeys.in_features: "review"
         })
     )
 
@@ -126,7 +126,7 @@ class TextCleaningFeatureGroup(AbstractFeatureGroup):
             return {Feature(source_feature)}
 
         # Fall back to configuration-based approach
-        source_features = options.get_source_features()
+        source_features = options.get_in_features()
         if len(source_features) != 1:
             raise ValueError(
                 f"Expected exactly one source feature, but found {len(source_features)}: {source_features}"
@@ -181,7 +181,7 @@ class TextCleaningFeatureGroup(AbstractFeatureGroup):
             return operations, source_feature_name  # type: ignore
 
         # Fall back to configuration-based approach
-        source_features = feature.options.get_source_features()
+        source_features = feature.options.get_in_features()
         source_feature = next(iter(source_features))
         source_feature_name = source_feature.get_name()
 

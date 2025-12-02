@@ -33,7 +33,7 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
     - `ordinal`: OrdinalEncoder - converts categories to ordinal integers
 
     Encoding features follow this naming pattern:
-    `{mloda_source_features}__{encoder_type}_encoded`
+    `{in_features}__{encoder_type}_encoded`
 
     ## Feature Creation Methods
 
@@ -64,7 +64,7 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
         options=Options(
             context={
                 EncodingFeatureGroup.ENCODER_TYPE: "onehot",
-                DefaultOptionKeys.mloda_source_features: "category",
+                DefaultOptionKeys.in_features: "category",
             }
         )
     )
@@ -101,7 +101,7 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
         options=Options(
             context={
                 EncodingFeatureGroup.ENCODER_TYPE: "onehot",
-                DefaultOptionKeys.mloda_source_features: "department",
+                DefaultOptionKeys.in_features: "department",
             }
         )
     )
@@ -112,7 +112,7 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
         options=Options(
             context={
                 EncodingFeatureGroup.ENCODER_TYPE: "label",
-                DefaultOptionKeys.mloda_source_features: "risk_level",
+                DefaultOptionKeys.in_features: "risk_level",
             }
         )
     )
@@ -135,7 +135,7 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
     ### Context Parameters (Default)
     These parameters don't affect Feature Group resolution/splitting:
     - `encoder_type`: Type of encoder to use (onehot, label, or ordinal)
-    - `mloda_source_features`: Source feature to encode
+    - `in_features`: Source feature to encode
 
     ### Group Parameters
     Currently none for EncodingFeatureGroup. Parameters that affect Feature Group
@@ -177,7 +177,7 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
             DefaultOptionKeys.mloda_context: True,  # Context parameter
             DefaultOptionKeys.mloda_strict_validation: True,  # Enable strict validation
         },
-        DefaultOptionKeys.mloda_source_features: {
+        DefaultOptionKeys.in_features: {
             "explanation": "Source feature to encode",
             DefaultOptionKeys.mloda_context: True,  # Context parameter
             DefaultOptionKeys.mloda_strict_validation: False,  # Flexible validation
@@ -200,7 +200,7 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
             return {Feature(base_feature)}
 
         # Fall back to configuration-based approach
-        source_features = options.get_source_features()
+        source_features = options.get_in_features()
         if len(source_features) != 1:
             raise ValueError(
                 f"Expected exactly one source feature, but found {len(source_features)}: {source_features}"
@@ -319,7 +319,7 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
             return encoder_type, source_feature_name
 
         # Fall back to configuration-based approach
-        source_features = feature.options.get_source_features()
+        source_features = feature.options.get_in_features()
         source_feature = next(iter(source_features))
         source_feature_name = source_feature.get_name()
 

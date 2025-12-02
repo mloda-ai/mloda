@@ -136,21 +136,21 @@ class TestOptions:
         assert str(options) == expected
 
     def test_update_with_protected_keys_default(self) -> None:
-        """Test update method with default protected keys (mloda_source_features)."""
+        """Test update method with default protected keys (in_features)."""
         from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
         options1 = Options(group={"key1": "value1"})
-        options2 = Options(group={"key2": "value2", DefaultOptionKeys.mloda_source_features: "source1"})
+        options2 = Options(group={"key2": "value2", DefaultOptionKeys.in_features: "source1"})
 
-        # Update should work normally - mloda_source_features is included when only one has it
+        # Update should work normally - in_features is included when only one has it
         options1.update_with_protected_keys(options2)
         assert options1.group == {"key1": "value1", "key2": "value2"}
 
-        # mloda_source_features should be excluded when both have it
-        options3 = Options(group={"key3": "value3", DefaultOptionKeys.mloda_source_features: "source2"})
+        # in_features should be excluded when both have it
+        options3 = Options(group={"key3": "value3", DefaultOptionKeys.in_features: "source2"})
         options2.update_with_protected_keys(options3)
-        # The existing mloda_source_features should be preserved
-        assert options2.group[DefaultOptionKeys.mloda_source_features] == "source1"
+        # The existing in_features should be preserved
+        assert options2.group[DefaultOptionKeys.in_features] == "source1"
         assert options2.group["key3"] == "value3"
 
     def test_update_conflict_detection(self) -> None:
@@ -185,7 +185,7 @@ class TestOptions:
             group={
                 "data_source": "prod",
                 "aggregation_type": "sum",
-                "mloda_source_features": "sales_data",
+                "in_features": "sales_data",
                 "debug_mode": True,
             }
         )
@@ -203,7 +203,7 @@ class TestOptions:
             group={"data_source": "prod"},  # Only isolation-requiring parameters
             context={  # Metadata parameters
                 "aggregation_type": "sum",
-                "mloda_source_features": "sales_data",
+                "in_features": "sales_data",
                 "debug_mode": True,
             },
         )
@@ -238,7 +238,7 @@ class TestProtectedKeys:
 
     def test_update_with_default_protected_keys(self) -> None:
         """
-        Test that mloda_source_features is protected by default.
+        Test that in_features is protected by default.
 
         This is the most common use case - allowing parent and child features
         to have different data sources without conflict.
@@ -249,7 +249,7 @@ class TestProtectedKeys:
         parent_options = Options(
             group={
                 "common_key": "shared_value",
-                DefaultOptionKeys.mloda_source_features: "parent_source",
+                DefaultOptionKeys.in_features: "parent_source",
             }
         )
 
@@ -257,7 +257,7 @@ class TestProtectedKeys:
         child_options = Options(
             group={
                 "child_key": "child_value",
-                DefaultOptionKeys.mloda_source_features: "child_source",
+                DefaultOptionKeys.in_features: "child_source",
             }
         )
 
@@ -265,7 +265,7 @@ class TestProtectedKeys:
         parent_options.update_with_protected_keys(child_options)
 
         # Parent should keep its own source (protected key)
-        assert parent_options.group[DefaultOptionKeys.mloda_source_features] == "parent_source"
+        assert parent_options.group[DefaultOptionKeys.in_features] == "parent_source"
 
         # Parent should receive child's non-protected keys
         assert parent_options.group["child_key"] == "child_value"
@@ -322,15 +322,15 @@ class TestProtectedKeys:
         """
         from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
-        parent_options = Options(group={DefaultOptionKeys.mloda_source_features: "source_A", "shared": "value"})
+        parent_options = Options(group={DefaultOptionKeys.in_features: "source_A", "shared": "value"})
 
-        child_options = Options(group={DefaultOptionKeys.mloda_source_features: "source_B", "shared": "value"})
+        child_options = Options(group={DefaultOptionKeys.in_features: "source_B", "shared": "value"})
 
-        # This should NOT raise an error because mloda_source_features is protected
+        # This should NOT raise an error because in_features is protected
         parent_options.update_with_protected_keys(child_options)
 
         # Parent's protected key value is preserved
-        assert parent_options.group[DefaultOptionKeys.mloda_source_features] == "source_A"
+        assert parent_options.group[DefaultOptionKeys.in_features] == "source_A"
 
     def test_update_raises_error_for_non_protected_conflicts(self) -> None:
         """
@@ -382,7 +382,7 @@ class TestProtectedKeys:
         # Child has source feature
         child_options = Options(
             group={
-                DefaultOptionKeys.mloda_source_features: "child_source",
+                DefaultOptionKeys.in_features: "child_source",
                 "key2": "value2",
             }
         )
@@ -391,7 +391,7 @@ class TestProtectedKeys:
         parent_options.update_with_protected_keys(child_options)
 
         # Protected key should NOT be added to parent
-        assert DefaultOptionKeys.mloda_source_features not in parent_options.group
+        assert DefaultOptionKeys.in_features not in parent_options.group
 
         # Non-protected keys should be merged
         assert parent_options.group["key2"] == "value2"
@@ -407,7 +407,7 @@ class TestProtectedKeys:
         # Parent has source feature
         parent_options = Options(
             group={
-                DefaultOptionKeys.mloda_source_features: "parent_source",
+                DefaultOptionKeys.in_features: "parent_source",
                 "key1": "value1",
             }
         )
@@ -419,7 +419,7 @@ class TestProtectedKeys:
         parent_options.update_with_protected_keys(child_options)
 
         # Parent's protected key should be preserved
-        assert parent_options.group[DefaultOptionKeys.mloda_source_features] == "parent_source"
+        assert parent_options.group[DefaultOptionKeys.in_features] == "parent_source"
 
         # Child's keys should be merged
         assert parent_options.group["key2"] == "value2"

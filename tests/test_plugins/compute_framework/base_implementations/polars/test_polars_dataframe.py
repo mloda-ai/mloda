@@ -1,12 +1,12 @@
 import os
-from typing import Any
-from mloda_core.abstract_plugins.components.link import JoinType
+from typing import Any, Optional, Type
 import pytest
 from unittest.mock import patch
 from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataframe
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
 from mloda_core.abstract_plugins.components.index.index import Index
+from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
 
 import logging
 
@@ -90,69 +90,20 @@ class TestPolarsDataframeComputeFramework:
         self.pl_dataframe.set_column_names()
         assert self.pl_dataframe.column_names == {"column1", "column2"}
 
-    def test_merge_inner(self) -> None:
-        _plDf = PolarsDataframe(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
-        _plDf.data = self.left_data
-        merge_engine = _plDf.merge_engine()
-        result = merge_engine().merge(_plDf.data, self.right_data, JoinType.INNER, self.idx, self.idx)
-        assert len(result) == 1
-        expected = self.left_data.join(self.right_data, on="idx", how="inner")
-        assert result.equals(expected)
 
-    def test_merge_left(self) -> None:
-        _plDf = PolarsDataframe(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
-        _plDf.data = self.left_data
-        merge_engine = _plDf.merge_engine()
-        result = merge_engine().merge(_plDf.data, self.right_data, JoinType.LEFT, self.idx, self.idx)
-        expected = self.left_data.join(self.right_data, on="idx", how="left")
-        assert result.equals(expected)
+@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
+class TestPolarsDataframeMerge(DataFrameTestBase):
+    """Test PolarsDataframe merge operations using the base test class."""
 
-    def test_merge_right(self) -> None:
-        _plDf = PolarsDataframe(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
-        _plDf.data = self.left_data
-        merge_engine = _plDf.merge_engine()
-        result = merge_engine().merge(_plDf.data, self.right_data, JoinType.RIGHT, self.idx, self.idx)
-        expected = self.left_data.join(self.right_data, on="idx", how="right")
+    @classmethod
+    def framework_class(cls) -> Type[Any]:
+        """Return the PolarsDataframe class."""
+        return PolarsDataframe
 
-        # Reorder columns to match and sort by all columns to ensure consistent ordering for comparison
-        column_order = ["idx", "col1", "col2"]
-        result_reordered = result.select(column_order).sort(column_order)
-        expected_reordered = expected.select(column_order).sort(column_order)
-        assert result_reordered.equals(expected_reordered)
+    def create_dataframe(self, data: dict[str, Any]) -> Any:
+        """Create a polars DataFrame from a dictionary."""
+        return pl.DataFrame(data)
 
-    def test_merge_full_outer(self) -> None:
-        _plDf = PolarsDataframe(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
-        _plDf.data = self.left_data
-        merge_engine = _plDf.merge_engine()
-        result = merge_engine().merge(_plDf.data, self.right_data, JoinType.OUTER, self.idx, self.idx)
-
-        # Get the native result and properly coalesce it like our implementation does
-        native_raw = self.left_data.join(self.right_data, on="idx", how="full")
-        expected = native_raw.with_columns(
-            pl.when(pl.col("idx").is_null()).then(pl.col("idx_right")).otherwise(pl.col("idx")).alias("idx")
-        ).drop("idx_right")
-
-        # Reorder columns to match and sort by all columns to ensure consistent ordering for comparison
-        column_order = ["idx", "col1", "col2"]
-        result_reordered = result.select(column_order).sort(column_order)
-        expected_reordered = expected.select(column_order).sort(column_order)
-        assert result_reordered.equals(expected_reordered)
-
-    def test_merge_append(self) -> None:
-        _plDf = PolarsDataframe(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
-        _plDf.data = self.left_data
-        merge_engine = _plDf.merge_engine()
-        result = merge_engine().merge(_plDf.data, self.right_data, JoinType.APPEND, self.idx, self.idx)
-        expected = pl.concat([self.left_data, self.right_data], how="diagonal")
-        assert result.equals(expected)
-
-    def test_merge_union(self) -> None:
-        _plDf = PolarsDataframe(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
-        _plDf.data = self.left_data
-        merge_engine = _plDf.merge_engine()
-        result = merge_engine().merge(_plDf.data, self.right_data, JoinType.UNION, self.idx, self.idx)
-        expected = pl.concat([self.left_data, self.right_data], how="diagonal").unique()
-        # Sort both by all columns to ensure consistent ordering for comparison
-        result_sorted = result.sort(["idx", "col1", "col2"])
-        expected_sorted = expected.sort(["idx", "col1", "col2"])
-        assert result_sorted.equals(expected_sorted)
+    def get_connection(self) -> Optional[Any]:
+        """Return connection object (None for polars)."""
+        return None

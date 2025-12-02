@@ -270,24 +270,89 @@ class ResolveLinks:
         if not self.links:
             return
 
-        for link in self.links:
-            for child, parents in self.graph.parent_to_children_mapping.items():
-                for parent_in in parents:
-                    for parent_out in parents:
-                        if parent_in == parent_out:
-                            continue
+        for child, parents in self.graph.parent_to_children_mapping.items():
+            for parent_in in parents:
+                for parent_out in parents:
+                    if parent_in == parent_out:
+                        continue
 
-                        r_left = self.graph.get_nodes()[parent_in]
-                        r_right = self.graph.get_nodes()[parent_out]
+                    r_left = self.graph.get_nodes()[parent_in]
+                    r_right = self.graph.get_nodes()[parent_out]
+                    left_fg = r_left.feature_group_class
+                    right_fg = r_right.feature_group_class
 
-                        if link.matches(
-                            other_left_feature_group=r_left.feature_group_class,
-                            other_right_feature_group=r_right.feature_group_class,
-                        ):
-                            key = self.create_link_trekker_key(
-                                link, r_left.feature.compute_frameworks, r_right.feature.compute_frameworks
-                            )
-                            self.set_link_trekker(key, child)
+                    # Two-pass matching: exact match first, then polymorphic
+                    matched_links = self._find_matching_links(left_fg, right_fg)
+
+                    for matched_link in matched_links:
+                        key = self.create_link_trekker_key(
+                            matched_link, r_left.feature.compute_frameworks, r_right.feature.compute_frameworks
+                        )
+                        self.set_link_trekker(key, child)
+
+    def _find_matching_links(self, left_fg: type, right_fg: type) -> List[Link]:
+        """Find all matching links using two-pass matching: exact first, then polymorphic.
+
+        Returns all exact matches if any exist, otherwise returns the most specific
+        polymorphic matches (closest in inheritance hierarchy).
+        """
+        if self.links is None:
+            return []
+
+        # Pass 1: Collect all exact matches
+        exact_matches = [link for link in self.links if link.matches_exact(left_fg, right_fg)]
+        if exact_matches:
+            return exact_matches
+
+        # Pass 2: If no exact matches, find most specific polymorphic matches
+        polymorphic_matches = [link for link in self.links if link.matches_polymorphic(left_fg, right_fg)]
+        if not polymorphic_matches:
+            return []
+
+        # Find the most specific match (smallest inheritance distance)
+        return self._select_most_specific_links(polymorphic_matches, left_fg, right_fg)
+
+    def _inheritance_distance(self, child: type, parent: type) -> int:
+        """Calculate the inheritance distance from child to parent in the MRO.
+
+        Returns the number of steps in the Method Resolution Order from child to parent.
+        Returns a large number if parent is not in child's MRO.
+        """
+        try:
+            mro = child.__mro__
+            return mro.index(parent)
+        except (ValueError, AttributeError):
+            return 9999  # Not in hierarchy
+
+    def _select_most_specific_links(self, links: List[Link], left_fg: type, right_fg: type) -> List[Link]:
+        """Select links that are most specific (closest in inheritance hierarchy).
+
+        For each link, calculates the inheritance distance on both sides.
+        Only considers links where both sides have the same inheritance distance
+        (to avoid sibling mismatches). Returns links with the minimum distance.
+        """
+        if not links:
+            return []
+
+        # Calculate distance for each link, filtering out unbalanced matches
+        link_distances: List[Tuple[Link, int]] = []
+        for link in links:
+            left_dist = self._inheritance_distance(left_fg, link.left_feature_group)
+            right_dist = self._inheritance_distance(right_fg, link.right_feature_group)
+
+            # Only consider links where both sides have the same inheritance level
+            # This prevents sibling class mismatches
+            if left_dist == right_dist and left_fg == right_fg:
+                link_distances.append((link, left_dist))
+
+        if not link_distances:
+            return []
+
+        # Find minimum distance
+        min_dist = min(dist for _, dist in link_distances)
+
+        # Return all links with minimum distance
+        return [link for link, dist in link_distances if dist == min_dist]
 
     def set_link_trekker(self, link_trekker_key: LinkFrameworkTrekker, uuid: UUID) -> None:
         self.link_trekker.update(link_trekker_key, uuid)

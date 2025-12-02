@@ -5,7 +5,7 @@ from mloda_core.filter.single_filter import SingleFilter
 try:
     import polars as pl
 except ImportError:
-    pl = None  # type: ignore
+    pl = None  # type: ignore[assignment]
 
 
 class PolarsFilterEngine(BaseFilterEngine):

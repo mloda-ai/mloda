@@ -5,7 +5,7 @@ from mloda_core.abstract_plugins.components.framework_transformer.base_transform
 try:
     import polars as pl
 except ImportError:
-    pl = None  # type: ignore
+    pl = None  # type: ignore[assignment]
 
 try:
     import pyarrow as pa
@@ -66,4 +66,4 @@ class PolarsLazyPyarrowTransformer(BaseTransformer):
             raise ImportError("Polars is not installed. To be able to use this framework, please install polars.")
         # Convert PyArrow to DataFrame, then make it lazy
         df = pl.from_arrow(data)
-        return df.lazy()  # type: ignore
+        return df.lazy()  # type: ignore[union-attr]

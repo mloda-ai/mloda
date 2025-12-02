@@ -7,7 +7,7 @@ from mloda_plugins.compute_framework.base_implementations.polars.polars_lazy_mer
 try:
     import polars as pl
 except ImportError:
-    pl = None  # type: ignore
+    pl = None  # type: ignore[assignment]
 
 
 class PolarsLazyDataframe(PolarsDataframe):

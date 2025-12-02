@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 try:
     from opentelemetry import trace
 except ImportError:
-    trace = None  # type: ignore
+    trace = None  # type: ignore[assignment]
 
 
 class OtelExtender(WrapperFunctionExtender):

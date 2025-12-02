@@ -14,7 +14,7 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.base impo
 try:
     import polars as pl
 except ImportError:
-    pl = None  # type: ignore
+    pl = None  # type: ignore[assignment]
 
 
 class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):

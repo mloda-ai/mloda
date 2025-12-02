@@ -102,8 +102,44 @@ class TestTimeWindowFeatureGroup:
 
     def test_input_features(self) -> None:
         """Test input_features method."""
+        from typing import Any, List, Set
+        from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
+
+        class ConcreteTimeWindowFeatureGroup(TimeWindowFeatureGroup):
+            @classmethod
+            def _check_time_filter_feature_exists(cls, data: Any, time_filter_feature: str) -> None:
+                pass
+
+            @classmethod
+            def _check_time_filter_feature_is_datetime(cls, data: Any, time_filter_feature: str) -> None:
+                pass
+
+            @classmethod
+            def _get_available_columns(cls, data: Any) -> Set[str]:
+                return set()
+
+            @classmethod
+            def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
+                pass
+
+            @classmethod
+            def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
+                return data
+
+            @classmethod
+            def _perform_window_operation(
+                cls,
+                data: Any,
+                window_function: str,
+                window_size: int,
+                time_unit: str,
+                in_features: List[str],
+                time_filter_feature: str | None = None,
+            ) -> Any:
+                return None
+
         options = Options()
-        feature_group = TimeWindowFeatureGroup()
+        feature_group = ConcreteTimeWindowFeatureGroup()
 
         # Test with valid feature names
         input_features = feature_group.input_features(options, FeatureName("temperature__avg_3_day_window"))

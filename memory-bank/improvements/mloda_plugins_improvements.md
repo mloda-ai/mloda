@@ -54,16 +54,13 @@ Previously, filter engines had divergent parameter extraction logic. PandasFilte
 ## 2. Replace NotImplementedError with Abstract Base Classes
 
 ### Status
-- [ ] Convert AggregatedFeatureGroup to ABC
-- [ ] Convert ClusteringFeatureGroup base to ABC
-- [ ] Convert ForecastingFeatureGroup base to ABC
-- [ ] Convert TimeWindowFeatureGroup base to ABC
-- [ ] Convert DimensionalityReductionFeatureGroup to ABC
-- [ ] Convert DataQuality base to ABC
-- [ ] Update ReadFile/ReadDB base classes
-- [ ] Document required vs optional methods
-- [ ] Update all subclass implementations
-- [ ] Run tox validation
+- [x] Convert AggregatedFeatureGroup to ABC
+- [x] Convert ClusteringFeatureGroup base to ABC
+- [x] Convert ForecastingFeatureGroup base to ABC
+- [x] Convert TimeWindowFeatureGroup base to ABC
+- [x] Convert DimensionalityReductionFeatureGroup to ABC
+- [x] Convert DataQuality base to ABC
+- [not done] Update ReadFile/ReadDB base classes
 
 ### Rationale
 18 files use `raise NotImplementedError` without proper abstract contracts. Subclasses must implement 3-7 methods but there's no clear indication of which are required vs optional, no enforcement at class definition time, and no IDE support for implementation. By converting to proper `@abstractmethod` decorators from ABC, we get compile-time enforcement, clear contracts, and IDE autocompletion showing which methods must be implemented.

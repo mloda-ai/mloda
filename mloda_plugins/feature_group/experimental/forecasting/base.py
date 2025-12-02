@@ -4,6 +4,7 @@ Base implementation for forecasting feature groups.
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from typing import Any, List, Optional, Set, Type, Union
 
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
@@ -468,6 +469,7 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
         return algorithm, horizon, time_unit, source_feature_name
 
     @classmethod
+    @abstractmethod
     def _check_time_filter_feature_exists(cls, data: Any, time_filter_feature: str) -> None:
         """
         Check if the time filter feature exists in the data.
@@ -479,9 +481,10 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
         Raises:
             ValueError: If the time filter feature does not exist in the data
         """
-        raise NotImplementedError(f"_check_time_filter_feature_exists not implemented in {cls.__name__}")
+        ...
 
     @classmethod
+    @abstractmethod
     def _check_time_filter_feature_is_datetime(cls, data: Any, time_filter_feature: str) -> None:
         """
         Check if the time filter feature is a datetime column.
@@ -493,9 +496,10 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
         Raises:
             ValueError: If the time filter feature is not a datetime column
         """
-        raise NotImplementedError(f"_check_time_filter_feature_is_datetime not implemented in {cls.__name__}")
+        ...
 
     @classmethod
+    @abstractmethod
     def _get_available_columns(cls, data: Any) -> Set[str]:
         """
         Get the set of available column names from the data.
@@ -506,9 +510,10 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
         Returns:
             Set of column names available in the data
         """
-        raise NotImplementedError(f"_get_available_columns not implemented in {cls.__name__}")
+        ...
 
     @classmethod
+    @abstractmethod
     def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
         """
         Check if the resolved source features exist in the data.
@@ -520,9 +525,10 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
         Raises:
             ValueError: If none of the features exist in the data
         """
-        raise NotImplementedError(f"_check_source_features_exist not implemented in {cls.__name__}")
+        ...
 
     @classmethod
+    @abstractmethod
     def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
         """
         Add the result to the data.
@@ -535,9 +541,10 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
         Returns:
             The updated data
         """
-        raise NotImplementedError(f"_add_result_to_data not implemented in {cls.__name__}")
+        ...
 
     @classmethod
+    @abstractmethod
     def _perform_forecasting(
         cls,
         data: Any,
@@ -567,9 +574,10 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
         Returns:
             A tuple containing (forecast_result, updated_artifact)
         """
-        raise NotImplementedError(f"_perform_forecasting not implemented in {cls.__name__}")
+        ...
 
     @classmethod
+    @abstractmethod
     def _perform_forecasting_with_confidence(
         cls,
         data: Any,
@@ -601,4 +609,4 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
             - upper_bound: The upper confidence bound
             - updated_artifact: The updated artifact (or None)
         """
-        raise NotImplementedError(f"_perform_forecasting_with_confidence not implemented in {cls.__name__}")
+        ...

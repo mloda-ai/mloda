@@ -4,6 +4,7 @@ Base implementation for time window feature groups.
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from typing import Any, List, Optional, Set, Type, Union
 
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
@@ -347,6 +348,7 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
         return data
 
     @classmethod
+    @abstractmethod
     def _check_time_filter_feature_exists(cls, data: Any, time_filter_feature: str) -> None:
         """
         Check if the time filter feature exists in the data.
@@ -358,9 +360,10 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
         Raises:
             ValueError: If the time filter feature does not exist in the data
         """
-        raise NotImplementedError(f"_check_time_filter_feature_exists not implemented in {cls.__name__}")
+        ...
 
     @classmethod
+    @abstractmethod
     def _check_time_filter_feature_is_datetime(cls, data: Any, time_filter_feature: str) -> None:
         """
         Check if the time filter feature is a datetime column.
@@ -372,9 +375,10 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
         Raises:
             ValueError: If the time filter feature is not a datetime column
         """
-        raise NotImplementedError(f"_check_time_filter_feature_is_datetime not implemented in {cls.__name__}")
+        ...
 
     @classmethod
+    @abstractmethod
     def _get_available_columns(cls, data: Any) -> Set[str]:
         """
         Get the set of available column names from the data.
@@ -385,9 +389,10 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
         Returns:
             Set of column names available in the data
         """
-        raise NotImplementedError(f"_get_available_columns not implemented in {cls.__name__}")
+        ...
 
     @classmethod
+    @abstractmethod
     def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
         """
         Check if the resolved source features exist in the data.
@@ -399,9 +404,10 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
         Raises:
             ValueError: If none of the features exist in the data
         """
-        raise NotImplementedError(f"_check_source_features_exist not implemented in {cls.__name__}")
+        ...
 
     @classmethod
+    @abstractmethod
     def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
         """
         Add the result to the data.
@@ -414,9 +420,10 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
         Returns:
             The updated data
         """
-        raise NotImplementedError(f"_add_result_to_data not implemented in {cls.__name__}")
+        ...
 
     @classmethod
+    @abstractmethod
     def _perform_window_operation(
         cls,
         data: Any,
@@ -445,4 +452,4 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
         Returns:
             The result of the window operation
         """
-        raise NotImplementedError(f"_perform_window_operation not implemented in {cls.__name__}")
+        ...

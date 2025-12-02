@@ -1,3 +1,5 @@
+from typing import Any, List, Set
+
 import pandas as pd
 import pytest
 
@@ -15,6 +17,26 @@ from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_
     PandasAggregatedTestDataCreator,
     validate_aggregated_features,
 )
+
+
+class ConcreteAggregatedFeatureGroupForTest(AggregatedFeatureGroup):
+    """Concrete subclass for testing base class methods."""
+
+    @classmethod
+    def _get_available_columns(cls, data: Any) -> Set[str]:
+        return set()
+
+    @classmethod
+    def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
+        pass
+
+    @classmethod
+    def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
+        return data
+
+    @classmethod
+    def _perform_aggregation(cls, data: Any, aggregation_type: str, in_features: List[str]) -> Any:
+        return None
 
 
 @pytest.fixture
@@ -108,7 +130,7 @@ class TestAggregatedFeatureGroup:
     def test_input_features(self) -> None:
         """Test input_features method."""
         options = Options()
-        feature_group = AggregatedFeatureGroup()
+        feature_group = ConcreteAggregatedFeatureGroupForTest()
 
         # Test with valid feature names
         input_features = feature_group.input_features(options, FeatureName("sales__sum_aggr"))

@@ -120,7 +120,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         algorithm: str,
         horizon: int,
         time_unit: str,
-        mloda_source_features: List[str],
+        in_features: List[str],
         time_filter_feature: str,
         model_artifact: Optional[Any] = None,
     ) -> Tuple[pd.Series, Dict[str, Any]]:
@@ -142,7 +142,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
             algorithm: The forecasting algorithm to use
             horizon: The forecast horizon
             time_unit: The time unit for the horizon
-            mloda_source_features: List of resolved source feature names to forecast
+            in_features: List of resolved source feature names to forecast
             time_filter_feature: The name of the time filter feature
             model_artifact: Optional artifact containing a trained model
 
@@ -173,7 +173,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         # For multi-column features, we need to handle each column separately or aggregate them
         # For now, we'll use the first column for single-column behavior
         # In the future, this could be extended to forecast multiple columns or aggregated columns
-        source_feature_name = mloda_source_features[0] if len(mloda_source_features) == 1 else mloda_source_features[0]
+        source_feature_name = in_features[0] if len(in_features) == 1 else in_features[0]
 
         # Create or load the model
         if model_artifact is None:
@@ -314,14 +314,14 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
 
     @classmethod
     def _create_features(
-        cls, df: pd.DataFrame, mloda_source_features: str, time_filter_feature: str, lag_features: List[int]
+        cls, df: pd.DataFrame, in_features: str, time_filter_feature: str, lag_features: List[int]
     ) -> Tuple[pd.DataFrame, pd.Series]:
         """
         Create features for training the forecasting model.
 
         Args:
             df: The pandas DataFrame
-            mloda_source_features: The name of the source feature
+            in_features: The name of the source feature
             time_filter_feature: The name of the time filter feature
             lag_features: List of lag periods to use
 
@@ -332,13 +332,13 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         df_features = df.copy()
 
         # Extract target variable
-        y = df_features[mloda_source_features]
+        y = df_features[in_features]
 
         # Create time-based features
         df_features = cls._create_time_features(df_features, time_filter_feature)
 
         # Create lag features (previous values)
-        df_features = cls._create_lag_features(df_features, mloda_source_features, lags=lag_features)
+        df_features = cls._create_lag_features(df_features, in_features, lags=lag_features)
 
         # Drop rows with NaN values (from lag features)
         df_features = df_features.dropna()
@@ -353,7 +353,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
             )
 
         # Drop the original source feature and time filter feature
-        X = df_features.drop([mloda_source_features, time_filter_feature], axis=1)
+        X = df_features.drop([in_features, time_filter_feature], axis=1)
 
         return X, y
 
@@ -420,7 +420,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         cls,
         df: pd.DataFrame,
         future_timestamps: List[datetime],
-        mloda_source_features: str,
+        in_features: str,
         time_filter_feature: str,
         lag_features: List[int],
     ) -> pd.DataFrame:
@@ -430,7 +430,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         Args:
             df: The pandas DataFrame with historical data
             future_timestamps: List of future timestamps to create features for
-            mloda_source_features: The name of the source feature
+            in_features: The name of the source feature
             time_filter_feature: The name of the time filter feature
             lag_features: List of lag periods to use
 
@@ -446,7 +446,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         # Get the most recent values for lag features
         max_lag = max(lag_features)
         available_values = min(len(df), max_lag)
-        last_values = df[mloda_source_features].iloc[-available_values:].tolist()
+        last_values = df[in_features].iloc[-available_values:].tolist()
         last_values.reverse()  # Reverse to get [t-n, ..., t-2, t-1]
 
         # Pad with the last value if we don't have enough history
@@ -457,9 +457,9 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         for lag in lag_features:
             lag_index = lag - 1  # Convert lag to index (lag 1 = index 0)
             if lag_index < len(last_values):
-                future_df[f"{mloda_source_features}_lag_{lag}"] = last_values[lag_index]
+                future_df[f"{in_features}_lag_{lag}"] = last_values[lag_index]
             else:
-                future_df[f"{mloda_source_features}_lag_{lag}"] = last_values[-1]
+                future_df[f"{in_features}_lag_{lag}"] = last_values[-1]
 
         # Drop the time filter feature
         future_df = future_df.drop([time_filter_feature], axis=1)
@@ -513,7 +513,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         algorithm: str,
         horizon: int,
         time_unit: str,
-        mloda_source_features: List[str],
+        in_features: List[str],
         time_filter_feature: str,
         model_artifact: Optional[Any] = None,
     ) -> Tuple[pd.Series, pd.Series, pd.Series, Dict[str, Any]]:
@@ -531,7 +531,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
             algorithm: The forecasting algorithm to use
             horizon: The forecast horizon
             time_unit: The time unit for the horizon
-            mloda_source_features: List of resolved source feature names to forecast
+            in_features: List of resolved source feature names to forecast
             time_filter_feature: The name of the time filter feature
             model_artifact: Optional artifact containing a trained model
 
@@ -560,7 +560,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         lag_features = cls._determine_lag_features(horizon, time_unit, len(df))
 
         # For multi-column features, use the first column
-        source_feature_name = mloda_source_features[0] if len(mloda_source_features) == 1 else mloda_source_features[0]
+        source_feature_name = in_features[0] if len(in_features) == 1 else in_features[0]
 
         # Create or load the model
         if model_artifact is None:

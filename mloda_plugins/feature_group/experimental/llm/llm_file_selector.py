@@ -194,7 +194,7 @@ class LLMFileSelector(AbstractFeatureGroup):
             options={
                 "model": "gemini-2.0-flash-exp",  # Choose your desired model
                 "prompt": prompt,
-                DefaultOptionKeys.mloda_source_features: frozenset([ConcatenatedFileContent.get_class_name()]),
+                DefaultOptionKeys.in_features: frozenset([ConcatenatedFileContent.get_class_name()]),
                 "target_folder": frozenset(target_folder),
                 "disallowed_files": frozenset(disallowed_files),
                 "file_type": file_type,

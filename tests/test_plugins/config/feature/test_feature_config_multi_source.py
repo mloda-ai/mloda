@@ -65,7 +65,7 @@ def test_load_multiple_sources_as_frozenset() -> None:
     When a feature config includes mloda_sources array (e.g., ["latitude", "longitude"]),
     the loader should:
     1. Convert the array to a frozenset for immutability and performance
-    2. Store the frozenset in options.context[DefaultOptionKeys.mloda_source_features]
+    2. Store the frozenset in options.context[DefaultOptionKeys.in_features]
     3. Preserve any other options in the appropriate location
 
     The use of frozenset ensures:
@@ -75,7 +75,7 @@ def test_load_multiple_sources_as_frozenset() -> None:
 
     Example:
         Input: {"name": "distance", "mloda_sources": ["lat", "lon"]}
-        Output: Feature.options.context[mloda_source_features] = frozenset({"lat", "lon"})
+        Output: Feature.options.context[in_features] = frozenset({"lat", "lon"})
     """
     config_str = """[
         {
@@ -100,8 +100,8 @@ def test_load_multiple_sources_as_frozenset() -> None:
     assert result[0].name.name == "distance_from_center"
 
     # mloda_sources should be converted to frozenset and stored in context
-    # Note: Using DefaultOptionKeys.mloda_source_features (singular)
-    mloda_sources = result[0].options.context.get(DefaultOptionKeys.mloda_source_features)
+    # Note: Using DefaultOptionKeys.in_features (singular)
+    mloda_sources = result[0].options.context.get(DefaultOptionKeys.in_features)
     assert isinstance(mloda_sources, frozenset)
     assert mloda_sources == frozenset({"latitude", "longitude"})
 
@@ -113,7 +113,7 @@ def test_load_multiple_sources_as_frozenset() -> None:
     assert result[1].name.name == "area_calculation"
 
     # mloda_sources should be converted to frozenset and stored in context
-    mloda_sources_2 = result[1].options.context.get(DefaultOptionKeys.mloda_source_features)
+    mloda_sources_2 = result[1].options.context.get(DefaultOptionKeys.in_features)
     assert isinstance(mloda_sources_2, frozenset)
     assert mloda_sources_2 == frozenset({"width", "height"})
 

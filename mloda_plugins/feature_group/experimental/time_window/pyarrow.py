@@ -86,7 +86,7 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         window_function: str,
         window_size: int,
         time_unit: str,
-        mloda_source_features: List[str],
+        in_features: List[str],
         time_filter_feature: Optional[str] = None,
     ) -> pa.Array:
         """
@@ -101,7 +101,7 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
             window_function: The type of window function to perform
             window_size: The size of the window
             time_unit: The time unit for the window
-            mloda_source_features: List of source feature names (may be single or multiple columns)
+            in_features: List of source feature names (may be single or multiple columns)
             time_filter_feature: The name of the time filter feature to use for time-based operations.
                                 If None, uses the value from get_time_filter_feature().
 
@@ -116,7 +116,7 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         time_column = data.column(time_filter_feature)
 
         # Get the source columns
-        source_columns = [data.column(name) for name in mloda_source_features]
+        source_columns = [data.column(name) for name in in_features]
 
         # Sort the data by time
         # First create indices sorted by time
@@ -173,7 +173,7 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
                         raise ValueError(f"Unsupported window function: {window_function}")
 
                 # If multi-column, aggregate across columns
-                if len(mloda_source_features) > 1:
+                if len(in_features) > 1:
                     import numpy as np
 
                     column_array = np.array(column_results)

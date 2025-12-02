@@ -249,7 +249,7 @@ class TestEncodingFeatureGroupIntegration:
             Options(
                 context={
                     EncodingFeatureGroup.ENCODER_TYPE: "onehot",
-                    DefaultOptionKeys.mloda_source_features: "category",
+                    DefaultOptionKeys.in_features: "category",
                 }
             ),
         )
@@ -259,7 +259,7 @@ class TestEncodingFeatureGroupIntegration:
             Options(
                 context={
                     EncodingFeatureGroup.ENCODER_TYPE: "onehot",
-                    DefaultOptionKeys.mloda_source_features: "category",
+                    DefaultOptionKeys.in_features: "category",
                 }
             ),
         )

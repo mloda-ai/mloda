@@ -36,7 +36,7 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
 
     ### 1. String-Based Creation
 
-    Features follow the naming pattern: `{mloda_source_features}__{algorithm}_{dimension}d`
+    Features follow the naming pattern: `{in_features}__{algorithm}_{dimension}d`
 
     Examples:
     ```python
@@ -58,7 +58,7 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
             context={
                 DimensionalityReductionFeatureGroup.ALGORITHM: "pca",
                 DimensionalityReductionFeatureGroup.DIMENSION: 2,
-                DefaultOptionKeys.mloda_source_features: "customer_metrics",
+                DefaultOptionKeys.in_features: "customer_metrics",
             }
         )
     )
@@ -76,7 +76,7 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
     These parameters don't affect Feature Group resolution/splitting:
     - `algorithm`: The dimensionality reduction algorithm to use
     - `dimension`: Target dimension for the reduction
-    - `mloda_source_features`: Source features to reduce
+    - `in_features`: Source features to reduce
 
     ### Group Parameters
     Currently none for DimensionalityReductionFeatureGroup. Parameters that affect Feature Group
@@ -126,7 +126,7 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
             and str(value).isdigit()
             and int(value) > 0,
         },
-        DefaultOptionKeys.mloda_source_features: {
+        DefaultOptionKeys.in_features: {
             "explanation": "Source features to use for dimensionality reduction",
             DefaultOptionKeys.mloda_context: True,
             DefaultOptionKeys.mloda_strict_validation: False,
@@ -206,7 +206,7 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
             return source_features
 
         # Fall back to configuration-based approach
-        source_featurez = options.get_source_features()
+        source_featurez = options.get_in_features()
         if len(source_featurez) != 1:
             raise ValueError(
                 f"Expected exactly one source feature, but found {len(source_featurez)}: {source_featurez}"
@@ -241,7 +241,7 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
         if len(parts) != 2 or not parts[1].endswith("d"):
             raise ValueError(
                 f"Invalid dimensionality reduction feature name format: {feature_name}. "
-                f"Expected format: {{mloda_source_features}}__{{algorithm}}_{{dimension}}d"
+                f"Expected format: {{in_features}}__{{algorithm}}_{{dimension}}d"
             )
 
         algorithm = parts[0]
@@ -325,7 +325,7 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
             return algorithm, dimension, source_features, feature.options
 
         # Fall back to configuration-based approach
-        source_features_set = feature.options.get_source_features()
+        source_features_set = feature.options.get_in_features()
         source_feature = next(iter(source_features_set))
         source_features = [source_feature.get_name()]
 

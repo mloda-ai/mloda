@@ -28,7 +28,7 @@ class ScalingFeatureGroup(AbstractFeatureGroup):
     ## Feature Naming Convention
 
     Scaling features follow this naming pattern:
-    `{mloda_source_features}__{scaler_type}_scaled`
+    `{in_features}__{scaler_type}_scaled`
 
     The source feature comes first, followed by the scaling operation.
     Note the double underscore separating the source feature from the scaler type.
@@ -58,7 +58,7 @@ class ScalingFeatureGroup(AbstractFeatureGroup):
         "PlaceHolder",  # Placeholder name, will be replaced
         Options({
             ScalingFeatureGroup.SCALER_TYPE: "standard",
-            DefaultOptionKeys.mloda_source_features: "income"
+            DefaultOptionKeys.in_features: "income"
         })
     )
 
@@ -89,7 +89,7 @@ class ScalingFeatureGroup(AbstractFeatureGroup):
             DefaultOptionKeys.mloda_context: True,  # Context parameter
             DefaultOptionKeys.mloda_strict_validation: True,  # Enable strict validation
         },
-        DefaultOptionKeys.mloda_source_features: {
+        DefaultOptionKeys.in_features: {
             "explanation": "Source feature to scale",
             DefaultOptionKeys.mloda_context: True,  # Context parameter
             DefaultOptionKeys.mloda_strict_validation: False,  # Flexible validation
@@ -110,7 +110,7 @@ class ScalingFeatureGroup(AbstractFeatureGroup):
             return {Feature(source_feature)}
 
         # Fall back to configuration-based approach
-        source_features = options.get_source_features()
+        source_features = options.get_in_features()
         if len(source_features) != 1:
             raise ValueError(
                 f"Expected exactly one source feature, but found {len(source_features)}: {source_features}"
@@ -225,7 +225,7 @@ class ScalingFeatureGroup(AbstractFeatureGroup):
             return scaler_type, source_feature_name
 
         # Fall back to configuration-based approach
-        source_features = feature.options.get_source_features()
+        source_features = feature.options.get_in_features()
         source_feature = next(iter(source_features))
         source_feature_name = source_feature.get_name()
 

@@ -58,7 +58,7 @@ Test that your feature group correctly parses features from configuration option
 # Test creating features from options
 options = Options({
     "aggregation_type": "sum",
-    "mloda_source_features": "sales"
+    "in_features": "sales"
 })
 feature_name = parser_config.parse_from_options(options)
 assert feature_name == "sales__sum_aggr"

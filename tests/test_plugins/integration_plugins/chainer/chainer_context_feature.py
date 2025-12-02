@@ -42,7 +42,7 @@ class ChainedContextFeatureGroupTest(AbstractFeatureGroup):
             DefaultOptionKeys.mloda_context: True,  # Mark as context parameter
             DefaultOptionKeys.mloda_strict_validation: False,  # Disable strict validation for property3
         },
-        DefaultOptionKeys.mloda_source_features: {
+        DefaultOptionKeys.in_features: {
             "explanation": "explanation",
             DefaultOptionKeys.mloda_context: True,  # Mark as context parameter
             # No strict validation for source feature -> defaults to flexible
@@ -80,7 +80,7 @@ class ChainedContextFeatureGroupTest(AbstractFeatureGroup):
                     group={
                         "property2": "value1",  # default group parameter
                         DefaultOptionKeys.mloda_feature_chainer_parser_key: frozenset(
-                            ["ident", DefaultOptionKeys.mloda_source_features.value, "property2", "property3"]
+                            ["ident", DefaultOptionKeys.in_features.value, "property2", "property3"]
                         ),
                     },
                     context={
@@ -93,11 +93,11 @@ class ChainedContextFeatureGroupTest(AbstractFeatureGroup):
             return features
 
         # Configuration-based approach
-        source_features = options.get_source_features()
+        source_features = options.get_in_features()
         for source_feature in source_features:
             source_feature.options.add(
                 DefaultOptionKeys.mloda_feature_chainer_parser_key,
-                frozenset(["ident", DefaultOptionKeys.mloda_source_features.value, "property2", "property3"]),
+                frozenset(["ident", DefaultOptionKeys.in_features.value, "property2", "property3"]),
             )
             features.add(source_feature)
 
@@ -116,7 +116,7 @@ class ChainedContextFeatureGroupTest(AbstractFeatureGroup):
 
         # Try config-based approach first
         try:
-            source_features = feature.options.get_source_features()
+            source_features = feature.options.get_in_features()
             source_feature = next(iter(source_features))
             source_feature_name: str | None = source_feature.get_name()
 

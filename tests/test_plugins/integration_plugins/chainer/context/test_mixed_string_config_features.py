@@ -35,7 +35,7 @@ class TestMixedStringConfigFeatures:
                     "property2": "value2",  # Different group parameter from string feature
                 },
                 context={
-                    DefaultOptionKeys.mloda_source_features: string_feature_name,
+                    DefaultOptionKeys.in_features: string_feature_name,
                     "ident": "identifier2",  # Context parameter
                     "property3": "opt_val1",  # Optional context parameter
                 },
@@ -50,7 +50,7 @@ class TestMixedStringConfigFeatures:
                     "property2": "value1",  # Same group parameter as string feature
                 },
                 context={
-                    DefaultOptionKeys.mloda_source_features: config_feature1,
+                    DefaultOptionKeys.in_features: config_feature1,
                     "ident": "identifier1",  # Context parameter
                     # property3 omitted (optional)
                 },
@@ -65,7 +65,7 @@ class TestMixedStringConfigFeatures:
                     "property2": "value1",  # Same group parameter as config_feature2
                 },
                 context={
-                    DefaultOptionKeys.mloda_source_features: config_feature1,
+                    DefaultOptionKeys.in_features: config_feature1,
                     "ident": "identifier1",  # Same context parameter as config_feature2
                     "property3": "opt_val2",  # Different optional context parameter
                 },
@@ -119,7 +119,7 @@ class TestMixedStringConfigFeatures:
                     "property2": "value2",
                 },
                 context={
-                    DefaultOptionKeys.mloda_source_features: string_source,
+                    DefaultOptionKeys.in_features: string_source,
                     "ident": "identifier2",
                     "property3": "opt_val1",
                 },
@@ -155,7 +155,7 @@ class TestMixedStringConfigFeatures:
                     "property2": "value1",  # Should match string feature's default
                 },
                 context={
-                    DefaultOptionKeys.mloda_source_features: "Sales",
+                    DefaultOptionKeys.in_features: "Sales",
                     "ident": "identifier1",  # Same as string feature
                     "property3": "different_context",  # Different context (shouldn't affect grouping)
                 },
@@ -170,7 +170,7 @@ class TestMixedStringConfigFeatures:
                     "property2": "value2",  # Different group parameter
                 },
                 context={
-                    DefaultOptionKeys.mloda_source_features: "Sales",
+                    DefaultOptionKeys.in_features: "Sales",
                     "ident": "identifier1",  # Same context as others
                 },
             ),

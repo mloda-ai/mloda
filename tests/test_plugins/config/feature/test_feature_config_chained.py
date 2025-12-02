@@ -60,12 +60,12 @@ def test_load_chained_feature_as_string() -> None:
     """Test loading a chained feature configuration into a Feature object.
 
     When loading a chained feature config (e.g., "age__scale" with mloda_sources=["age"]),
-    the loader should create a Feature object with mloda_source_features added to the
+    the loader should create a Feature object with in_features added to the
     options context, enabling the mloda runtime to properly resolve the dependency.
 
     This test verifies that:
     1. The loader processes FeatureConfig.mloda_sources field
-    2. The resulting Feature has mloda_source_features in its options
+    2. The resulting Feature has in_features in its options
     3. The mloda_sources value is correctly passed as a frozenset
     """
     from mloda_core.abstract_plugins.components.feature import Feature
@@ -88,9 +88,9 @@ def test_load_chained_feature_as_string() -> None:
     feature = result[0]
     assert feature.name.name == "age__scale"
 
-    # The mloda_sources should be added to options as mloda_source_features
+    # The mloda_sources should be added to options as in_features
     # It should be in the context section, not group, as a frozenset
-    mloda_sources_value = feature.options.context.get(DefaultOptionKeys.mloda_source_features)
+    mloda_sources_value = feature.options.context.get(DefaultOptionKeys.in_features)
     assert isinstance(mloda_sources_value, frozenset)
     assert mloda_sources_value == frozenset({"age"})
 
@@ -109,7 +109,7 @@ def test_load_chained_feature_from_config() -> None:
 
     The test verifies that:
     - All feature types are loaded correctly
-    - Chained features have mloda_source_features in options.context
+    - Chained features have in_features in options.context
     - Regular features preserve their options in options.group
     - Simple string features remain as strings
     """
@@ -141,13 +141,13 @@ def test_load_chained_feature_from_config() -> None:
     assert result[1].name.name == "weight"
     assert result[1].options.group.get("unit") == "kg"
     assert result[1].options.group.get("precision") == 2
-    # Should NOT have mloda_source_features
-    assert DefaultOptionKeys.mloda_source_features not in result[1].options.context
+    # Should NOT have in_features
+    assert DefaultOptionKeys.in_features not in result[1].options.context
 
     # Third feature should be a chained Feature with mloda_sources in context as frozenset
     assert isinstance(result[2], Feature)
     assert result[2].name.name == "age__scale"
-    mloda_sources_value = result[2].options.context.get(DefaultOptionKeys.mloda_source_features)
+    mloda_sources_value = result[2].options.context.get(DefaultOptionKeys.in_features)
     assert isinstance(mloda_sources_value, frozenset)
     assert mloda_sources_value == frozenset({"age"})
     # Original options should be preserved in group

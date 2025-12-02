@@ -68,7 +68,7 @@ class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
         return data.with_columns(result.alias(feature_name))
 
     @classmethod
-    def _perform_aggregation(cls, data: Any, aggregation_type: str, mloda_source_features: List[str]) -> Any:
+    def _perform_aggregation(cls, data: Any, aggregation_type: str, in_features: List[str]) -> Any:
         """
         Perform the aggregation using Polars lazy expressions.
 
@@ -79,7 +79,7 @@ class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
         Args:
             data: The Polars LazyFrame
             aggregation_type: The type of aggregation to perform
-            mloda_source_features: List of source feature names (may be single or multiple columns)
+            in_features: List of source feature names (may be single or multiple columns)
 
         Returns:
             A Polars expression representing the aggregation
@@ -89,9 +89,9 @@ class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
 
         # For multi-column features, use horizontal aggregation (across columns)
         # For single-column features, use vertical aggregation (within column)
-        if len(mloda_source_features) > 1:
+        if len(in_features) > 1:
             # Multi-column: aggregate across columns horizontally
-            columns = [pl.col(name) for name in mloda_source_features]
+            columns = [pl.col(name) for name in in_features]
             if aggregation_type == "sum":
                 return pl.sum_horizontal(*columns)
             elif aggregation_type == "min":
@@ -119,7 +119,7 @@ class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
                 raise ValueError(f"Unsupported aggregation type: {aggregation_type}")
         else:
             # Single column: vertical aggregation
-            column = pl.col(mloda_source_features[0])
+            column = pl.col(in_features[0])
             if aggregation_type == "sum":
                 return column.sum()
             elif aggregation_type == "min":

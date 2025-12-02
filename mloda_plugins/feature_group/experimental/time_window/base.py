@@ -30,9 +30,9 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
     ## Feature Naming Convention
 
     Time window features follow this naming pattern:
-    `{mloda_source_features}__{window_function}_{window_size}_{time_unit}_window`
+    `{in_features}__{window_function}_{window_size}_{time_unit}_window`
 
-    The source feature (mloda_source_features) comes first, followed by the window operation.
+    The source feature (in_features) comes first, followed by the window operation.
     Note the double underscore separating the source feature from the operation.
 
     Examples:
@@ -140,7 +140,7 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
             DefaultOptionKeys.mloda_strict_validation: True,  # Enable strict validation
         },
         # Source feature parameter (context parameter)
-        DefaultOptionKeys.mloda_source_features: {
+        DefaultOptionKeys.in_features: {
             "explanation": "Source feature to apply time window operation to",
             DefaultOptionKeys.mloda_context: True,  # Mark as context parameter
             DefaultOptionKeys.mloda_strict_validation: False,  # Flexible validation
@@ -163,7 +163,7 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
             return {Feature(source_feature), time_filter_feature}
 
         # Fall back to configuration-based approach
-        source_features = options.get_source_features()
+        source_features = options.get_in_features()
         if len(source_features) != 1:
             raise ValueError(
                 f"Expected exactly one source feature, but found {len(source_features)}: {source_features}"
@@ -201,7 +201,7 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
         if len(parts) != 4 or parts[3] != "window":
             raise ValueError(
                 f"Invalid time window feature name format: {feature_name}. "
-                f"Expected format: {{mloda_source_features}}__{{window_function}}_{{window_size}}_{{time_unit}}_window"
+                f"Expected format: {{in_features}}__{{window_function}}_{{window_size}}_{{time_unit}}_window"
             )
 
         window_function, window_size_str, time_unit = parts[0], parts[1], parts[2]
@@ -293,11 +293,9 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
             feature_name = feature.get_name()
 
             # Try string-based parsing first (for legacy features)
-            parsed_params, mloda_source_features = FeatureChainParser.parse_feature_name(
-                feature_name, [cls.PREFIX_PATTERN]
-            )
+            parsed_params, in_features = FeatureChainParser.parse_feature_name(feature_name, [cls.PREFIX_PATTERN])
 
-            if mloda_source_features is not None:
+            if in_features is not None:
                 # String-based approach succeeded
                 window_function, window_size, time_unit = cls.parse_time_window_prefix(feature_name)
             else:
@@ -314,13 +312,13 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
                     )
 
                 # Configuration-based approach
-                source_features = feature.options.get_source_features()
+                source_features = feature.options.get_in_features()
                 if len(source_features) != 1:
                     raise ValueError(
                         f"Expected exactly one source feature, but found {len(source_features)}: {source_features}"
                     )
                 source_feature = next(iter(source_features))
-                mloda_source_features = source_feature.get_name()
+                in_features = source_feature.get_name()
 
                 # Extract parameters from options
                 window_function = feature.options.get(cls.WINDOW_FUNCTION)
@@ -332,10 +330,10 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
                     window_size = int(window_size)
 
             # Resolve multi-column features automatically
-            # If mloda_source_features is "onehot_encoded__product", this discovers
+            # If in_features is "onehot_encoded__product", this discovers
             # ["onehot_encoded__product~0", "onehot_encoded__product~1", ...]
             available_columns = cls._get_available_columns(data)
-            resolved_columns = cls.resolve_multi_column_feature(mloda_source_features, available_columns)
+            resolved_columns = cls.resolve_multi_column_feature(in_features, available_columns)
 
             # Check that resolved columns exist
             cls._check_source_features_exist(data, resolved_columns)
@@ -425,7 +423,7 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
         window_function: str,
         window_size: int,
         time_unit: str,
-        mloda_source_features: List[str],
+        in_features: List[str],
         time_filter_feature: Optional[str] = None,
     ) -> Any:
         """
@@ -440,7 +438,7 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
             window_function: The type of window function to perform
             window_size: The size of the window
             time_unit: The time unit for the window
-            mloda_source_features: List of resolved source feature names to perform window operation on
+            in_features: List of resolved source feature names to perform window operation on
             time_filter_feature: The name of the time filter feature to use for time-based operations.
                                 If None, uses the value from get_time_filter_feature().
 

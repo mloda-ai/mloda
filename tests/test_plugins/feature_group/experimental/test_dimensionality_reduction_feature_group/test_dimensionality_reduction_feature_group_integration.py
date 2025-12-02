@@ -140,7 +140,7 @@ class TestDimensionalityReductionFeatureGroupIntegration:
                 {
                     DimensionalityReductionFeatureGroup.ALGORITHM: "pca",
                     DimensionalityReductionFeatureGroup.DIMENSION: 2,
-                    DefaultOptionKeys.mloda_source_features: "feature0,feature1,feature2",
+                    DefaultOptionKeys.in_features: "feature0,feature1,feature2",
                 }
             ),
         )
@@ -151,7 +151,7 @@ class TestDimensionalityReductionFeatureGroupIntegration:
                 {
                     DimensionalityReductionFeatureGroup.ALGORITHM: "tsne",
                     DimensionalityReductionFeatureGroup.DIMENSION: 2,
-                    DefaultOptionKeys.mloda_source_features: "feature0,feature1,feature2",
+                    DefaultOptionKeys.in_features: "feature0,feature1,feature2",
                 }
             ),
         )

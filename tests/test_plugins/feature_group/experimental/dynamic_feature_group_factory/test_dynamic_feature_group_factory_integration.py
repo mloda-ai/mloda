@@ -91,7 +91,7 @@ class TestDynamicFeatureGroupFactoryIntegration:
             Feature(
                 name="AggregatedFeature",
                 options={
-                    DefaultOptionKeys.mloda_source_features: frozenset(
+                    DefaultOptionKeys.in_features: frozenset(
                         [
                             (
                                 "source_feature_1",

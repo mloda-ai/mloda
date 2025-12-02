@@ -14,7 +14,7 @@ from mloda_plugins.feature_group.experimental.default_options_key import Default
 
 
 def process_nested_features(options: Dict[str, Any]) -> Dict[str, Any]:
-    """Recursively convert nested mloda_source_features dicts to Feature objects.
+    """Recursively convert nested in_features dicts to Feature objects.
 
     Args:
         options: Dictionary of options that may contain nested feature definitions
@@ -24,11 +24,11 @@ def process_nested_features(options: Dict[str, Any]) -> Dict[str, Any]:
     """
     processed: Dict[str, Any] = {}
     for key, value in options.items():
-        if key == "mloda_source_features" and isinstance(value, dict):
+        if key == "in_features" and isinstance(value, dict):
             # This is a nested feature definition - convert it to a Feature object
             feature_name = value.get("name")
             if not feature_name:
-                raise ValueError(f"Nested mloda_source_features must have a 'name' field: {value}")
+                raise ValueError(f"Nested in_features must have a 'name' field: {value}")
 
             # Recursively process nested options
             nested_options = value.get("options", {})
@@ -39,17 +39,15 @@ def process_nested_features(options: Dict[str, Any]) -> Dict[str, Any]:
             if mloda_sources:
                 if isinstance(mloda_sources, list):
                     # For list, convert each to string (single sources) or keep as-is
-                    processed_nested_options["mloda_source_features"] = (
+                    processed_nested_options["in_features"] = (
                         mloda_sources if len(mloda_sources) > 1 else mloda_sources[0]
                     )
                 elif isinstance(mloda_sources, dict):
                     # Recursively create Feature for mloda_sources
-                    mloda_source_features = process_nested_features({"mloda_source_features": mloda_sources})[
-                        "mloda_source_features"
-                    ]
-                    processed_nested_options["mloda_source_features"] = mloda_source_features
+                    in_features = process_nested_features({"in_features": mloda_sources})["in_features"]
+                    processed_nested_options["in_features"] = in_features
                 else:
-                    processed_nested_options["mloda_source_features"] = mloda_sources
+                    processed_nested_options["in_features"] = mloda_sources
 
             # Create the Feature object
             processed[key] = Feature(name=feature_name, options=processed_nested_options)
@@ -104,7 +102,7 @@ def load_features_from_config(config_str: str, format: str = "json") -> List[Uni
                 # Handle mloda_sources if present
                 if item.mloda_sources:
                     # Always convert to frozenset for consistency
-                    context[DefaultOptionKeys.mloda_source_features] = frozenset(item.mloda_sources)
+                    context[DefaultOptionKeys.in_features] = frozenset(item.mloda_sources)
                 options = Options(group=item.group_options or {}, context=context)
                 feature = Feature(name=feature_name, options=options)
                 features.append(feature)
@@ -115,9 +113,7 @@ def load_features_from_config(config_str: str, format: str = "json") -> List[Uni
                 processed_options = process_nested_features(item.options)
                 # Always convert to frozenset for consistency (even single items)
                 source_value = frozenset(item.mloda_sources)
-                options = Options(
-                    group=processed_options, context={DefaultOptionKeys.mloda_source_features: source_value}
-                )
+                options = Options(group=processed_options, context={DefaultOptionKeys.in_features: source_value})
                 feature = Feature(name=feature_name, options=options)
                 features.append(feature)
                 feature_registry[feature_name] = feature
@@ -133,16 +129,14 @@ def load_features_from_config(config_str: str, format: str = "json") -> List[Uni
     # Pass 2: Resolve @feature_name references to Feature objects
     for feat in features:
         if isinstance(feat, Feature):
-            mloda_source = feat.options.context.get(DefaultOptionKeys.mloda_source_features)
+            mloda_source = feat.options.context.get(DefaultOptionKeys.in_features)
             if mloda_source:
                 # Handle both single string and frozenset of strings
                 if isinstance(mloda_source, str) and mloda_source.startswith("@"):
                     # Single reference string
                     referenced_name = mloda_source[1:]
                     if referenced_name in feature_registry:
-                        feat.options.context[DefaultOptionKeys.mloda_source_features] = feature_registry[
-                            referenced_name
-                        ]
+                        feat.options.context[DefaultOptionKeys.in_features] = feature_registry[referenced_name]
                     else:
                         raise ValueError(f"Feature reference '@{referenced_name}' not found in configuration")
                 elif isinstance(mloda_source, frozenset):
@@ -159,6 +153,6 @@ def load_features_from_config(config_str: str, format: str = "json") -> List[Uni
                             resolved_sources.append(source)
                     # Only replace if we actually resolved any references
                     if any(isinstance(s, str) and s.startswith("@") for s in mloda_source):
-                        feat.options.context[DefaultOptionKeys.mloda_source_features] = frozenset(resolved_sources)
+                        feat.options.context[DefaultOptionKeys.in_features] = frozenset(resolved_sources)
 
     return features

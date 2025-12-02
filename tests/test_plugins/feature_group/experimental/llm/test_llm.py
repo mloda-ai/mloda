@@ -87,7 +87,7 @@ class TestPlugInLLM:
                         "model": _model,
                         "prompt": """Does this file contain a directory structure and a list of installed packages? 
                                      Answer with yes if both are present, otherwise answer with no.""",
-                        DefaultOptionKeys.mloda_source_features: frozenset([]),
+                        DefaultOptionKeys.in_features: frozenset([]),
                         "project_meta_data": True,
                     },
                 )
@@ -123,7 +123,7 @@ class TestPlugInLLM:
                     options={
                         "model": "gemini-1.5-flash-8b",
                         "prompt": "Does this file contain a directory structure and a list of installed packages and Strawberries? Answer with yes or no.",
-                        DefaultOptionKeys.mloda_source_features: frozenset(["InputData1"]),
+                        DefaultOptionKeys.in_features: frozenset(["InputData1"]),
                         "project_meta_data": True,
                     },
                     link=link,
@@ -171,7 +171,7 @@ class TestGeminiLLMFiles:
                     options={
                         "model": "gemini-2.0-flash-exp",
                         "prompt": prompt,
-                        DefaultOptionKeys.mloda_source_features: frozenset([ConcatenatedFileContent.get_class_name()]),
+                        DefaultOptionKeys.in_features: frozenset([ConcatenatedFileContent.get_class_name()]),
                         "target_folder": frozenset(
                             [
                                 os.getcwd() + "/mloda_plugins",
@@ -235,7 +235,7 @@ class TestGeminiLLMFiles:
                         "model": _model,
                         "prompt": prompt,
                         "tools": tool_collection,
-                        DefaultOptionKeys.mloda_source_features: frozenset([ConcatenatedFileContent.get_class_name()]),
+                        DefaultOptionKeys.in_features: frozenset([ConcatenatedFileContent.get_class_name()]),
                         "target_folder": frozenset(
                             [
                                 os.getcwd() + "/tests/test_core/test_index",

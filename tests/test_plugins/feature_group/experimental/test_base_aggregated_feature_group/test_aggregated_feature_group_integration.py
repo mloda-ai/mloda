@@ -43,7 +43,7 @@ class TestAggregatedFeatureGroupIntegration:
             Options(
                 context={
                     AggregatedFeatureGroup.AGGREGATION_TYPE: "sum",
-                    DefaultOptionKeys.mloda_source_features: "Sales",
+                    DefaultOptionKeys.in_features: "Sales",
                 }
             ),
         )
@@ -53,7 +53,7 @@ class TestAggregatedFeatureGroupIntegration:
             Options(
                 context={
                     AggregatedFeatureGroup.AGGREGATION_TYPE: "avg",
-                    DefaultOptionKeys.mloda_source_features: "Revenue",
+                    DefaultOptionKeys.in_features: "Revenue",
                 }
             ),
         )

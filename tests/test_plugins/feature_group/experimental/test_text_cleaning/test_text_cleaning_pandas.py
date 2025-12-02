@@ -214,7 +214,7 @@ class TestPandasTextCleaningFeatureGroup:
             Options(
                 context={
                     TextCleaningFeatureGroup.CLEANING_OPERATIONS: ("normalize", "remove_punctuation"),
-                    DefaultOptionKeys.mloda_source_features: "text",
+                    DefaultOptionKeys.in_features: "text",
                 }
             ),
         )

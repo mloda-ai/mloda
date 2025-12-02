@@ -27,7 +27,7 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
     ## Feature Naming Convention
 
     Clustering features follow this naming pattern:
-    `{mloda_source_features}__cluster_{algorithm}_{k_value}`
+    `{in_features}__cluster_{algorithm}_{k_value}`
 
     The source features come first, followed by the clustering operation.
     Note the double underscore separating the source features from the operation.
@@ -52,7 +52,7 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
             context={
                 ClusteringFeatureGroup.ALGORITHM: "kmeans",
                 ClusteringFeatureGroup.K_VALUE: 5,
-                DefaultOptionKeys.mloda_source_features: "customer_behavior",
+                DefaultOptionKeys.in_features: "customer_behavior",
             }
         )
     )
@@ -66,7 +66,7 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
     These parameters don't affect Feature Group resolution/splitting:
     - `algorithm`: The clustering algorithm to use
     - `k_value`: The number of clusters or 'auto' for automatic determination
-    - `mloda_source_features`: The source features to use for clustering
+    - `in_features`: The source features to use for clustering
 
     ### Group Parameters
     Currently none for ClusteringFeatureGroup. Parameters that affect Feature Group
@@ -118,7 +118,7 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
             DefaultOptionKeys.mloda_validation_function: lambda value: value == "auto"
             or (isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0),
         },
-        DefaultOptionKeys.mloda_source_features: {
+        DefaultOptionKeys.in_features: {
             "explanation": "Source features to use for clustering",
             DefaultOptionKeys.mloda_context: True,  # Mark as context parameter
             DefaultOptionKeys.mloda_strict_validation: False,  # Flexible validation
@@ -147,7 +147,7 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
             return source_features
 
         # configuration based
-        source_features_frozen = options.get_source_features()
+        source_features_frozen = options.get_in_features()
         if len(source_features_frozen) < 1:
             raise ValueError(f"Feature '{feature_name}' requires at least one source feature, but none were provided.")
         return set(source_features_frozen)
@@ -180,7 +180,7 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
         if len(parts) != 3 or parts[0] != "cluster":
             raise ValueError(
                 f"Invalid clustering feature name format: {feature_name}. "
-                f"Expected format: {{mloda_source_features}}__cluster_{{algorithm}}_{{k_value}}"
+                f"Expected format: {{in_features}}__cluster_{{algorithm}}_{{k_value}}"
             )
 
         algorithm, k_value = parts[1], parts[2]
@@ -281,7 +281,7 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
             return algorithm, k_value, source_features
 
         # configuration based
-        source_features_frozen = feature.options.get_source_features()
+        source_features_frozen = feature.options.get_in_features()
         source_features = [source_feature.get_name() for source_feature in source_features_frozen]
 
         algorithm = feature.options.get(cls.ALGORITHM)

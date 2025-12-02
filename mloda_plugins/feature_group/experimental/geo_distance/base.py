@@ -49,7 +49,7 @@ class GeoDistanceFeatureGroup(AbstractFeatureGroup):
         options=Options(
             context={
                 GeoDistanceFeatureGroup.DISTANCE_TYPE: "haversine",
-                DefaultOptionKeys.mloda_source_features: ["customer_location", "store_location"],
+                DefaultOptionKeys.in_features: ["customer_location", "store_location"],
             }
         )
     )
@@ -60,7 +60,7 @@ class GeoDistanceFeatureGroup(AbstractFeatureGroup):
     ### Context Parameters (Default)
     These parameters don't affect Feature Group resolution/splitting:
     - `distance_type`: The type of distance calculation (haversine, euclidean, manhattan)
-    - `mloda_source_features`: The source features (list of exactly 2 point features)
+    - `in_features`: The source features (list of exactly 2 point features)
 
     ### Group Parameters
     Currently none for GeoDistanceFeatureGroup. Parameters that affect Feature Group
@@ -99,7 +99,7 @@ class GeoDistanceFeatureGroup(AbstractFeatureGroup):
             DefaultOptionKeys.mloda_context: True,
             DefaultOptionKeys.mloda_strict_validation: True,
         },
-        DefaultOptionKeys.mloda_source_features: {
+        DefaultOptionKeys.in_features: {
             "explanation": "Source features (exactly 2 point features required)",
             DefaultOptionKeys.mloda_context: True,
             DefaultOptionKeys.mloda_strict_validation: True,
@@ -131,7 +131,7 @@ class GeoDistanceFeatureGroup(AbstractFeatureGroup):
             pass
 
         # Fall back to configuration-based approach
-        source_features = options.get_source_features()
+        source_features = options.get_in_features()
         if len(source_features) != 2:
             raise ValueError(
                 f"Expected exactly 2 source features for geo distance, got {len(source_features)}: {source_features}"
@@ -246,7 +246,7 @@ class GeoDistanceFeatureGroup(AbstractFeatureGroup):
             return distance_type, point1_feature, point2_feature
 
         # Fall back to configuration-based approach
-        source_features = feature.options.get_source_features()
+        source_features = feature.options.get_in_features()
         if len(source_features) != 2:
             raise ValueError(
                 f"Expected exactly 2 source features for geo distance, got {len(source_features)}: {source_features}"

@@ -76,7 +76,7 @@ class TestTextCleaningFeatureChainParser:
         options = Options(
             context={
                 TextCleaningFeatureGroup.CLEANING_OPERATIONS: ("normalize", "remove_stopwords"),
-                DefaultOptionKeys.mloda_source_features: "review",
+                DefaultOptionKeys.in_features: "review",
             }
         )
 
@@ -88,7 +88,7 @@ class TestTextCleaningFeatureChainParser:
             group={"some_group_param": "value"},
             context={
                 TextCleaningFeatureGroup.CLEANING_OPERATIONS: ("normalize", "remove_punctuation"),
-                DefaultOptionKeys.mloda_source_features: "description",
+                DefaultOptionKeys.in_features: "description",
             },
         )
         assert TextCleaningFeatureGroup.match_feature_group_criteria("placeholder", options_with_group)
@@ -99,7 +99,7 @@ class TestTextCleaningFeatureChainParser:
         options = Options(
             context={
                 TextCleaningFeatureGroup.CLEANING_OPERATIONS: ("normalize", "remove_stopwords"),
-                DefaultOptionKeys.mloda_source_features: "review",
+                DefaultOptionKeys.in_features: "review",
             }
         )
 

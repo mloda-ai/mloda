@@ -15,7 +15,7 @@ class DefaultOptionKeys(str, Enum):
 
     """
 
-    mloda_source_features = "mloda_source_features"
+    in_features = "in_features"
     mloda_source_feature_group = "mloda_source_feature_group"
     mloda_feature_chainer_parser_key = "mloda_feature_chainer_parser_key"
     reference_time = "time_filter"

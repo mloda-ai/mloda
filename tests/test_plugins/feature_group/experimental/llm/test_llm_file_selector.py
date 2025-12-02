@@ -88,7 +88,7 @@ def test_llm_file_selector() -> None:
         options={
             "model": "gemini-2.0-flash-exp",  # Choose your desired model
             "prompt": prompt,
-            DefaultOptionKeys.mloda_source_features: frozenset([ConcatenatedFileContent.get_class_name()]),
+            DefaultOptionKeys.in_features: frozenset([ConcatenatedFileContent.get_class_name()]),
             "file_paths": frozenset(files),
             "project_meta_data": True,
         },

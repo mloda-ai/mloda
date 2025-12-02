@@ -48,7 +48,7 @@ class PandasAggregatedFeatureGroup(AggregatedFeatureGroup):
         return data
 
     @classmethod
-    def _perform_aggregation(cls, data: Any, aggregation_type: str, mloda_source_features: List[str]) -> Any:
+    def _perform_aggregation(cls, data: Any, aggregation_type: str, in_features: List[str]) -> Any:
         """
         Perform the aggregation using Pandas.
 
@@ -59,23 +59,23 @@ class PandasAggregatedFeatureGroup(AggregatedFeatureGroup):
         Args:
             data: The Pandas DataFrame
             aggregation_type: The type of aggregation to perform
-            mloda_source_features: List of source feature names (may be single or multiple columns)
+            in_features: List of source feature names (may be single or multiple columns)
 
         Returns:
             The result of the aggregation (Series for multi-column, scalar for single-column)
         """
         # Select the columns to aggregate
         # Note: data[[col]] returns DataFrame with 1 column, data[col] returns Series
-        if len(mloda_source_features) == 1:
+        if len(in_features) == 1:
             # Single column: extract as Series for simpler aggregation
-            selected_data = data[mloda_source_features[0]]
+            selected_data = data[in_features[0]]
         else:
             # Multiple columns: keep as DataFrame
-            selected_data = data[mloda_source_features]
+            selected_data = data[in_features]
 
         # For multi-column features, aggregate across columns (axis=1)
         # For single-column features, aggregate within the Series
-        if len(mloda_source_features) > 1:
+        if len(in_features) > 1:
             # Multi-column: selected_data is DataFrame, aggregate across columns
             if aggregation_type == "sum":
                 return selected_data.sum(axis=1)

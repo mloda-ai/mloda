@@ -4,6 +4,7 @@ Base implementation for aggregated feature groups.
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from typing import Any, List, Optional, Set, Union
 
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
@@ -241,6 +242,7 @@ class AggregatedFeatureGroup(AbstractFeatureGroup):
         return data
 
     @classmethod
+    @abstractmethod
     def _get_available_columns(cls, data: Any) -> Set[str]:
         """
         Get the set of available column names from the data.
@@ -251,9 +253,10 @@ class AggregatedFeatureGroup(AbstractFeatureGroup):
         Returns:
             Set of column names available in the data
         """
-        raise NotImplementedError(f"_get_available_columns not implemented in {cls.__name__}")
+        ...
 
     @classmethod
+    @abstractmethod
     def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
         """
         Check if the resolved source features exist in the data.
@@ -265,9 +268,10 @@ class AggregatedFeatureGroup(AbstractFeatureGroup):
         Raises:
             ValueError: If none of the features exist in the data
         """
-        raise NotImplementedError(f"_check_source_features_exist not implemented in {cls.__name__}")
+        ...
 
     @classmethod
+    @abstractmethod
     def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
         """
         Add the result to the data.
@@ -280,9 +284,10 @@ class AggregatedFeatureGroup(AbstractFeatureGroup):
         Returns:
             The updated data
         """
-        raise NotImplementedError(f"_add_result_to_data not implemented in {cls.__name__}")
+        ...
 
     @classmethod
+    @abstractmethod
     def _perform_aggregation(cls, data: Any, aggregation_type: str, in_features: List[str]) -> Any:
         """
         Method to perform the aggregation. Should be implemented by subclasses.
@@ -299,4 +304,4 @@ class AggregatedFeatureGroup(AbstractFeatureGroup):
         Returns:
             The result of the aggregation
         """
-        raise NotImplementedError(f"_perform_aggregation not implemented in {cls.__name__}")
+        ...

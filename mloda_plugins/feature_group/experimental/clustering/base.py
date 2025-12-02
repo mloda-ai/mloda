@@ -4,7 +4,8 @@ Base implementation for clustering feature groups.
 
 from __future__ import annotations
 
-from typing import Any, List, Optional, Set, Type, Union
+from abc import abstractmethod
+from typing import Any, List, Optional, Set, Union
 
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
@@ -359,6 +360,7 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
         return data
 
     @classmethod
+    @abstractmethod
     def _get_available_columns(cls, data: Any) -> Set[str]:
         """
         Get the set of available column names from the data.
@@ -369,9 +371,10 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
         Returns:
             Set of column names available in the data
         """
-        raise NotImplementedError(f"_get_available_columns not implemented in {cls.__name__}")
+        ...
 
     @classmethod
+    @abstractmethod
     def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
         """
         Check if the resolved source features exist in the data.
@@ -383,9 +386,10 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
         Raises:
             ValueError: If none of the features exist in the data
         """
-        raise NotImplementedError(f"_check_source_features_exist not implemented in {cls.__name__}")
+        ...
 
     @classmethod
+    @abstractmethod
     def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
         """
         Add the result to the data.
@@ -398,9 +402,10 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
         Returns:
             The updated data
         """
-        raise NotImplementedError(f"_add_result_to_data not implemented in {cls.__name__}")
+        ...
 
     @classmethod
+    @abstractmethod
     def _perform_clustering(
         cls,
         data: Any,
@@ -420,9 +425,10 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
         Returns:
             The result of the clustering (typically cluster assignments)
         """
-        raise NotImplementedError(f"_perform_clustering not implemented in {cls.__name__}")
+        ...
 
     @classmethod
+    @abstractmethod
     def _perform_clustering_with_probabilities(
         cls,
         data: Any,
@@ -445,4 +451,4 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
             - probabilities: 2D array where probabilities[i, j] is the probability/distance
                            of sample i belonging to cluster j
         """
-        raise NotImplementedError(f"_perform_clustering_with_probabilities not implemented in {cls.__name__}")
+        ...

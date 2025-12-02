@@ -8,6 +8,9 @@ from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_plugins.feature_group.experimental.dimensionality_reduction.base import DimensionalityReductionFeatureGroup
+from mloda_plugins.feature_group.experimental.dimensionality_reduction.pandas import (
+    PandasDimensionalityReductionFeatureGroup,
+)
 
 
 class TestDimensionalityReductionFeatureGroup:
@@ -54,7 +57,7 @@ class TestDimensionalityReductionFeatureGroup:
 
     def test_input_features(self) -> None:
         """Test the input_features method."""
-        feature_group = DimensionalityReductionFeatureGroup()
+        feature_group = PandasDimensionalityReductionFeatureGroup()
 
         # Single source feature
         input_features = feature_group.input_features(Options(), FeatureName("customer_metrics__pca_2d"))

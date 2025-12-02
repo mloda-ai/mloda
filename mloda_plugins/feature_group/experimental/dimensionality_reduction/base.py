@@ -4,6 +4,7 @@ Base implementation for dimensionality reduction feature groups.
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from typing import Any, Optional, Set, Union
 
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
@@ -379,6 +380,7 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
         return data
 
     @classmethod
+    @abstractmethod
     def _check_source_feature_exists(cls, data: Any, feature_name: str) -> None:
         """
         Check if the source feature exists in the data.
@@ -390,9 +392,10 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
         Raises:
             ValueError: If the feature does not exist in the data
         """
-        raise NotImplementedError(f"_check_source_feature_exists not implemented in {cls.__name__}")
+        ...
 
     @classmethod
+    @abstractmethod
     def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
         """
         Add the result to the data.
@@ -405,9 +408,10 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
         Returns:
             The updated data
         """
-        raise NotImplementedError(f"_add_result_to_data not implemented in {cls.__name__}")
+        ...
 
     @classmethod
+    @abstractmethod
     def _perform_reduction(
         cls,
         data: Any,
@@ -429,4 +433,4 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
         Returns:
             The result of the dimensionality reduction (typically the reduced features)
         """
-        raise NotImplementedError(f"_perform_reduction not implemented in {cls.__name__}")
+        ...

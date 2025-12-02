@@ -37,11 +37,7 @@ class PolarsFilterEngine(BaseFilterEngine):
         column_name = filter_feature.name.name
 
         # Extract the value from the parameter
-        value = None
-        for param in filter_feature.parameter:
-            if param[0] == "value":
-                value = param[1]
-                break
+        value = filter_feature.parameter.value
 
         if value is None:
             raise ValueError(f"Filter parameter 'value' not found in {filter_feature.parameter}")
@@ -53,14 +49,8 @@ class PolarsFilterEngine(BaseFilterEngine):
         column_name = filter_feature.name.name
 
         # Check if this is a complex parameter with max/max_exclusive or a simple one with value
-        has_max = False
-        has_value = False
-
-        for param in filter_feature.parameter:
-            if param[0] == "max":
-                has_max = True
-            elif param[0] == "value":
-                has_value = True
+        has_max = filter_feature.parameter.max_value is not None
+        has_value = filter_feature.parameter.value is not None
 
         if has_max:
             # Complex parameter - use get_min_max_operator
@@ -82,11 +72,7 @@ class PolarsFilterEngine(BaseFilterEngine):
                 return data.filter(pl.col(column_name) <= max_parameter)
         elif has_value:
             # Simple parameter - extract the value
-            value = None
-            for param in filter_feature.parameter:
-                if param[0] == "value":
-                    value = param[1]
-                    break
+            value = filter_feature.parameter.value
 
             if value is None:
                 raise ValueError(f"Filter parameter 'value' not found in {filter_feature.parameter}")
@@ -100,11 +86,7 @@ class PolarsFilterEngine(BaseFilterEngine):
         column_name = filter_feature.name.name
 
         # Extract the value from the parameter
-        value = None
-        for param in filter_feature.parameter:
-            if param[0] == "value":
-                value = param[1]
-                break
+        value = filter_feature.parameter.value
 
         if value is None:
             raise ValueError(f"Filter parameter 'value' not found in {filter_feature.parameter}")
@@ -116,11 +98,7 @@ class PolarsFilterEngine(BaseFilterEngine):
         column_name = filter_feature.name.name
 
         # Extract the value from the parameter
-        value = None
-        for param in filter_feature.parameter:
-            if param[0] == "value":
-                value = param[1]
-                break
+        value = filter_feature.parameter.value
 
         if value is None:
             raise ValueError(f"Filter parameter 'value' not found in {filter_feature.parameter}")
@@ -132,11 +110,7 @@ class PolarsFilterEngine(BaseFilterEngine):
         column_name = filter_feature.name.name
 
         # Extract the values from the parameter
-        values = None
-        for param in filter_feature.parameter:
-            if param[0] == "values":
-                values = param[1]
-                break
+        values = filter_feature.parameter.values
 
         if values is None:
             raise ValueError(f"Filter parameter 'values' not found in {filter_feature.parameter}")

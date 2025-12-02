@@ -1,8 +1,9 @@
-from typing import Any, Dict, Tuple, Union
+from typing import Any, Dict, Union
 import uuid
 
 
 from mloda_core.filter.filter_type_enum import FilterTypeEnum
+from mloda_core.filter.filter_parameter import FilterParameterImpl
 
 
 class SingleFilter:
@@ -51,15 +52,14 @@ class SingleFilter:
         else:
             raise ValueError(f"filter_feature is of wrong type {filter_feature}")
 
-    def handle_parameter(self, parameter: Dict[str, Any]) -> Tuple[Tuple[str, Any], ...]:
+    def handle_parameter(self, parameter: Dict[str, Any]) -> FilterParameterImpl:
         if not isinstance(parameter, dict):
             raise ValueError(f"Filter parameter is no dictionary: {parameter}.")
 
         elif not parameter:
             raise ValueError(f"Dictionary is empty: {parameter}.")
 
-        # Convert dictionary to a tuple of sorted key-value pairs for hashability
-        return tuple(sorted(parameter.items()))
+        return FilterParameterImpl.from_dict(parameter)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, SingleFilter):

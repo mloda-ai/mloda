@@ -4,6 +4,7 @@ from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.filter.global_filter import GlobalFilter
 from mloda_core.filter.single_filter import SingleFilter
 from mloda_core.filter.filter_type_enum import FilterTypeEnum
+from mloda_core.filter.filter_parameter import FilterParameterImpl
 
 
 class TestGlobalFilter(unittest.TestCase):
@@ -24,7 +25,9 @@ class TestGlobalFilter(unittest.TestCase):
         self.assertIsInstance(added_filter, SingleFilter)
         self.assertEqual(added_filter.filter_feature, self.feature)
         self.assertEqual(added_filter.filter_type, "range")
-        self.assertEqual(added_filter.parameter, (("max", 50), ("min", 25)))
+        self.assertIsInstance(added_filter.parameter, FilterParameterImpl)
+        self.assertEqual(added_filter.parameter.min_value, 25)
+        self.assertEqual(added_filter.parameter.max_value, 50)
 
     def test_adding_identical_filters(self) -> None:
         """Test that adding identical filters doesn't duplicate them in the config set."""
@@ -65,7 +68,9 @@ class TestGlobalFilterTimeTravel(unittest.TestCase):
         self.assertIsInstance(added_filter, SingleFilter)
         self.assertEqual(added_filter.filter_feature, self.feature)
         self.assertEqual(added_filter.filter_type, "range")
-        self.assertEqual(added_filter.parameter, (("max", 50), ("min", 25)))
+        self.assertIsInstance(added_filter.parameter, FilterParameterImpl)
+        self.assertEqual(added_filter.parameter.min_value, 25)
+        self.assertEqual(added_filter.parameter.max_value, 50)
 
     def test_adding_identical_filters(self) -> None:
         """Test that adding identical filters doesn't duplicate them in the config set."""

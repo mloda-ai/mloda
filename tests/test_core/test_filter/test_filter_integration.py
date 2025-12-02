@@ -31,10 +31,7 @@ class GlobalFilterBasicTest(AbstractFeatureGroup):
             raise ValueError("Test Filter not found")
 
         for filter in features.filters:  # type: ignore
-            if (
-                filter.__repr__()
-                != """<SingleFilter(feature_name=GlobalFilterBasicTest, type=equal, parameters=(('value', 1),))>"""
-            ):
+            if filter.filter_type != "equal" or filter.parameter.value != 1:
                 raise ValueError("Test Filter not found")
         return pa.table({cls.get_class_name(): [1, 2, 3]})
 

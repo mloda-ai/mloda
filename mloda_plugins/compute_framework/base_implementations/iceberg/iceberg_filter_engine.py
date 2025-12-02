@@ -123,15 +123,25 @@ class IcebergFilterEngine(BaseFilterEngine):
     @classmethod
     def _extract_parameter_value(cls, filter_feature: SingleFilter, param_name: str) -> Any:
         """Extract a parameter value from filter feature."""
-        for param in filter_feature.parameter:
-            if param[0] == param_name:
-                return param[1]
+        if param_name == "value":
+            return filter_feature.parameter.value
+        elif param_name == "values":
+            return filter_feature.parameter.values
+        elif param_name == "min":
+            return filter_feature.parameter.min_value
+        elif param_name == "max":
+            return filter_feature.parameter.max_value
+        elif param_name == "max_exclusive":
+            return filter_feature.parameter.max_exclusive
         return None
 
     @classmethod
     def _has_parameter(cls, filter_feature: SingleFilter, param_name: str) -> bool:
         """Check if filter feature has a specific parameter."""
-        return any(param[0] == param_name for param in filter_feature.parameter)
+        value = cls._extract_parameter_value(filter_feature, param_name)
+        if param_name == "max_exclusive":
+            return True
+        return value is not None
 
     # Standard filter methods - not used for Iceberg but required by interface
     @classmethod

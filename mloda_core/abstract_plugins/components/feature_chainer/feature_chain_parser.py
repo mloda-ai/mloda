@@ -269,10 +269,6 @@ class FeatureChainParser:
                 found_property_value, property_value, property_name, property_mapping[property_name]
             )
 
-            # We deal with this case for now like this as it is easier and we can add tuples later.
-            if collected_property_value == "tuple_found":  # type: ignore
-                return False
-
             if property_tracker[property_name] is not None:
                 raise ValueError(f"Feature name has duplicate values for property '{property_name}'.")
 

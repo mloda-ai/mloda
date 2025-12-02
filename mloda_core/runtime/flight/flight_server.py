@@ -18,7 +18,7 @@ def create_location(host: str = "0.0.0.0") -> str:
     return f"grpc://{host}:{port}"
 
 
-class FlightServer(flight.FlightServerBase):  # type: ignore
+class FlightServer(flight.FlightServerBase):  # type: ignore[misc]
     def __init__(self, location: Any = create_location()) -> None:
         self.tables: Dict[str, Any] = {}  # Dictionary to store tables
         self.location = location

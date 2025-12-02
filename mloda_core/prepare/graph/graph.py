@@ -1,6 +1,6 @@
 from collections import defaultdict
 from copy import copy
-from typing import Dict, List, Set
+from typing import DefaultDict, Dict, List, Set
 from uuid import UUID
 
 from mloda_core.prepare.graph.properties import EdgeProperties, NodeProperties
@@ -8,8 +8,8 @@ from mloda_core.prepare.graph.properties import EdgeProperties, NodeProperties
 
 class Graph:
     def __init__(self) -> None:
-        self.nodes: Dict[UUID, NodeProperties] = defaultdict(lambda: NodeProperties(None, None))  # type: ignore
-        self.edges: Dict[tuple[UUID, UUID], EdgeProperties] = defaultdict(lambda: EdgeProperties(None, None))  # type: ignore
+        self.nodes: DefaultDict[UUID, NodeProperties] = defaultdict(lambda: NodeProperties(None, None))  # type: ignore[arg-type]
+        self.edges: DefaultDict[tuple[UUID, UUID], EdgeProperties] = defaultdict(lambda: EdgeProperties(None, None))  # type: ignore[arg-type]
 
         self.adjacency_list: Dict[UUID, list[UUID]] = defaultdict(list)
 

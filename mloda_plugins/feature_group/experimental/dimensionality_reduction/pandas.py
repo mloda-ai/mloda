@@ -4,15 +4,17 @@ Pandas implementation for dimensionality reduction feature groups.
 
 from __future__ import annotations
 
-from typing import Any, List, cast
+from typing import Any, List, TYPE_CHECKING, cast
 
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
 
 try:
     import pandas as pd
     import numpy as np
 except ImportError:
     pd = None
-    np = None  # type: ignore
+    np = None  # type: ignore[assignment]
 
 # Check if required packages are available
 SKLEARN_AVAILABLE = True
@@ -52,7 +54,7 @@ class PandasDimensionalityReductionFeatureGroup(DimensionalityReductionFeatureGr
             raise ValueError(f"Feature '{feature_name}' not found in the data")
 
     @classmethod
-    def _add_result_to_data(cls, data: pd.DataFrame, feature_name: str, result: np.ndarray) -> pd.DataFrame:  # type: ignore
+    def _add_result_to_data(cls, data: "pd.DataFrame", feature_name: str, result: "NDArray[Any]") -> "pd.DataFrame":
         """
         Add the dimensionality reduction result to the DataFrame using the multiple result columns pattern.
 
@@ -83,7 +85,7 @@ class PandasDimensionalityReductionFeatureGroup(DimensionalityReductionFeatureGr
         dimension: int,
         source_features: List[str],
         options: Any,
-    ) -> np.ndarray:  # type: ignore
+    ) -> "NDArray[Any]":
         """
         Perform dimensionality reduction on the specified features.
 
@@ -184,7 +186,7 @@ class PandasDimensionalityReductionFeatureGroup(DimensionalityReductionFeatureGr
             raise ValueError(f"Unsupported dimensionality reduction algorithm: {algorithm}")
 
     @classmethod
-    def _perform_pca_reduction(cls, X: np.ndarray, dimension: int, svd_solver: str = "auto") -> np.ndarray:  # type: ignore
+    def _perform_pca_reduction(cls, X: "NDArray[Any]", dimension: int, svd_solver: str = "auto") -> "NDArray[Any]":
         """
         Perform Principal Component Analysis (PCA).
 
@@ -202,17 +204,17 @@ class PandasDimensionalityReductionFeatureGroup(DimensionalityReductionFeatureGr
 
         # Perform PCA
         pca = PCA(n_components=dimension, random_state=42, svd_solver=svd_solver)
-        return pca.fit_transform(X)  # type: ignore
+        return cast("NDArray[Any]", pca.fit_transform(X))
 
     @classmethod
     def _perform_tsne_reduction(
         cls,
-        X: np.ndarray,  # type: ignore
+        X: "NDArray[Any]",
         dimension: int,
         max_iter: int = 250,
         n_iter_without_progress: int = 50,
         method: str = "barnes_hut",
-    ) -> np.ndarray:  # type: ignore
+    ) -> "NDArray[Any]":
         """
         Perform t-Distributed Stochastic Neighbor Embedding (t-SNE).
 
@@ -254,10 +256,10 @@ class PandasDimensionalityReductionFeatureGroup(DimensionalityReductionFeatureGr
             n_iter_without_progress=n_iter_without_progress,
             method=actual_method,
         )
-        return tsne.fit_transform(X)  # type: ignore
+        return cast("NDArray[Any]", tsne.fit_transform(X))
 
     @classmethod
-    def _perform_ica_reduction(cls, X: np.ndarray, dimension: int, max_iter: int = 200) -> np.ndarray:  # type: ignore
+    def _perform_ica_reduction(cls, X: "NDArray[Any]", dimension: int, max_iter: int = 200) -> "NDArray[Any]":
         """
         Perform Independent Component Analysis (ICA).
 
@@ -273,12 +275,22 @@ class PandasDimensionalityReductionFeatureGroup(DimensionalityReductionFeatureGr
         if not SKLEARN_AVAILABLE:
             raise ImportError("scikit-learn is required for ICA dimensionality reduction")
 
+        # For small datasets, increase tolerance and iterations for better convergence
+        n_samples = X.shape[0]
+        if n_samples < 50:
+            # Small datasets may need more iterations and higher tolerance
+            actual_max_iter = max(max_iter, 1000)
+            tol = 0.01
+        else:
+            actual_max_iter = max_iter
+            tol = 1e-4  # sklearn default
+
         # Perform ICA
-        ica = FastICA(n_components=dimension, random_state=42, max_iter=max_iter)
-        return ica.fit_transform(X)  # type: ignore
+        ica = FastICA(n_components=dimension, random_state=42, max_iter=actual_max_iter, tol=tol)
+        return cast("NDArray[Any]", ica.fit_transform(X))
 
     @classmethod
-    def _perform_lda_reduction(cls, X: np.ndarray, dimension: int, df: pd.DataFrame) -> np.ndarray:  # type: ignore
+    def _perform_lda_reduction(cls, X: "NDArray[Any]", dimension: int, df: "pd.DataFrame") -> "NDArray[Any]":
         """
         Perform Linear Discriminant Analysis (LDA).
 
@@ -307,10 +319,10 @@ class PandasDimensionalityReductionFeatureGroup(DimensionalityReductionFeatureGr
 
         # Perform LDA
         lda = LinearDiscriminantAnalysis(n_components=dimension)
-        return lda.fit_transform(X, y)  # type: ignore
+        return cast("NDArray[Any]", lda.fit_transform(X, y))
 
     @classmethod
-    def _perform_isomap_reduction(cls, X: np.ndarray, dimension: int, n_neighbors: int = 5) -> np.ndarray:  # type: ignore
+    def _perform_isomap_reduction(cls, X: "NDArray[Any]", dimension: int, n_neighbors: int = 5) -> "NDArray[Any]":
         """
         Perform Isometric Mapping (Isomap).
 
@@ -328,4 +340,4 @@ class PandasDimensionalityReductionFeatureGroup(DimensionalityReductionFeatureGr
 
         # Perform Isomap
         isomap = Isomap(n_components=dimension, n_neighbors=n_neighbors)
-        return isomap.fit_transform(X)  # type: ignore
+        return cast("NDArray[Any]", isomap.fit_transform(X))

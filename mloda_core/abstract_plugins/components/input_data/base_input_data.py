@@ -53,7 +53,7 @@ class BaseInputData(ABC):
                 _key = cls.deal_with_base_input_data_name_as_cls_or_str(key)
 
                 if _key == subclass.data_access_name():
-                    matched_data_access = subclass.match_subclass_data_access(value, [feature_name])  # type: ignore
+                    matched_data_access = subclass.match_subclass_data_access(value, [feature_name])  # type: ignore[attr-defined]
                     if matched_data_access:
                         cls.add_base_input_data_to_options(subclass, matched_data_access, options)
                         return True
@@ -103,7 +103,7 @@ class BaseInputData(ABC):
         subclasses = get_all_filtereted_subclasses(BaseInputData, cls)
 
         for subclass in subclasses:
-            matched_data_access = subclass.match_subclass_data_access(data_access_collection, feature_names)  # type: ignore
+            matched_data_access = subclass.match_subclass_data_access(data_access_collection, feature_names)  # type: ignore[attr-defined]
             if matched_data_access:
                 return (subclass, matched_data_access)
         return False, False
@@ -147,7 +147,7 @@ class BaseInputData(ABC):
         we can use this function to check if the class supports scoped data access and is the final child class.
         """
         try:
-            cls.load_data(None, None)  # type: ignore
+            cls.load_data(None, None)  # type: ignore[arg-type]
         except NotImplementedError:
             return False
         except AttributeError:  # Expected as cls.load_data(None, None) should raise an error

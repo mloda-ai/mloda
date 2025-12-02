@@ -4,8 +4,10 @@ Pandas implementation for clustering feature groups.
 
 from __future__ import annotations
 
-from typing import Any, List, Set, Union, cast
+from typing import Any, List, Set, TYPE_CHECKING, Union, cast
 
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
 
 try:
     from sklearn.cluster import KMeans, AgglomerativeClustering, DBSCAN, SpectralClustering
@@ -22,7 +24,7 @@ try:
     import numpy as np
 except ImportError:
     pd = None
-    np = None  # type: ignore
+    np = None  # type: ignore[assignment]
 
 
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
@@ -60,7 +62,7 @@ class PandasClusteringFeatureGroup(ClusteringFeatureGroup):
             )
 
     @classmethod
-    def _add_result_to_data(cls, data: pd.DataFrame, feature_name: str, result: np.ndarray) -> pd.DataFrame:  # type: ignore
+    def _add_result_to_data(cls, data: "pd.DataFrame", feature_name: str, result: "NDArray[Any]") -> "pd.DataFrame":
         """
         Add the clustering result to the DataFrame.
 
@@ -82,7 +84,7 @@ class PandasClusteringFeatureGroup(ClusteringFeatureGroup):
         algorithm: str,
         k_value: Union[int, str],
         source_features: List[str],
-    ) -> np.ndarray:  # type: ignore
+    ) -> "NDArray[Any]":
         """
         Perform clustering on the specified features.
 
@@ -96,7 +98,7 @@ class PandasClusteringFeatureGroup(ClusteringFeatureGroup):
             A numpy array containing the cluster assignments
         """
         # Cast data to pandas DataFrame
-        df = cast(pd.DataFrame, data)
+        df = cast("pd.DataFrame", data)
 
         # Extract the features to use for clustering
         X = df[source_features].copy()
@@ -128,7 +130,7 @@ class PandasClusteringFeatureGroup(ClusteringFeatureGroup):
             raise ValueError(f"Unsupported clustering algorithm: {algorithm}")
 
     @classmethod
-    def _perform_kmeans_clustering(cls, X: np.ndarray, k_value: Union[int, str]) -> np.ndarray:  # type: ignore
+    def _perform_kmeans_clustering(cls, X: "NDArray[Any]", k_value: Union[int, str]) -> "NDArray[Any]":
         """
         Perform K-means clustering.
 
@@ -148,10 +150,10 @@ class PandasClusteringFeatureGroup(ClusteringFeatureGroup):
 
         # Perform K-means clustering
         kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
-        return kmeans.fit_predict(X)  # type: ignore
+        return cast("NDArray[Any]", kmeans.fit_predict(X))
 
     @classmethod
-    def _perform_hierarchical_clustering(cls, X: np.ndarray, k_value: Union[int, str]) -> np.ndarray:  # type: ignore
+    def _perform_hierarchical_clustering(cls, X: "NDArray[Any]", k_value: Union[int, str]) -> "NDArray[Any]":
         """
         Perform hierarchical clustering.
 
@@ -171,10 +173,10 @@ class PandasClusteringFeatureGroup(ClusteringFeatureGroup):
 
         # Perform hierarchical clustering
         hierarchical = AgglomerativeClustering(n_clusters=k)
-        return hierarchical.fit_predict(X)  # type: ignore
+        return cast("NDArray[Any]", hierarchical.fit_predict(X))
 
     @classmethod
-    def _perform_dbscan_clustering(cls, X: np.ndarray, k_value: Union[int, str]) -> np.ndarray:  # type: ignore
+    def _perform_dbscan_clustering(cls, X: "NDArray[Any]", k_value: Union[int, str]) -> "NDArray[Any]":
         """
         Perform DBSCAN clustering.
 
@@ -197,10 +199,10 @@ class PandasClusteringFeatureGroup(ClusteringFeatureGroup):
             eps = 1.0 / k
             dbscan = DBSCAN(eps=eps, min_samples=5)
 
-        return dbscan.fit_predict(X)  # type: ignore
+        return cast("NDArray[Any]", dbscan.fit_predict(X))
 
     @classmethod
-    def _perform_spectral_clustering(cls, X: np.ndarray, k_value: Union[int, str]) -> np.ndarray:  # type: ignore
+    def _perform_spectral_clustering(cls, X: "NDArray[Any]", k_value: Union[int, str]) -> "NDArray[Any]":
         """
         Perform spectral clustering.
 
@@ -220,10 +222,10 @@ class PandasClusteringFeatureGroup(ClusteringFeatureGroup):
 
         # Perform spectral clustering
         spectral = SpectralClustering(n_clusters=k, assign_labels="discretize", random_state=42)
-        return spectral.fit_predict(X)  # type: ignore
+        return cast("NDArray[Any]", spectral.fit_predict(X))
 
     @classmethod
-    def _perform_affinity_clustering(cls, X: np.ndarray, k_value: Union[int, str]) -> np.ndarray:  # type: ignore
+    def _perform_affinity_clustering(cls, X: "NDArray[Any]", k_value: Union[int, str]) -> "NDArray[Any]":
         """
         Perform affinity propagation clustering.
 
@@ -251,10 +253,10 @@ class PandasClusteringFeatureGroup(ClusteringFeatureGroup):
             damping = min(0.99, max(0.5, damping))  # Keep damping between 0.5 and 0.99
             affinity = AffinityPropagation(damping=damping, random_state=42)
 
-        return affinity.fit_predict(X)  # type: ignore
+        return cast("NDArray[Any]", affinity.fit_predict(X))
 
     @classmethod
-    def _find_optimal_k(cls, X: np.ndarray, algorithm: str, max_k: int = 10) -> int:  # type: ignore
+    def _find_optimal_k(cls, X: "NDArray[Any]", algorithm: str, max_k: int = 10) -> int:
         """
         Find the optimal number of clusters using silhouette score.
 
@@ -314,7 +316,7 @@ class PandasClusteringFeatureGroup(ClusteringFeatureGroup):
         algorithm: str,
         k_value: Union[int, str],
         source_features: List[str],
-    ) -> tuple[np.ndarray, np.ndarray]:  # type: ignore
+    ) -> tuple["NDArray[Any]", "NDArray[Any]"]:
         """
         Perform clustering and return both labels and probabilities/distances.
 
@@ -370,9 +372,9 @@ class PandasClusteringFeatureGroup(ClusteringFeatureGroup):
     @classmethod
     def _perform_kmeans_clustering_with_probabilities(
         cls,
-        X: np.ndarray[Any, Any],
+        X: "NDArray[Any]",
         k_value: Union[int, str],
-    ) -> tuple[np.ndarray[Any, Any], np.ndarray[Any, Any]]:
+    ) -> tuple["NDArray[Any]", "NDArray[Any]"]:
         """
         Perform K-means clustering and return probabilities based on distances to centroids.
         """
@@ -399,9 +401,9 @@ class PandasClusteringFeatureGroup(ClusteringFeatureGroup):
     @classmethod
     def _perform_hierarchical_clustering_with_probabilities(
         cls,
-        X: np.ndarray[Any, Any],
+        X: "NDArray[Any]",
         k_value: Union[int, str],
-    ) -> tuple[np.ndarray[Any, Any], np.ndarray[Any, Any]]:
+    ) -> tuple["NDArray[Any]", "NDArray[Any]"]:
         """
         Perform hierarchical clustering and compute distances to cluster centroids.
         """
@@ -430,9 +432,9 @@ class PandasClusteringFeatureGroup(ClusteringFeatureGroup):
     @classmethod
     def _perform_dbscan_clustering_with_probabilities(
         cls,
-        X: np.ndarray[Any, Any],
+        X: "NDArray[Any]",
         k_value: Union[int, str],
-    ) -> tuple[np.ndarray[Any, Any], np.ndarray[Any, Any]]:
+    ) -> tuple["NDArray[Any]", "NDArray[Any]"]:
         """
         Perform DBSCAN clustering. For probabilities, returns binary membership.
         """
@@ -463,9 +465,9 @@ class PandasClusteringFeatureGroup(ClusteringFeatureGroup):
     @classmethod
     def _perform_spectral_clustering_with_probabilities(
         cls,
-        X: np.ndarray[Any, Any],
+        X: "NDArray[Any]",
         k_value: Union[int, str],
-    ) -> tuple[np.ndarray[Any, Any], np.ndarray[Any, Any]]:
+    ) -> tuple["NDArray[Any]", "NDArray[Any]"]:
         """
         Perform spectral clustering and compute distances to cluster centroids.
         """
@@ -494,9 +496,9 @@ class PandasClusteringFeatureGroup(ClusteringFeatureGroup):
     @classmethod
     def _perform_affinity_clustering_with_probabilities(
         cls,
-        X: np.ndarray[Any, Any],
+        X: "NDArray[Any]",
         k_value: Union[int, str],
-    ) -> tuple[np.ndarray[Any, Any], np.ndarray[Any, Any]]:
+    ) -> tuple["NDArray[Any]", "NDArray[Any]"]:
         """
         Perform affinity propagation clustering. Returns binary membership based on exemplar assignment.
         """

@@ -17,8 +17,6 @@ from mloda_plugins.feature_group.input_data.read_context_files import Concatenat
 from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.input_data.api.api_input_data_collection import ApiInputDataCollection
-from mloda_core.abstract_plugins.components.input_data.api.base_api_data import BaseApiData
 from mloda_core.abstract_plugins.components.link import Link
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.api.request import mlodaAPI
@@ -26,16 +24,6 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 from mloda_plugins.feature_group.input_data.read_files.text_file_reader import PyFileReader
 from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
-
-
-class DataTestApiInputData(BaseApiData):
-    @classmethod
-    def column_names(cls) -> List[str]:
-        return [
-            "InputData1",
-            "InputData2",
-            "InputData3",
-        ]
 
 
 class TestReadLLMFiles:
@@ -130,18 +118,10 @@ class TestPlugInLLM:
                 )
             ]
 
-            api_input_data_collection = ApiInputDataCollection(registry={api_input_key: DataTestApiInputData})
-            api_data = {
-                api_input_key: {
-                    "InputData1": [" Strawberries "],
-                }
-            }
-
             # Run the API
             results = mlodaAPI.run_all(
                 features,
-                api_input_data_collection=api_input_data_collection,
-                api_data=api_data,
+                api_data={api_input_key: {"InputData1": [" Strawberries "]}},
                 compute_frameworks={PandasDataframe},
             )
 

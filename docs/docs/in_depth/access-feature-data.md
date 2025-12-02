@@ -157,7 +157,7 @@ For this purpose, we have the ApiData.
 
 #### ApiData
 
-The ApiData can read data given to mlodaAPI at request time. The built-in `ApiInputDataFeature` handles this - it receives data from the `ApiInputDataCollection` and makes it available as features.
+The ApiData can read data given to mlodaAPI at request time. The built-in `ApiInputDataFeature` handles this - it receives data from the `api_data` parameter and makes it available as features.
 
 Use cases:
 
@@ -173,24 +173,16 @@ from typing import List
 
 from mloda_core.api.request import mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
-from mloda_core.abstract_plugins.components.input_data.api.api_input_data_collection import ApiInputDataCollection
 
-# Setup the ApiInputDataCollection and api data.
-# These 2 objects are needed to relate given data to the correct features.
-api_input_data_collection = ApiInputDataCollection()
-api_data = api_input_data_collection.setup_key_api_data(
-    key_name="ExampleApiData", api_input_data={"FeatureInputAPITest": ["TestValue3", "TestValue4"]}
-)
-
+# Pass api_data directly as a dict - the framework handles registration internally
 result = mlodaAPI.run_all(
         ["FeatureInputAPITest"],
         compute_frameworks={PandasDataframe},
-        api_input_data_collection=api_input_data_collection,
-        api_data=api_data,
+        api_data={"ExampleApiData": {"FeatureInputAPITest": ["TestValue3", "TestValue4"]}},
 )
 for res in result:
     print(res)
-``` 
+```
 
 Output:
 

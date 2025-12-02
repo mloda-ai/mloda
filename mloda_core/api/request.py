@@ -26,7 +26,7 @@ class mlodaAPI:
         links: Optional[Set[Link]] = None,
         data_access_collection: Optional[DataAccessCollection] = None,
         global_filter: Optional[GlobalFilter] = None,
-        api_input_data_collection: Optional[ApiInputDataCollection] = None,
+        api_data: Optional[Dict[str, Dict[str, Any]]] = None,
         plugin_collector: Optional[PlugInCollector] = None,
         copy_features: Optional[bool] = True,
     ) -> None:
@@ -34,12 +34,20 @@ class mlodaAPI:
         # Set copy_features=False to disable deep copying for use cases where features contain non-copyable objects.
         _requested_features = deepcopy(requested_features) if copy_features else requested_features
 
+        # Handle api_data: create ApiInputDataCollection if api_data provided
+        api_input_data_collection: Optional[ApiInputDataCollection] = None
+        if api_data is not None and len(api_data) > 0:
+            api_input_data_collection = ApiInputDataCollection()
+            for key_name, key_data in api_data.items():
+                api_input_data_collection.setup_key_class(key_name, list(key_data.keys()))
+
         self.features = self._process_features(_requested_features, api_input_data_collection)
         self.compute_framework = SetupComputeFramework(compute_frameworks, self.features).compute_frameworks
         self.links = links
         self.data_access_collection = data_access_collection
         self.global_filter = global_filter
         self.api_input_data_collection = api_input_data_collection
+        self.api_data = api_data
         self.plugin_collector = plugin_collector
 
         self.runner: None | Runner = None
@@ -71,13 +79,35 @@ class mlodaAPI:
         flight_server: Optional[Any] = None,
         function_extender: Optional[Set[WrapperFunctionExtender]] = None,
         global_filter: Optional[GlobalFilter] = None,
-        api_input_data_collection: Optional[ApiInputDataCollection] = None,
-        api_data: Optional[Dict[str, Any]] = None,
+        api_data: Optional[Dict[str, Dict[str, Any]]] = None,
         plugin_collector: Optional[PlugInCollector] = None,
         copy_features: Optional[bool] = True,
     ) -> List[Any]:
         """
-        This step runs setup engine, batch run and get result in one go.
+        Run feature computation in one step.
+
+        Args:
+            features: Features to compute.
+            compute_frameworks: Compute frameworks to use.
+            links: Links between feature groups.
+            data_access_collection: Data access configuration.
+            parallelization_modes: Parallelization modes.
+            flight_server: Flight server for distributed processing.
+            function_extender: Function extenders.
+            global_filter: Global filter configuration.
+            api_data: Runtime API data as {"KeyName": {"column": [values]}}.
+                Auto-creates ApiInputDataCollection internally.
+            plugin_collector: Plugin collector.
+            copy_features: Whether to deep copy features (default True).
+
+        Returns:
+            List of computed results.
+
+        Example:
+            result = mlodaAPI.run_all(
+                features,
+                api_data={"UserQuery": {"row_index": [0], "query": ["hello"]}}
+            )
         """
         api = mlodaAPI(
             features,
@@ -85,21 +115,20 @@ class mlodaAPI:
             links,
             data_access_collection,
             global_filter,
-            api_input_data_collection,
-            plugin_collector,
+            api_data=api_data,
+            plugin_collector=plugin_collector,
             copy_features=copy_features,
         )
-        return api._execute_batch_run(parallelization_modes, flight_server, function_extender, api_data)
+        return api._execute_batch_run(parallelization_modes, flight_server, function_extender)
 
     def _execute_batch_run(
         self,
-        parallelization_modes: Set[ParallelizationModes],
-        flight_server: Optional[Any],
-        function_extender: Optional[Set[WrapperFunctionExtender]],
-        api_data: Optional[Dict[str, Any]],
+        parallelization_modes: Set[ParallelizationModes] = {ParallelizationModes.SYNC},
+        flight_server: Optional[Any] = None,
+        function_extender: Optional[Set[WrapperFunctionExtender]] = None,
     ) -> List[Any]:
         """Encapsulates the batch run execution flow."""
-        self._batch_run(parallelization_modes, flight_server, function_extender, api_data)
+        self._batch_run(parallelization_modes, flight_server, function_extender)
         return self.get_result()
 
     def _batch_run(
@@ -110,8 +139,10 @@ class mlodaAPI:
         api_data: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Sets up the engine runner and runs the engine computation."""
+        # Use stored api_data if not explicitly provided
+        _api_data = api_data if api_data is not None else self.api_data
         self._setup_engine_runner(parallelization_modes, flight_server)
-        self._run_engine_computation(parallelization_modes, function_extender, api_data)
+        self._run_engine_computation(parallelization_modes, function_extender, _api_data)
 
     def _run_engine_computation(
         self,

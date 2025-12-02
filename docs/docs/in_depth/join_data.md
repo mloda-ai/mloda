@@ -131,6 +131,48 @@ features = {
 
 The execution planner validates that the pointer key-value pairs exist in the corresponding feature's options to correctly identify which instance belongs to which side of the join.
 
+#### Polymorphic Link Matching
+
+Links support inheritance-based matching, allowing a link defined with base classes to automatically apply to subclasses. This enables defining generic join relationships that work across feature group hierarchies.
+
+**Matching Rules:**
+
+1. **Exact match first**: If a link's feature groups exactly match the classes being joined, it takes priority over any polymorphic matches.
+
+2. **Balanced inheritance**: For polymorphic matches, both sides must have the same inheritance distance from the link's defined classes. This prevents sibling class mismatches.
+
+3. **Most specific wins**: Among valid balanced matches, the link closest in the inheritance hierarchy is selected.
+
+**Example:**
+
+```python
+# Define a base feature group hierarchy
+class BaseUserFeatureGroup(AbstractFeatureGroup):
+    pass
+
+class PremiumUserFeatureGroup(BaseUserFeatureGroup):
+    pass
+
+class StandardUserFeatureGroup(BaseUserFeatureGroup):
+    pass
+
+# Define a link using base classes
+link = Link.inner(
+    left=(BaseUserFeatureGroup, Index(("user_id",))),
+    right=(BaseUserFeatureGroup, Index(("user_id",)))
+)
+
+# This link will match:
+# - (PremiumUserFeatureGroup, PremiumUserFeatureGroup) ✓
+# - (StandardUserFeatureGroup, StandardUserFeatureGroup) ✓
+# - (BaseUserFeatureGroup, BaseUserFeatureGroup) ✓
+
+# This link will NOT match (sibling mismatch):
+# - (PremiumUserFeatureGroup, StandardUserFeatureGroup) ✗
+```
+
+The balanced inheritance rule ensures that joins only occur between "parallel" subclasses - both sides must be at the same level in the inheritance hierarchy relative to the link definition.
+
 #### mlodaAPI
 
 ``` python

@@ -50,6 +50,29 @@ class Link:
         >>> Link("inner", (UserFG, idx), (UserFG, idx),
         ...      left_pointer={"side": "manager"},
         ...      right_pointer={"side": "employee"})
+
+    Polymorphic Matching:
+        Links support inheritance-based matching, allowing a link defined with base
+        classes to automatically apply to subclasses. The matching follows these rules:
+
+        1. **Exact match first**: If a link's feature groups exactly match the classes
+           being joined, it takes priority over any polymorphic matches.
+
+        2. **Balanced inheritance**: For polymorphic matches, both sides must have the
+           same inheritance distance. This prevents sibling class mismatches.
+
+           Example - Given hierarchy:
+               BaseFeatureGroup
+               ├── ChildA
+               └── ChildB
+
+           Link(BaseFeatureGroup, BaseFeatureGroup) will match:
+           - (ChildA, ChildA) ✓  - both sides distance=1
+           - (ChildB, ChildB) ✓  - both sides distance=1
+           - (ChildA, ChildB) ✗  - rejected: siblings, not balanced inheritance
+
+        3. **Most specific wins**: Among valid matches, the link closest in the
+           inheritance hierarchy is selected.
     """
 
     def __init__(
@@ -121,18 +144,35 @@ class Link:
     ) -> Link:
         return cls(JoinType.UNION, left, right)
 
+    def matches_exact(
+        self,
+        other_left_feature_group: Type[Any],
+        other_right_feature_group: Type[Any],
+    ) -> bool:
+        """Exact class name match only."""
+        left_match: bool = self.left_feature_group.get_class_name() == other_left_feature_group.get_class_name()
+        right_match: bool = self.right_feature_group.get_class_name() == other_right_feature_group.get_class_name()
+        return left_match and right_match
+
+    def matches_polymorphic(
+        self,
+        other_left_feature_group: Type[Any],
+        other_right_feature_group: Type[Any],
+    ) -> bool:
+        """Subclass match (inheritance). Returns True if both sides are subclasses."""
+        return issubclass(other_left_feature_group, self.left_feature_group) and issubclass(
+            other_right_feature_group, self.right_feature_group
+        )
+
     def matches(
         self,
         other_left_feature_group: Type[Any],
         other_right_feature_group: Type[Any],
     ) -> bool:
-        if self.left_feature_group.get_class_name() != other_left_feature_group.get_class_name():
-            return False
-
-        if self.right_feature_group.get_class_name() != other_right_feature_group.get_class_name():
-            return False
-
-        return True
+        """Combined match: exact OR polymorphic."""
+        return self.matches_exact(other_left_feature_group, other_right_feature_group) or self.matches_polymorphic(
+            other_left_feature_group, other_right_feature_group
+        )
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, Link):

@@ -1,10 +1,10 @@
-from mloda_core.abstract_plugins.components.link import JoinType
 import pytest
-from unittest.mock import patch
+from typing import Any, Optional, Type
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
 from mloda_core.abstract_plugins.components.index.index import Index
+from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
 
 import logging
 
@@ -57,53 +57,20 @@ class TestPandasDataframeComputeFramework:
         self.pd_dataframe.set_column_names()
         assert self.pd_dataframe.column_names == {"column1", "column2"}
 
-    def test_merge_inner(self) -> None:
-        _pdDf = PandasDataframe(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
-        _pdDf.data = self.left_data
-        merge_engine = _pdDf.merge_engine()
-        result = merge_engine().merge(_pdDf.data, self.right_data, JoinType.INNER, self.idx, self.idx)
-        assert len(result) == 1
-        expected = PandasDataframe.pd_merge()(self.left_data, self.right_data, on="idx", how="inner")
-        assert result.equals(expected)
 
-    def test_merge_left(self) -> None:
-        _pdDf = PandasDataframe(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
-        _pdDf.data = self.left_data
-        merge_engine = _pdDf.merge_engine()
-        result = merge_engine().merge(_pdDf.data, self.right_data, JoinType.LEFT, self.idx, self.idx)
-        expected = PandasDataframe.pd_merge()(self.left_data, self.right_data, on="idx", how="left")
-        assert result.equals(expected)
+@pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
+class TestPandasDataframeMerge(DataFrameTestBase):
+    """Test PandasDataframe merge operations using the base test class."""
 
-    def test_merge_right(self) -> None:
-        _pdDf = PandasDataframe(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
-        _pdDf.data = self.left_data
-        merge_engine = _pdDf.merge_engine()
-        result = merge_engine().merge(_pdDf.data, self.right_data, JoinType.RIGHT, self.idx, self.idx)
-        expected = PandasDataframe.pd_merge()(self.left_data, self.right_data, on="idx", how="right")
-        assert all(expected["col2"] == result["col2"])
-        assert_series_equal(expected["col1"], result["col1"])
-        assert result.equals(expected)
+    @classmethod
+    def framework_class(cls) -> Type[Any]:
+        """Return the PandasDataframe class."""
+        return PandasDataframe
 
-    def test_merge_full_outer(self) -> None:
-        _pdDf = PandasDataframe(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
-        _pdDf.data = self.left_data
-        merge_engine = _pdDf.merge_engine()
-        result = merge_engine().merge(_pdDf.data, self.right_data, JoinType.OUTER, self.idx, self.idx)
-        expected = PandasDataframe.pd_merge()(self.left_data, self.right_data, on="idx", how="outer")
-        assert result.equals(expected)
+    def create_dataframe(self, data: dict[str, Any]) -> Any:
+        """Create a pandas DataFrame from a dictionary."""
+        return pd.DataFrame.from_dict(data)
 
-    def test_merge_append(self) -> None:
-        _pdDf = PandasDataframe(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
-        _pdDf.data = self.left_data
-        merge_engine = _pdDf.merge_engine()
-        result = merge_engine().merge(_pdDf.data, self.right_data, JoinType.APPEND, self.idx, self.idx)
-        expected = pd.concat([self.left_data, self.right_data], ignore_index=True)
-        assert result.equals(expected)
-
-    def test_merge_union(self) -> None:
-        _pdDf = PandasDataframe(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
-        _pdDf.data = self.left_data
-        merge_engine = _pdDf.merge_engine()
-        result = merge_engine().merge(_pdDf.data, self.right_data, JoinType.UNION, self.idx, self.idx)
-        expected = pd.concat([self.left_data, self.right_data], ignore_index=True).drop_duplicates()
-        assert result.equals(expected)
+    def get_connection(self) -> Optional[Any]:
+        """Return connection object (None for pandas)."""
+        return None

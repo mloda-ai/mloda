@@ -1,12 +1,12 @@
 import os
-from typing import Any
-from mloda_core.abstract_plugins.components.link import JoinType
+from typing import Any, Optional, Type
 import pytest
 from unittest.mock import patch
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
 from mloda_core.abstract_plugins.components.index.index import Index
+from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
 
 import logging
 
@@ -14,9 +14,11 @@ logger = logging.getLogger(__name__)
 
 try:
     import duckdb
+    import pyarrow as pa
 except ImportError:
     logger.warning("DuckDB is not installed. Some tests will be skipped.")
     duckdb = None  # type: ignore[assignment]
+    pa = None
 
 
 class TestDuckDBFrameworkAvailability:
@@ -104,42 +106,43 @@ class TestDuckDBFrameworkComputeFramework:
         assert "column1" in self.duckdb_framework.column_names
         assert "column2" in self.duckdb_framework.column_names
 
-    def test_merge_inner(self) -> None:
-        _duckdb_framework = DuckDBFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
-        _duckdb_framework.set_framework_connection_object(self.conn)
-        _duckdb_framework.data = self.left_data
-        merge_engine_class = _duckdb_framework.merge_engine()
-        framework_connection = _duckdb_framework.get_framework_connection_object()
-        merge_engine = merge_engine_class(framework_connection)
-        result = merge_engine.merge(_duckdb_framework.data, self.right_data, JoinType.INNER, self.idx, self.idx)
 
-        # Check that we got a result and it has the expected structure
-        assert result is not None
-        assert len(result) == 1  # Should have 1 matching row
+@pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed. Skipping this test.")
+class TestDuckDBFrameworkMerge(DataFrameTestBase):
+    """Test DuckDBFramework merge operations using the base test class."""
 
-    def test_merge_append(self) -> None:
-        _duckdb_framework = DuckDBFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
-        _duckdb_framework.set_framework_connection_object(self.conn)
-        _duckdb_framework.data = self.left_data
-        framework_connection = _duckdb_framework.get_framework_connection_object()
-        merge_engine_class = _duckdb_framework.merge_engine()
-        merge_engine = merge_engine_class(framework_connection)
-        result = merge_engine.merge(_duckdb_framework.data, self.right_data, JoinType.APPEND, self.idx, self.idx)
+    @classmethod
+    def framework_class(cls) -> Type[Any]:
+        """Return the DuckDBFramework class."""
+        return DuckDBFramework
 
-        # Check that we got a result with combined rows
-        assert result is not None
-        assert len(result) == 4  # Should have 2 + 2 rows
+    def setup_method(self) -> None:
+        """Set up DuckDB connection and test data."""
+        self.conn = duckdb.connect()
+        super().setup_method()
 
-    def test_merge_union(self) -> None:
-        _duckdb_framework = DuckDBFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
-        _duckdb_framework.set_framework_connection_object(self.conn)
-        _duckdb_framework.data = self.left_data
-        framework_connection = _duckdb_framework.get_framework_connection_object()
-        merge_engine_class = _duckdb_framework.merge_engine()
-        merge_engine = merge_engine_class(framework_connection)
-        result = merge_engine.merge(_duckdb_framework.data, self.right_data, JoinType.UNION, self.idx, self.idx)
+    def create_dataframe(self, data: dict[str, Any]) -> Any:
+        """Create a DuckDB relation from a dictionary."""
+        arrow_table = pa.Table.from_pydict(data)
+        return self.conn.from_arrow(arrow_table)
 
-        # Check that we got a result (union removes duplicates)
-        assert result is not None
-        # The exact count depends on duplicate handling, but should be <= 4
-        assert len(result) <= 4
+    def get_connection(self) -> Optional[Any]:
+        """Return DuckDB connection object."""
+        return self.conn
+
+    def _create_test_framework(self) -> Any:
+        """Create a framework instance with sync mode and DuckDB connection."""
+        framework = super()._create_test_framework()
+        framework.set_framework_connection_object(self.conn)
+        return framework
+
+    def _get_merge_engine(self, framework: Any) -> Any:
+        """Get merge engine factory that returns an instance with connection for DuckDB."""
+        merge_engine_class = framework.merge_engine()
+        framework_connection = framework.get_framework_connection_object()
+
+        class MergeEngineFactory:
+            def __call__(self) -> Any:
+                return merge_engine_class(framework_connection)
+
+        return MergeEngineFactory()

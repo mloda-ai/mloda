@@ -4,10 +4,6 @@ from typing import Any, List, Optional
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.input_data.api.base_api_data import BaseApiData
-from mloda_core.abstract_plugins.components.input_data.api.api_input_data_collection import (
-    ApiInputDataCollection,
-)
 from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
 from mloda_core.api.request import mlodaAPI
@@ -33,16 +29,6 @@ class InputDataTestFeatureGroup(AbstractFeatureGroup):
         }
 
 
-class DataTestApiInputData(BaseApiData):
-    @classmethod
-    def column_names(cls) -> List[str]:
-        return [
-            "ApiInputDataTestFeatureGroup_id",
-            "ApiInputDataTestFeatureGroup_V1",
-            "ApiInputDataTestFeatureGroup_V2",
-        ]
-
-
 class TestInputData:
     file_path = f"{os.path.dirname(os.path.abspath(__file__))}/creditcard_2023.csv"
 
@@ -61,21 +47,16 @@ class TestInputData:
     def test_api_input_data(self) -> None:
         features = [f"ApiInputDataTestFeatureGroup_{f}" for f in self.feature_list]
 
-        api_input_data_collection = ApiInputDataCollection(registry={"TestApiInputData": DataTestApiInputData})
-
-        api_data = {
-            "TestApiInputData": {
-                "ApiInputDataTestFeatureGroup_id": [12, 2, 3],
-                "ApiInputDataTestFeatureGroup_V1": [1, 2, 3],
-                "ApiInputDataTestFeatureGroup_V2": [1, 2, 3],
-            }
-        }
-
         result = mlodaAPI.run_all(
             features,  # type: ignore
             compute_frameworks=["PyarrowTable"],
-            api_input_data_collection=api_input_data_collection,
-            api_data=api_data,
+            api_data={
+                "TestApiInputData": {
+                    "ApiInputDataTestFeatureGroup_id": [12, 2, 3],
+                    "ApiInputDataTestFeatureGroup_V1": [1, 2, 3],
+                    "ApiInputDataTestFeatureGroup_V2": [1, 2, 3],
+                }
+            },
         )
 
         assert result[0].to_pydict() == {
@@ -98,19 +79,16 @@ class TestInputData:
             },
         )
 
-        api_data = {
-            "TestApiInputData": {
-                "ApiInputDataTestFeatureGroup_id": [12, 2, 3],
-                "ApiInputDataTestFeatureGroup_V1": [1, 2, 3],
-                "ApiInputDataTestFeatureGroup_V2": [1, 2, 3],
-            }
-        }
-
         result = mlodaAPI.run_all(
             [_agg_creator, _agg_api_input_feature],
             compute_frameworks=["PyarrowTable"],
-            api_input_data_collection=ApiInputDataCollection(registry={"TestApiInputData": DataTestApiInputData}),
-            api_data=api_data,
+            api_data={
+                "TestApiInputData": {
+                    "ApiInputDataTestFeatureGroup_id": [12, 2, 3],
+                    "ApiInputDataTestFeatureGroup_V1": [1, 2, 3],
+                    "ApiInputDataTestFeatureGroup_V2": [1, 2, 3],
+                }
+            },
         )
 
         for res in result:

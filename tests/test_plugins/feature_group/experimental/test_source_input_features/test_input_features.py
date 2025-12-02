@@ -10,9 +10,6 @@ from mloda_core.abstract_plugins.components.data_access_collection import (
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.input_data.api.api_input_data_collection import (
-    ApiInputDataCollection,
-)
 from mloda_core.abstract_plugins.components.input_data.base_input_data import (
     BaseInputData,
 )
@@ -111,20 +108,8 @@ class TestInputFeatures:
         """
         This test is a bit more complex, as it requires the use of the API.
 
-        We need to create an API input data collection and setup the API data for the feature.
-
-        We create an ApiInputDataCollection and add the key "Example" with the API data "FeatureInputAPITest".
-        We use the convenience function setup_key_api_data to create the API data.
-            - key_name: link between data and feature based on this link.
-            - api_input_data: FeatureName and values for the feature.
+        We pass api_data directly to run_all() - the ApiInputDataCollection is created internally.
         """
-
-        api_input_data_collection = ApiInputDataCollection()
-        api_data = api_input_data_collection.setup_key_api_data(
-            key_name="Example",
-            api_input_data={"FeatureInputAPITest": ["TestValue3", "TestValue4"]},
-        )
-
         feature_list: List[Feature | str] = []
         feature_list.append(
             Feature(
@@ -140,8 +125,7 @@ class TestInputFeatures:
             feature_list,
             plugin_collector=self._enabled,
             compute_frameworks={PandasDataframe},
-            api_input_data_collection=api_input_data_collection,
-            api_data=api_data,
+            api_data={"Example": {"FeatureInputAPITest": ["TestValue3", "TestValue4"]}},
         )
         for res in result:
             assert len(res) == 2
@@ -265,11 +249,6 @@ class TestInputFeatures:
         )
 
         # api
-        api_input_data_collection = ApiInputDataCollection()
-        api_data = api_input_data_collection.setup_key_api_data(
-            key_name="Example",
-            api_input_data={"FeatureInputAPITest": ["TestValue3", "TestValue4"]},
-        )
         feature_list.append(
             Feature(
                 name=self._requested_name,
@@ -295,8 +274,7 @@ class TestInputFeatures:
             feature_list,
             compute_frameworks=["PandasDataframe"],
             data_access_collection=data_access_collection,
-            api_input_data_collection=api_input_data_collection,
-            api_data=api_data,
+            api_data={"Example": {"FeatureInputAPITest": ["TestValue3", "TestValue4"]}},
         )
         assert len(result) == 10
 

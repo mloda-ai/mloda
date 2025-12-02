@@ -13,7 +13,6 @@ from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.input_data.api.api_input_data_collection import ApiInputDataCollection
 from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
 from mloda_core.abstract_plugins.components.link import Link
@@ -128,13 +127,6 @@ class TestApiLinkJoin:
         Creator data (3 rows): ids 1, 2, 3
         Result: 4 rows (LEFT keeps all API rows, id 4 has null for creator_value)
         """
-        # Setup API data
-        api_input_data_collection = ApiInputDataCollection()
-        api_data = api_input_data_collection.setup_key_api_data(
-            key_name="ApiExample",
-            api_input_data={"api_id": [1, 2, 3, 4], "api_value": ["w", "x", "y", "z"]},
-        )
-
         # Request the joined feature
         feature_list: List[Union[Feature, str]] = [Feature(name="LeftJoinedFeature")]
 
@@ -142,8 +134,7 @@ class TestApiLinkJoin:
             feature_list,
             plugin_collector=self._enabled_left,
             compute_frameworks={PandasDataframe},
-            api_input_data_collection=api_input_data_collection,
-            api_data=api_data,
+            api_data={"ApiExample": {"api_id": [1, 2, 3, 4], "api_value": ["w", "x", "y", "z"]}},
         )
 
         assert len(result) == 1
@@ -159,13 +150,6 @@ class TestApiLinkJoin:
         Creator data (3 rows)
         Result: 5 rows (stacked vertically)
         """
-        # Setup API data
-        api_input_data_collection = ApiInputDataCollection()
-        api_data = api_input_data_collection.setup_key_api_data(
-            key_name="ApiExample",
-            api_input_data={"api_id": [1, 2], "api_value": ["x", "y"]},
-        )
-
         # Request the appended feature
         feature_list: List[Union[Feature, str]] = [Feature(name="AppendedFeature")]
 
@@ -173,8 +157,7 @@ class TestApiLinkJoin:
             feature_list,
             plugin_collector=self._enabled_append,
             compute_frameworks={PandasDataframe},
-            api_input_data_collection=api_input_data_collection,
-            api_data=api_data,
+            api_data={"ApiExample": {"api_id": [1, 2], "api_value": ["x", "y"]}},
         )
 
         assert len(result) == 1

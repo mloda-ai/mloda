@@ -79,17 +79,8 @@ class BaseFilterEngine(ABC):
     def get_min_max_operator(cls, filter_feature: SingleFilter) -> Any:
         """Convenience method to get min, max, and max operator from filter parameters"""
 
-        min_parameter, max_parameter, is_max_exclusive = None, None, False
-
-        for parameter in filter_feature.parameter:
-            if parameter[0] == "min":
-                min_parameter = parameter[1]
-            elif parameter[0] == "max":
-                max_parameter = parameter[1]
-            elif parameter[0] == "max_exclusive":
-                if parameter[1] is True:
-                    is_max_exclusive = True
-            else:
-                raise ValueError(f"Filter parameter {parameter[0]} not supported")
+        min_parameter = filter_feature.parameter.min_value
+        max_parameter = filter_feature.parameter.max_value
+        is_max_exclusive = filter_feature.parameter.max_exclusive
 
         return min_parameter, max_parameter, is_max_exclusive

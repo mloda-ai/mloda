@@ -2,6 +2,7 @@ import unittest
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.filter.single_filter import SingleFilter
 from mloda_core.filter.filter_type_enum import FilterTypeEnum
+from mloda_core.filter.filter_parameter import FilterParameterImpl
 
 
 class TestSingleFilter(unittest.TestCase):
@@ -17,7 +18,9 @@ class TestSingleFilter(unittest.TestCase):
 
         self.assertEqual(single_filter.filter_feature, self.feature)
         self.assertEqual(single_filter.filter_type, "range")
-        self.assertEqual(single_filter.parameter, (("max", 50), ("min", 25)))  # parameter is tuple
+        self.assertIsInstance(single_filter.parameter, FilterParameterImpl)
+        self.assertEqual(single_filter.parameter.min_value, 25)
+        self.assertEqual(single_filter.parameter.max_value, 50)
 
     def test_invalid_filter_type(self) -> None:
         """Test that invalid filter type raises ValueError."""

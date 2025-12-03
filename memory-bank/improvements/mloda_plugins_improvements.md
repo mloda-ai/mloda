@@ -112,30 +112,48 @@ Every experimental feature group implements two parallel feature definition meth
 
 ## 4. Standardize Class Naming Conventions
 
-### Status
-- [ ] Define naming convention standard (document)
-- [ ] Rename PandasPyarrowTransformer -> PandasPyArrowTransformer
-- [ ] Standardize all *PyarrowTransformer classes
-- [ ] Standardize DuckDB vs Duckdb prefix usage
-- [ ] Standardize *Dataframe vs *DataFrame suffix
-- [ ] Update all imports across codebase
-- [ ] Create deprecation aliases for old names
-- [ ] Update documentation
-- [ ] Run tox validation
+### Status: COMPLETED
+
+- [x] Define naming convention standard (document)
+- [x] Rename PandasPyarrowTransformer -> PandasPyArrowTransformer
+- [x] Standardize all *PyarrowTransformer classes (7 classes renamed)
+- [x] Standardize DuckDB vs Duckdb prefix usage (already consistent, no changes needed)
+- [x] Standardize *Dataframe vs *DataFrame suffix (3 classes renamed)
+- [x] Rename PyarrowTable -> PyArrowTable
+- [x] Update all imports across codebase (~159 files)
+- [x] Update documentation
+- [x] Run tox validation - **1171 tests pass, mypy strict clean**
+
+### Implementation Summary
+
+**Classes Renamed:**
+
+| Old Name | New Name |
+|----------|----------|
+| `PandasPyarrowTransformer` | `PandasPyArrowTransformer` |
+| `PolarsPyarrowTransformer` | `PolarsPyArrowTransformer` |
+| `PolarsLazyPyarrowTransformer` | `PolarsLazyPyArrowTransformer` |
+| `SparkPyarrowTransformer` | `SparkPyArrowTransformer` |
+| `DuckDBPyarrowTransformer` | `DuckDBPyArrowTransformer` |
+| `PythonDictPyarrowTransformer` | `PythonDictPyArrowTransformer` |
+| `IcebergPyarrowTransformer` | `IcebergPyArrowTransformer` |
+| `PyarrowTable` | `PyArrowTable` |
+| `PandasDataframe` | `PandasDataFrame` |
+| `PolarsDataframe` | `PolarsDataFrame` |
+| `PolarsLazyDataframe` | `PolarsLazyDataFrame` |
+
+**Note:** DuckDB naming was already consistent throughout - no changes needed.
+
+**Note:** Deprecation aliases were NOT created per user request (direct rename without backward compatibility).
 
 ### Rationale
-The codebase has inconsistent naming patterns: `PandasPyarrowTransformer` vs `PolarsPyarrowTransformer` (case differences), `DuckDB` vs `Duckdb` prefixes, and `Dataframe` vs `DataFrame` suffixes. This makes it difficult to discover classes programmatically, causes import errors when users guess names, and looks unprofessional. Standardizing on consistent PascalCase with proper acronym handling (PyArrow, DuckDB) improves discoverability and reduces user friction.
+The codebase had inconsistent naming patterns: `PandasPyarrowTransformer` vs `PolarsPyarrowTransformer` (case differences), and `Dataframe` vs `DataFrame` suffixes. Standardizing on consistent PascalCase with proper acronym handling (PyArrow, DataFrame) improves discoverability and reduces user friction.
 
-**Pros:**
+**Benefits Achieved:**
 - Consistent, predictable API
 - Easier to discover and import classes
 - Better IDE autocompletion
 - Professional appearance
-
-**Cons:**
-- Breaking change for all imports
-- Requires deprecation period with aliases
-- Documentation and examples need updates
 
 ---
 
@@ -211,7 +229,7 @@ Three different patterns exist for data access: ReadFile checks `isinstance(data
 - [ ] Run tox validation
 
 ### Rationale
-Methods like `PandasDataframe.pd_dataframe()` are marked `@staticmethod` but access global `pd` variable, violating static method semantics. Instance methods like `merge_engine()` don't use `self` but aren't static. This inconsistency makes testing and mocking difficult, breaks IDE analysis, and confuses developers about method contracts. Proper classification enables better testing and clearer intent.
+Methods like `PandasDataFrame.pd_dataframe()` are marked `@staticmethod` but access global `pd` variable, violating static method semantics. Instance methods like `merge_engine()` don't use `self` but aren't static. This inconsistency makes testing and mocking difficult, breaks IDE analysis, and confuses developers about method contracts. Proper classification enables better testing and clearer intent.
 
 **Pros:**
 - Proper semantic usage of decorators
@@ -321,7 +339,7 @@ Every experimental feature group reimplements identical logic: feature chain par
 | 1 | Unify Filter Parameter Interface | High | Medium | **DONE** |
 | 2 | Replace NotImplementedError with ABC | Medium | Low | Pending |
 | 3 | Eliminate Dual Interface Pattern | High | High | Pending |
-| 4 | Standardize Class Naming | Medium | Low | Pending |
+| 4 | Standardize Class Naming | Medium | Low | **DONE** |
 | 5 | Replace Options Dict with Typed Classes | High | High | Pending |
 | 6 | Standardize Data Access Patterns | Medium | Medium | Pending |
 | 7 | Fix Static vs Class Method | Low | Low | Pending |

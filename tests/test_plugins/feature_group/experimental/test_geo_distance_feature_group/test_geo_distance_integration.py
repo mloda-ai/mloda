@@ -9,7 +9,7 @@ from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.geo_distance.base import GeoDistanceFeatureGroup
 from mloda_plugins.feature_group.experimental.geo_distance.pandas import PandasGeoDistanceFeatureGroup
@@ -47,7 +47,7 @@ class GeoDistanceTestDataCreator(ATestDataCreator):
 class PandasGeoDistanceTestDataCreator(GeoDistanceTestDataCreator):
     """Pandas implementation of the geo distance test data creator."""
 
-    compute_framework = PandasDataframe
+    compute_framework = PandasDataFrame
 
 
 def validate_geo_distance_features(df: pd.DataFrame, expected_features: List[Feature | str]) -> None:
@@ -105,7 +105,7 @@ class TestGeoDistancePandasIntegration:
                 "point1&point2__euclidean_distance",  # Euclidean distance between point1 and point2
                 "point1&point2__manhattan_distance",  # Manhattan distance between point1 and point2
             ],
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
         )
 
@@ -174,7 +174,7 @@ class TestGeoDistancePandasIntegration:
                 euclidean_config,  # Euclidean distance between point1 and point2
                 manhattan_config,  # Manhattan distance between point1 and point2
             ],
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
         )
 

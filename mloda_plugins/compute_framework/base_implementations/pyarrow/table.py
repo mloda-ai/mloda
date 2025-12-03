@@ -16,7 +16,7 @@ except ImportError:
     pd = None
 
 
-class PyarrowTable(ComputeFrameWork):
+class PyArrowTable(ComputeFrameWork):
     @staticmethod
     def is_available() -> bool:
         """Check if PyArrow is installed and available."""

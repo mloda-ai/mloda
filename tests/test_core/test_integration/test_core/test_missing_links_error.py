@@ -28,7 +28,7 @@ from mloda_core.abstract_plugins.components.input_data.creator.data_creator impo
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
 # Test Feature Groups
@@ -109,7 +109,7 @@ class TestMissingLinksError:
             mlodaAPI.run_all(
                 features=[Feature.int32_of("MultiDependencyFeature")],
                 links=set(),  # EMPTY - this should trigger the error
-                compute_frameworks={PyarrowTable},
+                compute_frameworks={PyArrowTable},
                 plugin_collector=PlugInCollector.enabled_feature_groups(
                     {RootFeatureA, RootFeatureB, MultiDependencyFeature}
                 ),

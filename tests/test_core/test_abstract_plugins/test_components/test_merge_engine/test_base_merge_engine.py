@@ -115,7 +115,7 @@ class TestBaseMergeEngine:
 
         result = mlodaAPI.run_all(
             feature_list,
-            compute_frameworks=["PandasDataframe"],
+            compute_frameworks=["PandasDataFrame"],
             plugin_collector=PlugInCollector.enabled_feature_groups({AppendMergeTestFeature}),
         )
         assert len(result) == 1
@@ -135,7 +135,7 @@ class TestBaseMergeEngine:
 
         result = mlodaAPI.run_all(
             [feature],
-            compute_frameworks=["PandasDataframe"],
+            compute_frameworks=["PandasDataFrame"],
             plugin_collector=PlugInCollector.enabled_feature_groups(
                 {GroupedAppendMergeTestFeature, AppendMergeTestFeature}
             ),
@@ -183,7 +183,7 @@ class TestBaseMergeEngine:
 
         result = mlodaAPI.run_all(
             [feature, feature2],
-            compute_frameworks=["PandasDataframe"],
+            compute_frameworks=["PandasDataFrame"],
             plugin_collector=PlugInCollector.enabled_feature_groups(
                 {GroupedAppendMergeTestFeature, AppendMergeTestFeature, SecondAppendMergeTestFeature}
             ),
@@ -208,7 +208,7 @@ class TestBaseMergeEngine:
         result = mlodaAPI.run_all(
             [feature],
             links={link},
-            compute_frameworks=["PandasDataframe"],
+            compute_frameworks=["PandasDataFrame"],
             plugin_collector=PlugInCollector.enabled_feature_groups(
                 {
                     GroupedAppendMergeTestFeature,

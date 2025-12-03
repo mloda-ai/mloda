@@ -9,8 +9,8 @@ from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
 from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
-from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataframe
-from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataframe
+from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
+from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
 import logging
@@ -35,12 +35,12 @@ polars_test_dict = {
 class PolarsLazyTestDataCreator(ATestDataCreator):
     """Test data creator for Polars lazy integration tests."""
 
-    compute_framework = PolarsLazyDataframe
+    compute_framework = PolarsLazyDataFrame
 
     # Override conversion to support Polars LazyFrame
     conversion = {
         **ATestDataCreator.conversion,
-        PolarsLazyDataframe: lambda data: pl.LazyFrame(data),
+        PolarsLazyDataFrame: lambda data: pl.LazyFrame(data),
     }
 
     @classmethod
@@ -52,12 +52,12 @@ class PolarsLazyTestDataCreator(ATestDataCreator):
 class PolarsEagerTestDataCreator(ATestDataCreator):
     """Test data creator for Polars eager integration tests."""
 
-    compute_framework = PolarsDataframe
+    compute_framework = PolarsDataFrame
 
     # Override conversion to support Polars DataFrame
     conversion = {
         **ATestDataCreator.conversion,
-        PolarsDataframe: lambda data: pl.DataFrame(data),
+        PolarsDataFrame: lambda data: pl.DataFrame(data),
     }
 
     @classmethod
@@ -72,7 +72,7 @@ class PolarsLazySimpleTransformFeatureGroup(AbstractFeatureGroup):
     @classmethod
     def compute_framework_rule(cls) -> Set[Any]:
         """Support both lazy and eager Polars frameworks."""
-        return {PolarsDataframe, PolarsLazyDataframe}
+        return {PolarsDataFrame, PolarsLazyDataFrame}
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         """Require base features for transformation."""
@@ -113,7 +113,7 @@ class SecondTransformFeatureGroup(AbstractFeatureGroup):
 
     @classmethod
     def compute_framework_rule(cls) -> Set[Any]:
-        return {PolarsLazyDataframe}
+        return {PolarsLazyDataFrame}
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         return {Feature("doubled_value")}
@@ -137,7 +137,7 @@ class SecondTransformFeatureGroup(AbstractFeatureGroup):
 
 @pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
 class TestPolarsLazyIntegrationWithMlodaAPI:
-    """Integration tests for PolarsLazyDataframe with mlodaAPI."""
+    """Integration tests for PolarsLazyDataFrame with mlodaAPI."""
 
     @pytest.mark.parametrize(
         "modes",
@@ -158,7 +158,7 @@ class TestPolarsLazyIntegrationWithMlodaAPI:
             feature_list,
             flight_server=flight_server,
             parallelization_modes=modes,
-            compute_frameworks={PolarsLazyDataframe},
+            compute_frameworks={PolarsLazyDataFrame},
             plugin_collector=plugin_collector,
         )
 
@@ -188,7 +188,7 @@ class TestPolarsLazyIntegrationWithMlodaAPI:
         )
         eager_result = mlodaAPI.run_all(
             feature_list,
-            compute_frameworks={PolarsDataframe},
+            compute_frameworks={PolarsDataFrame},
             plugin_collector=eager_plugin_collector,
         )
 
@@ -198,7 +198,7 @@ class TestPolarsLazyIntegrationWithMlodaAPI:
         )
         lazy_result = mlodaAPI.run_all(
             feature_list,
-            compute_frameworks={PolarsLazyDataframe},
+            compute_frameworks={PolarsLazyDataFrame},
             plugin_collector=lazy_plugin_collector,
         )
 
@@ -232,7 +232,7 @@ class TestPolarsLazyIntegrationWithMlodaAPI:
         result = mlodaAPI.run_all(
             feature_list,
             flight_server=flight_server,
-            compute_frameworks={PolarsLazyDataframe},
+            compute_frameworks={PolarsLazyDataFrame},
             plugin_collector=plugin_collector,
             parallelization_modes={ParallelizationModes.SYNC},
         )

@@ -6,11 +6,11 @@ import pyarrow as pa
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
 from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
 
 
-class TestPyarrowTableAvailability:
+class TestPyArrowTableAvailability:
     @patch("builtins.__import__")
     def test_is_available_when_pyarrow_not_installed(self, mock_import: Any) -> None:
         """Test that is_available() returns False when pyarrow import fails."""
@@ -21,11 +21,11 @@ class TestPyarrowTableAvailability:
             return __import__(name, *args, **kwargs)
 
         mock_import.side_effect = side_effect
-        assert PyarrowTable.is_available() is False
+        assert PyArrowTable.is_available() is False
 
 
-class TestPyarrowTableComputeFramework:
-    pyarrow_table = PyarrowTable(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+class TestPyArrowTableComputeFramework:
+    pyarrow_table = PyArrowTable(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
     dict_data = {"column1": [1, 2, 3], "column2": [4, 5, 6]}
     expected_data = pa.table(dict_data)
     left_data = pa.table({"idx": [1, 3], "col1": ["a", "b"]})
@@ -43,7 +43,7 @@ class TestPyarrowTableComputeFramework:
         pa_array = pa.array([1, 2, 3])
 
         for data in [chunked_array, pa_array]:
-            _pytable = PyarrowTable(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+            _pytable = PyArrowTable(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
             _pytable.set_data(pa.table({"existing_column": [4, 5, 6]}))
 
             data = _pytable.transform(data=data, feature_names={"new_column"})
@@ -64,12 +64,12 @@ class TestPyarrowTableComputeFramework:
 
 
 class TestPyArrowTableMerge(DataFrameTestBase):
-    """Test PyarrowTable merge operations using the base test class."""
+    """Test PyArrowTable merge operations using the base test class."""
 
     @classmethod
     def framework_class(cls) -> Type[Any]:
-        """Return the PyarrowTable class."""
-        return PyarrowTable
+        """Return the PyArrowTable class."""
+        return PyArrowTable
 
     def create_dataframe(self, data: dict[str, Any]) -> Any:
         """Create a pyarrow Table from a dictionary."""

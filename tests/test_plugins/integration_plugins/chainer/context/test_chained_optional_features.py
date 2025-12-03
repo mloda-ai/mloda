@@ -5,7 +5,7 @@ from mloda_plugins.feature_group.experimental.default_options_key import Default
 
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from tests.test_plugins.integration_plugins.chainer.chainer_context_feature import (
     ChainedContextFeatureGroupTest,
 )
@@ -16,7 +16,7 @@ from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCr
 class ChainerContextParserTestDataCreator(ATestDataCreator):
     """Test data creator for aggregation parser tests."""
 
-    compute_framework = PandasDataframe
+    compute_framework = PandasDataFrame
 
     @classmethod
     def get_raw_data(cls) -> Dict[str, Any]:
@@ -81,7 +81,7 @@ class TestChainedFeatures:
                 feature1,
                 "Sales",
             ],
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             plugin_collector=self.plugin_collector,
         )
         # Currently, we duplicate here the data. This can be changed in the future.
@@ -91,7 +91,7 @@ class TestChainedFeatures:
             [
                 feature4,
             ],
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             plugin_collector=self.plugin_collector,
         )
         assert len(result) == 1

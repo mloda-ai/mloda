@@ -13,7 +13,7 @@ except ImportError:
     pa = None
 
 
-class PandasPyarrowTransformer(BaseTransformer):
+class PandasPyArrowTransformer(BaseTransformer):
     """
     Transformer for converting between Pandas DataFrame and PyArrow Table.
 

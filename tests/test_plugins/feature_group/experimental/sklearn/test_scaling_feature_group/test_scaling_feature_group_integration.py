@@ -10,7 +10,7 @@ from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.scaling.base import ScalingFeatureGroup
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
@@ -22,7 +22,7 @@ from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCr
 class ScalingIntegrationTestDataCreator(ATestDataCreator):
     """Test data creator for scaling integration tests."""
 
-    compute_framework = PandasDataframe
+    compute_framework = PandasDataFrame
 
     @classmethod
     def get_raw_data(cls) -> Dict[str, Any]:
@@ -57,7 +57,7 @@ class TestScalingFeatureGroupIntegration:
         # Phase 1: Train and save artifacts
         api1 = mlodaAPI(
             [scaling_feature],
-            {PandasDataframe},
+            {PandasDataFrame},
             plugin_collector=plugin_collector,
         )
         api1._batch_run()
@@ -90,7 +90,7 @@ class TestScalingFeatureGroupIntegration:
 
         api2 = mlodaAPI(
             [scaling_feature_reuse],
-            {PandasDataframe},
+            {PandasDataFrame},
             plugin_collector=plugin_collector,
         )
         api2._batch_run()

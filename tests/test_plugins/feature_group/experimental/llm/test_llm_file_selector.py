@@ -10,7 +10,7 @@ from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.llm.llm_file_selector import LLMFileSelector
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.input_data.read_context_files import ConcatenatedFileContent
 
 
@@ -56,7 +56,7 @@ def test_llm_file_selector() -> None:
 
     results = mlodaAPI.run_all(
         features,
-        compute_frameworks={PandasDataframe},
+        compute_frameworks={PandasDataFrame},
     )
 
     # prompt = "Given the following code files, which code smells do you see?"
@@ -97,7 +97,7 @@ def test_llm_file_selector() -> None:
     try:
         results = mlodaAPI.run_all(
             [llm_feature],
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
         )
     except ValueError as e:
         print(e)

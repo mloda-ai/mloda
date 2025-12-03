@@ -11,7 +11,7 @@ from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.function_extender import WrapperFunctionEnum, WrapperFunctionExtender
 from mloda_core.api.request import mlodaAPI
 from mloda_core.runtime.flight.flight_server import FlightServer
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
@@ -110,7 +110,7 @@ class TestValidateInputFeatures:
         function_extender: Set[WrapperFunctionExtender] = set(),
     ) -> List[Any]:
         results = mlodaAPI.run_all(
-            features, {PyarrowTable}, None, None, parallelization_modes, flight_server, function_extender
+            features, {PyArrowTable}, None, None, parallelization_modes, flight_server, function_extender
         )
 
         # make sure all datasets are dropped on server

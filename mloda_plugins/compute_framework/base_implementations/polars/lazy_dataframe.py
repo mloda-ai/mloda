@@ -1,6 +1,6 @@
 from typing import Any, Set, Type
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataframe
+from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
 from mloda_core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.polars.polars_lazy_merge_engine import PolarsLazyMergeEngine
 
@@ -10,9 +10,9 @@ except ImportError:
     pl = None  # type: ignore[assignment]
 
 
-class PolarsLazyDataframe(PolarsDataframe):
+class PolarsLazyDataFrame(PolarsDataFrame):
     """
-    Lazy evaluation version of PolarsDataframe using pl.LazyFrame.
+    Lazy evaluation version of PolarsDataFrame using pl.LazyFrame.
 
     This compute framework defers execution of operations until results are explicitly
     requested, enabling query optimization and reduced memory usage for large datasets.
@@ -20,7 +20,7 @@ class PolarsLazyDataframe(PolarsDataframe):
 
     @staticmethod
     def expected_data_framework() -> Any:
-        return PolarsLazyDataframe.pl_lazy_frame()
+        return PolarsLazyDataFrame.pl_lazy_frame()
 
     def merge_engine(self) -> Type[BaseMergeEngine]:
         return PolarsLazyMergeEngine

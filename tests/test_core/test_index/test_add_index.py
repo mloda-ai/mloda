@@ -138,7 +138,7 @@ class TestAddIndex(unittest.TestCase):
 
         result = mlodaAPI.run_all(
             [f],
-            compute_frameworks=["PyarrowTable"],
+            compute_frameworks=["PyArrowTable"],
             links={link},
             plugin_collector=PlugInCollector.disabled_feature_groups({ReadDBFeature}),
         )

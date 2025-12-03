@@ -6,8 +6,8 @@ from typing import List
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindowFeatureGroup
 from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindowFeatureGroup
 
@@ -47,7 +47,7 @@ class TestTimeWindowPandasIntegration:
                 "pressure__min_2_day_window",  # 2-day minimum pressure
                 "wind_speed__sum_4_day_window",  # 4-day sum of wind speed
             ],
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
         )
 
@@ -87,7 +87,7 @@ class TestTimeWindowPyArrowIntegration:
                 "pressure__min_2_day_window",  # 2-day minimum pressure
                 "wind_speed__sum_4_day_window",  # 4-day sum of wind speed
             ],
-            compute_frameworks={PyarrowTable},
+            compute_frameworks={PyArrowTable},
             plugin_collector=plugin_collector,
         )
 

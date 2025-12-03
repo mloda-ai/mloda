@@ -11,7 +11,7 @@ from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 from mloda_core.filter.global_filter import GlobalFilter
 from mloda_core.runtime.flight.flight_server import FlightServer
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_core.core.engine import Engine
 from mloda_core.runtime.run import Runner
 from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
@@ -35,7 +35,7 @@ class TimeTravelNegativeFilterTest(AbstractFeatureGroup):
 
     @classmethod
     def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
-        return {PyarrowTable}
+        return {PyArrowTable}
 
 
 class TimeTravelPositiveFilterTest(AbstractFeatureGroup):
@@ -86,7 +86,7 @@ class TestTimeTravel:
         flight_server: Any,
         global_filter: GlobalFilter,
     ) -> Runner:
-        compute_framework: Set[Type[ComputeFrameWork]] = {PyarrowTable}
+        compute_framework: Set[Type[ComputeFrameWork]] = {PyArrowTable}
 
         engine = Engine(features, compute_framework, None, global_filter=global_filter)
 

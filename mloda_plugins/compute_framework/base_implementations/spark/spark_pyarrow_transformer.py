@@ -14,7 +14,7 @@ except ImportError:
     pa = None
 
 
-class SparkPyarrowTransformer(BaseTransformer):
+class SparkPyArrowTransformer(BaseTransformer):
     """
     Transformer for converting between Spark DataFrame and PyArrow Table.
 

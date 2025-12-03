@@ -141,7 +141,7 @@ class DynamicFeatureGroupCreator:
     properties = {
         "match_feature_group_criteria": custom_match_criteria,
         "input_features": custom_input_features,
-        "compute_framework_rule": lambda: {PandasDataframe},
+        "compute_framework_rule": lambda: {PandasDataFrame},
     }
 
     CustomFG = DynamicFeatureGroupCreator.create(

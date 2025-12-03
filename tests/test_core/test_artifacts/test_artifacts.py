@@ -6,7 +6,7 @@ from mloda_core.abstract_plugins.components.input_data.base_input_data import Ba
 from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
 from mloda_core.api.request import mlodaAPI
 from mloda_core.runtime.flight.flight_server import FlightServer
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
@@ -85,7 +85,7 @@ class TestBaseArtifacts:
         parallelization_modes: Set[ParallelizationModes],
         flight_server: Any,
     ) -> Tuple[List[Any], Dict[str, Any]]:
-        api = mlodaAPI(features, {PyarrowTable})
+        api = mlodaAPI(features, {PyArrowTable})
         api._batch_run(parallelization_modes, flight_server)
         results = api.get_result()
         artifacts = api.get_artifacts()

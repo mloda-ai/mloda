@@ -46,7 +46,7 @@ from mloda_core.api.request import mlodaAPI
 
 result = mlodaAPI.run_all(
             example_feature_list, 
-            compute_frameworks=["PyarrowTable"], 
+            compute_frameworks=["PyArrowTable"], 
             data_access_collection=data_access_collection
         )
 result[0]

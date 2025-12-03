@@ -50,5 +50,5 @@ class TestSetFeatureName:
     def test_set_feature_name(self) -> None:
         mlodaAPI.run_all(
             ["ATestSetFeatureNameFeature"],
-            compute_frameworks=["PyarrowTable"],
+            compute_frameworks=["PyArrowTable"],
         )

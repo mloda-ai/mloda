@@ -12,14 +12,14 @@ import pyarrow.compute as pc
 
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 
 
 class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
     @classmethod
     def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
-        return {PyarrowTable}
+        return {PyArrowTable}
 
     @classmethod
     def _check_time_filter_feature_exists(cls, data: pa.Table, time_filter_feature: str) -> None:

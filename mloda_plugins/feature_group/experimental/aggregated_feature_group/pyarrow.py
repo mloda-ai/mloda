@@ -11,7 +11,7 @@ import pyarrow.compute as pc
 
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 
 
@@ -25,7 +25,7 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
     @classmethod
     def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
         """Specify that this feature group works with PyArrow."""
-        return {PyarrowTable}
+        return {PyArrowTable}
 
     @classmethod
     def _get_available_columns(cls, data: pa.Table) -> Set[str]:

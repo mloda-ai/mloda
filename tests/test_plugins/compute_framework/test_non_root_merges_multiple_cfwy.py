@@ -1,7 +1,7 @@
 from typing import Any, Optional, Set, Type, Union
 
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 import pytest
 import pyarrow as pa
 
@@ -16,7 +16,7 @@ from mloda_core.abstract_plugins.components.link import Link
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_core.api.request import mlodaAPI
 
 
@@ -31,7 +31,7 @@ class NonCfwRootJoinTestFeature(AbstractFeatureGroup):
 
     @classmethod
     def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
-        return {PyarrowTable}
+        return {PyArrowTable}
 
 
 class NonCfwRootJoinTestFeatureB(NonCfwRootJoinTestFeature):
@@ -51,7 +51,7 @@ class SecondNonCfwRootJoinTestFeature(NonCfwRootJoinTestFeature):
 
     @classmethod
     def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
-        return {PandasDataframe}
+        return {PandasDataFrame}
 
 
 class GroupedNonCfwRootJoinTestFeature(AbstractFeatureGroup):
@@ -72,7 +72,7 @@ class GroupedNonCfwRootJoinTestFeature(AbstractFeatureGroup):
 
     @classmethod
     def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
-        return {PyarrowTable}
+        return {PyArrowTable}
 
 
 class GroupedSecondNonCfwRootJoinTestFeature(GroupedNonCfwRootJoinTestFeature):
@@ -86,7 +86,7 @@ class GroupedSecondNonCfwRootJoinTestFeature(GroupedNonCfwRootJoinTestFeature):
 
     @classmethod
     def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
-        return {PandasDataframe}
+        return {PandasDataFrame}
 
 
 class Call2GroupedNonCfwRootJoinTestFeature(AbstractFeatureGroup):
@@ -132,7 +132,7 @@ class TestNonCfWRootMerge:
         result = mlodaAPI.run_all(
             [feature],
             links={link},
-            compute_frameworks=["PyarrowTable", "PandasDataframe"],
+            compute_frameworks=["PyArrowTable", "PandasDataFrame"],
             plugin_collector=PlugInCollector.enabled_feature_groups(
                 {
                     NonCfwRootJoinTestFeature,
@@ -172,7 +172,7 @@ class TestNonCfWRootMerge:
         result = mlodaAPI.run_all(
             [feature],
             links=links,
-            compute_frameworks=["PyarrowTable", "PandasDataframe"],
+            compute_frameworks=["PyArrowTable", "PandasDataFrame"],
             plugin_collector=PlugInCollector.enabled_feature_groups(
                 {
                     NonCfwRootJoinTestFeature,

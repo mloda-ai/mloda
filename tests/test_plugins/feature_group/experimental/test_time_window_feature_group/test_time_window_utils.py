@@ -6,8 +6,8 @@ from typing import Any, Dict, List
 import pandas as pd
 
 from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
@@ -30,11 +30,11 @@ class TimeWindowTestDataCreator(ATestDataCreator):
 
 
 class PandasTimeWindowTestDataCreator(TimeWindowTestDataCreator):
-    compute_framework = PandasDataframe
+    compute_framework = PandasDataFrame
 
 
 class PyArrowTimeWindowTestDataCreator(TimeWindowTestDataCreator):
-    compute_framework = PyarrowTable
+    compute_framework = PyArrowTable
 
 
 def validate_time_window_features(window_df: pd.DataFrame, expected_features: List[Feature | str]) -> None:

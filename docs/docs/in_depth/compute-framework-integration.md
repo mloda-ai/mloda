@@ -14,7 +14,7 @@ Feature groups specify which compute frameworks they support through the `comput
 @classmethod
 def compute_framework_rule(cls) -> set[type[ComputeFrameWork]]:
     """Define the compute frameworks this feature group supports."""
-    return {PandasDataframe}  # Support only Pandas
+    return {PandasDataFrame}  # Support only Pandas
     # Or return True to support all available compute frameworks
 ```
 
@@ -62,7 +62,7 @@ class PandasMyFeatureGroup(MyFeatureGroup):
     @classmethod
     def compute_framework_rule(cls):
         """Define supported compute frameworks."""
-        return {PandasDataframe}
+        return {PandasDataFrame}
     
     @classmethod
     def calculate_feature(cls, data, features):
@@ -110,7 +110,7 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
 class PandasClusteringFeatureGroup(ClusteringFeatureGroup):
     @classmethod
     def compute_framework_rule(cls):
-        return {PandasDataframe}
+        return {PandasDataFrame}
     
     @classmethod
     def calculate_feature(cls, data, features):
@@ -143,7 +143,7 @@ class AggregatedFeatureGroup(AbstractFeatureGroup):
 class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
     @classmethod
     def compute_framework_rule(cls):
-        return {PolarsLazyDataframe}
+        return {PolarsLazyDataFrame}
     
     @classmethod
     def calculate_feature(cls, data, features):
@@ -151,7 +151,7 @@ class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
         # Uses lazy evaluation for query optimization
 ```
 
-Note that Polars supports both eager (`PolarsDataframe`) and lazy (`PolarsLazyDataframe`) evaluation modes, allowing you to choose the appropriate strategy based on your performance requirements.
+Note that Polars supports both eager (`PolarsDataFrame`) and lazy (`PolarsLazyDataFrame`) evaluation modes, allowing you to choose the appropriate strategy based on your performance requirements.
 
 For an analytical feature group with DuckDB support:
 

@@ -7,7 +7,7 @@ from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregatedFeatureGroup
 
@@ -55,7 +55,7 @@ class TestPyArrowAggregatedFeatureGroup:
 
     def test_compute_framework_rule(self) -> None:
         """Test compute_framework_rule method."""
-        assert PyArrowAggregatedFeatureGroup.compute_framework_rule() == {PyarrowTable}
+        assert PyArrowAggregatedFeatureGroup.compute_framework_rule() == {PyArrowTable}
 
     def test_perform_aggregation_sum(self, sample_table: pa.Table) -> None:
         """Test _perform_aggregation method with sum aggregation."""
@@ -195,7 +195,7 @@ class TestAggPyArrowIntegration:
                 "discount__min_aggr",
                 "customer_rating__max_aggr",
             ],
-            compute_frameworks={PyarrowTable},
+            compute_frameworks={PyArrowTable},
             plugin_collector=plugin_collector,
         )
 

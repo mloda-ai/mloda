@@ -33,9 +33,9 @@ This document identifies 10 targeted improvements for the test codebase. Each im
 - [ ] Ensure each test gets fresh data instances
 - [ ] Run `tox` to verify all tests pass
 
-**Partial Progress:** The `DataFrameTestBase` class (from improvement #3) uses `setup_method()` to create fresh `left_data` and `right_data` per test method, addressing isolation for merge tests. However, the original `TestPandasDataframeComputeFramework` (and similar) still use class-level attributes.
+**Partial Progress:** The `DataFrameTestBase` class (from improvement #3) uses `setup_method()` to create fresh `left_data` and `right_data` per test method, addressing isolation for merge tests. However, the original `TestPandasDataFrameComputeFramework` (and similar) still use class-level attributes.
 
-**Why:** Tests like `TestPandasDataframeComputeFramework` define shared class attributes (`left_data`, `right_data`) that persist across test methods. If any test accidentally mutates this data, subsequent tests receive polluted state, causing intermittent failures that are difficult to debug. Fixtures create fresh instances per test, guaranteeing isolation.
+**Why:** Tests like `TestPandasDataFrameComputeFramework` define shared class attributes (`left_data`, `right_data`) that persist across test methods. If any test accidentally mutates this data, subsequent tests receive polluted state, causing intermittent failures that are difficult to debug. Fixtures create fresh instances per test, guaranteeing isolation.
 
 | Pros | Cons |
 |------|------|
@@ -65,8 +65,8 @@ Created `DataFrameTestBase` in `tests/test_plugins/compute_framework/test_toolin
 - Helper methods: `_create_test_framework()`, `_get_merge_engine()`, `_assert_row_count()`, `_assert_result_equals()`
 
 Framework implementations:
-- `TestPandasDataframeMerge(DataFrameTestBase)` - pandas/test_pandas_dataframe.py
-- `TestPolarsDataframeMerge(DataFrameTestBase)` - polars/test_polars_dataframe.py
+- `TestPandasDataFrameMerge(DataFrameTestBase)` - pandas/test_pandas_dataframe.py
+- `TestPolarsDataFrameMerge(DataFrameTestBase)` - polars/test_polars_dataframe.py
 - `TestPyArrowTableMerge(DataFrameTestBase)` - pyarrow/test_pyarrow_table.py (skips append/union due to PyArrow limitations)
 - `TestDuckDBFrameworkMerge(DataFrameTestBase)` - duckdb/test_duckdb_framework.py (custom connection handling)
 

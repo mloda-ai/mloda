@@ -3,9 +3,9 @@ import pytest
 from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
-from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataframe
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_core.core.engine import Engine
 from mloda_core.runtime.run import Runner
@@ -26,15 +26,15 @@ import mloda_plugins.compute_framework.base_implementations.polars.polars_pyarro
 import mloda_plugins.compute_framework.base_implementations.polars.polars_lazy_pyarrow_transformer  # noqa: F401
 
 
-class SecondCfw(PyarrowTable):
+class SecondCfw(PyArrowTable):
     pass
 
 
-class ThirdCfw(PyarrowTable):
+class ThirdCfw(PyArrowTable):
     pass
 
 
-class FourthCfw(PyarrowTable):
+class FourthCfw(PyArrowTable):
     pass
 
 
@@ -49,7 +49,7 @@ class JoinCfwTest1(AbstractFeatureGroup):
 
     @classmethod
     def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
-        return {PyarrowTable}
+        return {PyArrowTable}
 
 
 class JoinCfwTest2(AbstractFeatureGroup):
@@ -121,7 +121,7 @@ class Join3CfwTest(AbstractFeatureGroup):
 
     @classmethod
     def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
-        return {PyarrowTable}
+        return {PyArrowTable}
 
 
 class Join4CfwTest(Join3CfwTest):
@@ -143,7 +143,7 @@ class Join4CfwTest(Join3CfwTest):
 
     @classmethod
     def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
-        return {PyarrowTable}
+        return {PyArrowTable}
 
 
 class MultiIndexJoinTest1(AbstractFeatureGroup):
@@ -163,7 +163,7 @@ class MultiIndexJoinTest1(AbstractFeatureGroup):
 
     @classmethod
     def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
-        return {PandasDataframe}
+        return {PandasDataFrame}
 
 
 class MultiIndexJoinTest2(AbstractFeatureGroup):
@@ -183,7 +183,7 @@ class MultiIndexJoinTest2(AbstractFeatureGroup):
 
     @classmethod
     def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
-        return {PolarsLazyDataframe}
+        return {PolarsLazyDataFrame}
 
 
 class MultiIndexJoinTest3(AbstractFeatureGroup):
@@ -203,7 +203,7 @@ class MultiIndexJoinTest3(AbstractFeatureGroup):
 
     @classmethod
     def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
-        return {PyarrowTable}
+        return {PyArrowTable}
 
 
 class MultiIndexJoinTest4(AbstractFeatureGroup):
@@ -248,7 +248,7 @@ class JoinMultiIndexTest(AbstractFeatureGroup):
 
     @classmethod
     def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
-        return {PyarrowTable}
+        return {PyArrowTable}
 
 
 @pytest.mark.parametrize(
@@ -267,12 +267,12 @@ class TestEngineMultipleJoinCfw:
         self, features: Features, parallelization_modes: Set[ParallelizationModes], flight_server: Any, links: Set[Link]
     ) -> Runner:
         compute_framework: Set[Type[ComputeFrameWork]] = {
-            PyarrowTable,
+            PyArrowTable,
             SecondCfw,
             ThirdCfw,
             FourthCfw,
-            PandasDataframe,
-            PolarsLazyDataframe,
+            PandasDataFrame,
+            PolarsLazyDataFrame,
             PythonDictFramework,
         }
 

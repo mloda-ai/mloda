@@ -15,7 +15,7 @@ from mloda_core.abstract_plugins.components.plugin_option.plugin_collector impor
 from mloda_core.api.request import mlodaAPI
 from mloda_core.filter.single_filter import SingleFilter
 from mloda_core.filter.filter_type_enum import FilterTypeEnum
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
@@ -25,7 +25,7 @@ from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCr
 class ComplexEncodingTestDataCreator(ATestDataCreator):
     """Test data creator for complex encoding chaining tests."""
 
-    compute_framework = PandasDataframe
+    compute_framework = PandasDataFrame
 
     @classmethod
     def get_raw_data(cls) -> Dict[str, Any]:
@@ -95,7 +95,7 @@ class TestComplexEncodingChaining:
         # Phase 1: Train and save artifacts for all complex features
         api1 = mlodaAPI(
             complex_features,
-            {PandasDataframe},
+            {PandasDataFrame},
             plugin_collector=plugin_collector,
         )
         api1._batch_run()
@@ -178,7 +178,7 @@ class TestComplexEncodingChaining:
 
         api2 = mlodaAPI(
             complex_features_reuse,
-            {PandasDataframe},
+            {PandasDataFrame},
             plugin_collector=plugin_collector,
         )
         api2._batch_run()

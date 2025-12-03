@@ -1,7 +1,7 @@
 from typing import Any
 import pytest
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_pyarrow_transformer import (
-    DuckDBPyarrowTransformer,
+    DuckDBPyArrowTransformer,
 )
 
 import logging
@@ -22,7 +22,7 @@ except ImportError:
 
 
 @pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB or PyArrow is not installed. Skipping this test.")
-class TestDuckDBPyarrowTransformer:
+class TestDuckDBPyArrowTransformer:
     @pytest.fixture
     def connection(self) -> Any:
         """Create a DuckDB connection for testing."""
@@ -35,12 +35,12 @@ class TestDuckDBPyarrowTransformer:
 
     def test_framework_types(self) -> None:
         """Test that the transformer returns the correct framework types."""
-        assert DuckDBPyarrowTransformer.framework() == duckdb.DuckDBPyRelation
-        assert DuckDBPyarrowTransformer.other_framework() == pa.Table
+        assert DuckDBPyArrowTransformer.framework() == duckdb.DuckDBPyRelation
+        assert DuckDBPyArrowTransformer.other_framework() == pa.Table
 
     def test_check_imports(self) -> None:
         """Test that import checks work correctly."""
-        assert DuckDBPyarrowTransformer.check_imports() is True
+        assert DuckDBPyArrowTransformer.check_imports() is True
 
     def test_duckdb_to_pyarrow_transformation(self) -> None:
         """Test transformation from DuckDB relation to PyArrow Table."""
@@ -52,7 +52,7 @@ class TestDuckDBPyarrowTransformer:
         duckdb_relation = conn.from_arrow(arrow_table)
 
         # Transform to PyArrow
-        result_arrow_table = DuckDBPyarrowTransformer.transform_fw_to_other_fw(duckdb_relation)
+        result_arrow_table = DuckDBPyArrowTransformer.transform_fw_to_other_fw(duckdb_relation)
 
         # Verify it's a PyArrow Table
         assert isinstance(result_arrow_table, pa.Table)
@@ -70,7 +70,7 @@ class TestDuckDBPyarrowTransformer:
         )
 
         # Transform to DuckDB
-        duckdb_relation = DuckDBPyarrowTransformer.transform_other_fw_to_fw(arrow_table, connection)
+        duckdb_relation = DuckDBPyArrowTransformer.transform_other_fw_to_fw(arrow_table, connection)
 
         # Verify it's a DuckDB relation
         assert isinstance(duckdb_relation, duckdb.DuckDBPyRelation)
@@ -95,8 +95,8 @@ class TestDuckDBPyarrowTransformer:
         original_relation = connection.from_arrow(original_arrow)
 
         # Roundtrip: DuckDB -> PyArrow -> DuckDB
-        arrow_table = DuckDBPyarrowTransformer.transform_fw_to_other_fw(original_relation)
-        restored_relation = DuckDBPyarrowTransformer.transform_other_fw_to_fw(arrow_table, connection)
+        arrow_table = DuckDBPyArrowTransformer.transform_fw_to_other_fw(original_relation)
+        restored_relation = DuckDBPyArrowTransformer.transform_other_fw_to_fw(arrow_table, connection)
 
         # Verify data integrity
         original_df = original_relation.df()
@@ -121,8 +121,8 @@ class TestDuckDBPyarrowTransformer:
         empty_relation = connection.from_arrow(empty_arrow)
 
         # Transform to PyArrow and back
-        arrow_table = DuckDBPyarrowTransformer.transform_fw_to_other_fw(empty_relation)
-        restored_relation = DuckDBPyarrowTransformer.transform_other_fw_to_fw(arrow_table, connection)
+        arrow_table = DuckDBPyArrowTransformer.transform_fw_to_other_fw(empty_relation)
+        restored_relation = DuckDBPyArrowTransformer.transform_other_fw_to_fw(arrow_table, connection)
 
         # Verify structure is preserved
         restored_df = restored_relation.df()
@@ -138,8 +138,8 @@ class TestDuckDBPyarrowTransformer:
         relation_with_nulls = connection.from_arrow(arrow_with_nulls)
 
         # Roundtrip transformation
-        arrow_table = DuckDBPyarrowTransformer.transform_fw_to_other_fw(relation_with_nulls)
-        restored_relation = DuckDBPyarrowTransformer.transform_other_fw_to_fw(arrow_table, connection)
+        arrow_table = DuckDBPyArrowTransformer.transform_fw_to_other_fw(relation_with_nulls)
+        restored_relation = DuckDBPyArrowTransformer.transform_other_fw_to_fw(arrow_table, connection)
 
         # Verify null values are preserved
         original_df = relation_with_nulls.df()
@@ -158,11 +158,11 @@ class TestDuckDBPyarrowTransformer:
         duckdb_relation = connection.from_arrow(arrow_table)
 
         # Test DuckDB -> PyArrow transformation
-        arrow_result = DuckDBPyarrowTransformer.transform(duckdb.DuckDBPyRelation, pa.Table, duckdb_relation, None)
+        arrow_result = DuckDBPyArrowTransformer.transform(duckdb.DuckDBPyRelation, pa.Table, duckdb_relation, None)
         assert isinstance(arrow_result, pa.Table)
 
         # Test PyArrow -> DuckDB transformation
-        duckdb_result = DuckDBPyarrowTransformer.transform(pa.Table, duckdb.DuckDBPyRelation, arrow_result, connection)
+        duckdb_result = DuckDBPyArrowTransformer.transform(pa.Table, duckdb.DuckDBPyRelation, arrow_result, connection)
         assert isinstance(duckdb_result, duckdb.DuckDBPyRelation)
 
         # Verify data integrity
@@ -176,7 +176,7 @@ class TestDuckDBPyarrowTransformer:
         duckdb_relation = connection.from_arrow(arrow_table)
 
         with pytest.raises(ValueError):
-            DuckDBPyarrowTransformer.transform(list, dict, duckdb_relation, None)
+            DuckDBPyArrowTransformer.transform(list, dict, duckdb_relation, None)
 
     def test_large_dataset_transformation(self, connection: Any) -> None:
         """Test transformation with larger datasets."""
@@ -192,8 +192,8 @@ class TestDuckDBPyarrowTransformer:
         large_relation = connection.from_arrow(large_arrow)
 
         # Transform to PyArrow and back
-        arrow_result = DuckDBPyarrowTransformer.transform_fw_to_other_fw(large_relation)
-        restored_relation = DuckDBPyarrowTransformer.transform_other_fw_to_fw(arrow_result, connection)
+        arrow_result = DuckDBPyArrowTransformer.transform_fw_to_other_fw(large_relation)
+        restored_relation = DuckDBPyArrowTransformer.transform_other_fw_to_fw(arrow_result, connection)
 
         # Verify data integrity
         original_df = large_relation.df()
@@ -218,8 +218,8 @@ class TestDuckDBPyarrowTransformer:
         mixed_relation = connection.from_arrow(mixed_arrow)
 
         # Transform to PyArrow and back
-        arrow_result = DuckDBPyarrowTransformer.transform_fw_to_other_fw(mixed_relation)
-        restored_relation = DuckDBPyarrowTransformer.transform_other_fw_to_fw(arrow_result, connection)
+        arrow_result = DuckDBPyArrowTransformer.transform_fw_to_other_fw(mixed_relation)
+        restored_relation = DuckDBPyArrowTransformer.transform_other_fw_to_fw(arrow_result, connection)
 
         # Verify data integrity
         original_df = mixed_relation.df()
@@ -236,11 +236,11 @@ class TestDuckDBPyarrowTransformer:
         relation1 = connection.from_arrow(arrow_table)
 
         # Transform to PyArrow
-        arrow_result = DuckDBPyarrowTransformer.transform_fw_to_other_fw(relation1)
+        arrow_result = DuckDBPyArrowTransformer.transform_fw_to_other_fw(relation1)
 
         # Transform back with a different connection (should work)
         conn2 = duckdb.connect()
-        relation2 = DuckDBPyarrowTransformer.transform_other_fw_to_fw(arrow_result, conn2)
+        relation2 = DuckDBPyArrowTransformer.transform_other_fw_to_fw(arrow_result, conn2)
 
         # Verify data integrity
         df1 = relation1.df()
@@ -272,8 +272,8 @@ class TestDuckDBPyarrowTransformer:
         relation = connection.from_arrow(arrow_table)
 
         # Transform to PyArrow and back
-        arrow_result = DuckDBPyarrowTransformer.transform_fw_to_other_fw(relation)
-        restored_relation = DuckDBPyarrowTransformer.transform_other_fw_to_fw(arrow_result, connection)
+        arrow_result = DuckDBPyArrowTransformer.transform_fw_to_other_fw(relation)
+        restored_relation = DuckDBPyArrowTransformer.transform_other_fw_to_fw(arrow_result, connection)
 
         # Verify schema is preserved
         original_df = relation.df()

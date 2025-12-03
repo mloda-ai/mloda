@@ -37,7 +37,7 @@ class TestInputData:
 
     def test_data_creator(self) -> Any:
         features = [f"InputDataTestFeatureGroup_{f}" for f in self.feature_list]
-        result = mlodaAPI.run_all(features, compute_frameworks=["PyarrowTable"])  # type: ignore
+        result = mlodaAPI.run_all(features, compute_frameworks=["PyArrowTable"])  # type: ignore
         assert result[0].to_pydict() == {
             "InputDataTestFeatureGroup_id": [12, 2, 3],
             "InputDataTestFeatureGroup_V1": [1, 2, 3],
@@ -49,7 +49,7 @@ class TestInputData:
 
         result = mlodaAPI.run_all(
             features,  # type: ignore
-            compute_frameworks=["PyarrowTable"],
+            compute_frameworks=["PyArrowTable"],
             api_data={
                 "TestApiInputData": {
                     "ApiInputDataTestFeatureGroup_id": [12, 2, 3],
@@ -81,7 +81,7 @@ class TestInputData:
 
         result = mlodaAPI.run_all(
             [_agg_creator, _agg_api_input_feature],
-            compute_frameworks=["PyarrowTable"],
+            compute_frameworks=["PyArrowTable"],
             api_data={
                 "TestApiInputData": {
                     "ApiInputDataTestFeatureGroup_id": [12, 2, 3],

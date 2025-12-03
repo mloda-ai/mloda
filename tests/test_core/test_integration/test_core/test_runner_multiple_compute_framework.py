@@ -5,7 +5,7 @@ import pytest
 from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_core.core.engine import Engine
 from mloda_core.runtime.run import Runner
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
@@ -30,10 +30,10 @@ class MultipleCfwTest1(AbstractFeatureGroup):
 
     @classmethod
     def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
-        return {PyarrowTable}
+        return {PyArrowTable}
 
 
-class SecondCfw(PyarrowTable):
+class SecondCfw(PyArrowTable):
     pass
 
 
@@ -64,7 +64,7 @@ class ChangeCfw(AbstractFeatureGroup):
         return pc.multiply(data.column("MultipleCfwTest1"), 2)
 
 
-class ThirdCfw(PyarrowTable):
+class ThirdCfw(PyArrowTable):
     pass
 
 
@@ -102,7 +102,7 @@ class TestEngineMultipleCfw:
         parallelization_modes: Set[ParallelizationModes],
         flight_server: Any,
     ) -> Runner:
-        compute_framework: Set[Type[ComputeFrameWork]] = {PyarrowTable, SecondCfw, ThirdCfw}
+        compute_framework: Set[Type[ComputeFrameWork]] = {PyArrowTable, SecondCfw, ThirdCfw}
 
         engine = Engine(features, compute_framework, None)
 
@@ -134,7 +134,7 @@ class TestEngineMultipleCfw:
         runner = self.basic_runner(features, modes, flight_server)
 
         used_cfws = {step.compute_framework for step in runner.execution_planner.execution_plan}  # type: ignore
-        assert used_cfws == {PyarrowTable, SecondCfw}
+        assert used_cfws == {PyArrowTable, SecondCfw}
 
         for result in runner.get_result():
             assert isinstance(result, pa.Table)
@@ -150,17 +150,17 @@ class TestEngineMultipleCfw:
 
         execution_plan = runner.execution_planner.execution_plan
         used_cfws = [step.compute_framework for step in execution_plan if isinstance(step, FeatureGroupStep)]
-        assert used_cfws == [PyarrowTable, SecondCfw]
+        assert used_cfws == [PyArrowTable, SecondCfw]
 
         assert isinstance(execution_plan[1], TransformFrameworkStep)
         tfs = execution_plan[1]
-        assert tfs.from_framework == PyarrowTable
+        assert tfs.from_framework == PyArrowTable
         assert tfs.to_framework == SecondCfw
         assert tfs.from_feature_group == MultipleCfwTest1
         assert tfs.to_feature_group == ChangeCfw
         assert tfs.required_uuids == {execution_plan[0].features.any_uuid}  # type: ignore
 
-        assert execution_plan[0].compute_framework == PyarrowTable  # type: ignore
+        assert execution_plan[0].compute_framework == PyArrowTable  # type: ignore
         assert execution_plan[2].compute_framework == SecondCfw  # type: ignore
 
         result = runner.get_result()
@@ -174,12 +174,12 @@ class TestEngineMultipleCfw:
 
         execution_plan = runner.execution_planner.execution_plan
         used_cfws = {step.compute_framework for step in execution_plan if isinstance(step, FeatureGroupStep)}
-        assert used_cfws == {PyarrowTable, SecondCfw}
+        assert used_cfws == {PyArrowTable, SecondCfw}
 
         for step in execution_plan:
             if isinstance(step, TransformFrameworkStep):
                 tfs = step
-                assert tfs.from_framework == PyarrowTable
+                assert tfs.from_framework == PyArrowTable
                 assert tfs.to_framework == SecondCfw
                 assert tfs.from_feature_group == MultipleCfwTest1
                 assert tfs.to_feature_group == ChangeCfw

@@ -24,7 +24,7 @@ ensure proper resource management across all test methods.
 import pytest
 from typing import Any
 
-from mloda_plugins.compute_framework.base_implementations.spark.spark_pyarrow_transformer import SparkPyarrowTransformer
+from mloda_plugins.compute_framework.base_implementations.spark.spark_pyarrow_transformer import SparkPyArrowTransformer
 
 # Import shared fixtures and availability flags from conftest.py
 try:
@@ -95,26 +95,26 @@ def sample_pyarrow_table() -> Any:
 @pytest.mark.skipif(
     not PYSPARK_AVAILABLE or not PYARROW_AVAILABLE, reason="PySpark or PyArrow is not installed. Skipping this test."
 )
-class TestSparkPyarrowTransformer:
-    """Tests for SparkPyarrowTransformer."""
+class TestSparkPyArrowTransformer:
+    """Tests for SparkPyArrowTransformer."""
 
     def test_framework_types(self) -> None:
         """Test that framework types are correctly identified."""
         from pyspark.sql import DataFrame
 
-        assert SparkPyarrowTransformer.framework() == DataFrame
-        assert SparkPyarrowTransformer.other_framework() == pa.Table
+        assert SparkPyArrowTransformer.framework() == DataFrame
+        assert SparkPyArrowTransformer.other_framework() == pa.Table
 
     def test_import_methods(self) -> None:
         """Test that import methods work correctly."""
         # These should not raise exceptions
-        SparkPyarrowTransformer.import_fw()
-        SparkPyarrowTransformer.import_other_fw()
+        SparkPyArrowTransformer.import_fw()
+        SparkPyArrowTransformer.import_other_fw()
 
     def test_spark_to_pyarrow_transformation(self, sample_spark_dataframe: Any) -> None:
         """Test transformation from Spark DataFrame to PyArrow Table."""
         # Transform Spark DataFrame to PyArrow Table
-        pyarrow_table = SparkPyarrowTransformer.transform_fw_to_other_fw(sample_spark_dataframe)
+        pyarrow_table = SparkPyArrowTransformer.transform_fw_to_other_fw(sample_spark_dataframe)
 
         # Verify the result is a PyArrow Table
         assert isinstance(pyarrow_table, pa.Table)
@@ -138,7 +138,7 @@ class TestSparkPyarrowTransformer:
     def test_pyarrow_to_spark_transformation(self, sample_pyarrow_table: Any, spark_session: Any) -> None:
         """Test transformation from PyArrow Table to Spark DataFrame."""
         # Transform PyArrow Table to Spark DataFrame
-        spark_dataframe = SparkPyarrowTransformer.transform_other_fw_to_fw(
+        spark_dataframe = SparkPyArrowTransformer.transform_other_fw_to_fw(
             sample_pyarrow_table, framework_connection_object=spark_session
         )
 
@@ -171,8 +171,8 @@ class TestSparkPyarrowTransformer:
         original_count = sample_spark_dataframe.count()
 
         # Transform to PyArrow and back to Spark
-        pyarrow_table = SparkPyarrowTransformer.transform_fw_to_other_fw(sample_spark_dataframe)
-        restored_spark_df = SparkPyarrowTransformer.transform_other_fw_to_fw(
+        pyarrow_table = SparkPyArrowTransformer.transform_fw_to_other_fw(sample_spark_dataframe)
+        restored_spark_df = SparkPyArrowTransformer.transform_other_fw_to_fw(
             pyarrow_table, framework_connection_object=spark_session
         )
 
@@ -208,7 +208,7 @@ class TestSparkPyarrowTransformer:
         empty_df = spark_session.createDataFrame([], schema)
 
         # Transform to PyArrow
-        pyarrow_table = SparkPyarrowTransformer.transform_fw_to_other_fw(empty_df)
+        pyarrow_table = SparkPyArrowTransformer.transform_fw_to_other_fw(empty_df)
 
         # Verify empty table
         assert isinstance(pyarrow_table, pa.Table)
@@ -218,12 +218,12 @@ class TestSparkPyarrowTransformer:
         # Transform back to Spark should raise an error for empty data
         # because Spark cannot infer schema from empty datasets
         with pytest.raises(Exception):  # Could be PySparkValueError or similar
-            SparkPyarrowTransformer.transform_other_fw_to_fw(pyarrow_table, framework_connection_object=spark_session)
+            SparkPyArrowTransformer.transform_other_fw_to_fw(pyarrow_table, framework_connection_object=spark_session)
 
     def test_pyarrow_to_spark_without_connection_object(self, sample_pyarrow_table: Any, spark_session: Any) -> None:
         """Test PyArrow to Spark transformation without explicit connection object."""
         # This should work because we have an active SparkSession
-        spark_dataframe = SparkPyarrowTransformer.transform_other_fw_to_fw(sample_pyarrow_table)
+        spark_dataframe = SparkPyArrowTransformer.transform_other_fw_to_fw(sample_pyarrow_table)
 
         # Verify the result
         from pyspark.sql import DataFrame
@@ -234,7 +234,7 @@ class TestSparkPyarrowTransformer:
     def test_pyarrow_to_spark_invalid_connection_object(self, sample_pyarrow_table: Any) -> None:
         """Test PyArrow to Spark transformation with invalid connection object."""
         with pytest.raises(ValueError, match="Expected a SparkSession object"):
-            SparkPyarrowTransformer.transform_other_fw_to_fw(
+            SparkPyArrowTransformer.transform_other_fw_to_fw(
                 sample_pyarrow_table, framework_connection_object="invalid"
             )
 
@@ -249,8 +249,8 @@ class TestSparkPyarrowTransformer:
         spark_df = spark_session.createDataFrame(data)
 
         # Transform to PyArrow and back
-        pyarrow_table = SparkPyarrowTransformer.transform_fw_to_other_fw(spark_df)
-        restored_df = SparkPyarrowTransformer.transform_other_fw_to_fw(
+        pyarrow_table = SparkPyArrowTransformer.transform_fw_to_other_fw(spark_df)
+        restored_df = SparkPyArrowTransformer.transform_other_fw_to_fw(
             pyarrow_table, framework_connection_object=spark_session
         )
 
@@ -275,7 +275,7 @@ class TestSparkPyarrowTransformer:
         large_df = spark_session.createDataFrame(data)
 
         # Transform to PyArrow
-        pyarrow_table = SparkPyarrowTransformer.transform_fw_to_other_fw(large_df)
+        pyarrow_table = SparkPyArrowTransformer.transform_fw_to_other_fw(large_df)
 
         # Verify large table
         assert isinstance(pyarrow_table, pa.Table)
@@ -283,7 +283,7 @@ class TestSparkPyarrowTransformer:
         assert pyarrow_table.num_columns == 3
 
         # Transform back to Spark
-        restored_df = SparkPyarrowTransformer.transform_other_fw_to_fw(
+        restored_df = SparkPyArrowTransformer.transform_other_fw_to_fw(
             pyarrow_table, framework_connection_object=spark_session
         )
 
@@ -306,8 +306,8 @@ class TestSparkPyarrowTransformer:
         df_with_nulls = spark_session.createDataFrame(data)
 
         # Transform to PyArrow and back
-        pyarrow_table = SparkPyarrowTransformer.transform_fw_to_other_fw(df_with_nulls)
-        restored_df = SparkPyarrowTransformer.transform_other_fw_to_fw(
+        pyarrow_table = SparkPyArrowTransformer.transform_fw_to_other_fw(df_with_nulls)
+        restored_df = SparkPyArrowTransformer.transform_other_fw_to_fw(
             pyarrow_table, framework_connection_object=spark_session
         )
 

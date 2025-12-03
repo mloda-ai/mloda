@@ -10,7 +10,7 @@ from unittest.mock import patch
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.pandas import PandasSklearnPipelineFeatureGroup
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 
 class TestPandasSklearnPipelineFeatureGroup:
@@ -19,7 +19,7 @@ class TestPandasSklearnPipelineFeatureGroup:
     def test_compute_framework_rule(self) -> None:
         """Test that the feature group specifies pandas framework."""
         rule = PandasSklearnPipelineFeatureGroup.compute_framework_rule()
-        assert PandasDataframe in rule  # type: ignore
+        assert PandasDataFrame in rule  # type: ignore
 
     def test_check_source_feature_exists_valid(self) -> None:
         """Test checking for existing source features."""

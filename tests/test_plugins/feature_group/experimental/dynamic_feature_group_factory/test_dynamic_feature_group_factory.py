@@ -8,7 +8,7 @@ from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.data_types import DataType
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.dynamic_feature_group_factory.dynamic_feature_group_factory import (
     DynamicFeatureGroupCreator,
@@ -120,7 +120,7 @@ class TestDynamicFeatureGroupFactory:
             return {Feature(name="custom_input_feature")}
 
         def custom_compute_framework_rule() -> Union[bool, Set[Type[ComputeFrameWork]]]:
-            return {PandasDataframe}
+            return {PandasDataFrame}
 
         def custom_index_columns() -> Optional[List[Index]]:
             return [Index(("a",)), Index(("b", "c"))]
@@ -157,7 +157,7 @@ class TestDynamicFeatureGroupFactory:
         assert input_features == {Feature(name="custom_input_feature")}
 
         # Test compute framework rule logic
-        assert DynamicTestFeatureGroup.compute_framework_rule() == {PandasDataframe}
+        assert DynamicTestFeatureGroup.compute_framework_rule() == {PandasDataFrame}
 
         # Test index columns
         assert DynamicTestFeatureGroup.index_columns() == [Index(("a",)), Index(("b", "c"))]

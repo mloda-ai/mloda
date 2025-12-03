@@ -13,7 +13,7 @@ except ImportError:
     pa = None
 
 
-class PolarsLazyPyarrowTransformer(BaseTransformer):
+class PolarsLazyPyArrowTransformer(BaseTransformer):
     """
     Transformer for converting between Polars LazyFrame and PyArrow Table.
 

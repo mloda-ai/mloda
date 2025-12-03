@@ -4,7 +4,7 @@ from mloda_plugins.feature_group.experimental.default_options_key import Default
 
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from tests.test_plugins.integration_plugins.chainer.chainer_context_feature import (
     ChainedContextFeatureGroupTest,
 )
@@ -90,7 +90,7 @@ class TestChainedFeatures:
                 feature1,
                 "Sales",
             ],
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             plugin_collector=self.plugin_collector,
         )
 
@@ -128,7 +128,7 @@ class TestChainedFeatures:
 
         result = mlodaAPI.run_all(
             [feature4, feature5, feature6],
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             plugin_collector=self.plugin_collector,
         )
 

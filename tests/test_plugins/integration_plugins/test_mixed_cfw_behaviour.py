@@ -40,7 +40,7 @@ class TestMixComputeFrameWork:
     def get_feature_list_from_local_scope(cls, features: List[str], path: str) -> List[str | Feature]:
         _feature_list: List[str | Feature] = []
         for feature in features:
-            compute_framework = "PyarrowTable" if feature == "Amount" else "PandasDataframe"
+            compute_framework = "PyArrowTable" if feature == "Amount" else "PandasDataFrame"
             _f = Feature(
                 name=feature,
                 options={CsvReader.__name__: path},
@@ -57,7 +57,7 @@ class TestMixComputeFrameWork:
     def test_mix_cfw_can_work_in_parallel(self) -> None:
         feature_list = self.feature_list
         features = self.get_feature_list_from_local_scope(feature_list, self.file_path)
-        result_data = mlodaAPI.run_all(features, compute_frameworks=["PandasDataframe", "PyarrowTable"])
+        result_data = mlodaAPI.run_all(features, compute_frameworks=["PandasDataFrame", "PyArrowTable"])
 
         for data in result_data:
             if isinstance(data, pd.DataFrame):
@@ -84,7 +84,7 @@ class TestMixComputeFrameWork:
         if MixedCfwFeature is None:
             raise ValueError("MixedCfwFeature is not imported")
 
-        feature = Feature(name="MixedCfwFeature", compute_framework="PandasDataframe")
+        feature = Feature(name="MixedCfwFeature", compute_framework="PandasDataFrame")
 
         idx = Index(
             ("id",),
@@ -126,7 +126,7 @@ class TestMixComputeFrameWork:
         if DuplicateFeatureSetup is None:
             raise ValueError("DuplicateFeatureSetup is not imported")
 
-        feature = Feature(name="DuplicateFeatureSetup", compute_framework="PandasDataframe")
+        feature = Feature(name="DuplicateFeatureSetup", compute_framework="PandasDataFrame")
 
         idx = Index(
             ("id",),

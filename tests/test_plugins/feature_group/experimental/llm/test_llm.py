@@ -20,7 +20,7 @@ from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.link import Link
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 from mloda_plugins.feature_group.input_data.read_files.text_file_reader import PyFileReader
 from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
@@ -53,7 +53,7 @@ class TestReadLLMFiles:
             feat = Feature(name=LLMBasic.get_class_name(), options={PyFileReader.__name__: f})
             new_features.append(feat)
 
-        result = mlodaAPI.run_all(new_features[:3], compute_frameworks={PandasDataframe})
+        result = mlodaAPI.run_all(new_features[:3], compute_frameworks={PandasDataFrame})
         assert len(result) == 3
 
 
@@ -122,7 +122,7 @@ class TestPlugInLLM:
             results = mlodaAPI.run_all(
                 features,
                 api_data={api_input_key: {"InputData1": [" Strawberries "]}},
-                compute_frameworks={PandasDataframe},
+                compute_frameworks={PandasDataFrame},
             )
 
             for i, res in enumerate(results):
@@ -169,7 +169,7 @@ class TestGeminiLLMFiles:
             # Run the API
             results = mlodaAPI.run_all(
                 features,
-                compute_frameworks={PandasDataframe},
+                compute_frameworks={PandasDataFrame},
             )
 
             for i, res in enumerate(results):
@@ -241,7 +241,7 @@ class TestGeminiLLMFiles:
             # Run the API
             results = mlodaAPI.run_all(
                 features,
-                compute_frameworks={PandasDataframe},
+                compute_frameworks={PandasDataFrame},
             )
 
             for i, res in enumerate(results):

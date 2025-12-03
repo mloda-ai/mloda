@@ -1,6 +1,6 @@
 import pytest
 from typing import Any, Optional, Type
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
 from mloda_core.abstract_plugins.components.index.index import Index
@@ -20,12 +20,12 @@ except ImportError:
 
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
-class TestPandasDataframeComputeFramework:
-    pd_dataframe = PandasDataframe(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+class TestPandasDataFrameComputeFramework:
+    pd_dataframe = PandasDataFrame(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
     dict_data = {"column1": [1, 2, 3], "column2": [4, 5, 6]}
-    expected_data = PandasDataframe.pd_dataframe().from_dict(dict_data)
-    left_data = PandasDataframe.pd_dataframe().from_dict({"idx": [1, 3], "col1": ["a", "b"]}).set_index("idx")
-    right_data = PandasDataframe.pd_dataframe().from_dict({"idx": [1, 2], "col2": ["x", "z"]}).set_index("idx")
+    expected_data = PandasDataFrame.pd_dataframe().from_dict(dict_data)
+    left_data = PandasDataFrame.pd_dataframe().from_dict({"idx": [1, 3], "col1": ["a", "b"]}).set_index("idx")
+    right_data = PandasDataFrame.pd_dataframe().from_dict({"idx": [1, 2], "col2": ["x", "z"]}).set_index("idx")
     idx = Index(("idx",))
 
     def test_expected_data_framework(self) -> None:
@@ -35,13 +35,13 @@ class TestPandasDataframeComputeFramework:
         assert all(self.pd_dataframe.transform(self.dict_data, set()) == self.expected_data)
 
     def test_transform_arrays(self) -> None:
-        data = PandasDataframe.pd_series()([1, 2, 3])
-        _pdDf = PandasDataframe(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
-        _pdDf.set_data(PandasDataframe.pd_dataframe().from_dict({"existing_column": [4, 5, 6]}))
+        data = PandasDataFrame.pd_series()([1, 2, 3])
+        _pdDf = PandasDataFrame(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        _pdDf.set_data(PandasDataFrame.pd_dataframe().from_dict({"existing_column": [4, 5, 6]}))
 
         data = _pdDf.transform(data=data, feature_names={"new_column"})
         assert data.equals(
-            PandasDataframe.pd_dataframe().from_dict({"existing_column": [4, 5, 6], "new_column": [1, 2, 3]})
+            PandasDataFrame.pd_dataframe().from_dict({"existing_column": [4, 5, 6], "new_column": [1, 2, 3]})
         )
 
     def test_transform_invalid_data(self) -> None:
@@ -59,13 +59,13 @@ class TestPandasDataframeComputeFramework:
 
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
-class TestPandasDataframeMerge(DataFrameTestBase):
-    """Test PandasDataframe merge operations using the base test class."""
+class TestPandasDataFrameMerge(DataFrameTestBase):
+    """Test PandasDataFrame merge operations using the base test class."""
 
     @classmethod
     def framework_class(cls) -> Type[Any]:
-        """Return the PandasDataframe class."""
-        return PandasDataframe
+        """Return the PandasDataFrame class."""
+        return PandasDataFrame
 
     def create_dataframe(self, data: dict[str, Any]) -> Any:
         """Create a pandas DataFrame from a dictionary."""

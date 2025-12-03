@@ -101,7 +101,7 @@ class TestMlodaBasicsNotebooks:
 
         result = mlodaAPI.run_all(
             feature_list,
-            compute_frameworks=["PandasDataframe"],
+            compute_frameworks=["PandasDataFrame"],
             global_filter=global_filter,
             plugin_collector=plugin_collector,
         )

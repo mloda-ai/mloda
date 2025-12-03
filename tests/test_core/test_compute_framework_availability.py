@@ -14,38 +14,38 @@ class TestComputeFrameworkAvailability(unittest.TestCase):
         self.assertTrue(ComputeFrameWork.is_available())
 
     def test_pyarrow_framework_available_when_pyarrow_installed(self) -> None:
-        """Test that PyarrowTable.is_available() returns True when pyarrow is installed."""
+        """Test that PyArrowTable.is_available() returns True when pyarrow is installed."""
         try:
             import pyarrow
 
             # If we can import pyarrow, test that it's available
-            from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
+            from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
-            self.assertTrue(PyarrowTable.is_available())
+            self.assertTrue(PyArrowTable.is_available())
         except ImportError:
             # If pyarrow is not installed, skip this test
             self.skipTest("PyArrow not installed, skipping availability test")
 
-    @patch("mloda_plugins.compute_framework.base_implementations.pyarrow.table.PyarrowTable.is_available")
+    @patch("mloda_plugins.compute_framework.base_implementations.pyarrow.table.PyArrowTable.is_available")
     def test_get_cfw_subclasses_exclude_unavailable_frameworks(self, mock_is_available: Any) -> None:
         """Test that get_cfw_subclasses() includes available compute frameworks."""
 
-        # PyarrowTable should be in the available frameworks
+        # PyArrowTable should be in the available frameworks
         framework_names = {fw.__name__ for fw in PreFilterPlugins.get_cfw_subclasses()}
-        self.assertIn("PyarrowTable", framework_names)
+        self.assertIn("PyArrowTable", framework_names)
 
-        # Mock PyarrowTable as available
+        # Mock PyArrowTable as available
         mock_is_available.return_value = False
 
         # Get all available compute framework subclasses
         available_frameworks = PreFilterPlugins.get_cfw_subclasses()
 
-        # Import PyarrowTable to check if it's included
-        from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
+        # Import PyArrowTable to check if it's included
+        from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
-        # PyarrowTable should be in the available frameworks
+        # PyArrowTable should be in the available frameworks
         framework_names = {fw.__name__ for fw in available_frameworks}
-        self.assertNotIn("PyarrowTable", framework_names)
+        self.assertNotIn("PyArrowTable", framework_names)
 
     def test_available_frameworks_only_include_available_ones(self) -> None:
         """Test that get_cfw_subclasses() only returns frameworks that report as available."""
@@ -60,9 +60,9 @@ class TestComputeFrameworkAvailability(unittest.TestCase):
             )
 
     def test_pyarrow_availability_check_directly(self) -> None:
-        """Test PyarrowTable availability check directly."""
-        from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
+        """Test PyArrowTable availability check directly."""
+        from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
         # Test the availability check
-        is_available = PyarrowTable.is_available()
+        is_available = PyArrowTable.is_available()
         assert is_available is True

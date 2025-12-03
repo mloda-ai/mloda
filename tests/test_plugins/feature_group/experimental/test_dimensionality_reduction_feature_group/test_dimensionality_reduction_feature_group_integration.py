@@ -11,7 +11,7 @@ from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
 
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.dimensionality_reduction.base import DimensionalityReductionFeatureGroup
 from mloda_plugins.feature_group.experimental.dimensionality_reduction.pandas import (
     PandasDimensionalityReductionFeatureGroup,
@@ -24,7 +24,7 @@ from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCr
 class DimensionalityReductionFeatureTestDataCreator(ATestDataCreator):
     """Base class for dimensionality reduction feature test data creators."""
 
-    compute_framework = PandasDataframe
+    compute_framework = PandasDataFrame
 
     @classmethod
     def get_raw_data(cls) -> Dict[str, Any]:
@@ -121,7 +121,7 @@ class TestDimensionalityReductionFeatureGroupIntegration:
         ]
 
         # Run the API
-        result = mlodaAPI.run_all(features, compute_frameworks={PandasDataframe}, plugin_collector=plugin_collector)
+        result = mlodaAPI.run_all(features, compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
 
         # Validate the results
         validate_dimensionality_reduction_results(result)
@@ -160,7 +160,7 @@ class TestDimensionalityReductionFeatureGroupIntegration:
         features: List[str | Feature] = ["feature0", "feature1", "feature2", pca_feature, tsne_feature]
 
         # Run the API
-        result = mlodaAPI.run_all(features, compute_frameworks={PandasDataframe}, plugin_collector=plugin_collector)
+        result = mlodaAPI.run_all(features, compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
 
         # Validate the results
         validate_dimensionality_reduction_results(result)
@@ -183,7 +183,7 @@ class TestDimensionalityReductionFeatureGroupIntegration:
         ]
 
         # Run the API
-        result = mlodaAPI.run_all(features, compute_frameworks={PandasDataframe}, plugin_collector=plugin_collector)
+        result = mlodaAPI.run_all(features, compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
 
         # Verify we have at least one result
         assert len(result) >= 1, "Expected at least one result"

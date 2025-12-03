@@ -6,7 +6,7 @@ import pytest
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.config.feature.loader import load_features_from_config
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
@@ -113,7 +113,7 @@ def test_integration_json_file() -> None:
 class ChainedFeatureTestDataCreator(ATestDataCreator):
     """Test data creator for end-to-end chained feature tests."""
 
-    compute_framework = PandasDataframe
+    compute_framework = PandasDataFrame
 
     @classmethod
     def get_raw_data(cls) -> Dict[str, Any]:
@@ -168,7 +168,7 @@ def test_end2end_chained_features() -> None:
     # Run mlodaAPI with the features
     results = mlodaAPI.run_all(
         features,
-        compute_frameworks={PandasDataframe},
+        compute_frameworks={PandasDataFrame},
         plugin_collector=plugin_collector,
     )
 
@@ -271,7 +271,7 @@ def test_end2end_multi_column_access() -> None:
     class StateTestDataCreator(ATestDataCreator):
         """Test data creator for state column selector tests."""
 
-        compute_framework = PandasDataframe
+        compute_framework = PandasDataFrame
 
         @classmethod
         def get_raw_data(cls) -> Dict[str, Any]:
@@ -286,7 +286,7 @@ def test_end2end_multi_column_access() -> None:
     # Run mlodaAPI with the features
     results = mlodaAPI.run_all(
         features,
-        compute_frameworks={PandasDataframe},
+        compute_frameworks={PandasDataFrame},
         plugin_collector=plugin_collector,
     )
 

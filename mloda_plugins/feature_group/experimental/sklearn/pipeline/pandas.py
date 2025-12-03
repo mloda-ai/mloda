@@ -9,7 +9,7 @@ from typing import Any, List, Set, Type, Union
 
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import SklearnPipelineFeatureGroup
 
 
@@ -24,7 +24,7 @@ class PandasSklearnPipelineFeatureGroup(SklearnPipelineFeatureGroup):
     @classmethod
     def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
         """Specify that this feature group works with Pandas."""
-        return {PandasDataframe}
+        return {PandasDataFrame}
 
     @classmethod
     def _check_source_feature_exists(cls, data: Any, feature_name: str) -> None:

@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Any, List, Optional, Set, Type, Union
 
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 
 
@@ -20,7 +20,7 @@ except ImportError:
 class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
     @classmethod
     def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
-        return {PandasDataframe}
+        return {PandasDataFrame}
 
     @classmethod
     def _check_time_filter_feature_exists(cls, data: pd.DataFrame, time_filter_feature: str) -> None:

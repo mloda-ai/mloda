@@ -9,7 +9,7 @@ from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
@@ -18,7 +18,7 @@ from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCr
 class SimpleChainTestDataCreator(ATestDataCreator):
     """Test data creator for simple chaining tests."""
 
-    compute_framework = PandasDataframe
+    compute_framework = PandasDataFrame
 
     @classmethod
     def get_raw_data(cls) -> Dict[str, Any]:
@@ -52,7 +52,7 @@ class TestSimpleChaining:
         print("Step 1: Creating OneHot encoding...")
         # L→R: category__onehot_encoded~0__standard_scaled
         onehot_feature = Feature("category__onehot_encoded~0__standard_scaled")
-        api1 = mlodaAPI([onehot_feature], {PandasDataframe}, plugin_collector=plugin_collector)
+        api1 = mlodaAPI([onehot_feature], {PandasDataFrame}, plugin_collector=plugin_collector)
         api1._batch_run()
         results1 = api1.get_result()
         df1 = results1[0]

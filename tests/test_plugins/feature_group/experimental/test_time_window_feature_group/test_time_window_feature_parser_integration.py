@@ -8,7 +8,7 @@ from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindowFeatureGroup
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
@@ -20,7 +20,7 @@ from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCr
 class TimeWindowParserTestDataCreator(ATestDataCreator):
     """Test data creator for time window parser tests."""
 
-    compute_framework = PandasDataframe
+    compute_framework = PandasDataFrame
 
     @classmethod
     def get_raw_data(cls) -> Dict[str, Any]:
@@ -68,7 +68,7 @@ class TestTimeWindowFeatureParserIntegration:
         # test with pre parsing the features
         results = mlodaAPI.run_all(
             [f1, f2],
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
         )
         assert len(results) == 1
@@ -89,7 +89,7 @@ class TestTimeWindowFeatureParserIntegration:
         # test with mloda parsing the features
         results2 = mlodaAPI.run_all(
             [f1, f2],
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
         )
 
@@ -131,7 +131,7 @@ class TestTimeWindowFeatureParserIntegration:
         # test with pre parsing the features
         results = mlodaAPI.run_all(
             [f1, f2],
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
         )
 
@@ -153,7 +153,7 @@ class TestTimeWindowFeatureParserIntegration:
         # test with mloda parsing the features
         results2 = mlodaAPI.run_all(
             [f1, f2],
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
         )
 

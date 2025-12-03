@@ -7,8 +7,8 @@ from typing import Any, Dict, List
 import pandas as pd
 
 from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
@@ -38,11 +38,11 @@ class CombinedFeatureTestDataCreator(ATestDataCreator):
 
 
 class PandasCombinedFeatureTestDataCreator(CombinedFeatureTestDataCreator):
-    compute_framework = PandasDataframe
+    compute_framework = PandasDataFrame
 
 
 class PyArrowCombinedFeatureTestDataCreator(CombinedFeatureTestDataCreator):
-    compute_framework = PyarrowTable
+    compute_framework = PyArrowTable
 
 
 def validate_combined_features(result: List[Any]) -> None:

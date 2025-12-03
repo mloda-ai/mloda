@@ -10,7 +10,7 @@ from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.index.index import Index
 from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.components.link import Link
+from mloda_core.abstract_plugins.components.link import Link, JoinSpec
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
@@ -54,8 +54,8 @@ class GroupedAppendMergeTestFeature(AbstractFeatureGroup):
             _link = None
             if cnt < len(source_features) - 1:
                 _link = Link.append(
-                    (left_links_cls, Index(add_run_id(run_uuid))),
-                    (right_links_cls, Index(add_run_id(run_uuid, 1))),
+                    JoinSpec(left_links_cls, Index(add_run_id(run_uuid))),
+                    JoinSpec(right_links_cls, Index(add_run_id(run_uuid, 1))),
                 )
 
             features.add(
@@ -201,8 +201,8 @@ class TestBaseMergeEngine:
         )
 
         link = Link.union(
-            (GroupedAppendMergeTestFeature, Index(("GroupedAppendMergeTestFeature",))),
-            (GroupedAppendMergeTestFeature, Index(("GroupedAppendMergeTestFeature2",))),
+            JoinSpec(GroupedAppendMergeTestFeature, Index(("GroupedAppendMergeTestFeature",))),
+            JoinSpec(GroupedAppendMergeTestFeature, Index(("GroupedAppendMergeTestFeature2",))),
         )
 
         result = mlodaAPI.run_all(

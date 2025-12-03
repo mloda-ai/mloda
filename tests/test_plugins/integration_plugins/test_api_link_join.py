@@ -15,7 +15,7 @@ from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.index.index import Index
 from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.components.link import Link
+from mloda_core.abstract_plugins.components.link import Link, JoinSpec
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
@@ -52,7 +52,9 @@ class LeftJoinedFeature(AbstractFeatureGroup):
         """Define input features with a LEFT join link."""
 
         # Create the link: LEFT join on api_id = creator_id
-        link = Link.left((ApiInputDataFeature, Index(("api_id",))), (CreatorDataFeature, Index(("creator_id",))))
+        link = Link.left(
+            JoinSpec(ApiInputDataFeature, Index(("api_id",))), JoinSpec(CreatorDataFeature, Index(("creator_id",)))
+        )
 
         # Return features - attach link to one of them
         return {
@@ -78,7 +80,9 @@ class AppendedFeature(AbstractFeatureGroup):
         """Define input features with an APPEND link."""
 
         # Create the link: APPEND stacks data vertically
-        link = Link.append((ApiInputDataFeature, Index(("api_id",))), (CreatorDataFeature, Index(("creator_id",))))
+        link = Link.append(
+            JoinSpec(ApiInputDataFeature, Index(("api_id",))), JoinSpec(CreatorDataFeature, Index(("creator_id",)))
+        )
 
         # Return features - attach link to one of them
         return {

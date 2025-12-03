@@ -2,8 +2,9 @@ import os
 from typing import Any, Dict
 
 import tempfile
-import unittest
 import sqlite3
+
+import pytest
 
 from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda_core.abstract_plugins.components.feature import Feature
@@ -18,8 +19,8 @@ from tests.test_plugins.feature_group.input_data.test_classes.test_input_classes
 from tests.test_core.test_integration.test_core.test_runner_one_compute_framework import SumFeature
 
 
-class TestInputDataDB(unittest.TestCase):
-    def setUp(self) -> None:
+class TestInputDataDB:
+    def setup_method(self) -> None:
         # Create a temporary file to act as the SQLite database
         self.db_fd, self.db_path = tempfile.mkstemp(suffix=".sqlite")
         # Initialize the SQLite database with a sample table
@@ -33,7 +34,7 @@ class TestInputDataDB(unittest.TestCase):
 
         self.conn.commit()
 
-    def tearDown(self) -> None:
+    def teardown_method(self) -> None:
         self.conn.close()
         os.close(self.db_fd)
         os.remove(self.db_path)
@@ -77,8 +78,8 @@ class TestInputDataDB(unittest.TestCase):
         assert "SumFeature_idid" in result[0].to_pydict()
 
 
-class TestReadDB(unittest.TestCase):
-    def setUp(self) -> None:
+class TestReadDB:
+    def setup_method(self) -> None:
         # Create a temporary file to act as the SQLite database
         self.db_fd, self.db_path = tempfile.mkstemp(suffix=".sqlite")
         # Initialize the SQLite database with a sample table
@@ -89,50 +90,50 @@ class TestReadDB(unittest.TestCase):
         self.cursor.execute('INSERT INTO test_table (name) VALUES ("Bob")')
         self.conn.commit()
 
-    def tearDown(self) -> None:
+    def teardown_method(self) -> None:
         self.conn.close()
         os.close(self.db_fd)
         os.remove(self.db_path)
 
     def test_load_data_not_implemented(self) -> None:
-        with self.assertRaises(NotImplementedError):
+        with pytest.raises(NotImplementedError):
             ReadDB.load_data(None, None)  # type: ignore
 
     def test_connect_not_implemented(self) -> None:
-        with self.assertRaises(NotImplementedError):
+        with pytest.raises(NotImplementedError):
             ReadDB.connect(None)
 
     def test_build_query_not_implemented(self) -> None:
-        with self.assertRaises(NotImplementedError):
+        with pytest.raises(NotImplementedError):
             ReadDB.build_query(None)  # type: ignore
 
     def test_is_valid_credentials_not_implemented(self) -> None:
-        with self.assertRaises(NotImplementedError):
+        with pytest.raises(NotImplementedError):
             ReadDB.is_valid_credentials({})
 
     def test_check_feature_in_data_access_not_implemented(self) -> None:
-        with self.assertRaises(NotImplementedError):
+        with pytest.raises(NotImplementedError):
             ReadDB.check_feature_in_data_access("", None)
 
     def test_init_reader_no_options(self) -> None:
         read_db = ReadDB()
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             read_db.init_reader(None)
 
     def test_init_reader_no_data_access(self) -> None:
         read_db = ReadDB()
         options = Options()
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             read_db.init_reader(options)
 
     def test_match_subclass_data_access(self) -> None:
         data_access = DataAccessCollection(credential_dicts={SQLITEReader.db_path(): self.db_path})
         feature_names = ["name"]
         result = ReadDB.match_subclass_data_access(data_access, feature_names)
-        self.assertFalse(result)
+        assert not result
 
     def test_get_connection_no_credentials(self) -> None:
-        with self.assertRaises(NotImplementedError):
+        with pytest.raises(NotImplementedError):
             ReadDB.get_connection(None)
 
     def test_read_db_success(self) -> None:
@@ -152,5 +153,5 @@ class TestReadDB(unittest.TestCase):
         credentials = {SQLITEReader.db_path(): self.db_path}
         query = "SELECT * FROM test_table"
         result, column_names = MockReadDB.read_db(credentials, query)
-        self.assertEqual(len(result), 2)
-        self.assertEqual(column_names, ["id", "name"])
+        assert len(result) == 2
+        assert column_names == ["id", "name"]

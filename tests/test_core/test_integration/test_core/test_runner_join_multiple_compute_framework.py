@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Set, Tuple, Type, Union
+from typing import Any, Dict, List, Optional, Set, Type, Union
 import pytest
 from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
@@ -17,7 +17,7 @@ from mloda_core.abstract_plugins.components.feature_collection import Features
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.link import Link
+from mloda_core.abstract_plugins.components.link import Link, JoinSpec
 
 # Import transformers to ensure they're registered
 import mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_pyarrow_transformer  # noqa: F401
@@ -307,8 +307,8 @@ class TestEngineMultipleJoinCfw:
                 ("idx",),
             )
 
-            left: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest1, idx)
-            right: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest2, idx)
+            left = JoinSpec(JoinCfwTest1, idx)
+            right = JoinSpec(JoinCfwTest2, idx)
 
             links = {Link(join_type, left, right)}
 
@@ -337,9 +337,9 @@ class TestEngineMultipleJoinCfw:
             ("idx",),
         )
 
-        left: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest1, idx)
-        right_1: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest2, idx)
-        right_2: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest3, idx)
+        left = JoinSpec(JoinCfwTest1, idx)
+        right_1 = JoinSpec(JoinCfwTest2, idx)
+        right_2 = JoinSpec(JoinCfwTest3, idx)
         links = {Link("inner", left, right_1), Link("inner", left, right_2)}
 
         self.base_join_runner(modes, flight_server, links)
@@ -351,9 +351,9 @@ class TestEngineMultipleJoinCfw:
             ("idx",),
         )
 
-        left: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest1, idx)
-        right_1: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest2, idx)
-        right_2: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest3, idx)
+        left = JoinSpec(JoinCfwTest1, idx)
+        right_1 = JoinSpec(JoinCfwTest2, idx)
+        right_2 = JoinSpec(JoinCfwTest3, idx)
         links = {Link("inner", right_1, left), Link("inner", right_2, left)}
 
         self.base_join_runner(modes, flight_server, links)
@@ -363,9 +363,9 @@ class TestEngineMultipleJoinCfw:
             ("idx",),
         )
 
-        left: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest1, idx)
-        right_1: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest2, idx)
-        right_2: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest3, idx)
+        left = JoinSpec(JoinCfwTest1, idx)
+        right_1 = JoinSpec(JoinCfwTest2, idx)
+        right_2 = JoinSpec(JoinCfwTest3, idx)
         links = {Link("inner", left, right_1), Link("inner", right_1, right_2)}
 
         self.base_join_runner(modes, flight_server, links)
@@ -377,10 +377,10 @@ class TestEngineMultipleJoinCfw:
             ("idx",),
         )
 
-        left: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest1, idx)
-        right_1: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest2, idx)
-        right_2: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest3, idx)
-        right_3: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest4, idx)
+        left = JoinSpec(JoinCfwTest1, idx)
+        right_1 = JoinSpec(JoinCfwTest2, idx)
+        right_2 = JoinSpec(JoinCfwTest3, idx)
+        right_3 = JoinSpec(JoinCfwTest4, idx)
         links = {Link("inner", left, right_1), Link("inner", right_1, right_2), Link("inner", right_2, right_3)}
         self.base_join_runner(modes, flight_server, links, f_name="4")
 
@@ -394,10 +394,10 @@ class TestEngineMultipleJoinCfw:
             ("idx",),
         )
 
-        left: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest1, idx)
-        right_1: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest2, idx)
-        right_2: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest3, idx)
-        right_3: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest4, idx)
+        left = JoinSpec(JoinCfwTest1, idx)
+        right_1 = JoinSpec(JoinCfwTest2, idx)
+        right_2 = JoinSpec(JoinCfwTest3, idx)
+        right_3 = JoinSpec(JoinCfwTest4, idx)
         links = {Link("inner", left, right_1), Link("inner", left, right_2), Link("inner", left, right_3)}
         self.base_join_runner(modes, flight_server, links, f_name="4")
 
@@ -414,10 +414,10 @@ class TestEngineMultipleJoinCfw:
             ("idx",),
         )
 
-        left: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest1, idx)
-        right_1: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest2, idx)
-        right_2: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest3, idx)
-        right_3: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest4, idx)
+        left = JoinSpec(JoinCfwTest1, idx)
+        right_1 = JoinSpec(JoinCfwTest2, idx)
+        right_2 = JoinSpec(JoinCfwTest3, idx)
+        right_3 = JoinSpec(JoinCfwTest4, idx)
 
         links = {Link("left", left, right_1), Link("left", left, right_2), Link("left", left, right_3)}
         self.base_join_runner(modes, flight_server, links, f_name="4")
@@ -435,10 +435,10 @@ class TestEngineMultipleJoinCfw:
             ("idx",),
         )
 
-        left: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest1, idx)
-        right_2: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest2, idx)
-        right_3: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest3, idx)
-        right_4: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest4, idx)
+        left = JoinSpec(JoinCfwTest1, idx)
+        right_2 = JoinSpec(JoinCfwTest2, idx)
+        right_3 = JoinSpec(JoinCfwTest3, idx)
+        right_4 = JoinSpec(JoinCfwTest4, idx)
 
         links = {Link("left", left, right_2), Link("right", right_3, left), Link("left", left, right_4)}
         self.base_join_runner(modes, flight_server, links, f_name="4")
@@ -458,10 +458,10 @@ class TestEngineMultipleJoinCfw:
             ("idx",),
         )
 
-        left: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest1, idx)
-        right_2: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest2, idx)
-        right_3: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest3, idx)
-        right_4: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest4, idx)
+        left = JoinSpec(JoinCfwTest1, idx)
+        right_2 = JoinSpec(JoinCfwTest2, idx)
+        right_3 = JoinSpec(JoinCfwTest3, idx)
+        right_4 = JoinSpec(JoinCfwTest4, idx)
 
         links = {Link("inner", left, right_2), Link("inner", right_3, left), Link("inner", right_3, right_4)}
         self.base_join_runner(modes, flight_server, links, f_name="4")
@@ -478,10 +478,10 @@ class TestEngineMultipleJoinCfw:
             ("idx",),
         )
 
-        left: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest1, idx)
-        right_2: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest2, idx)
-        right_3: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest3, idx)
-        right_4: Tuple[type[AbstractFeatureGroup], Index] = (JoinCfwTest4, idx)
+        left = JoinSpec(JoinCfwTest1, idx)
+        right_2 = JoinSpec(JoinCfwTest2, idx)
+        right_3 = JoinSpec(JoinCfwTest3, idx)
+        right_4 = JoinSpec(JoinCfwTest4, idx)
 
         links = {
             Link("inner", right_2, left),

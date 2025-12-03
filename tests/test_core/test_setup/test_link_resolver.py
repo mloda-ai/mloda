@@ -5,7 +5,7 @@ from mloda_core.prepare.resolve_graph import ResolveGraph
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.link import Link
+from mloda_core.abstract_plugins.components.link import Link, JoinSpec
 from tests.test_core.test_setup.test_graph_builder import BaseTestGraphFeatureGroup3
 from tests.test_core.test_abstract_plugins.test_abstract_feature_group import BaseTestFeatureGroup1
 from tests.test_core.test_abstract_plugins.test_abstract_compute_framework import (
@@ -113,8 +113,8 @@ class TestResolveGraph:
     def test_base_link(self) -> None:
         links = {
             Link.inner(
-                (BaseLinkTestFeatureGroup1, Index(tuple(["Index1"]))),
-                (BaseTestGraphFeatureGroup3, Index(tuple(["Index1"]))),
+                JoinSpec(BaseLinkTestFeatureGroup1, Index(tuple(["Index1"]))),
+                JoinSpec(BaseTestGraphFeatureGroup3, Index(tuple(["Index1"]))),
             )
         }
 

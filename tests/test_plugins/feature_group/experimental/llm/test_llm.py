@@ -17,7 +17,7 @@ from mloda_plugins.feature_group.input_data.read_context_files import Concatenat
 from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.link import Link
+from mloda_core.abstract_plugins.components.link import JoinSpec, Link
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.api.request import mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -100,7 +100,9 @@ class TestPlugInLLM:
         installed = Index(("InstalledPackagesFeatureGroup",))
         api_data_index = Index(("InputData1",))
 
-        link = Link.outer((InstalledPackagesFeatureGroup, installed), (ApiInputDataFeature, api_data_index))
+        link = Link.outer(
+            JoinSpec(InstalledPackagesFeatureGroup, installed), JoinSpec(ApiInputDataFeature, api_data_index)
+        )
 
         _test_classes = [OpenAIRequestLoop, GeminiRequestLoop]
 

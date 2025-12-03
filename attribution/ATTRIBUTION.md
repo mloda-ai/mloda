@@ -26,7 +26,7 @@
 | click                                  | 8.3.1           | BSD-3-Clause                                            |
 | colorama                               | 0.4.6           | BSD License                                             |
 | comm                                   | 0.2.3           | BSD License                                             |
-| cyclonedx-python-lib                   | 9.1.0           | Apache Software License                                 |
+| cyclonedx-python-lib                   | 7.6.2           | Apache Software License                                 |
 | debugpy                                | 1.8.17          | MIT License                                             |
 | decorator                              | 5.2.1           | BSD License                                             |
 | defusedxml                             | 0.7.1           | Python Software Foundation License                      |
@@ -40,6 +40,7 @@
 | fqdn                                   | 1.5.1           | Mozilla Public License 2.0 (MPL 2.0)                    |
 | fsspec                                 | 2025.10.0       | BSD-3-Clause                                            |
 | h11                                    | 0.16.0          | MIT License                                             |
+| html5lib                               | 1.1             | MIT License                                             |
 | httpcore                               | 1.0.9           | BSD License                                             |
 | httpx                                  | 0.28.1          | BSD License                                             |
 | idna                                   | 3.11            | BSD-3-Clause                                            |
@@ -101,7 +102,7 @@
 | pexpect                                | 4.9.0           | ISC License (ISCL)                                      |
 | pip-api                                | 0.0.34          | Apache Software License                                 |
 | pip-requirements-parser                | 32.0.1          | MIT                                                     |
-| pip_audit                              | 2.9.0           | Apache Software License                                 |
+| pip_audit                              | 2.7.3           | Apache Software License                                 |
 | platformdirs                           | 4.5.0           | MIT License                                             |
 | pluggy                                 | 1.6.0           | MIT License                                             |
 | polars                                 | 1.35.2          | MIT License                                             |
@@ -111,7 +112,7 @@
 | psutil                                 | 7.1.3           | BSD-3-Clause                                            |
 | ptyprocess                             | 0.7.0           | ISC License (ISCL)                                      |
 | pure_eval                              | 0.2.3           | MIT License                                             |
-| py-serializable                        | 2.1.0           | Apache Software License                                 |
+| py-serializable                        | 1.1.2           | Apache Software License                                 |
 | pyarrow                                | 22.0.0          | Apache Software License                                 |
 | pycparser                              | 2.23            | BSD License                                             |
 | pydantic                               | 2.12.5          | MIT                                                     |

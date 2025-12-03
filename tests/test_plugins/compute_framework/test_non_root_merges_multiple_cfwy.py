@@ -12,7 +12,7 @@ from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.index.index import Index
 from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.components.link import Link
+from mloda_core.abstract_plugins.components.link import Link, JoinSpec
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
@@ -125,8 +125,8 @@ class TestNonCfWRootMerge:
         feature = Feature(name=Call2GroupedNonCfwRootJoinTestFeature.get_class_name())
 
         link = Link.inner(
-            left=(GroupedNonCfwRootJoinTestFeature, Index(("GroupedNonCfwRootJoinTestFeature",))),
-            right=(GroupedSecondNonCfwRootJoinTestFeature, Index(("GroupedSecondNonCfwRootJoinTestFeature",))),
+            left=JoinSpec(GroupedNonCfwRootJoinTestFeature, Index(("GroupedNonCfwRootJoinTestFeature",))),
+            right=JoinSpec(GroupedSecondNonCfwRootJoinTestFeature, Index(("GroupedSecondNonCfwRootJoinTestFeature",))),
         )
 
         result = mlodaAPI.run_all(
@@ -158,13 +158,13 @@ class TestNonCfWRootMerge:
         )
 
         link = Link.inner(
-            left=(GroupedNonCfwRootJoinTestFeature, Index(("GroupedNonCfwRootJoinTestFeature",))),
-            right=(GroupedSecondNonCfwRootJoinTestFeature, Index(("GroupedSecondNonCfwRootJoinTestFeature",))),
+            left=JoinSpec(GroupedNonCfwRootJoinTestFeature, Index(("GroupedNonCfwRootJoinTestFeature",))),
+            right=JoinSpec(GroupedSecondNonCfwRootJoinTestFeature, Index(("GroupedSecondNonCfwRootJoinTestFeature",))),
         )
 
         link_first_level = Link.inner(
-            left=(NonCfwRootJoinTestFeature, Index(("NonCfwRootJoinTestFeature",))),
-            right=(NonCfwRootJoinTestFeatureB, Index(("NonCfwRootJoinTestFeatureB",))),
+            left=JoinSpec(NonCfwRootJoinTestFeature, Index(("NonCfwRootJoinTestFeature",))),
+            right=JoinSpec(NonCfwRootJoinTestFeatureB, Index(("NonCfwRootJoinTestFeatureB",))),
         )
 
         links = set([link, link_first_level])

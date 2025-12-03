@@ -10,7 +10,7 @@ from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.api.request import mlodaAPI
 from mloda_core.core.engine import Engine
 from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.link import Link
+from mloda_core.abstract_plugins.components.link import Link, JoinSpec
 from tests.test_core.test_setup.test_graph_builder import BaseTestGraphFeatureGroup3
 from tests.test_core.test_setup.test_link_resolver import BaseLinkTestFeatureGroup1
 from mloda_core.abstract_plugins.components.utils import get_all_subclasses
@@ -35,8 +35,8 @@ class TestmlodaAPI:
         compute_fws = [fw.get_class_name() for fw in get_all_subclasses(ComputeFrameWork)]
         links = {
             Link.inner(
-                (BaseLinkTestFeatureGroup1, Index(tuple(["Index1"]))),
-                (BaseTestGraphFeatureGroup3, Index(tuple(["Index1"]))),
+                JoinSpec(BaseLinkTestFeatureGroup1, Index(tuple(["Index1"]))),
+                JoinSpec(BaseTestGraphFeatureGroup3, Index(tuple(["Index1"]))),
             )
         }
 

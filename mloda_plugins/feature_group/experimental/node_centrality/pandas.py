@@ -15,7 +15,7 @@ except ImportError:
     np = None  # type: ignore
 
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.node_centrality.base import NodeCentralityFeatureGroup
 
 
@@ -23,7 +23,7 @@ class PandasNodeCentralityFeatureGroup(NodeCentralityFeatureGroup):
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFrameWork]]:
         """Define the compute framework for this feature group."""
-        return {PandasDataframe}
+        return {PandasDataFrame}
 
     @classmethod
     def _check_source_feature_exists(cls, data: pd.DataFrame, feature_name: str) -> None:

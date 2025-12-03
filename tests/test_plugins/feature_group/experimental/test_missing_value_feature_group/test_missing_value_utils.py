@@ -7,8 +7,8 @@ from typing import Any, Dict, List
 import pandas as pd
 
 from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
@@ -39,11 +39,11 @@ class MissingValueTestDataCreator(ATestDataCreator):
 
 
 class PandasMissingValueTestDataCreator(MissingValueTestDataCreator):
-    compute_framework = PandasDataframe
+    compute_framework = PandasDataFrame
 
 
 class PyArrowMissingValueTestDataCreator(MissingValueTestDataCreator):
-    compute_framework = PyarrowTable
+    compute_framework = PyArrowTable
 
 
 def validate_missing_value_features(result: List[pd.DataFrame]) -> None:

@@ -22,7 +22,7 @@ from mloda_core.abstract_plugins.components.plugin_option.plugin_collector impor
 )
 from mloda_core.api.request import mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import (
-    PandasDataframe,
+    PandasDataFrame,
 )
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.source_input_feature import SourceInputFeature
@@ -93,7 +93,7 @@ class TestInputFeatures:
         result = mlodaAPI.run_all(
             feature_list,
             plugin_collector=self._enabled,
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
         )
 
         for res in result:
@@ -124,7 +124,7 @@ class TestInputFeatures:
         result = mlodaAPI.run_all(
             feature_list,
             plugin_collector=self._enabled,
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             api_data={"Example": {"FeatureInputAPITest": ["TestValue3", "TestValue4"]}},
         )
         for res in result:
@@ -150,7 +150,7 @@ class TestInputFeatures:
         result = mlodaAPI.run_all(
             feature_list,
             plugin_collector=self._enabled,
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
         )
         for res in result:
             assert len(res) == 2
@@ -174,7 +174,7 @@ class TestInputFeatures:
             )
         )
 
-        result = mlodaAPI.run_all(feature_list, compute_frameworks=["PandasDataframe"])
+        result = mlodaAPI.run_all(feature_list, compute_frameworks=["PandasDataFrame"])
         for res in result:
             assert len(res) == 2
             if "InputFeatureGroupTest" in res:
@@ -200,7 +200,7 @@ class TestInputFeatures:
         )
 
         result = mlodaAPI.run_all(
-            feature_list, compute_frameworks=["PandasDataframe"], data_access_collection=data_access_collection
+            feature_list, compute_frameworks=["PandasDataFrame"], data_access_collection=data_access_collection
         )
         for res in result:
             assert len(res) == 2
@@ -272,7 +272,7 @@ class TestInputFeatures:
 
         result = mlodaAPI.run_all(
             feature_list,
-            compute_frameworks=["PandasDataframe"],
+            compute_frameworks=["PandasDataFrame"],
             data_access_collection=data_access_collection,
             api_data={"Example": {"FeatureInputAPITest": ["TestValue3", "TestValue4"]}},
         )
@@ -319,7 +319,7 @@ class TestInputFeatures:
 
         result = mlodaAPI.run_all(
             feature_list,
-            compute_frameworks=["PandasDataframe"],
+            compute_frameworks=["PandasDataFrame"],
             data_access_collection=data_access_collection,
         )
 
@@ -374,7 +374,7 @@ class TestInputFeatures:
 
         result = mlodaAPI.run_all(
             feature_list,
-            compute_frameworks=["PandasDataframe"],
+            compute_frameworks=["PandasDataFrame"],
             data_access_collection=data_access_collection,
         )
 

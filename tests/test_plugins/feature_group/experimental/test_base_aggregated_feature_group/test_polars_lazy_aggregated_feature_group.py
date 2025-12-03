@@ -5,7 +5,7 @@ from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataframe
+from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.polars_lazy import (
     PolarsLazyAggregatedFeatureGroup,
@@ -29,12 +29,12 @@ except ImportError:
 class PolarsLazyAggregatedTestDataCreator(AggregatedTestDataCreator):
     """Test data creator for Polars Lazy aggregated feature group tests."""
 
-    compute_framework = PolarsLazyDataframe
+    compute_framework = PolarsLazyDataFrame
 
     # Add Polars LazyFrame conversion to the conversion dictionary
     conversion = AggregatedTestDataCreator.conversion.copy()
     if POLARS_AVAILABLE:
-        conversion[PolarsLazyDataframe] = lambda data: pl.LazyFrame(data)
+        conversion[PolarsLazyDataFrame] = lambda data: pl.LazyFrame(data)
 
 
 @pytest.fixture
@@ -78,7 +78,7 @@ class TestPolarsLazyAggregatedFeatureGroup:
 
     def test_compute_framework_rule(self) -> None:
         """Test compute_framework_rule method."""
-        assert PolarsLazyAggregatedFeatureGroup.compute_framework_rule() == {PolarsLazyDataframe}
+        assert PolarsLazyAggregatedFeatureGroup.compute_framework_rule() == {PolarsLazyDataFrame}
 
     def test_check_source_feature_exists_valid(self, sample_lazy_dataframe: Any) -> None:
         """Test _check_source_feature_exists with valid feature."""
@@ -251,7 +251,7 @@ class TestPolarsLazyAggregationIntegration:
                 "discount__min_aggr",
                 "customer_rating__max_aggr",
             ],
-            compute_frameworks={PolarsLazyDataframe},
+            compute_frameworks={PolarsLazyDataFrame},
             plugin_collector=plugin_collector,
         )
 

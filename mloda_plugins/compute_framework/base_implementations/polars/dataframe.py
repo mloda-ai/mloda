@@ -12,7 +12,7 @@ except ImportError:
     pl = None  # type: ignore[assignment]
 
 
-class PolarsDataframe(ComputeFrameWork):
+class PolarsDataFrame(ComputeFrameWork):
     @staticmethod
     def is_available() -> bool:
         """Check if Polars is installed and available."""
@@ -25,7 +25,7 @@ class PolarsDataframe(ComputeFrameWork):
 
     @staticmethod
     def expected_data_framework() -> Any:
-        return PolarsDataframe.pl_dataframe()
+        return PolarsDataFrame.pl_dataframe()
 
     def merge_engine(self) -> Type[BaseMergeEngine]:
         return PolarsMergeEngine

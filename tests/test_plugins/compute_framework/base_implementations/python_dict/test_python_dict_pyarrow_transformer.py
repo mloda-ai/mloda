@@ -9,13 +9,13 @@ except ImportError:
     PYARROW_AVAILABLE = False
 
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_pyarrow_transformer import (
-    PythonDictPyarrowTransformer,
+    PythonDictPyArrowTransformer,
 )
 
 
 @pytest.mark.skipif(not PYARROW_AVAILABLE, reason="PyArrow not available")
-class TestPythonDictPyarrowTransformer:
-    """Unit tests for the PythonDictPyarrowTransformer class."""
+class TestPythonDictPyArrowTransformer:
+    """Unit tests for the PythonDictPyArrowTransformer class."""
 
     @pytest.fixture
     def sample_python_dict_data(self) -> Any:
@@ -33,23 +33,23 @@ class TestPythonDictPyarrowTransformer:
 
     def test_framework(self) -> None:
         """Test that framework returns correct type."""
-        assert PythonDictPyarrowTransformer.framework() == list
+        assert PythonDictPyArrowTransformer.framework() == list
 
     def test_other_framework(self) -> None:
         """Test that other_framework returns correct type."""
-        assert PythonDictPyarrowTransformer.other_framework() == pa.Table
+        assert PythonDictPyArrowTransformer.other_framework() == pa.Table
 
     def test_import_fw(self) -> None:
         """Test that import_fw doesn't raise errors."""
-        PythonDictPyarrowTransformer.import_fw()  # Should not raise
+        PythonDictPyArrowTransformer.import_fw()  # Should not raise
 
     def test_import_other_fw(self) -> None:
         """Test that import_other_fw doesn't raise errors."""
-        PythonDictPyarrowTransformer.import_other_fw()  # Should not raise
+        PythonDictPyArrowTransformer.import_other_fw()  # Should not raise
 
     def test_transform_fw_to_other_fw(self, sample_python_dict_data: Any) -> None:
         """Test transformation from PythonDict to PyArrow."""
-        result = PythonDictPyarrowTransformer.transform_fw_to_other_fw(sample_python_dict_data)
+        result = PythonDictPyArrowTransformer.transform_fw_to_other_fw(sample_python_dict_data)
 
         assert isinstance(result, pa.Table)
         assert result.num_rows == 3
@@ -62,7 +62,7 @@ class TestPythonDictPyarrowTransformer:
 
     def test_transform_other_fw_to_fw(self, sample_pyarrow_data: Any) -> None:
         """Test transformation from PyArrow to PythonDict."""
-        result = PythonDictPyarrowTransformer.transform_other_fw_to_fw(sample_pyarrow_data)
+        result = PythonDictPyArrowTransformer.transform_other_fw_to_fw(sample_pyarrow_data)
 
         assert isinstance(result, list)
         assert len(result) == 3
@@ -78,10 +78,10 @@ class TestPythonDictPyarrowTransformer:
     def test_roundtrip_transformation(self, sample_python_dict_data: Any) -> None:
         """Test that PythonDict -> PyArrow -> PythonDict preserves data."""
         # Transform to PyArrow
-        pyarrow_data = PythonDictPyarrowTransformer.transform_fw_to_other_fw(sample_python_dict_data)
+        pyarrow_data = PythonDictPyArrowTransformer.transform_fw_to_other_fw(sample_python_dict_data)
 
         # Transform back to PythonDict
-        result = PythonDictPyarrowTransformer.transform_other_fw_to_fw(pyarrow_data)
+        result = PythonDictPyArrowTransformer.transform_other_fw_to_fw(pyarrow_data)
 
         # Should be identical to original
         assert result == sample_python_dict_data
@@ -89,7 +89,7 @@ class TestPythonDictPyarrowTransformer:
     def test_transform_empty_list(self) -> None:
         """Test transformation of empty list."""
         empty_list: List[Dict[str, Any]] = []
-        result = PythonDictPyarrowTransformer.transform_fw_to_other_fw(empty_list)
+        result = PythonDictPyArrowTransformer.transform_fw_to_other_fw(empty_list)
 
         assert isinstance(result, pa.Table)
         assert result.num_rows == 0
@@ -98,7 +98,7 @@ class TestPythonDictPyarrowTransformer:
     def test_transform_empty_table(self) -> None:
         """Test transformation of empty PyArrow table."""
         empty_table = pa.table({})
-        result = PythonDictPyarrowTransformer.transform_other_fw_to_fw(empty_table)
+        result = PythonDictPyArrowTransformer.transform_other_fw_to_fw(empty_table)
 
         assert isinstance(result, list)
         assert len(result) == 0
@@ -106,19 +106,19 @@ class TestPythonDictPyarrowTransformer:
     def test_transform_fw_to_other_fw_invalid_type(self) -> None:
         """Test that invalid input type raises error."""
         with pytest.raises(ValueError, match="Expected list, got"):
-            PythonDictPyarrowTransformer.transform_fw_to_other_fw("invalid")
+            PythonDictPyArrowTransformer.transform_fw_to_other_fw("invalid")
 
     def test_transform_fw_to_other_fw_invalid_list_content(self) -> None:
         """Test that list with non-dict items raises error."""
         invalid_data = [{"id": 1}, "invalid", {"id": 3}]
 
         with pytest.raises(ValueError, match="Expected dict at index 1, got"):
-            PythonDictPyarrowTransformer.transform_fw_to_other_fw(invalid_data)
+            PythonDictPyArrowTransformer.transform_fw_to_other_fw(invalid_data)
 
     def test_transform_other_fw_to_fw_invalid_type(self) -> None:
         """Test that invalid PyArrow input type raises error."""
         with pytest.raises(ValueError, match="Expected pa.Table, got"):
-            PythonDictPyarrowTransformer.transform_other_fw_to_fw("invalid")
+            PythonDictPyArrowTransformer.transform_other_fw_to_fw("invalid")
 
     def test_transform_with_mixed_types(self) -> None:
         """Test transformation with mixed data types."""
@@ -129,8 +129,8 @@ class TestPythonDictPyarrowTransformer:
         ]
 
         # Transform to PyArrow and back
-        pyarrow_data = PythonDictPyarrowTransformer.transform_fw_to_other_fw(mixed_data)
-        result = PythonDictPyarrowTransformer.transform_other_fw_to_fw(pyarrow_data)
+        pyarrow_data = PythonDictPyArrowTransformer.transform_fw_to_other_fw(mixed_data)
+        result = PythonDictPyArrowTransformer.transform_other_fw_to_fw(pyarrow_data)
 
         assert result == mixed_data
 
@@ -142,8 +142,8 @@ class TestPythonDictPyarrowTransformer:
         ]
 
         # Transform to PyArrow and back
-        pyarrow_data = PythonDictPyarrowTransformer.transform_fw_to_other_fw(nested_data)
-        result = PythonDictPyarrowTransformer.transform_other_fw_to_fw(pyarrow_data)
+        pyarrow_data = PythonDictPyArrowTransformer.transform_fw_to_other_fw(nested_data)
+        result = PythonDictPyArrowTransformer.transform_other_fw_to_fw(pyarrow_data)
 
         assert result == nested_data
 
@@ -157,4 +157,4 @@ class TestPythonDictPyarrowTransformer:
 
         # Should raise an error due to inconsistent schema
         with pytest.raises(ValueError, match="Inconsistent schema at index 1"):
-            PythonDictPyarrowTransformer.transform_fw_to_other_fw(inconsistent_data)
+            PythonDictPyArrowTransformer.transform_fw_to_other_fw(inconsistent_data)

@@ -12,7 +12,7 @@ except ImportError:
     pd = None
 
 
-class PandasDataframe(ComputeFrameWork):
+class PandasDataFrame(ComputeFrameWork):
     @staticmethod
     def is_available() -> bool:
         """Check if Pandas is installed and available."""
@@ -25,7 +25,7 @@ class PandasDataframe(ComputeFrameWork):
 
     @staticmethod
     def expected_data_framework() -> Any:
-        return PandasDataframe.pd_dataframe()
+        return PandasDataFrame.pd_dataframe()
 
     def merge_engine(self) -> Type[BaseMergeEngine]:
         return PandasMergeEngine

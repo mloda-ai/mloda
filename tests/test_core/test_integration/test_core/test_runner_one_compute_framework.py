@@ -8,7 +8,7 @@ from mloda_core.api.request import mlodaAPI
 from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
@@ -140,7 +140,7 @@ class TestEngineRunnerOneComputeFramework:
         flight_server: Any,
         function_extender: Any = None,
     ) -> List[Any]:
-        compute_framework: Set[Type[ComputeFrameWork]] = {PyarrowTable}
+        compute_framework: Set[Type[ComputeFrameWork]] = {PyArrowTable}
 
         results = mlodaAPI.run_all(
             features, compute_framework, None, None, parallelization_modes, flight_server, function_extender

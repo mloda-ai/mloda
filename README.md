@@ -60,7 +60,7 @@ class SampleData(AbstractFeatureGroup):
 # Step 2: Load mloda plugins and run pipeline
 from mloda_core.api.request import mlodaAPI
 from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 PluginLoader.all()
 
@@ -70,7 +70,7 @@ result = mlodaAPI.run_all(
         "age",                            # Original column
         "income__standard_scaled"         # Transform: scale income to mean=0, std=1
     ],
-    compute_frameworks={PandasDataframe}
+    compute_frameworks={PandasDataFrame}
 )
 
 # Step 3: Get your processed data
@@ -173,7 +173,7 @@ For truly custom configurations, you can use `Feature` objects:
 #
 # result = mlodaAPI.run_all(
 #     features=features,
-#     compute_frameworks={PandasDataframe}
+#     compute_frameworks={PandasDataFrame}
 # )
 ```
 
@@ -218,7 +218,7 @@ mloda supports multiple data access patterns depending on your use case:
 #
 # result = mlodaAPI.run_all(
 #     features=["customer_id", "income__standard_scaled"],
-#     compute_frameworks={PandasDataframe},
+#     compute_frameworks={PandasDataFrame},
 #     data_access_collection=data_access
 # )
 ```
@@ -236,7 +236,7 @@ mloda supports multiple data access patterns depending on your use case:
 #
 # result = mlodaAPI.run_all(
 #     features=["customer_id", "age__standard_scaled"],
-#     compute_frameworks={PandasDataframe},
+#     compute_frameworks={PandasDataFrame},
 #     api_input_data_collection=api_input_data_collection,
 #     api_data=api_data
 # )
@@ -255,7 +255,7 @@ mloda supports multiple compute frameworks (pandas, polars, pyarrow, etc.). Most
 # Default: Everything processes with pandas
 result = mlodaAPI.run_all(
     features=["customer_id", "income__standard_scaled"],
-    compute_frameworks={PandasDataframe}  # Use pandas for all features
+    compute_frameworks={PandasDataFrame}  # Use pandas for all features
 )
 
 data = result[0]  # Returns pandas DataFrame
@@ -268,7 +268,7 @@ print(type(data))  # <class 'pandas.core.frame.DataFrame'>
 - **PyArrow**: Memory-efficient, great for columnar data
 - **Spark**: Distributed processing for big data
 
-> **For most use cases**: Start with `compute_frameworks={PandasDataframe}` and switch to others only if you need specific performance characteristics.
+> **For most use cases**: Start with `compute_frameworks={PandasDataFrame}` and switch to others only if you need specific performance characteristics.
 
 ### 6. Putting It All Together - Complete ML Pipeline
 
@@ -323,7 +323,7 @@ result = mlodaAPI.run_all(
         "customer_segment__label_encoded",
         "churned"
     ],
-    compute_frameworks={PandasDataframe}
+    compute_frameworks={PandasDataFrame}
 )
 
 # Step 3: Prepare for ML

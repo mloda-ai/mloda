@@ -73,19 +73,19 @@ class TestInputData:
 
     def test_local_scope_file(self) -> Any:
         features = self.get_features(self.feature_list, self.file_path)
-        result = mlodaAPI.run_all(features, compute_frameworks=["PyarrowTable"])
+        result = mlodaAPI.run_all(features, compute_frameworks=["PyArrowTable"])
         assert "V2" in result[0].to_pydict()
 
     def test_local_scope_folder(self) -> Any:
         file_path = self.file_path.replace("creditcard_2023_short.csv", "")
         features = self.get_features(self.feature_list, file_path)
-        result = mlodaAPI.run_all(features, compute_frameworks=["PyarrowTable"])
+        result = mlodaAPI.run_all(features, compute_frameworks=["PyArrowTable"])
         assert "V2" in result[0].to_pydict()
 
     def test_global_scope_file(self) -> Any:
         result = mlodaAPI.run_all(
             self.feature_list,  # type: ignore
-            compute_frameworks=["PyarrowTable"],
+            compute_frameworks=["PyArrowTable"],
             data_access_collection=DataAccessCollection(files={self.file_path}),
         )
         assert "V2" in result[0].to_pydict()
@@ -94,7 +94,7 @@ class TestInputData:
         file_path = self.file_path.replace("creditcard_2023_short.csv", "")
         result = mlodaAPI.run_all(
             self.feature_list,  # type: ignore
-            compute_frameworks=["PyarrowTable"],
+            compute_frameworks=["PyArrowTable"],
             data_access_collection=DataAccessCollection(folders={file_path}),
         )
         assert "V2" in result[0].to_pydict()
@@ -123,7 +123,7 @@ class TestInputData:
 
         result = mlodaAPI.run_all(
             features,
-            compute_frameworks=["PyarrowTable"],
+            compute_frameworks=["PyArrowTable"],
             data_access_collection=DataAccessCollection(files={self.file_path}),
         )
         assert "V2" in result[0].to_pydict()
@@ -143,7 +143,7 @@ class TestInputData:
 
         result = mlodaAPI.run_all(
             features,
-            compute_frameworks=["PyarrowTable"],
+            compute_frameworks=["PyArrowTable"],
         )
         assert "V2" in result[0].to_pydict()
         for k, v in result[0].to_pydict().items():
@@ -158,7 +158,7 @@ class TestInputData:
         file_path = self.file_path.replace("creditcard_2023_short.csv", "")
         result = mlodaAPI.run_all(
             [f],
-            compute_frameworks=["PyarrowTable"],
+            compute_frameworks=["PyArrowTable"],
             data_access_collection=DataAccessCollection(folders={file_path}),
         )
         assert "SumFeature_V1V2" in result[0].to_pydict()
@@ -173,7 +173,7 @@ class TestInputData:
         )
         result = mlodaAPI.run_all(
             [f],
-            compute_frameworks=["PyarrowTable"],
+            compute_frameworks=["PyArrowTable"],
         )
         assert "SumFeature_V1V2" in result[0].to_pydict()
         for k, v in result[0].to_pydict().items():
@@ -191,7 +191,7 @@ class TestInputData:
         )
         result = mlodaAPI.run_all(
             [f],
-            compute_frameworks=["PyarrowTable"],
+            compute_frameworks=["PyArrowTable"],
         )
         assert "SumFeature_V1V2" in result[0].to_pydict()
         for k, v in result[0].to_pydict().items():

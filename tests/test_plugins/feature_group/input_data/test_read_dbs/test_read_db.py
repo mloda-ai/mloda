@@ -49,7 +49,7 @@ class TestInputDataDB:
 
         result = mlodaAPI.run_all(
             [f],
-            compute_frameworks=["PyarrowTable"],
+            compute_frameworks=["PyArrowTable"],
             plugin_collector=PlugInCollector.enabled_feature_groups({DBInputDataTestFeatureGroup}),
         )
         assert "id" in result[0].to_pydict()
@@ -57,7 +57,7 @@ class TestInputDataDB:
     def test_load_sqlite_found_in_data_access_collection(self) -> Any:
         result = mlodaAPI.run_all(
             ["name", "id"],
-            compute_frameworks=["PyarrowTable"],
+            compute_frameworks=["PyArrowTable"],
             data_access_collection=DataAccessCollection(credential_dicts={SQLITEReader.db_path(): self.db_path}),
             plugin_collector=PlugInCollector.enabled_feature_groups({DBInputDataTestFeatureGroup}),
         )
@@ -71,7 +71,7 @@ class TestInputDataDB:
 
         result = mlodaAPI.run_all(
             [f],
-            compute_frameworks=["PyarrowTable"],
+            compute_frameworks=["PyArrowTable"],
             data_access_collection=DataAccessCollection(credential_dicts={SQLITEReader.db_path(): self.db_path}),
             plugin_collector=PlugInCollector.enabled_feature_groups({DBInputDataTestFeatureGroup, SumFeature}),
         )

@@ -9,7 +9,7 @@ from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.dynamic_feature_group_factory.dynamic_feature_group_factory import (
     DynamicFeatureGroupCreator,
@@ -28,7 +28,7 @@ class TestDynamicFeatureGroupFactoryIntegration:
             "match_feature_group_criteria": lambda cls, feature_name, options, data_access_collection: feature_name
             == FeatureName("input_feature"),
             "input_data": lambda: DataCreator({"input_feature"}),
-            "compute_framework_rule": lambda: {PandasDataframe},
+            "compute_framework_rule": lambda: {PandasDataFrame},
         }
 
         # 2. Create the Dynamic Feature Group
@@ -78,7 +78,7 @@ class TestDynamicFeatureGroupFactoryIntegration:
             "calculate_feature": lambda cls, data, features: pd.DataFrame(
                 {"AggregatedFeature": [data["source_feature_1"].iloc[0] + data["source_feature_2"].iloc[0]]}
             ),
-            "compute_framework_rule": lambda: {PandasDataframe},
+            "compute_framework_rule": lambda: {PandasDataFrame},
         }
 
         # 3. Create the Dynamic Feature Group
@@ -110,7 +110,7 @@ class TestDynamicFeatureGroupFactoryIntegration:
         ]
 
         # 5. Run mlodaAPI with the Dynamic Feature Group
-        result = mlodaAPI.run_all(features=features, compute_frameworks={PandasDataframe})  # type: ignore
+        result = mlodaAPI.run_all(features=features, compute_frameworks={PandasDataFrame})  # type: ignore
 
         # 6. Verification
         assert result

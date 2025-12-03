@@ -31,7 +31,7 @@ class MixedCfwFeature(AbstractFeatureGroup):
                 Feature(
                     name=py_f,
                     options={CsvReader.__name__: self.file_path, "123": 2},
-                    compute_framework="PyarrowTable",
+                    compute_framework="PyArrowTable",
                 )
             )
 
@@ -41,7 +41,7 @@ class MixedCfwFeature(AbstractFeatureGroup):
                 Feature(
                     name=py_f,
                     options={CsvReader.__name__: self.file_path, "123": 2},
-                    compute_framework="PandasDataframe",
+                    compute_framework="PandasDataFrame",
                 )
             )
         return feature_set
@@ -71,7 +71,7 @@ class DuplicateFeatureSetup(MixedCfwFeature):
                 Feature(
                     name=py_f,
                     options={CsvReader.__name__: self.file_path, "left_pointer": "dummy"},
-                    compute_framework="PandasDataframe",
+                    compute_framework="PandasDataFrame",
                 )
             )
 
@@ -81,7 +81,7 @@ class DuplicateFeatureSetup(MixedCfwFeature):
                 Feature(
                     name=py_f,
                     options={CsvReader.__name__: self.file_path, "right_pointer": "dummy"},
-                    compute_framework="PandasDataframe",
+                    compute_framework="PandasDataFrame",
                 )
             )
         return feature_set

@@ -7,7 +7,7 @@ from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.api.request import mlodaAPI
 
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 
 class NFeatureNameBase(AbstractFeatureGroup):
@@ -33,7 +33,7 @@ class TestNFeature:
     def test_n_feature_name(self) -> None:
         result = mlodaAPI.run_all(
             ["NFeatureNameBase"],
-            compute_frameworks=["PyarrowTable"],
+            compute_frameworks=["PyArrowTable"],
         )
 
         for k, v in result[0].to_pydict().items():
@@ -45,7 +45,7 @@ class TestNFeature:
 
     def test_n_feature_as_input(self) -> None:
         # Run the API with NFeatureConsumer, which depends on NFeatureNameBase
-        result = mlodaAPI.run_all(["NFeatureConsumer"], compute_frameworks={PandasDataframe})
+        result = mlodaAPI.run_all(["NFeatureConsumer"], compute_frameworks={PandasDataFrame})
 
         # Verify the results
         res = result[0]

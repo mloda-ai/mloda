@@ -24,7 +24,7 @@ from mloda_core.abstract_plugins.components.link import Link, JoinSpec
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.input_data.api_data.api_data import ApiInputDataFeature
 
 
@@ -180,7 +180,7 @@ class TestSimplifiedApiData:
         result = mlodaAPI.run_all(
             feature_list,
             plugin_collector=self._enabled_simple,
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             api_data=api_data,  # No api_input_data_collection needed!
         )
 
@@ -215,7 +215,7 @@ class TestSimplifiedApiData:
         result = mlodaAPI.run_all(
             feature_list,
             plugin_collector=self._enabled_simple,
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             api_data=api_data,
         )
 
@@ -251,7 +251,7 @@ class TestSimplifiedApiData:
 
         result = mlodaAPI.run_all(
             feature_list,
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             api_data=api_data,
         )
 
@@ -286,7 +286,7 @@ class TestSimplifiedApiData:
 
         result = mlodaAPI.run_all(
             feature_list,
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             api_data=api_data,
         )
 
@@ -315,7 +315,7 @@ class TestSimplifiedApiData:
         result = mlodaAPI.run_all(
             feature_list,
             plugin_collector=self._enabled_join,
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             api_data=api_data,
         )
 
@@ -338,7 +338,7 @@ class TestSimplifiedApiData:
         result = mlodaAPI.run_all(
             feature_list,
             plugin_collector=_enabled_creator_only,
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             api_data=None,  # Explicitly None
         )
 
@@ -361,7 +361,7 @@ class TestSimplifiedApiData:
         result = mlodaAPI.run_all(
             feature_list,
             plugin_collector=_enabled_creator_only,
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             api_data={},  # Empty dict
         )
 

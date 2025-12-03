@@ -10,7 +10,7 @@ from mloda_core.abstract_plugins.components.input_data.base_input_data import Ba
 from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.llm.llm_api.claude import ClaudeRequestLoop
 from mloda_plugins.feature_group.experimental.llm.llm_api.gemini import GeminiRequestLoop
 from mloda_plugins.feature_group.experimental.llm.llm_file_selector import LLMFileSelector
@@ -38,7 +38,7 @@ class RunRefactorGeminiRequestLoop(GeminiRequestLoop):
 
 class RunRefactorDiffCached:
     def __init__(self) -> None:
-        self.compute_frameworks: Set[Type[ComputeFrameWork]] = {PandasDataframe}
+        self.compute_frameworks: Set[Type[ComputeFrameWork]] = {PandasDataFrame}
 
     def run(self) -> None:
         # check tests are passing
@@ -341,7 +341,7 @@ class RunToolFeatureGroup(AbstractFeatureGroup):
 
     @classmethod
     def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
-        return {PandasDataframe}
+        return {PandasDataFrame}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -373,7 +373,7 @@ class DiffFeatureGroup(RunToolFeatureGroup):
 class ToxFeatureGroup(AbstractFeatureGroup):
     @classmethod
     def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
-        return {PandasDataframe}
+        return {PandasDataFrame}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

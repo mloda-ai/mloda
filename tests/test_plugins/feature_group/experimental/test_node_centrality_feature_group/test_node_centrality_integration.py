@@ -10,7 +10,7 @@ from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.node_centrality.base import NodeCentralityFeatureGroup
 from mloda_plugins.feature_group.experimental.node_centrality.pandas import PandasNodeCentralityFeatureGroup
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
@@ -21,7 +21,7 @@ from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCr
 class NodeCentralityTestDataCreator(ATestDataCreator):
     """Base class for node centrality test data creators."""
 
-    compute_framework = PandasDataframe
+    compute_framework = PandasDataFrame
 
     @classmethod
     def get_raw_data(cls) -> Dict[str, Any]:
@@ -97,7 +97,7 @@ class TestNodeCentralityPandasIntegration:
                 "source__eigenvector_centrality",  # Eigenvector centrality
                 "source__pagerank_centrality",  # PageRank centrality
             ],
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
         )
 
@@ -160,7 +160,7 @@ class TestNodeCentralityPandasIntegration:
                 degree_feature,
                 betweenness_feature,
             ],
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
         )
 
@@ -221,7 +221,7 @@ class TestNodeCentralityPandasIntegration:
                 degree_undirected,
                 degree_directed,
             ],
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
         )
 

@@ -13,7 +13,7 @@ except ImportError:
     pa = None
 
 
-class PolarsPyarrowTransformer(BaseTransformer):
+class PolarsPyArrowTransformer(BaseTransformer):
     """
     Transformer for converting between Polars DataFrame and PyArrow Table.
 

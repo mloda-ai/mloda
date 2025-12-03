@@ -28,7 +28,7 @@ except ImportError:
 
 
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.forecasting.base import ForecastingFeatureGroup
 
 
@@ -36,7 +36,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFrameWork]]:
         """Define the compute framework for this feature group."""
-        return {PandasDataframe}
+        return {PandasDataFrame}
 
     @classmethod
     def _get_available_columns(cls, data: pd.DataFrame) -> Set[str]:

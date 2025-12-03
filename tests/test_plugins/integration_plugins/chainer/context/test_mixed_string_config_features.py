@@ -5,7 +5,7 @@ from mloda_plugins.feature_group.experimental.default_options_key import Default
 
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from tests.test_plugins.integration_plugins.chainer.chainer_context_feature import (
     ChainedContextFeatureGroupTest,
 )
@@ -81,7 +81,7 @@ class TestMixedStringConfigFeatures:
                 config_feature3,  # Config-based (same group as config_feature2)
                 "Sales",  # Base data
             ],
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             plugin_collector=self.plugin_collector,
         )
 
@@ -128,7 +128,7 @@ class TestMixedStringConfigFeatures:
 
         result = mlodaAPI.run_all(
             [config_target, "Sales"],
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             plugin_collector=self.plugin_collector,
         )
 
@@ -178,7 +178,7 @@ class TestMixedStringConfigFeatures:
 
         result = mlodaAPI.run_all(
             [string_feature, config_feature_same_group, config_feature_diff_group, "Sales"],
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             plugin_collector=self.plugin_collector,
         )
 

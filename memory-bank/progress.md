@@ -29,10 +29,10 @@ mindmap
         GeoDistanceFeatureGroup
         SklearnPipelineFeatureGroup
     Compute Frameworks
-      PandasDataframe
-      PyarrowTable
+      PandasDataFrame
+      PyArrowTable
       PythonDict
-      PolarsDataframe
+      PolarsDataFrame
       DuckDBFramework
       IcebergFramework
       SparkFramework

@@ -67,7 +67,7 @@ class TestTwoReader:
 
         result = mlodaAPI.run_all(
             feature_list,  # type: ignore
-            compute_frameworks=["PyarrowTable"],
+            compute_frameworks=["PyArrowTable"],
             plugin_collector=PlugInCollector.enabled_feature_groups({DBInputDataTestFeatureGroup, ReadFileFeature}),
         )
         assert result[0].to_pydict()["id"] != result[1].to_pydict()["id"]
@@ -89,7 +89,7 @@ class TestTwoReader:
         with pytest.raises(ValueError) as excinfo:
             mlodaAPI.run_all(
                 feature_list,  # type: ignore
-                compute_frameworks=["PyarrowTable"],
+                compute_frameworks=["PyArrowTable"],
             )
         assert "BaseInputData already set with different values" in str(excinfo.value)
 
@@ -109,7 +109,7 @@ class TestTwoReader:
         with pytest.raises(ValueError) as excinfo:
             mlodaAPI.run_all(
                 feature_list,  # type: ignore
-                compute_frameworks=["PyarrowTable"],
+                compute_frameworks=["PyArrowTable"],
                 data_access_collection=DataAccessCollection(files={self.file_path}),
             )
         assert "BaseInputData already set with different values" in str(excinfo.value)
@@ -183,7 +183,7 @@ class TestTwoReader:
 
         result = mlodaAPI.run_all(
             [f],
-            compute_frameworks=["PyarrowTable"],
+            compute_frameworks=["PyArrowTable"],
             links={link},
             plugin_collector=PlugInCollector.enabled_feature_groups(
                 {ReadFileFeatureWithIndex, DBInputDataTestFeatureGroupWithIndex, SumFeature}
@@ -194,7 +194,7 @@ class TestTwoReader:
         with pytest.raises(ValueError):
             mlodaAPI.run_all(
                 [f],
-                compute_frameworks=["PyarrowTable"],
+                compute_frameworks=["PyArrowTable"],
                 links={link},
                 plugin_collector=PlugInCollector.enabled_feature_groups(
                     {ReadFileFeature, DBInputDataTestFeatureGroupWithIndex}

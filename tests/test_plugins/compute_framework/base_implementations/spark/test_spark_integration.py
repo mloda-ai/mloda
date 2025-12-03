@@ -26,7 +26,7 @@ import pytest
 
 from mloda_core.abstract_plugins.components.match_data.match_data import MatchData
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
@@ -261,7 +261,7 @@ class CheckData(AbstractFeatureGroup):
 
     @classmethod
     def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
-        return {PyarrowTable}
+        return {PyArrowTable}
 
 
 @pytest.mark.skipif(
@@ -419,7 +419,7 @@ class TestSparkIntegrationWithMlodaAPI:
         result = mlodaAPI.run_all(
             feature_list,  # type: ignore
             flight_server=flight_server,
-            compute_frameworks={SparkFramework, PyarrowTable},
+            compute_frameworks={SparkFramework, PyArrowTable},
             plugin_collector=plugin_collector,
             parallelization_modes={ParallelizationModes.SYNC},
         )

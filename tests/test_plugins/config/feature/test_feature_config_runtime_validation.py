@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Dict
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.config.feature.loader import load_features_from_config
 from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import PandasMissingValueFeatureGroup
@@ -20,7 +20,7 @@ from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCr
 class IntegrationDataCreator(ATestDataCreator):
     """Provides test data for all columns in integration JSON."""
 
-    compute_framework = PandasDataframe
+    compute_framework = PandasDataFrame
 
     @classmethod
     def get_raw_data(cls) -> Dict[str, Any]:
@@ -94,7 +94,7 @@ def test_features_runtime_one_by_one() -> None:
     # Run mlodaAPI with all features being tested
     results = mlodaAPI.run_all(
         features_to_test,
-        compute_frameworks={PandasDataframe},
+        compute_frameworks={PandasDataFrame},
         plugin_collector=plugin_collector,
     )
 
@@ -168,7 +168,7 @@ def test_feature_3_step1_onehot_encoding() -> None:
     # Run with BOTH features - the intermediate one must be created first
     results = mlodaAPI.run_all(
         [intermediate_feature, chained_feature],
-        compute_frameworks={PandasDataframe},
+        compute_frameworks={PandasDataFrame},
         plugin_collector=plugin_collector,
     )
 

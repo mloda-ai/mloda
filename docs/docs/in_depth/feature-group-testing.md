@@ -71,10 +71,10 @@ Test that your feature group works correctly with the mloda API.
 **Example:**
 ``` python
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 features = ["source_feature", "source_feature__my_operation"]
-result = mlodaAPI.run_all(features, compute_frameworks={PandasDataframe})
+result = mlodaAPI.run_all(features, compute_frameworks={PandasDataFrame})
 assert "source_feature__my_operation" in result[0].columns
 ```
 

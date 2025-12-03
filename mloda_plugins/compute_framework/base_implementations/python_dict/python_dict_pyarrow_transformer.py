@@ -8,7 +8,7 @@ except ImportError:
     pa = None
 
 
-class PythonDictPyarrowTransformer(BaseTransformer):
+class PythonDictPyArrowTransformer(BaseTransformer):
     """
     Transformer for converting between PythonDict (List[Dict]) and PyArrow Table.
 

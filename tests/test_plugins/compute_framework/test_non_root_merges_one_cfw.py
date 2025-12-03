@@ -112,7 +112,7 @@ class TestNonRootMerge:
         result = mlodaAPI.run_all(
             [feature],
             links={link},
-            compute_frameworks=["PandasDataframe"],
+            compute_frameworks=["PandasDataFrame"],
             plugin_collector=PlugInCollector.enabled_feature_groups(
                 {
                     NonRootJoinTestFeature,
@@ -156,7 +156,7 @@ class TestNonRootMerge:
         result = mlodaAPI.run_all(
             [feature],
             links=links,
-            compute_frameworks=["PandasDataframe"],
+            compute_frameworks=["PandasDataFrame"],
             plugin_collector=PlugInCollector.enabled_feature_groups(
                 {
                     NonRootJoinTestFeature,

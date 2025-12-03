@@ -11,7 +11,7 @@ import numpy as np
 
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.geo_distance.base import GeoDistanceFeatureGroup
 
 
@@ -19,7 +19,7 @@ class PandasGeoDistanceFeatureGroup(GeoDistanceFeatureGroup):
     @classmethod
     def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
         """Specify that this feature group works with Pandas."""
-        return {PandasDataframe}
+        return {PandasDataFrame}
 
     @classmethod
     def _check_point_features_exist(cls, data: Any, point1_feature: str, point2_feature: str) -> None:

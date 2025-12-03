@@ -9,8 +9,8 @@ from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
 
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregatedFeatureGroup
@@ -61,7 +61,7 @@ class TestCombinedFeatureGroupsPandas:
         # Run the API with the feature chain
         result = mlodaAPI.run_all(
             features,
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
         )
 
@@ -70,7 +70,7 @@ class TestCombinedFeatureGroupsPandas:
 
         result2 = mlodaAPI.run_all(
             ["price__mean_imputed__sum_7_day_window__max_aggr"],
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
         )
 
@@ -120,7 +120,7 @@ class TestCombinedFeatureGroupsPyArrow:
         # Run the API with the feature chain
         result = mlodaAPI.run_all(
             features,
-            compute_frameworks={PyarrowTable},
+            compute_frameworks={PyArrowTable},
             plugin_collector=plugin_collector,
         )
 

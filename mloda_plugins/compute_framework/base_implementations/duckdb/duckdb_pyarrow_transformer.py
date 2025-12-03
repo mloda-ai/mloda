@@ -13,7 +13,7 @@ except ImportError:
     pa = None
 
 
-class DuckDBPyarrowTransformer(BaseTransformer):
+class DuckDBPyArrowTransformer(BaseTransformer):
     """
     Transformer for converting between DuckDB relations and PyArrow Table.
 

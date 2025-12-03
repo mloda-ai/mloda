@@ -24,7 +24,7 @@ from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 
 class MultiColumnTestDataCreator(AbstractFeatureGroup):
@@ -47,7 +47,7 @@ class MultiColumnTestDataCreator(AbstractFeatureGroup):
     @classmethod
     def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
         """Return the compute framework for this data creator."""
-        return {PandasDataframe}
+        return {PandasDataFrame}
 
 
 class MultiColumnProducer(AbstractFeatureGroup):
@@ -102,7 +102,7 @@ class MultiColumnProducer(AbstractFeatureGroup):
     @classmethod
     def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
         """Support Pandas framework."""
-        return {PandasDataframe}
+        return {PandasDataFrame}
 
 
 class MultiColumnConsumer(AbstractFeatureGroup):
@@ -171,7 +171,7 @@ class MultiColumnConsumer(AbstractFeatureGroup):
     @classmethod
     def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
         """Support Pandas framework."""
-        return {PandasDataframe}
+        return {PandasDataFrame}
 
 
 class ChainedProcessor(AbstractFeatureGroup):
@@ -211,7 +211,7 @@ class ChainedProcessor(AbstractFeatureGroup):
     @classmethod
     def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
         """Support Pandas framework."""
-        return {PandasDataframe}
+        return {PandasDataFrame}
 
 
 def test_multi_column_auto_resolution_with_chaining() -> None:
@@ -263,7 +263,7 @@ def test_multi_column_auto_resolution_with_chaining() -> None:
     # Run the computation
     api = mlodaAPI(
         features_to_request,
-        {PandasDataframe},
+        {PandasDataFrame},
         plugin_collector=plugin_collector,
     )
     api._batch_run()

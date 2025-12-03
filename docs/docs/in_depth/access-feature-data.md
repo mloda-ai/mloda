@@ -67,7 +67,7 @@ data_access_collection = DataAccessCollection(folders={str(file_path)})
 
 result = mlodaAPI.run_all(
             ["AExample", "BExample"], 
-            compute_frameworks=["PandasDataframe"], 
+            compute_frameworks=["PandasDataFrame"], 
             # Define data access on a global level
             data_access_collection=data_access_collection
         )
@@ -139,7 +139,7 @@ feature_list.append(
 )
 
 
-result = mlodaAPI.run_all(feature_list, compute_frameworks=["PandasDataframe"])
+result = mlodaAPI.run_all(feature_list, compute_frameworks=["PandasDataFrame"])
 print(result)
 ```
 
@@ -172,12 +172,12 @@ The following example shows a simple ApiData setup.
 from typing import List
 
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 # Pass api_data directly as a dict - the framework handles registration internally
 result = mlodaAPI.run_all(
         ["FeatureInputAPITest"],
-        compute_frameworks={PandasDataframe},
+        compute_frameworks={PandasDataFrame},
         api_data={"ExampleApiData": {"FeatureInputAPITest": ["TestValue3", "TestValue4"]}},
 )
 for res in result:
@@ -210,7 +210,7 @@ One could imagine that for experimenting one wants to see data. Then one could u
 ```python
 
 
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
 
 # Create a Creator FeatureGroup class, which delivers the data needed
@@ -228,7 +228,7 @@ class AFeatureInputCreator(AbstractFeatureGroup):
 
 result = mlodaAPI.run_all(
         ["AFeatureInputCreator"],
-        compute_frameworks={PandasDataframe},
+        compute_frameworks={PandasDataFrame},
 )
 for res in result:
      print(res)
@@ -295,7 +295,7 @@ feature_list.append(
 
 result = mlodaAPI.run_all(
     feature_list,
-    compute_frameworks={PandasDataframe},
+    compute_frameworks={PandasDataFrame},
     plugin_collector=PlugInCollector.enabled_feature_groups({AInputFeatureGroup, AFeatureInputCreator})
 
 )

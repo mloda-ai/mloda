@@ -202,7 +202,7 @@ The compute framework uses the base class BaseMergeEngine as configuration.
 In this example, we show the PandasMergeEngine.
 
 ``` python
-class PandasDataframe(ComputeFrameWork):
+class PandasDataFrame(ComputeFrameWork):
     def merge_engine(self) -> Type[BaseMergeEngine]:
         return PandasMergeEngine
 ```

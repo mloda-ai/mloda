@@ -10,16 +10,16 @@ from unittest.mock import Mock, patch
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 
 class TestPandasEncodingFeatureGroup:
     """Test cases for the PandasEncodingFeatureGroup class."""
 
     def test_compute_framework_rule(self) -> None:
-        """Test that the feature group works with PandasDataframe."""
+        """Test that the feature group works with PandasDataFrame."""
         frameworks = PandasEncodingFeatureGroup.compute_framework_rule()
-        assert frameworks == {PandasDataframe}
+        assert frameworks == {PandasDataFrame}
 
     def test_check_source_feature_exists_valid(self) -> None:
         """Test checking for existing source features."""

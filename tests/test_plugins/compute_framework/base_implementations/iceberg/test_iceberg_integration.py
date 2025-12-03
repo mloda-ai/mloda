@@ -17,7 +17,7 @@ from mloda_core.api.request import mlodaAPI
 from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
 from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework import IcebergFramework
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 import logging
 
@@ -236,7 +236,7 @@ class IcebergToArrowFeatureGroup(AbstractFeatureGroup):
 
     @classmethod
     def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
-        return {PyarrowTable}
+        return {PyArrowTable}
 
 
 @pytest.mark.skipif(
@@ -313,7 +313,7 @@ class TestIcebergIntegrationWithMlodaAPI:
             parallelization_modes={ParallelizationModes.SYNC},
             plugin_collector=plugin_collector,
             data_access_collection=data_access_collection,
-            compute_frameworks={IcebergFramework, PyarrowTable},
+            compute_frameworks={IcebergFramework, PyArrowTable},
         )
 
         # Verify results

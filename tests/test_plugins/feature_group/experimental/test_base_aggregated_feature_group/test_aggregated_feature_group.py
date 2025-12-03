@@ -9,7 +9,7 @@ from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
 
@@ -151,7 +151,7 @@ class TestPandasAggregatedFeatureGroup:
 
     def test_compute_framework_rule(self) -> None:
         """Test compute_framework_rule method."""
-        assert PandasAggregatedFeatureGroup.compute_framework_rule() == {PandasDataframe}
+        assert PandasAggregatedFeatureGroup.compute_framework_rule() == {PandasDataFrame}
 
     def test_perform_aggregation_sum(self, sample_dataframe: pd.DataFrame) -> None:
         """Test _perform_aggregation method with sum aggregation."""
@@ -287,7 +287,7 @@ class TestAggPandasIntegration:
                 "discount__min_aggr",
                 "customer_rating__max_aggr",
             ],
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
         )
 

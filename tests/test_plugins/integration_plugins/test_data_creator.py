@@ -10,8 +10,8 @@ from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
 from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
 class ATestDataCreator(AbstractFeatureGroup):
@@ -20,17 +20,17 @@ class ATestDataCreator(AbstractFeatureGroup):
     Subclasses should set the compute_framework class variable and implement
     any framework-specific data transformations.
 
-    Default is PandasDataframe.
+    Default is PandasDataFrame.
 
     If needed, you can overwrite the conversion dictionary to add more
     compute frameworks and their conversion functions.
     """
 
-    compute_framework: Type[ComputeFrameWork] = PandasDataframe
+    compute_framework: Type[ComputeFrameWork] = PandasDataFrame
 
     conversion = {
-        PandasDataframe: pd.DataFrame,
-        PyarrowTable: None,
+        PandasDataFrame: pd.DataFrame,
+        PyArrowTable: None,
     }
 
     @classmethod

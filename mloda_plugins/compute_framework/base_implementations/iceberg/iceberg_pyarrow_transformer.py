@@ -9,7 +9,7 @@ except ImportError:
     pa = None
 
 
-class IcebergPyarrowTransformer(BaseTransformer):
+class IcebergPyArrowTransformer(BaseTransformer):
     """
     Transformer for converting between Iceberg tables and PyArrow tables.
 

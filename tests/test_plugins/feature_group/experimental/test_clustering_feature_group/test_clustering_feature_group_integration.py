@@ -11,7 +11,7 @@ from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
 
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.clustering.base import ClusteringFeatureGroup
 from mloda_plugins.feature_group.experimental.clustering.pandas import PandasClusteringFeatureGroup
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
@@ -22,7 +22,7 @@ from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCr
 class ClusteringFeatureTestDataCreator(ATestDataCreator):
     """Base class for clustering feature test data creators."""
 
-    compute_framework = PandasDataframe
+    compute_framework = PandasDataFrame
 
     @classmethod
     def get_raw_data(cls) -> Dict[str, Any]:
@@ -132,7 +132,7 @@ class TestClusteringFeatureGroupIntegration:
         # Run the API
         result = mlodaAPI.run_all(
             features,
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
         )
 
@@ -195,7 +195,7 @@ class TestClusteringFeatureGroupIntegration:
         # Run the API
         result = mlodaAPI.run_all(
             features,
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
         )
 
@@ -223,7 +223,7 @@ class TestClusteringFeatureGroupIntegration:
         # Run the API
         result = mlodaAPI.run_all(
             features,
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
         )
 

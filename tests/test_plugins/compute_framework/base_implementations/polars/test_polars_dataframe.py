@@ -2,7 +2,7 @@ import os
 from typing import Any, Optional, Type
 import pytest
 from unittest.mock import patch
-from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataframe
+from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
 from mloda_core.abstract_plugins.components.index.index import Index
@@ -19,7 +19,7 @@ except ImportError:
     pl = None  # type: ignore
 
 
-class TestPolarsDataframeAvailability:
+class TestPolarsDataFrameAvailability:
     @patch("builtins.__import__")
     def test_is_available_when_polars_not_installed(self, mock_import: Any) -> None:
         """Test that is_available() returns False when polars import fails."""
@@ -30,7 +30,7 @@ class TestPolarsDataframeAvailability:
             return __import__(name, *args, **kwargs)
 
         mock_import.side_effect = side_effect
-        assert PolarsDataframe.is_available() is False
+        assert PolarsDataFrame.is_available() is False
 
 
 class TestPolarsInstallation:
@@ -52,13 +52,13 @@ class TestPolarsInstallation:
 
 
 @pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
-class TestPolarsDataframeComputeFramework:
+class TestPolarsDataFrameComputeFramework:
     if pl:
-        pl_dataframe = PolarsDataframe(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        pl_dataframe = PolarsDataFrame(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
         dict_data = {"column1": [1, 2, 3], "column2": [4, 5, 6]}
-        expected_data = PolarsDataframe.pl_dataframe()(dict_data)
-        left_data = PolarsDataframe.pl_dataframe()({"idx": [1, 3], "col1": ["a", "b"]})
-        right_data = PolarsDataframe.pl_dataframe()({"idx": [1, 2], "col2": ["x", "z"]})
+        expected_data = PolarsDataFrame.pl_dataframe()(dict_data)
+        left_data = PolarsDataFrame.pl_dataframe()({"idx": [1, 3], "col1": ["a", "b"]})
+        right_data = PolarsDataFrame.pl_dataframe()({"idx": [1, 2], "col2": ["x", "z"]})
         idx = Index(("idx",))
 
     def test_expected_data_framework(self) -> None:
@@ -69,12 +69,12 @@ class TestPolarsDataframeComputeFramework:
         assert result.equals(self.expected_data)
 
     def test_transform_arrays(self) -> None:
-        data = PolarsDataframe.pl_series()([1, 2, 3])
-        _plDf = PolarsDataframe(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
-        _plDf.set_data(PolarsDataframe.pl_dataframe()({"existing_column": [4, 5, 6]}))
+        data = PolarsDataFrame.pl_series()([1, 2, 3])
+        _plDf = PolarsDataFrame(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        _plDf.set_data(PolarsDataFrame.pl_dataframe()({"existing_column": [4, 5, 6]}))
 
         result = _plDf.transform(data=data, feature_names={"new_column"})
-        expected = PolarsDataframe.pl_dataframe()({"existing_column": [4, 5, 6], "new_column": [1, 2, 3]})
+        expected = PolarsDataFrame.pl_dataframe()({"existing_column": [4, 5, 6], "new_column": [1, 2, 3]})
         assert result.equals(expected)
 
     def test_transform_invalid_data(self) -> None:
@@ -92,13 +92,13 @@ class TestPolarsDataframeComputeFramework:
 
 
 @pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
-class TestPolarsDataframeMerge(DataFrameTestBase):
-    """Test PolarsDataframe merge operations using the base test class."""
+class TestPolarsDataFrameMerge(DataFrameTestBase):
+    """Test PolarsDataFrame merge operations using the base test class."""
 
     @classmethod
     def framework_class(cls) -> Type[Any]:
-        """Return the PolarsDataframe class."""
-        return PolarsDataframe
+        """Return the PolarsDataFrame class."""
+        return PolarsDataFrame
 
     def create_dataframe(self, data: dict[str, Any]) -> Any:
         """Create a polars DataFrame from a dictionary."""

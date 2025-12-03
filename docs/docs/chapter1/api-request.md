@@ -28,7 +28,7 @@ Finally, we send the request to the mloda API, specifying the compute framework 
 ```python
 result = mlodaAPI.run_all(
     feature_list, 
-    compute_frameworks=["PyarrowTable"],
+    compute_frameworks=["PyArrowTable"],
     data_access_collection=data_access_collection)
 result[0]
 ```

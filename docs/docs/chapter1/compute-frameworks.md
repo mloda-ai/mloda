@@ -1,6 +1,6 @@
 ## Compute Framework
 
-In the previous examples, you may have noticed that we used the following parameter in the mlodaAPI call: **compute_frameworks=["PyarrowTable"]**. Let’s take a moment to dive into this concept.
+In the previous examples, you may have noticed that we used the following parameter in the mlodaAPI call: **compute_frameworks=["PyArrowTable"]**. Let’s take a moment to dive into this concept.
 
 The Compute Framework is the second critical plugin in mloda, after the feature group. It is responsible for holding the state of the data and defining the technology used to execute operations.
 
@@ -16,7 +16,7 @@ This flexibility is one of mloda’s key advantages, allowing users to decouple 
 
 #### 2. Balancing Flexibility and Complexity
 
-However, this flexibility introduces a bit of complexity. Let's look at an example where we remove the compute_frameworks=["PyarrowTable"] parameter from the mlodaAPI call.
+However, this flexibility introduces a bit of complexity. Let's look at an example where we remove the compute_frameworks=["PyArrowTable"] parameter from the mlodaAPI call.
 
 #### 3. Example Without a Specified Compute Framework
 ```python
@@ -38,11 +38,11 @@ mlodaAPI.run_all(
 )
 
 ValueError: Multiple feature groups
-{<class 'CsvReader'>: {<class 'PyarrowTable'>, <class 'PandasDataframe'>}
+{<class 'CsvReader'>: {<class 'PyArrowTable'>, <class 'PandasDataFrame'>}
 .... found for feature name: id.
 ```
 
-In this case, the framework finds multiple compute frameworks (like **PyarrowTable** and **PandasDataframe**) that can handle the same file through the **CsvReader** feature group. Without explicitly specifying a compute framework, mloda doesn't know which one to use, leading to ambiguity.
+In this case, the framework finds multiple compute frameworks (like **PyArrowTable** and **PandasDataFrame**) that can handle the same file through the **CsvReader** feature group. Without explicitly specifying a compute framework, mloda doesn't know which one to use, leading to ambiguity.
 
 This might seem counterintuitive, but it’s actually a **feature**, allowing you to compare different technologies and computation methods, particularly useful in scenarios such as:
 
@@ -59,11 +59,11 @@ There are several ways to resolve this ambiguity by explicitly defining the comp
 ##### Part of API request
 
 ##### Specific feature configuration
-You can configure individual features to use a specific compute framework. Here’s how to specify that a feature should use the PyarrowTable framework:
+You can configure individual features to use a specific compute framework. Here’s how to specify that a feature should use the PyArrowTable framework:
 ```python
 from mloda_core.abstract_plugins.components.feature import Feature
 
-feature = Feature("id", options={"compute_framework": "PyarrowTable"})
+feature = Feature("id", options={"compute_framework": "PyArrowTable"})
 
 result = mlodaAPI.run_all(
     [feature], 
@@ -78,15 +78,15 @@ id: int64
 id: [[0,1,2,3,...]]
 ```
 ##### Defining the Compute Framework in a Feature Group
-In this example, we define a compute framework rule inside the feature group. This ensures that the feature group can only run on a **PyarrowTable**. We also specify that the input feature should use **PandasDataframe**, allowing automatic conversion from **PandasDataframe** to **PyarrowTable** behind the scenes.
+In this example, we define a compute framework rule inside the feature group. This ensures that the feature group can only run on a **PyArrowTable**. We also specify that the input feature should use **PandasDataFrame**, allowing automatic conversion from **PandasDataFrame** to **PyArrowTable** behind the scenes.
 
 
 ```python
 import pyarrow.compute as pc
 import pyarrow as pa
 
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 
 
@@ -94,10 +94,10 @@ class ExampleB(AbstractFeatureGroup):
 
     @classmethod
     def compute_framework_rule(cls):
-            return {PyarrowTable}
+            return {PyArrowTable}
     def input_features(self, option, feature_name):
         return {Feature(name=feature_name.name.split("_")[1], 
-                compute_framework="PandasDataframe")}
+                compute_framework="PandasDataFrame")}
 
     @classmethod
     def calculate_feature(cls, data, _):
@@ -112,22 +112,22 @@ example_feature_list = [f"ExampleB_{f}" for f in feature_list]
 
 result = mlodaAPI.run_all(
     example_feature_list,
-    compute_frameworks={PyarrowTable, PandasDataframe},
+    compute_frameworks={PyArrowTable, PandasDataFrame},
     data_access_collection=data_access_collection,
 )
 result[0]
 ```
-In this case, the feature group ExampleB will only run on the PyarrowTable framework, while the input feature group uses PandasDataframe, ensuring that the framework correctly handles the conversion between these technologies.
+In this case, the feature group ExampleB will only run on the PyArrowTable framework, while the input feature group uses PandasDataFrame, ensuring that the framework correctly handles the conversion between these technologies.
 
 
 #### 5. Available Compute Frameworks
 
 | Framework | Technology | Strengths | Best For | Dependencies |
 |-----------|------------|-----------|----------|--------------|
-| **PandasDataframe** | pandas DataFrame | Rich data transformation, familiar API | Development, data exploration, smaller datasets | pandas, numpy |
-| **PyarrowTable** | Apache Arrow Tables | Memory-efficient, high performance, columnar format | Production, big data, interoperability | pyarrow |
-| **PolarsDataframe** | Polars DataFrame | Fast, memory-efficient, eager evaluation | Development, immediate results | polars |
-| **PolarsLazyDataframe** | Polars LazyFrame | Query optimization, lazy evaluation | Large datasets, performance optimization | polars |
+| **PandasDataFrame** | pandas DataFrame | Rich data transformation, familiar API | Development, data exploration, smaller datasets | pandas, numpy |
+| **PyArrowTable** | Apache Arrow Tables | Memory-efficient, high performance, columnar format | Production, big data, interoperability | pyarrow |
+| **PolarsDataFrame** | Polars DataFrame | Fast, memory-efficient, eager evaluation | Development, immediate results | polars |
+| **PolarsLazyDataFrame** | Polars LazyFrame | Query optimization, lazy evaluation | Large datasets, performance optimization | polars |
 | **DuckDBFramework** | DuckDB Relations | SQL interface, fast analytics, OLAP queries | Analytical workloads, SQL-based transformations, data warehousing | duckdb |
 | **IcebergFramework** | Apache Iceberg Tables | Schema evolution, time travel, data lake management | Data lake scenarios, versioned datasets, large-scale analytics | pyiceberg, pyarrow |
 | **SparkFramework** | Apache Spark DataFrames | Distributed processing, scalability, fault tolerance | Big data, distributed computing, production clusters | pyspark, Java 8+ |
@@ -142,7 +142,7 @@ This means you can:
 - Deploy mloda in minimal environments without all compute framework dependencies
 - Avoid import errors when optional dependencies are missing
 
-For example, if `polars` is not installed, `PolarsDataframe` will not be available as a compute framework option, and mloda will automatically work with the remaining available frameworks.
+For example, if `polars` is not installed, `PolarsDataFrame` will not be available as a compute framework option, and mloda will automatically work with the remaining available frameworks.
 
 Example using PythonDictFramework:
 ``` python
@@ -162,10 +162,10 @@ Example using Polars frameworks:
 from mloda_core.abstract_plugins.components.feature import Feature
 
 # Using Polars eager evaluation
-feature_eager = Feature("id", options={"compute_framework": "PolarsDataframe"})
+feature_eager = Feature("id", options={"compute_framework": "PolarsDataFrame"})
 
 # Using Polars lazy evaluation
-feature_lazy = Feature("id", options={"compute_framework": "PolarsLazyDataframe"})
+feature_lazy = Feature("id", options={"compute_framework": "PolarsLazyDataFrame"})
 
 result = mlodaAPI.run_all(
     [feature_eager], 

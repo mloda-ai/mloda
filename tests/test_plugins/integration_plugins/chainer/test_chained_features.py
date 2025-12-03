@@ -5,7 +5,7 @@ import pytest
 
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from tests.test_plugins.integration_plugins.chainer.chainer_test_feature import (
     ChainedFeatureGroupTest,
     ChainedFeatureGroupTest_B,
@@ -16,7 +16,7 @@ from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCr
 class ChainerParserTestDataCreator(ATestDataCreator):
     """Test data creator for aggregation parser tests."""
 
-    compute_framework = PandasDataframe
+    compute_framework = PandasDataFrame
 
     @classmethod
     def get_raw_data(cls) -> Dict[str, Any]:
@@ -45,7 +45,7 @@ class TestChainedFeatures:
                 feature2,
                 f"Sales__{ChainedFeatureGroupTest.OPERATION_ID}identifier2__{ChainedFeatureGroupTest_B.OPERATION_ID}identifier2",
             ],
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             plugin_collector=self.plugin_collector,
         )
         # Currently, we duplicate here the data. This can be changed in the future.
@@ -55,7 +55,7 @@ class TestChainedFeatures:
         with pytest.raises(Exception) as exc_info:
             mlodaAPI.run_all(
                 [f"Sales__{ChainedFeatureGroupTest.OPERATION_ID}invalid_suffix"],
-                compute_frameworks={PandasDataframe},
+                compute_frameworks={PandasDataFrame},
                 plugin_collector=self.plugin_collector,
             )
         assert "invalid_suffix" in str(exc_info.value)

@@ -19,7 +19,7 @@ from mloda_core.abstract_plugins.components.link import Link, JoinSpec
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.input_data.api_data.api_data import ApiInputDataFeature
 
 
@@ -137,7 +137,7 @@ class TestApiLinkJoin:
         result = mlodaAPI.run_all(
             feature_list,
             plugin_collector=self._enabled_left,
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             api_data={"ApiExample": {"api_id": [1, 2, 3, 4], "api_value": ["w", "x", "y", "z"]}},
         )
 
@@ -160,7 +160,7 @@ class TestApiLinkJoin:
         result = mlodaAPI.run_all(
             feature_list,
             plugin_collector=self._enabled_append,
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             api_data={"ApiExample": {"api_id": [1, 2], "api_value": ["x", "y"]}},
         )
 

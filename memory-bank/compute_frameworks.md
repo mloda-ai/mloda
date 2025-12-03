@@ -7,10 +7,10 @@ Compute Frameworks define the technology stack for executing feature transformat
 ```mermaid
 graph TD
     subgraph Frameworks
-        PD[PandasDataframe]
-        PA[PyarrowTable]
+        PD[PandasDataFrame]
+        PA[PyArrowTable]
         PY[PythonDictFramework]
-        PL[PolarsDataframe]
+        PL[PolarsDataFrame]
         DB[DuckDBFramework]
         IC[IcebergFramework]
         SP[SparkFramework]
@@ -31,12 +31,12 @@ graph TD
 ## Available Frameworks
 
 ### Core Frameworks
-- **PandasDataframe**: Rich data manipulation, good for development
-- **PyarrowTable**: Memory-efficient columnar format, production-ready
+- **PandasDataFrame**: Rich data manipulation, good for development
+- **PyArrowTable**: Memory-efficient columnar format, production-ready
 - **PythonDictFramework**: Dependency-free, List[Dict] structure
 
 ### Advanced Frameworks
-- **PolarsDataframe**: High-performance Rust-based, lazy evaluation
+- **PolarsDataFrame**: High-performance Rust-based, lazy evaluation
 - **DuckDBFramework**: SQL interface, OLAP workloads
 - **IcebergFramework**: Data lake management, schema evolution
 - **SparkFramework**: Distributed processing, big data
@@ -58,9 +58,9 @@ Enable seamless conversion between data representations:
 
 ```python
 # Automatic transformation when needed
-PandasDataframe <--> PyarrowTable
-PyarrowTable <--> PolarsDataframe
-PyarrowTable <--> SparkDataframe
+PandasDataFrame <--> PyArrowTable
+PyArrowTable <--> PolarsDataFrame
+PyArrowTable <--> SparkDataframe
 ```
 
 ## Integration Pattern
@@ -68,5 +68,5 @@ PyarrowTable <--> SparkDataframe
 ```python
 @classmethod
 def compute_framework_rule(cls):
-    return {PandasDataframe}  # Specific framework
+    return {PandasDataFrame}  # Specific framework
     # Or return True for all frameworks

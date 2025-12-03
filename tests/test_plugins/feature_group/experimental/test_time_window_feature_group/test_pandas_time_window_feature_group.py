@@ -8,7 +8,7 @@ import pytest
 
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindowFeatureGroup
 from tests.test_plugins.feature_group.experimental.test_time_window_feature_group.conftest import EXPECTED_VALUES
@@ -19,7 +19,7 @@ class TestPandasTimeWindowFeatureGroup:
 
     def test_compute_framework_rule(self) -> None:
         """Test compute_framework_rule method."""
-        assert PandasTimeWindowFeatureGroup.compute_framework_rule() == {PandasDataframe}
+        assert PandasTimeWindowFeatureGroup.compute_framework_rule() == {PandasDataFrame}
 
     def test_get_pandas_freq(self) -> None:
         """Test _get_pandas_freq method."""

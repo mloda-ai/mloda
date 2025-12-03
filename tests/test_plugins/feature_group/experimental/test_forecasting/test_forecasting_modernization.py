@@ -15,7 +15,7 @@ from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.forecasting.base import ForecastingFeatureGroup
 from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecastingFeatureGroup
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
@@ -26,7 +26,7 @@ from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCr
 class ForecastingModernizationTestDataCreator(ATestDataCreator):
     """Test data creator for forecasting modernization tests."""
 
-    compute_framework = PandasDataframe
+    compute_framework = PandasDataFrame
 
     @classmethod
     def get_raw_data(cls) -> Dict[str, Any]:
@@ -62,7 +62,7 @@ class TestForecastingModernization:
         # Run the API
         api = mlodaAPI(
             [feature],
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
         )
 
@@ -98,7 +98,7 @@ class TestForecastingModernization:
         # Run the API
         api = mlodaAPI(
             [feature],
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
         )
 
@@ -137,11 +137,11 @@ class TestForecastingModernization:
         )
 
         # Run both approaches
-        api1 = mlodaAPI([string_feature], {PandasDataframe}, plugin_collector=plugin_collector)
+        api1 = mlodaAPI([string_feature], {PandasDataFrame}, plugin_collector=plugin_collector)
         api1._batch_run()
         results1 = api1.get_result()
 
-        api2 = mlodaAPI([config_feature], {PandasDataframe}, plugin_collector=plugin_collector)
+        api2 = mlodaAPI([config_feature], {PandasDataFrame}, plugin_collector=plugin_collector)
         api2._batch_run()
         results2 = api2.get_result()
 
@@ -174,7 +174,7 @@ class TestForecastingModernization:
                     }
                 ),
             )
-            api = mlodaAPI([feature], {PandasDataframe}, plugin_collector=plugin_collector)
+            api = mlodaAPI([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
             api._batch_run()
 
         # Test invalid time unit
@@ -190,7 +190,7 @@ class TestForecastingModernization:
                     }
                 ),
             )
-            api = mlodaAPI([feature], {PandasDataframe}, plugin_collector=plugin_collector)
+            api = mlodaAPI([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
             api._batch_run()
 
         # Test invalid horizon (negative)
@@ -206,7 +206,7 @@ class TestForecastingModernization:
                     }
                 ),
             )
-            api = mlodaAPI([feature], {PandasDataframe}, plugin_collector=plugin_collector)
+            api = mlodaAPI([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
             api._batch_run()
 
     def test_multiple_algorithms_configuration_based(self) -> None:
@@ -235,7 +235,7 @@ class TestForecastingModernization:
             features.append(feature)
 
         # Run the API with multiple features
-        api = mlodaAPI(features, {PandasDataframe}, plugin_collector=plugin_collector)
+        api = mlodaAPI(features, {PandasDataFrame}, plugin_collector=plugin_collector)
         api._batch_run()
         results = api.get_result()
 
@@ -280,7 +280,7 @@ class TestForecastingModernization:
         )
 
         # Run the API with both features
-        api = mlodaAPI([feature1, feature2], {PandasDataframe}, plugin_collector=plugin_collector)
+        api = mlodaAPI([feature1, feature2], {PandasDataFrame}, plugin_collector=plugin_collector)
         api._batch_run()
         results = api.get_result()
 

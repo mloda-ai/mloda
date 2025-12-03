@@ -8,7 +8,7 @@ from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
 
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import PandasMissingValueFeatureGroup
 
 from tests.test_plugins.feature_group.experimental.test_missing_value_feature_group.test_missing_value_utils import (
@@ -79,7 +79,7 @@ class TestPandasMissingValueFeatureGroup:
 
     def test_compute_framework_rule(self) -> None:
         """Test compute_framework_rule method."""
-        assert PandasMissingValueFeatureGroup.compute_framework_rule() == {PandasDataframe}
+        assert PandasMissingValueFeatureGroup.compute_framework_rule() == {PandasDataFrame}
 
     def test_perform_imputation_mean(self, sample_dataframe_with_missing: pd.DataFrame) -> None:
         """Test _perform_imputation method with mean imputation."""
@@ -309,7 +309,7 @@ class TestMissingValuePandasIntegration:
         # Run the API with multiple imputation features
         result = mlodaAPI.run_all(
             feature_list,
-            compute_frameworks={PandasDataframe},
+            compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
         )
 

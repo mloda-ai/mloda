@@ -13,7 +13,7 @@ from mloda_core.abstract_plugins.components.input_data.base_input_data import Ba
 from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import PandasMissingValueFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
@@ -129,7 +129,7 @@ def cell4_mloda_approach() -> Any:
         PandasMissingValueFeatureGroup,
     )
     from mloda_core.api.request import mlodaAPI
-    from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+    from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
     # Enable necessary feature groups
     plugin_collector = PlugInCollector.enabled_feature_groups(
@@ -150,7 +150,7 @@ def cell4_mloda_approach() -> Any:
     ]
 
     # Execute with mloda
-    result = mlodaAPI.run_all(features, compute_frameworks={PandasDataframe}, plugin_collector=plugin_collector)  # type: ignore
+    result = mlodaAPI.run_all(features, compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)  # type: ignore
     _result = result[0]
     _result2 = result[1]
     print("✅ Transformed dataset with split fit/transform:")
@@ -172,7 +172,7 @@ def cell5_demonstrate_feature_chaining() -> None:
         PandasMissingValueFeatureGroup,
     )
     from mloda_core.api.request import mlodaAPI
-    from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+    from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
     # Enable necessary feature groups
     plugin_collector = PlugInCollector.enabled_feature_groups(
@@ -197,7 +197,7 @@ def cell5_demonstrate_feature_chaining() -> None:
     print("Step 2:   age__mean_imputed__standard_scaled")
     print("\nmloda automatically resolves dependencies!")
 
-    result = mlodaAPI.run_all(chained_features, compute_frameworks={PandasDataframe}, plugin_collector=plugin_collector)  # type: ignore
+    result = mlodaAPI.run_all(chained_features, compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)  # type: ignore
     print(
         result[0].head(2),
         result[1].head(2),
@@ -240,7 +240,7 @@ def cell6_reusability_demo() -> None:
         }
     )
 
-    result = mlodaAPI.run_all(chained_features, compute_frameworks={PandasDataframe}, plugin_collector=plugin_collector)  # type: ignore
+    result = mlodaAPI.run_all(chained_features, compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)  # type: ignore
     print(
         result[0].head(2),
         result[1].head(2),

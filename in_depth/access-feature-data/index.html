@@ -249,7 +249,7 @@ data_access_collection = DataAccessCollection(folders={str(file_path)})
 
 result = mlodaAPI.run_all(
             [&quot;AExample&quot;, &quot;BExample&quot;], 
-            compute_frameworks=[&quot;PandasDataframe&quot;], 
+            compute_frameworks=[&quot;PandasDataFrame&quot;], 
             # Define data access on a global level
             data_access_collection=data_access_collection
         )
@@ -308,7 +308,7 @@ feature_list.append(
 )
 
 
-result = mlodaAPI.run_all(feature_list, compute_frameworks=[&quot;PandasDataframe&quot;])
+result = mlodaAPI.run_all(feature_list, compute_frameworks=[&quot;PandasDataFrame&quot;])
 print(result)
 </code></pre>
 <p>Output</p>
@@ -332,12 +332,12 @@ For this purpose, we have the ApiData.</p>
 from typing import List
 
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 # Pass api_data directly as a dict - the framework handles registration internally
 result = mlodaAPI.run_all(
         [&quot;FeatureInputAPITest&quot;],
-        compute_frameworks={PandasDataframe},
+        compute_frameworks={PandasDataFrame},
         api_data={&quot;ExampleApiData&quot;: {&quot;FeatureInputAPITest&quot;: [&quot;TestValue3&quot;, &quot;TestValue4&quot;]}},
 )
 for res in result:
@@ -361,7 +361,7 @@ for res in result:
 <p>One could imagine that for experimenting one wants to see data. Then one could use this feature as input feature to another feature instead of e.g. the true data.</p>
 <pre><code class="language-python">
 
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
 
 # Create a Creator FeatureGroup class, which delivers the data needed
@@ -379,7 +379,7 @@ class AFeatureInputCreator(AbstractFeatureGroup):
 
 result = mlodaAPI.run_all(
         [&quot;AFeatureInputCreator&quot;],
-        compute_frameworks={PandasDataframe},
+        compute_frameworks={PandasDataFrame},
 )
 for res in result:
      print(res)
@@ -437,7 +437,7 @@ feature_list.append(
 
 result = mlodaAPI.run_all(
     feature_list,
-    compute_frameworks={PandasDataframe},
+    compute_frameworks={PandasDataFrame},
     plugin_collector=PlugInCollector.enabled_feature_groups({AInputFeatureGroup, AFeatureInputCreator})
 
 )

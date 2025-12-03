@@ -155,7 +155,7 @@ def create_ml_lifecylce_data() -> None:
         else:
             feature_list.append(Feature(name=feature, options=options))
 
-    results = mlodaAPI.run_all(feature_list, compute_frameworks=["PandasDataframe"])
+    results = mlodaAPI.run_all(feature_list, compute_frameworks=["PandasDataFrame"])
 
     results[0].to_csv("base_data/output.csv", index=False)
     results[1].to_parquet("base_data/output.parquet", index=False)

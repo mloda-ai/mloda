@@ -240,9 +240,9 @@ class BaseExampleArtifactFeature(AbstractFeatureGroup):
 </code></pre>
 <p>Now, we run the query to the feature group to save the artifact. This example is very basic, but could be a much more complex artifact.</p>
 <pre><code class="language-python">from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
-api = mlodaAPI([&quot;BaseExampleArtifactFeature&quot;], {PyarrowTable})
+api = mlodaAPI([&quot;BaseExampleArtifactFeature&quot;], {PyArrowTable})
 api._batch_run()
 artifacts = api.get_artifacts()
 print(artifacts)
@@ -254,7 +254,7 @@ print(artifacts)
 <pre><code class="language-python">from mloda_core.abstract_plugins.components.feature import Feature
 
 feat = Feature(name=&quot;BaseExampleArtifactFeature&quot;, options=artifacts)
-api = mlodaAPI([feat], {PyarrowTable})
+api = mlodaAPI([feat], {PyArrowTable})
 api._batch_run()
 </code></pre>
 <p>Result:</p>

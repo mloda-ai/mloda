@@ -267,7 +267,7 @@ from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_core.api.request import mlodaAPI
 
 class ExampleOrderFilter(AbstractFeatureGroup):
@@ -298,7 +298,7 @@ class ExampleOrderFilter(AbstractFeatureGroup):
         return filtered_data
     @classmethod
     def compute_framework_rule(cls) -&gt; Union[bool, Set[Type[ComputeFrameWork]]]:
-        return {PyarrowTable}
+        return {PyArrowTable}
 
 result = mlodaAPI.run_all(
     [&quot;ExampleOrderFilter&quot;], 

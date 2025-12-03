@@ -929,7 +929,7 @@ Result: 8 columns total
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.components.feature_set</span><span class="w"> </span><span class="kn">import</span> <span class="n">FeatureSet</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.plugin_loader.plugin_loader</span><span class="w"> </span><span class="kn">import</span> <span class="n">PluginLoader</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.api.request</span><span class="w"> </span><span class="kn">import</span> <span class="n">mlodaAPI</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.compute_framework.base_implementations.pandas.dataframe</span><span class="w"> </span><span class="kn">import</span> <span class="n">PandasDataframe</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.compute_framework.base_implementations.pandas.dataframe</span><span class="w"> </span><span class="kn">import</span> <span class="n">PandasDataFrame</span>
 
 <span class="c1"># In mloda, we have the concept of feature groups.</span>
 <span class="c1"># A feature group is an abstraction between a data framework and processes of a data transformation.</span>
@@ -968,7 +968,7 @@ Result: 8 columns total
 <span class="n">PluginLoader</span><span class="p">()</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
 
 <span class="c1"># And then we execute mloda, which will resolve its dependencies of its feature groups and data frame technologies automatically.</span>
-<span class="n">result</span> <span class="o">=</span> <span class="n">mlodaAPI</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span><span class="n">features</span><span class="p">,</span> <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">{</span><span class="n">PandasDataframe</span><span class="p">})</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">mlodaAPI</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span><span class="n">features</span><span class="p">,</span> <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">{</span><span class="n">PandasDataFrame</span><span class="p">})</span>
 <span class="n">_result</span><span class="p">,</span> <span class="n">_result2</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">result</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
 <span class="nb">print</span><span class="p">(</span><span class="s2">"✅ Transformed dataset with split fit/transform:"</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">_result</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span>
@@ -988,7 +988,7 @@ from mloda_core.abstract_plugins.components.input_data.creator.data_creator impo
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 # In mloda, we have the concept of feature groups.
 # A feature group is an abstraction between a data framework and processes of a data transformation.
@@ -1027,7 +1027,7 @@ features = [
 PluginLoader().all()
 
 # And then we execute mloda, which will resolve its dependencies of its feature groups and data frame technologies automatically.
-result = mlodaAPI.run_all(features, compute_frameworks={PandasDataframe})
+result = mlodaAPI.run_all(features, compute_frameworks={PandasDataFrame})
 _result, _result2 = result[0], result[1]
 print("✅ Transformed dataset with split fit/transform:")
 print(_result.head(2))
@@ -1070,7 +1070,7 @@ print(f"Result: {list(_result.columns)} \n {list(_result2.columns)} columns tota
     <span class="s2">"state__onehot_encoded~0"</span><span class="p">,</span>  <span class="c1"># Access specific one-hot column</span>
 <span class="p">]</span>
 
-<span class="n">result</span> <span class="o">=</span> <span class="n">mlodaAPI</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span><span class="n">chained_features</span><span class="p">,</span> <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">{</span><span class="n">PandasDataframe</span><span class="p">})</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">mlodaAPI</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span><span class="n">chained_features</span><span class="p">,</span> <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">{</span><span class="n">PandasDataFrame</span><span class="p">})</span>
 <span class="nb">print</span><span class="p">(</span>
     <span class="n">result</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span>
     <span class="n">result</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span>
@@ -1084,7 +1084,7 @@ chained_features = [
     "state__onehot_encoded~0",  # Access specific one-hot column
 ]
 
-result = mlodaAPI.run_all(chained_features, compute_frameworks={PandasDataframe})
+result = mlodaAPI.run_all(chained_features, compute_frameworks={PandasDataFrame})
 print(
     result[0].head(2),
     result[1].head(2),
@@ -1145,7 +1145,7 @@ print(
 <span class="c1"># We deactivated now the other feature group, so that we use SecondSklearnDataCreator.</span>
 <span class="n">result</span> <span class="o">=</span> <span class="n">mlodaAPI</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span>
     <span class="n">chained_features</span><span class="p">,</span>
-    <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">{</span><span class="n">PandasDataframe</span><span class="p">},</span>
+    <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">{</span><span class="n">PandasDataFrame</span><span class="p">},</span>
     <span class="n">plugin_collector</span><span class="o">=</span><span class="n">PlugInCollector</span><span class="o">.</span><span class="n">disabled_feature_groups</span><span class="p">(</span><span class="n">SklearnDataCreator</span><span class="p">),</span>
 <span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span>
@@ -1185,7 +1185,7 @@ chained_features = [
 # We deactivated now the other feature group, so that we use SecondSklearnDataCreator.
 result = mlodaAPI.run_all(
     chained_features,
-    compute_frameworks={PandasDataframe},
+    compute_frameworks={PandasDataFrame},
     plugin_collector=PlugInCollector.disabled_feature_groups(SklearnDataCreator),
 )
 print(

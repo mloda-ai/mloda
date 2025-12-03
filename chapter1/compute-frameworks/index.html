@@ -197,7 +197,7 @@
             <div class="section" itemprop="articleBody">
               
                 <h2 id="compute-framework">Compute Framework</h2>
-<p>In the previous examples, you may have noticed that we used the following parameter in the mlodaAPI call: <strong>compute_frameworks=["PyarrowTable"]</strong>. Let’s take a moment to dive into this concept.</p>
+<p>In the previous examples, you may have noticed that we used the following parameter in the mlodaAPI call: <strong>compute_frameworks=["PyArrowTable"]</strong>. Let’s take a moment to dive into this concept.</p>
 <p>The Compute Framework is the second critical plugin in mloda, after the feature group. It is responsible for holding the state of the data and defining the technology used to execute operations.</p>
 <h4 id="1-key-use-cases">1. Key Use Cases</h4>
 <p>The compute framework concept provides significant flexibility and enables a variety of use cases, such as:</p>
@@ -208,7 +208,7 @@
 </ul>
 <p>This flexibility is one of mloda’s key advantages, allowing users to decouple feature definitions from specific computation technologies—something that traditional feature stores don’t easily offer.</p>
 <h4 id="2-balancing-flexibility-and-complexity">2. Balancing Flexibility and Complexity</h4>
-<p>However, this flexibility introduces a bit of complexity. Let's look at an example where we remove the compute_frameworks=["PyarrowTable"] parameter from the mlodaAPI call.</p>
+<p>However, this flexibility introduces a bit of complexity. Let's look at an example where we remove the compute_frameworks=["PyArrowTable"] parameter from the mlodaAPI call.</p>
 <h4 id="3-example-without-a-specified-compute-framework">3. Example Without a Specified Compute Framework</h4>
 <pre><code class="language-python">from mloda_core.api.request import mlodaAPI
 from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
@@ -225,10 +225,10 @@ feature_list = [&quot;id&quot;,&quot;V1&quot;,&quot;V2&quot;,&quot;V3&quot;]
 )
 
 ValueError: Multiple feature groups
-{&lt;class 'CsvReader'&gt;: {&lt;class 'PyarrowTable'&gt;, &lt;class 'PandasDataframe'&gt;}
+{&lt;class 'CsvReader'&gt;: {&lt;class 'PyArrowTable'&gt;, &lt;class 'PandasDataFrame'&gt;}
 .... found for feature name: id.
 </code></pre>
-<p>In this case, the framework finds multiple compute frameworks (like <strong>PyarrowTable</strong> and <strong>PandasDataframe</strong>) that can handle the same file through the <strong>CsvReader</strong> feature group. Without explicitly specifying a compute framework, mloda doesn't know which one to use, leading to ambiguity.</p>
+<p>In this case, the framework finds multiple compute frameworks (like <strong>PyArrowTable</strong> and <strong>PandasDataFrame</strong>) that can handle the same file through the <strong>CsvReader</strong> feature group. Without explicitly specifying a compute framework, mloda doesn't know which one to use, leading to ambiguity.</p>
 <p>This might seem counterintuitive, but it’s actually a <strong>feature</strong>, allowing you to compare different technologies and computation methods, particularly useful in scenarios such as:</p>
 <ul>
 <li><strong>Migrations</strong>: Moving from one environment to another.</li>
@@ -244,10 +244,10 @@ ValueError: Multiple feature groups
 </ul>
 <h5 id="part-of-api-request">Part of API request</h5>
 <h5 id="specific-feature-configuration">Specific feature configuration</h5>
-<p>You can configure individual features to use a specific compute framework. Here’s how to specify that a feature should use the PyarrowTable framework:</p>
+<p>You can configure individual features to use a specific compute framework. Here’s how to specify that a feature should use the PyArrowTable framework:</p>
 <pre><code class="language-python">from mloda_core.abstract_plugins.components.feature import Feature
 
-feature = Feature(&quot;id&quot;, options={&quot;compute_framework&quot;: &quot;PyarrowTable&quot;})
+feature = Feature(&quot;id&quot;, options={&quot;compute_framework&quot;: &quot;PyArrowTable&quot;})
 
 result = mlodaAPI.run_all(
     [feature], 
@@ -261,12 +261,12 @@ id: int64
 id: [[0,1,2,3,...]]
 </code></pre>
 <h5 id="defining-the-compute-framework-in-a-feature-group">Defining the Compute Framework in a Feature Group</h5>
-<p>In this example, we define a compute framework rule inside the feature group. This ensures that the feature group can only run on a <strong>PyarrowTable</strong>. We also specify that the input feature should use <strong>PandasDataframe</strong>, allowing automatic conversion from <strong>PandasDataframe</strong> to <strong>PyarrowTable</strong> behind the scenes.</p>
+<p>In this example, we define a compute framework rule inside the feature group. This ensures that the feature group can only run on a <strong>PyArrowTable</strong>. We also specify that the input feature should use <strong>PandasDataFrame</strong>, allowing automatic conversion from <strong>PandasDataFrame</strong> to <strong>PyArrowTable</strong> behind the scenes.</p>
 <pre><code class="language-python">import pyarrow.compute as pc
 import pyarrow as pa
 
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 
 
@@ -274,10 +274,10 @@ class ExampleB(AbstractFeatureGroup):
 
     @classmethod
     def compute_framework_rule(cls):
-            return {PyarrowTable}
+            return {PyArrowTable}
     def input_features(self, option, feature_name):
         return {Feature(name=feature_name.name.split(&quot;_&quot;)[1], 
-                compute_framework=&quot;PandasDataframe&quot;)}
+                compute_framework=&quot;PandasDataFrame&quot;)}
 
     @classmethod
     def calculate_feature(cls, data, _):
@@ -291,12 +291,12 @@ class ExampleB(AbstractFeatureGroup):
 
 result = mlodaAPI.run_all(
     example_feature_list,
-    compute_frameworks={PyarrowTable, PandasDataframe},
+    compute_frameworks={PyArrowTable, PandasDataFrame},
     data_access_collection=data_access_collection,
 )
 result[0]
 </code></pre>
-<p>In this case, the feature group ExampleB will only run on the PyarrowTable framework, while the input feature group uses PandasDataframe, ensuring that the framework correctly handles the conversion between these technologies.</p>
+<p>In this case, the feature group ExampleB will only run on the PyArrowTable framework, while the input feature group uses PandasDataFrame, ensuring that the framework correctly handles the conversion between these technologies.</p>
 <h4 id="5-available-compute-frameworks">5. Available Compute Frameworks</h4>
 <table>
 <thead>
@@ -310,28 +310,28 @@ result[0]
 </thead>
 <tbody>
 <tr>
-<td><strong>PandasDataframe</strong></td>
+<td><strong>PandasDataFrame</strong></td>
 <td>pandas DataFrame</td>
 <td>Rich data transformation, familiar API</td>
 <td>Development, data exploration, smaller datasets</td>
 <td>pandas, numpy</td>
 </tr>
 <tr>
-<td><strong>PyarrowTable</strong></td>
+<td><strong>PyArrowTable</strong></td>
 <td>Apache Arrow Tables</td>
 <td>Memory-efficient, high performance, columnar format</td>
 <td>Production, big data, interoperability</td>
 <td>pyarrow</td>
 </tr>
 <tr>
-<td><strong>PolarsDataframe</strong></td>
+<td><strong>PolarsDataFrame</strong></td>
 <td>Polars DataFrame</td>
 <td>Fast, memory-efficient, eager evaluation</td>
 <td>Development, immediate results</td>
 <td>polars</td>
 </tr>
 <tr>
-<td><strong>PolarsLazyDataframe</strong></td>
+<td><strong>PolarsLazyDataFrame</strong></td>
 <td>Polars LazyFrame</td>
 <td>Query optimization, lazy evaluation</td>
 <td>Large datasets, performance optimization</td>
@@ -373,7 +373,7 @@ result[0]
 - Install only the dependencies you need for your specific use case
 - Deploy mloda in minimal environments without all compute framework dependencies
 - Avoid import errors when optional dependencies are missing</p>
-<p>For example, if <code>polars</code> is not installed, <code>PolarsDataframe</code> will not be available as a compute framework option, and mloda will automatically work with the remaining available frameworks.</p>
+<p>For example, if <code>polars</code> is not installed, <code>PolarsDataFrame</code> will not be available as a compute framework option, and mloda will automatically work with the remaining available frameworks.</p>
 <p>Example using PythonDictFramework:</p>
 <pre><code class="language-python">from mloda_core.abstract_plugins.components.feature import Feature
 
@@ -389,10 +389,10 @@ result[0]  # Returns List[Dict[str, Any]]
 <pre><code class="language-python">from mloda_core.abstract_plugins.components.feature import Feature
 
 # Using Polars eager evaluation
-feature_eager = Feature(&quot;id&quot;, options={&quot;compute_framework&quot;: &quot;PolarsDataframe&quot;})
+feature_eager = Feature(&quot;id&quot;, options={&quot;compute_framework&quot;: &quot;PolarsDataFrame&quot;})
 
 # Using Polars lazy evaluation
-feature_lazy = Feature(&quot;id&quot;, options={&quot;compute_framework&quot;: &quot;PolarsLazyDataframe&quot;})
+feature_lazy = Feature(&quot;id&quot;, options={&quot;compute_framework&quot;: &quot;PolarsLazyDataFrame&quot;})
 
 result = mlodaAPI.run_all(
     [feature_eager], 

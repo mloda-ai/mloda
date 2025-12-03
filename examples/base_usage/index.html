@@ -720,26 +720,26 @@ class DummyData(AbstractFeatureGroup):
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.api.request</span><span class="w"> </span><span class="kn">import</span> <span class="n">mlodaAPI</span>
 
 <span class="c1"># Load plugins into namespace</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.compute_framework.base_implementations.pandas.dataframe</span><span class="w"> </span><span class="kn">import</span> <span class="n">PandasDataframe</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.compute_framework.base_implementations.pyarrow.table</span><span class="w"> </span><span class="kn">import</span> <span class="n">PyarrowTable</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.compute_framework.base_implementations.pandas.dataframe</span><span class="w"> </span><span class="kn">import</span> <span class="n">PandasDataFrame</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.compute_framework.base_implementations.pyarrow.table</span><span class="w"> </span><span class="kn">import</span> <span class="n">PyArrowTable</span>
 
 <span class="c1"># from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader</span>
 <span class="c1"># plugin_loader = PluginLoader.all()</span>
 
-<span class="n">result</span> <span class="o">=</span> <span class="n">mlodaAPI</span><span class="o">.</span><span class="n">run_all</span><span class="p">([</span><span class="s2">"age"</span><span class="p">,</span> <span class="s2">"weight"</span><span class="p">,</span> <span class="s2">"state"</span><span class="p">,</span> <span class="s2">"gender"</span><span class="p">],</span> <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">[</span><span class="s2">"PyarrowTable"</span><span class="p">,</span> <span class="s2">"PandasDataframe"</span><span class="p">])</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">mlodaAPI</span><span class="o">.</span><span class="n">run_all</span><span class="p">([</span><span class="s2">"age"</span><span class="p">,</span> <span class="s2">"weight"</span><span class="p">,</span> <span class="s2">"state"</span><span class="p">,</span> <span class="s2">"gender"</span><span class="p">],</span> <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">[</span><span class="s2">"PyArrowTable"</span><span class="p">,</span> <span class="s2">"PandasDataFrame"</span><span class="p">])</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
 </pre></div>
 <div class="clipboard-copy-txt" id="cell-2"># We load dependencies.
 from mloda_core.api.request import mlodaAPI
 
 # Load plugins into namespace
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 # from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 # plugin_loader = PluginLoader.all()
 
-result = mlodaAPI.run_all(["age", "weight", "state", "gender"], compute_frameworks=["PyarrowTable", "PandasDataframe"])
+result = mlodaAPI.run_all(["age", "weight", "state", "gender"], compute_frameworks=["PyArrowTable", "PandasDataFrame"])
 print(result)</div>
 </div>
 </div>
@@ -821,7 +821,7 @@ print(result)</div>
 </clipboard-copy>
 </div>
 <div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># Load plugin into namespace again</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe</span><span class="w"> </span><span class="kn">import</span> <span class="n">PolarsLazyDataframe</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe</span><span class="w"> </span><span class="kn">import</span> <span class="n">PolarsLazyDataFrame</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.feature_group.experimental.aggregated_feature_group.polars_lazy</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">PolarsLazyAggregatedFeatureGroup</span><span class="p">,</span>
 <span class="p">)</span>
@@ -829,12 +829,12 @@ print(result)</div>
 
 <span class="n">result</span> <span class="o">=</span> <span class="n">mlodaAPI</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span>
     <span class="p">[</span><span class="s2">"age__sum_aggr"</span><span class="p">],</span>
-    <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">[</span><span class="s2">"PolarsLazyDataframe"</span><span class="p">],</span>
+    <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">[</span><span class="s2">"PolarsLazyDataFrame"</span><span class="p">],</span>
 <span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
 </pre></div>
 <div class="clipboard-copy-txt" id="cell-3"># Load plugin into namespace again
-from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataframe
+from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.polars_lazy import (
     PolarsLazyAggregatedFeatureGroup,
 )
@@ -842,7 +842,7 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.polars_la
 
 result = mlodaAPI.run_all(
     ["age__sum_aggr"],
-    compute_frameworks=["PolarsLazyDataframe"],
+    compute_frameworks=["PolarsLazyDataFrame"],
 )
 print(result)</div>
 </div>
@@ -891,7 +891,7 @@ print(result)</div>
 
 <span class="n">result</span> <span class="o">=</span> <span class="n">mlodaAPI</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span>
     <span class="p">[</span><span class="n">feature</span><span class="p">],</span>
-    <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">[</span><span class="s2">"PolarsLazyDataframe"</span><span class="p">],</span>
+    <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">[</span><span class="s2">"PolarsLazyDataFrame"</span><span class="p">],</span>
 <span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
 </pre></div>
@@ -905,7 +905,7 @@ feature = Feature(
 
 result = mlodaAPI.run_all(
     [feature],
-    compute_frameworks=["PolarsLazyDataframe"],
+    compute_frameworks=["PolarsLazyDataFrame"],
 )
 print(result)</div>
 </div>

@@ -713,7 +713,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.feature_group.input_data.read_dbs.sqlite</span><span class="w"> </span><span class="kn">import</span> <span class="n">SQLITEReader</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.plugin_loader.plugin_loader</span><span class="w"> </span><span class="kn">import</span> <span class="n">PluginLoader</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.api.request</span><span class="w"> </span><span class="kn">import</span> <span class="n">mlodaAPI</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.compute_framework.base_implementations.pyarrow.table</span><span class="w"> </span><span class="kn">import</span> <span class="n">PyarrowTable</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.compute_framework.base_implementations.pyarrow.table</span><span class="w"> </span><span class="kn">import</span> <span class="n">PyArrowTable</span>
 
 <span class="n">plugin_loader</span> <span class="o">=</span> <span class="n">PluginLoader</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
 
@@ -740,7 +740,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <span class="n">categorical_features</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Feature</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"user_age_group"</span><span class="p">,</span> <span class="s2">"product_category"</span><span class="p">,</span> <span class="s2">"transaction_type"</span><span class="p">]</span>
 <span class="n">all_features</span> <span class="o">=</span> <span class="n">order_features</span> <span class="o">+</span> <span class="n">payment_features</span> <span class="o">+</span> <span class="n">location_features</span> <span class="o">+</span> <span class="n">categorical_features</span>
 
-<span class="n">mlodaAPI</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span><span class="n">all_features</span><span class="p">,</span> <span class="n">data_access_collection</span><span class="o">=</span><span class="n">data_access_collection</span><span class="p">,</span> <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">{</span><span class="n">PyarrowTable</span><span class="p">})</span>
+<span class="n">mlodaAPI</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span><span class="n">all_features</span><span class="p">,</span> <span class="n">data_access_collection</span><span class="o">=</span><span class="n">data_access_collection</span><span class="p">,</span> <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">{</span><span class="n">PyArrowTable</span><span class="p">})</span>
 </pre></div>
 <div class="clipboard-copy-txt" id="cell-1"># We reuse the data from the first example and just rerun it for the sake of the example, but just in one cell.
 
@@ -751,7 +751,7 @@ from mloda_core.abstract_plugins.components.data_access_collection import DataAc
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 plugin_loader = PluginLoader.all()
 
@@ -778,7 +778,7 @@ location_features: List[str | Feature] = ["user_location", "merchant_location", 
 categorical_features: List[str | Feature] = ["user_age_group", "product_category", "transaction_type"]
 all_features = order_features + payment_features + location_features + categorical_features
 
-mlodaAPI.run_all(all_features, data_access_collection=data_access_collection, compute_frameworks={PyarrowTable})</div>
+mlodaAPI.run_all(all_features, data_access_collection=data_access_collection, compute_frameworks={PyArrowTable})</div>
 </div>
 </div>
 </div>
@@ -1033,7 +1033,7 @@ class ReadFileFeature2(ReadFileFeature):
 <span class="n">result</span> <span class="o">=</span> <span class="n">mlodaAPI</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span>
     <span class="n">order_features</span><span class="p">,</span>
     <span class="n">data_access_collection</span><span class="o">=</span><span class="n">data_access_collection</span><span class="p">,</span>
-    <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">{</span><span class="n">PyarrowTable</span><span class="p">},</span>
+    <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">{</span><span class="n">PyArrowTable</span><span class="p">},</span>
     <span class="n">plugin_collector</span><span class="o">=</span><span class="n">PlugInCollector</span><span class="o">.</span><span class="n">enabled_feature_groups</span><span class="p">({</span><span class="n">ReadFileFeature2</span><span class="p">}),</span>
 <span class="p">)</span>
 
@@ -1045,7 +1045,7 @@ class ReadFileFeature2(ReadFileFeature):
 result = mlodaAPI.run_all(
     order_features,
     data_access_collection=data_access_collection,
-    compute_frameworks={PyarrowTable},
+    compute_frameworks={PyArrowTable},
     plugin_collector=PlugInCollector.enabled_feature_groups({ReadFileFeature2}),
 )
 

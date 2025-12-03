@@ -204,7 +204,7 @@
 <pre><code class="language-python">@classmethod
 def compute_framework_rule(cls) -&gt; set[type[ComputeFrameWork]]:
     &quot;&quot;&quot;Define the compute frameworks this feature group supports.&quot;&quot;&quot;
-    return {PandasDataframe}  # Support only Pandas
+    return {PandasDataFrame}  # Support only Pandas
     # Or return True to support all available compute frameworks
 </code></pre>
 <h3 id="framework-specific-implementations">Framework-Specific Implementations</h3>
@@ -239,7 +239,7 @@ def compute_framework_rule(cls) -&gt; set[type[ComputeFrameWork]]:
     @classmethod
     def compute_framework_rule(cls):
         &quot;&quot;&quot;Define supported compute frameworks.&quot;&quot;&quot;
-        return {PandasDataframe}
+        return {PandasDataFrame}
 
     @classmethod
     def calculate_feature(cls, data, features):
@@ -280,7 +280,7 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
 class PandasClusteringFeatureGroup(ClusteringFeatureGroup):
     @classmethod
     def compute_framework_rule(cls):
-        return {PandasDataframe}
+        return {PandasDataFrame}
 
     @classmethod
     def calculate_feature(cls, data, features):
@@ -310,14 +310,14 @@ class AggregatedFeatureGroup(AbstractFeatureGroup):
 class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
     @classmethod
     def compute_framework_rule(cls):
-        return {PolarsLazyDataframe}
+        return {PolarsLazyDataFrame}
 
     @classmethod
     def calculate_feature(cls, data, features):
         # Polars lazy-specific aggregation implementation
         # Uses lazy evaluation for query optimization
 </code></pre>
-<p>Note that Polars supports both eager (<code>PolarsDataframe</code>) and lazy (<code>PolarsLazyDataframe</code>) evaluation modes, allowing you to choose the appropriate strategy based on your performance requirements.</p>
+<p>Note that Polars supports both eager (<code>PolarsDataFrame</code>) and lazy (<code>PolarsLazyDataFrame</code>) evaluation modes, allowing you to choose the appropriate strategy based on your performance requirements.</p>
 <p>For an analytical feature group with DuckDB support:</p>
 <pre><code class="language-python"># Base class (framework-agnostic)
 class AnalyticalFeatureGroup(AbstractFeatureGroup):

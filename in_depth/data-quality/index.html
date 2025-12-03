@@ -228,7 +228,7 @@ from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
 class DocSimpleValidateInputFeatures(AbstractFeatureGroup):
@@ -250,7 +250,7 @@ class DocSimpleValidateInputFeatures(AbstractFeatureGroup):
 </code></pre>
 <p>As we run it, it will return an error.</p>
 <pre><code class="language-python">results = mlodaAPI.run_all(
-            [&quot;DocSimpleValidateInputFeatures&quot;], {PyarrowTable}
+            [&quot;DocSimpleValidateInputFeatures&quot;], {PyArrowTable}
         )
 ValueError: Data should have 3 elements
 </code></pre>
@@ -312,7 +312,7 @@ class DocExamplePanderaValidator(BaseValidator):
 </code></pre>
 <p>The validator should raise an error again.</p>
 <pre><code class="language-python">results = mlodaAPI.run_all(
-            [&quot;DocCustomValidateInputFeatures&quot;], {PyarrowTable}
+            [&quot;DocCustomValidateInputFeatures&quot;], {PyArrowTable}
         )
 </code></pre>
 <h6 id="log-only-validator-and-extender-use">Log only validator and Extender use</h6>
@@ -326,7 +326,7 @@ from tests.test_documentation.test_documentation import DokuValidateInputFeature
 example_feature = Feature(&quot;DocCustomValidateInputFeatures&quot;, {&quot;ValidationLevel&quot;: &quot;warning&quot;})
 
 results = mlodaAPI.run_all(
-            [example_feature], {PyarrowTable}, function_extender={DokuValidateInputFeatureExtender()}
+            [example_feature], {PyArrowTable}, function_extender={DokuValidateInputFeatureExtender()}
         )
 </code></pre>
 <p>This time it does not raise an error, we should see the following output:</p>
@@ -364,7 +364,7 @@ class DocBaseValidateOutputFeaturesBase(AbstractFeatureGroup):
         return True
 
 results = mlodaAPI.run_all(
-            [&quot;DocBaseValidateOutputFeaturesBase&quot;], {PyarrowTable}
+            [&quot;DocBaseValidateOutputFeaturesBase&quot;], {PyArrowTable}
         )
 results
 </code></pre>
@@ -386,7 +386,7 @@ results
 </code></pre>
 <p>This one should fail:</p>
 <pre><code class="language-python">results = mlodaAPI.run_all(
-            [&quot;DocBaseValidateOutputFeaturesBaseNegativePandera&quot;], {PyarrowTable}
+            [&quot;DocBaseValidateOutputFeaturesBaseNegativePandera&quot;], {PyArrowTable}
         )
 </code></pre>
 <h6 id="log-only-validator-and-extender-use_1">Log only validator and Extender use</h6>
@@ -394,7 +394,7 @@ results
 <pre><code class="language-python">from tests.test_plugins.integration_plugins.test_validate_features.test_validate_output_features import ValidateOutputFeatureExtender
 
 results = mlodaAPI.run_all(
-            [&quot;DocBaseValidateOutputFeaturesBase&quot;], {PyarrowTable},
+            [&quot;DocBaseValidateOutputFeaturesBase&quot;], {PyArrowTable},
             function_extender={ValidateOutputFeatureExtender()}
         )
 </code></pre>

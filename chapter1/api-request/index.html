@@ -201,7 +201,7 @@ feature_list = feature_list.split(&quot;,&quot;)
 <p>Finally, we send the request to the mloda API, specifying the compute framework and the data source. The result is returned as a DataFrame:</p>
 <pre><code class="language-python">result = mlodaAPI.run_all(
     feature_list, 
-    compute_frameworks=[&quot;PyarrowTable&quot;],
+    compute_frameworks=[&quot;PyArrowTable&quot;],
     data_access_collection=data_access_collection)
 result[0]
 </code></pre>

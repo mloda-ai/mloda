@@ -892,14 +892,14 @@ data_access_collection.add_credential_dict(
 </div>
 <div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># Step 3: Request Data Using the Defined Access Collection and Desired Features</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.api.request</span><span class="w"> </span><span class="kn">import</span> <span class="n">mlodaAPI</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.compute_framework.base_implementations.pyarrow.table</span><span class="w"> </span><span class="kn">import</span> <span class="n">PyarrowTable</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.compute_framework.base_implementations.pyarrow.table</span><span class="w"> </span><span class="kn">import</span> <span class="n">PyArrowTable</span>
 
 
 <span class="n">all_features</span> <span class="o">=</span> <span class="n">order_features</span> <span class="o">+</span> <span class="n">payment_features</span> <span class="o">+</span> <span class="n">location_features</span> <span class="o">+</span> <span class="n">categorical_features</span>
 
 <span class="c1"># Retrieve data based on the specified feature list and access collection</span>
 <span class="n">result</span> <span class="o">=</span> <span class="n">mlodaAPI</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span>
-    <span class="n">all_features</span><span class="p">,</span> <span class="n">data_access_collection</span><span class="o">=</span><span class="n">data_access_collection</span><span class="p">,</span> <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">{</span><span class="n">PyarrowTable</span><span class="p">}</span>
+    <span class="n">all_features</span><span class="p">,</span> <span class="n">data_access_collection</span><span class="o">=</span><span class="n">data_access_collection</span><span class="p">,</span> <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">{</span><span class="n">PyArrowTable</span><span class="p">}</span>
 <span class="p">)</span>
 
 <span class="c1"># Display the first five entries of each result table and its type</span>
@@ -908,14 +908,14 @@ data_access_collection.add_credential_dict(
 </pre></div>
 <div class="clipboard-copy-txt" id="cell-5"># Step 3: Request Data Using the Defined Access Collection and Desired Features
 from mloda_core.api.request import mlodaAPI
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyarrowTable
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
 all_features = order_features + payment_features + location_features + categorical_features
 
 # Retrieve data based on the specified feature list and access collection
 result = mlodaAPI.run_all(
-    all_features, data_access_collection=data_access_collection, compute_frameworks={PyarrowTable}
+    all_features, data_access_collection=data_access_collection, compute_frameworks={PyArrowTable}
 )
 
 # Display the first five entries of each result table and its type
@@ -993,24 +993,24 @@ user_age_group: [["26-35","26-35"]] &lt;class 'pyarrow.lib.Table'&gt;
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># The data is initially loaded as a Pyarrow table. However, we can easily load it also as a PandasDataframe.</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.compute_framework.base_implementations.pandas.dataframe</span><span class="w"> </span><span class="kn">import</span> <span class="n">PandasDataframe</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># The data is initially loaded as a Pyarrow table. However, we can easily load it also as a PandasDataFrame.</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.compute_framework.base_implementations.pandas.dataframe</span><span class="w"> </span><span class="kn">import</span> <span class="n">PandasDataFrame</span>
 
 <span class="c1"># Request data using the Pandas compute framework</span>
 <span class="n">result</span> <span class="o">=</span> <span class="n">mlodaAPI</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span>
-    <span class="n">all_features</span><span class="p">,</span> <span class="n">data_access_collection</span><span class="o">=</span><span class="n">data_access_collection</span><span class="p">,</span> <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">{</span><span class="n">PandasDataframe</span><span class="p">}</span>
+    <span class="n">all_features</span><span class="p">,</span> <span class="n">data_access_collection</span><span class="o">=</span><span class="n">data_access_collection</span><span class="p">,</span> <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">{</span><span class="n">PandasDataFrame</span><span class="p">}</span>
 <span class="p">)</span>
 
 <span class="c1"># Display the first five entries of each result table and its type</span>
 <span class="k">for</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">result</span><span class="p">:</span>
     <span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="p">[:</span><span class="mi">2</span><span class="p">],</span> <span class="nb">type</span><span class="p">(</span><span class="n">data</span><span class="p">))</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-6"># The data is initially loaded as a Pyarrow table. However, we can easily load it also as a PandasDataframe.
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
+<div class="clipboard-copy-txt" id="cell-6"># The data is initially loaded as a Pyarrow table. However, we can easily load it also as a PandasDataFrame.
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 # Request data using the Pandas compute framework
 result = mlodaAPI.run_all(
-    all_features, data_access_collection=data_access_collection, compute_frameworks={PandasDataframe}
+    all_features, data_access_collection=data_access_collection, compute_frameworks={PandasDataFrame}
 )
 
 # Display the first five entries of each result table and its type
@@ -1065,8 +1065,8 @@ for data in result:
 </clipboard-copy>
 </div>
 <div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># Define features with specific compute frameworks</span>
-<span class="n">order_id</span> <span class="o">=</span> <span class="n">Feature</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"order_id"</span><span class="p">,</span> <span class="n">compute_framework</span><span class="o">=</span><span class="s2">"PandasDataframe"</span><span class="p">)</span>
-<span class="n">product_id</span> <span class="o">=</span> <span class="n">Feature</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"product_id"</span><span class="p">,</span> <span class="n">compute_framework</span><span class="o">=</span><span class="s2">"PyarrowTable"</span><span class="p">)</span>
+<span class="n">order_id</span> <span class="o">=</span> <span class="n">Feature</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"order_id"</span><span class="p">,</span> <span class="n">compute_framework</span><span class="o">=</span><span class="s2">"PandasDataFrame"</span><span class="p">)</span>
+<span class="n">product_id</span> <span class="o">=</span> <span class="n">Feature</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"product_id"</span><span class="p">,</span> <span class="n">compute_framework</span><span class="o">=</span><span class="s2">"PyArrowTable"</span><span class="p">)</span>
 <span class="n">specific_framework_feature_list</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Feature</span> <span class="o">|</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">order_id</span><span class="p">,</span> <span class="n">product_id</span><span class="p">]</span>
 
 <span class="c1"># Request data for the defined features</span>
@@ -1078,8 +1078,8 @@ for data in result:
     <span class="nb">print</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">res</span><span class="p">[:</span><span class="mi">3</span><span class="p">],</span> <span class="nb">type</span><span class="p">(</span><span class="n">res</span><span class="p">))</span>
 </pre></div>
 <div class="clipboard-copy-txt" id="cell-7"># Define features with specific compute frameworks
-order_id = Feature(name="order_id", compute_framework="PandasDataframe")
-product_id = Feature(name="product_id", compute_framework="PyarrowTable")
+order_id = Feature(name="order_id", compute_framework="PandasDataFrame")
+product_id = Feature(name="product_id", compute_framework="PyArrowTable")
 specific_framework_feature_list: List[Feature | str] = [order_id, product_id]
 
 # Request data for the defined features
@@ -1170,8 +1170,8 @@ product_id: [[282,355,395]] &lt;class 'pyarrow.lib.Table'&gt;
 <span class="k">class</span><span class="w"> </span><span class="nc">ExampleMlLifeCycleJoin</span><span class="p">(</span><span class="n">AbstractFeatureGroup</span><span class="p">):</span>
     <span class="c1"># Define input features with different compute frameworks</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">input_features</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">options</span><span class="p">:</span> <span class="n">Options</span><span class="p">,</span> <span class="n">feature_name</span><span class="p">:</span> <span class="n">FeatureName</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Set</span><span class="p">[</span><span class="n">Feature</span><span class="p">]]:</span>
-        <span class="n">quantity</span> <span class="o">=</span> <span class="n">Feature</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"quantity"</span><span class="p">,</span> <span class="n">compute_framework</span><span class="o">=</span><span class="s2">"PandasDataframe"</span><span class="p">)</span>
-        <span class="n">product_id</span> <span class="o">=</span> <span class="n">Feature</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"product_id"</span><span class="p">,</span> <span class="n">compute_framework</span><span class="o">=</span><span class="s2">"PyarrowTable"</span><span class="p">)</span>
+        <span class="n">quantity</span> <span class="o">=</span> <span class="n">Feature</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"quantity"</span><span class="p">,</span> <span class="n">compute_framework</span><span class="o">=</span><span class="s2">"PandasDataFrame"</span><span class="p">)</span>
+        <span class="n">product_id</span> <span class="o">=</span> <span class="n">Feature</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"product_id"</span><span class="p">,</span> <span class="n">compute_framework</span><span class="o">=</span><span class="s2">"PyArrowTable"</span><span class="p">)</span>
         <span class="k">return</span> <span class="p">{</span><span class="n">product_id</span><span class="p">,</span> <span class="n">quantity</span><span class="p">}</span>
 
     <span class="c1"># Perform calculations on the joined data</span>
@@ -1233,8 +1233,8 @@ link = Link(jointype=JoinType.INNER, left=(ReadFileFeatureJoin, index), right=(R
 class ExampleMlLifeCycleJoin(AbstractFeatureGroup):
     # Define input features with different compute frameworks
     def input_features(self, options: Options, feature_name: FeatureName) -&gt; Optional[Set[Feature]]:
-        quantity = Feature(name="quantity", compute_framework="PandasDataframe")
-        product_id = Feature(name="product_id", compute_framework="PyarrowTable")
+        quantity = Feature(name="quantity", compute_framework="PandasDataFrame")
+        product_id = Feature(name="product_id", compute_framework="PyArrowTable")
         return {product_id, quantity}
 
     # Perform calculations on the joined data

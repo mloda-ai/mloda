@@ -4,7 +4,6 @@ import os
 import sqlite3
 import tempfile
 from typing import Any, Set, Optional, Union, List
-import unittest
 
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_plugins.feature_group.input_data.read_db_feature import ReadDBFeature
@@ -29,13 +28,13 @@ from tests.test_plugins.feature_group.input_data.test_classes.test_input_classes
 )
 
 
-class TestAddIndex(unittest.TestCase):
+class TestAddIndex:
     file_path = f"{os.getcwd()}/tests/test_plugins/feature_group/src/dataset/creditcard_2023_short.csv"
 
     feature_names = "id,V1,V2,V3,V4,V5,V6,V7,V8,V9,V10,V11,V12,V13,V14,V15,V16,V17,V18,V19,V20,V21,V22,V23,V24,V25,V26,V27,V28,Amount,Class"
     feature_list = feature_names.split(",")
 
-    def setUp(self) -> None:
+    def setup_method(self) -> None:
         # Create a temporary file to act as the SQLite database
         self.db_fd, self.db_path = tempfile.mkstemp(suffix=".sqlite")
         # Initialize the SQLite database with a sample table
@@ -46,7 +45,7 @@ class TestAddIndex(unittest.TestCase):
         self.cursor.execute('INSERT INTO test_table (name, any_num) VALUES ("Bob", 4)')
         self.conn.commit()
 
-    def tearDown(self) -> None:
+    def teardown_method(self) -> None:
         self.conn.close()
         os.close(self.db_fd)
         os.remove(self.db_path)

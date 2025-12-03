@@ -3,7 +3,7 @@ import os
 import shutil
 import tempfile
 from typing import Any, List
-import unittest
+
 import pyarrow as pa
 import pyarrow.feather as pyarrow_feather
 import pyarrow.json as pyarrow_json
@@ -27,18 +27,18 @@ class FeatureSet:
         return self.columns
 
 
-class TestReadFilesImplementations(unittest.TestCase):
-    table = None
-    columns = None
-    feather_file = None
-    json_file = None
-    csv_file = None
-    orc_file = None
-    parquet_file = None
-    base_path = None
+class TestReadFilesImplementations:
+    table: Any = None
+    columns: Any = None
+    feather_file: Any = None
+    json_file: Any = None
+    csv_file: Any = None
+    orc_file: Any = None
+    parquet_file: Any = None
+    base_path: Any = None
 
     @classmethod
-    def setUpClass(cls) -> None:
+    def setup_class(cls) -> None:
         cls.base_path = tempfile.mkdtemp(prefix="arrow_test_")
 
         # Create a sample dataset
@@ -67,8 +67,8 @@ class TestReadFilesImplementations(unittest.TestCase):
         cls.parquet_file = "test.parquet"
         pyarrow_parquet.write_table(cls.table, cls.parquet_file)
 
-    def tearDown(self) -> None:
-        shutil.rmtree(self.base_path, ignore_errors=True)  # type: ignore
+    def teardown_method(self) -> None:
+        shutil.rmtree(self.base_path, ignore_errors=True)
 
     def assert_read_file(self, cls: Any, path: Any, reader: Any, features: FeatureSet) -> None:
         result = cls.load_data(path, features)
@@ -81,7 +81,7 @@ class TestReadFilesImplementations(unittest.TestCase):
         result_data = result.to_pydict()
         expected_data = expected.to_pydict()
 
-        self.assertEqual(result_data, expected_data)
+        assert result_data == expected_data
 
     def assert_check_files(self, cls: Any, path: Any, reader: Any, features: FeatureSet) -> None:
         if cls != CsvReader:  # only implemented for csv for now
@@ -111,13 +111,13 @@ class TestReadFilesImplementations(unittest.TestCase):
             (ParquetReader, self.parquet_file, pyarrow_parquet.read_table),
         ]
 
-        features = FeatureSet(self.columns)  # type: ignore
+        features = FeatureSet(self.columns)
 
         try:
             for cls, path, reader in test_cases:
                 self.assert_read_file(cls, path, reader, features)
                 try:
-                    os.remove(path)  # type: ignore
+                    os.remove(path)
                 except FileNotFoundError:
                     pass
         finally:

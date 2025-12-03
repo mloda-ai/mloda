@@ -1,12 +1,11 @@
 """
-Minimal reproduction of polymorphic link bug in mloda.
+Tests for polymorphic link resolution in mloda.
 
-The polymorphic link feature (commit cdcec67) allows defining links with base classes
-that match concrete subclasses. Link.matches() works correctly, but the actual data
-joining in calculate_feature does not include all columns.
-
-Expected: All input features should be joined into the data dict
-Actual: Only some features appear depending on which side uses base classes
+Tests that Links defined with base classes correctly resolve to concrete subclasses
+during the data joining phase. Covers:
+- Exact class matching (concrete + concrete)
+- Symmetric polymorphic matching (base + base -> concrete + concrete)
+- Asymmetric polymorphic matching (base + external concrete)
 """
 
 from typing import Any, List, Optional, Set, Union
@@ -23,6 +22,7 @@ from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from mloda_plugins.feature_group.input_data.api_data.api_data import ApiInputDataFeature
 
 
 # =============================================================================
@@ -147,8 +147,8 @@ class AssemblerWithPolymorphicLinks(AbstractFeatureGroup):
 # =============================================================================
 # Tests
 # =============================================================================
-class TestPolymorphicLinkBug:
-    """Demonstrates the polymorphic link bug."""
+class TestPolymorphicLinkResolution:
+    """Tests for symmetric polymorphic link resolution (base + base -> concrete + concrete)."""
 
     def test_link_matches_works(self) -> None:
         """Link.matches() correctly handles polymorphic matching."""
@@ -175,8 +175,8 @@ class TestPolymorphicLinkBug:
         result = results[0][0][AssemblerWithConcreteLinks.FEATURE_NAME]
         assert result == "a=value_a, b=value_b", f"Got: {result}"
 
-    def test_polymorphic_links_fail(self) -> None:
-        """Assembler with base classes in links fails - BUG."""
+    def test_polymorphic_links_resolve_correctly(self) -> None:
+        """Assembler with base classes in links resolves to concrete classes."""
         feature = Feature(name=AssemblerWithPolymorphicLinks.FEATURE_NAME)
 
         results = mlodaAPI.run_all(
@@ -188,7 +188,62 @@ class TestPolymorphicLinkBug:
         )
 
         result = results[0][0][AssemblerWithPolymorphicLinks.FEATURE_NAME]
+        assert result == "a=value_a, b=value_b", f"Got: {result}"
 
-        # EXPECTED: "a=value_a, b=value_b" (both features joined)
-        # ACTUAL: "a=MISSING_A, b=value_b" (only B is in the data)
-        assert result == "a=value_a, b=value_b", f"BUG: Got '{result}' - feature_a missing from joined data"
+
+# =============================================================================
+# Asymmetric Case: Base Class + External Concrete Class
+# =============================================================================
+class AssemblerWithMixedLink(AbstractFeatureGroup):
+    """Assembler using base class + external concrete class (asymmetric polymorphic matching)."""
+
+    FEATURE_NAME = "assembled_mixed"
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls, feature_name: Union[FeatureName, str], options: Any, data_access_collection: Any = None
+    ) -> bool:
+        name = feature_name.name if isinstance(feature_name, FeatureName) else feature_name
+        return name == cls.FEATURE_NAME
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+        idx = Index((BaseFeatureGroupA.ROW_INDEX,))
+
+        # Base class + External concrete class (ApiInputDataFeature has no subclass)
+        link = Link.inner(
+            JoinSpec(BaseFeatureGroupA, idx),  # Base class -> resolves to ConcreteFeatureGroupA
+            JoinSpec(ApiInputDataFeature, idx),  # External concrete class (no subclass)
+        )
+
+        return {
+            Feature(name=BaseFeatureGroupA.FEATURE_NAME),
+            Feature(name="user_query", link=link),
+        }
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        # Extract from joined data
+        row = data[0] if isinstance(data, list) else data
+        a = row.get(BaseFeatureGroupA.FEATURE_NAME, "MISSING_A")
+        query = row.get("user_query", "MISSING_QUERY")
+        return {cls.FEATURE_NAME: [f"a={a}, query={query}"]}
+
+
+class TestAsymmetricPolymorphicLinkResolution:
+    """Tests for asymmetric polymorphic link resolution (base + external concrete)."""
+
+    def test_mixed_polymorphic_link_resolves_correctly(self) -> None:
+        """Assembler with base class + external concrete class in link resolves correctly."""
+        feature = Feature(name=AssemblerWithMixedLink.FEATURE_NAME)
+
+        results = mlodaAPI.run_all(
+            [feature],
+            compute_frameworks={PythonDictFramework},
+            api_data={"UserQuery": {"_idx": [0], "user_query": ["test query"]}},
+            plugin_collector=PlugInCollector.enabled_feature_groups(
+                {AssemblerWithMixedLink, ConcreteFeatureGroupA, ApiInputDataFeature}
+            ),
+        )
+
+        result = results[0][0][AssemblerWithMixedLink.FEATURE_NAME]
+        assert result == "a=value_a, query=test query", f"Got: {result}"

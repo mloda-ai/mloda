@@ -327,26 +327,37 @@ class ResolveLinks:
     def _select_most_specific_links(self, links: List[Link], left_fg: type, right_fg: type) -> List[Link]:
         """Select links that are most specific (closest in inheritance hierarchy).
 
-        For each link, calculates the inheritance distance on both sides.
-        Only considers links where both sides have the same inheritance distance
-        (to avoid sibling mismatches). Returns links with the minimum distance.
+        For self-joins, requires balanced inheritance distance to prevent sibling mismatches.
+        For non-self-joins with unrelated classes, accepts asymmetric polymorphic+exact matches.
         """
         if not links:
             return []
 
-        # Calculate distance for each link, filtering out unbalanced matches
         link_distances: List[Tuple[Link, int]] = []
         for link in links:
             left_dist = self._inheritance_distance(left_fg, link.left_feature_group)
             right_dist = self._inheritance_distance(right_fg, link.right_feature_group)
 
-            # Only consider links where both sides have the same inheritance level
-            # This prevents sibling class mismatches for self-join patterns
             link_is_self_join = link.left_feature_group == link.right_feature_group
-            # For self-joins: require same concrete class to prevent sibling mismatches
-            # For different-class joins: balanced distance is sufficient
-            if left_dist == right_dist and (not link_is_self_join or left_fg == right_fg):
+
+            if link_is_self_join:
+                # For self-joins: require same concrete class and balanced inheritance
+                if left_fg == right_fg and left_dist == right_dist:
+                    link_distances.append((link, left_dist))
+            elif left_dist == right_dist:
+                # Balanced match (both exact or both polymorphic at same level)
                 link_distances.append((link, left_dist))
+            else:
+                # Check if asymmetric match is allowed
+                # Only allow when one side is exact (distance 0) AND
+                # the Link's classes are not related by inheritance
+                # (to prevent sibling class mismatches)
+                link_classes_related = issubclass(link.left_feature_group, link.right_feature_group) or issubclass(
+                    link.right_feature_group, link.left_feature_group
+                )
+                if not link_classes_related and (left_dist == 0 or right_dist == 0):
+                    max_dist = max(left_dist, right_dist)
+                    link_distances.append((link, max_dist))
 
         if not link_distances:
             return []

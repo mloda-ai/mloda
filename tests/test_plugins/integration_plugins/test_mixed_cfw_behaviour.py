@@ -1,5 +1,5 @@
 import os
-from typing import Any, List, Set, Tuple
+from typing import Any, List, Set
 import time
 
 from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
@@ -10,7 +10,7 @@ from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGr
 from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.link import Link
+from mloda_core.abstract_plugins.components.link import Link, JoinSpec
 from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
@@ -90,8 +90,8 @@ class TestMixComputeFrameWork:
             ("id",),
         )
 
-        left: Tuple[type[AbstractFeatureGroup], Index] = (ReadFileFeature, idx)
-        right: Tuple[type[AbstractFeatureGroup], Index] = (ReadFileFeature, idx)
+        left = JoinSpec(ReadFileFeature, idx)
+        right = JoinSpec(ReadFileFeature, idx)
         links = {Link("inner", left, right)}
 
         result_data = mlodaAPI.run_all(
@@ -132,8 +132,8 @@ class TestMixComputeFrameWork:
             ("id",),
         )
 
-        left: Tuple[type[AbstractFeatureGroup], Index] = (ReadFileFeature, idx)
-        right: Tuple[type[AbstractFeatureGroup], Index] = (ReadFileFeature, idx)
+        left = JoinSpec(ReadFileFeature, idx)
+        right = JoinSpec(ReadFileFeature, idx)
         links = {Link("inner", left, right, {"left_pointer": "dummy"}, {"right_pointer": "dummy"})}
 
         result_data = mlodaAPI.run_all(

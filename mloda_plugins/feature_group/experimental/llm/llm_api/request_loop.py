@@ -6,7 +6,7 @@ from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.link import Link
+from mloda_core.abstract_plugins.components.link import JoinSpec, Link
 from mloda_core.abstract_plugins.components.options import Options
 
 from mloda_plugins.feature_group.experimental.llm.installed_packages_feature_group import InstalledPackagesFeatureGroup
@@ -61,7 +61,8 @@ class RequestLoop(LLMBaseRequest):
             idx_list_dir = Index(("ListDirectoryFeatureGroup",))
 
             link = Link.append(
-                (ListDirectoryFeatureGroup, idx_list_dir), (InstalledPackagesFeatureGroup, idx_installed)
+                JoinSpec(ListDirectoryFeatureGroup, idx_list_dir),
+                JoinSpec(InstalledPackagesFeatureGroup, idx_installed),
             )
 
             list_dir = Feature(

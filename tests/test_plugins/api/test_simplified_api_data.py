@@ -20,7 +20,7 @@ from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.index.index import Index
 from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.components.link import Link
+from mloda_core.abstract_plugins.components.link import Link, JoinSpec
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
@@ -102,7 +102,9 @@ class SimplifiedApiJoinFeature(AbstractFeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         """Define input features with a LEFT join link."""
         # Create the link: LEFT join on api_id = creator_id
-        link = Link.left((ApiInputDataFeature, Index(("api_id",))), (CreatorDataFeature, Index(("creator_id",))))
+        link = Link.left(
+            JoinSpec(ApiInputDataFeature, Index(("api_id",))), JoinSpec(CreatorDataFeature, Index(("creator_id",)))
+        )
 
         return {
             Feature(name="api_value", link=link, index=Index(("api_id",))),

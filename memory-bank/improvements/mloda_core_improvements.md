@@ -12,7 +12,7 @@ This document identifies 10 high-impact code improvements for mloda_core. These 
 - [ ] 4. Make FeatureName immutable
 - [ ] 5. Standardize Abstract/Base prefix naming convention
 - [ ] 6. Replace mlodaAPI 8-parameter constructor with builder/config pattern
-- [ ] 7. Use NamedTuple/dataclass for Link tuple parameters
+- [x] 7. Use NamedTuple/dataclass for Link tuple parameters
 - [ ] 8. Replace Options dual-category dict with explicit factory methods
 - [x] 9. Eliminate type: ignore suppressions with proper typing
 - [ ] 10. Extract validation logic into separate validator classes

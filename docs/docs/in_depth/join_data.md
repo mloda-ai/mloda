@@ -75,28 +75,34 @@ A Link specifies the relationship of:
 -   and the indexes to use for the join.
 
 ```python
-from mloda_core.abstract_plugins.components.link import Link
+from mloda_core.abstract_plugins.components.link import Link, JoinSpec
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 
 # Assume FeatureGroupA and FeatureGroupB are defined feature groups
 feature_group_a = AbstractFeatureGroup()
 feature_group_b = AbstractFeatureGroup()
 
-# Define indexes for each feature group
-left_index = Index(('id',))
-right_index = Index(('feature_a_id',))
+# JoinSpec accepts multiple index formats:
+# - String for single column: "id"
+# - Tuple for single/multiple columns: ("id",) or ("col1", "col2")
+# - Explicit Index: Index(("id",))
 
-# Create a Link using an inner join
-link = Link(
-    jointype=JoinType.INNER,
-    left=(feature_group_b, left_index),
-    right=(feature_group_b, right_index)
+# Simple single-column join using string
+link = Link.inner(
+    left=JoinSpec(feature_group_a, "id"),
+    right=JoinSpec(feature_group_b, "feature_a_id")
 )
 
-# Alternatively, use the class method for an inner join
+# Multi-column join using tuple
 link = Link.inner(
-    left=(feature_group_b, left_index),
-    right=(feature_group_b, right_index)
+    left=JoinSpec(feature_group_a, ("id", "timestamp")),
+    right=JoinSpec(feature_group_b, ("ref_id", "ref_time"))
+)
+
+# Explicit Index syntax (equivalent to string/tuple above)
+link = Link.inner(
+    left=JoinSpec(feature_group_a, Index(("id",))),
+    right=JoinSpec(feature_group_b, Index(("feature_a_id",)))
 )
 ```
 
@@ -114,8 +120,8 @@ class UserFeatureGroup(AbstractFeatureGroup):
     pass
 
 # 1. Create link with pointers
-left = (UserFeatureGroup, Index(("user_id",)))
-right = (UserFeatureGroup, Index(("user_id",)))
+left = JoinSpec(UserFeatureGroup, "user_id")
+right = JoinSpec(UserFeatureGroup, "user_id")
 
 link = Link("inner", left, right,
             left_pointer={"side": "left"},
@@ -158,8 +164,8 @@ class StandardUserFeatureGroup(BaseUserFeatureGroup):
 
 # Define a link using base classes
 link = Link.inner(
-    left=(BaseUserFeatureGroup, Index(("user_id",))),
-    right=(BaseUserFeatureGroup, Index(("user_id",)))
+    left=JoinSpec(BaseUserFeatureGroup, "user_id"),
+    right=JoinSpec(BaseUserFeatureGroup, "user_id")
 )
 
 # This link will match:

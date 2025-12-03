@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, FrozenInstanceError
 from enum import Enum
 from uuid import uuid4
 from typing import Any, Dict, Optional, Set, Tuple, Type, Union
@@ -29,25 +30,68 @@ class JoinType(Enum):
     UNION = "union"
 
 
+class JoinSpec:
+    """Specification for one side of a join operation.
+
+    Args:
+        feature_group: The feature group class for this side of the join.
+        index: Join column(s) - can be:
+            - str: single column name, e.g., "id"
+            - Tuple[str, ...]: multiple columns, e.g., ("col1", "col2")
+            - Index: explicit Index object
+    """
+
+    feature_group: Type[Any]
+    index: Index
+
+    def __init__(self, feature_group: Type[Any], index: Union[Index, Tuple[str, ...], str]) -> None:
+        """Create JoinSpec, converting index input to Index if needed."""
+        if isinstance(index, str):
+            if not index:
+                raise ValueError("Index column name cannot be empty")
+            index = Index((index,))
+        elif isinstance(index, tuple):
+            if not index:
+                raise ValueError("Index tuple cannot be empty")
+            index = Index(index)
+
+        object.__setattr__(self, "feature_group", feature_group)
+        object.__setattr__(self, "index", index)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise FrozenInstanceError(f"cannot assign to field '{name}'")
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, JoinSpec):
+            return False
+        return self.feature_group == other.feature_group and self.index == other.index
+
+    def __hash__(self) -> int:
+        return hash((self.feature_group, self.index))
+
+
 class Link:
     """
     Defines a join relationship between two feature groups.
 
     Args:
         jointype: Type of join operation (inner, left, right, outer, append, union).
-        left: Tuple of (FeatureGroup class, Index) for the left side.
-        right: Tuple of (FeatureGroup class, Index) for the right side.
+        left: JoinSpec for the left side of the join.
+        right: JoinSpec for the right side of the join.
         left_pointer: Optional dict to distinguish left instance in self-joins.
             Must match key-value pairs in the left feature's options.
         right_pointer: Optional dict to distinguish right instance in self-joins.
             Must match key-value pairs in the right feature's options.
 
     Example:
-        >>> # Normal join
-        >>> Link("inner", (UserFG, user_idx), (OrderFG, order_idx))
+        >>> # Simple join using string index (single column)
+        >>> Link.inner(JoinSpec(UserFG, "user_id"), JoinSpec(OrderFG, "user_id"))
+        >>>
+        >>> # Multi-column join using tuple index
+        >>> Link.inner(JoinSpec(UserFG, ("id", "date")), JoinSpec(OrderFG, ("user_id", "order_date")))
         >>>
         >>> # Self-join with pointers
-        >>> Link("inner", (UserFG, idx), (UserFG, idx),
+        >>> Link("inner", JoinSpec(UserFG, "user_id"), JoinSpec(UserFG, "user_id"),
         ...      left_pointer={"side": "manager"},
         ...      right_pointer={"side": "employee"})
 
@@ -78,16 +122,16 @@ class Link:
     def __init__(
         self,
         jointype: Union[JoinType, str],
-        left: Tuple[Type[Any], Index],  # Any is AbstractFeatureGroup
-        right: Tuple[Type[Any], Index],  # Any is AbstractFeatureGroup
+        left: JoinSpec,
+        right: JoinSpec,
         left_pointer: Optional[Dict[str, Any]] = None,
         right_pointer: Optional[Dict[str, Any]] = None,
     ) -> None:
         self.jointype = JoinType(jointype) if isinstance(jointype, str) else jointype
-        self.left_feature_group = left[0]
-        self.right_feature_group = right[0]
-        self.left_index = left[1]
-        self.right_index = right[1]
+        self.left_feature_group = left.feature_group
+        self.right_feature_group = right.feature_group
+        self.left_index = left.index
+        self.right_index = right.index
         self.left_pointer = left_pointer
         self.right_pointer = right_pointer
 
@@ -99,48 +143,48 @@ class Link:
     @classmethod
     def inner(
         cls,
-        left: Tuple[Type[Any], Index],
-        right: Tuple[Type[Any], Index],
+        left: JoinSpec,
+        right: JoinSpec,
     ) -> Link:
         return cls(JoinType.INNER, left, right)
 
     @classmethod
     def left(
         cls,
-        left: Tuple[Type[Any], Index],
-        right: Tuple[Type[Any], Index],
+        left: JoinSpec,
+        right: JoinSpec,
     ) -> Link:
         return cls(JoinType.LEFT, left, right)
 
     @classmethod
     def right(
         cls,
-        left: Tuple[Type[Any], Index],
-        right: Tuple[Type[Any], Index],
+        left: JoinSpec,
+        right: JoinSpec,
     ) -> Link:
         return cls(JoinType.RIGHT, left, right)
 
     @classmethod
     def outer(
         cls,
-        left: Tuple[Type[Any], Index],
-        right: Tuple[Type[Any], Index],
+        left: JoinSpec,
+        right: JoinSpec,
     ) -> Link:
         return cls(JoinType.OUTER, left, right)
 
     @classmethod
     def append(
         cls,
-        left: Tuple[Type[Any], Index],
-        right: Tuple[Type[Any], Index],
+        left: JoinSpec,
+        right: JoinSpec,
     ) -> Link:
         return cls(JoinType.APPEND, left, right)
 
     @classmethod
     def union(
         cls,
-        left: Tuple[Type[Any], Index],
-        right: Tuple[Type[Any], Index],
+        left: JoinSpec,
+        right: JoinSpec,
     ) -> Link:
         return cls(JoinType.UNION, left, right)
 

@@ -18,7 +18,7 @@ from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGr
 from mloda_core.prepare.graph.graph import Graph
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.link import Link
+from mloda_core.abstract_plugins.components.link import Link, JoinSpec
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.prepare.resolve_links import ResolveLinks
 
@@ -103,8 +103,8 @@ class TestLinkMatchesPolymorphic:
         """Test that exact class match still works."""
         # Link defined with ConcreteGroupA and ConcreteGroupB
         link = Link.inner(
-            (ConcreteGroupA, Index(("id",))),
-            (ConcreteGroupB, Index(("id",))),
+            JoinSpec(ConcreteGroupA, Index(("id",))),
+            JoinSpec(ConcreteGroupB, Index(("id",))),
         )
 
         # Should match the exact same classes
@@ -114,8 +114,8 @@ class TestLinkMatchesPolymorphic:
         """Test that link with base class matches concrete subclass."""
         # Link defined with BASE classes
         link = Link.inner(
-            (BaseGroupA, Index(("id",))),
-            (BaseGroupB, Index(("id",))),
+            JoinSpec(BaseGroupA, Index(("id",))),
+            JoinSpec(BaseGroupB, Index(("id",))),
         )
 
         # Should match when we provide CONCRETE subclasses
@@ -126,8 +126,8 @@ class TestLinkMatchesPolymorphic:
         """Test that link with base class matches the base class itself."""
         # Link defined with base classes
         link = Link.inner(
-            (BaseGroupA, Index(("id",))),
-            (BaseGroupB, Index(("id",))),
+            JoinSpec(BaseGroupA, Index(("id",))),
+            JoinSpec(BaseGroupB, Index(("id",))),
         )
 
         # Should match the base classes themselves (exact match is also valid)
@@ -137,8 +137,8 @@ class TestLinkMatchesPolymorphic:
         """Test that link does NOT match unrelated classes."""
         # Link defined with BaseGroupA and BaseGroupB
         link = Link.inner(
-            (BaseGroupA, Index(("id",))),
-            (BaseGroupB, Index(("id",))),
+            JoinSpec(BaseGroupA, Index(("id",))),
+            JoinSpec(BaseGroupB, Index(("id",))),
         )
 
         # Should NOT match when we swap sides with unrelated class
@@ -149,8 +149,8 @@ class TestLinkMatchesPolymorphic:
         """Test that link with concrete class does NOT match base class."""
         # Link defined with CONCRETE classes
         link = Link.inner(
-            (ConcreteGroupA, Index(("id",))),
-            (ConcreteGroupB, Index(("id",))),
+            JoinSpec(ConcreteGroupA, Index(("id",))),
+            JoinSpec(ConcreteGroupB, Index(("id",))),
         )
 
         # Should NOT match when we provide BASE classes
@@ -162,8 +162,8 @@ class TestLinkMatchesPolymorphic:
         """Test that partial match (left side matches, right doesn't) fails."""
         # Link defined with base classes
         link = Link.inner(
-            (BaseGroupA, Index(("id",))),
-            (BaseGroupB, Index(("id",))),
+            JoinSpec(BaseGroupA, Index(("id",))),
+            JoinSpec(BaseGroupB, Index(("id",))),
         )
 
         # Left side matches (ConcreteGroupA is subclass of BaseGroupA)
@@ -174,8 +174,8 @@ class TestLinkMatchesPolymorphic:
         """Test that partial match (right side matches, left doesn't) fails."""
         # Link defined with base classes
         link = Link.inner(
-            (BaseGroupA, Index(("id",))),
-            (BaseGroupB, Index(("id",))),
+            JoinSpec(BaseGroupA, Index(("id",))),
+            JoinSpec(BaseGroupB, Index(("id",))),
         )
 
         # Left side does NOT match (UnrelatedGroup is not subclass of BaseGroupA)
@@ -186,8 +186,8 @@ class TestLinkMatchesPolymorphic:
         """Test polymorphic match with one exact match and one subclass match."""
         # Link defined with one base and one concrete
         link = Link.inner(
-            (BaseGroupA, Index(("id",))),
-            (ConcreteGroupB, Index(("id",))),
+            JoinSpec(BaseGroupA, Index(("id",))),
+            JoinSpec(ConcreteGroupB, Index(("id",))),
         )
 
         # Left: subclass of BaseGroupA (polymorphic match)
@@ -198,36 +198,36 @@ class TestLinkMatchesPolymorphic:
         """Test that polymorphic matching works for all join types."""
         # Test LEFT join
         left_link = Link.left(
-            (BaseGroupA, Index(("id",))),
-            (BaseGroupB, Index(("id",))),
+            JoinSpec(BaseGroupA, Index(("id",))),
+            JoinSpec(BaseGroupB, Index(("id",))),
         )
         assert left_link.matches(ConcreteGroupA, ConcreteGroupB) is True
 
         # Test RIGHT join
         right_link = Link.right(
-            (BaseGroupA, Index(("id",))),
-            (BaseGroupB, Index(("id",))),
+            JoinSpec(BaseGroupA, Index(("id",))),
+            JoinSpec(BaseGroupB, Index(("id",))),
         )
         assert right_link.matches(ConcreteGroupA, ConcreteGroupB) is True
 
         # Test OUTER join
         outer_link = Link.outer(
-            (BaseGroupA, Index(("id",))),
-            (BaseGroupB, Index(("id",))),
+            JoinSpec(BaseGroupA, Index(("id",))),
+            JoinSpec(BaseGroupB, Index(("id",))),
         )
         assert outer_link.matches(ConcreteGroupA, ConcreteGroupB) is True
 
         # Test APPEND
         append_link = Link.append(
-            (BaseGroupA, Index(("id",))),
-            (BaseGroupB, Index(("id",))),
+            JoinSpec(BaseGroupA, Index(("id",))),
+            JoinSpec(BaseGroupB, Index(("id",))),
         )
         assert append_link.matches(ConcreteGroupA, ConcreteGroupB) is True
 
         # Test UNION
         union_link = Link.union(
-            (BaseGroupA, Index(("id",))),
-            (BaseGroupB, Index(("id",))),
+            JoinSpec(BaseGroupA, Index(("id",))),
+            JoinSpec(BaseGroupB, Index(("id",))),
         )
         assert union_link.matches(ConcreteGroupA, ConcreteGroupB) is True
 
@@ -281,12 +281,12 @@ class TestSelectMostSpecificLinks:
         """Test that the most specific (closest) link is selected over broader links."""
         # Create links at different hierarchy levels
         grandparent_link = Link.inner(
-            (GrandparentGroup, Index(("id",))),
-            (GrandparentGroup, Index(("id",))),
+            JoinSpec(GrandparentGroup, Index(("id",))),
+            JoinSpec(GrandparentGroup, Index(("id",))),
         )
         parent_link = Link.inner(
-            (ParentGroupA, Index(("id",))),
-            (ParentGroupA, Index(("id",))),
+            JoinSpec(ParentGroupA, Index(("id",))),
+            JoinSpec(ParentGroupA, Index(("id",))),
         )
 
         links = [grandparent_link, parent_link]
@@ -310,8 +310,8 @@ class TestSelectMostSpecificLinks:
         """
         # Link defined with common ancestor
         grandparent_link = Link.inner(
-            (GrandparentGroup, Index(("id",))),
-            (GrandparentGroup, Index(("id",))),
+            JoinSpec(GrandparentGroup, Index(("id",))),
+            JoinSpec(GrandparentGroup, Index(("id",))),
         )
 
         links = [grandparent_link]
@@ -330,8 +330,8 @@ class TestSelectMostSpecificLinks:
         """Test that querying with same class on both sides matches correctly."""
         # Link with common ancestor
         grandparent_link = Link.inner(
-            (GrandparentGroup, Index(("id",))),
-            (GrandparentGroup, Index(("id",))),
+            JoinSpec(GrandparentGroup, Index(("id",))),
+            JoinSpec(GrandparentGroup, Index(("id",))),
         )
 
         links = [grandparent_link]
@@ -348,8 +348,8 @@ class TestSelectMostSpecificLinks:
         """Test that links with unbalanced inheritance distances are rejected."""
         # Link at grandparent level
         grandparent_link = Link.inner(
-            (GrandparentGroup, Index(("id",))),
-            (GrandparentGroup, Index(("id",))),
+            JoinSpec(GrandparentGroup, Index(("id",))),
+            JoinSpec(GrandparentGroup, Index(("id",))),
         )
 
         links = [grandparent_link]
@@ -372,12 +372,12 @@ class TestFindMatchingLinks:
         """Test that exact matches take priority over polymorphic matches."""
         # Create links at different levels
         parent_link = Link.inner(
-            (ParentGroupA, Index(("id",))),
-            (ParentGroupA, Index(("id",))),
+            JoinSpec(ParentGroupA, Index(("id",))),
+            JoinSpec(ParentGroupA, Index(("id",))),
         )
         child_link = Link.inner(
-            (ChildGroupA, Index(("id",))),
-            (ChildGroupA, Index(("id",))),
+            JoinSpec(ChildGroupA, Index(("id",))),
+            JoinSpec(ChildGroupA, Index(("id",))),
         )
 
         links = {parent_link, child_link}
@@ -393,8 +393,8 @@ class TestFindMatchingLinks:
         """Test that polymorphic matching works when no exact match exists."""
         # Only parent-level link
         parent_link = Link.inner(
-            (ParentGroupA, Index(("id",))),
-            (ParentGroupA, Index(("id",))),
+            JoinSpec(ParentGroupA, Index(("id",))),
+            JoinSpec(ParentGroupA, Index(("id",))),
         )
 
         links = {parent_link}

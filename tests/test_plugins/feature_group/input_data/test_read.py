@@ -15,7 +15,7 @@ from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.hashable_dict import HashableDict
 from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.link import Link
+from mloda_core.abstract_plugins.components.link import Link, JoinSpec
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.api.request import mlodaAPI
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
@@ -169,8 +169,8 @@ class TestTwoReader(unittest.TestCase):
 
         link = Link(
             jointype="inner",
-            left=(DBInputDataTestFeatureGroupWithIndex, index),
-            right=(ReadFileFeatureWithIndex, index),
+            left=JoinSpec(DBInputDataTestFeatureGroupWithIndex, index),
+            right=JoinSpec(ReadFileFeatureWithIndex, index),
         )
         f = Feature(
             name="sum_of_",

@@ -19,9 +19,6 @@ class FeatureName:
     def __str__(self) -> str:
         return self.name
 
-    def replace(self, old: str, new: str = "") -> None:
-        self.name = self.name.replace(old, new)
-
     def __contains__(self, item: str) -> bool:
         return item in self.name
 

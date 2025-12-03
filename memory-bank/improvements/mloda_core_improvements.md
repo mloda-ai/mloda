@@ -9,7 +9,7 @@ This document identifies 10 high-impact code improvements for mloda_core. These 
 - [will not do] 1. Decompose ComputeFrameWork class into focused components
 - [ ] 2. Split Runner class into single-responsibility modules
 - [ ] 3. Replace get_all_subclasses() reflection with dependency injection
-- [ ] 4. Make FeatureName immutable
+- [x] 4. Make FeatureName immutable
 - [ ] 5. Standardize Abstract/Base prefix naming convention
 - [ ] 6. Replace mlodaAPI 8-parameter constructor with builder/config pattern
 - [x] 7. Use NamedTuple/dataclass for Link tuple parameters
@@ -73,25 +73,6 @@ The current plugin discovery uses Python's `__subclasses__()` reflection, causin
 - Requires changes to all plugin registration patterns
 - More verbose plugin setup in user code
 - Breaking change for all existing plugin implementations
-
----
-
-## 4. Make FeatureName Immutable
-
-**File:** `mloda_core/abstract_plugins/components/feature_name.py`
-
-FeatureName objects are used as dictionary keys and in sets (requiring stable hashing), yet the `replace()` method mutates internal state after construction. This violates Python's hash contract and can cause silent bugs where features "disappear" from collections after modification. Making FeatureName immutable with a `with_replaced()` method returning a new instance would prevent hash corruption, align with Python conventions for hashable objects, and prevent subtle bugs that are extremely difficult to diagnose.
-
-**Pros:**
-- Prevents hash corruption bugs
-- Aligns with Python hashable object conventions
-- Makes feature tracking more predictable
-- Enables safe use in concurrent contexts
-
-**Cons:**
-- Breaking change for code using `replace()` method
-- Slightly more verbose (create new object vs modify)
-- May require updates to feature chain parsing logic
 
 ---
 

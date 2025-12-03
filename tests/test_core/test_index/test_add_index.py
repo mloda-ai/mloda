@@ -20,7 +20,7 @@ from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.hashable_dict import HashableDict
 from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.link import Link
+from mloda_core.abstract_plugins.components.link import Link, JoinSpec
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.api.request import mlodaAPI
 from tests.test_plugins.feature_group.input_data.test_classes.test_input_classes import (
@@ -123,8 +123,8 @@ class TestAddIndex:
 
         link = Link(
             jointype="inner",
-            left=(ReadFileFeatureWithIndex, Index(("id",))),
-            right=(DBInputDataTestFeatureGroupWithIndex, Index(("id",))),
+            left=JoinSpec(ReadFileFeatureWithIndex, Index(("id",))),
+            right=JoinSpec(DBInputDataTestFeatureGroupWithIndex, Index(("id",))),
         )
         f = Feature(
             name="TestAddIndexFeature",

@@ -8,7 +8,7 @@ from mloda_core.prepare.execution_plan import ExecutionPlan
 from mloda_core.core.step.feature_group_step import FeatureGroupStep
 from mloda_core.abstract_plugins.components.feature_collection import Features
 from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.link import Link
+from mloda_core.abstract_plugins.components.link import Link, JoinSpec
 
 from tests.test_core.test_abstract_plugins.test_abstract_compute_framework import (
     BaseTestComputeFrameWork1,
@@ -39,8 +39,8 @@ class TestEngine:
             features = Features(["BaseTestFeature1", "BaseTestFeature2"])
             links = {
                 Link.inner(
-                    (BaseLinkTestFeatureGroup1, Index(tuple(["Index1"]))),
-                    (BaseTestGraphFeatureGroup3, Index(tuple(["Index1"]))),
+                    JoinSpec(BaseLinkTestFeatureGroup1, Index(tuple(["Index1"]))),
+                    JoinSpec(BaseTestGraphFeatureGroup3, Index(tuple(["Index1"]))),
                 )
             }
             Engine(features, compute_framework, links)
@@ -97,8 +97,8 @@ class TestEngine:
 
             links = {
                 Link.inner(
-                    (BaseLinkTestFeatureGroup1, Index(tuple(["Index1"]))),
-                    (BaseTestFeatureGroup2, Index(tuple(["Index1"]))),
+                    JoinSpec(BaseLinkTestFeatureGroup1, Index(tuple(["Index1"]))),
+                    JoinSpec(BaseTestFeatureGroup2, Index(tuple(["Index1"]))),
                 )
             }
 

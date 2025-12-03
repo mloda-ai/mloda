@@ -43,7 +43,7 @@ from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGr
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.link import JoinType, Link
+from mloda_core.abstract_plugins.components.link import JoinType, Link, JoinSpec
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
@@ -238,8 +238,8 @@ class SourceInputFeatureComposite:
         join_func = cls._get_join_func(join_type)
 
         link_obj = join_func(
-            (left_link_cls, left_index),
-            (right_link_cls, right_index),
+            JoinSpec(left_link_cls, left_index),
+            JoinSpec(right_link_cls, right_index),
         )
 
         if isinstance(link_obj, Link):

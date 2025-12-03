@@ -886,9 +886,7 @@ print(result)</div>
 
 <span class="n">feature</span> <span class="o">=</span> <span class="n">Feature</span><span class="p">(</span>
     <span class="n">name</span><span class="o">=</span><span class="s2">"CustomConfiguration"</span><span class="p">,</span>
-    <span class="n">options</span><span class="o">=</span><span class="n">Options</span><span class="p">(</span>
-        <span class="n">context</span><span class="o">=</span><span class="p">{</span><span class="s2">"aggregation_type"</span><span class="p">:</span> <span class="s2">"sum"</span><span class="p">,</span> <span class="s2">"mloda_source_features"</span><span class="p">:</span> <span class="n">Feature</span><span class="p">(</span><span class="s2">"age"</span><span class="p">,</span> <span class="n">options</span><span class="o">=</span><span class="p">{</span><span class="s2">"n_samples"</span><span class="p">:</span> <span class="mi">5</span><span class="p">})}</span>
-    <span class="p">),</span>
+    <span class="n">options</span><span class="o">=</span><span class="n">Options</span><span class="p">(</span><span class="n">context</span><span class="o">=</span><span class="p">{</span><span class="s2">"aggregation_type"</span><span class="p">:</span> <span class="s2">"sum"</span><span class="p">,</span> <span class="s2">"in_features"</span><span class="p">:</span> <span class="n">Feature</span><span class="p">(</span><span class="s2">"age"</span><span class="p">,</span> <span class="n">options</span><span class="o">=</span><span class="p">{</span><span class="s2">"n_samples"</span><span class="p">:</span> <span class="mi">5</span><span class="p">})}),</span>
 <span class="p">)</span>
 
 <span class="n">result</span> <span class="o">=</span> <span class="n">mlodaAPI</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span>
@@ -902,9 +900,7 @@ from mloda_core.abstract_plugins.components.options import Options
 
 feature = Feature(
     name="CustomConfiguration",
-    options=Options(
-        context={"aggregation_type": "sum", "mloda_source_features": Feature("age", options={"n_samples": 5})}
-    ),
+    options=Options(context={"aggregation_type": "sum", "in_features": Feature("age", options={"n_samples": 5})}),
 )
 
 result = mlodaAPI.run_all(

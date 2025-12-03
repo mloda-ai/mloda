@@ -284,11 +284,11 @@ class ExampleOrderFilter(AbstractFeatureGroup):
         # The filter implementation highly depends on the feature group!
         # Extract the filter value and filter_name information from the filters.
         for filter in features.filters:
-            filter_value = filter.parameter[0]
+            filter_value = filter.parameter.value
             filter_name = filter.filter_feature.name
             break
         # Create the order_id filter
-        order_id_filter = [i for i, order_id in enumerate(_data_creator[filter_name]) if order_id == filter_value[1]]
+        order_id_filter = [i for i, order_id in enumerate(_data_creator[filter_name]) if order_id == filter_value]
         # Apply the filter
         filtered_data = {
             key: [value[i] for i in order_id_filter]

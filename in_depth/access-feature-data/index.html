@@ -320,7 +320,7 @@ print(result)
 We might want to give data to the framework. 
 For this purpose, we have the ApiData.</p>
 <h4 id="apidata">ApiData</h4>
-<p>The ApiData can read data given to mlodaAPI at request time. The built-in <code>ApiInputDataFeature</code> handles this - it receives data from the <code>ApiInputDataCollection</code> and makes it available as features.</p>
+<p>The ApiData can read data given to mlodaAPI at request time. The built-in <code>ApiInputDataFeature</code> handles this - it receives data from the <code>api_data</code> parameter and makes it available as features.</p>
 <p>Use cases:</p>
 <ul>
 <li>web requests</li>
@@ -333,20 +333,12 @@ from typing import List
 
 from mloda_core.api.request import mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataframe
-from mloda_core.abstract_plugins.components.input_data.api.api_input_data_collection import ApiInputDataCollection
 
-# Setup the ApiInputDataCollection and api data.
-# These 2 objects are needed to relate given data to the correct features.
-api_input_data_collection = ApiInputDataCollection()
-api_data = api_input_data_collection.setup_key_api_data(
-    key_name=&quot;ExampleApiData&quot;, api_input_data={&quot;FeatureInputAPITest&quot;: [&quot;TestValue3&quot;, &quot;TestValue4&quot;]}
-)
-
+# Pass api_data directly as a dict - the framework handles registration internally
 result = mlodaAPI.run_all(
         [&quot;FeatureInputAPITest&quot;],
         compute_frameworks={PandasDataframe},
-        api_input_data_collection=api_input_data_collection,
-        api_data=api_data,
+        api_data={&quot;ExampleApiData&quot;: {&quot;FeatureInputAPITest&quot;: [&quot;TestValue3&quot;, &quot;TestValue4&quot;]}},
 )
 for res in result:
     print(res)
@@ -410,7 +402,7 @@ from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 
 # Set this variable as convention (internal key name)
-_mloda_source_features = &quot;mloda_source_features&quot;
+_in_features = &quot;in_features&quot;
 
 
 # First, we create a class, which uses input features from another class
@@ -420,9 +412,9 @@ class AInputFeatureGroup(AbstractFeatureGroup):
 
         # We use the source to make this feature flexible.
         # One could give here different feature names via the configuration.
-        mloda_source = options.get(_mloda_source_features)
+        mloda_source = options.get(_in_features)
         if mloda_source is None:
-            raise ValueError(f&quot;Option '{_mloda_source_features}' is required.&quot;)
+            raise ValueError(f&quot;Option '{_in_features}' is required.&quot;)
 
         features = set()
         for source in mloda_source:
@@ -440,7 +432,7 @@ class AInputFeatureGroup(AbstractFeatureGroup):
 
 feature_list = []
 feature_list.append(
-    Feature(name=&quot;AInputFeatureGroup&quot;, options={_mloda_source_features: frozenset([&quot;AFeatureInputCreator&quot;])})
+    Feature(name=&quot;AInputFeatureGroup&quot;, options={_in_features: frozenset([&quot;AFeatureInputCreator&quot;])})
 )
 
 result = mlodaAPI.run_all(

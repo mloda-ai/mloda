@@ -204,7 +204,7 @@ PROPERTY_MAPPING = {
         DefaultOptionKeys.mloda_context: True,  # Parameter classification
         DefaultOptionKeys.mloda_strict_validation: True,  # Validation mode
     },
-    DefaultOptionKeys.mloda_source_features: {
+    DefaultOptionKeys.in_features: {
         &quot;explanation&quot;: &quot;Source feature description&quot;,
         DefaultOptionKeys.mloda_context: True,
         DefaultOptionKeys.mloda_strict_validation: False,  # Flexible validation
@@ -255,7 +255,7 @@ PROPERTY_MAPPING = {
             DefaultOptionKeys.mloda_context: True,
             DefaultOptionKeys.mloda_strict_validation: True,
         },
-        DefaultOptionKeys.mloda_source_features: {
+        DefaultOptionKeys.in_features: {
             &quot;explanation&quot;: &quot;Source feature&quot;,
             DefaultOptionKeys.mloda_context: True,
         },
@@ -275,7 +275,7 @@ Options(context={&quot;operation_type&quot;: &quot;sum&quot;})
 Options(context={&quot;operation_type&quot;: &quot;custom&quot;})  # Raises ValueError
 
 # Valid with flexible validation - any value allowed
-Options(context={&quot;mloda_source_features&quot;: &quot;any_feature_name&quot;})
+Options(context={&quot;in_features&quot;: &quot;any_feature_name&quot;})
 </code></pre>
               
             </div>

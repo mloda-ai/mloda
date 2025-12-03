@@ -84,6 +84,8 @@
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#self-joins-with-pointer-fields">Self-Joins with Pointer Fields</a>
     </li>
+    <li class="toctree-l2"><a class="reference internal" href="#polymorphic-link-matching">Polymorphic Link Matching</a>
+    </li>
     <li class="toctree-l2"><a class="reference internal" href="#mlodaapi">mlodaAPI</a>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#merging-data-in-the-compute-framework">Merging Data in the Compute Framework</a>
@@ -294,6 +296,46 @@ features = {
 }
 </code></pre>
 <p>The execution planner validates that the pointer key-value pairs exist in the corresponding feature's options to correctly identify which instance belongs to which side of the join.</p>
+<h4 id="polymorphic-link-matching">Polymorphic Link Matching</h4>
+<p>Links support inheritance-based matching, allowing a link defined with base classes to automatically apply to subclasses. This enables defining generic join relationships that work across feature group hierarchies.</p>
+<p><strong>Matching Rules:</strong></p>
+<ol>
+<li>
+<p><strong>Exact match first</strong>: If a link's feature groups exactly match the classes being joined, it takes priority over any polymorphic matches.</p>
+</li>
+<li>
+<p><strong>Balanced inheritance</strong>: For polymorphic matches, both sides must have the same inheritance distance from the link's defined classes. This prevents sibling class mismatches.</p>
+</li>
+<li>
+<p><strong>Most specific wins</strong>: Among valid balanced matches, the link closest in the inheritance hierarchy is selected.</p>
+</li>
+</ol>
+<p><strong>Example:</strong></p>
+<pre><code class="language-python"># Define a base feature group hierarchy
+class BaseUserFeatureGroup(AbstractFeatureGroup):
+    pass
+
+class PremiumUserFeatureGroup(BaseUserFeatureGroup):
+    pass
+
+class StandardUserFeatureGroup(BaseUserFeatureGroup):
+    pass
+
+# Define a link using base classes
+link = Link.inner(
+    left=(BaseUserFeatureGroup, Index((&quot;user_id&quot;,))),
+    right=(BaseUserFeatureGroup, Index((&quot;user_id&quot;,)))
+)
+
+# This link will match:
+# - (PremiumUserFeatureGroup, PremiumUserFeatureGroup) ✓
+# - (StandardUserFeatureGroup, StandardUserFeatureGroup) ✓
+# - (BaseUserFeatureGroup, BaseUserFeatureGroup) ✓
+
+# This link will NOT match (sibling mismatch):
+# - (PremiumUserFeatureGroup, StandardUserFeatureGroup) ✗
+</code></pre>
+<p>The balanced inheritance rule ensures that joins only occur between "parallel" subclasses - both sides must be at the same level in the inheritance hierarchy relative to the link definition.</p>
 <h4 id="mlodaapi">mlodaAPI</h4>
 <pre><code class="language-python">from mloda_core.api.request import mlodaAPI
 

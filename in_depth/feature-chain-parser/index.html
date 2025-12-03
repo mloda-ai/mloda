@@ -295,7 +295,7 @@ options = Options(
     },
     context={
         &quot;aggregation_type&quot;: &quot;sum&quot;,    # Doesn't affect splitting
-        &quot;mloda_source_features&quot;: &quot;sales&quot;
+        &quot;in_features&quot;: &quot;sales&quot;
     }
 )
 </code></pre>
@@ -313,7 +313,7 @@ feature = Feature(
     Options(
         context={
             &quot;aggregation_type&quot;: &quot;sum&quot;,
-            &quot;mloda_source_features&quot;: &quot;sales&quot;
+            &quot;in_features&quot;: &quot;sales&quot;
         }
     )
 )
@@ -338,7 +338,7 @@ class MyFeatureGroup(AbstractFeatureGroup):
             DefaultOptionKeys.mloda_strict_validation: True,  # Strict validation
         },
         # Source feature parameter
-        DefaultOptionKeys.mloda_source_features: {
+        DefaultOptionKeys.in_features: {
             &quot;explanation&quot;: &quot;Source feature for the operation&quot;,
             DefaultOptionKeys.mloda_context: True,  # Context parameter
             DefaultOptionKeys.mloda_strict_validation: False,  # Flexible validation

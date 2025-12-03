@@ -227,7 +227,7 @@ assert &quot;feature1,feature2__cluster_kmeans_2&quot; in result.columns
 <pre><code class="language-python"># Test creating features from options
 options = Options({
     &quot;aggregation_type&quot;: &quot;sum&quot;,
-    &quot;mloda_source_features&quot;: &quot;sales&quot;
+    &quot;in_features&quot;: &quot;sales&quot;
 })
 feature_name = parser_config.parse_from_options(options)
 assert feature_name == &quot;sales__sum_aggr&quot;

@@ -1,13 +1,14 @@
 import threading
 from typing import Any
-import unittest
 from unittest.mock import MagicMock
+
+import pytest
 import pyarrow as pa
 import pyarrow.flight as flight
 from mloda_core.runtime.flight.flight_server import FlightServer
 
 
-class TestFlightServerUnit(unittest.TestCase):
+class TestFlightServerUnit:
     server: Any = None
     context: Any = None
     table: Any = None
@@ -17,7 +18,7 @@ class TestFlightServerUnit(unittest.TestCase):
     location: Any = None
 
     @classmethod
-    def setUpClass(cls) -> None:
+    def setup_class(cls) -> None:
         """Set up test environment and instantiate server"""
         cls.server = FlightServer()
         cls.context = MagicMock()
@@ -28,7 +29,7 @@ class TestFlightServerUnit(unittest.TestCase):
         cls.location = cls.server.location
 
     @classmethod
-    def tearDownClass(cls) -> None:
+    def teardown_class(cls) -> None:
         cls.server.shutdown()
 
     def test_do_put_and_get(self) -> None:
@@ -40,19 +41,20 @@ class TestFlightServerUnit(unittest.TestCase):
         # Execute do_put method
         self.server.do_put(self.context, self.descriptor, reader, writer)
 
-        self.assertIn(self.table_key.encode("utf-8"), self.server.tables)
-        self.assertEqual(self.server.tables[self.table_key.encode("utf-8")], self.table)
+        assert self.table_key.encode("utf-8") in self.server.tables
+        assert self.server.tables[self.table_key.encode("utf-8")] == self.table
 
         result_stream = self.server.do_get(self.context, self.ticket)
-        self.assertIsInstance(result_stream, flight.RecordBatchStream)
+        assert isinstance(result_stream, flight.RecordBatchStream)
 
     def test_do_get_not_found(self) -> None:
         """Test error handling when table is not found."""
-        with self.assertRaises(ValueError):
-            self.server.do_get(self.context, self.ticket)
+        non_existent_ticket = flight.Ticket(b"non_existent_table")
+        with pytest.raises(KeyError):
+            self.server.do_get(self.context, non_existent_ticket)
 
 
-class TestFlightServerIntegration(unittest.TestCase):
+class TestFlightServerIntegration:
     server: Any = None
     table: Any = None
     table_key: Any = None
@@ -60,14 +62,14 @@ class TestFlightServerIntegration(unittest.TestCase):
     server_thread: Any = None
 
     @classmethod
-    def setUpClass(cls) -> None:
+    def setup_class(cls) -> None:
         cls.server = FlightServer()
         cls.server_thread = threading.Thread(target=cls.server.serve)
         cls.server_thread.start()
         cls.location = cls.server.location
 
     @classmethod
-    def tearDownClass(cls) -> None:
+    def teardown_class(cls) -> None:
         cls.server.shutdown()
         cls.server_thread.join()
 
@@ -79,9 +81,9 @@ class TestFlightServerIntegration(unittest.TestCase):
 
         FlightServer.upload_table(self.location, table, table_key)
         result_table = FlightServer.download_table(self.location, table_key)
-        self.assertEqual(table, result_table)
+        assert table == result_table
         assert result_table == table
 
         FlightServer.drop_tables(self.location, {table_key})
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             FlightServer.download_table(self.location, table_key)

@@ -1,6 +1,5 @@
 import os
 from typing import Any
-import unittest
 
 import pytest
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
@@ -17,36 +16,36 @@ class BTestFeatureGroup(AbstractFeatureGroup):
     pass
 
 
-class TestPlugInCollector(unittest.TestCase):
-    def setUp(self) -> None:
+class TestPlugInCollector:
+    def setup_method(self) -> None:
         self.plugin_collector = PlugInCollector()
 
     def test_add_disabled_feature_group_classes(self) -> None:
         self.plugin_collector.add_disabled_feature_group_classes({ATestFeatureGroup})
-        self.assertIn(ATestFeatureGroup, self.plugin_collector.disabled_feature_group_classes)
+        assert ATestFeatureGroup in self.plugin_collector.disabled_feature_group_classes
 
     def test_add_enabled_feature_group_classes(self) -> None:
         self.plugin_collector.add_enabled_feature_group_classes({BTestFeatureGroup})
-        self.assertIn(BTestFeatureGroup, self.plugin_collector.enabled_feature_group_classes)
+        assert BTestFeatureGroup in self.plugin_collector.enabled_feature_group_classes
 
     def test_applicable_feature_group_class_disabled(self) -> None:
         self.plugin_collector.add_disabled_feature_group_classes({ATestFeatureGroup})
-        self.assertFalse(self.plugin_collector.applicable_feature_group_class(ATestFeatureGroup))
+        assert not self.plugin_collector.applicable_feature_group_class(ATestFeatureGroup)
 
     def test_applicable_feature_group_class_enabled(self) -> None:
         self.plugin_collector.add_enabled_feature_group_classes({BTestFeatureGroup})
-        self.assertTrue(self.plugin_collector.applicable_feature_group_class(BTestFeatureGroup))
+        assert self.plugin_collector.applicable_feature_group_class(BTestFeatureGroup)
 
     def test_applicable_feature_group_class_no_enabled(self) -> None:
-        self.assertTrue(self.plugin_collector.applicable_feature_group_class(ATestFeatureGroup))
+        assert self.plugin_collector.applicable_feature_group_class(ATestFeatureGroup)
 
     def test_disabled_feature_groups_static_method(self) -> None:
         plugin_collector = PlugInCollector.disabled_feature_groups({ATestFeatureGroup})
-        self.assertIn(ATestFeatureGroup, plugin_collector.disabled_feature_group_classes)
+        assert ATestFeatureGroup in plugin_collector.disabled_feature_group_classes
 
     def test_enabled_feature_groups_static_method(self) -> None:
         plugin_collector = PlugInCollector.enabled_feature_groups({BTestFeatureGroup})
-        self.assertIn(BTestFeatureGroup, plugin_collector.enabled_feature_group_classes)
+        assert BTestFeatureGroup in plugin_collector.enabled_feature_group_classes
 
 
 class TestPlugInCollectorIntegration:

@@ -1,12 +1,13 @@
-import unittest
+import pytest
+
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.filter.single_filter import SingleFilter
 from mloda_core.filter.filter_type_enum import FilterTypeEnum
 from mloda_core.filter.filter_parameter import FilterParameterImpl
 
 
-class TestSingleFilter(unittest.TestCase):
-    def setUp(self) -> None:
+class TestSingleFilter:
+    def setup_method(self) -> None:
         """Set up test variables."""
         self.feature = Feature("age")
         self.filter_type = FilterTypeEnum.range
@@ -16,37 +17,37 @@ class TestSingleFilter(unittest.TestCase):
         """Test that SingleFilter initializes correctly."""
         single_filter = SingleFilter(self.feature, self.filter_type, self.parameter)
 
-        self.assertEqual(single_filter.filter_feature, self.feature)
-        self.assertEqual(single_filter.filter_type, "range")
-        self.assertIsInstance(single_filter.parameter, FilterParameterImpl)
-        self.assertEqual(single_filter.parameter.min_value, 25)
-        self.assertEqual(single_filter.parameter.max_value, 50)
+        assert single_filter.filter_feature == self.feature
+        assert single_filter.filter_type == "range"
+        assert isinstance(single_filter.parameter, FilterParameterImpl)
+        assert single_filter.parameter.min_value == 25
+        assert single_filter.parameter.max_value == 50
 
     def test_invalid_filter_type(self) -> None:
         """Test that invalid filter type raises ValueError."""
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             SingleFilter(self.feature, 123, self.parameter)  # type: ignore
 
     def test_invalid_filter_feature(self) -> None:
         """Test that invalid filter feature raises ValueError."""
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             SingleFilter(123, self.filter_type, self.parameter)
 
     def test_invalid_parameter(self) -> None:
         """Test that invalid parameter raises ValueError."""
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             SingleFilter(self.feature, self.filter_type, "not_a_dict")  # type: ignore
 
     def test_empty_parameter(self) -> None:
         """Test that an empty parameter raises ValueError."""
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             SingleFilter(self.feature, self.filter_type, {})  # empty parameter dict
 
     def test_filter_equality(self) -> None:
         """Test that two identical SingleFilters are considered equal."""
         single_filter1 = SingleFilter(self.feature, self.filter_type, self.parameter)
         single_filter2 = SingleFilter(self.feature, self.filter_type, self.parameter)
-        self.assertEqual(single_filter1, single_filter2)
+        assert single_filter1 == single_filter2
 
     def test_filter_hash(self) -> None:
         """Test that SingleFilter objects can be used in a set (requires __hash__)."""
@@ -54,4 +55,4 @@ class TestSingleFilter(unittest.TestCase):
         single_filter2 = SingleFilter(self.feature, self.filter_type, self.parameter)
 
         filter_set = {single_filter1, single_filter2}
-        self.assertEqual(len(filter_set), 1)  # Since they are equal, only one should be in the set
+        assert len(filter_set) == 1  # Since they are equal, only one should be in the set

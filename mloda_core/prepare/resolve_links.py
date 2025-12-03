@@ -341,8 +341,11 @@ class ResolveLinks:
             right_dist = self._inheritance_distance(right_fg, link.right_feature_group)
 
             # Only consider links where both sides have the same inheritance level
-            # This prevents sibling class mismatches
-            if left_dist == right_dist and left_fg == right_fg:
+            # This prevents sibling class mismatches for self-join patterns
+            link_is_self_join = link.left_feature_group == link.right_feature_group
+            # For self-joins: require same concrete class to prevent sibling mismatches
+            # For different-class joins: balanced distance is sufficient
+            if left_dist == right_dist and (not link_is_self_join or left_fg == right_fg):
                 link_distances.append((link, left_dist))
 
         if not link_distances:

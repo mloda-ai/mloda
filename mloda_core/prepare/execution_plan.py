@@ -611,9 +611,11 @@ class ExecutionPlan:
     def case_link_fw_is_equal_to_children_fw(
         self, link_fw: LinkFrameworkTrekker, children_uuid: UUID, graph: Graph
     ) -> bool | Tuple[Set[UUID], Set[UUID]]:
-        # check that we only support non-right joins for equal feature groups
+        # check that we only support non-right joins for equal/polymorphic feature groups
         if link_fw[0].jointype == JoinType.RIGHT:
-            raise Exception(f"Right joins are not supported for equal feature groups in the join. link: {link_fw[0]}")
+            raise Exception(
+                f"Right joins are not supported for equal or polymorphic feature groups. link: {link_fw[0]}"
+            )
 
         # get feature which could be left
         parents = graph.parent_to_children_mapping[children_uuid]
@@ -632,7 +634,8 @@ class ExecutionPlan:
             if link_fw[1] != graph.nodes[uuid].feature.get_compute_framework():
                 continue
 
-            if link_fw[0].left_feature_group != graph.nodes[uuid].feature_group_class:
+            # Use polymorphic matching: concrete class should be subclass of link's base class
+            if not issubclass(graph.nodes[uuid].feature_group_class, link_fw[0].left_feature_group):
                 continue
 
             # loop over all other feature set collections
@@ -644,7 +647,8 @@ class ExecutionPlan:
                 if link_fw[2] != graph.nodes[_uuid].feature.get_compute_framework():
                     continue
 
-                if link_fw[0].right_feature_group != graph.nodes[_uuid].feature_group_class:
+                # Use polymorphic matching: concrete class should be subclass of link's base class
+                if not issubclass(graph.nodes[_uuid].feature_group_class, link_fw[0].right_feature_group):
                     continue
 
                 if left_uuids is None:
@@ -693,9 +697,11 @@ class ExecutionPlan:
         If you find a use case needing different support here, please contact mloda developers.
         """
 
-        # check that we only support non-right joins for equal feature groups
+        # check that we only support non-right joins for equal/polymorphic feature groups
         if link_fw[0].jointype == JoinType.RIGHT:
-            raise Exception(f"Right joins are not supported for equal feature groups in the join. link: {link_fw[0]}")
+            raise Exception(
+                f"Right joins are not supported for equal or polymorphic feature groups. link: {link_fw[0]}"
+            )
 
         # check that the compute framework of the child_fw is similar to the left cfw as this is the target cfw
         if link_fw[1] != children_fw:

@@ -724,8 +724,8 @@ class ExecutionPlan:
             if link_fw[1] != graph.nodes[uuid].feature.get_compute_framework():
                 continue
 
-            if link_fw[0].left_pointer is not None:
-                if not self.check_pointer(link_fw[0].left_pointer, link_fw, graph, uuid):
+            if link_fw[0].self_left_alias is not None:
+                if not self.check_pointer(link_fw[0].self_left_alias, link_fw, graph, uuid):
                     continue
 
             # loop over all other feature set collections
@@ -737,9 +737,9 @@ class ExecutionPlan:
                 if link_fw[2] != graph.nodes[_uuid].feature.get_compute_framework():
                     continue
 
-                if link_fw[0].right_pointer is not None:
+                if link_fw[0].self_right_alias is not None:
                     if not self.check_pointer(
-                        link_fw[0].right_pointer,
+                        link_fw[0].self_right_alias,
                         link_fw,
                         graph,
                         _uuid,
@@ -775,11 +775,11 @@ class ExecutionPlan:
     def check_pointer(
         self, pointer_dict: Dict[str, Any], link_fw: LinkFrameworkTrekker, graph: Graph, uuid: UUID
     ) -> bool:
-        if link_fw[0].right_pointer is None:
-            raise ValueError("This should not happen. If one pointer is set, the other should be set as well.")
+        if link_fw[0].self_right_alias is None:
+            raise ValueError("This should not happen. If one alias is set, the other should be set as well.")
 
-        if link_fw[0].left_pointer is None:
-            raise ValueError("This should not happen. If one pointer is set, the other should be set as well.")
+        if link_fw[0].self_left_alias is None:
+            raise ValueError("This should not happen. If one alias is set, the other should be set as well.")
 
         for k, v in graph.nodes[uuid].feature.options.items():
             for _k, _v in pointer_dict.items():

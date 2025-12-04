@@ -70,7 +70,7 @@ class DuplicateFeatureSetup(MixedCfwFeature):
             feature_set.add(
                 Feature(
                     name=py_f,
-                    options={CsvReader.__name__: self.file_path, "left_pointer": "dummy"},
+                    options={CsvReader.__name__: self.file_path, "self_left_alias": "dummy"},
                     compute_framework="PandasDataFrame",
                 )
             )
@@ -80,7 +80,7 @@ class DuplicateFeatureSetup(MixedCfwFeature):
             feature_set.add(
                 Feature(
                     name=py_f,
-                    options={CsvReader.__name__: self.file_path, "right_pointer": "dummy"},
+                    options={CsvReader.__name__: self.file_path, "self_right_alias": "dummy"},
                     compute_framework="PandasDataFrame",
                 )
             )

@@ -134,7 +134,7 @@ class TestMixComputeFrameWork:
 
         left = JoinSpec(ReadFileFeature, idx)
         right = JoinSpec(ReadFileFeature, idx)
-        links = {Link("inner", left, right, {"left_pointer": "dummy"}, {"right_pointer": "dummy"})}
+        links = {Link("inner", left, right, {"self_left_alias": "dummy"}, {"self_right_alias": "dummy"})}
 
         result_data = mlodaAPI.run_all(
             [feature],

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, FrozenInstanceError
+from dataclasses import FrozenInstanceError
 from enum import Enum
 from uuid import uuid4
 from typing import Any, Dict, Optional, Set, Tuple, Type, Union
@@ -70,6 +70,47 @@ class JoinSpec:
         return hash((self.feature_group, self.index))
 
 
+def _get_index_from_feature_group(
+    feature_group: Type[Any],
+    index_position: int,
+    side_name: str,
+) -> Index:
+    """Extract Index from feature group's index_columns().
+
+    Args:
+        feature_group: The feature group class
+        index_position: Which index to use (0-based)
+        side_name: "left" or "right" for error messages
+
+    Returns:
+        The Index at the specified position
+
+    Raises:
+        ValueError: If index_columns() returns None or empty list
+        IndexError: If index_position is out of range
+    """
+    index_columns = feature_group.index_columns()
+
+    if index_columns is None:
+        raise ValueError(
+            f"{side_name.capitalize()} feature group {feature_group.__name__} does not define index_columns()"
+        )
+
+    if not index_columns:
+        raise ValueError(
+            f"{side_name.capitalize()} feature group {feature_group.__name__}.index_columns() returned empty list"
+        )
+
+    if index_position < 0 or index_position >= len(index_columns):
+        raise IndexError(
+            f"{side_name}_index {index_position} out of range for "
+            f"{feature_group.__name__} (has {len(index_columns)} indexes)"
+        )
+
+    result: Index = index_columns[index_position]
+    return result
+
+
 class Link:
     """
     Defines a join relationship between two feature groups.
@@ -78,22 +119,52 @@ class Link:
         jointype: Type of join operation (inner, left, right, outer, append, union).
         left: JoinSpec for the left side of the join.
         right: JoinSpec for the right side of the join.
-        left_pointer: Optional dict to distinguish left instance in self-joins.
-            Must match key-value pairs in the left feature's options.
-        right_pointer: Optional dict to distinguish right instance in self-joins.
+        self_left_alias: Optional dict to distinguish left instance in self-joins.
+            Must match key-value pairs in the left feature's options. Named after
+            SQL table aliases used in self-joins (e.g., SELECT * FROM t1 AS a JOIN t1 AS b).
+        self_right_alias: Optional dict to distinguish right instance in self-joins.
             Must match key-value pairs in the right feature's options.
 
+    Factory Methods:
+        There are two styles of factory methods available:
+
+        **Standard methods** - require explicit JoinSpec objects:
+            - Link.inner(left_joinspec, right_joinspec)
+            - Link.left(left_joinspec, right_joinspec)
+            - Link.right(left_joinspec, right_joinspec)
+            - Link.outer(left_joinspec, right_joinspec)
+            - Link.append(left_joinspec, right_joinspec)
+            - Link.union(left_joinspec, right_joinspec)
+
+        **Convenience _on methods** - accept feature groups directly and derive
+        JoinSpecs automatically from index_columns():
+            - Link.inner_on(LeftFG, RightFG, left_index=0, right_index=0)
+            - Link.left_on(LeftFG, RightFG, left_index=0, right_index=0)
+            - Link.right_on(LeftFG, RightFG, left_index=0, right_index=0)
+            - Link.outer_on(LeftFG, RightFG, left_index=0, right_index=0)
+            - Link.append_on(LeftFG, RightFG, left_index=0, right_index=0)
+            - Link.union_on(LeftFG, RightFG, left_index=0, right_index=0)
+
+        The _on methods require feature groups to have index_columns() defined.
+        Use left_index/right_index to select which index when multiple are available.
+
     Example:
-        >>> # Simple join using string index (single column)
+        >>> # Verbose: explicit JoinSpec with index
         >>> Link.inner(JoinSpec(UserFG, "user_id"), JoinSpec(OrderFG, "user_id"))
+        >>>
+        >>> # Convenient: derive index from feature group's index_columns()
+        >>> Link.inner_on(UserFG, OrderFG)
+        >>>
+        >>> # Multi-index selection (use second index from left, first from right)
+        >>> Link.inner_on(UserFG, OrderFG, left_index=1, right_index=0)
         >>>
         >>> # Multi-column join using tuple index
         >>> Link.inner(JoinSpec(UserFG, ("id", "date")), JoinSpec(OrderFG, ("user_id", "order_date")))
         >>>
-        >>> # Self-join with pointers
-        >>> Link("inner", JoinSpec(UserFG, "user_id"), JoinSpec(UserFG, "user_id"),
-        ...      left_pointer={"side": "manager"},
-        ...      right_pointer={"side": "employee"})
+        >>> # Self-join with aliases (like SQL table aliases)
+        >>> Link.inner_on(UserFG, UserFG,
+        ...               self_left_alias={"side": "manager"},
+        ...               self_right_alias={"side": "employee"})
 
     Polymorphic Matching:
         Links support inheritance-based matching, allowing a link defined with base
@@ -124,16 +195,16 @@ class Link:
         jointype: Union[JoinType, str],
         left: JoinSpec,
         right: JoinSpec,
-        left_pointer: Optional[Dict[str, Any]] = None,
-        right_pointer: Optional[Dict[str, Any]] = None,
+        self_left_alias: Optional[Dict[str, Any]] = None,
+        self_right_alias: Optional[Dict[str, Any]] = None,
     ) -> None:
         self.jointype = JoinType(jointype) if isinstance(jointype, str) else jointype
         self.left_feature_group = left.feature_group
         self.right_feature_group = right.feature_group
         self.left_index = left.index
         self.right_index = right.index
-        self.left_pointer = left_pointer
-        self.right_pointer = right_pointer
+        self.self_left_alias = self_left_alias
+        self.self_right_alias = self_right_alias
 
         self.uuid = uuid4()
 
@@ -187,6 +258,132 @@ class Link:
         right: JoinSpec,
     ) -> Link:
         return cls(JoinType.UNION, left, right)
+
+    @classmethod
+    def inner_on(
+        cls,
+        left: Type[Any],
+        right: Type[Any],
+        left_index: int = 0,
+        right_index: int = 0,
+        self_left_alias: Optional[Dict[str, Any]] = None,
+        self_right_alias: Optional[Dict[str, Any]] = None,
+    ) -> "Link":
+        """Create INNER join using feature groups' index_columns()."""
+        left_idx = _get_index_from_feature_group(left, left_index, "left")
+        right_idx = _get_index_from_feature_group(right, right_index, "right")
+        return cls(
+            JoinType.INNER,
+            JoinSpec(left, left_idx),
+            JoinSpec(right, right_idx),
+            self_left_alias,
+            self_right_alias,
+        )
+
+    @classmethod
+    def left_on(
+        cls,
+        left: Type[Any],
+        right: Type[Any],
+        left_index: int = 0,
+        right_index: int = 0,
+        self_left_alias: Optional[Dict[str, Any]] = None,
+        self_right_alias: Optional[Dict[str, Any]] = None,
+    ) -> "Link":
+        """Create LEFT join using feature groups' index_columns()."""
+        left_idx = _get_index_from_feature_group(left, left_index, "left")
+        right_idx = _get_index_from_feature_group(right, right_index, "right")
+        return cls(
+            JoinType.LEFT,
+            JoinSpec(left, left_idx),
+            JoinSpec(right, right_idx),
+            self_left_alias,
+            self_right_alias,
+        )
+
+    @classmethod
+    def right_on(
+        cls,
+        left: Type[Any],
+        right: Type[Any],
+        left_index: int = 0,
+        right_index: int = 0,
+        self_left_alias: Optional[Dict[str, Any]] = None,
+        self_right_alias: Optional[Dict[str, Any]] = None,
+    ) -> "Link":
+        """Create RIGHT join using feature groups' index_columns()."""
+        left_idx = _get_index_from_feature_group(left, left_index, "left")
+        right_idx = _get_index_from_feature_group(right, right_index, "right")
+        return cls(
+            JoinType.RIGHT,
+            JoinSpec(left, left_idx),
+            JoinSpec(right, right_idx),
+            self_left_alias,
+            self_right_alias,
+        )
+
+    @classmethod
+    def outer_on(
+        cls,
+        left: Type[Any],
+        right: Type[Any],
+        left_index: int = 0,
+        right_index: int = 0,
+        self_left_alias: Optional[Dict[str, Any]] = None,
+        self_right_alias: Optional[Dict[str, Any]] = None,
+    ) -> "Link":
+        """Create OUTER join using feature groups' index_columns()."""
+        left_idx = _get_index_from_feature_group(left, left_index, "left")
+        right_idx = _get_index_from_feature_group(right, right_index, "right")
+        return cls(
+            JoinType.OUTER,
+            JoinSpec(left, left_idx),
+            JoinSpec(right, right_idx),
+            self_left_alias,
+            self_right_alias,
+        )
+
+    @classmethod
+    def append_on(
+        cls,
+        left: Type[Any],
+        right: Type[Any],
+        left_index: int = 0,
+        right_index: int = 0,
+        self_left_alias: Optional[Dict[str, Any]] = None,
+        self_right_alias: Optional[Dict[str, Any]] = None,
+    ) -> "Link":
+        """Create APPEND join using feature groups' index_columns()."""
+        left_idx = _get_index_from_feature_group(left, left_index, "left")
+        right_idx = _get_index_from_feature_group(right, right_index, "right")
+        return cls(
+            JoinType.APPEND,
+            JoinSpec(left, left_idx),
+            JoinSpec(right, right_idx),
+            self_left_alias,
+            self_right_alias,
+        )
+
+    @classmethod
+    def union_on(
+        cls,
+        left: Type[Any],
+        right: Type[Any],
+        left_index: int = 0,
+        right_index: int = 0,
+        self_left_alias: Optional[Dict[str, Any]] = None,
+        self_right_alias: Optional[Dict[str, Any]] = None,
+    ) -> "Link":
+        """Create UNION join using feature groups' index_columns()."""
+        left_idx = _get_index_from_feature_group(left, left_index, "left")
+        right_idx = _get_index_from_feature_group(right, right_index, "right")
+        return cls(
+            JoinType.UNION,
+            JoinSpec(left, left_idx),
+            JoinSpec(right, right_idx),
+            self_left_alias,
+            self_right_alias,
+        )
 
     def matches_exact(
         self,

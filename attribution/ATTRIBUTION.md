@@ -38,7 +38,7 @@
 | fastjsonschema                         | 2.21.2          | BSD License                                             |
 | filelock                               | 3.20.0          | The Unlicense (Unlicense)                               |
 | fqdn                                   | 1.5.1           | Mozilla Public License 2.0 (MPL 2.0)                    |
-| fsspec                                 | 2025.10.0       | BSD-3-Clause                                            |
+| fsspec                                 | 2025.12.0       | BSD-3-Clause                                            |
 | h11                                    | 0.16.0          | MIT License                                             |
 | html5lib                               | 1.1             | MIT License                                             |
 | httpcore                               | 1.0.9           | BSD License                                             |
@@ -84,13 +84,13 @@
 | notebook                               | 7.5.0           | BSD License                                             |
 | notebook_shim                          | 0.2.4           | BSD License                                             |
 | numpy                                  | 2.2.6           | BSD License                                             |
-| opentelemetry-api                      | 1.38.0          | Apache-2.0                                              |
-| opentelemetry-instrumentation          | 0.59b0          | Apache Software License                                 |
-| opentelemetry-instrumentation-logging  | 0.59b0          | Apache Software License                                 |
-| opentelemetry-instrumentation-requests | 0.59b0          | Apache Software License                                 |
-| opentelemetry-sdk                      | 1.38.0          | Apache-2.0                                              |
-| opentelemetry-semantic-conventions     | 0.59b0          | Apache-2.0                                              |
-| opentelemetry-util-http                | 0.59b0          | Apache Software License                                 |
+| opentelemetry-api                      | 1.39.0          | Apache-2.0                                              |
+| opentelemetry-instrumentation          | 0.60b0          | Apache Software License                                 |
+| opentelemetry-instrumentation-logging  | 0.60b0          | Apache Software License                                 |
+| opentelemetry-instrumentation-requests | 0.60b0          | Apache Software License                                 |
+| opentelemetry-sdk                      | 1.39.0          | Apache-2.0                                              |
+| opentelemetry-semantic-conventions     | 0.60b0          | Apache-2.0                                              |
+| opentelemetry-util-http                | 0.60b0          | Apache Software License                                 |
 | overrides                              | 7.7.0           | Apache License, Version 2.0                             |
 | packageurl-python                      | 0.17.6          | MIT License                                             |
 | packaging                              | 25.0            | Apache Software License; BSD License                    |

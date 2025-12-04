@@ -106,26 +106,68 @@ link = Link.inner(
 )
 ```
 
-#### Self-Joins with Pointer Fields
+#### Convenience _on Methods
 
-When joining a feature group with itself, you need to distinguish between the left and right instances using **pointer fields**.
+For feature groups that define `index_columns()`, you can use the convenience `_on` methods to automatically derive the join index:
 
-**Pointer fields** are optional dictionary parameters (`left_pointer` and `right_pointer`) that match against feature options:
+```python
+from mloda_core.abstract_plugins.components.link import Link
+
+# Define feature groups with index_columns
+class UserFeatureGroup(AbstractFeatureGroup):
+    @classmethod
+    def index_columns(cls):
+        return [Index(("user_id",))]
+
+class OrderFeatureGroup(AbstractFeatureGroup):
+    @classmethod
+    def index_columns(cls):
+        return [Index(("user_id",)), Index(("order_id",))]
+
+# Instead of verbose JoinSpec construction:
+link = Link.inner(
+    JoinSpec(UserFeatureGroup, UserFeatureGroup.index_columns()[0]),
+    JoinSpec(OrderFeatureGroup, OrderFeatureGroup.index_columns()[0])
+)
+
+# Use the convenient _on method:
+link = Link.inner_on(UserFeatureGroup, OrderFeatureGroup)
+
+# Select specific index when feature group has multiple (0-based position):
+link = Link.inner_on(UserFeatureGroup, OrderFeatureGroup, left_index=0, right_index=1)
+```
+
+Available `_on` methods: `inner_on`, `left_on`, `right_on`, `outer_on`, `append_on`, `union_on`
+
+**Note:** The `_on` methods raise `ValueError` if the feature group doesn't define `index_columns()` or returns an empty list, and `IndexError` if the specified index position is out of range.
+
+#### Self-Joins with Alias Fields
+
+When joining a feature group with itself, you need to distinguish between the left and right instances using **alias fields** (similar to SQL table aliases in self-joins).
+
+**Alias fields** are optional dictionary parameters (`self_left_alias` and `self_right_alias`) that match against feature options:
 
 ```python
 from mloda_core.abstract_plugins.components.feature import Feature
 
 # Define an example feature group for demonstration
 class UserFeatureGroup(AbstractFeatureGroup):
-    pass
+    @classmethod
+    def index_columns(cls):
+        return [Index(("user_id",))]
 
-# 1. Create link with pointers
+# Option 1: Using _on method (recommended when index_columns is defined)
+link = Link.inner_on(UserFeatureGroup, UserFeatureGroup,
+                     self_left_alias={"side": "left"},
+                     self_right_alias={"side": "right"})
+
+# Option 2: Using explicit JoinSpec
 left = JoinSpec(UserFeatureGroup, "user_id")
 right = JoinSpec(UserFeatureGroup, "user_id")
 
 link = Link("inner", left, right,
-            left_pointer={"side": "left"},
-            right_pointer={"side": "right"})
+            self_left_alias={"side": "left"},
+            self_right_alias={"side": "right"})
 
 # 2. Tag features with matching options
 # Feature names reference the feature from the feature group
@@ -135,7 +177,7 @@ features = {
 }
 ```
 
-The execution planner validates that the pointer key-value pairs exist in the corresponding feature's options to correctly identify which instance belongs to which side of the join.
+The execution planner validates that the alias key-value pairs exist in the corresponding feature's options to correctly identify which instance belongs to which side of the join.
 
 #### Polymorphic Link Matching
 

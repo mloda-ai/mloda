@@ -459,20 +459,20 @@ class TestLinkWithJoinSpec:
         left_spec = JoinSpec(feature_group=MockFeatureGroup, index=left_idx)
         right_spec = JoinSpec(feature_group=MockFeatureGroup, index=right_idx)
 
-        left_pointer = {"side": "manager"}
-        right_pointer = {"side": "employee"}
+        self_left_alias = {"side": "manager"}
+        self_right_alias = {"side": "employee"}
 
-        # Should accept JoinSpec objects with pointer arguments
+        # Should accept JoinSpec objects with alias arguments
         link = Link(
             jointype=JoinType.INNER,
             left=left_spec,
             right=right_spec,
-            left_pointer=left_pointer,
-            right_pointer=right_pointer,
+            self_left_alias=self_left_alias,
+            self_right_alias=self_right_alias,
         )
 
-        assert link.left_pointer == left_pointer
-        assert link.right_pointer == right_pointer
+        assert link.self_left_alias == self_left_alias
+        assert link.self_right_alias == self_right_alias
 
     def test_link_with_multi_index_join_spec(self) -> None:
         """Test Link works with JoinSpec objects containing multi-column indexes."""

@@ -16,15 +16,10 @@ class DefaultOptionKeys(str, Enum):
     """
 
     in_features = "in_features"
-    mloda_source_feature_group = "mloda_source_feature_group"
     mloda_feature_chainer_parser_key = "mloda_feature_chainer_parser_key"
-    reference_time = "time_filter"
+    reference_time = "reference_time"
     mloda_default = "default"
     mloda_context = "context"
     mloda_group = "group"
     mloda_strict_validation = "strict_validation"
     mloda_validation_function = "validation_function"
-
-    @classmethod
-    def list(cls) -> list[str]:
-        return [member.value for member in cls]

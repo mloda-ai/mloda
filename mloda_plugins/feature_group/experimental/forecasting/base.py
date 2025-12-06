@@ -98,7 +98,7 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
 
     ## Requirements
     - The input data must have a datetime column that can be used for time-based operations
-    - By default, the feature group will use DefaultOptionKeys.reference_time (default: "time_filter")
+    - By default, the feature group will use DefaultOptionKeys.reference_time (default: "reference_time")
     - You can specify a custom time column by setting the reference_time option in the feature group options
     """
 

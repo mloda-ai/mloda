@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, Optional, Set, TYPE_CHECKING, cast
 from copy import deepcopy
 
+from mloda_core.abstract_plugins.components.validators.options_validator import OptionsValidator
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 if TYPE_CHECKING:
@@ -67,13 +68,7 @@ class Options:
     ) -> None:
         self.group = group or {}
         self.context = context or {}
-        self._validate_no_duplicate_keys_in_group_and_context()
-
-    def _validate_no_duplicate_keys_in_group_and_context(self) -> None:
-        """Ensure no key exists in both group and context."""
-        duplicate_keys = set(self.group.keys()) & set(self.context.keys())
-        if duplicate_keys:
-            raise ValueError(f"Keys cannot exist in both group and context: {duplicate_keys}")
+        OptionsValidator.validate_no_duplicate_keys(self.group, self.context)
 
     def add(self, key: str, value: Any) -> None:
         """
@@ -86,28 +81,12 @@ class Options:
 
     def add_to_group(self, key: str, value: Any) -> None:
         """Add parameter to group (affects Feature Group resolution/splitting)."""
-
-        if key in self.group:
-            if value != self.group[key]:
-                raise ValueError(f"Key {key} already exists in group options with a different value: {self.group[key]}")
-
-        if key in self.context:
-            raise ValueError(f"Key {key} already exists in context options. Cannot add to group.")
-
+        OptionsValidator.validate_can_add_to_group(key, value, self.group, self.context)
         self.group[key] = value
 
     def add_to_context(self, key: str, value: Any) -> None:
         """Add parameter to context (metadata only, doesn't affect splitting)."""
-
-        if key in self.context:
-            if value != self.context[key]:
-                raise ValueError(
-                    f"Key {key} already exists in context options with a different value: {self.context[key]}"
-                )
-
-        if key in self.group:
-            raise ValueError(f"Key {key} already exists in group options. Cannot add to context.")
-
+        OptionsValidator.validate_can_add_to_context(key, value, self.group, self.context)
         self.context[key] = value
 
     def __hash__(self) -> int:
@@ -283,8 +262,5 @@ class Options:
                 del other_group_copy[protected_key]
 
         # Check for conflicts before updating
-        conflicting_keys = set(other_group_copy.keys()) & set(self.context.keys())
-        if conflicting_keys:
-            raise ValueError(f"Cannot update group: keys already exist in context: {conflicting_keys}")
-
+        OptionsValidator.validate_no_group_context_conflicts(set(other_group_copy.keys()), set(self.context.keys()))
         self.group.update(other_group_copy)

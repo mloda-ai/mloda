@@ -27,6 +27,7 @@ from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_collection import Features
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.link import Link
+from mloda_core.abstract_plugins.components.validators.link_validator import LinkValidator
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 
@@ -53,7 +54,7 @@ class Engine:
         # get accessible feature groups and their compute platforms
         self.accessible_plugins = PreFilterPlugins(compute_frameworks, plugin_collector).get_accessible_plugins()
         # get links
-        Link.validate(links)
+        LinkValidator.validate_links(links)
         self.links = links
 
         # set api input collection if relevant

@@ -12,6 +12,7 @@ from mloda_core.abstract_plugins.components.link import Link
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.utils import get_all_subclasses
+from mloda_core.abstract_plugins.components.validators.feature_validator import FeatureValidator
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 
@@ -181,20 +182,14 @@ class Feature:
     def _set_compute_framework(
         self, compute_framework: Optional[str], compute_framework_options: Optional[str]
     ) -> Optional[Type[ComputeFrameWork]]:
-        if compute_framework or compute_framework_options:
-            subclasses_compute_frameworks = get_all_subclasses(ComputeFrameWork)
-
-            if compute_framework:
-                for subclass in subclasses_compute_frameworks:
-                    if compute_framework == subclass.get_class_name():
-                        return subclass
-                raise ValueError(f"Compute framework via parameter {compute_framework} not found.")
-
-            elif compute_framework_options:
-                for subclass in subclasses_compute_frameworks:
-                    if compute_framework_options == subclass.get_class_name():
-                        return subclass
-                raise ValueError(f"Compute framework via options {compute_framework_options} not found.")
+        if compute_framework:
+            return FeatureValidator.validate_and_resolve_compute_framework(
+                compute_framework, get_all_subclasses(ComputeFrameWork), "parameter"
+            )
+        elif compute_framework_options:
+            return FeatureValidator.validate_and_resolve_compute_framework(
+                compute_framework_options, get_all_subclasses(ComputeFrameWork), "options"
+            )
         return None
 
     def _set_uuid(self, uuid: UUID) -> Feature:
@@ -208,11 +203,8 @@ class Feature:
         return self
 
     def get_compute_framework(self) -> Type[ComputeFrameWork]:
-        if self.compute_frameworks is None:
-            raise ValueError(
-                f"Feature {self.name} does not have any compute framework. This function can only be called when the frameworks were resolved."
-            )
-
+        FeatureValidator.validate_compute_frameworks_resolved(self.compute_frameworks, str(self.name))
+        assert self.compute_frameworks is not None
         return next(iter(self.compute_frameworks))
 
     def get_name(self) -> str:

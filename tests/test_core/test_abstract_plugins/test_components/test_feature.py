@@ -2,6 +2,7 @@ import pytest
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.utils import get_all_subclasses
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame  # noqa: F401
 
 
 def test_feature_equals() -> None:

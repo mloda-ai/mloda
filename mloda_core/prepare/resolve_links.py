@@ -5,6 +5,7 @@ from uuid import UUID
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 from mloda_core.prepare.graph.graph import Graph
 from mloda_core.abstract_plugins.components.link import Link
+from mloda_core.prepare.validators.resolve_link_validator import ResolveLinkValidator
 
 
 LinkFrameworkTrekker = Tuple[Link, Type[ComputeFrameWork], Type[ComputeFrameWork]]
@@ -203,8 +204,7 @@ class LinkTrekker:
             if k not in self.data_ordered:
                 self.data_ordered[k] = v
 
-        if len(self.data.items()) != len(self.data_ordered.items()):
-            raise ValueError("Data ordered is not the same length as data!")
+        ResolveLinkValidator.validate_data_consistency(self.data, self.data_ordered)
 
 
 class ResolveLinks:
@@ -241,27 +241,7 @@ class ResolveLinks:
         self.graph.set_root_parents_by_direct_()
 
         self.go_through_each_child_and_its_parents_and_look_for_links()
-        self.validate_link_trekker()
-
-    def validate_link_trekker(self) -> None:
-        for link_fw_trekker, _ in self.link_trekker.data.items():
-            for other_fw_trekker, _ in self.link_trekker.data.items():
-                if link_fw_trekker == other_fw_trekker:
-                    continue
-
-                link, _, _ = link_fw_trekker
-                other, _, _ = other_fw_trekker
-
-                # if feature group match
-                if (
-                    link.left_feature_group.get_class_name() == other.left_feature_group.get_class_name()
-                    and link.right_feature_group.get_class_name() == other.right_feature_group.get_class_name()
-                ):
-                    # case join different
-                    if link.jointype != other.jointype:
-                        raise Exception(
-                            f"Link {link} and {other} have the same feature groups, but different join types!"
-                        )
+        ResolveLinkValidator.validate_no_conflicting_join_types(self.link_trekker.data)
 
     def get_link_trekker(self) -> LinkTrekker:
         return self.link_trekker

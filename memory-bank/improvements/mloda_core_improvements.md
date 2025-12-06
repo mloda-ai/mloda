@@ -15,7 +15,7 @@ This document identifies 10 high-impact code improvements for mloda_core. These 
 - [x] 7. Use NamedTuple/dataclass for Link tuple parameters
 - [ ] 8. Replace Options dual-category dict with explicit factory methods
 - [x] 9. Eliminate type: ignore suppressions with proper typing
-- [ ] 10. Extract validation logic into separate validator classes
+- [x] 10. Extract validation logic into separate validator classes
 
 ---
 
@@ -114,25 +114,6 @@ The mlodaAPI constructor has 8 parameters including confusing union types like `
 
 ---
 
-## 7. Use NamedTuple/Dataclass for Link Parameters
-
-**File:** `mloda_core/abstract_plugins/components/link.py` (lines 55-69)
-
-Link constructor uses anonymous tuples `Tuple[Type[Any], Index]` for left/right parameters without any type hints about tuple contents. This forces developers to remember position-based semantics and makes code harder to read and maintain. Using a NamedTuple or dataclass like `LinkSide(feature_group: Type, index: Index)` would make the API self-documenting, enable IDE support for field access, and reduce errors from incorrect tuple ordering.
-
-**Pros:**
-- Self-documenting parameter types
-- IDE autocomplete for fields
-- Prevents tuple ordering mistakes
-- Enables validation in LinkSide constructor
-
-**Cons:**
-- Breaking change for all Link instantiations
-- Slightly more verbose construction
-- Need to update all existing link definitions
-
----
-
 ## 8. Replace Options Dual-Category Dict with Factory Methods
 
 **File:** `mloda_core/abstract_plugins/components/options.py`
@@ -149,22 +130,3 @@ The Options class uses an implicit dual-category system (group vs context dicts)
 - Breaking change for all Options usage
 - More verbose than dict-style construction
 - Requires updating all existing Options instantiations
-
----
-
-## 10. Extract Validation Logic into Validator Classes
-
-**Files:** `link.py`, `options.py`, `feature.py`, others
-
-Validation logic is scattered throughout constructors and methods with complex nested conditionals (e.g., Link.validate() with 3 nested if statements checking different consistency rules). This makes validation rules hard to discover, test, and maintain. Extracting into dedicated validator classes (LinkValidator, OptionsValidator, FeatureValidator) would centralize validation rules, enable unit testing of validation logic, improve error messages, and make it easier to add new validation rules.
-
-**Pros:**
-- Centralized, discoverable validation rules
-- Enables isolated testing of validation logic
-- Easier to add new validation rules
-- Can improve error messages systematically
-
-**Cons:**
-- Additional classes to maintain
-- Validation separated from data classes
-- May complicate construction if validators need to be injected

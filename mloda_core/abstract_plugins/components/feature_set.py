@@ -4,6 +4,7 @@ from uuid import UUID
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.options import Options
+from mloda_core.abstract_plugins.components.validators.feature_set_validator import FeatureSetValidator
 from mloda_core.filter.filter_engine import BaseFilterEngine
 from mloda_core.filter.single_filter import SingleFilter
 
@@ -22,8 +23,8 @@ class FeatureSet:
         self.filter_engine: Type[BaseFilterEngine] = BaseFilterEngine
 
     def add_artifact_name(self) -> None:
-        if self.options is None:
-            raise ValueError("No options set. Call this after adding a feature to ensure Options are initialized.")
+        FeatureSetValidator.validate_options_initialized(self.options, "add_artifact_name")
+        assert self.options is not None  # Type narrowing for mypy
 
         for feature_name in self.get_all_names():
             if feature_name in self.options.keys():
@@ -72,35 +73,28 @@ class FeatureSet:
             Prefer accessing options directly from individual features when possible.
             Only use this when you need to ensure all features share the same option value.
         """
-        if self.options is None:
-            raise ValueError("No options set. Call this after adding a feature to ensure Options are initialized.")
-        self.validate_equal_options()
+        FeatureSetValidator.validate_options_initialized(self.options, "get_options_key")
+        assert self.options is not None  # Type narrowing for mypy
+        FeatureSetValidator.validate_equal_options(self.features)
         return self.options.get(key)
 
     def validate_equal_options(self) -> None:
         """Checks if all features have the same options."""
-        _options = None
-        for feature in self.features:
-            if _options:
-                if _options != feature.options:
-                    raise ValueError("All features must have the same options.")
-            _options = feature.options
+        FeatureSetValidator.validate_equal_options(self.features)
 
     def get_initial_requested_features(self) -> Set[FeatureName]:
         return {feature.name for feature in self.features if feature.initial_requested_data}
 
     def get_name_of_one_feature(self) -> FeatureName:
-        if self.name_of_one_feature is None:
-            raise ValueError("No feature added yet. Add a feature before calling this method.")
+        FeatureSetValidator.validate_feature_added(
+            self.name_of_one_feature.name if self.name_of_one_feature else None, "get_name_of_one_feature"
+        )
+        assert self.name_of_one_feature is not None  # Type narrowing for mypy
         return self.name_of_one_feature
 
     def add_filters(self, single_filters: Set[SingleFilter]) -> None:
-        if self.filters is not None:
-            raise ValueError("Filters already set. This should be called once during setup of the feature set.")
-
-        if not isinstance(single_filters, Set):
-            raise ValueError("Filters should be a set.")
-
+        FeatureSetValidator.validate_filters_not_set(self.filters)
+        FeatureSetValidator.validate_filters_is_set_type(single_filters)
         self.filters = single_filters
 
     def get_artifact(self, config: Options) -> Any:

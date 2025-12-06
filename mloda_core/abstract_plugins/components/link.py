@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional, Set, Tuple, Type, Union
 
 
 from mloda_core.abstract_plugins.components.index.index import Index
+from mloda_core.abstract_plugins.components.validators.link_validator import LinkValidator
 
 
 class JoinType(Enum):
@@ -47,12 +48,10 @@ class JoinSpec:
     def __init__(self, feature_group: Type[Any], index: Union[Index, Tuple[str, ...], str]) -> None:
         """Create JoinSpec, converting index input to Index if needed."""
         if isinstance(index, str):
-            if not index:
-                raise ValueError("Index column name cannot be empty")
+            LinkValidator.validate_index_not_empty(index, "Index column name")
             index = Index((index,))
         elif isinstance(index, tuple):
-            if not index:
-                raise ValueError("Index tuple cannot be empty")
+            LinkValidator.validate_index_not_empty(index, "Index tuple")
             index = Index(index)
 
         object.__setattr__(self, "feature_group", feature_group)
@@ -436,48 +435,3 @@ class Link:
                 self.right_index,
             )
         )
-
-    @staticmethod
-    def validate(links: Optional[Set[Link]] = None) -> None:
-        if links is None:
-            return
-
-        for i_link in links:
-            if i_link.jointype not in JoinType:
-                raise ValueError(f"Join type {i_link.jointype} is not supported")
-
-            for j_link in links:
-                if i_link == j_link:
-                    continue
-
-                # case: A B and B A -> is not clear which join to use
-                # We exclude here append and union, because they are not directional.
-                if (
-                    i_link.left_feature_group == j_link.right_feature_group
-                    and i_link.right_feature_group == j_link.left_feature_group
-                    and i_link.jointype not in [JoinType.APPEND, JoinType.UNION]
-                ):
-                    raise ValueError(
-                        f"Link {i_link} and {j_link} have at least two different defined joins. Please remove one."
-                    )
-
-                # case: Multiple different join types between two feature groups
-                if (
-                    i_link.left_feature_group == j_link.left_feature_group
-                    and i_link.right_feature_group == j_link.right_feature_group
-                    and i_link.jointype != j_link.jointype
-                ):
-                    raise ValueError(
-                        f"Link {i_link} and {j_link} have different join types for the same feature groups. Please remove one."
-                    )
-
-                # case: Multiple right joins
-                # For now, only small right joins are supported. Lets see if any use case will need this in future.
-                if i_link.jointype == JoinType.RIGHT:
-                    if (
-                        i_link.left_feature_group == j_link.left_feature_group
-                        or i_link.left_feature_group == j_link.right_feature_group
-                    ):
-                        raise ValueError(
-                            f"Link {i_link} and {j_link} have multiple right joins for the same feature group on the left side or switching from left to right side although using right join. Please reconsider your joinlogic and if possible, use left joins instead of rightjoins. This will currently break the planner or during execution."
-                        )

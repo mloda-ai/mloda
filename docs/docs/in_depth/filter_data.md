@@ -51,7 +51,7 @@ Parameters:
 -   valid_from (Optional[datetime]): Start of the validity period (optional, with timezone).
 -   valid_to (Optional[datetime]): End of the validity period (optional, with timezone).
 -   max_exclusive (bool): If True, **valid_to** values are treated as exclusive.
--   time_filter_feature: the feature description for the time filter. Default is "time_filter".
+-   time_filter_feature: the feature description for the time filter. Default is "reference_time".
 -   time_travel_filter_feature: the feature description for the time travel filter. Default is "time_travel_filter".
 
 The **single_filters** created will be converted to UTC as ISO 8601 formatted strings to ensure consistency
@@ -96,8 +96,8 @@ global_filter.filters
 Result
 
 ``` python
-{<SingleFilter(feature_name=time_travel_filter, type=range, parameters=(('max', '2022-12-31T00:00:00+00:00'), ('max_exclusive', True), ('min', '2022-01-01T00:00:00+00:00')))>, 
- <SingleFilter(feature_name=time_filter, type=range, parameters=(('max', '2023-12-31T00:00:00+00:00'), ('max_exclusive', True), ('min', '2023-01-01T00:00:00+00:00')))>}
+{<SingleFilter(feature_name=time_travel_filter, type=range, parameters=(('max', '2022-12-31T00:00:00+00:00'), ('max_exclusive', True), ('min', '2022-01-01T00:00:00+00:00')))>,
+ <SingleFilter(feature_name=reference_time, type=range, parameters=(('max', '2023-12-31T00:00:00+00:00'), ('max_exclusive', True), ('min', '2023-01-01T00:00:00+00:00')))>}
 ```
 
 

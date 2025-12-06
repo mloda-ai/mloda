@@ -332,6 +332,38 @@ Every experimental feature group reimplements identical logic: feature chain par
 
 ---
 
+## 11. Clarify Time Concepts Design
+
+### Status
+- [ ] See [time_concepts_design.md](time_concepts_design.md) for full analysis
+- [ ] Implement `DefaultColumnNames` class
+- [ ] Update method/parameter naming
+- [ ] Standardize test patterns
+- [ ] Update documentation
+- [ ] Run tox validation
+
+### Rationale
+The codebase conflates three distinct time concepts, causing confusion:
+
+1. **`reference_time`** - DATA COLUMN: The column containing event timestamps
+2. **`time_filter`** - FILTER CONCEPT: Range filter on event time (event_from, event_to)
+3. **`time_travel_filter`** - FILTER CONCEPT: Range filter on validity period (valid_from, valid_to)
+
+The `DefaultOptionKeys.reference_time` enum serves triple duty (Options key, default column name, feature name), making the API confusing. The fix from `"time_filter"` to `"reference_time"` was semantically correct, but deeper refactoring would improve clarity.
+
+**Proposed:** Separate `DefaultColumnNames` class for default column values, rename methods like `get_time_filter_feature()` to `get_reference_time_column()`.
+
+**Pros:**
+- Clearer API for users
+- Self-documenting code
+- Consistent mental model
+
+**Cons:**
+- Parameter/method rename is breaking change
+- Requires updating documentation and examples
+
+---
+
 ## Implementation Priority
 
 | Priority | Improvement | Impact | Effort | Status |
@@ -346,6 +378,7 @@ Every experimental feature group reimplements identical logic: feature chain par
 | 8 | Proper Dependency Management | Medium | Medium | Pending |
 | 9 | Standardize Return Types | Medium | Medium | Pending |
 | 10 | Extract Common Utilities | High | Medium | Pending |
+| 11 | Clarify Time Concepts Design | Medium | Medium | Pending |
 
 ---
 

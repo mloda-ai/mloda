@@ -47,7 +47,7 @@ class TimeTravelPositiveFilterTest(AbstractFeatureGroup):
         return pa.table(
             {
                 cls.get_class_name(): [1, 2, 3],
-                "time_filter": [
+                "reference_time": [
                     (datetime.now(tz=timezone.utc) - timedelta(days=10)).isoformat(),  # 10 days ago - within range
                     (datetime.now(tz=timezone.utc) - timedelta(days=30)).isoformat(),  # 30 days ago - outside range
                     (datetime.now(tz=timezone.utc) - timedelta(days=30)).isoformat(),  # 30 days ago - outside range
@@ -62,7 +62,7 @@ class TimeTravelPositiveFilterTest(AbstractFeatureGroup):
         _: Options,
         _2=None,
     ) -> bool:
-        if feature_name.name in ["TimeTravelPositiveFilterTest", "time_filter", "time_travel_filter"]:  # type: ignore
+        if feature_name.name in ["TimeTravelPositiveFilterTest", "reference_time", "time_travel_filter"]:  # type: ignore
             return True
         return False
 

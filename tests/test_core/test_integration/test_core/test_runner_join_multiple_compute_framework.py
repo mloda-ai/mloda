@@ -7,8 +7,6 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from mloda_core.core.engine import Engine
-from mloda_core.runtime.run import Runner
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
@@ -25,17 +23,23 @@ import mloda_plugins.compute_framework.base_implementations.pandas.pandaspyarrow
 import mloda_plugins.compute_framework.base_implementations.polars.polars_pyarrow_transformer  # noqa: F401
 import mloda_plugins.compute_framework.base_implementations.polars.polars_lazy_pyarrow_transformer  # noqa: F401
 
+from tests.test_plugins.compute_framework.test_tooling.shared_compute_frameworks import (
+    SecondCfw,
+    ThirdCfw,
+    FourthCfw,
+)
+from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_SYNC_THREADING
 
-class SecondCfw(PyArrowTable):
-    pass
 
-
-class ThirdCfw(PyArrowTable):
-    pass
-
-
-class FourthCfw(PyArrowTable):
-    pass
+COMPUTE_FRAMEWORKS: Set[Type[ComputeFrameWork]] = {
+    PyArrowTable,
+    SecondCfw,
+    ThirdCfw,
+    FourthCfw,
+    PandasDataFrame,
+    PolarsLazyDataFrame,
+    PythonDictFramework,
+}
 
 
 class JoinCfwTest1(AbstractFeatureGroup):
@@ -251,55 +255,10 @@ class JoinMultiIndexTest(AbstractFeatureGroup):
         return {PyArrowTable}
 
 
-@pytest.mark.parametrize(
-    "modes",
-    [
-        ({ParallelizationModes.SYNC}),
-        ({ParallelizationModes.THREADING}),
-        # ({ParallelizationModes.MULTIPROCESSING}),
-    ],
-)
+@PARALLELIZATION_MODES_SYNC_THREADING
 class TestEngineMultipleJoinCfw:
     def get_features(self, feature_list: List[str], options: Dict[str, Any] = {}) -> Features:
         return Features([Feature(name=f_name, options=options, initial_requested_data=True) for f_name in feature_list])
-
-    def basic_runner(
-        self, features: Features, parallelization_modes: Set[ParallelizationModes], flight_server: Any, links: Set[Link]
-    ) -> Runner:
-        compute_framework: Set[Type[ComputeFrameWork]] = {
-            PyArrowTable,
-            SecondCfw,
-            ThirdCfw,
-            FourthCfw,
-            PandasDataFrame,
-            PolarsLazyDataFrame,
-            PythonDictFramework,
-        }
-
-        engine = Engine(features, compute_framework, links)
-
-        if ParallelizationModes.MULTIPROCESSING in parallelization_modes:
-            runner = engine.compute(flight_server)
-        else:
-            runner = engine.compute(None)
-
-        assert runner is not None
-
-        try:
-            runner.__enter__(parallelization_modes)
-            runner.compute()
-            runner.__exit__(None, None, None)
-        finally:
-            try:
-                runner.manager.shutdown()
-            except Exception:  # nosec
-                pass
-
-        # make sure all datasets are dropped on server
-        # flight_infos = FlightServer.list_flight_infos(flight_server.location)
-        # assert len(flight_infos) == 0
-
-        return runner
 
     def test_runner_join_multiple_cfw1_most_basic(self, modes: Set[ParallelizationModes], flight_server: Any) -> None:
         def inner_loop(join_type: str) -> None:
@@ -313,7 +272,13 @@ class TestEngineMultipleJoinCfw:
             links = {Link(join_type, left, right)}
 
             features = self.get_features(["Join2CfwTest"])
-            runner = self.basic_runner(features, modes, flight_server, links)
+            runner = MlodaTestRunner.run_engine(
+                features,
+                compute_frameworks=COMPUTE_FRAMEWORKS,
+                parallelization_modes=modes,
+                flight_server=flight_server,
+                links=links,
+            )
             res = runner.get_result()
             assert res[0].to_pydict() == {"Join2CfwTest": [10, 2, 3]}
 
@@ -325,8 +290,13 @@ class TestEngineMultipleJoinCfw:
     ) -> None:
         f_name = f"Join{f_name}CfwTest"
         features = self.get_features([f_name])
-        runner = self.basic_runner(features, modes, flight_server, links)
-        res = runner.get_result()
+        runner = MlodaTestRunner.run_engine(
+            features,
+            compute_frameworks=COMPUTE_FRAMEWORKS,
+            parallelization_modes=modes,
+            flight_server=flight_server,
+            links=links,
+        )
         res = runner.get_result()
         assert res[0].to_pydict() == {f_name: [33, 2, 3]}
 

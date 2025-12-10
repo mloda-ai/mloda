@@ -3,6 +3,9 @@ from unittest.mock import Mock, patch
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework import IcebergFramework
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
+from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
+    assert_unavailable_when_import_blocked,
+)
 
 import logging
 
@@ -125,8 +128,7 @@ class TestIcebergFrameworkUnavailable:
 
     def test_is_available_false_when_not_installed(self) -> None:
         """Test that is_available returns False when dependencies are not installed."""
-        with patch("mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework.IcebergTable", None):
-            assert IcebergFramework.is_available() is False
+        assert_unavailable_when_import_blocked(IcebergFramework, ["pyiceberg"])
 
     def test_expected_data_framework_raises_when_not_installed(self) -> None:
         """Test that expected_data_framework raises ImportError when PyIceberg is not installed."""

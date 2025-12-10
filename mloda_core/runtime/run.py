@@ -74,10 +74,6 @@ class Runner:
         if flight_server:
             self.flight_server = flight_server
 
-        # This can be reduced in realtime.
-        # It is set currently for convenience on this high level
-        self.wait_for_drop_data = 0.01
-
     def _is_step_done(self, step_uuids: Set[UUID], finished_ids: Set[UUID]) -> bool:
         """
         Checks if all steps identified by the given UUIDs have already been finished.
@@ -228,7 +224,31 @@ class Runner:
             if flyway_datasets:
                 self.track_data_to_drop[cfw.uuid] = flyway_datasets
 
-            time.sleep(self.wait_for_drop_data)
+            if result_queue is not None:
+                self._wait_for_drop_completion(result_queue, cfw.uuid)
+
+    def _wait_for_drop_completion(
+        self, result_queue: multiprocessing.Queue[Any], cfw_uuid: UUID, timeout: float = 5.0
+    ) -> None:
+        """
+        Wait for drop operation to complete from worker process.
+
+        Args:
+            result_queue: The queue to receive completion signals from the worker.
+            cfw_uuid: The UUID of the compute framework being dropped.
+            timeout: Maximum time to wait for completion in seconds.
+        """
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            try:
+                msg = result_queue.get(block=False)
+                if isinstance(msg, tuple) and len(msg) == 2 and msg[0] == "DROP_COMPLETE" and msg[1] == cfw_uuid:
+                    return
+                # Put back other messages (e.g., step completion UUIDs)
+                result_queue.put(msg, block=False)
+            except queue.Empty:
+                time.sleep(0.001)
+        logger.warning(f"Drop operation for CFW {cfw_uuid} timed out after {timeout}s")
 
     def get_cfw(self, compute_framework: Type[ComputeFrameWork], feature_uuid: UUID) -> ComputeFrameWork:
         """

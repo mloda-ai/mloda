@@ -1,20 +1,18 @@
-from typing import Any, Dict, List, Optional, Set, Type, Union
+from typing import Any, Dict, List, Optional, Set, Union
 import pyarrow as pa
 import pyarrow.compute as pc
 import pytest
 from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.api.request import mlodaAPI
 from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_collection import Features
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.options import Options
+from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_SYNC_THREADING
 
 
 class EngineRunnerTest(AbstractFeatureGroup):
@@ -121,36 +119,14 @@ class SumFeature(AbstractFeatureGroup):
         return FeatureName(f"{self.get_class_name()}_{ending}")
 
 
-@pytest.mark.parametrize(
-    "modes",
-    [
-        ({ParallelizationModes.SYNC}),
-        ({ParallelizationModes.THREADING}),
-        # ({ParallelizationModes.MULTIPROCESSING}),
-    ],
-)
+@PARALLELIZATION_MODES_SYNC_THREADING
 class TestEngineRunnerOneComputeFramework:
     def get_features(self, feature_list: List[str], options: Dict[str, Any] = {}) -> Features:
         return Features([Feature(name=f_name, options=options, initial_requested_data=True) for f_name in feature_list])
 
-    def basic_runner(
-        self,
-        features: Features,
-        parallelization_modes: Set[ParallelizationModes],
-        flight_server: Any,
-        function_extender: Any = None,
-    ) -> List[Any]:
-        compute_framework: Set[Type[ComputeFrameWork]] = {PyArrowTable}
-
-        results = mlodaAPI.run_all(
-            features, compute_framework, None, None, parallelization_modes, flight_server, function_extender
-        )
-        # assert_flight_infos(flight_server)
-        return results
-
     def test_runner_cfw_single_feature(self, modes: Set[ParallelizationModes], flight_server: Any) -> None:
         features = self.get_features(["EngineRunnerTest1"])
-        result = self.basic_runner(features, modes, flight_server)[0]
+        result = MlodaTestRunner.run_api_simple(features, parallelization_modes=modes, flight_server=flight_server)[0]
 
         assert isinstance(result, pa.Table)
         assert result.column_names == ["EngineRunnerTest1"]
@@ -158,7 +134,7 @@ class TestEngineRunnerOneComputeFramework:
 
     def test_runner_single_feature(self, modes: Set[ParallelizationModes], flight_server: Any) -> None:
         features = self.get_features(["EngineRunnerTest1"])
-        result = self.basic_runner(features, modes, flight_server)[0]
+        result = MlodaTestRunner.run_api_simple(features, parallelization_modes=modes, flight_server=flight_server)[0]
 
         assert isinstance(result, pa.Table)
         assert result.column_names == ["EngineRunnerTest1"]
@@ -168,7 +144,7 @@ class TestEngineRunnerOneComputeFramework:
         self, modes: Set[ParallelizationModes], flight_server: Any
     ) -> None:
         features = self.get_features(["EngineRunnerTest2"])
-        result = self.basic_runner(features, modes, flight_server)[0]
+        result = MlodaTestRunner.run_api_simple(features, parallelization_modes=modes, flight_server=flight_server)[0]
 
         assert result.to_pydict() == {"EngineRunnerTest2": [2, 4, 6]}
 
@@ -176,25 +152,25 @@ class TestEngineRunnerOneComputeFramework:
         self, modes: Set[ParallelizationModes], flight_server: Any
     ) -> None:
         features = self.get_features(["EngineRunnerTest1"], {"config": "test"})
-        result = self.basic_runner(features, modes, flight_server)[0]
+        result = MlodaTestRunner.run_api_simple(features, parallelization_modes=modes, flight_server=flight_server)[0]
         assert result.to_pydict() == {"EngineRunnerTest1": [2, 4, 6]}
 
-    def test_runner_dependent_feature_config_given_1(
+    def test_runner_single_feature_with_config_modifies_output(
         self, modes: Set[ParallelizationModes], flight_server: Any
     ) -> None:
         features = self.get_features(["EngineRunnerTest2"], {"config": "test"})
-        result = self.basic_runner(features, modes, flight_server)[0]
+        result = MlodaTestRunner.run_api_simple(features, parallelization_modes=modes, flight_server=flight_server)[0]
         assert result.to_pydict() == {"EngineRunnerTest2-test": [4, 8, 12]}
 
-    def test_runner_dependent_feature_config_given_2(
+    def test_runner_multiple_features_with_same_config(
         self, modes: Set[ParallelizationModes], flight_server: Any
     ) -> None:
         features = self.get_features(["EngineRunnerTest2", "EngineRunnerTest1"], {"config": "test"})
-        result = self.basic_runner(features, modes, flight_server)
+        result = MlodaTestRunner.run_api_simple(features, parallelization_modes=modes, flight_server=flight_server)
         assert result[0].to_pydict() == {"EngineRunnerTest1": [2, 4, 6]}
         assert result[1].to_pydict() == {"EngineRunnerTest2-test": [4, 8, 12]}
 
-    def test_runner_dependent_feature_config_given_3(
+    def test_runner_same_feature_with_different_configs(
         self, modes: Set[ParallelizationModes], flight_server: Any
     ) -> None:
         features = Features(
@@ -204,7 +180,7 @@ class TestEngineRunnerOneComputeFramework:
             ]
         )
 
-        result = self.basic_runner(features, modes, flight_server)
+        result = MlodaTestRunner.run_api_simple(features, parallelization_modes=modes, flight_server=flight_server)
         assert (
             result[0].to_pydict() == {"EngineRunnerTest1": [2, 4, 6]}
             and result[1].to_pydict() == {"EngineRunnerTest1": [1, 2, 3]}
@@ -213,7 +189,7 @@ class TestEngineRunnerOneComputeFramework:
             and result[0].to_pydict() == {"EngineRunnerTest1": [1, 2, 3]}
         ), "Inverted order because calculation order is not guaranteed."
 
-    def test_runner_dependent_feature_config_given_4(
+    def test_runner_same_feature_different_configs_custom_naming(
         self, modes: Set[ParallelizationModes], flight_server: Any
     ) -> None:
         features = Features(
@@ -223,7 +199,7 @@ class TestEngineRunnerOneComputeFramework:
             ]
         )
 
-        result = self.basic_runner(features, modes, flight_server)
+        result = MlodaTestRunner.run_api_simple(features, parallelization_modes=modes, flight_server=flight_server)
         res1 = result[0].to_pydict()
         res2 = result[1].to_pydict()
 
@@ -235,14 +211,14 @@ class TestEngineRunnerOneComputeFramework:
         assert no_config_res["EngineRunnerTest2"] == [2, 4, 6]
         assert config_res["EngineRunnerTest2-test"] == [4, 8, 12]
 
-    def test_runner_dependent_feature_config_given_5(
+    def test_runner_dependency_chain_with_config_propagation(
         self, modes: Set[ParallelizationModes], flight_server: Any
     ) -> None:
         features = Features(
             [Feature(name="EngineRunnerTest3", options={"config": "test"}, initial_requested_data=True)]
         )
 
-        result = self.basic_runner(features, modes, flight_server)
+        result = MlodaTestRunner.run_api_simple(features, parallelization_modes=modes, flight_server=flight_server)
         res = result[0].to_pydict()
         assert res == {"EngineRunnerTest3": [12, 24, 36]}
 
@@ -252,7 +228,7 @@ class TestEngineRunnerOneComputeFramework:
         features = self.get_features(
             ["EngineRunnerTest4_1", "EngineRunnerTest4_2", "EngineRunnerTest4_3", "EngineRunnerTest4_0"]
         )
-        result = self.basic_runner(features, modes, flight_server)[0]
+        result = MlodaTestRunner.run_api_simple(features, parallelization_modes=modes, flight_server=flight_server)[0]
         assert isinstance(result, pa.Table)
 
         assert result.to_pydict() == {
@@ -274,7 +250,7 @@ class TestEngineRunnerOneComputeFramework:
                 )
             ]
         )
-        result = self.basic_runner(features, modes, flight_server)[0]
+        result = MlodaTestRunner.run_api_simple(features, parallelization_modes=modes, flight_server=flight_server)[0]
         assert isinstance(result, pa.Table)
         assert result.to_pydict() == {
             "SumFeature_EngineRunnerTest4_0EngineRunnerTest4_1": [

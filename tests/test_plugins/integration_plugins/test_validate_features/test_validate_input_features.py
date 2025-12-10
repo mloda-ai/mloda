@@ -1,26 +1,23 @@
+import logging
 import time
 from typing import Any, Dict, List, Optional, Set
+
 import pytest
+from pandera import Check, Column
 
-from pandera import Column, Check
-
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.function_extender import WrapperFunctionEnum, WrapperFunctionExtender
-from mloda_core.api.request import mlodaAPI
-from mloda_core.runtime.flight.flight_server import FlightServer
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_collection import Features
+from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from tests.test_plugins.integration_plugins.test_validate_features.example_validator import ExamplePanderaValidator
+from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
+from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
+from mloda_core.abstract_plugins.components.options import Options
+from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
+from mloda_core.abstract_plugins.function_extender import WrapperFunctionEnum, WrapperFunctionExtender
+from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_SYNC_THREADING
 from tests.test_documentation.test_documentation import DokuExtender
-
-import logging
+from tests.test_plugins.integration_plugins.test_validate_features.example_validator import ExamplePanderaValidator
 
 logger = logging.getLogger(__name__)
 
@@ -90,35 +87,10 @@ class ValidateInputFeatureExtender(DokuExtender):
         return result
 
 
-@pytest.mark.parametrize(
-    "modes",
-    [
-        ({ParallelizationModes.SYNC}),
-        ({ParallelizationModes.THREADING}),
-        # ({ParallelizationModes.MULTIPROCESSING}),
-    ],
-)
+@PARALLELIZATION_MODES_SYNC_THREADING
 class TestValidateInputFeatures:
     def get_features(self, feature_list: List[str], options: Dict[str, Any] = {}) -> Features:
         return Features([Feature(name=f_name, options=options, initial_requested_data=True) for f_name in feature_list])
-
-    def basic_runner(
-        self,
-        features: Features,
-        parallelization_modes: Set[ParallelizationModes],
-        flight_server: Any,
-        function_extender: Set[WrapperFunctionExtender] = set(),
-    ) -> List[Any]:
-        results = mlodaAPI.run_all(
-            features, {PyArrowTable}, None, None, parallelization_modes, flight_server, function_extender
-        )
-
-        # make sure all datasets are dropped on server
-        if ParallelizationModes.MULTIPROCESSING in parallelization_modes:
-            flight_infos = FlightServer.list_flight_infos(flight_server.location)
-            assert len(flight_infos) == 0
-
-        return results
 
     def test_basic_validate_input_features(self, modes: Set[ParallelizationModes], flight_server: Any) -> None:
         _features = "SimpleValidateInputFeatures"
@@ -126,7 +98,7 @@ class TestValidateInputFeatures:
         features = self.get_features([_features])
 
         with pytest.raises(Exception):
-            self.basic_runner(features, modes, flight_server)
+            MlodaTestRunner.run_api_simple(features, parallelization_modes=modes, flight_server=flight_server)
 
     def test_custom_validate_input_features_error(self, modes: Set[ParallelizationModes], flight_server: Any) -> None:
         _features = "CustomValidateInputFeatures"
@@ -134,7 +106,7 @@ class TestValidateInputFeatures:
         features = self.get_features([_features])
 
         with pytest.raises(Exception) as excinfo:
-            self.basic_runner(features, modes, flight_server)
+            MlodaTestRunner.run_api_simple(features, parallelization_modes=modes, flight_server=flight_server)
 
         assert "in_range(1, 2)" in str(excinfo.value)
         assert "BaseValidateInputFeaturesBase" in str(excinfo.value)
@@ -149,7 +121,7 @@ class TestValidateInputFeatures:
 
         # Current mp version, logging is broken. This is known and not a focus for now.
         if ParallelizationModes.MULTIPROCESSING not in modes:
-            self.basic_runner(features, modes, flight_server)
+            MlodaTestRunner.run_api_simple(features, parallelization_modes=modes, flight_server=flight_server)
 
             assert (
                 "pandera.errors.SchemaError: Column 'BaseValidateInputFeaturesBase' failed element-wise validator number 0: in_range(1, 2) failure cases: 3"
@@ -168,7 +140,7 @@ class TestValidateInputFeatures:
         features = self.get_features([_features], {validator.__class__.__name__: validator})
 
         with pytest.raises(Exception) as excinfo:
-            self.basic_runner(features, modes, flight_server)
+            MlodaTestRunner.run_api_simple(features, parallelization_modes=modes, flight_server=flight_server)
 
         assert "in_range(1, 2)" in str(excinfo.value)
         assert "BaseValidateInputFeaturesBase" in str(excinfo.value)
@@ -181,7 +153,12 @@ class TestValidateInputFeatures:
 
         features = self.get_features([_features], {"ValidationLevel": "warning"})
 
-        self.basic_runner(features, modes, flight_server, function_extender={ValidateInputFeatureExtender()})
+        MlodaTestRunner.run_api_simple(
+            features,
+            parallelization_modes=modes,
+            flight_server=flight_server,
+            function_extender={ValidateInputFeatureExtender()},
+        )
 
         # Current mp version, logging is broken. This is known and not a focus for now.
         if ParallelizationModes.MULTIPROCESSING not in modes:

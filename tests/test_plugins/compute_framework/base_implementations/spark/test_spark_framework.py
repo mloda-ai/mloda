@@ -24,21 +24,19 @@ import os
 from typing import Any
 from mloda_core.abstract_plugins.components.link import JoinType
 import pytest
-from unittest.mock import patch
 from mloda_plugins.compute_framework.base_implementations.spark.spark_framework import SparkFramework
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
 from mloda_core.abstract_plugins.components.index.index import Index
+from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
+    assert_unavailable_when_import_blocked,
+)
 
 # Import shared fixtures and availability flags from conftest.py
-try:
-    from tests.test_plugins.compute_framework.base_implementations.spark.conftest import PYSPARK_AVAILABLE, SKIP_REASON
-except ImportError:
-    # Fallback for when running tests directly
-    import sys
-
-    sys.path.insert(0, os.path.dirname(__file__))
-    from conftest import PYSPARK_AVAILABLE, SKIP_REASON  # type: ignore
+from tests.test_plugins.compute_framework.base_implementations.spark.conftest import (
+    PYSPARK_AVAILABLE,
+    SKIP_REASON,
+)
 
 import logging
 
@@ -59,17 +57,9 @@ else:
 
 
 class TestSparkFrameworkAvailability:
-    @patch("builtins.__import__")
-    def test_is_available_when_pyspark_not_installed(self, mock_import: Any) -> None:
+    def test_is_available_when_pyspark_not_installed(self) -> None:
         """Test that is_available() returns False when pyspark import fails."""
-
-        def side_effect(name: Any, *args: Any, **kwargs: Any) -> Any:
-            if name == "pyspark.sql":
-                raise ImportError("No module named 'pyspark'")
-            return __import__(name, *args, **kwargs)
-
-        mock_import.side_effect = side_effect
-        assert SparkFramework.is_available() is False
+        assert_unavailable_when_import_blocked(SparkFramework, ["pyspark.sql"])
 
 
 class TestSparkInstallation:

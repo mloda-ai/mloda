@@ -1,11 +1,13 @@
 from typing import Any
 from mloda_core.abstract_plugins.components.link import JoinType
 import pytest
-from unittest.mock import patch
 from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
 from mloda_core.abstract_plugins.components.index.index import Index
+from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
+    assert_unavailable_when_import_blocked,
+)
 
 import logging
 
@@ -19,17 +21,9 @@ except ImportError:
 
 
 class TestPolarsLazyDataFrameAvailability:
-    @patch("builtins.__import__")
-    def test_is_available_when_polars_not_installed(self, mock_import: Any) -> None:
+    def test_is_available_when_polars_not_installed(self) -> None:
         """Test that is_available() returns False when polars import fails."""
-
-        def side_effect(name: Any, *args: Any, **kwargs: Any) -> Any:
-            if name == "polars":
-                raise ImportError("No module named 'polars'")
-            return __import__(name, *args, **kwargs)
-
-        mock_import.side_effect = side_effect
-        assert PolarsLazyDataFrame.is_available() is False
+        assert_unavailable_when_import_blocked(PolarsLazyDataFrame, ["polars"])
 
 
 @pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")

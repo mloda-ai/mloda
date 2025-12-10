@@ -29,9 +29,14 @@ def _handle_data_dropping(
     cfw: ComputeFrameWork,
     command: Set[Any],
     location: str,
+    result_queue: multiprocessing.Queue[Any],
 ) -> bool:
     """Handles dropping already calculated data based on the provided command."""
     data_to_drop = cfw.add_already_calculated_children_and_drop_if_possible(command, location)
+
+    # Signal completion back to main thread
+    result_queue.put(("DROP_COMPLETE", cfw.uuid), block=False)
+
     if data_to_drop is True:
         _handle_stop_command(command_queue)
         return True
@@ -115,7 +120,7 @@ def worker(
             break
 
         if isinstance(command, set):
-            if _handle_data_dropping(command_queue, cfw, command, location):
+            if _handle_data_dropping(command_queue, cfw, command, location, result_queue):
                 break
             continue
 

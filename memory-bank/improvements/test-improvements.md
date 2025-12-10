@@ -54,13 +54,32 @@ Key transformations applied:
 
 ## 2. Convert Class-Level Test Data to Fixtures
 
-- [ ] Identify classes with shared class-level state
-- [ ] Create pytest fixtures for `left_data`, `right_data`, `expected_data`
-- [ ] Remove class attributes, inject via fixture parameters
-- [ ] Ensure each test gets fresh data instances
-- [ ] Run `tox` to verify all tests pass
+- [x] Identify classes with shared class-level state
+- [x] Create pytest fixtures for `left_data`, `right_data`, `expected_data`
+- [x] Remove class attributes, inject via fixture parameters
+- [x] Ensure each test gets fresh data instances
+- [x] Run `tox` to verify all tests pass
 
-**Partial Progress:** The `DataFrameTestBase` class (from improvement #3) uses `setup_method()` to create fresh `left_data` and `right_data` per test method, addressing isolation for merge tests. However, the original `TestPandasDataFrameComputeFramework` (and similar) still use class-level attributes.
+**Status: IMPLEMENTED**
+
+Converted 4 compute framework test classes from class-level attributes to pytest fixtures:
+
+| Test Class | File |
+|------------|------|
+| `TestPandasDataFrameComputeFramework` | `pandas/test_pandas_dataframe.py` |
+| `TestPolarsDataFrameComputeFramework` | `polars/test_polars_dataframe.py` |
+| `TestPyArrowTableComputeFramework` | `pyarrow/test_pyarrow_table.py` |
+| `TestDuckDBFrameworkComputeFramework` | `duckdb/test_duckdb_framework.py` |
+
+Key transformations applied:
+- Class-level `framework_instance` → `@pytest.fixture` returning fresh instance
+- Class-level `dict_data` → `@pytest.fixture` returning fresh dictionary
+- Class-level `expected_data` → `@pytest.fixture` using dict_data fixture
+- Removed unused `left_data`, `right_data`, `idx` attributes (merge tests use `DataFrameTestBase`)
+- Test methods now receive fixtures as parameters
+- Removed unused `assert_series_equal` import from pandas tests
+
+**Note:** Spark framework tests were already using fixtures via `spark_session` parameter.
 
 **Why:** Tests like `TestPandasDataFrameComputeFramework` define shared class attributes (`left_data`, `right_data`) that persist across test methods. If any test accidentally mutates this data, subsequent tests receive polluted state, causing intermittent failures that are difficult to debug. Fixtures create fresh instances per test, guaranteeing isolation.
 
@@ -71,7 +90,7 @@ Key transformations applied:
 | Easier to debug failures | Requires restructuring test classes |
 | Tests can run in any order | - |
 
-**Example file:** `tests/test_plugins/compute_framework/base_implementations/pandas/test_pandas_dataframe.py:24-29`
+**Files converted:** `test_pandas_dataframe.py`, `test_polars_dataframe.py`, `test_pyarrow_table.py`, `test_duckdb_framework.py`
 
 ---
 
@@ -81,7 +100,7 @@ Key transformations applied:
 - [x] Define abstract methods for framework-specific setup
 - [x] Move merge tests (inner, left, right, outer, append, union) to base class
 - [x] Have Pandas, Polars, PyArrow, DuckDB tests inherit from base
-- [ ] Run `tox` to verify all tests pass
+- [x] Run `tox` to verify all tests pass
 
 **Status: IMPLEMENTED**
 
@@ -114,32 +133,63 @@ Tests for the base class itself: `test_tooling/test_dataframe_test_base.py`
 
 ## 4. Parametrize Import Availability Tests
 
-- [ ] Create shared fixture for import mocking pattern
-- [ ] Parametrize framework availability tests by framework name
-- [ ] Remove duplicate `test_is_available_when_X_not_installed` methods
-- [ ] Move to shared test module `tests/test_plugins/compute_framework/test_availability.py`
-- [ ] Run `tox` to verify all tests pass
+- [x] Create shared helper for import mocking pattern
+- [x] Update framework availability tests to use shared helper
+- [x] Remove duplicate mocking logic from test files
+- [x] Run `tox` to verify all tests pass
+
+**Status: IMPLEMENTED**
+
+Created `tests/test_plugins/compute_framework/test_tooling/availability_test_helper.py` with `assert_unavailable_when_import_blocked()` helper function. Each test file now calls this helper instead of duplicating the mocking logic.
+
+**Approach taken**: Instead of moving all tests to a central module (which would hurt discoverability and cause import issues), we created a shared helper that each test file calls. Tests remain in their respective files but delegate to the helper for the mocking logic.
+
+**Files updated:**
+- `polars/test_polars_dataframe.py` - uses helper with `["polars"]`
+- `polars/test_polars_lazy_dataframe.py` - uses helper with `["polars"]`
+- `duckdb/test_duckdb_framework.py` - uses helper with `["duckdb"]`
+- `pyarrow/test_pyarrow_table.py` - uses helper with `["pyarrow"]`
+- `spark/test_spark_framework.py` - uses helper with `["pyspark.sql"]`
+- `iceberg/test_iceberg_framework.py` - uses helper with `["pyiceberg"]` (standardized from different pattern)
 
 **Why:** Each compute framework has nearly identical tests for checking availability when dependencies aren't installed. The pattern `@patch("builtins.__import__")` with `side_effect` raising `ImportError` is repeated 6+ times. A single parametrized test would cover all frameworks in one place, making it trivial to add new framework availability tests.
 
 | Pros | Cons |
 |------|------|
-| Single test covers all frameworks | Parametrized test failures can be harder to isolate |
-| Easy to add new frameworks | Requires understanding parametrize patterns |
-| Reduces boilerplate significantly | - |
+| Tests remain discoverable in their files | - |
+| Easy to add new frameworks | - |
+| Reduces boilerplate significantly (~10 lines → 1 line per test) | - |
 | Centralizes import mock logic | - |
-
-**Current duplication in:** `test_pandas_dataframe.py`, `test_polars_dataframe.py`, `test_duckdb_framework.py`, `test_pyarrow_table.py`
+| No import issues (each file imports only its own framework) | - |
 
 ---
 
 ## 5. Rename Numbered Test Methods to Descriptive Names
 
-- [ ] Audit tests with `_1`, `_2`, `_3` suffixes
-- [ ] Determine what each numbered variant tests differently
-- [ ] Rename to describe the specific scenario being tested
-- [ ] Update any documentation referencing old names
-- [ ] Run `tox` to verify all tests pass
+- [x] Audit tests with `_1`, `_2`, `_3` suffixes
+- [x] Determine what each numbered variant tests differently
+- [x] Rename to describe the specific scenario being tested
+- [x] Update any documentation referencing old names
+- [x] Run `tox` to verify all tests pass
+
+**Status: IMPLEMENTED**
+
+Renamed 5 numbered test methods in `tests/test_core/test_integration/test_core/test_runner_one_compute_framework.py`:
+
+| Old Name | New Descriptive Name |
+|----------|---------------------|
+| `test_runner_dependent_feature_config_given_1` | `test_runner_single_feature_with_config_modifies_output` |
+| `test_runner_dependent_feature_config_given_2` | `test_runner_multiple_features_with_same_config` |
+| `test_runner_dependent_feature_config_given_3` | `test_runner_same_feature_with_different_configs` |
+| `test_runner_dependent_feature_config_given_4` | `test_runner_same_feature_different_configs_custom_naming` |
+| `test_runner_dependent_feature_config_given_5` | `test_runner_dependency_chain_with_config_propagation` |
+
+The new names clearly describe what each test validates:
+- Test 1: Single feature with config affects output name and values
+- Test 2: Multiple features requested with same config applied to both
+- Test 3: Same feature requested twice with different configs produces distinct results
+- Test 4: Same feature with custom naming logic, different configs
+- Test 5: Dependency chain where config propagates through Test1 → Test2 → Test3
 
 **Why:** Test methods like `test_runner_dependent_feature_config_given_1` through `_5` don't communicate what differentiates them. When a test fails, developers must read the implementation to understand what's being tested. Descriptive names like `test_runner_with_config_returns_modified_values` and `test_runner_multiple_features_with_config` make failures immediately actionable.
 
@@ -156,11 +206,37 @@ Tests for the base class itself: `test_tooling/test_dataframe_test_base.py`
 
 ## 6. Extract Test Feature Groups to Shared Fixtures Module
 
-- [ ] Create `tests/fixtures/feature_groups.py` module
-- [ ] Move `EngineRunnerTest`, `EngineRunnerTest2`, etc. to shared module
-- [ ] Import feature groups from shared location in test files
-- [ ] Remove duplicate feature group definitions
-- [ ] Run `tox` to verify all tests pass
+- [x] Create shared module for compute framework classes
+- [x] Move `SecondCfw`, `ThirdCfw`, `FourthCfw` to shared module
+- [x] Import classes from shared location in test files
+- [x] Remove duplicate class definitions
+- [x] Run `tox` to verify all tests pass
+
+**Status: IMPLEMENTED**
+
+Created `tests/test_plugins/compute_framework/test_tooling/shared_compute_frameworks.py` with shared custom compute framework classes.
+
+**Analysis performed:**
+- Explored 93 feature group classes across the test codebase
+- Identified that most feature groups are context-specific (used locally for specific test scenarios)
+- Found exact duplicates: `SecondCfw`, `ThirdCfw`, `FourthCfw` classes in two files
+
+**Classes extracted:**
+
+| Class | Description | Previously in |
+|-------|-------------|---------------|
+| `SecondCfw` | Custom CFW for multi-framework testing | 2 files (duplicate) |
+| `ThirdCfw` | Custom CFW for multi-framework testing | 2 files (duplicate) |
+| `FourthCfw` | Custom CFW for join testing | 1 file |
+
+**Files updated:**
+- `test_runner_multiple_compute_framework.py` - imports `SecondCfw`, `ThirdCfw` from shared module
+- `test_runner_join_multiple_compute_framework.py` - imports `SecondCfw`, `ThirdCfw`, `FourthCfw` from shared module
+
+**Why not extract more?** After thorough analysis:
+- `EngineRunnerTest*` classes are context-specific with interdependent test scenarios
+- `NonRootJoinTestFeature*` classes differ between single-CFW and multi-CFW tests (not exact duplicates)
+- `features_for_testing.py` already serves as a shared module for its domain
 
 **Why:** Test feature groups like `EngineRunnerTest`, `NonRootJoinTestFeature`, and similar classes are defined inline in multiple test files. This creates duplication and risks inconsistency if the same logical feature group is defined differently in different files. Centralizing these in a shared fixtures module ensures consistency and reduces the test file size.
 
@@ -171,17 +247,31 @@ Tests for the base class itself: `test_tooling/test_dataframe_test_base.py`
 | Reusable across test modules | Initial refactoring effort |
 | Easier to maintain test infrastructure | - |
 
-**Files with duplicate definitions:** `test_runner_one_compute_framework.py`, `test_non_root_merges_one_cfw.py`, `features_for_testing.py`
+**New shared module:** `tests/test_plugins/compute_framework/test_tooling/shared_compute_frameworks.py`
 
 ---
 
 ## 7. Standardize Assertion Style to Pytest Native
 
-- [ ] Replace `pandas.testing.assert_series_equal` with pytest patterns where possible
-- [ ] Use `pytest.approx()` for floating-point comparisons
-- [ ] Create custom assertion helpers for complex comparisons
-- [ ] Document assertion patterns in test README
-- [ ] Run `tox` to verify all tests pass
+- [x] Replace `pandas.testing.assert_series_equal` with pytest patterns where possible
+- [x] Use `pytest.approx()` for floating-point comparisons
+- [ ] Create custom assertion helpers for complex comparisons (not needed currently)
+- [ ] Document assertion patterns in test README (not needed currently)
+- [x] Run `tox` to verify all tests pass
+
+**Status: MOSTLY ADDRESSED (Low Priority Remaining)**
+
+After investigation, this improvement is largely outdated:
+
+1. **`assert_series_equal` in pandas tests**: Was imported but **never used**. Removed the unused import during improvement #2.
+
+2. **`pdt.assert_frame_equal` in `test_base_merge_engine.py`**: This is the only remaining pandas.testing usage (1 occurrence). It's appropriate here since the test specifically validates pandas DataFrame equality with proper NaN handling.
+
+3. **`self.assertEqual` style**: Already addressed in improvement #1 (unittest migration).
+
+**Remaining work** (very low priority):
+- The single `pdt.assert_frame_equal` usage is intentional and appropriate for pandas-specific testing
+- No widespread assertion style inconsistency exists in the current codebase
 
 **Why:** The codebase uses multiple assertion styles: plain `assert`, `self.assertEqual`, `pandas.testing.assert_series_equal`, and framework-specific matchers. While some framework assertions are necessary (e.g., for DataFrame equality with NaN handling), many uses could be standardized. Consistent assertions improve readability and make it easier to understand what's being verified.
 
@@ -192,28 +282,54 @@ Tests for the base class itself: `test_tooling/test_dataframe_test_base.py`
 | Simpler test code | Some precision may require framework assertions |
 | Reduced cognitive load | - |
 
-**Mixed styles in:** `test_pandas_dataframe.py` (uses `assert`, `assert_series_equal`, `equals()` method)
+**Note:** `test_pandas_dataframe.py` now uses standard pytest `assert` statements and DataFrame `.equals()` methods.
 
 ---
 
 ## 8. Remove sys.path Manipulation from Tests
 
-- [ ] Identify all `sys.path.insert` calls in test files
-- [ ] Fix underlying import issues via proper package structure
-- [ ] Ensure `conftest.py` and pytest configuration handle paths
-- [ ] Remove sys.path manipulation code
-- [ ] Run `tox` to verify all tests pass
+- [x] Identify all `sys.path.insert` calls in test files
+- [x] Fix underlying import issues via proper package structure
+- [x] Ensure `conftest.py` and pytest configuration handle paths
+- [x] Remove sys.path manipulation code
+- [x] Run `tox` to verify all tests pass
 
-**Why:** Tests like `test_spark_integration.py` contain `sys.path.insert(0, ...)` blocks, which is a code smell indicating import issues. Pytest should handle test discovery and imports automatically when the project is properly structured. Path manipulation can cause inconsistent behavior between local runs and CI, and makes tests dependent on execution context.
+**Status: IMPLEMENTED**
+
+Removed all `sys.path.insert` manipulation from 5 Spark test files by fixing the underlying package structure issue.
+
+**Root cause:** The `tests/test_plugins/compute_framework/base_implementations/` directory and its subdirectories were missing `__init__.py` files, which prevented Python's import system from treating them as packages. This caused the full package import path to fail, requiring a fallback to sys.path manipulation.
+
+**Solution:**
+1. Added `__init__.py` files to:
+   - `tests/test_plugins/compute_framework/base_implementations/`
+   - `tests/test_plugins/compute_framework/base_implementations/spark/`
+   - `tests/test_plugins/compute_framework/base_implementations/pandas/`
+   - `tests/test_plugins/compute_framework/base_implementations/polars/`
+   - `tests/test_plugins/compute_framework/base_implementations/pyarrow/`
+   - `tests/test_plugins/compute_framework/base_implementations/duckdb/`
+   - `tests/test_plugins/compute_framework/base_implementations/iceberg/`
+   - `tests/test_plugins/compute_framework/base_implementations/python_dict/`
+
+2. Replaced try/except import blocks with direct imports in all 5 Spark test files:
+   - `test_spark_framework.py`
+   - `test_spark_integration.py`
+   - `test_spark_pyarrow_transformer.py`
+   - `test_spark_filter_engine.py`
+   - `test_spark_merge_engine.py`
+
+**Why:** Tests like `test_spark_integration.py` contained `sys.path.insert(0, ...)` blocks, which is a code smell indicating import issues. Pytest should handle test discovery and imports automatically when the project is properly structured. Path manipulation can cause inconsistent behavior between local runs and CI, and makes tests dependent on execution context.
 
 | Pros | Cons |
 |------|------|
-| Tests work consistently everywhere | May require pyproject.toml/setup.py changes |
-| No hidden import side effects | Need to understand pytest import system |
+| Tests work consistently everywhere | - |
+| No hidden import side effects | - |
 | Cleaner test code | - |
 | Better IDE support | - |
+| Full package imports work reliably | - |
 
-**Files affected:** `tests/test_plugins/compute_framework/base_implementations/spark/test_spark_integration.py`
+**Files modified:** 5 Spark test files in `tests/test_plugins/compute_framework/base_implementations/spark/`
+**Files added:** 8 `__init__.py` files in `base_implementations/` and subdirectories
 
 ---
 
@@ -261,11 +377,14 @@ Tests for the base class itself: `test_tooling/test_dataframe_test_base.py`
 
 ## Priority Order
 
-1. **High Impact, Lower Effort:** #2 (Class-level state), #5 (Rename numbered tests)
-2. **High Impact, Medium Effort:** #6 (Extract feature groups)
-3. **Medium Impact:** #4 (Parametrize availability), #7 (Standardize assertions)
-4. **Housekeeping:** #8 (Remove sys.path), #9 (Consolidate conftest), #10 (Type hints)
+1. **Housekeeping:** #9 (Consolidate conftest), #10 (Type hints)
 
 **Completed:**
 - ✅ #1 (Migrate unittest) - 13 classes migrated
+- ✅ #2 (Class-level state to fixtures) - 4 test classes converted to pytest fixtures
 - ✅ #3 (Abstract base tests) - `DataFrameTestBase` implemented
+- ✅ #4 (Parametrize availability) - `availability_test_helper.py` with shared helper
+- ✅ #5 (Rename numbered tests) - 5 methods renamed to descriptive names
+- ✅ #6 (Extract feature groups) - `shared_compute_frameworks.py` with `SecondCfw`, `ThirdCfw`, `FourthCfw`
+- ✅ #7 (Standardize assertions) - Mostly addressed; unused imports removed, only 1 appropriate pandas.testing usage remains
+- ✅ #8 (Remove sys.path) - Added missing `__init__.py` files, removed sys.path manipulation from 5 Spark test files

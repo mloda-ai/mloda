@@ -1,17 +1,15 @@
-from typing import Any, Dict, List, Optional, Set, Tuple, Type
+from typing import Any, Dict, List, Optional, Set, Type
 import pytest
 
 from mloda_core.abstract_plugins.components.base_artifact import BaseArtifact
 from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.api.request import mlodaAPI
-from mloda_core.runtime.flight.flight_server import FlightServer
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_collection import Features
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
+from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_ALL
 
 
 import logging
@@ -67,44 +65,18 @@ class BaseTestArtifactFeature(AbstractFeatureGroup):
             raise ValueError("Artifact loading failed.")
 
 
-@pytest.mark.parametrize(
-    "modes",
-    [
-        ({ParallelizationModes.SYNC}),
-        ({ParallelizationModes.THREADING}),
-        ({ParallelizationModes.MULTIPROCESSING}),
-    ],
-)
+@PARALLELIZATION_MODES_ALL
 class TestBaseArtifacts:
     def get_features(self, feature_list: List[str], options: Dict[str, Any] = {}) -> Features:
         return Features([Feature(name=f_name, options=options, initial_requested_data=True) for f_name in feature_list])
-
-    def basic_runner(
-        self,
-        features: Features,
-        parallelization_modes: Set[ParallelizationModes],
-        flight_server: Any,
-    ) -> Tuple[List[Any], Dict[str, Any]]:
-        api = mlodaAPI(features, {PyArrowTable})
-        api._batch_run(parallelization_modes, flight_server)
-        results = api.get_result()
-        artifacts = api.get_artifacts()
-
-        # make sure all datasets are dropped on server
-        if ParallelizationModes.MULTIPROCESSING in parallelization_modes:
-            flight_infos = FlightServer.list_flight_infos(flight_server.location)
-            assert len(flight_infos) == 0
-
-        return results, artifacts
 
     def test_basic_artifact_feature(self, modes: Set[ParallelizationModes], flight_server: Any) -> None:
         _features = "BaseTestArtifactFeature"
 
         features = self.get_features([_features])
-
-        _, artifacts = self.basic_runner(features, modes, flight_server)
-        assert artifacts == {"BaseTestArtifactFeature": "DummyArtifact"}
+        result = MlodaTestRunner.run_api(features, parallelization_modes=modes, flight_server=flight_server)
+        assert result.artifacts == {"BaseTestArtifactFeature": "DummyArtifact"}
 
         features = self.get_features([_features], options={"BaseTestArtifactFeature": "DummyArtifact"})
-        _, artifacts = self.basic_runner(features, modes, flight_server)
-        assert not artifacts
+        result = MlodaTestRunner.run_api(features, parallelization_modes=modes, flight_server=flight_server)
+        assert not result.artifacts

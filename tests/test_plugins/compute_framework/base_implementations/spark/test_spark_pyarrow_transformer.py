@@ -27,15 +27,10 @@ from typing import Any
 from mloda_plugins.compute_framework.base_implementations.spark.spark_pyarrow_transformer import SparkPyArrowTransformer
 
 # Import shared fixtures and availability flags from conftest.py
-try:
-    from tests.test_plugins.compute_framework.base_implementations.spark.conftest import PYSPARK_AVAILABLE, SKIP_REASON
-except ImportError:
-    # Fallback for when running tests directly
-    import os
-    import sys
-
-    sys.path.insert(0, os.path.dirname(__file__))
-    from conftest import PYSPARK_AVAILABLE, SKIP_REASON  # type: ignore
+from tests.test_plugins.compute_framework.base_implementations.spark.conftest import (
+    PYSPARK_AVAILABLE,
+    SKIP_REASON,
+)
 
 import logging
 

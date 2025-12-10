@@ -40,15 +40,7 @@ from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCr
 from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
 
 # Import shared fixtures and availability flags from conftest.py
-try:
-    from tests.test_plugins.compute_framework.base_implementations.spark.conftest import PYSPARK_AVAILABLE
-except ImportError:
-    # Fallback for when running tests directly
-    import os
-    import sys
-
-    sys.path.insert(0, os.path.dirname(__file__))
-    from conftest import PYSPARK_AVAILABLE  # type: ignore
+from tests.test_plugins.compute_framework.base_implementations.spark.conftest import PYSPARK_AVAILABLE
 
 import logging
 

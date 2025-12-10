@@ -12,27 +12,35 @@ logger = logging.getLogger(__name__)
 
 try:
     import pandas as pd
-    from pandas.testing import assert_series_equal
 except ImportError:
     logger.warning("Pandas is not installed. Some tests will be skipped.")
     pd = None
-    assert_series_equal = None
 
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
 class TestPandasDataFrameComputeFramework:
-    pd_dataframe = PandasDataFrame(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
-    dict_data = {"column1": [1, 2, 3], "column2": [4, 5, 6]}
-    expected_data = PandasDataFrame.pd_dataframe().from_dict(dict_data)
-    left_data = PandasDataFrame.pd_dataframe().from_dict({"idx": [1, 3], "col1": ["a", "b"]}).set_index("idx")
-    right_data = PandasDataFrame.pd_dataframe().from_dict({"idx": [1, 2], "col2": ["x", "z"]}).set_index("idx")
-    idx = Index(("idx",))
+    @pytest.fixture
+    def pd_dataframe(self) -> PandasDataFrame:
+        """Create a fresh PandasDataFrame instance for each test."""
+        return PandasDataFrame(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
 
-    def test_expected_data_framework(self) -> None:
-        assert self.pd_dataframe.expected_data_framework() == pd.DataFrame
+    @pytest.fixture
+    def dict_data(self) -> dict[str, list[int]]:
+        """Create fresh test dictionary data for each test."""
+        return {"column1": [1, 2, 3], "column2": [4, 5, 6]}
 
-    def test_transform_dict_to_table(self) -> None:
-        assert all(self.pd_dataframe.transform(self.dict_data, set()) == self.expected_data)
+    @pytest.fixture
+    def expected_data(self, dict_data: dict[str, list[int]]) -> Any:
+        """Create fresh expected DataFrame for each test."""
+        return PandasDataFrame.pd_dataframe().from_dict(dict_data)
+
+    def test_expected_data_framework(self, pd_dataframe: PandasDataFrame) -> None:
+        assert pd_dataframe.expected_data_framework() == pd.DataFrame
+
+    def test_transform_dict_to_table(
+        self, pd_dataframe: PandasDataFrame, dict_data: dict[str, list[int]], expected_data: Any
+    ) -> None:
+        assert all(pd_dataframe.transform(dict_data, set()) == expected_data)
 
     def test_transform_arrays(self) -> None:
         data = PandasDataFrame.pd_series()([1, 2, 3])
@@ -44,18 +52,18 @@ class TestPandasDataFrameComputeFramework:
             PandasDataFrame.pd_dataframe().from_dict({"existing_column": [4, 5, 6], "new_column": [1, 2, 3]})
         )
 
-    def test_transform_invalid_data(self) -> None:
+    def test_transform_invalid_data(self, pd_dataframe: PandasDataFrame) -> None:
         with pytest.raises(ValueError):
-            self.pd_dataframe.transform(data=["a"], feature_names=set())
+            pd_dataframe.transform(data=["a"], feature_names=set())
 
-    def test_select_data_by_column_names(self) -> None:
-        data = self.pd_dataframe.select_data_by_column_names(self.expected_data, {FeatureName("column1")})
+    def test_select_data_by_column_names(self, pd_dataframe: PandasDataFrame, expected_data: Any) -> None:
+        data = pd_dataframe.select_data_by_column_names(expected_data, {FeatureName("column1")})
         assert data.columns == ["column1"]
 
-    def test_set_column_names(self) -> None:
-        self.pd_dataframe.data = self.expected_data
-        self.pd_dataframe.set_column_names()
-        assert self.pd_dataframe.column_names == {"column1", "column2"}
+    def test_set_column_names(self, pd_dataframe: PandasDataFrame, expected_data: Any) -> None:
+        pd_dataframe.data = expected_data
+        pd_dataframe.set_column_names()
+        assert pd_dataframe.column_names == {"column1", "column2"}
 
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")

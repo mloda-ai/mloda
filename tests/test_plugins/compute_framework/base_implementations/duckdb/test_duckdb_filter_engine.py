@@ -24,11 +24,6 @@ class TestDuckDBFilterEngine:
     """Unit tests for the DuckDBFilterEngine class."""
 
     @pytest.fixture
-    def connection(self) -> Any:
-        """Create a DuckDB connection for testing."""
-        return duckdb.connect()
-
-    @pytest.fixture
     def sample_data(self, connection: Any) -> Any:
         """Create a sample DuckDB relation for testing."""
         arrow_table = pa.Table.from_pydict(

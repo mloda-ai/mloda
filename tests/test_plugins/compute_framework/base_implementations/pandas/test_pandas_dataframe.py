@@ -25,11 +25,6 @@ class TestPandasDataFrameComputeFramework:
         return PandasDataFrame(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
 
     @pytest.fixture
-    def dict_data(self) -> dict[str, list[int]]:
-        """Create fresh test dictionary data for each test."""
-        return {"column1": [1, 2, 3], "column2": [4, 5, 6]}
-
-    @pytest.fixture
     def expected_data(self, dict_data: dict[str, list[int]]) -> Any:
         """Create fresh expected DataFrame for each test."""
         return PandasDataFrame.pd_dataframe().from_dict(dict_data)

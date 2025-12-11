@@ -23,16 +23,6 @@ except ImportError:
 
 @pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB or PyArrow is not installed. Skipping this test.")
 class TestDuckDBPyArrowTransformer:
-    @pytest.fixture
-    def connection(self) -> Any:
-        """Create a DuckDB connection for testing."""
-        conn = duckdb.connect()
-        yield conn
-        try:
-            conn.close()
-        except Exception as e:
-            logger.debug(f"Error closing DuckDB connection: {e}")
-
     def test_framework_types(self) -> None:
         """Test that the transformer returns the correct framework types."""
         assert DuckDBPyArrowTransformer.framework() == duckdb.DuckDBPyRelation

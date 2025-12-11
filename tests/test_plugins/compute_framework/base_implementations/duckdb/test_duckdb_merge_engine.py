@@ -27,11 +27,6 @@ class TestDuckDBMergeEngine:
     """Unit tests for the DuckDBMergeEngine class."""
 
     @pytest.fixture
-    def connection(self) -> Any:
-        """Create a DuckDB connection for testing."""
-        return duckdb.connect()
-
-    @pytest.fixture
     def left_data(self, connection: Any) -> Any:
         """Create sample left dataset."""
         arrow_table = pa.Table.from_pydict({"idx": [1, 3], "col1": ["a", "b"]})
@@ -42,11 +37,6 @@ class TestDuckDBMergeEngine:
         """Create sample right dataset."""
         arrow_table = pa.Table.from_pydict({"idx": [1, 2], "col2": ["x", "z"]})
         return connection.from_arrow(arrow_table)
-
-    @pytest.fixture
-    def index_obj(self) -> Any:
-        """Create index object for joins."""
-        return Index(("idx",))
 
     def test_check_import(self) -> None:
         """Test that check_import passes without errors."""
@@ -315,11 +305,6 @@ class TestDuckDBMergeEngine:
 @pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB or PyArrow is not installed. Skipping this test.")
 class TestDuckDBMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):
     """Test DuckDBMergeEngine multi-index support using shared test scenarios."""
-
-    @pytest.fixture
-    def connection(self) -> Any:
-        """Create a DuckDB connection for testing."""
-        return duckdb.connect()
 
     @classmethod
     def merge_engine_class(cls) -> Type[BaseMergeEngine]:

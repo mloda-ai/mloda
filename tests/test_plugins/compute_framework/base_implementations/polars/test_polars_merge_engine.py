@@ -30,11 +30,6 @@ class TestPolarsMergeEngine:
         """Create sample right dataset."""
         return pl.DataFrame({"idx": [1, 2], "col2": ["x", "z"]})
 
-    @pytest.fixture
-    def index_obj(self) -> Any:
-        """Create index object for joins."""
-        return Index(("idx",))
-
     def test_check_import(self) -> None:
         """Test that check_import passes without errors."""
         engine = PolarsMergeEngine()

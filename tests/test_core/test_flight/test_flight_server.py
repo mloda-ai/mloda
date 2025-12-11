@@ -49,6 +49,10 @@ class TestFlightServerUnit:
 
     def test_do_get_not_found(self) -> None:
         """Test error handling when table is not found."""
+        # Ensure server has at least one table so we test the KeyError path,
+        # not the ValueError path for empty tables
+        self.server.tables[b"existing_table"] = self.table
+
         non_existent_ticket = flight.Ticket(b"non_existent_table")
         with pytest.raises(KeyError):
             self.server.do_get(self.context, non_existent_ticket)

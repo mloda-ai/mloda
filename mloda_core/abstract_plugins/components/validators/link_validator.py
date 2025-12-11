@@ -14,10 +14,7 @@ class LinkValidator:
     def validate_join_type(jointype: Any) -> None:
         from mloda_core.abstract_plugins.components.link import JoinType
 
-        try:
-            if jointype not in JoinType:
-                raise ValueError(f"Join type {jointype} is not supported")
-        except TypeError:
+        if not isinstance(jointype, JoinType):
             raise ValueError(f"Join type {jointype} is not supported")
 
     @staticmethod

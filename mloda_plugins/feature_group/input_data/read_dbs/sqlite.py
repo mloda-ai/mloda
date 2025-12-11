@@ -214,11 +214,22 @@ class SQLITEReader(ReadDB):
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
         query = cls.build_query(features)
         result, column_names = cls.read_db(data_access, query)
-        return cls.read_as_pa_data(result, column_names)
+        return cls.read_as_pa_data(result, column_names, features)
 
     @classmethod
-    def read_as_pa_data(cls, result: Any, column_names: Any) -> Any:
-        schema = pa.schema([(column_names[i], DataType.infer_arrow_type(result[0][i])) for i in range(len(result[0]))])
+    def read_as_pa_data(cls, result: Any, column_names: Any, features: Any) -> Any:
+        feature_map = {f.get_name(): f for f in features.features}
+
+        schema_fields = []
+        for i, col_name in enumerate(column_names):
+            feature = feature_map.get(col_name)
+            if feature and feature.data_type:
+                arrow_type = DataType.to_arrow_type(feature.data_type)
+            else:
+                arrow_type = DataType.infer_arrow_type(result[0][i])
+            schema_fields.append((col_name, arrow_type))
+
+        schema = pa.schema(schema_fields)
         data_dicts = [{column_names[i]: row[i] for i in range(len(row))} for row in result]
         table = pa.Table.from_pylist(data_dicts, schema=schema)
         return table

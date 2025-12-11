@@ -255,6 +255,11 @@ class ComputeFrameWork(ABC):
     def run_validate_output_features(self, feature_group: Any, features: Any) -> Any:
         if self.data is None:
             return
+
+        from mloda_core.abstract_plugins.components.validators.datatype_validator import DataTypeValidator
+
+        DataTypeValidator.validate(self.data, features, strict_only=True)
+
         extender = self.get_function_extender(WrapperFunctionEnum.VALIDATE_OUTPUT_FEATURE)
         if extender is None:
             result = feature_group.validate_output_features(self.data, features)

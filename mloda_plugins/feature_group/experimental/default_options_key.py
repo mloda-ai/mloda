@@ -24,3 +24,4 @@ class DefaultOptionKeys(str, Enum):
     mloda_group = "group"
     mloda_strict_validation = "strict_validation"
     mloda_validation_function = "validation_function"
+    mloda_strict_type_enforcement = "strict_type_enforcement"

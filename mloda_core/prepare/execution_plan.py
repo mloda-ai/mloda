@@ -957,11 +957,39 @@ class ExecutionPlan:
         return new_set
 
     def group_features_by_compute_framework_and_options(self, features: Set[Feature]) -> Dict[int, Set[Feature]]:
-        hash_collector: Dict[int, Set[Feature]] = defaultdict(set)
+        """Group features by compute framework, options, and data type.
 
-        # get features with same compute framework and options
+        Features with data_type=None are "lenient" - they join existing groups
+        with matching base properties (options + compute_frameworks).
+        This allows index columns (which have no explicit type) to stay grouped
+        with typed features from the same FeatureGroup.
+        """
+        hash_collector: Dict[int, Set[Feature]] = defaultdict(set)
+        none_typed_features: list[Feature] = []
+
+        # First pass: group features with explicit data_type
         for feature in features:
-            f_hash = feature.has_similarity_properties()
-            hash_collector[f_hash].add(feature)
+            if feature.data_type is None:
+                none_typed_features.append(feature)
+            else:
+                f_hash = feature.has_similarity_properties()
+                hash_collector[f_hash].add(feature)
+
+        # Second pass: assign None-typed features to existing groups with matching base hash
+        for feature in none_typed_features:
+            base_hash = feature.base_similarity_properties()
+            assigned = False
+
+            # Find an existing group with matching base properties
+            for existing_hash, group in hash_collector.items():
+                any_feature = next(iter(group))
+                if any_feature.base_similarity_properties() == base_hash:
+                    hash_collector[existing_hash].add(feature)
+                    assigned = True
+                    break
+
+            if not assigned:
+                # No matching typed group found, create a new group for this None-typed feature
+                hash_collector[base_hash].add(feature)
 
         return hash_collector

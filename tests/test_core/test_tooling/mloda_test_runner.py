@@ -27,6 +27,7 @@ import pytest
 from mloda_core.abstract_plugins.components.feature_collection import Features
 from mloda_core.abstract_plugins.components.link import Link
 from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
+from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 from mloda_core.abstract_plugins.function_extender import WrapperFunctionExtender
 from mloda_core.api.request import mlodaAPI
@@ -72,6 +73,8 @@ class MlodaTestRunner:
         global_filter: Optional[GlobalFilter] = None,
         api_data: Optional[Dict[str, Any]] = None,
         cleanup_flight_server: bool = True,
+        plugin_collector: Optional[PlugInCollector] = None,
+        strict_type_enforcement: bool = False,
     ) -> RunResult:
         """
         Run mlodaAPI with the given configuration.
@@ -89,6 +92,8 @@ class MlodaTestRunner:
             global_filter: Optional global filter
             api_data: Optional API data dictionary
             cleanup_flight_server: Whether to assert flight server cleanup (default: True)
+            plugin_collector: Optional plugin collector for feature group filtering
+            strict_type_enforcement: If True, enforce strict type matching for typed features
 
         Returns:
             RunResult containing results, artifacts, and optionally the runner
@@ -104,6 +109,8 @@ class MlodaTestRunner:
             links=links,
             global_filter=global_filter,
             api_data=api_data,
+            plugin_collector=plugin_collector,
+            strict_type_enforcement=strict_type_enforcement,
         )
         api._batch_run(parallelization_modes, flight_server, function_extender)
 

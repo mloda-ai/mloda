@@ -112,7 +112,9 @@ class TestSQLITEReader:
         # Assert that read_db was called with the correct query
         mock_read_db.assert_called_once()
         # Assert that read_as_pa_data was called with the correct parameters
-        mock_read_as_pa_data.assert_called_once_with([(1, "Alice", 30), (2, "Bob", 25)], ["id", "name", "age"])
+        mock_read_as_pa_data.assert_called_once_with(
+            [(1, "Alice", 30), (2, "Bob", 25)], ["id", "name", "age"], feature_set
+        )
         # Assert the result is the mocked table
         assert result == table
 

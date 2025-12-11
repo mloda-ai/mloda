@@ -84,6 +84,10 @@ class AbstractFeatureGroup:
     def compute_framework_rule() -> Set[ComputeFramework]
 ```
 
+### Data Type Enforcement
+
+Features support optional type declarations via typed constructors (e.g., `Feature.int32_of("amount")`, `Feature.str_of("name")`). Declared types are validated at runtime against computed data, with lenient mode allowing compatible numeric conversions and strict mode requiring exact matches.
+
 ### Multi-Column Utilities
 
 AbstractFeatureGroup provides utilities for working with multi-column features (pattern: `feature~0`, `~1`, `~2`):

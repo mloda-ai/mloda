@@ -164,9 +164,23 @@ class Feature:
         return hash((self.name, self.options, self.domain, compute_frameworks_hashable, self.data_type, child_options))
 
     def is_different_data_type(self, other: Feature) -> bool:
-        return self.name == other.options and self.data_type == other.data_type
+        return self.name == other.name and self.data_type != other.data_type
 
     def has_similarity_properties(self) -> int:
+        """Hash for grouping features by compute framework, options, and data type.
+
+        When data_type is None, it's excluded from the hash so None-typed features
+        can be grouped with any typed features (handled by grouping logic).
+        """
+        compute_frameworks_hashable = (
+            frozenset(self.compute_frameworks) if self.compute_frameworks is not None else None
+        )
+        if self.data_type is not None:
+            return hash((self.options, compute_frameworks_hashable, self.data_type))
+        return hash((self.options, compute_frameworks_hashable))
+
+    def base_similarity_properties(self) -> int:
+        """Base hash excluding data_type - used for lenient grouping of None-typed features."""
         compute_frameworks_hashable = (
             frozenset(self.compute_frameworks) if self.compute_frameworks is not None else None
         )

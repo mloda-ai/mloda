@@ -25,11 +25,6 @@ class TestPythonDictMergeEngine:
         """Create sample right dataset."""
         return [{"idx": 1, "col2": "x"}, {"idx": 2, "col2": "z"}]
 
-    @pytest.fixture
-    def index_obj(self) -> Any:
-        """Create index object for joins."""
-        return Index(("idx",))
-
     def test_check_import(self) -> None:
         """Test that check_import passes without errors."""
         engine = PythonDictMergeEngine()

@@ -55,33 +55,23 @@ class TestDuckDBInstallation:
 @pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed. Skipping this test.")
 class TestDuckDBFrameworkComputeFramework:
     @pytest.fixture
-    def conn(self) -> Any:
-        """Create a fresh DuckDB connection for each test."""
-        return duckdb.connect()
-
-    @pytest.fixture
     def duckdb_framework(self) -> DuckDBFramework:
         """Create a fresh DuckDBFramework instance for each test."""
         return DuckDBFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
 
     @pytest.fixture
-    def dict_data(self) -> dict[str, list[int]]:
-        """Create fresh test dictionary data for each test."""
-        return {"column1": [1, 2, 3], "column2": [4, 5, 6]}
-
-    @pytest.fixture
-    def expected_data(self, conn: Any, dict_data: dict[str, list[int]]) -> Any:
+    def expected_data(self, connection: Any, dict_data: dict[str, list[int]]) -> Any:
         """Create fresh expected DuckDB relation for each test."""
         expected_arrow = pa.Table.from_pydict(dict_data)
-        return conn.from_arrow(expected_arrow)
+        return connection.from_arrow(expected_arrow)
 
     def test_expected_data_framework(self, duckdb_framework: DuckDBFramework) -> None:
         assert duckdb_framework.expected_data_framework() == duckdb.DuckDBPyRelation
 
     def test_transform_dict_to_relation(
-        self, duckdb_framework: DuckDBFramework, conn: Any, dict_data: dict[str, list[int]], expected_data: Any
+        self, duckdb_framework: DuckDBFramework, connection: Any, dict_data: dict[str, list[int]], expected_data: Any
     ) -> None:
-        duckdb_framework.set_framework_connection_object(conn)
+        duckdb_framework.set_framework_connection_object(connection)
         result = duckdb_framework.transform(dict_data, set())
         result_df = result.df()
         expected_df = expected_data.df()

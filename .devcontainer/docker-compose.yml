@@ -1,153 +1,161 @@
+x-agent-common: &agent-common
+  image: mloda-devcontainer:latest
+  pull_policy: never
+  deploy:
+    resources:
+      limits:
+        memory: 8G
+        pids: 2048
+  cap_drop:
+    - ALL
+  cap_add:
+    - CHOWN
+    - DAC_OVERRIDE
+    - FOWNER
+    - SETGID
+    - SETUID
+    - KILL
+  environment:
+    - USE_TOX_LOCK=1
+  depends_on:
+    mloda-base:
+      condition: service_completed_successfully
+  stdin_open: true
+  tty: true
+  command: >
+    bash -c "
+      if [ -f /tmp/host-gitconfig ] && [ ! -d /tmp/host-gitconfig ]; then
+        cp /tmp/host-gitconfig /home/vscode/.gitconfig;
+        echo 'Copied .gitconfig from host';
+      fi;
+      if [ -f /tmp/host-git-credentials ] && [ ! -d /tmp/host-git-credentials ]; then
+        cp /tmp/host-git-credentials /home/vscode/.git-credentials;
+        chmod 600 /home/vscode/.git-credentials;
+        echo 'Copied .git-credentials from host';
+      fi;
+      if [ \"$(stat -c '%U' /workspace)\" != 'vscode' ]; then
+        echo 'Fixing /workspace ownership (was root)...';
+        sudo chown -R vscode:vscode /workspace;
+      fi;
+      if [ -d /shared ] && [ \"$(stat -c '%U' /shared)\" != 'vscode' ]; then
+        sudo chown vscode:vscode /shared;
+      fi;
+      cd /workspace;
+      exec bash"
+
 services:
-  # Base image service - builds the image once
   mloda-base:
     build:
       context: ..
       dockerfile: .devcontainer/Dockerfile
     image: mloda-devcontainer:latest
-    command: "true"  # Exit immediately, just used for building
+    command: "true"
     networks:
-      - dev-network
+      - shared-network
 
   ai-agent-1:
-    image: mloda-devcontainer:latest
-    pull_policy: never
-    depends_on:
-      mloda-base:
-        condition: service_completed_successfully
+    <<: *agent-common
+    container_name: ai-agent-1
     volumes:
       - ai_agent_1_data:/workspace
+      - shared_locks:/shared
       - ~/.gitconfig:/tmp/host-gitconfig:ro
       - ~/.git-credentials:/tmp/host-git-credentials:ro
     ports:
       - "8000:8000"
-    command: >
-      bash -c "
-        if [ -f /tmp/host-gitconfig ] && [ ! -d /tmp/host-gitconfig ]; then
-          cp /tmp/host-gitconfig /home/vscode/.gitconfig;
-          echo 'Copied .gitconfig from host';
-        fi;
-        if [ -f /tmp/host-git-credentials ] && [ ! -d /tmp/host-git-credentials ]; then
-          cp /tmp/host-git-credentials /home/vscode/.git-credentials;
-          chmod 600 /home/vscode/.git-credentials;
-          echo 'Copied .git-credentials from host';
-        fi;
-        if [ \"$(stat -c '%U' /workspace)\" != 'vscode' ]; then
-          echo 'Fixing /workspace ownership (was root)...';
-          sudo chown -R vscode:vscode /workspace;
-        fi;
-        cd /workspace;
-        exec bash"
-    stdin_open: true    # Keep STDIN open for interaction
-    tty: true           # Allocate a pseudo-TTY
-    container_name: ai-agent-1
     networks:
-      - dev-network
+      - agent-1-network
 
   ai-agent-2:
-    image: mloda-devcontainer:latest
-    pull_policy: never
-    depends_on:
-      mloda-base:
-        condition: service_completed_successfully
+    <<: *agent-common
+    container_name: ai-agent-2
     volumes:
       - ai_agent_2_data:/workspace
+      - shared_locks:/shared
       - ~/.gitconfig:/tmp/host-gitconfig:ro
       - ~/.git-credentials:/tmp/host-git-credentials:ro
     ports:
       - "8001:8000"
-    command: >
-      bash -c "
-        if [ -f /tmp/host-gitconfig ] && [ ! -d /tmp/host-gitconfig ]; then
-          cp /tmp/host-gitconfig /home/vscode/.gitconfig;
-          echo 'Copied .gitconfig from host';
-        fi;
-        if [ -f /tmp/host-git-credentials ] && [ ! -d /tmp/host-git-credentials ]; then
-          cp /tmp/host-git-credentials /home/vscode/.git-credentials;
-          chmod 600 /home/vscode/.git-credentials;
-          echo 'Copied .git-credentials from host';
-        fi;
-        if [ \"$(stat -c '%U' /workspace)\" != 'vscode' ]; then
-          echo 'Fixing /workspace ownership (was root)...';
-          sudo chown -R vscode:vscode /workspace;
-        fi;
-        cd /workspace;
-        exec bash"
-    stdin_open: true    # Keep STDIN open for interaction
-    tty: true           # Allocate a pseudo-TTY
-    container_name: ai-agent-2
     networks:
-      - dev-network
+      - agent-2-network
 
   ai-agent-3:
-    image: mloda-devcontainer:latest
-    pull_policy: never
-    depends_on:
-      mloda-base:
-        condition: service_completed_successfully
+    <<: *agent-common
+    container_name: ai-agent-3
     volumes:
       - ai_agent_3_data:/workspace
+      - shared_locks:/shared
       - ~/.gitconfig:/tmp/host-gitconfig:ro
       - ~/.git-credentials:/tmp/host-git-credentials:ro
     ports:
       - "8002:8000"
-    command: >
-      bash -c "
-        if [ -f /tmp/host-gitconfig ] && [ ! -d /tmp/host-gitconfig ]; then
-          cp /tmp/host-gitconfig /home/vscode/.gitconfig;
-          echo 'Copied .gitconfig from host';
-        fi;
-        if [ -f /tmp/host-git-credentials ] && [ ! -d /tmp/host-git-credentials ]; then
-          cp /tmp/host-git-credentials /home/vscode/.git-credentials;
-          chmod 600 /home/vscode/.git-credentials;
-          echo 'Copied .git-credentials from host';
-        fi;
-        if [ \"$(stat -c '%U' /workspace)\" != 'vscode' ]; then
-          echo 'Fixing /workspace ownership (was root)...';
-          sudo chown -R vscode:vscode /workspace;
-        fi;
-        cd /workspace;
-        exec bash"
-    stdin_open: true    # Keep STDIN open for interaction
-    tty: true           # Allocate a pseudo-TTY
-    container_name: ai-agent-3
     networks:
-      - dev-network
+      - agent-3-network
 
   ai-agent-4:
-    image: mloda-devcontainer:latest
-    pull_policy: never
-    depends_on:
-      mloda-base:
-        condition: service_completed_successfully
+    <<: *agent-common
+    container_name: ai-agent-4
     volumes:
       - ai_agent_4_data:/workspace
+      - shared_locks:/shared
       - ~/.gitconfig:/tmp/host-gitconfig:ro
       - ~/.git-credentials:/tmp/host-git-credentials:ro
     ports:
       - "8003:8000"
-    command: >
-      bash -c "
-        if [ -f /tmp/host-gitconfig ] && [ ! -d /tmp/host-gitconfig ]; then
-          cp /tmp/host-gitconfig /home/vscode/.gitconfig;
-          echo 'Copied .gitconfig from host';
-        fi;
-        if [ -f /tmp/host-git-credentials ] && [ ! -d /tmp/host-git-credentials ]; then
-          cp /tmp/host-git-credentials /home/vscode/.git-credentials;
-          chmod 600 /home/vscode/.git-credentials;
-          echo 'Copied .git-credentials from host';
-        fi;
-        if [ \"$(stat -c '%U' /workspace)\" != 'vscode' ]; then
-          echo 'Fixing /workspace ownership (was root)...';
-          sudo chown -R vscode:vscode /workspace;
-        fi;
-        cd /workspace;
-        exec bash"
-    stdin_open: true    # Keep STDIN open for interaction
-    tty: true           # Allocate a pseudo-TTY
-    container_name: ai-agent-4
     networks:
-      - dev-network
+      - agent-4-network
+
+  ai-agent-5:
+    <<: *agent-common
+    container_name: ai-agent-5
+    volumes:
+      - ai_agent_5_data:/workspace
+      - shared_locks:/shared
+      - ~/.gitconfig:/tmp/host-gitconfig:ro
+      - ~/.git-credentials:/tmp/host-git-credentials:ro
+    ports:
+      - "8004:8000"
+    networks:
+      - agent-5-network
+
+  ai-agent-6:
+    <<: *agent-common
+    container_name: ai-agent-6
+    volumes:
+      - ai_agent_6_data:/workspace
+      - shared_locks:/shared
+      - ~/.gitconfig:/tmp/host-gitconfig:ro
+      - ~/.git-credentials:/tmp/host-git-credentials:ro
+    ports:
+      - "8005:8000"
+    networks:
+      - agent-6-network
+
+  ai-agent-7:
+    <<: *agent-common
+    container_name: ai-agent-7
+    volumes:
+      - ai_agent_7_data:/workspace
+      - shared_locks:/shared
+      - ~/.gitconfig:/tmp/host-gitconfig:ro
+      - ~/.git-credentials:/tmp/host-git-credentials:ro
+    ports:
+      - "8006:8000"
+    networks:
+      - agent-7-network
+
+  ai-agent-8:
+    <<: *agent-common
+    container_name: ai-agent-8
+    volumes:
+      - ai_agent_8_data:/workspace
+      - shared_locks:/shared
+      - ~/.gitconfig:/tmp/host-gitconfig:ro
+      - ~/.git-credentials:/tmp/host-git-credentials:ro
+    ports:
+      - "8007:8000"
+    networks:
+      - agent-8-network
 
   context7:
     # claude mcp add --transport http context7 http://localhost:8765/mcp
@@ -156,11 +164,32 @@ services:
       - "8765:8080"
 
 volumes:
+  shared_locks:
   ai_agent_1_data:
   ai_agent_2_data:
   ai_agent_3_data:
   ai_agent_4_data:
+  ai_agent_5_data:
+  ai_agent_6_data:
+  ai_agent_7_data:
+  ai_agent_8_data:
 
 networks:
-  dev-network:
+  agent-1-network:
+    driver: bridge
+  agent-2-network:
+    driver: bridge
+  agent-3-network:
+    driver: bridge
+  agent-4-network:
+    driver: bridge
+  agent-5-network:
+    driver: bridge
+  agent-6-network:
+    driver: bridge
+  agent-7-network:
+    driver: bridge
+  agent-8-network:
+    driver: bridge
+  shared-network:
     driver: bridge

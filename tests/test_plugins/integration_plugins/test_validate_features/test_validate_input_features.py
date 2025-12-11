@@ -16,7 +16,6 @@ from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
 from mloda_core.abstract_plugins.function_extender import WrapperFunctionEnum, WrapperFunctionExtender
 from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_SYNC_THREADING
-from tests.test_documentation.test_documentation import DokuExtender
 from tests.test_plugins.integration_plugins.test_validate_features.example_validator import ExamplePanderaValidator
 
 logger = logging.getLogger(__name__)
@@ -76,7 +75,7 @@ class CustomValidateInputFeatures(AbstractFeatureGroup):
         return validator.validate(data)
 
 
-class ValidateInputFeatureExtender(DokuExtender):
+class ValidateInputFeatureExtender(WrapperFunctionExtender):
     def wraps(self) -> Set[WrapperFunctionEnum]:
         return {WrapperFunctionEnum.VALIDATE_INPUT_FEATURE}
 
@@ -85,6 +84,23 @@ class ValidateInputFeatureExtender(DokuExtender):
         result = func(*args, **kwargs)
         logger.error(f"Time taken: {time.time() - start}")
         return result
+
+
+class TrackingExtender(WrapperFunctionExtender):
+    """Extender that tracks execution order for testing multiple extenders."""
+
+    execution_log: List[str] = []
+
+    def __init__(self, name: str, priority: int = 100):
+        self.name = name
+        self.priority = priority
+
+    def wraps(self) -> Set[WrapperFunctionEnum]:
+        return {WrapperFunctionEnum.VALIDATE_INPUT_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        TrackingExtender.execution_log.append(self.name)
+        return func(*args, **kwargs)
 
 
 @PARALLELIZATION_MODES_SYNC_THREADING
@@ -163,3 +179,30 @@ class TestValidateInputFeatures:
         # Current mp version, logging is broken. This is known and not a focus for now.
         if ParallelizationModes.MULTIPROCESSING not in modes:
             assert "Time taken" in caplog.text
+
+    def test_multiple_extenders_execute_in_priority_order(
+        self, modes: Set[ParallelizationModes], flight_server: Any
+    ) -> None:
+        """Integration test: multiple extenders are chained and execute in priority order."""
+        _features = "CustomValidateInputFeatures"
+        features = self.get_features([_features], {"ValidationLevel": "warning"})
+
+        # Clear execution log and create extenders with different priorities
+        TrackingExtender.execution_log = []
+        extender_low = TrackingExtender("low_priority", priority=10)
+        extender_high = TrackingExtender("high_priority", priority=50)
+
+        # Pass extenders in non-priority order to verify sorting works
+        MlodaTestRunner.run_api_simple(
+            features,
+            parallelization_modes=modes,
+            flight_server=flight_server,
+            function_extender={extender_high, extender_low},
+        )
+
+        # Verify both extenders were called in priority order (lower first)
+        assert "low_priority" in TrackingExtender.execution_log
+        assert "high_priority" in TrackingExtender.execution_log
+        assert TrackingExtender.execution_log.index("low_priority") < TrackingExtender.execution_log.index(
+            "high_priority"
+        )

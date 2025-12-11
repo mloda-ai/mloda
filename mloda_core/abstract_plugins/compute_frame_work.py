@@ -8,7 +8,11 @@ from mloda_core.abstract_plugins.components.framework_transformer.cfw_transforme
 from mloda_core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
 import pyarrow as pa
 
-from mloda_core.abstract_plugins.function_extender import WrapperFunctionExtender, WrapperFunctionEnum
+from mloda_core.abstract_plugins.function_extender import (
+    WrapperFunctionExtender,
+    WrapperFunctionEnum,
+    _CompositeExtender,
+)
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
 from mloda_core.filter.filter_engine import BaseFilterEngine
@@ -324,18 +328,18 @@ class ComputeFrameWork(ABC):
 
     @final
     def get_function_extender(self, wrapper_function_enum: WrapperFunctionEnum) -> Optional[WrapperFunctionExtender]:
-        found_extender = None
+        matching_extenders = []
         for extender in self.function_extender:
             if wrapper_function_enum in extender.wraps():
-                if found_extender is not None:
-                    raise ValueError(
-                        f"Multiple function_extender found for {wrapper_function_enum}, {found_extender.__class__.__name__}, {extender.__class__.__name__}"
-                    )
-                found_extender = extender
+                matching_extenders.append(extender)
 
-        if found_extender is not None:
-            return found_extender
-        return None
+        if len(matching_extenders) == 0:
+            return None
+        if len(matching_extenders) == 1:
+            return matching_extenders[0]
+
+        sorted_extenders = sorted(matching_extenders, key=lambda e: e.priority)
+        return _CompositeExtender(sorted_extenders, wrapper_function_enum)
 
     @final
     def run_calculate_feature(self, feature_group: Any, features: Any) -> Any:

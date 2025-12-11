@@ -82,14 +82,30 @@ class AbstractFeatureGroup(ABC):
     @classmethod
     def validate_input_features(cls, data: Any, features: FeatureSet) -> Optional[bool]:
         """
-        This function should be used to validate the input data.
+        Validate the input data before feature calculation.
+
+        Override this method to implement custom input validation logic.
+        The base implementation returns None (no validation).
+
+        Returns:
+            None: No validation needed/not implemented (neutral - validation passes by default)
+            True: Validation explicitly passed
+            False: Validation failed
         """
         return None
 
     @classmethod
     def validate_output_features(cls, data: Any, features: FeatureSet) -> Optional[bool]:
         """
-        This function should be used to validate the output data.
+        Validate the output data after feature calculation.
+
+        Override this method to implement custom output validation logic.
+        The base implementation returns None (no validation).
+
+        Returns:
+            None: No validation needed/not implemented (neutral - validation passes by default)
+            True: Validation explicitly passed
+            False: Validation failed
         """
         return None
 
@@ -238,11 +254,18 @@ class AbstractFeatureGroup(ABC):
     @classmethod
     def supports_index(cls, index: Index) -> Optional[bool]:
         """
-        Indicates whether this feature group supports the given index.
+        Check if this feature group supports the given index.
 
-        This method should return True if the feature group supports the given index,
-        False otherwise. If the feature group does not have any specific index
-        requirements, it should return None.
+        This method checks the index against the feature group's supported index columns.
+        If no index columns are defined, any index is accepted.
+
+        Args:
+            index: The index to check for support.
+
+        Returns:
+            None: No index constraint defined (accepts any index)
+            True: Index is supported
+            False: Index is not supported
         """
         supported_index_columns = cls.index_columns()
 

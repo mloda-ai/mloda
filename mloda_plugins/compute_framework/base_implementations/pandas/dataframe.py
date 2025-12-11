@@ -23,11 +23,12 @@ class PandasDataFrame(ComputeFrameWork):
         except ImportError:
             return False
 
-    @staticmethod
-    def expected_data_framework() -> Any:
-        return PandasDataFrame.pd_dataframe()
+    @classmethod
+    def expected_data_framework(cls) -> Any:
+        return cls.pd_dataframe()
 
-    def merge_engine(self) -> Type[BaseMergeEngine]:
+    @classmethod
+    def merge_engine(cls) -> Type[BaseMergeEngine]:
         return PandasMergeEngine
 
     def select_data_by_column_names(self, data: Any, selected_feature_names: Set[FeatureName]) -> Any:
@@ -38,20 +39,20 @@ class PandasDataFrame(ComputeFrameWork):
     def set_column_names(self) -> None:
         self.column_names = set(self.data.columns)
 
-    @staticmethod
-    def pd_dataframe() -> Any:
+    @classmethod
+    def pd_dataframe(cls) -> Any:
         if pd is None:
             raise ImportError("Pandas is not installed. To be able to use this framework, please install pandas.")
         return pd.DataFrame
 
-    @staticmethod
-    def pd_series() -> Any:
+    @classmethod
+    def pd_series(cls) -> Any:
         if pd is None:
             raise ImportError("Pandas is not installed. To be able to use this framework, please install pandas.")
         return pd.Series
 
-    @staticmethod
-    def pd_merge() -> Any:
+    @classmethod
+    def pd_merge(cls) -> Any:
         if pd is None:
             raise ImportError("Pandas is not installed. To be able to use this framework, please install pandas.")
         return pd.merge
@@ -83,5 +84,6 @@ class PandasDataFrame(ComputeFrameWork):
 
         raise ValueError(f"Data {type(data)} is not supported by {self.__class__.__name__}")
 
-    def filter_engine(self) -> Type[BaseFilterEngine]:
+    @classmethod
+    def filter_engine(cls) -> Type[BaseFilterEngine]:
         return PandasFilterEngine

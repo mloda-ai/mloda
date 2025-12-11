@@ -218,15 +218,36 @@ Three different patterns exist for data access: ReadFile checks `isinstance(data
 
 ## 7. Fix Static vs Class Method Inconsistencies
 
-### Status
-- [ ] Audit all @staticmethod usages
-- [ ] Convert state-dependent statics to @classmethod
-- [ ] Remove global state from static methods
-- [ ] Standardize pd_dataframe/pd_series patterns
-- [ ] Update merge_engine/filter_engine patterns
-- [ ] Document when to use each decorator
-- [ ] Update tests for method signatures
-- [ ] Run tox validation
+### Status: COMPLETED
+
+- [x] Audit all @staticmethod usages
+- [x] Convert state-dependent statics to @classmethod
+- [x] Remove global state from static methods
+- [x] Standardize pd_dataframe/pd_series patterns
+- [x] Update merge_engine/filter_engine patterns
+- [x] Document when to use each decorator
+- [x] Update tests for method signatures
+- [x] Run tox validation - **1338 tests pass, mypy strict clean**
+
+### Implementation Summary
+
+Converted methods that access module-level globals or return class types from `@staticmethod` to `@classmethod`:
+
+**Phase 1 - Framework Type Accessor Methods:**
+- `PandasDataFrame.pd_dataframe()`, `pd_series()`, `pd_merge()`
+- `PolarsDataFrame.pl_dataframe()`, `pl_series()`
+- `PolarsLazyDataFrame.pl_lazy_frame()`, `pl_dataframe()`, `pl_series()`
+- `DuckDBFramework.duckdb_relation()`
+- `SparkFramework.spark_dataframe()`, `spark_session()`
+- `PandasMergeEngine.pd_merge()`, `pd_concat()`
+
+**Phase 2 - Engine Factory Methods:**
+- `ComputeFrameWork.merge_engine()`, `filter_engine()`, `expected_data_framework()`
+- All 8 subclass implementations updated
+
+**New Tests:** `/workspace/tests/test_plugins/compute_framework/test_method_decorators.py`
+- 35 tests verifying methods are bound classmethods using `inspect.ismethod()`
+- Tests verify class-level and instance-level calling patterns
 
 ### Rationale
 Methods like `PandasDataFrame.pd_dataframe()` are marked `@staticmethod` but access global `pd` variable, violating static method semantics. Instance methods like `merge_engine()` don't use `self` but aren't static. This inconsistency makes testing and mocking difficult, breaks IDE analysis, and confuses developers about method contracts. Proper classification enables better testing and clearer intent.
@@ -276,29 +297,46 @@ Files like `duckdb_framework.py` use `try: import duckdb except ImportError: duc
 
 ## 9. Standardize Return Type Conventions
 
-### Status
-- [ ] Define return type standards document
-- [ ] Replace `return False` with `return None` or exceptions
-- [ ] Standardize match_* method return types
-- [ ] Standardize validation method return types
-- [ ] Add type hints to all public methods
-- [ ] Update type checking in CI (mypy strict)
-- [ ] Update all affected tests
-- [ ] Run tox validation
+### Status: COMPLETED
 
-### Rationale
+- [x] Define return type standards document (see [return_type_standards.md](return_type_standards.md))
+- [x] Replace `return False` with `return None` for "not found" scenarios
+- [x] Standardize match_* method return types
+- [x] Standardize validation method return types (documented Optional[bool] semantics)
+- [x] Add type hints to all public methods
+- [x] Update type checking in CI (mypy strict)
+- [x] Update all affected tests
+- [x] Run tox validation - **1303 tests pass, mypy strict clean**
+
+### Implementation Summary
+
+**Standards document:** `memory-bank/improvements/return_type_standards.md`
+
+**Key changes:**
+1. Match methods now return `None` instead of `False` for "not found"
+2. Callers updated to check `is None` instead of `is False` or `== False`
+3. `Optional[bool]` methods documented with clear semantics:
+   - `None`: No validation needed/neutral
+   - `True`: Validation passed
+   - `False`: Validation failed
+
+**Files modified:**
+- `mloda_plugins/feature_group/input_data/read_file.py`
+- `mloda_plugins/feature_group/input_data/read_db.py`
+- `mloda_core/abstract_plugins/components/input_data/base_input_data.py`
+- `mloda_core/abstract_plugins/components/match_data/match_data.py`
+- `mloda_core/abstract_plugins/abstract_feature_group.py` (docstrings)
+- `mloda_core/abstract_plugins/components/base_validator.py` (docstrings)
+- 3 test files updated for consistency
+
+### Original Rationale
 Methods inconsistently return `False`, `None`, or raise exceptions for "not found" scenarios. `match_read_file_data_access` returns `False`, `input_features` raises `ValueError`, and `validate_input_features` returns `Optional[bool]`. This forces callers to check for boolean False AND None AND catch exceptions. Standardizing on `Optional[T]` for optional results and exceptions for errors provides consistent, type-safe behavior.
 
-**Pros:**
-- Consistent, predictable API behavior
+**Benefits Achieved:**
+- Consistent, predictable API behavior following Python best practices (Django/SQLAlchemy patterns)
 - Type-safe with Optional[T]
-- Clear distinction between "not found" and "error"
-- Easier to write correct calling code
-
-**Cons:**
-- Breaking change to method signatures
-- All callers must be updated
-- May surface hidden bugs in error handling
+- Clear distinction between "not found" (return None) and "error" (raise exception)
+- Easier to write correct calling code with `is None` checks
 
 ---
 
@@ -334,13 +372,35 @@ Every experimental feature group reimplements identical logic: feature chain par
 
 ## 11. Clarify Time Concepts Design
 
-### Status
-- [ ] See [time_concepts_design.md](time_concepts_design.md) for full analysis
-- [ ] Implement `DefaultColumnNames` class
-- [ ] Update method/parameter naming
-- [ ] Standardize test patterns
-- [ ] Update documentation
-- [ ] Run tox validation
+### Status: COMPLETED
+
+- [x] See [time_concepts_design.md](time_concepts_design.md) for full analysis
+- [x] Implement `DefaultColumnNames` class
+- [x] Update method/parameter naming
+- [x] Standardize test patterns
+- [x] Update documentation
+- [x] Run tox validation - **1352 tests pass, mypy strict clean**
+
+### Implementation Summary
+
+**Updated file:** `mloda_plugins/feature_group/experimental/default_options_key.py`
+- Added `time_travel = "time_travel_filter"` enum member
+- Enum values serve as both option keys AND default column names
+- Note: Initially created separate `DefaultColumnNames` class, then merged back into `DefaultOptionKeys` (see `default_column_names_merge.md`)
+
+**Method renames:**
+- `get_time_filter_feature()` → `get_reference_time_column()` (TimeWindowFeatureGroup, ForecastingFeatureGroup)
+- `_check_time_filter_feature_exists` → `_check_reference_time_column_exists`
+- `_check_time_filter_feature_is_datetime` → `_check_reference_time_column_is_datetime`
+
+**Parameter renames (GlobalFilter.add_time_and_time_travel_filters):**
+- `time_filter_feature` → `event_time_column`
+- `time_travel_filter_feature` → `validity_time_column`
+
+**Benefits:**
+- Clear separation of concepts (column names vs option keys vs filters)
+- Self-documenting API with accurate method/parameter names
+- Consistent mental model for users
 
 ### Rationale
 The codebase conflates three distinct time concepts, causing confusion:
@@ -374,11 +434,11 @@ The `DefaultOptionKeys.reference_time` enum serves triple duty (Options key, def
 | 4 | Standardize Class Naming | Medium | Low | **DONE** |
 | 5 | Replace Options Dict with Typed Classes | High | High | Pending |
 | 6 | Standardize Data Access Patterns | Medium | Medium | Pending |
-| 7 | Fix Static vs Class Method | Low | Low | Pending |
+| 7 | Fix Static vs Class Method | Low | Low | **DONE** |
 | 8 | Proper Dependency Management | Medium | Medium | Pending |
-| 9 | Standardize Return Types | Medium | Medium | Pending |
+| 9 | Standardize Return Types | Medium | Medium | **DONE** |
 | 10 | Extract Common Utilities | High | Medium | Pending |
-| 11 | Clarify Time Concepts Design | Medium | Medium | Pending |
+| 11 | Clarify Time Concepts Design | Medium | Medium | **DONE** |
 
 ---
 

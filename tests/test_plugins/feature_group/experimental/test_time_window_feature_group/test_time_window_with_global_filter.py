@@ -223,7 +223,7 @@ class TestTimeWindowWithGlobalFilter:
         global_filter.add_time_and_time_travel_filters(
             event_from=event_from,
             event_to=event_to,
-            time_filter_feature=custom_time_filter,  # Use the custom time filter feature name
+            event_time_column=custom_time_filter,  # Use the custom time filter feature name
         )
 
         # Enable the necessary feature groups

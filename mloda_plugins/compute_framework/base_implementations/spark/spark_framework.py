@@ -62,11 +62,12 @@ class SparkFramework(ComputeFrameWork):
         except ImportError:
             return False
 
-    @staticmethod
-    def expected_data_framework() -> Any:
-        return SparkFramework.spark_dataframe()
+    @classmethod
+    def expected_data_framework(cls) -> Any:
+        return cls.spark_dataframe()
 
-    def merge_engine(self) -> Type[BaseMergeEngine]:
+    @classmethod
+    def merge_engine(cls) -> Type[BaseMergeEngine]:
         return SparkMergeEngine
 
     def select_data_by_column_names(self, data: Any, selected_feature_names: Set[FeatureName]) -> Any:
@@ -78,14 +79,14 @@ class SparkFramework(ComputeFrameWork):
         if self.data is not None:
             self.column_names = set(self.data.columns)
 
-    @staticmethod
-    def spark_dataframe() -> Any:
+    @classmethod
+    def spark_dataframe(cls) -> Any:
         if DataFrame is None:
             raise ImportError("PySpark is not installed. To be able to use this framework, please install pyspark.")
         return DataFrame
 
-    @staticmethod
-    def spark_session() -> Any:
+    @classmethod
+    def spark_session(cls) -> Any:
         if SparkSession is None:
             raise ImportError("PySpark is not installed. To be able to use this framework, please install pyspark.")
         return SparkSession
@@ -194,5 +195,6 @@ class SparkFramework(ComputeFrameWork):
 
         raise ValueError(f"Data {type(data)} is not supported by {self.__class__.__name__}")
 
-    def filter_engine(self) -> Type[BaseFilterEngine]:
+    @classmethod
+    def filter_engine(cls) -> Type[BaseFilterEngine]:
         return SparkFilterEngine

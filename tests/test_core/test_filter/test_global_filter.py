@@ -112,16 +112,16 @@ class TestGlobalFilterTimeTravel:
         event_to = datetime(2023, 12, 31, tzinfo=timezone.utc)
         valid_from = datetime(2022, 1, 1, tzinfo=timezone.utc)
         valid_to = datetime(2022, 12, 31, tzinfo=timezone.utc)
-        time_filter_feature = "custom_time_filter"
-        time_travel_filter_feature = "custom_time_travel_filter"
+        event_time_column = "custom_time_filter"
+        validity_time_column = "custom_time_travel_filter"
 
         self.global_filter.add_time_and_time_travel_filters(
             event_from,
             event_to,
             valid_from,
             valid_to,
-            time_filter_feature=time_filter_feature,
-            time_travel_filter_feature=time_travel_filter_feature,
+            event_time_column=event_time_column,
+            validity_time_column=validity_time_column,
         )
 
         # Assert that two filters have been added
@@ -130,25 +130,23 @@ class TestGlobalFilterTimeTravel:
         # Check that the filters have the correct feature names
         filter_features = {f.filter_feature.name for f in self.global_filter.filters}
 
-        assert time_filter_feature in filter_features
-        assert time_travel_filter_feature in filter_features
+        assert event_time_column in filter_features
+        assert validity_time_column in filter_features
 
     def test_add_time_filters_with_custom_feature(self) -> None:
         """Test adding time filters with a custom feature name."""
         event_from = datetime(2023, 1, 1, tzinfo=timezone.utc)
         event_to = datetime(2023, 12, 31, tzinfo=timezone.utc)
-        time_filter_feature = "custom_time_filter"
+        event_time_column = "custom_time_filter"
 
-        self.global_filter.add_time_and_time_travel_filters(
-            event_from, event_to, time_filter_feature=time_filter_feature
-        )
+        self.global_filter.add_time_and_time_travel_filters(event_from, event_to, event_time_column=event_time_column)
 
         # Assert that one filter has been added
         assert len(self.global_filter.filters) == 1
 
         # Check that the filter has the correct feature name
         added_filter = next(iter(self.global_filter.filters)).filter_feature
-        assert added_filter.name.name == time_filter_feature
+        assert added_filter.name.name == event_time_column
 
     def test_add_time_travel_filters_with_custom_feature(self) -> None:
         """Test adding time-travel filters with a custom feature name."""
@@ -156,10 +154,10 @@ class TestGlobalFilterTimeTravel:
         event_to = datetime(2023, 12, 31, tzinfo=timezone.utc)
         valid_from = datetime(2022, 1, 1, tzinfo=timezone.utc)
         valid_to = datetime(2022, 12, 31, tzinfo=timezone.utc)
-        time_travel_filter_feature = "custom_time_travel_filter"
+        validity_time_column = "custom_time_travel_filter"
 
         self.global_filter.add_time_and_time_travel_filters(
-            event_from, event_to, valid_from, valid_to, time_travel_filter_feature=time_travel_filter_feature
+            event_from, event_to, valid_from, valid_to, validity_time_column=validity_time_column
         )
 
         # Assert that two filters have been added
@@ -167,7 +165,7 @@ class TestGlobalFilterTimeTravel:
 
         # Check that the time-travel filter has the correct feature name
         filter_features = {f.filter_feature.name for f in self.global_filter.filters}
-        assert time_travel_filter_feature in filter_features
+        assert validity_time_column in filter_features
 
     def test_add_time_filters_without_validity(self) -> None:
         """Test adding time filters without validity period."""
@@ -202,3 +200,63 @@ class TestGlobalFilterTimeTravel:
 
         with pytest.raises(ValueError):
             self.global_filter._check_and_convert_time_info(time_without_tz)
+
+    def test_add_time_filters_with_event_time_column(self) -> None:
+        """Test adding time filters with the new event_time_column parameter name."""
+        event_from = datetime(2023, 1, 1, tzinfo=timezone.utc)
+        event_to = datetime(2023, 12, 31, tzinfo=timezone.utc)
+        event_time_column = "custom_event_time"
+
+        self.global_filter.add_time_and_time_travel_filters(event_from, event_to, event_time_column=event_time_column)
+
+        # Assert that one filter has been added
+        assert len(self.global_filter.filters) == 1
+
+        # Check that the filter has the correct feature name
+        added_filter = next(iter(self.global_filter.filters)).filter_feature
+        assert added_filter.name.name == event_time_column
+
+    def test_add_time_filters_with_validity_time_column(self) -> None:
+        """Test adding time-travel filters with the new validity_time_column parameter name."""
+        event_from = datetime(2023, 1, 1, tzinfo=timezone.utc)
+        event_to = datetime(2023, 12, 31, tzinfo=timezone.utc)
+        valid_from = datetime(2022, 1, 1, tzinfo=timezone.utc)
+        valid_to = datetime(2022, 12, 31, tzinfo=timezone.utc)
+        validity_time_column = "custom_validity_time"
+
+        self.global_filter.add_time_and_time_travel_filters(
+            event_from, event_to, valid_from, valid_to, validity_time_column=validity_time_column
+        )
+
+        # Assert that two filters have been added
+        assert len(self.global_filter.filters) == 2
+
+        # Check that the time-travel filter has the correct feature name
+        filter_features = {f.filter_feature.name for f in self.global_filter.filters}
+        assert validity_time_column in filter_features
+
+    def test_add_time_filters_with_both_new_parameter_names(self) -> None:
+        """Test adding filters with both event_time_column and validity_time_column parameter names."""
+        event_from = datetime(2023, 1, 1, tzinfo=timezone.utc)
+        event_to = datetime(2023, 12, 31, tzinfo=timezone.utc)
+        valid_from = datetime(2022, 1, 1, tzinfo=timezone.utc)
+        valid_to = datetime(2022, 12, 31, tzinfo=timezone.utc)
+        event_time_column = "custom_event_time"
+        validity_time_column = "custom_validity_time"
+
+        self.global_filter.add_time_and_time_travel_filters(
+            event_from,
+            event_to,
+            valid_from,
+            valid_to,
+            event_time_column=event_time_column,
+            validity_time_column=validity_time_column,
+        )
+
+        # Assert that two filters have been added
+        assert len(self.global_filter.filters) == 2
+
+        # Check that both filters have the correct feature names
+        filter_features = {f.filter_feature.name for f in self.global_filter.filters}
+        assert event_time_column in filter_features
+        assert validity_time_column in filter_features

@@ -85,11 +85,11 @@ class ReadDB(BaseInputData):
             data_accesses.append(data_access)
 
         if not data_accesses:
-            return False
+            return None
 
         matched_data_access = cls.match_read_db_data_access(data_accesses, feature_names)
-        if matched_data_access is False:
-            return False
+        if matched_data_access is None:
+            return None
         return matched_data_access
 
     @classmethod
@@ -110,7 +110,7 @@ class ReadDB(BaseInputData):
                     return data_access
             except NotImplementedError:
                 continue
-        return False
+        return None
 
     @classmethod
     def get_connection(cls, credentials: Any) -> Any:

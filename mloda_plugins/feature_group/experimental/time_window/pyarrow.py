@@ -22,21 +22,21 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         return {PyArrowTable}
 
     @classmethod
-    def _check_time_filter_feature_exists(cls, data: pa.Table, time_filter_feature: str) -> None:
-        """Check if the time filter feature exists in the Table."""
-        if time_filter_feature not in data.schema.names:
+    def _check_reference_time_column_exists(cls, data: pa.Table, reference_time_column: str) -> None:
+        """Check if the reference time column exists in the Table."""
+        if reference_time_column not in data.schema.names:
             raise ValueError(
-                f"Time filter feature '{time_filter_feature}' not found in data. "
+                f"Reference time column '{reference_time_column}' not found in data. "
                 f"Please ensure the Table contains this column."
             )
 
     @classmethod
-    def _check_time_filter_feature_is_datetime(cls, data: pa.Table, time_filter_feature: str) -> None:
-        """Check if the time filter feature is a datetime column."""
-        time_column = data.column(time_filter_feature)
+    def _check_reference_time_column_is_datetime(cls, data: pa.Table, reference_time_column: str) -> None:
+        """Check if the reference time column is a datetime column."""
+        time_column = data.column(reference_time_column)
         if not pa.types.is_timestamp(time_column.type):
             raise ValueError(
-                f"Time filter feature '{time_filter_feature}' must be a timestamp column. "
+                f"Reference time column '{reference_time_column}' must be a timestamp column. "
                 f"Current type: {time_column.type}"
             )
 
@@ -103,14 +103,14 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
             time_unit: The time unit for the window
             in_features: List of source feature names (may be single or multiple columns)
             time_filter_feature: The name of the time filter feature to use for time-based operations.
-                                If None, uses the value from get_time_filter_feature().
+                                If None, uses the value from get_reference_time_column().
 
         Returns:
             The result of the window operation as a PyArrow Array
         """
         # Use the default time filter feature if none is provided
         if time_filter_feature is None:
-            time_filter_feature = cls.get_time_filter_feature()
+            time_filter_feature = cls.get_reference_time_column()
 
         # Get the time column
         time_column = data.column(time_filter_feature)

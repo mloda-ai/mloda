@@ -5,6 +5,7 @@ Tests for the ForecastingFeatureGroup.
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+import pytest
 
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
@@ -175,3 +176,28 @@ class TestForecastingFeatureGroup:
 
         # Check that the result contains the forecast feature
         assert feature_name in result_df2.columns
+
+    def test_get_reference_time_column_default(self) -> None:
+        """Test get_reference_time_column method returns default column name when no options provided."""
+        # Test with no options - should return default column name
+        assert ForecastingFeatureGroup.get_reference_time_column() == DefaultOptionKeys.reference_time.value
+
+    def test_get_reference_time_column_custom(self) -> None:
+        """Test get_reference_time_column method returns custom column name when reference_time option is set."""
+        # Test with custom options using DefaultOptionKeys.reference_time
+        options = Options()
+        options.add(DefaultOptionKeys.reference_time, "custom_time_column")
+        assert ForecastingFeatureGroup.get_reference_time_column(options) == "custom_time_column"
+
+        # Test with custom options using DefaultOptionKeys.reference_time.value
+        options = Options()
+        options.add(DefaultOptionKeys.reference_time.value, "another_custom_column")
+        assert ForecastingFeatureGroup.get_reference_time_column(options) == "another_custom_column"
+
+    def test_get_reference_time_column_invalid_type(self) -> None:
+        """Test get_reference_time_column method raises ValueError when option value is not a string."""
+        # Test with invalid options (non-string value)
+        options = Options()
+        options.add(DefaultOptionKeys.reference_time.value, 123)  # Not a string
+        with pytest.raises(ValueError):
+            ForecastingFeatureGroup.get_reference_time_column(options)

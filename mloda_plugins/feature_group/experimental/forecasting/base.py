@@ -179,15 +179,15 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
         return ForecastingArtifact
 
     @classmethod
-    def get_time_filter_feature(cls, options: Optional[Options] = None) -> str:
+    def get_reference_time_column(cls, options: Optional[Options] = None) -> str:
         """
-        Get the time filter feature name from options or use the default.
+        Get the reference time column name from options or use the default.
 
         Args:
-            options: Optional Options object that may contain a custom time filter feature name
+            options: Optional Options object that may contain a custom reference time column name
 
         Returns:
-            The time filter feature name to use
+            The reference time column name to use
         """
         reference_time_key = DefaultOptionKeys.reference_time.value
         if options and options.get(reference_time_key):
@@ -197,7 +197,7 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
                     f"Invalid reference_time option: {reference_time}. Must be string. Is: {type(reference_time)}."
                 )
             return reference_time
-        return reference_time_key
+        return DefaultOptionKeys.reference_time.value
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         """Extract source feature and time filter feature from either configuration-based options or string parsing."""
@@ -207,7 +207,7 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
         # Try string-based parsing first
         _, source_feature = FeatureChainParser.parse_feature_name(feature_name, [self.PREFIX_PATTERN])
         if source_feature is not None:
-            time_filter_feature = Feature(self.get_time_filter_feature(options))
+            time_filter_feature = Feature(self.get_reference_time_column(options))
             return {Feature(source_feature), time_filter_feature}
 
         # Fall back to configuration-based approach
@@ -218,7 +218,7 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
             )
 
         source_feature_obj = next(iter(source_features))
-        time_filter_feature = Feature(self.get_time_filter_feature(options))
+        time_filter_feature = Feature(self.get_reference_time_column(options))
         return {source_feature_obj, time_filter_feature}
 
     @classmethod
@@ -339,10 +339,10 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
                     raise ValueError("All features must have the same options.")
             _options = feature.options
 
-        time_filter_feature = cls.get_time_filter_feature(_options)
+        reference_time_column = cls.get_reference_time_column(_options)
 
-        cls._check_time_filter_feature_exists(data, time_filter_feature)
-        cls._check_time_filter_feature_is_datetime(data, time_filter_feature)
+        cls._check_reference_time_column_exists(data, reference_time_column)
+        cls._check_reference_time_column_is_datetime(data, reference_time_column)
 
         # Store the original clean data
         original_data = data
@@ -381,7 +381,13 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
             if output_confidence_intervals:
                 # Get forecast, lower bound, and upper bound
                 result, lower_bound, upper_bound, updated_artifact = cls._perform_forecasting_with_confidence(
-                    original_data, algorithm, horizon, time_unit, resolved_columns, time_filter_feature, model_artifact
+                    original_data,
+                    algorithm,
+                    horizon,
+                    time_unit,
+                    resolved_columns,
+                    reference_time_column,
+                    model_artifact,
                 )
 
                 # Save the updated artifact if needed
@@ -395,7 +401,13 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
             else:
                 # Original behavior: only output point forecast
                 result, updated_artifact = cls._perform_forecasting(
-                    original_data, algorithm, horizon, time_unit, resolved_columns, time_filter_feature, model_artifact
+                    original_data,
+                    algorithm,
+                    horizon,
+                    time_unit,
+                    resolved_columns,
+                    reference_time_column,
+                    model_artifact,
                 )
 
                 # Save the updated artifact if needed
@@ -470,31 +482,31 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
 
     @classmethod
     @abstractmethod
-    def _check_time_filter_feature_exists(cls, data: Any, time_filter_feature: str) -> None:
+    def _check_reference_time_column_exists(cls, data: Any, reference_time_column: str) -> None:
         """
-        Check if the time filter feature exists in the data.
+        Check if the reference time column exists in the data.
 
         Args:
             data: The input data
-            time_filter_feature: The name of the time filter feature
+            reference_time_column: The name of the reference time column
 
         Raises:
-            ValueError: If the time filter feature does not exist in the data
+            ValueError: If the reference time column does not exist in the data
         """
         ...
 
     @classmethod
     @abstractmethod
-    def _check_time_filter_feature_is_datetime(cls, data: Any, time_filter_feature: str) -> None:
+    def _check_reference_time_column_is_datetime(cls, data: Any, reference_time_column: str) -> None:
         """
-        Check if the time filter feature is a datetime column.
+        Check if the reference time column is a datetime column.
 
         Args:
             data: The input data
-            time_filter_feature: The name of the time filter feature
+            reference_time_column: The name of the reference time column
 
         Raises:
-            ValueError: If the time filter feature is not a datetime column
+            ValueError: If the reference time column is not a datetime column
         """
         ...
 

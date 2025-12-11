@@ -44,39 +44,39 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         return set(data.columns)
 
     @classmethod
-    def _check_time_filter_feature_exists(cls, data: pd.DataFrame, time_filter_feature: str) -> None:
+    def _check_reference_time_column_exists(cls, data: pd.DataFrame, reference_time_column: str) -> None:
         """
-        Check if the time filter feature exists in the DataFrame.
+        Check if the reference time column exists in the DataFrame.
 
         Args:
             data: The pandas DataFrame
-            time_filter_feature: The name of the time filter feature
+            reference_time_column: The name of the reference time column
 
         Raises:
-            ValueError: If the time filter feature does not exist in the DataFrame
+            ValueError: If the reference time column does not exist in the DataFrame
         """
-        if time_filter_feature not in data.columns:
+        if reference_time_column not in data.columns:
             raise ValueError(
-                f"Time filter feature '{time_filter_feature}' not found in data. "
+                f"Reference time column '{reference_time_column}' not found in data. "
                 f"Please ensure the DataFrame contains this column."
             )
 
     @classmethod
-    def _check_time_filter_feature_is_datetime(cls, data: pd.DataFrame, time_filter_feature: str) -> None:
+    def _check_reference_time_column_is_datetime(cls, data: pd.DataFrame, reference_time_column: str) -> None:
         """
-        Check if the time filter feature is a datetime column.
+        Check if the reference time column is a datetime column.
 
         Args:
             data: The pandas DataFrame
-            time_filter_feature: The name of the time filter feature
+            reference_time_column: The name of the reference time column
 
         Raises:
-            ValueError: If the time filter feature is not a datetime column
+            ValueError: If the reference time column is not a datetime column
         """
-        if not pd.api.types.is_datetime64_any_dtype(data[time_filter_feature]):
+        if not pd.api.types.is_datetime64_any_dtype(data[reference_time_column]):
             raise ValueError(
-                f"Time filter feature '{time_filter_feature}' must be a datetime column. "
-                f"Current dtype: {data[time_filter_feature].dtype}"
+                f"Reference time column '{reference_time_column}' must be a datetime column. "
+                f"Current dtype: {data[reference_time_column].dtype}"
             )
 
     @classmethod

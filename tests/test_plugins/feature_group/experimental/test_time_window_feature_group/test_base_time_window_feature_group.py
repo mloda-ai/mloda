@@ -107,11 +107,11 @@ class TestTimeWindowFeatureGroup:
 
         class ConcreteTimeWindowFeatureGroup(TimeWindowFeatureGroup):
             @classmethod
-            def _check_time_filter_feature_exists(cls, data: Any, time_filter_feature: str) -> None:
+            def _check_reference_time_column_exists(cls, data: Any, reference_time_column: str) -> None:
                 pass
 
             @classmethod
-            def _check_time_filter_feature_is_datetime(cls, data: Any, time_filter_feature: str) -> None:
+            def _check_reference_time_column_is_datetime(cls, data: Any, reference_time_column: str) -> None:
                 pass
 
             @classmethod
@@ -160,23 +160,111 @@ class TestTimeWindowFeatureGroup:
             Feature(DefaultOptionKeys.reference_time),
         }
 
-    def test_get_time_filter_feature(self) -> None:
-        """Test get_time_filter_feature method."""
-        # Test with default options
-        assert TimeWindowFeatureGroup.get_time_filter_feature() == DefaultOptionKeys.reference_time
+    def test_get_reference_time_column_default(self) -> None:
+        """Test get_reference_time_column method returns default column name when no options provided."""
+        # Test with no options - should return default column name
+        assert TimeWindowFeatureGroup.get_reference_time_column() == DefaultOptionKeys.reference_time.value
 
-        # Test with custom options
+    def test_get_reference_time_column_custom(self) -> None:
+        """Test get_reference_time_column method returns custom column name when reference_time option is set."""
+        # Test with custom options using DefaultOptionKeys.reference_time
         options = Options()
         options.add(DefaultOptionKeys.reference_time, "custom_time_column")
-        assert TimeWindowFeatureGroup.get_time_filter_feature(options) == "custom_time_column"
+        assert TimeWindowFeatureGroup.get_reference_time_column(options) == "custom_time_column"
 
-        # Test with custom options
+        # Test with custom options using DefaultOptionKeys.reference_time.value
         options = Options()
-        options.add(DefaultOptionKeys.reference_time.value, "custom_time_column")
-        assert TimeWindowFeatureGroup.get_time_filter_feature(options) == "custom_time_column"
+        options.add(DefaultOptionKeys.reference_time.value, "another_custom_column")
+        assert TimeWindowFeatureGroup.get_reference_time_column(options) == "another_custom_column"
 
-        # Test with invalid options
+    def test_get_reference_time_column_invalid_type(self) -> None:
+        """Test get_reference_time_column method raises ValueError when option value is not a string."""
+        # Test with invalid options (non-string value)
         options = Options()
         options.add(DefaultOptionKeys.reference_time.value, 123)  # Not a string
         with pytest.raises(ValueError):
-            TimeWindowFeatureGroup.get_time_filter_feature(options)
+            TimeWindowFeatureGroup.get_reference_time_column(options)
+
+    def test_check_reference_time_column_exists_method_exists(self) -> None:
+        """Test that _check_reference_time_column_exists method can be called (verifies method rename)."""
+        from typing import Any, List, Set
+
+        class ConcreteTimeWindowFeatureGroup(TimeWindowFeatureGroup):
+            @classmethod
+            def _check_reference_time_column_exists(cls, data: Any, time_filter_feature: str) -> None:
+                # Simple implementation for testing
+                pass
+
+            @classmethod
+            def _check_reference_time_column_is_datetime(cls, data: Any, time_filter_feature: str) -> None:
+                pass
+
+            @classmethod
+            def _get_available_columns(cls, data: Any) -> Set[str]:
+                return set()
+
+            @classmethod
+            def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
+                pass
+
+            @classmethod
+            def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
+                return data
+
+            @classmethod
+            def _perform_window_operation(
+                cls,
+                data: Any,
+                window_function: str,
+                window_size: int,
+                time_unit: str,
+                in_features: List[str],
+                time_filter_feature: str | None = None,
+            ) -> Any:
+                return None
+
+        # Verify that the method can be called without error
+        concrete_fg = ConcreteTimeWindowFeatureGroup()
+        concrete_fg._check_reference_time_column_exists(None, "test_column")
+
+    def test_check_reference_time_column_is_datetime_method_exists(self) -> None:
+        """Test that _check_reference_time_column_is_datetime method can be called (verifies method rename)."""
+        from typing import Any, List, Set
+
+        class ConcreteTimeWindowFeatureGroup(TimeWindowFeatureGroup):
+            @classmethod
+            def _check_reference_time_column_exists(cls, data: Any, time_filter_feature: str) -> None:
+                pass
+
+            @classmethod
+            def _check_reference_time_column_is_datetime(cls, data: Any, time_filter_feature: str) -> None:
+                # Simple implementation for testing
+                pass
+
+            @classmethod
+            def _get_available_columns(cls, data: Any) -> Set[str]:
+                return set()
+
+            @classmethod
+            def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
+                pass
+
+            @classmethod
+            def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
+                return data
+
+            @classmethod
+            def _perform_window_operation(
+                cls,
+                data: Any,
+                window_function: str,
+                window_size: int,
+                time_unit: str,
+                in_features: List[str],
+                time_filter_feature: str | None = None,
+            ) -> Any:
+                return None
+
+        # Verify that the method can be called without error
+        concrete_fg = ConcreteTimeWindowFeatureGroup()
+        concrete_fg._check_reference_time_column_is_datetime(None, "test_column")

@@ -29,11 +29,12 @@ class PythonDictFramework(ComputeFrameWork):
         ]
     """
 
-    @staticmethod
-    def expected_data_framework() -> Any:
+    @classmethod
+    def expected_data_framework(cls) -> Any:
         return list
 
-    def merge_engine(self) -> Type[BaseMergeEngine]:
+    @classmethod
+    def merge_engine(cls) -> Type[BaseMergeEngine]:
         return PythonDictMergeEngine
 
     def select_data_by_column_names(
@@ -118,7 +119,8 @@ class PythonDictFramework(ComputeFrameWork):
 
         raise ValueError(f"Data type {type(data)} is not supported by {self.__class__.__name__}")
 
-    def filter_engine(self) -> Type[BaseFilterEngine]:
+    @classmethod
+    def filter_engine(cls) -> Type[BaseFilterEngine]:
         """
         Returns the filter engine for PythonDict framework.
 

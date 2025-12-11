@@ -176,8 +176,8 @@ class GlobalFilter:
         valid_from: Optional[datetime] = None,
         valid_to: Optional[datetime] = None,
         max_exclusive: bool = True,
-        time_filter_feature: Union[str, Feature] = DefaultOptionKeys.reference_time,
-        time_travel_filter_feature: Union[str, Feature] = "time_travel_filter",
+        event_time_column: Union[str, Feature] = DefaultOptionKeys.reference_time,
+        validity_time_column: Union[str, Feature] = DefaultOptionKeys.time_travel,
     ) -> None:
         """
         Adds time-based filters (`event_from`, `event_to`) and optionally time-travel filters (`valid_from`, `valid_to`).
@@ -197,21 +197,21 @@ class GlobalFilter:
         - valid_from (Optional[datetime]): Start of the validity period (optional, with timezone).
         - valid_to (Optional[datetime]): End of the validity period (optional, with timezone).
         - max_exclusive (bool): If True, the `event_to` and `valid_to` values are treated as exclusive.
-        - time_filter_feature: the feature description for the time filter. Default is DefaultOptionKeys.reference_time.
-        - time_travel_filter_feature: the feature description for the time travel filter. Default is "time_travel_filter".
+        - event_time_column: the column name for the event time filter. Default is DefaultOptionKeys.reference_time.
+        - validity_time_column: the column name for the validity time filter. Default is DefaultOptionKeys.time_travel.
 
         The `single_filters` created will be converted to UTC as ISO 8601 formatted strings to ensure consistency
         across time zones and avoid ambiguity when comparing or processing time-based data.
         """
 
-        self._add_range_filter(time_filter_feature, event_from, event_to, max_exclusive)
+        self._add_range_filter(event_time_column, event_from, event_to, max_exclusive)
 
         # validate that both valid_from and valid_to are provided together
         if (valid_from is not None and valid_to is None) or (valid_from is None and valid_to is not None):
             raise ValueError("Both `valid_from` and `valid_to` must be provided together, or neither should be.")
 
         if valid_from and valid_to:
-            self._add_range_filter(time_travel_filter_feature, valid_from, valid_to, max_exclusive)
+            self._add_range_filter(validity_time_column, valid_from, valid_to, max_exclusive)
 
     def _add_range_filter(
         self, filter_feature: Union[str, Feature], time_from: datetime, time_to: datetime, max_exclusive: bool

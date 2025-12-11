@@ -1,0 +1,24 @@
+{
+  "name": "mloda Dev Container 7",
+  "dockerComposeFile": ["../../.devcontainer/docker-compose.yml"],
+  "service": "ai-agent-7",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+  "workspaceFolder": "/workspace/.devcontainer/mloda.code-workspace",
+  "postAttachCommand": "cd /workspace",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "overrideCommand": false,
+  "forwardPorts": [8006],
+  "remoteUser": "vscode",
+  "shutdownAction": "stopCompose",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "mypy-type-checker.interpreter": [
+          "/home/vscode/.tox-cache/python310/bin/python3"
+        ]
+      }
+    }
+  }
+}

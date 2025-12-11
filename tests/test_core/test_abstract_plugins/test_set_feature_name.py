@@ -39,7 +39,7 @@ class ATestSetFeatureNameBase(AbstractFeatureGroup):
 
 class ATestSetFeatureNameFeature(AbstractFeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
-        return {Feature.str_of("ATestSetFeatureNameBase1"), Feature.str_of("ATestSetFeatureNameBase2")}
+        return {Feature.int64_of("ATestSetFeatureNameBase1"), Feature.int64_of("ATestSetFeatureNameBase2")}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

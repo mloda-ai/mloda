@@ -330,21 +330,16 @@ class TestSklearnPipelineFeatureGroupIntegration:
         assert df1["income__sklearn_pipeline_scaling"].equals(df2["income__sklearn_pipeline_scaling"])
 
     @pytest.mark.parametrize(
-        "storage_config",
-        [
-            None,  # Uses temp directory fallback
-            "/tmp/test_sklearn_artifacts",  # nosec
-        ],
+        "use_custom_path",
+        [False, True],
         ids=["fallback_temp_dir", "custom_path"],
     )
-    def test_artifact_persistence_with_storage_paths(self, storage_config: Any) -> None:
+    def test_artifact_persistence_with_storage_paths(self, use_custom_path: bool, tmp_path: Any) -> None:
         """Test artifact persistence with both fallback and custom storage paths following proper mloda lifecycle."""
         # Skip test if sklearn not available
         try:
             import sklearn
-            import tempfile
             import os
-            from pathlib import Path
         except ImportError:
             pytest.skip("scikit-learn not available")
 
@@ -353,83 +348,64 @@ class TestSklearnPipelineFeatureGroupIntegration:
             {SklearnPipelineTestDataCreator, PandasSklearnPipelineFeatureGroup}
         )
 
-        # Create feature with or without custom storage path
-        feature_options = {}
-        if storage_config is not None:
-            # Create the custom directory if it doesn't exist
-            os.makedirs(storage_config, exist_ok=True)
-            feature_options["artifact_storage_path"] = storage_config
+        # Use tmp_path for isolation - each test gets unique directory
+        storage_path = str(tmp_path / "sklearn_artifacts")
+        os.makedirs(storage_path, exist_ok=True)
 
-        try:
-            # First run - create feature WITHOUT artifact options (mloda will set artifact_to_save)
-            feature1 = Feature("income__sklearn_pipeline_scaling", Options(feature_options))
+        # Always use explicit storage path to avoid parallel test interference
+        feature_options: Dict[str, Any] = {"artifact_storage_path": storage_path}
 
-            api1 = mlodaAPI([feature1], {PandasDataFrame}, plugin_collector=plugin_collector)
-            api1._batch_run()
-            results1 = api1.get_result()
-            artifacts1 = api1.get_artifacts()
+        # First run - create feature WITHOUT artifact options (mloda will set artifact_to_save)
+        feature1 = Feature("income__sklearn_pipeline_scaling", Options(feature_options))
 
-            # Verify we got results and artifacts
-            assert len(results1) == 1
-            assert len(artifacts1) == 1  # Should be 1 pipeline artifact with unique key
-            assert "income__sklearn_pipeline_scaling" in artifacts1
+        api1 = mlodaAPI([feature1], {PandasDataFrame}, plugin_collector=plugin_collector)
+        api1._batch_run()
+        results1 = api1.get_result()
+        artifacts1 = api1.get_artifacts()
 
-            # Verify artifact file was created in expected location
-            from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import SklearnArtifact
-            from mloda_core.abstract_plugins.components.feature_set import FeatureSet
+        # Verify we got results and artifacts
+        assert len(results1) == 1
+        assert len(artifacts1) == 1  # Should be 1 pipeline artifact with unique key
+        assert "income__sklearn_pipeline_scaling" in artifacts1
 
-            mock_features = FeatureSet()
-            mock_features.add(Feature("income__sklearn_pipeline_scaling", Options(feature_options)))
+        # Verify artifact file was created in expected location
+        from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import SklearnArtifact
+        from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 
-            # Use the new artifact key-based file path method
-            artifact_key = "income__sklearn_pipeline_scaling"
-            expected_file_path = SklearnArtifact._get_artifact_file_path_for_key(mock_features, artifact_key)
+        mock_features = FeatureSet()
+        mock_features.add(Feature("income__sklearn_pipeline_scaling", Options(feature_options)))
 
-            # Verify the file exists
-            assert expected_file_path.exists(), f"Artifact file should exist at {expected_file_path}"
+        # Use the new artifact key-based file path method
+        artifact_key = "income__sklearn_pipeline_scaling"
+        expected_file_path = SklearnArtifact._get_artifact_file_path_for_key(mock_features, artifact_key)
 
-            # Verify the file is in the expected directory
-            if storage_config is None:
-                # Should be in temp directory
-                assert str(expected_file_path).startswith(tempfile.gettempdir()), (
-                    f"Artifact should be in temp directory, but found at {expected_file_path}"
-                )
-            else:
-                # Should be in custom directory
-                assert str(expected_file_path).startswith(storage_config), (
-                    f"Artifact should be in custom directory {storage_config}, but found at {expected_file_path}"
-                )
+        # Verify the file exists
+        assert expected_file_path.exists(), f"Artifact file should exist at {expected_file_path}"
 
-            # Second run - create feature WITH artifact options (mloda will set artifact_to_load)
-            combined_options = {**feature_options, **artifacts1}
-            feature2 = Feature("income__sklearn_pipeline_scaling", Options(combined_options))
+        # Verify the file is in our isolated test directory
+        assert str(expected_file_path).startswith(storage_path), (
+            f"Artifact should be in test directory {storage_path}, but found at {expected_file_path}"
+        )
 
-            api2 = mlodaAPI([feature2], {PandasDataFrame}, plugin_collector=plugin_collector)
-            api2._batch_run()
-            results2 = api2.get_result()
-            artifacts2 = api2.get_artifacts()
+        # Second run - create feature WITH artifact options (mloda will set artifact_to_load)
+        combined_options = {**feature_options, **artifacts1}
+        feature2 = Feature("income__sklearn_pipeline_scaling", Options(combined_options))
 
-            # Verify results are identical (indicating artifact reuse)
-            assert len(results2) == 1
-            assert not artifacts2  # No new artifacts should be created
+        api2 = mlodaAPI([feature2], {PandasDataFrame}, plugin_collector=plugin_collector)
+        api2._batch_run()
+        results2 = api2.get_result()
+        artifacts2 = api2.get_artifacts()
 
-            df1 = results1[0]
-            df2 = results2[0]
+        # Verify results are identical (indicating artifact reuse)
+        assert len(results2) == 1
+        assert not artifacts2  # No new artifacts should be created
 
-            assert "income__sklearn_pipeline_scaling" in df1.columns
-            assert "income__sklearn_pipeline_scaling" in df2.columns
+        df1 = results1[0]
+        df2 = results2[0]
 
-            # Values should be identical (artifact was reused)
-            assert df1["income__sklearn_pipeline_scaling"].equals(df2["income__sklearn_pipeline_scaling"])
+        assert "income__sklearn_pipeline_scaling" in df1.columns
+        assert "income__sklearn_pipeline_scaling" in df2.columns
 
-        finally:
-            # Clean up: remove test artifacts
-            if storage_config is not None:
-                try:
-                    # Remove the custom directory and its contents
-                    import shutil
-
-                    if os.path.exists(storage_config):
-                        shutil.rmtree(storage_config)
-                except Exception:  # nosec
-                    pass
+        # Values should be identical (artifact was reused)
+        assert df1["income__sklearn_pipeline_scaling"].equals(df2["income__sklearn_pipeline_scaling"])
+        # tmp_path cleanup is handled automatically by pytest

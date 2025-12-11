@@ -76,3 +76,4 @@ For more in-depth information about feature groups, check out these advanced top
 - [Feature Group Versioning](../in_depth/feature-group-version.md) - How versioning works in feature groups
 - [Compute Framework Integration](../in_depth/compute-framework-integration.md) - How feature groups integrate with compute frameworks
 - [Multiple Result Columns](../in_depth/multiple_result_columns.md) - Working with multi-column features using automatic discovery utilities
+- [Data Type Enforcement](../in_depth/data-type-enforcement.md) - Runtime validation of declared feature data types

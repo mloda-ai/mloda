@@ -96,6 +96,45 @@ class DataType(Enum):
             raise ValueError(f"Unsupported DataType: {data_type}")
 
     @classmethod
+    def from_arrow_type(cls, arrow_type: pa.DataType) -> "DataType":
+        """
+        Converts a PyArrow DataType to the custom DataType enum.
+
+        Args:
+            arrow_type (pa.DataType): The PyArrow DataType to convert.
+
+        Returns:
+            DataType: The corresponding DataType enum member.
+
+        Raises:
+            ValueError: If the arrow_type is not supported.
+        """
+        if pa.types.is_int32(arrow_type):
+            return cls.INT32
+        elif pa.types.is_int64(arrow_type):
+            return cls.INT64
+        elif pa.types.is_float32(arrow_type):
+            return cls.FLOAT
+        elif pa.types.is_float64(arrow_type):
+            return cls.DOUBLE
+        elif pa.types.is_boolean(arrow_type):
+            return cls.BOOLEAN
+        elif pa.types.is_string(arrow_type) or pa.types.is_large_string(arrow_type):
+            return cls.STRING
+        elif pa.types.is_binary(arrow_type) or pa.types.is_large_binary(arrow_type):
+            return cls.BINARY
+        elif pa.types.is_date32(arrow_type):
+            return cls.DATE
+        elif pa.types.is_timestamp(arrow_type):
+            if arrow_type.unit == "ms":
+                return cls.TIMESTAMP_MILLIS
+            elif arrow_type.unit == "us":
+                return cls.TIMESTAMP_MICROS
+        elif pa.types.is_decimal(arrow_type):
+            return cls.DECIMAL
+        raise ValueError(f"Unsupported PyArrow type: {arrow_type}")
+
+    @classmethod
     def infer_arrow_type(cls, value: Any) -> pa.DataType:
         """
         Infers the PyArrow DataType directly from a Python value.

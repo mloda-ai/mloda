@@ -31,7 +31,7 @@
 | decorator                              | 5.2.1           | BSD License                                             |
 | defusedxml                             | 0.7.1           | Python Software Foundation License                      |
 | distlib                                | 0.4.0           | Python Software Foundation License                      |
-| duckdb                                 | 1.4.2           | MIT License                                             |
+| duckdb                                 | 1.4.3           | MIT License                                             |
 | exceptiongroup                         | 1.3.1           | MIT License                                             |
 | execnet                                | 2.1.2           | MIT License                                             |
 | executing                              | 2.2.1           | MIT License                                             |
@@ -57,7 +57,7 @@
 | jsonschema-specifications              | 2025.9.1        | MIT                                                     |
 | jupyter-events                         | 0.12.0          | BSD License                                             |
 | jupyter-lsp                            | 2.3.0           | BSD License                                             |
-| jupyter_client                         | 8.6.3           | BSD License                                             |
+| jupyter_client                         | 8.7.0           | BSD License                                             |
 | jupyter_core                           | 5.9.1           | BSD-3-Clause                                            |
 | jupyter_server                         | 2.17.0          | BSD License                                             |
 | jupyter_server_terminals               | 0.5.3           | BSD License                                             |
@@ -65,7 +65,7 @@
 | jupyterlab_pygments                    | 0.3.0           | BSD License                                             |
 | jupyterlab_server                      | 2.28.0          | BSD License                                             |
 | lark                                   | 1.3.1           | MIT License                                             |
-| librt                                  | 0.6.3           | MIT License                                             |
+| librt                                  | 0.7.3           | MIT License                                             |
 | markdown-it-py                         | 4.0.0           | MIT License                                             |
 | matplotlib-inline                      | 0.2.1           | UNKNOWN                                                 |
 | mdurl                                  | 0.1.2           | MIT License                                             |
@@ -103,10 +103,10 @@
 | pip-api                                | 0.0.34          | Apache Software License                                 |
 | pip-requirements-parser                | 32.0.1          | MIT                                                     |
 | pip_audit                              | 2.7.3           | Apache Software License                                 |
-| platformdirs                           | 4.5.0           | MIT License                                             |
+| platformdirs                           | 4.5.1           | MIT License                                             |
 | pluggy                                 | 1.6.0           | MIT License                                             |
-| polars                                 | 1.35.2          | MIT License                                             |
-| polars-runtime-32                      | 1.35.2          | MIT License                                             |
+| polars                                 | 1.36.1          | MIT License                                             |
+| polars-runtime-32                      | 1.36.1          | MIT License                                             |
 | prometheus_client                      | 0.23.1          | Apache-2.0 AND BSD-2-Clause                             |
 | prompt_toolkit                         | 3.0.52          | BSD License                                             |
 | psutil                                 | 7.1.3           | BSD-3-Clause                                            |
@@ -121,7 +121,7 @@
 | pyparsing                              | 3.2.5           | MIT                                                     |
 | pyproject-api                          | 1.10.0          | MIT License                                             |
 | pyroaring                              | 1.0.3           | MIT License                                             |
-| pytest                                 | 9.0.1           | MIT                                                     |
+| pytest                                 | 9.0.2           | MIT                                                     |
 | pytest-order                           | 1.3.0           | MIT License                                             |
 | pytest-timeout                         | 2.4.0           | DFSG approved; MIT License                              |
 | pytest-xdist                           | 3.8.0           | MIT                                                     |
@@ -137,7 +137,7 @@
 | rfc3987-syntax                         | 1.1.0           | Apache Software License                                 |
 | rich                                   | 14.2.0          | MIT License                                             |
 | rpds-py                                | 0.30.0          | MIT                                                     |
-| ruff                                   | 0.14.7          | MIT License                                             |
+| ruff                                   | 0.14.8          | MIT License                                             |
 | scikit-learn                           | 1.7.2           | BSD-3-Clause                                            |
 | scipy                                  | 1.15.3          | BSD License                                             |
 | six                                    | 1.17.0          | MIT License                                             |
@@ -164,7 +164,7 @@
 | typing_extensions                      | 4.15.0          | PSF-2.0                                                 |
 | tzdata                                 | 2025.2          | Apache Software License                                 |
 | uri-template                           | 1.3.0           | MIT License                                             |
-| urllib3                                | 2.5.0           | MIT                                                     |
+| urllib3                                | 2.6.1           | MIT                                                     |
 | virtualenv                             | 20.35.4         | MIT License                                             |
 | webcolors                              | 25.10.0         | BSD License                                             |
 | webencodings                           | 0.5.1           | BSD License                                             |

@@ -16,6 +16,7 @@ from mloda_core.abstract_plugins.components.parallelization_modes import Paralle
 from mloda_core.abstract_plugins.components.feature_collection import Features
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.link import Link
+from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 
 class mlodaAPI:
@@ -29,6 +30,7 @@ class mlodaAPI:
         api_data: Optional[Dict[str, Dict[str, Any]]] = None,
         plugin_collector: Optional[PlugInCollector] = None,
         copy_features: Optional[bool] = True,
+        strict_type_enforcement: bool = False,
     ) -> None:
         # The features object is potentially changed during the run, so we need to deepcopy it by default, so that follow up runs with the same object are not affected.
         # Set copy_features=False to disable deep copying for use cases where features contain non-copyable objects.
@@ -41,6 +43,7 @@ class mlodaAPI:
             for key_name, key_data in api_data.items():
                 api_input_data_collection.setup_key_class(key_name, list(key_data.keys()))
 
+        self.strict_type_enforcement = strict_type_enforcement
         self.features = self._process_features(_requested_features, api_input_data_collection)
         self.compute_framework = SetupComputeFramework(compute_frameworks, self.features).compute_frameworks
         self.links = links
@@ -66,6 +69,9 @@ class mlodaAPI:
         for feature in features:
             feature.initial_requested_data = True
             self._add_api_input_data(feature, api_input_data_collection)
+            # Propagate strict_type_enforcement to typed features only
+            if self.strict_type_enforcement and feature.data_type is not None:
+                feature.options.add(DefaultOptionKeys.mloda_strict_type_enforcement, True)
 
         return features
 
@@ -82,6 +88,7 @@ class mlodaAPI:
         api_data: Optional[Dict[str, Dict[str, Any]]] = None,
         plugin_collector: Optional[PlugInCollector] = None,
         copy_features: Optional[bool] = True,
+        strict_type_enforcement: bool = False,
     ) -> List[Any]:
         """
         Run feature computation in one step.
@@ -99,6 +106,7 @@ class mlodaAPI:
                 Auto-creates ApiInputDataCollection internally.
             plugin_collector: Plugin collector.
             copy_features: Whether to deep copy features (default True).
+            strict_type_enforcement: If True, enforce strict type matching for typed features.
 
         Returns:
             List of computed results.
@@ -118,6 +126,7 @@ class mlodaAPI:
             api_data=api_data,
             plugin_collector=plugin_collector,
             copy_features=copy_features,
+            strict_type_enforcement=strict_type_enforcement,
         )
         return api._execute_batch_run(parallelization_modes, flight_server, function_extender)
 

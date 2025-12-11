@@ -18,11 +18,12 @@ class PolarsLazyDataFrame(PolarsDataFrame):
     requested, enabling query optimization and reduced memory usage for large datasets.
     """
 
-    @staticmethod
-    def expected_data_framework() -> Any:
-        return PolarsLazyDataFrame.pl_lazy_frame()
+    @classmethod
+    def expected_data_framework(cls) -> Any:
+        return cls.pl_lazy_frame()
 
-    def merge_engine(self) -> Type[BaseMergeEngine]:
+    @classmethod
+    def merge_engine(cls) -> Type[BaseMergeEngine]:
         return PolarsLazyMergeEngine
 
     def select_data_by_column_names(self, data: Any, selected_feature_names: Set[FeatureName]) -> Any:
@@ -39,20 +40,20 @@ class PolarsLazyDataFrame(PolarsDataFrame):
         else:
             raise ValueError("Data does not have a collect_schema method, cannot set column names.")
 
-    @staticmethod
-    def pl_lazy_frame() -> Any:
+    @classmethod
+    def pl_lazy_frame(cls) -> Any:
         if pl is None:
             raise ImportError("Polars is not installed. To be able to use this framework, please install polars.")
         return pl.LazyFrame
 
-    @staticmethod
-    def pl_dataframe() -> Any:
+    @classmethod
+    def pl_dataframe(cls) -> Any:
         if pl is None:
             raise ImportError("Polars is not installed. To be able to use this framework, please install polars.")
         return pl.DataFrame
 
-    @staticmethod
-    def pl_series() -> Any:
+    @classmethod
+    def pl_series(cls) -> Any:
         if pl is None:
             raise ImportError("Polars is not installed. To be able to use this framework, please install polars.")
         return pl.Series

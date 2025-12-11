@@ -38,6 +38,19 @@ class BaseValidator(ABC):
 
     @abstractmethod
     def validate(self, data: Any) -> Optional[bool]:
+        """
+        Validate the given data against the validation rules.
+
+        Subclasses must implement this method with their specific validation logic.
+
+        Args:
+            data: The data to validate.
+
+        Returns:
+            None: No validation needed/not applicable (neutral - passes by default)
+            True: Validation explicitly passed
+            False: Validation failed
+        """
         pass
 
     def handle_log_level(self, _error: str, _exception: Exception) -> None:

@@ -84,15 +84,15 @@ class TestMlodaBasicsNotebooks:
             event_to=datetime(2023, 1, 1, tzinfo=timezone.utc),
             valid_from=datetime(2024, 1, 1, tzinfo=timezone.utc),
             valid_to=datetime(2024, 1, 15, tzinfo=timezone.utc),
-            time_filter_feature=Feature("created_at", options=example_options),
-            time_travel_filter_feature="valid_datetime",
+            event_time_column=Feature("created_at", options=example_options),
+            validity_time_column="valid_datetime",
         )
 
         # Currently, we do not support multiple names for the same filter.
         global_filter.add_time_and_time_travel_filters(
             event_from=datetime(2022, 1, 1, tzinfo=timezone.utc),
             event_to=datetime(2023, 1, 1, tzinfo=timezone.utc),
-            time_filter_feature=Feature("update_date", options=example_options),
+            event_time_column=Feature("update_date", options=example_options),
         )
 
         plugin_collector = PlugInCollector.enabled_feature_groups(

@@ -62,7 +62,7 @@ class MatchData:
             return False
 
         matched_data_access = cls.match_data_access(feature_name, options, data_access_collection, None)
-        if matched_data_access is False:
+        if matched_data_access is None:
             return False
 
         # We need to add the matched data access to the options of the feature. This way it is linked throughout mloda.

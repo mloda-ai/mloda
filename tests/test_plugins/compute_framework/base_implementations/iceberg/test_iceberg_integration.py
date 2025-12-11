@@ -124,26 +124,26 @@ class ATestIcebergFeatureGroup(AbstractFeatureGroup, MatchData):
         """Check for data access collection if any child classes match the data access."""
 
         if not IcebergFramework.is_available():
-            return False
+            return None
 
         if feature_name not in cls.feature_names_supported():
-            return False
+            return None
 
         # For testing, we'll use a mock catalog or table
         if isinstance(framework_connection_object, (Mock, IcebergTable)):
             return framework_connection_object
 
         if data_access_collection is None:
-            return False
+            return None
 
         if data_access_collection.initialized_connection_objects is None:
-            return False
+            return None
 
         if data_access_collection.initialized_connection_objects:
             for conn in data_access_collection.initialized_connection_objects:
                 if isinstance(conn, (Mock, IcebergTable)) or hasattr(conn, "load_table"):
                     return conn
-        return False
+        return None
 
     @classmethod
     def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:

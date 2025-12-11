@@ -23,11 +23,12 @@ class PolarsDataFrame(ComputeFrameWork):
         except ImportError:
             return False
 
-    @staticmethod
-    def expected_data_framework() -> Any:
-        return PolarsDataFrame.pl_dataframe()
+    @classmethod
+    def expected_data_framework(cls) -> Any:
+        return cls.pl_dataframe()
 
-    def merge_engine(self) -> Type[BaseMergeEngine]:
+    @classmethod
+    def merge_engine(cls) -> Type[BaseMergeEngine]:
         return PolarsMergeEngine
 
     def select_data_by_column_names(self, data: Any, selected_feature_names: Set[FeatureName]) -> Any:
@@ -38,14 +39,14 @@ class PolarsDataFrame(ComputeFrameWork):
     def set_column_names(self) -> None:
         self.column_names = set(self.data.columns)
 
-    @staticmethod
-    def pl_dataframe() -> Any:
+    @classmethod
+    def pl_dataframe(cls) -> Any:
         if pl is None:
             raise ImportError("Polars is not installed. To be able to use this framework, please install polars.")
         return pl.DataFrame
 
-    @staticmethod
-    def pl_series() -> Any:
+    @classmethod
+    def pl_series(cls) -> Any:
         if pl is None:
             raise ImportError("Polars is not installed. To be able to use this framework, please install polars.")
         return pl.Series
@@ -77,5 +78,6 @@ class PolarsDataFrame(ComputeFrameWork):
 
         raise ValueError(f"Data {type(data)} is not supported by {self.__class__.__name__}")
 
-    def filter_engine(self) -> Type[BaseFilterEngine]:
+    @classmethod
+    def filter_engine(cls) -> Type[BaseFilterEngine]:
         return PolarsFilterEngine

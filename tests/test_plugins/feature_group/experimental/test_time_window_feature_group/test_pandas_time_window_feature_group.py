@@ -140,6 +140,6 @@ class TestPandasTimeWindowFeatureGroup:
 
         with pytest.raises(
             ValueError,
-            match=f"Time filter feature '{DefaultOptionKeys.reference_time.value}' not found in data.*",
+            match=f"Reference time column '{DefaultOptionKeys.reference_time.value}' not found in data.*",
         ):
             PandasTimeWindowFeatureGroup.calculate_feature(df, feature_set)

@@ -139,7 +139,7 @@ class TestPyArrowTimeWindowFeatureGroup:
 
         with pytest.raises(
             ValueError,
-            match=f"Time filter feature '{DefaultOptionKeys.reference_time.value}' not found in data.*",
+            match=f"Reference time column '{DefaultOptionKeys.reference_time.value}' not found in data.*",
         ):
             PyArrowTimeWindowFeatureGroup.calculate_feature(table, feature_set)
 
@@ -158,6 +158,6 @@ class TestPyArrowTimeWindowFeatureGroup:
 
         with pytest.raises(
             ValueError,
-            match=f"Time filter feature '{DefaultOptionKeys.reference_time.value}' must be a timestamp column.*",
+            match=f"Reference time column '{DefaultOptionKeys.reference_time.value}' must be a timestamp column.*",
         ):
             PyArrowTimeWindowFeatureGroup.calculate_feature(table, feature_set)

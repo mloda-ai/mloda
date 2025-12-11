@@ -85,7 +85,7 @@ class BaseInputData(ABC):
             return False
 
         data_access_cls, matched_data_access = cls.match_data_access([feature_name], data_access_collection)
-        if data_access_cls is False:
+        if data_access_cls is None:
             return False
 
         cls.add_base_input_data_to_options(data_access_cls, matched_data_access, options)
@@ -106,7 +106,7 @@ class BaseInputData(ABC):
             matched_data_access = subclass.match_subclass_data_access(data_access_collection, feature_names)  # type: ignore[attr-defined]
             if matched_data_access:
                 return (subclass, matched_data_access)
-        return False, False
+        return None, None
 
     @classmethod
     def add_base_input_data_to_options(

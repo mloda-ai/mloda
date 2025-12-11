@@ -23,21 +23,21 @@ class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         return {PandasDataFrame}
 
     @classmethod
-    def _check_time_filter_feature_exists(cls, data: pd.DataFrame, time_filter_feature: str) -> None:
-        """Check if the time filter feature exists in the DataFrame."""
-        if time_filter_feature not in data.columns:
+    def _check_reference_time_column_exists(cls, data: pd.DataFrame, reference_time_column: str) -> None:
+        """Check if the reference time column exists in the DataFrame."""
+        if reference_time_column not in data.columns:
             raise ValueError(
-                f"Time filter feature '{time_filter_feature}' not found in data. "
+                f"Reference time column '{reference_time_column}' not found in data. "
                 f"Please ensure the DataFrame contains this column."
             )
 
     @classmethod
-    def _check_time_filter_feature_is_datetime(cls, data: pd.DataFrame, time_filter_feature: str) -> None:
-        """Check if the time filter feature is a datetime column."""
-        if not pd.api.types.is_datetime64_any_dtype(data[time_filter_feature]):
+    def _check_reference_time_column_is_datetime(cls, data: pd.DataFrame, reference_time_column: str) -> None:
+        """Check if the reference time column is a datetime column."""
+        if not pd.api.types.is_datetime64_any_dtype(data[reference_time_column]):
             raise ValueError(
-                f"Time filter feature '{time_filter_feature}' must be a datetime column. "
-                f"Current dtype: {data[time_filter_feature].dtype}"
+                f"Reference time column '{reference_time_column}' must be a datetime column. "
+                f"Current dtype: {data[reference_time_column].dtype}"
             )
 
     @classmethod
@@ -93,14 +93,14 @@ class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
             time_unit: The time unit for the window
             in_features: List of source feature names (may be single or multiple columns)
             time_filter_feature: The name of the time filter feature to use for time-based operations.
-                                If None, uses the value from get_time_filter_feature().
+                                If None, uses the value from get_reference_time_column().
 
         Returns:
             The result of the window operation
         """
         # Use the default time filter feature if none is provided
         if time_filter_feature is None:
-            time_filter_feature = cls.get_time_filter_feature()
+            time_filter_feature = cls.get_reference_time_column()
 
         # Create a copy of the DataFrame with the time filter feature as the index
         # This is necessary for time-based rolling operations

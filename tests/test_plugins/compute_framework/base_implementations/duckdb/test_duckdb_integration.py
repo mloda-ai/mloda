@@ -80,25 +80,25 @@ class ATestDuckDBFeatureGroup(AbstractFeatureGroup, MatchData):
         """We check for data access collection if any child classes match the data access."""
 
         if not DuckDBFramework.is_available():
-            return False
+            return None
 
         if feature_name not in cls.feature_names_supported():
-            return False
+            return None
 
         if isinstance(framework_connection_object, duckdb.DuckDBPyConnection):
             return framework_connection_object
 
         if data_access_collection is None:
-            return False
+            return None
 
         if data_access_collection.initialized_connection_objects is None:
-            return False
+            return None
 
         if data_access_collection.initialized_connection_objects:
             for conn in data_access_collection.initialized_connection_objects:
                 if isinstance(conn, duckdb.DuckDBPyConnection):
                     return conn
-        return False
+        return None
 
     @classmethod
     def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:

@@ -64,15 +64,16 @@ class ComputeFrameWork(ABC):
         # connection object for frameworks that need persistent connections (e.g., DuckDB, Spark)
         self.framework_connection_object: Optional[Any] = None
 
-    @staticmethod
-    def expected_data_framework() -> Any:
+    @classmethod
+    def expected_data_framework(cls) -> Any:
         """
         This function should return the expected data framework for the compute framework.
         However, we only need to set it if we really want to be sure that the datatype is correct.
         """
         return None
 
-    def filter_engine(self) -> Type[BaseFilterEngine]:
+    @classmethod
+    def filter_engine(cls) -> Type[BaseFilterEngine]:
         """
         This function should return the filtered data.
         The BaseFilterEngine should be overwritten by the appropriate ComputeFrameWork if needed
@@ -122,16 +123,15 @@ class ComputeFrameWork(ABC):
         """
         return data
 
-    def merge_engine(self) -> Type[BaseMergeEngine]:
+    @classmethod
+    def merge_engine(cls) -> Type[BaseMergeEngine]:
         """
         This function should return a subclass of the BaseMergeEngine.
         With this, we can merge data from the same compute framework.
 
         This implementation is optional.
         """
-        raise NotImplementedError(
-            f"Merge functionality is for this compute framework not implemented {self.__class__.__name__}."
-        )
+        raise NotImplementedError(f"Merge functionality is for this compute framework not implemented {cls.__name__}.")
 
     def set_framework_connection_object(self, framework_connection_object: Optional[Any] = None) -> None:
         """

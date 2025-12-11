@@ -27,14 +27,16 @@ class PyArrowTable(ComputeFrameWork):
         except ImportError:
             return False
 
-    @staticmethod
-    def expected_data_framework() -> Any:
+    @classmethod
+    def expected_data_framework(cls) -> Any:
         return pa.Table
 
-    def merge_engine(self) -> Type[BaseMergeEngine]:
+    @classmethod
+    def merge_engine(cls) -> Type[BaseMergeEngine]:
         return PyArrowMergeEngine
 
-    def filter_engine(self) -> Type[BaseFilterEngine]:
+    @classmethod
+    def filter_engine(cls) -> Type[BaseFilterEngine]:
         return PyArrowFilterEngine
 
     def select_data_by_column_names(self, data: Any, selected_feature_names: Set[FeatureName]) -> Any:

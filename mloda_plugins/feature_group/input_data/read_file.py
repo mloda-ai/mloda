@@ -74,11 +74,11 @@ class ReadFile(BaseInputData):
         elif isinstance(data_access, Path):
             data_accesses = [str(data_access)]
         else:
-            return False
+            return None
 
         matched_data_access = cls.match_read_file_data_access(data_accesses, feature_names)
-        if matched_data_access is False:
-            return False
+        if matched_data_access is None:
+            return None
         return matched_data_access
 
     @classmethod
@@ -101,7 +101,7 @@ class ReadFile(BaseInputData):
                             continue
 
                         return file_name
-        return False
+        return None
 
     @classmethod
     def validate_columns(cls, file_name: str, feature_names: List[str]) -> bool:

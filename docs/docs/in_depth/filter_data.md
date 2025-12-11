@@ -50,9 +50,9 @@ Parameters:
 -   event_to (datetime): End of the time range (with timezone).
 -   valid_from (Optional[datetime]): Start of the validity period (optional, with timezone).
 -   valid_to (Optional[datetime]): End of the validity period (optional, with timezone).
--   max_exclusive (bool): If True, **valid_to** values are treated as exclusive.
--   time_filter_feature: the feature description for the time filter. Default is "reference_time".
--   time_travel_filter_feature: the feature description for the time travel filter. Default is "time_travel_filter".
+-   max_exclusive (bool): If True, the upper bounds (event_to, valid_to) are treated as exclusive.
+-   event_time_column: The column name containing event timestamps. Default is "reference_time".
+-   validity_time_column: The column name containing validity timestamps. Default is "time_travel_filter".
 
 The **single_filters** created will be converted to UTC as ISO 8601 formatted strings to ensure consistency
     across time zones and avoid ambiguity when comparing or processing time-based data.

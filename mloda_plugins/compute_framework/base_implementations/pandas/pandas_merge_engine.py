@@ -49,14 +49,14 @@ class PandasMergeEngine(BaseMergeEngine):
         left_data = self.pd_merge()(left_data, right_data, left_on=left_idx, right_on=right_idx, how=join_type)
         return left_data
 
-    @staticmethod
-    def pd_merge() -> Any:
+    @classmethod
+    def pd_merge(cls) -> Any:
         if pd is None:
             raise ImportError("Pandas is not installed. To be able to use this framework, please install pandas.")
         return pd.merge
 
-    @staticmethod
-    def pd_concat() -> Any:
+    @classmethod
+    def pd_concat(cls) -> Any:
         if pd is None:
             raise ImportError("Pandas is not installed. To be able to use this framework, please install pandas.")
         return pd.concat

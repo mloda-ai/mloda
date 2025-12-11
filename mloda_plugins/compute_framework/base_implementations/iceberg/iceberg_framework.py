@@ -60,17 +60,18 @@ class IcebergFramework(ComputeFrameWork):
         except ImportError:
             return False
 
-    @staticmethod
-    def expected_data_framework() -> Any:
+    @classmethod
+    def expected_data_framework(cls) -> Any:
         """Return the expected Iceberg table type."""
         if IcebergTable is None:
             raise ImportError("PyIceberg is not installed. To use this framework, please install pyiceberg.")
         return IcebergTable
 
-    def merge_engine(self) -> Type[BaseMergeEngine]:
+    @classmethod
+    def merge_engine(cls) -> Type[BaseMergeEngine]:
         """Iceberg tables don't support direct merging in this framework context."""
         raise NotImplementedError(
-            f"Merge functionality is not implemented for {self.__class__.__name__}. "
+            f"Merge functionality is not implemented for {cls.__name__}. "
             "Iceberg tables are typically used for data lake scenarios where merging "
             "is handled at the catalog/table/engine level, not at the compute framework level."
         )
@@ -163,6 +164,7 @@ class IcebergFramework(ComputeFrameWork):
 
         raise ValueError(f"Data type {type(self.data)} is not supported by {self.__class__.__name__}")
 
-    def filter_engine(self) -> Type[BaseFilterEngine]:
+    @classmethod
+    def filter_engine(cls) -> Type[BaseFilterEngine]:
         """Return the Iceberg filter engine."""
         return IcebergFilterEngine

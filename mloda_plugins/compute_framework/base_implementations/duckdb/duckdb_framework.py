@@ -43,11 +43,12 @@ class DuckDBFramework(ComputeFrameWork):
         except ImportError:
             return False
 
-    @staticmethod
-    def expected_data_framework() -> Any:
-        return DuckDBFramework.duckdb_relation()
+    @classmethod
+    def expected_data_framework(cls) -> Any:
+        return cls.duckdb_relation()
 
-    def merge_engine(self) -> Type[BaseMergeEngine]:
+    @classmethod
+    def merge_engine(cls) -> Type[BaseMergeEngine]:
         return DuckDBMergeEngine
 
     def select_data_by_column_names(self, data: Any, selected_feature_names: Set[FeatureName]) -> Any:
@@ -61,8 +62,8 @@ class DuckDBFramework(ComputeFrameWork):
     def set_column_names(self) -> None:
         self.column_names = set(self.data.columns)
 
-    @staticmethod
-    def duckdb_relation() -> Any:
+    @classmethod
+    def duckdb_relation(cls) -> Any:
         if duckdb is None:
             raise ImportError("DuckDB is not installed. To be able to use this framework, please install duckdb.")
         return duckdb.DuckDBPyRelation
@@ -117,5 +118,6 @@ class DuckDBFramework(ComputeFrameWork):
 
         raise ValueError(f"Data {type(data)} is not supported by {self.__class__.__name__}")
 
-    def filter_engine(self) -> Type[BaseFilterEngine]:
+    @classmethod
+    def filter_engine(cls) -> Type[BaseFilterEngine]:
         return DuckDBFilterEngine

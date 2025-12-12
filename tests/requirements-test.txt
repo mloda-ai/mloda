@@ -15,4 +15,4 @@ types-requests
 types-toml
 scikit-learn
 #https://github.com/pypa/pip-audit/issues/982
-pip-audit<2.8.0
+pip-audit<2.10.0

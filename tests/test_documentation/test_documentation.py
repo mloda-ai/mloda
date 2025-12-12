@@ -9,9 +9,13 @@ from mktestdocs import check_md_file
 from typing import Set, Any
 import time
 from mloda_core.abstract_plugins.function_extender import WrapperFunctionEnum, WrapperFunctionExtender
+from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Load all plugins before running documentation tests
+PluginLoader.all()
 
 
 # We need this to test DokuExtender

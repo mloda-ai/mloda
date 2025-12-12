@@ -77,3 +77,7 @@ For more in-depth information about feature groups, check out these advanced top
 - [Compute Framework Integration](../in_depth/compute-framework-integration.md) - How feature groups integrate with compute frameworks
 - [Multiple Result Columns](../in_depth/multiple_result_columns.md) - Working with multi-column features using automatic discovery utilities
 - [Data Type Enforcement](../in_depth/data-type-enforcement.md) - Runtime validation of declared feature data types
+
+#### 6. Discovering Feature Groups
+
+To list all available feature groups and their documentation, use the `get_feature_group_docs()` function from `mloda_core.api.plugin_docs`.

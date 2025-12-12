@@ -267,3 +267,7 @@ For more in-depth information about compute frameworks, check out these advanced
 - [Framework Transformers](../in_depth/framework-transformers.md) - How data is transformed between different compute frameworks
 - [Compute Framework Integration](../in_depth/compute-framework-integration.md) - How feature groups integrate with different compute frameworks
 - [Framework Connection Object](../in_depth/framework-connection-object.md) - How stateful frameworks manage persistent connections and state
+
+#### 7. Discovering Compute Frameworks
+
+To list all available compute frameworks and their documentation, use the `get_compute_framework_docs()` function from `mloda_core.api.plugin_docs`.

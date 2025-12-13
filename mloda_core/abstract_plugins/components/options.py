@@ -221,7 +221,7 @@ class Options:
 
         Protected keys can be specified in two ways:
         1. Explicitly passed as the protected_keys parameter
-        2. Dynamically read from self.get(mloda_feature_chainer_parser_key) for backward compatibility
+        2. Dynamically read from self.get(feature_chainer_parser_key) for backward compatibility
 
         Mechanism:
         - Protected keys in 'other' are NOT merged into 'self'
@@ -238,7 +238,7 @@ class Options:
         Args:
             other: The Options object to merge from (typically child options)
             protected_keys: Set of keys to protect from merging.
-                          If None, uses in_features + any keys from mloda_feature_chainer_parser_key
+                          If None, uses in_features + any keys from feature_chainer_parser_key
 
         Raises:
             ValueError: If non-protected keys conflict between group and context
@@ -248,10 +248,10 @@ class Options:
             # Default: always protect in_features
             protected_keys = {DefaultOptionKeys.in_features}
 
-            # Dynamic: read additional protected keys from mloda_feature_chainer_parser_key
+            # Dynamic: read additional protected keys from feature_chainer_parser_key
             # This allows feature groups to specify which keys should be protected
-            if self.get(DefaultOptionKeys.mloda_feature_chainer_parser_key):
-                for key in self.get(DefaultOptionKeys.mloda_feature_chainer_parser_key):
+            if self.get(DefaultOptionKeys.feature_chainer_parser_key):
+                for key in self.get(DefaultOptionKeys.feature_chainer_parser_key):
                     protected_keys.add(key)
 
         # Create a copy of other.group excluding protected keys

@@ -110,13 +110,13 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
     PROPERTY_MAPPING = {
         AGGREGATION_TYPE: {
             **AGGREGATION_TYPES,  # All supported aggregation types as valid values
-            DefaultOptionKeys.mloda_context: True,  # Mark as context parameter
-            DefaultOptionKeys.mloda_strict_validation: True,  # Enable strict validation
+            DefaultOptionKeys.context: True,  # Mark as context parameter
+            DefaultOptionKeys.strict_validation: True,  # Enable strict validation
         },
         DefaultOptionKeys.in_features: {
             "explanation": "Source feature to aggregate",
-            DefaultOptionKeys.mloda_context: True,  # Mark as context parameter
-            DefaultOptionKeys.mloda_strict_validation: False,  # Flexible validation
+            DefaultOptionKeys.context: True,  # Mark as context parameter
+            DefaultOptionKeys.strict_validation: False,  # Flexible validation
         },
     }
 

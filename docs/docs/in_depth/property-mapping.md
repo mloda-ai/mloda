@@ -13,13 +13,13 @@ PROPERTY_MAPPING = {
     "parameter_name": {
         "value1": "Description of value1",
         "value2": "Description of value2",
-        DefaultOptionKeys.mloda_context: True,  # Parameter classification
-        DefaultOptionKeys.mloda_strict_validation: True,  # Validation mode
+        DefaultOptionKeys.context: True,  # Parameter classification
+        DefaultOptionKeys.strict_validation: True,  # Validation mode
     },
     DefaultOptionKeys.in_features: {
         "explanation": "Source feature description",
-        DefaultOptionKeys.mloda_context: True,
-        DefaultOptionKeys.mloda_strict_validation: False,  # Flexible validation
+        DefaultOptionKeys.context: True,
+        DefaultOptionKeys.strict_validation: False,  # Flexible validation
     },
 }
 ```
@@ -30,13 +30,13 @@ PROPERTY_MAPPING = {
 # Context parameter (doesn't affect Feature Group splitting)
 "aggregation_type": {
     "sum": "Sum aggregation",
-    DefaultOptionKeys.mloda_context: True,
+    DefaultOptionKeys.context: True,
 }
 
 # Group parameter (affects Feature Group splitting)  
 "data_source": {
     "production": "Production data",
-    DefaultOptionKeys.mloda_group: True,
+    DefaultOptionKeys.group: True,
 }
 ```
 
@@ -47,7 +47,7 @@ PROPERTY_MAPPING = {
 "algorithm_type": {
     "kmeans": "K-means clustering",
     "dbscan": "DBSCAN clustering", 
-    DefaultOptionKeys.mloda_strict_validation: True,  # Only listed values allowed
+    DefaultOptionKeys.strict_validation: True,  # Only listed values allowed
 }
 ```
 
@@ -55,8 +55,8 @@ PROPERTY_MAPPING = {
 ``` python
 "window_size": {
     "explanation": "Size of time window",
-    DefaultOptionKeys.mloda_validation_function: lambda x: isinstance(x, int) and x > 0,
-    DefaultOptionKeys.mloda_strict_validation: True,
+    DefaultOptionKeys.validation_function: lambda x: isinstance(x, int) and x > 0,
+    DefaultOptionKeys.strict_validation: True,
 }
 ```
 
@@ -65,7 +65,7 @@ PROPERTY_MAPPING = {
 "method": {
     "linear": "Linear interpolation",
     "cubic": "Cubic interpolation",
-    DefaultOptionKeys.mloda_default: "linear",  # Default if not specified
+    DefaultOptionKeys.default: "linear",  # Default if not specified
 }
 ```
 
@@ -77,12 +77,12 @@ class MyFeatureGroup(AbstractFeatureGroup):
         "operation_type": {
             "sum": "Sum operation",
             "avg": "Average operation",
-            DefaultOptionKeys.mloda_context: True,
-            DefaultOptionKeys.mloda_strict_validation: True,
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
         },
         DefaultOptionKeys.in_features: {
             "explanation": "Source feature",
-            DefaultOptionKeys.mloda_context: True,
+            DefaultOptionKeys.context: True,
         },
     }
     

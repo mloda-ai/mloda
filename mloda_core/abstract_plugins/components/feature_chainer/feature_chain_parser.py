@@ -103,23 +103,23 @@ class FeatureChainParser:
     @classmethod
     def _has_default_value(cls, property_value: Any) -> bool:
         """Check if property has a default value defined."""
-        return isinstance(property_value, dict) and DefaultOptionKeys.mloda_default in property_value
+        return isinstance(property_value, dict) and DefaultOptionKeys.default in property_value
 
     @classmethod
     def _is_context_parameter(cls, property_value: Any) -> bool:
         """Check if property is marked as context parameter in mapping."""
-        return isinstance(property_value, dict) and property_value.get(DefaultOptionKeys.mloda_context, False)
+        return isinstance(property_value, dict) and property_value.get(DefaultOptionKeys.context, False)
 
     @classmethod
     def _is_strict_validation(cls, property_value: Any) -> bool:
         """Check if property requires strict validation (values must be in mapping)."""
-        return isinstance(property_value, dict) and property_value.get(DefaultOptionKeys.mloda_strict_validation, False)
+        return isinstance(property_value, dict) and property_value.get(DefaultOptionKeys.strict_validation, False)
 
     @classmethod
     def _get_validation_function(cls, property_value: Any) -> Any:
         """Get validation function from property mapping if present."""
         if isinstance(property_value, dict):
-            return property_value.get(DefaultOptionKeys.mloda_validation_function, None)
+            return property_value.get(DefaultOptionKeys.validation_function, None)
         return None
 
     @classmethod
@@ -174,13 +174,13 @@ class FeatureChainParser:
             )
 
         if property_name in options.group:
-            return DefaultOptionKeys.mloda_group.value
+            return DefaultOptionKeys.group.value
         elif property_name in options.context:
-            return DefaultOptionKeys.mloda_context.value
+            return DefaultOptionKeys.context.value
         elif cls._is_context_parameter(property_value):
-            return DefaultOptionKeys.mloda_context.value
+            return DefaultOptionKeys.context.value
         else:
-            return DefaultOptionKeys.mloda_group.value
+            return DefaultOptionKeys.group.value
 
     @classmethod
     def _extract_property_values(cls, property_value: Any) -> Any:
@@ -188,11 +188,11 @@ class FeatureChainParser:
         if isinstance(property_value, dict):
             # Remove metadata keys, keep only the actual valid values
             metadata_keys = {
-                DefaultOptionKeys.mloda_default,
-                DefaultOptionKeys.mloda_context,
-                DefaultOptionKeys.mloda_group,
-                DefaultOptionKeys.mloda_strict_validation,
-                DefaultOptionKeys.mloda_validation_function,
+                DefaultOptionKeys.default,
+                DefaultOptionKeys.context,
+                DefaultOptionKeys.group,
+                DefaultOptionKeys.strict_validation,
+                DefaultOptionKeys.validation_function,
             }
             return {k: v for k, v in property_value.items() if k not in metadata_keys}
         return property_value

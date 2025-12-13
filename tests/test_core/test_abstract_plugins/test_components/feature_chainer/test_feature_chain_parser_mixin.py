@@ -20,8 +20,8 @@ class MockFeatureGroup(FeatureChainParserMixin):
         "operation": {
             "op1": "Operation 1",
             "op2": "Operation 2",
-            DefaultOptionKeys.mloda_context: True,
-            DefaultOptionKeys.mloda_strict_validation: True,
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
         }
     }
 
@@ -35,8 +35,8 @@ class MockFeatureGroupCustomSeparator(FeatureChainParserMixin):
         "operation": {
             "op1": "Operation 1",
             "op2": "Operation 2",
-            DefaultOptionKeys.mloda_context: True,
-            DefaultOptionKeys.mloda_strict_validation: True,
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
         }
     }
 
@@ -50,8 +50,8 @@ class MockFeatureGroupWithMinMax(FeatureChainParserMixin):
     PROPERTY_MAPPING = {
         "operation": {
             "op1": "Operation 1",
-            DefaultOptionKeys.mloda_context: True,
-            DefaultOptionKeys.mloda_strict_validation: True,
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
         }
     }
 
@@ -63,8 +63,8 @@ class MockFeatureGroupWithValidationHook(FeatureChainParserMixin):
     PROPERTY_MAPPING = {
         "operation": {
             "op1": "Operation 1",
-            DefaultOptionKeys.mloda_context: True,
-            DefaultOptionKeys.mloda_strict_validation: True,
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
         }
     }
 

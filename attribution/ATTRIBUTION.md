@@ -18,7 +18,7 @@
 | bandit                                 | 1.9.2           | Apache-2.0                                              |
 | beautifulsoup4                         | 4.14.3          | MIT License                                             |
 | bleach                                 | 6.3.0           | Apache Software License                                 |
-| cachetools                             | 6.2.2           | MIT License                                             |
+| cachetools                             | 6.2.3           | MIT                                                     |
 | certifi                                | 2025.11.12      | Mozilla Public License 2.0 (MPL 2.0)                    |
 | cffi                                   | 2.0.0           | MIT                                                     |
 | chardet                                | 5.2.0           | GNU Lesser General Public License v2 or later (LGPLv2+) |
@@ -26,8 +26,8 @@
 | click                                  | 8.3.1           | BSD-3-Clause                                            |
 | colorama                               | 0.4.6           | BSD License                                             |
 | comm                                   | 0.2.3           | BSD License                                             |
-| cyclonedx-python-lib                   | 7.6.2           | Apache Software License                                 |
-| debugpy                                | 1.8.17          | MIT License                                             |
+| cyclonedx-python-lib                   | 9.1.0           | Apache Software License                                 |
+| debugpy                                | 1.8.18          | MIT License                                             |
 | decorator                              | 5.2.1           | BSD License                                             |
 | defusedxml                             | 0.7.1           | Python Software Foundation License                      |
 | distlib                                | 0.4.0           | Python Software Foundation License                      |
@@ -40,7 +40,6 @@
 | fqdn                                   | 1.5.1           | Mozilla Public License 2.0 (MPL 2.0)                    |
 | fsspec                                 | 2025.12.0       | BSD-3-Clause                                            |
 | h11                                    | 0.16.0          | MIT License                                             |
-| html5lib                               | 1.1             | MIT License                                             |
 | httpcore                               | 1.0.9           | BSD License                                             |
 | httpx                                  | 0.28.1          | BSD License                                             |
 | idna                                   | 3.11            | BSD-3-Clause                                            |
@@ -84,13 +83,13 @@
 | notebook                               | 7.5.0           | BSD License                                             |
 | notebook_shim                          | 0.2.4           | BSD License                                             |
 | numpy                                  | 2.2.6           | BSD License                                             |
-| opentelemetry-api                      | 1.39.0          | Apache-2.0                                              |
-| opentelemetry-instrumentation          | 0.60b0          | Apache Software License                                 |
-| opentelemetry-instrumentation-logging  | 0.60b0          | Apache Software License                                 |
-| opentelemetry-instrumentation-requests | 0.60b0          | Apache Software License                                 |
-| opentelemetry-sdk                      | 1.39.0          | Apache-2.0                                              |
-| opentelemetry-semantic-conventions     | 0.60b0          | Apache-2.0                                              |
-| opentelemetry-util-http                | 0.60b0          | Apache Software License                                 |
+| opentelemetry-api                      | 1.39.1          | Apache-2.0                                              |
+| opentelemetry-instrumentation          | 0.60b1          | Apache Software License                                 |
+| opentelemetry-instrumentation-logging  | 0.60b1          | Apache Software License                                 |
+| opentelemetry-instrumentation-requests | 0.60b1          | Apache Software License                                 |
+| opentelemetry-sdk                      | 1.39.1          | Apache-2.0                                              |
+| opentelemetry-semantic-conventions     | 0.60b1          | Apache-2.0                                              |
+| opentelemetry-util-http                | 0.60b1          | Apache Software License                                 |
 | overrides                              | 7.7.0           | Apache License, Version 2.0                             |
 | packageurl-python                      | 0.17.6          | MIT License                                             |
 | packaging                              | 25.0            | Apache Software License; BSD License                    |
@@ -102,7 +101,7 @@
 | pexpect                                | 4.9.0           | ISC License (ISCL)                                      |
 | pip-api                                | 0.0.34          | Apache Software License                                 |
 | pip-requirements-parser                | 32.0.1          | MIT                                                     |
-| pip_audit                              | 2.7.3           | Apache Software License                                 |
+| pip_audit                              | 2.9.0           | Apache Software License                                 |
 | platformdirs                           | 4.5.1           | MIT License                                             |
 | pluggy                                 | 1.6.0           | MIT License                                             |
 | polars                                 | 1.36.1          | MIT License                                             |
@@ -112,7 +111,7 @@
 | psutil                                 | 7.1.3           | BSD-3-Clause                                            |
 | ptyprocess                             | 0.7.0           | ISC License (ISCL)                                      |
 | pure_eval                              | 0.2.3           | MIT License                                             |
-| py-serializable                        | 1.1.2           | Apache Software License                                 |
+| py-serializable                        | 2.1.0           | Apache Software License                                 |
 | pyarrow                                | 22.0.0          | Apache Software License                                 |
 | pycparser                              | 2.23            | BSD License                                             |
 | pydantic                               | 2.12.5          | MIT                                                     |
@@ -137,7 +136,7 @@
 | rfc3987-syntax                         | 1.1.0           | Apache Software License                                 |
 | rich                                   | 14.2.0          | MIT License                                             |
 | rpds-py                                | 0.30.0          | MIT                                                     |
-| ruff                                   | 0.14.8          | MIT License                                             |
+| ruff                                   | 0.14.9          | MIT License                                             |
 | scikit-learn                           | 1.7.2           | BSD-3-Clause                                            |
 | scipy                                  | 1.15.3          | BSD License                                             |
 | six                                    | 1.17.0          | MIT License                                             |
@@ -152,7 +151,7 @@
 | threadpoolctl                          | 3.6.0           | BSD License                                             |
 | tinycss2                               | 1.4.0           | BSD License                                             |
 | toml                                   | 0.10.2          | MIT License                                             |
-| tornado                                | 6.5.2           | Apache Software License                                 |
+| tornado                                | 6.5.3           | Apache Software License                                 |
 | tox                                    | 4.32.0          | MIT License                                             |
 | tqdm                                   | 4.67.1          | MIT License; Mozilla Public License 2.0 (MPL 2.0)       |
 | traitlets                              | 5.14.3          | BSD License                                             |
@@ -164,7 +163,7 @@
 | typing_extensions                      | 4.15.0          | PSF-2.0                                                 |
 | tzdata                                 | 2025.2          | Apache Software License                                 |
 | uri-template                           | 1.3.0           | MIT License                                             |
-| urllib3                                | 2.6.1           | MIT                                                     |
+| urllib3                                | 2.6.2           | MIT                                                     |
 | virtualenv                             | 20.35.4         | MIT License                                             |
 | webcolors                              | 25.10.0         | BSD License                                             |
 | webencodings                           | 0.5.1           | BSD License                                             |

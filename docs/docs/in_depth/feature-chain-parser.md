@@ -214,23 +214,6 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup)
         return base_match
 ```
 
-### Feature Groups Using the Mixin
-
-| Feature Group | MIN | MAX | Customization |
-|---------------|-----|-----|---------------|
-| AggregatedFeatureGroup | 1 | 1 | Simple inheritance |
-| ClusteringFeatureGroup | 1 | None | `_validate_string_match` hook |
-| ForecastingFeatureGroup | 1 | 1 | Custom `input_features` + `_validate_string_match` |
-| TimeWindowFeatureGroup | 1 | 1 | Custom `input_features` (time_filter) |
-| MissingValueFeatureGroup | 1 | 1 | Simple inheritance |
-| DimensionalityReductionFeatureGroup | 1 | 1 | Custom `input_features` + `_validate_string_match` |
-| GeoDistanceFeatureGroup | 2 | 2 | Custom `input_features` (& separator) |
-| NodeCentralityFeatureGroup | 1 | 1 | Simple inheritance |
-| EncodingFeatureGroup | 1 | 1 | Custom `input_features` (~suffix handling) |
-| SklearnPipelineFeatureGroup | 1 | None | Custom `match_feature_group_criteria` |
-| ScalingFeatureGroup | 1 | 1 | Simple inheritance |
-| TextCleaningFeatureGroup | 1 | 1 | Simple inheritance |
-
 ## Modern Implementation in Feature Groups
 
 ### 1. Define PROPERTY_MAPPING Configuration
@@ -251,14 +234,14 @@ class MyFeatureGroup(AbstractFeatureGroup):
             "sum": "Sum aggregation",
             "avg": "Average aggregation", 
             "max": "Maximum aggregation",
-            DefaultOptionKeys.mloda_context: True,  # Context parameter
-            DefaultOptionKeys.mloda_strict_validation: True,  # Strict validation
+            DefaultOptionKeys.context: True,  # Context parameter
+            DefaultOptionKeys.strict_validation: True,  # Strict validation
         },
         # Source feature parameter
         DefaultOptionKeys.in_features: {
             "explanation": "Source feature for the operation",
-            DefaultOptionKeys.mloda_context: True,  # Context parameter
-            DefaultOptionKeys.mloda_strict_validation: False,  # Flexible validation
+            DefaultOptionKeys.context: True,  # Context parameter
+            DefaultOptionKeys.strict_validation: False,  # Flexible validation
         },
     }
 ```
@@ -338,9 +321,9 @@ For complex validation beyond simple value lists:
 PROPERTY_MAPPING = {
     "dimension": {
         "explanation": "Number of dimensions for reduction",
-        DefaultOptionKeys.mloda_context: True,
-        DefaultOptionKeys.mloda_strict_validation: True,
-        DefaultOptionKeys.mloda_validation_function: lambda x: isinstance(x, int) and x > 0,
+        DefaultOptionKeys.context: True,
+        DefaultOptionKeys.strict_validation: True,
+        DefaultOptionKeys.validation_function: lambda x: isinstance(x, int) and x > 0,
     },
 }
 ```
@@ -354,8 +337,8 @@ PROPERTY_MAPPING = {
     "window_size": {
         "7": "7-day window",
         "30": "30-day window",
-        DefaultOptionKeys.mloda_default: "7",  # Default value
-        DefaultOptionKeys.mloda_context: True,
+        DefaultOptionKeys.default: "7",  # Default value
+        DefaultOptionKeys.context: True,
     },
 }
 ```
@@ -368,15 +351,15 @@ PROPERTY_MAPPING = {
     "data_source": {
         "production": "Production data",
         "staging": "Staging data", 
-        DefaultOptionKeys.mloda_group: True,  # Explicit group parameter
-        DefaultOptionKeys.mloda_strict_validation: True,
+        DefaultOptionKeys.group: True,  # Explicit group parameter
+        DefaultOptionKeys.strict_validation: True,
     },
     # Context parameter - doesn't affect resolution
     "algorithm_type": {
         "kmeans": "K-means clustering",
         "dbscan": "DBSCAN clustering",
-        DefaultOptionKeys.mloda_context: True,  # Context parameter
-        DefaultOptionKeys.mloda_strict_validation: False,  # Flexible validation
+        DefaultOptionKeys.context: True,  # Context parameter
+        DefaultOptionKeys.strict_validation: False,  # Flexible validation
     },
 }
 ```

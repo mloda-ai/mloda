@@ -144,34 +144,34 @@ class ForecastingFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
     PROPERTY_MAPPING = {
         ALGORITHM: {
             **FORECASTING_ALGORITHMS,
-            DefaultOptionKeys.mloda_context: True,
-            DefaultOptionKeys.mloda_strict_validation: True,
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
         },
         HORIZON: {
             "explanation": "Forecast horizon (number of time units to predict)",
-            DefaultOptionKeys.mloda_context: True,
-            DefaultOptionKeys.mloda_strict_validation: True,
-            DefaultOptionKeys.mloda_validation_function: lambda x: (
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
+            DefaultOptionKeys.validation_function: lambda x: (
                 isinstance(x, int) or (isinstance(x, str) and x.isdigit())
             )
             and int(x) > 0,
         },
         TIME_UNIT: {
             **TIME_UNITS,
-            DefaultOptionKeys.mloda_context: True,
-            DefaultOptionKeys.mloda_strict_validation: True,
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
         },
         DefaultOptionKeys.in_features: {
             "explanation": "Source feature to generate forecasts for",
-            DefaultOptionKeys.mloda_context: True,
-            DefaultOptionKeys.mloda_strict_validation: False,
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: False,
         },
         OUTPUT_CONFIDENCE_INTERVALS: {
             "explanation": "Whether to output confidence intervals as separate columns using ~lower and ~upper suffix pattern",
-            DefaultOptionKeys.mloda_context: True,
-            DefaultOptionKeys.mloda_strict_validation: False,
-            DefaultOptionKeys.mloda_default: False,  # Default is False (don't output confidence intervals)
-            DefaultOptionKeys.mloda_validation_function: lambda value: isinstance(value, bool),
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: False,
+            DefaultOptionKeys.default: False,  # Default is False (don't output confidence intervals)
+            DefaultOptionKeys.validation_function: lambda value: isinstance(value, bool),
         },
     }
 

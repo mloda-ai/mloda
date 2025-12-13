@@ -44,9 +44,9 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
     PROPERTY_MAPPING = {
         CLEANING_OPERATIONS: {
             **SUPPORTED_OPERATIONS,  # All supported operations as valid options
-            DefaultOptionKeys.mloda_context: True,  # Mark as context parameter
-            DefaultOptionKeys.mloda_strict_validation: True,  # Enable strict validation
-            DefaultOptionKeys.mloda_validation_function: lambda operations: (
+            DefaultOptionKeys.context: True,  # Mark as context parameter
+            DefaultOptionKeys.strict_validation: True,  # Enable strict validation
+            DefaultOptionKeys.validation_function: lambda operations: (
                 # Handle both actual tuples/lists and string representations
                 (
                     isinstance(operations, (tuple, list))
@@ -66,7 +66,7 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
         },
         DefaultOptionKeys.in_features: {
             "explanation": "Source feature to apply text cleaning operations to",
-            DefaultOptionKeys.mloda_context: True,
+            DefaultOptionKeys.context: True,
         },
     }
 

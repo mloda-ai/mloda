@@ -8,9 +8,9 @@ from mloda_plugins.feature_group.experimental.default_options_key import Default
 
 
 def test_default_option_key_exists() -> None:
-    """Test that mloda_strict_type_enforcement key exists in DefaultOptionKeys."""
-    assert hasattr(DefaultOptionKeys, "mloda_strict_type_enforcement")
-    assert DefaultOptionKeys.mloda_strict_type_enforcement.value == "strict_type_enforcement"
+    """Test that strict_type_enforcement key exists in DefaultOptionKeys."""
+    assert hasattr(DefaultOptionKeys, "strict_type_enforcement")
+    assert DefaultOptionKeys.strict_type_enforcement.value == "strict_type_enforcement"
 
 
 def test_mloda_api_accepts_strict_type_enforcement_parameter() -> None:

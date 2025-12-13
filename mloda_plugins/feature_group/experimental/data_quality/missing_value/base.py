@@ -170,21 +170,21 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
     PROPERTY_MAPPING = {
         IMPUTATION_METHOD: {
             **IMPUTATION_METHODS,
-            DefaultOptionKeys.mloda_context: True,
+            DefaultOptionKeys.context: True,
         },
         DefaultOptionKeys.in_features: {
             "explanation": "Source feature to impute missing values",
-            DefaultOptionKeys.mloda_context: True,
+            DefaultOptionKeys.context: True,
         },
         "constant_value": {
             "explanation": "Constant value to use for constant imputation method",
-            DefaultOptionKeys.mloda_context: True,
-            DefaultOptionKeys.mloda_default: None,  # Default is None, required only for constant method
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.default: None,  # Default is None, required only for constant method
         },
         "group_by_features": {
             "explanation": "Optional list of features to group by before imputation",
-            DefaultOptionKeys.mloda_context: True,
-            DefaultOptionKeys.mloda_default: None,  # Default is None (no grouping)
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.default: None,  # Default is None (no grouping)
         },
     }
 

@@ -26,7 +26,7 @@ class TestParameterResolutionUnit:
             "ident": {
                 "identifier1": "explanation",
                 "identifier2": "explanation",
-                DefaultOptionKeys.mloda_context: True,  # Mark as context parameter
+                DefaultOptionKeys.context: True,  # Mark as context parameter
             },
             "property2": {
                 "value1": "explanation",
@@ -37,12 +37,12 @@ class TestParameterResolutionUnit:
             "property3": {
                 "opt_val1": "explanation",
                 "opt_val2": "explanation",
-                DefaultOptionKeys.mloda_default: "opt_val1",  # Default value
-                DefaultOptionKeys.mloda_context: True,  # Mark as context parameter
+                DefaultOptionKeys.default: "opt_val1",  # Default value
+                DefaultOptionKeys.context: True,  # Mark as context parameter
             },
             DefaultOptionKeys.in_features: {
                 "explanation": "explanation",
-                DefaultOptionKeys.mloda_context: True,  # Mark as context parameter
+                DefaultOptionKeys.context: True,  # Mark as context parameter
             },
         }
 
@@ -152,7 +152,7 @@ class TestParameterResolutionUnit:
         category = FeatureChainParser._determine_parameter_category(
             "ident", property_mapping["ident"], options_context_default
         )
-        assert category == DefaultOptionKeys.mloda_context.value, "Context-marked parameter should go to context"
+        assert category == DefaultOptionKeys.context.value, "Context-marked parameter should go to context"
 
         # Test: Group parameter (not marked as context) goes to group by default
         options_group_default = Options(
@@ -162,7 +162,7 @@ class TestParameterResolutionUnit:
         category = FeatureChainParser._determine_parameter_category(
             "property2", property_mapping["property2"], options_group_default
         )
-        assert category == DefaultOptionKeys.mloda_group.value, "Non-context parameter should go to group"
+        assert category == DefaultOptionKeys.group.value, "Non-context parameter should go to group"
 
         # Test: User override - context parameter forced to group
         options_user_override = Options(
@@ -172,7 +172,7 @@ class TestParameterResolutionUnit:
         category = FeatureChainParser._determine_parameter_category(
             "ident", property_mapping["ident"], options_user_override
         )
-        assert category == DefaultOptionKeys.mloda_group.value, "User override should take precedence"
+        assert category == DefaultOptionKeys.group.value, "User override should take precedence"
 
     def test_optional_parameter_handling(self) -> None:
         """Test comprehensive optional parameter behavior."""
@@ -266,8 +266,8 @@ class TestParameterResolutionUnit:
         property_value_with_default = {
             "opt_val1": "explanation",
             "opt_val2": "explanation",
-            DefaultOptionKeys.mloda_default: "opt_val1",
-            DefaultOptionKeys.mloda_context: True,
+            DefaultOptionKeys.default: "opt_val1",
+            DefaultOptionKeys.context: True,
         }
 
         extracted = FeatureChainParser._extract_property_values(property_value_with_default)
@@ -330,18 +330,18 @@ class TestParameterResolutionUnit:
             "strict_param": {
                 "allowed_value1": "explanation",
                 "allowed_value2": "explanation",
-                DefaultOptionKeys.mloda_strict_validation: True,  # Explicit strict validation
-                DefaultOptionKeys.mloda_context: True,
+                DefaultOptionKeys.strict_validation: True,  # Explicit strict validation
+                DefaultOptionKeys.context: True,
             },
             "flexible_param": {
-                DefaultOptionKeys.mloda_strict_validation: False,  # Explicit flexible validation
-                DefaultOptionKeys.mloda_context: True,
+                DefaultOptionKeys.strict_validation: False,  # Explicit flexible validation
+                DefaultOptionKeys.context: True,
             },
             "default_flexible_param": {
-                DefaultOptionKeys.mloda_context: True,
+                DefaultOptionKeys.context: True,
             },
             DefaultOptionKeys.in_features: {
-                DefaultOptionKeys.mloda_context: True,
+                DefaultOptionKeys.context: True,
             },
         }
 
@@ -426,7 +426,7 @@ class TestParameterResolutionUnit:
         # Test: Property with explicit strict validation = True
         strict_property = {
             "value1": "explanation",
-            DefaultOptionKeys.mloda_strict_validation: True,
+            DefaultOptionKeys.strict_validation: True,
         }
         assert FeatureChainParser._is_strict_validation(strict_property) is True, (
             "Should identify strict validation = True"
@@ -435,7 +435,7 @@ class TestParameterResolutionUnit:
         # Test: Property with explicit strict validation = False
         flexible_property = {
             "value1": "explanation",
-            DefaultOptionKeys.mloda_strict_validation: False,
+            DefaultOptionKeys.strict_validation: False,
         }
         assert FeatureChainParser._is_strict_validation(flexible_property) is False, (
             "Should identify strict validation = False"
@@ -444,7 +444,7 @@ class TestParameterResolutionUnit:
         # Test: Property without strict validation flag (defaults to False)
         default_property = {
             "value1": "explanation",
-            DefaultOptionKeys.mloda_context: True,
+            DefaultOptionKeys.context: True,
         }
         assert FeatureChainParser._is_strict_validation(default_property) is False, (
             "Should default to strict validation = False"
@@ -470,24 +470,24 @@ class TestParameterResolutionUnit:
                 "sum": "explanation",
                 "avg": "explanation",
                 # No strict_validation flag -> defaults to False (flexible)
-                DefaultOptionKeys.mloda_context: True,
+                DefaultOptionKeys.context: True,
             },
             "data_source": {
                 "production": "explanation",
                 "staging": "explanation",
-                DefaultOptionKeys.mloda_strict_validation: True,  # Restrict data sources
-                DefaultOptionKeys.mloda_group: True,  # This affects grouping
+                DefaultOptionKeys.strict_validation: True,  # Restrict data sources
+                DefaultOptionKeys.group: True,  # This affects grouping
             },
             "debug_mode": {
                 "true": "explanation",
                 "false": "explanation",
-                DefaultOptionKeys.mloda_strict_validation: False,  # Explicit flexible validation
-                DefaultOptionKeys.mloda_context: True,
+                DefaultOptionKeys.strict_validation: False,  # Explicit flexible validation
+                DefaultOptionKeys.context: True,
             },
             DefaultOptionKeys.in_features: {
                 "explanation": "explanation",
                 # No strict_validation flag -> defaults to False (flexible)
-                DefaultOptionKeys.mloda_context: True,
+                DefaultOptionKeys.context: True,
             },
         }
 

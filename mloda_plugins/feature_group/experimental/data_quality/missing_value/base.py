@@ -211,6 +211,38 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
         return imputation_method
 
     @classmethod
+    def _extract_imputation_method(cls, feature: Feature) -> Optional[str]:
+        """
+        Extract imputation method from a feature.
+
+        Tries string-based parsing first, falls back to configuration-based.
+
+        Args:
+            feature: The feature to extract imputation method from
+
+        Returns:
+            Imputation method name or None if not found
+        """
+        feature_name = feature.get_name()
+
+        # Try string-based parsing first
+        if FeatureChainParser.is_chained_feature(feature_name):
+            # Use get_imputation_method which handles parse_feature_name correctly
+            return cls.get_imputation_method(feature_name)
+
+        # Fall back to configuration-based approach
+        imputation_method = feature.options.get(cls.IMPUTATION_METHOD)
+
+        # Validate imputation method if found
+        if imputation_method is not None and imputation_method not in cls.IMPUTATION_METHODS:
+            raise ValueError(
+                f"Unsupported imputation method: {imputation_method}. "
+                f"Supported methods: {', '.join(cls.IMPUTATION_METHODS.keys())}"
+            )
+
+        return str(imputation_method) if imputation_method is not None else None
+
+    @classmethod
     def _extract_imputation_method_and_source_feature(cls, feature: Feature) -> tuple[str, str]:
         """
         Extract imputation method and source feature name from a feature.
@@ -226,37 +258,13 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
         Raises:
             ValueError: If parameters cannot be extracted
         """
-        imputation_method = None
-        source_feature_name: str | None = None
+        source_features = cls._extract_source_features(feature)
+        imputation_method = cls._extract_imputation_method(feature)
 
-        # Try string-based parsing first
-        feature_name_str = feature.name.name if hasattr(feature.name, "name") else str(feature.name)
+        if imputation_method is None:
+            raise ValueError(f"Could not extract imputation method from: {feature.name}")
 
-        if FeatureChainParser.is_chained_feature(feature_name_str):
-            # Use get_imputation_method which already handles parse_feature_name correctly
-            imputation_method = cls.get_imputation_method(feature_name_str)
-            # Use extract_in_feature which returns everything before the last __
-            source_feature_name = FeatureChainParser.extract_in_feature(feature_name_str, cls.PREFIX_PATTERN)
-            return imputation_method, source_feature_name
-
-        # Fall back to configuration-based approach
-        source_features = feature.options.get_in_features()
-        source_feature = next(iter(source_features))
-        source_feature_name = source_feature.get_name()
-
-        imputation_method = feature.options.get(cls.IMPUTATION_METHOD)
-
-        if imputation_method is None or source_feature_name is None:
-            raise ValueError(f"Could not extract imputation method and source feature from: {feature.name}")
-
-        # Validate imputation method (no need to strip "imputed" from config-based method)
-        if imputation_method not in cls.IMPUTATION_METHODS:
-            raise ValueError(
-                f"Unsupported imputation method: {imputation_method}. "
-                f"Supported methods: {', '.join(cls.IMPUTATION_METHODS.keys())}"
-            )
-
-        return imputation_method, source_feature_name
+        return imputation_method, source_features[0]
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

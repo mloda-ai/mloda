@@ -215,6 +215,39 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
     # Custom validation done via _validate_string_match() hook
 
     @classmethod
+    def _extract_clustering_params(cls, feature: Feature) -> tuple[Optional[str], Optional[Union[int, str]]]:
+        """
+        Extract algorithm and k_value from a feature.
+
+        Tries string-based approach first, falls back to configuration-based.
+
+        Args:
+            feature: The feature to extract parameters from
+
+        Returns:
+            Tuple of (algorithm, k_value) or (None, None) if extraction fails
+
+        Raises:
+            ValueError: If string-based parsing fails due to invalid format
+        """
+        # Try string-based parsing first
+        algorithm_str, source_features_str = FeatureChainParser.parse_feature_name(feature.name, [cls.PREFIX_PATTERN])
+        if algorithm_str is not None and source_features_str is not None:
+            algorithm, k_value_str = cls.parse_clustering_prefix(feature.get_name())
+            k_value: Union[int, str] = "auto" if k_value_str == "auto" else int(k_value_str)
+            return algorithm, k_value
+
+        # Fall back to configuration-based
+        algorithm = feature.options.get(cls.ALGORITHM)
+        k_value_raw = feature.options.get(cls.K_VALUE)
+
+        if k_value_raw is None:
+            return algorithm, None
+
+        k_value = "auto" if k_value_raw == "auto" else int(k_value_raw)
+        return algorithm, k_value
+
+    @classmethod
     def _extract_algorithm_k_value_and_source_features(cls, feature: Feature) -> tuple[str, Union[int, str], list[str]]:
         """
         Extract algorithm, k_value, and source features from a feature.
@@ -230,42 +263,11 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
         Raises:
             ValueError: If parameters cannot be extracted
         """
-        algorithm = None
-        k_value: str | int | None = None
-        source_features = None
+        source_features = cls._extract_source_features(feature)
+        algorithm, k_value = cls._extract_clustering_params(feature)
 
-        # string based
-        algorithm_str, source_features_str = FeatureChainParser.parse_feature_name(feature.name, [cls.PREFIX_PATTERN])
-        if algorithm_str is not None and source_features_str is not None:
-            # Parse the algorithm and k_value from the prefix
-            algorithm, k_value_str = cls.parse_clustering_prefix(feature.get_name())
-
-            # Convert k_value to appropriate type
-            if k_value_str == "auto":
-                k_value = "auto"
-            else:
-                k_value = int(k_value_str)
-
-            # Parse source features (ampersand-separated)
-            source_features = [feature.strip() for feature in source_features_str.split("&")]
-
-            return algorithm, k_value, source_features
-
-        # configuration based
-        source_features_frozen = feature.options.get_in_features()
-        source_features = [source_feature.get_name() for source_feature in source_features_frozen]
-
-        algorithm = feature.options.get(cls.ALGORITHM)
-        k_value_raw = feature.options.get(cls.K_VALUE)
-
-        # Convert k_value to appropriate type
-        if k_value_raw == "auto":
-            k_value = "auto"
-        else:
-            k_value = int(k_value_raw)
-
-        if algorithm is None or k_value is None or not source_features:
-            raise ValueError(f"Could not extract algorithm, k_value, and source features from: {feature.name}")
+        if algorithm is None or k_value is None:
+            raise ValueError(f"Could not extract algorithm and k_value from: {feature.name}")
 
         return algorithm, k_value, source_features
 

@@ -188,33 +188,44 @@ class ScalingFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
         Raises:
             ValueError: If parameters cannot be extracted
         """
-        scaler_type = None
-        source_feature_name: str | None = None
+        source_features = cls._extract_source_features(feature)
+        scaler_type = cls._extract_scaler_type(feature)
+        if scaler_type is None:
+            raise ValueError(f"Could not extract scaler type from: {feature.name}")
+        return scaler_type, source_features[0]
 
-        # Try string-based parsing first
+    @classmethod
+    def _extract_scaler_type(cls, feature: Feature) -> Optional[str]:
+        """
+        Extract scaler type from a feature.
+
+        Tries string-based parsing first, falls back to configuration-based approach.
+
+        Args:
+            feature: The feature to extract scaler type from
+
+        Returns:
+            The scaler type string
+
+        Raises:
+            ValueError: If scaler type is unsupported
+        """
         feature_name_str = feature.name.name if hasattr(feature.name, "name") else str(feature.name)
 
+        # Try string-based parsing first
         if FeatureChainParser.is_chained_feature(feature_name_str):
             scaler_type = cls.get_scaler_type(feature_name_str)
-            source_feature_name = FeatureChainParser.extract_in_feature(feature_name_str, cls.PREFIX_PATTERN)
-            return scaler_type, source_feature_name
+            return scaler_type
 
         # Fall back to configuration-based approach
-        source_features = feature.options.get_in_features()
-        source_feature = next(iter(source_features))
-        source_feature_name = source_feature.get_name()
-
         scaler_type = feature.options.get(cls.SCALER_TYPE)
 
-        if scaler_type is None or source_feature_name is None:
-            raise ValueError(f"Could not extract scaler type and source feature from: {feature.name}")
-
-        if scaler_type not in cls.SUPPORTED_SCALERS:
+        if scaler_type is not None and scaler_type not in cls.SUPPORTED_SCALERS:
             raise ValueError(
                 f"Unsupported scaler type: {scaler_type}. Supported types: {', '.join(cls.SUPPORTED_SCALERS.keys())}"
             )
 
-        return scaler_type, source_feature_name
+        return str(scaler_type) if scaler_type is not None else None
 
     @classmethod
     def _import_sklearn_components(cls) -> Dict[str, Any]:

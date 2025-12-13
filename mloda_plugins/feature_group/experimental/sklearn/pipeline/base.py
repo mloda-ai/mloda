@@ -116,10 +116,9 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup)
 
     # In-feature configuration for FeatureChainParserMixin
     # Pipelines support variable number of in_features
+    IN_FEATURE_SEPARATOR = ","  # Use comma for multiple source features
     MIN_IN_FEATURES = 1
     MAX_IN_FEATURES: Optional[int] = None  # Unlimited
-
-    # Custom input_features needed to handle comma-separated multiple source features
 
     @staticmethod
     def artifact() -> Type[BaseArtifact] | None:
@@ -260,43 +259,45 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup)
         Raises:
             ValueError: If parameters cannot be extracted
         """
+        source_features = cls._extract_source_features(feature)
+        pipeline_name = cls._extract_pipeline_name(feature)
+        if pipeline_name is None:
+            raise ValueError(f"Could not extract pipeline name from: {feature.name}")
+        return pipeline_name, source_features
+
+    @classmethod
+    def _extract_pipeline_name(cls, feature: Feature) -> Optional[str]:
+        """
+        Extract pipeline name from a feature.
+
+        Tries string-based parsing first, falls back to configuration-based approach.
+
+        Args:
+            feature: The feature to extract pipeline name from
+
+        Returns:
+            Pipeline name or None if extraction fails
+        """
         # Try string-based parsing first
         feature_name_str = feature.name.name if hasattr(feature.name, "name") else str(feature.name)
 
         if FeatureChainParser.is_chained_feature(feature_name_str):
-            pipeline_name = cls.get_pipeline_name(feature_name_str)
-            _, source_features_str = FeatureChainParser.parse_feature_name(feature_name_str, [cls.PREFIX_PATTERN])
-
-            if source_features_str is not None:
-                # Handle multiple source features
-                if "," in source_features_str:
-                    source_features = [f.strip() for f in source_features_str.split(",")]
-                else:
-                    source_features = [source_features_str]
-
-                return pipeline_name, source_features
+            prefix_part, _ = FeatureChainParser.parse_feature_name(feature_name_str, [cls.PREFIX_PATTERN])
+            if prefix_part is not None:
+                return prefix_part
 
         # Fall back to configuration-based approach
         pipeline_name = feature.options.get(cls.PIPELINE_NAME)
         pipeline_steps = feature.options.get(cls.PIPELINE_STEPS)
-        source_features_set = feature.options.get_in_features()
-        source_features = [sf.get_name() for sf in source_features_set]
 
         # Handle mutual exclusivity: either PIPELINE_NAME or PIPELINE_STEPS
         if pipeline_name is not None:
-            # Using predefined pipeline
-            if not source_features:
-                raise ValueError(f"Could not extract source features from: {feature.name}")
-            return pipeline_name, source_features
+            return str(pipeline_name)
         elif pipeline_steps is not None:
             # Using custom pipeline steps - use "custom" as pipeline name
-            if not source_features:
-                raise ValueError(f"Could not extract source features from: {feature.name}")
-            return "custom", source_features
-        else:
-            raise ValueError(
-                f"Could not extract pipeline configuration from: {feature.name}. Must provide either PIPELINE_NAME or PIPELINE_STEPS."
-            )
+            return "custom"
+
+        return None
 
     @classmethod
     def _get_pipeline_config_from_feature(cls, feature: Feature, pipeline_name: str) -> Dict[str, Any]:

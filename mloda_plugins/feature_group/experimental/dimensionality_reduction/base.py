@@ -117,8 +117,9 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, AbstractFeatu
     PREFIX_PATTERN = r".*__([\w]+)_(\d+)d$"
 
     # In-feature configuration for FeatureChainParserMixin
+    IN_FEATURE_SEPARATOR = ","
     MIN_IN_FEATURES = 1
-    MAX_IN_FEATURES = 1
+    MAX_IN_FEATURES = None
 
     PROPERTY_MAPPING = {
         ALGORITHM: {
@@ -198,28 +199,6 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, AbstractFeatu
             and int(value) > 0,
         },
     }
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
-        """Extract source feature from either configuration-based options or string parsing."""
-
-        source_feature: str | None = None
-
-        # Try string-based parsing first
-        _, source_feature = FeatureChainParser.parse_feature_name(feature_name, [self.PREFIX_PATTERN])
-        if source_feature is not None:
-            # Handle multiple source features (comma-separated)
-            source_features = set()
-            for feature in source_feature.split(","):
-                source_features.add(Feature(feature.strip()))
-            return source_features
-
-        # Fall back to configuration-based approach
-        source_featurez = options.get_in_features()
-        if len(source_featurez) != 1:
-            raise ValueError(
-                f"Expected exactly one source feature, but found {len(source_featurez)}: {source_featurez}"
-            )
-        return set(source_featurez)
 
     @classmethod
     def parse_reduction_suffix(cls, feature_name: str) -> tuple[str, int]:
@@ -311,30 +290,38 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, AbstractFeatu
         Raises:
             ValueError: If parameters cannot be extracted
         """
-        algorithm = None
-        dimension = None
-        source_features = None
+        source_features = cls._extract_source_features(feature)
+        algorithm, dimension, algo_options = cls._extract_dim_reduction_params(feature)
+        if algorithm is None or dimension is None:
+            raise ValueError(f"Could not extract algorithm and dimension from: {feature.name}")
+        return algorithm, dimension, source_features, algo_options
 
-        # Try string-based parsing first
+    @classmethod
+    def _extract_dim_reduction_params(cls, feature: Feature) -> tuple[Optional[str], Optional[int], Options]:
+        """
+        Extract dimensionality reduction algorithm, dimension, and options from a feature.
+
+        Tries string-based parsing first, falls back to configuration-based approach.
+
+        Args:
+            feature: The feature to extract parameters from
+
+        Returns:
+            Tuple of (algorithm, dimension, algorithm_options)
+        """
         feature_name_str = feature.name.name if hasattr(feature.name, "name") else str(feature.name)
 
+        # Try string-based parsing first
         if FeatureChainParser.is_chained_feature(feature_name_str):
             algorithm, dimension = cls.parse_reduction_suffix(feature_name_str)
-            source_features_str = FeatureChainParser.extract_in_feature(feature_name_str, cls.PREFIX_PATTERN)
-            source_features = [feature.strip() for feature in source_features_str.split(",")]
-            # For string-based features, still extract algorithm-specific options from feature.options
-            return algorithm, dimension, source_features, feature.options
+            return algorithm, dimension, feature.options
 
         # Fall back to configuration-based approach
-        source_features_set = feature.options.get_in_features()
-        source_feature = next(iter(source_features_set))
-        source_features = [source_feature.get_name()]
-
         algorithm = feature.options.get(cls.ALGORITHM)
         dimension = feature.options.get(cls.DIMENSION)
 
         if algorithm is None or dimension is None:
-            raise ValueError(f"Could not extract algorithm and dimension from: {feature.name}")
+            return None, None, feature.options
 
         # Validate algorithm
         if algorithm not in cls.REDUCTION_ALGORITHMS:
@@ -344,12 +331,11 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, AbstractFeatu
             )
 
         # Validate and convert dimension
-
         dimension = int(dimension)
         if dimension <= 0:
             raise ValueError(f"Invalid dimension: {dimension}. Must be a positive integer.")
 
-        return algorithm, dimension, source_features, feature.options
+        return algorithm, dimension, feature.options
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

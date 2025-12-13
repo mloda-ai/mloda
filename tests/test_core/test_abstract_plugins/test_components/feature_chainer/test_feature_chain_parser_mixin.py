@@ -343,3 +343,59 @@ class TestFeatureChainParserMixinEdgeCases:
         # Result is a set, so we just check all features are present
         feature_names = {f.get_name() for f in result}
         assert feature_names == {"first", "second", "third"}
+
+
+class TestFeatureChainParserMixinExtractSourceFeatures:
+    """Tests for _extract_source_features() classmethod."""
+
+    def test_extract_source_features_string_based_single(self) -> None:
+        """Test extraction from feature name with single source feature."""
+        feature = Feature(
+            name="source_feature__op1_test",
+            options=Options(context={"operation": "op1"}),
+        )
+
+        result = MockFeatureGroup._extract_source_features(feature)
+
+        assert result == ["source_feature"]
+
+    def test_extract_source_features_string_based_multiple(self) -> None:
+        """Test extraction from feature name with multiple source features (ampersand separator)."""
+        feature = Feature(
+            name="feat1&feat2&feat3__op1_test",
+            options=Options(context={"operation": "op1"}),
+        )
+
+        result = MockFeatureGroup._extract_source_features(feature)
+
+        assert result == ["feat1", "feat2", "feat3"]
+
+    def test_extract_source_features_config_based_fallback(self) -> None:
+        """Test that when string parsing fails, it falls back to feature.options.get_in_features()."""
+        feature = Feature(
+            name="simple_name",
+            options=Options(
+                context={
+                    DefaultOptionKeys.in_features: ["feature_a", "feature_b"],
+                    "operation": "op1",
+                }
+            ),
+        )
+
+        result = MockFeatureGroup._extract_source_features(feature)
+
+        # Should return list of feature names from get_in_features()
+        assert len(result) == 2
+        assert "feature_a" in result
+        assert "feature_b" in result
+
+    def test_extract_source_features_custom_separator(self) -> None:
+        """Test extraction with custom separator (comma instead of ampersand)."""
+        feature = Feature(
+            name="feat1,feat2,feat3__op1_test",
+            options=Options(context={"operation": "op1"}),
+        )
+
+        result = MockFeatureGroupCustomSeparator._extract_source_features(feature)
+
+        assert result == ["feat1", "feat2", "feat3"]

@@ -182,6 +182,63 @@ class TimeWindowFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
         return set(source_features) | {time_filter_feature}
 
     @classmethod
+    def _extract_time_window_params(cls, feature: Feature) -> tuple[Optional[str], Optional[int], Optional[str]]:
+        """
+        Extract time window parameters (window_function, window_size, time_unit) from a feature.
+
+        Tries string-based parsing first using parse_time_window_prefix, falls back to configuration.
+
+        Args:
+            feature: The feature to extract parameters from
+
+        Returns:
+            Tuple of (window_function, window_size, time_unit), where any value may be None if not found
+        """
+        feature_name = feature.get_name()
+
+        # Try string-based parsing first
+        try:
+            window_function, window_size, time_unit = cls.parse_time_window_prefix(feature_name)
+            return window_function, window_size, time_unit
+        except ValueError:
+            pass
+
+        # Fall back to configuration
+        window_function = feature.options.get(cls.WINDOW_FUNCTION)
+        window_size = feature.options.get(cls.WINDOW_SIZE)
+        time_unit = feature.options.get(cls.TIME_UNIT)
+
+        # Convert window_size to int if it's a string
+        if window_size is not None and isinstance(window_size, str):
+            window_size = int(window_size)
+
+        return window_function, window_size, time_unit
+
+    @classmethod
+    def _extract_time_window_params_and_source_features(cls, feature: Feature) -> tuple[str, int, str, str]:
+        """
+        Extract time window parameters and source feature from a feature.
+
+        Tries string-based parsing first, falls back to configuration-based approach.
+
+        Args:
+            feature: The feature to extract parameters from
+
+        Returns:
+            Tuple of (window_function, window_size, time_unit, source_feature_name)
+
+        Raises:
+            ValueError: If parameters cannot be extracted
+        """
+        source_features = cls._extract_source_features(feature)
+        window_function, window_size, time_unit = cls._extract_time_window_params(feature)
+
+        if window_function is None or window_size is None or time_unit is None:
+            raise ValueError(f"Could not extract time window parameters from: {feature.name}")
+
+        return window_function, window_size, time_unit, source_features[0]
+
+    @classmethod
     def parse_time_window_prefix(cls, feature_name: str) -> tuple[str, int, str]:
         """
         Parse the time window suffix into its components.
@@ -282,44 +339,9 @@ class TimeWindowFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
 
         # Process each requested feature
         for feature in features.features:
-            feature_name = feature.get_name()
-
-            # Try string-based parsing first (for legacy features)
-            parsed_params, in_features = FeatureChainParser.parse_feature_name(feature_name, [cls.PREFIX_PATTERN])
-
-            if in_features is not None:
-                # String-based approach succeeded
-                window_function, window_size, time_unit = cls.parse_time_window_prefix(feature_name)
-            else:
-                # Fall back to configuration-based approach
-                has_config_params = (
-                    feature.options.get(cls.WINDOW_FUNCTION) is not None
-                    and feature.options.get(cls.WINDOW_SIZE) is not None
-                    and feature.options.get(cls.TIME_UNIT) is not None
-                )
-
-                if not has_config_params:
-                    raise ValueError(
-                        f"Feature '{feature_name}' does not match string pattern and lacks configuration parameters"
-                    )
-
-                # Configuration-based approach
-                source_features = feature.options.get_in_features()
-                if len(source_features) != 1:
-                    raise ValueError(
-                        f"Expected exactly one source feature, but found {len(source_features)}: {source_features}"
-                    )
-                source_feature = next(iter(source_features))
-                in_features = source_feature.get_name()
-
-                # Extract parameters from options
-                window_function = feature.options.get(cls.WINDOW_FUNCTION)
-                window_size = feature.options.get(cls.WINDOW_SIZE)
-                time_unit = feature.options.get(cls.TIME_UNIT)
-
-                # Convert window_size to int if it's a string
-                if isinstance(window_size, str):
-                    window_size = int(window_size)
+            window_function, window_size, time_unit, in_features = cls._extract_time_window_params_and_source_features(
+                feature
+            )
 
             # Resolve multi-column features automatically
             # If in_features is "onehot_encoded__product", this discovers

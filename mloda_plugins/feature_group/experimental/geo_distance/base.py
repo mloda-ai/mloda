@@ -228,27 +228,44 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
         Raises:
             ValueError: If parameters cannot be extracted
         """
+        # Use the mixin method to extract source features
+        source_features = cls._extract_source_features(feature)
+
+        # Extract distance type
+        distance_type = cls._extract_distance_unit(feature)
+
+        if distance_type is None or len(source_features) != 2:
+            raise ValueError(f"Could not extract geo distance parameters from: {feature.name}")
+
+        return distance_type, source_features[0], source_features[1]
+
+    @classmethod
+    def _extract_distance_unit(cls, feature: Feature) -> Optional[str]:
+        """
+        Extract distance unit (distance type) from a feature.
+
+        Tries string-based parsing first, falls back to configuration-based approach.
+
+        Args:
+            feature: The feature to extract distance unit from
+
+        Returns:
+            Distance unit/type (haversine, euclidean, manhattan) or None
+
+        Raises:
+            ValueError: If distance type is invalid
+        """
         # Try string-based parsing first
         feature_name_str = feature.name.name if hasattr(feature.name, "name") else str(feature.name)
 
         if FeatureChainParser.is_chained_feature(feature_name_str):
             distance_type = cls.get_distance_type(feature_name_str)
-            point1_feature, point2_feature = cls.get_point_features(feature_name_str)
-            return distance_type, point1_feature, point2_feature
+            return distance_type
 
         # Fall back to configuration-based approach
-        source_features = feature.options.get_in_features()
-        if len(source_features) != 2:
-            raise ValueError(
-                f"Expected exactly 2 source features for geo distance, got {len(source_features)}: {source_features}"
-            )
-
-        source_feature_names = [sf.get_name() for sf in source_features]
-        point1_feature, point2_feature = source_feature_names
-
         distance_type = feature.options.get(cls.DISTANCE_TYPE)
         if distance_type is None:
-            raise ValueError(f"Could not extract distance_type from feature: {feature.name}")
+            return None
 
         # Validate distance type
         if distance_type not in cls.DISTANCE_TYPES:
@@ -256,7 +273,7 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
                 f"Unsupported distance type: {distance_type}. Supported types: {', '.join(cls.DISTANCE_TYPES.keys())}"
             )
 
-        return distance_type, point1_feature, point2_feature
+        return str(distance_type)
 
     @classmethod
     def _check_point_features_exist(cls, data: Any, point1_feature: str, point2_feature: str) -> None:

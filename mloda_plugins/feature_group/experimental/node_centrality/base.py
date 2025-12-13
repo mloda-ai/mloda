@@ -261,35 +261,38 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
         Raises:
             ValueError: If parameters cannot be extracted
         """
-        centrality_type = None
-        source_feature_name: str | None = None
+        source_features = cls._extract_source_features(feature)
+        centrality_type = cls._extract_centrality_type(feature)
+        if centrality_type is None:
+            raise ValueError(f"Could not extract centrality type from: {feature.name}")
+        return centrality_type, source_features[0]
 
+    @classmethod
+    def _extract_centrality_type(cls, feature: Feature) -> Optional[str]:
+        """
+        Extract centrality type from a feature.
+
+        Tries string-based parsing first, falls back to configuration-based approach.
+
+        Args:
+            feature: The feature to extract centrality type from
+
+        Returns:
+            The centrality type, or None if not found
+
+        Raises:
+            ValueError: If centrality type cannot be extracted
+        """
         # Try string-based parsing first
-        # Note: parse_feature_name returns (operation_config, source_feature) for L→R format
-        # The operation_config is already extracted by the regex group (e.g., "degree" from "degree_centrality")
         suffix_part, source_feature_name = FeatureChainParser.parse_feature_name(feature.name, [cls.PREFIX_PATTERN])
         if source_feature_name is not None and suffix_part is not None:
             # The suffix_part is already the centrality type (extracted by regex group)
-            centrality_type = suffix_part
-            if centrality_type in cls.CENTRALITY_TYPES:
-                return centrality_type, source_feature_name
+            if suffix_part in cls.CENTRALITY_TYPES:
+                return suffix_part
 
         # Fall back to configuration-based approach
-        source_features = feature.options.get_in_features()
-        if len(source_features) != 1:
-            raise ValueError(
-                f"Expected exactly one source feature, but found {len(source_features)}: {source_features}"
-            )
-
-        source_feature = next(iter(source_features))
-        source_feature_name = source_feature.get_name()
-
         centrality_type = feature.options.get(cls.CENTRALITY_TYPE)
-
-        if centrality_type is None or source_feature_name is None:
-            raise ValueError(f"Could not extract centrality type and source feature from: {feature.name}")
-
-        return centrality_type, source_feature_name
+        return str(centrality_type) if centrality_type is not None else None
 
     @classmethod
     def _check_source_feature_exists(cls, data: Any, feature_name: str) -> None:

@@ -439,46 +439,43 @@ class ForecastingFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
         Raises:
             ValueError: If parameters cannot be extracted
         """
-        # Try string-based parsing first
+        source_features = cls._extract_source_features(feature)
+        algorithm, horizon, time_unit = cls._extract_forecast_params(feature)
+        if algorithm is None or horizon is None or time_unit is None:
+            raise ValueError(f"Could not extract forecasting parameters from: {feature.name}")
+        return algorithm, horizon, time_unit, source_features[0]
+
+    @classmethod
+    def _extract_forecast_params(cls, feature: Feature) -> tuple[Optional[str], Optional[int], Optional[str]]:
+        """
+        Extract forecast-specific parameters (algorithm, horizon, time_unit) from a feature.
+
+        Tries string-based parsing first using parse_forecast_suffix, falls back to configuration-based approach.
+
+        Args:
+            feature: The feature to extract parameters from
+
+        Returns:
+            Tuple of (algorithm, horizon, time_unit), where any value may be None if not found
+
+        Raises:
+            ValueError: If string-based parsing fails validation
+        """
+        # Try string-based first using parse_forecast_suffix
         feature_name_str = feature.name.name if hasattr(feature.name, "name") else str(feature.name)
-
         if FeatureChainParser.is_chained_feature(feature_name_str):
-            algorithm, horizon, time_unit = cls.parse_forecast_suffix(feature_name_str)
-
-            # Extract source feature name (everything before the last double underscore)
-            source_feature_name = feature_name_str.rsplit(CHAIN_SEPARATOR, 1)[0]
-            return algorithm, horizon, time_unit, source_feature_name
-
-        # Fall back to configuration-based approach
-        source_features = feature.options.get_in_features()
-        source_feature = next(iter(source_features))
-        source_feature_name = source_feature.get_name()
-
+            try:
+                algorithm, horizon, time_unit = cls.parse_forecast_suffix(feature_name_str)
+                return algorithm, horizon, time_unit
+            except ValueError:
+                pass
+        # Fall back to config
         algorithm = feature.options.get(cls.ALGORITHM)
         horizon = feature.options.get(cls.HORIZON)
         time_unit = feature.options.get(cls.TIME_UNIT)
-
-        if algorithm is None or horizon is None or time_unit is None or source_feature_name is None:
-            raise ValueError(f"Could not extract forecasting parameters from: {feature.name}")
-
-        # Validate parameters
-        if algorithm not in cls.FORECASTING_ALGORITHMS:
-            raise ValueError(
-                f"Unsupported forecasting algorithm: {algorithm}. "
-                f"Supported algorithms: {', '.join(cls.FORECASTING_ALGORITHMS.keys())}"
-            )
-
-        if time_unit not in cls.TIME_UNITS:
-            raise ValueError(f"Unsupported time unit: {time_unit}. Supported units: {', '.join(cls.TIME_UNITS.keys())}")
-
-        # Convert horizon to integer if it's a string
-        if isinstance(horizon, str):
+        if horizon is not None and isinstance(horizon, str):
             horizon = int(horizon)
-
-        if not isinstance(horizon, int) or horizon <= 0:
-            raise ValueError(f"Invalid horizon: {horizon}. Must be a positive integer.")
-
-        return algorithm, horizon, time_unit, source_feature_name
+        return algorithm, horizon, time_unit
 
     @classmethod
     @abstractmethod

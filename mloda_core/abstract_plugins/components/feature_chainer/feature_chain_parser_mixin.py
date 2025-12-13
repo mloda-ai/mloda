@@ -166,3 +166,32 @@ class FeatureChainParserMixin:
         if hasattr(cls, "PROPERTY_MAPPING"):
             return cast(Dict[str, Any], cls.PROPERTY_MAPPING)
         return None
+
+    @classmethod
+    def _extract_source_features(cls, feature: Feature) -> List[str]:
+        """
+        Extract source features from a feature.
+
+        Tries string-based parsing first, falls back to configuration-based.
+        Uses class attributes IN_FEATURE_SEPARATOR and PREFIX_PATTERN.
+
+        Args:
+            feature: The feature to extract source features from
+
+        Returns:
+            List of source feature names
+        """
+        feature_name = feature.get_name()
+        prefix_patterns = cls._get_prefix_patterns()
+
+        operation_config, source_feature = FeatureChainParser.parse_feature_name(
+            feature_name, prefix_patterns, CHAIN_SEPARATOR
+        )
+
+        # String-based parsing succeeded
+        if operation_config is not None and source_feature is not None and source_feature:
+            return source_feature.split(cls.IN_FEATURE_SEPARATOR)
+
+        # Configuration-based fallback using get_in_features()
+        in_features_set = feature.options.get_in_features()
+        return [f.get_name() for f in in_features_set]

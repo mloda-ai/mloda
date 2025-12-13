@@ -138,31 +138,36 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
         Raises:
             ValueError: If parameters cannot be extracted
         """
-        operations = None
-        source_feature_name: str | None = None
+        source_features = cls._extract_source_features(feature)
+        operations = cls._extract_cleaning_operations(feature)
+        if operations is None:
+            raise ValueError(f"Could not extract operations from: {feature.name}")
+        return operations, source_features[0]
 
+    @classmethod
+    def _extract_cleaning_operations(cls, feature: Feature) -> Optional[tuple[Any, Any]]:
+        """
+        Extract cleaning operations from a feature.
+
+        Tries string-based parsing first, falls back to configuration-based approach.
+
+        Args:
+            feature: The feature to extract operations from
+
+        Returns:
+            Tuple of cleaning operations, or None if not found
+        """
         # Try string-based parsing first
         feature_name_str = feature.name.name if hasattr(feature.name, "name") else str(feature.name)
 
         if FeatureChainParser.is_chained_feature(feature_name_str):
-            _, source_feature_name = FeatureChainParser.parse_feature_name(feature_name_str, [cls.PREFIX_PATTERN])
             # For string-based features, get operations from options
             operations = feature.options.get(cls.CLEANING_OPERATIONS) or ()
-            if source_feature_name is None:
-                raise ValueError(f"Could not extract source feature from string-based feature: {feature.name}")
-            return operations, source_feature_name  # type: ignore
+            return operations  # type: ignore
 
         # Fall back to configuration-based approach
-        source_features = feature.options.get_in_features()
-        source_feature = next(iter(source_features))
-        source_feature_name = source_feature.get_name()
-
         operations = feature.options.get(cls.CLEANING_OPERATIONS)
-
-        if operations is None or source_feature_name is None:
-            raise ValueError(f"Could not extract cleaning operations and source feature from: {feature.name}")
-
-        return operations, source_feature_name
+        return operations if operations is not None else None
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

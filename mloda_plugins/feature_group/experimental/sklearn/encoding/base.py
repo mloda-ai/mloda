@@ -298,33 +298,42 @@ class EncodingFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
         Raises:
             ValueError: If parameters cannot be extracted
         """
-        encoder_type = None
-        source_feature_name: str | None = None
+        source_features = cls._extract_source_features(feature)
+        encoder_type = cls._extract_encoder_type(feature)
+        if encoder_type is None:
+            raise ValueError(f"Could not extract encoder type from: {feature.name}")
+        return encoder_type, source_features[0]
 
-        # Try string-based parsing first
+    @classmethod
+    def _extract_encoder_type(cls, feature: Feature) -> Optional[str]:
+        """
+        Extract encoder type from a feature.
+
+        Tries string-based parsing first, falls back to configuration-based approach.
+
+        Args:
+            feature: The feature to extract encoder type from
+
+        Returns:
+            Encoder type string, or None if not found
+
+        Raises:
+            ValueError: If encoder type is unsupported
+        """
         feature_name_str = feature.name.name if hasattr(feature.name, "name") else str(feature.name)
 
         if FeatureChainParser.is_chained_feature(feature_name_str):
             encoder_type = cls.get_encoder_type(feature_name_str)
-            source_feature_name = FeatureChainParser.extract_in_feature(feature_name_str, cls.PREFIX_PATTERN)
-            return encoder_type, source_feature_name
-
-        # Fall back to configuration-based approach
-        source_features = feature.options.get_in_features()
-        source_feature = next(iter(source_features))
-        source_feature_name = source_feature.get_name()
+            return encoder_type
 
         encoder_type = feature.options.get(cls.ENCODER_TYPE)
 
-        if encoder_type is None or source_feature_name is None:
-            raise ValueError(f"Could not extract encoder type and source feature from: {feature.name}")
-
-        if encoder_type not in cls.SUPPORTED_ENCODERS:
+        if encoder_type is not None and encoder_type not in cls.SUPPORTED_ENCODERS:
             raise ValueError(
                 f"Unsupported encoder type: {encoder_type}. Supported types: {', '.join(cls.SUPPORTED_ENCODERS.keys())}"
             )
 
-        return encoder_type, source_feature_name
+        return str(encoder_type) if encoder_type is not None else None
 
     @classmethod
     def _import_sklearn_components(cls) -> Dict[str, Any]:

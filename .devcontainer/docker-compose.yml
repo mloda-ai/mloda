@@ -28,11 +28,6 @@ x-agent-common: &agent-common
         cp /tmp/host-gitconfig /home/vscode/.gitconfig;
         echo 'Copied .gitconfig from host';
       fi;
-      if [ -f /tmp/host-git-credentials ] && [ ! -d /tmp/host-git-credentials ]; then
-        cp /tmp/host-git-credentials /home/vscode/.git-credentials;
-        chmod 600 /home/vscode/.git-credentials;
-        echo 'Copied .git-credentials from host';
-      fi;
       if [ \"$(stat -c '%U' /workspace)\" != 'vscode' ]; then
         echo 'Fixing /workspace ownership (was root)...';
         sudo chown -R vscode:vscode /workspace;
@@ -60,7 +55,6 @@ services:
       - ai_agent_1_data:/workspace
       - shared_locks:/shared
       - ~/.gitconfig:/tmp/host-gitconfig:ro
-      - ~/.git-credentials:/tmp/host-git-credentials:ro
     ports:
       - "8000:8000"
     networks:
@@ -73,7 +67,6 @@ services:
       - ai_agent_2_data:/workspace
       - shared_locks:/shared
       - ~/.gitconfig:/tmp/host-gitconfig:ro
-      - ~/.git-credentials:/tmp/host-git-credentials:ro
     ports:
       - "8001:8000"
     networks:
@@ -86,7 +79,6 @@ services:
       - ai_agent_3_data:/workspace
       - shared_locks:/shared
       - ~/.gitconfig:/tmp/host-gitconfig:ro
-      - ~/.git-credentials:/tmp/host-git-credentials:ro
     ports:
       - "8002:8000"
     networks:
@@ -99,7 +91,6 @@ services:
       - ai_agent_4_data:/workspace
       - shared_locks:/shared
       - ~/.gitconfig:/tmp/host-gitconfig:ro
-      - ~/.git-credentials:/tmp/host-git-credentials:ro
     ports:
       - "8003:8000"
     networks:
@@ -112,7 +103,6 @@ services:
       - ai_agent_5_data:/workspace
       - shared_locks:/shared
       - ~/.gitconfig:/tmp/host-gitconfig:ro
-      - ~/.git-credentials:/tmp/host-git-credentials:ro
     ports:
       - "8004:8000"
     networks:
@@ -125,7 +115,6 @@ services:
       - ai_agent_6_data:/workspace
       - shared_locks:/shared
       - ~/.gitconfig:/tmp/host-gitconfig:ro
-      - ~/.git-credentials:/tmp/host-git-credentials:ro
     ports:
       - "8005:8000"
     networks:

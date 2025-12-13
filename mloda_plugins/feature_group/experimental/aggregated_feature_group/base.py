@@ -129,6 +129,28 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
         return prefix_part
 
     @classmethod
+    def _extract_aggregation_type(cls, feature: Feature) -> Optional[str]:
+        """
+        Extract aggregation type from a feature.
+
+        Tries string-based parsing first, falls back to configuration.
+
+        Args:
+            feature: The feature to extract aggregation type from
+
+        Returns:
+            The aggregation type, or None if not found
+        """
+        # Try string-based parsing first
+        aggregation_type, _ = FeatureChainParser.parse_feature_name(feature.name, [cls.PREFIX_PATTERN])
+        if aggregation_type is not None:
+            return aggregation_type
+
+        # Fall back to configuration
+        aggregation_type = feature.options.get(cls.AGGREGATION_TYPE)
+        return str(aggregation_type) if aggregation_type is not None else None
+
+    @classmethod
     def _extract_aggr_and_source_feature(cls, feature: Feature) -> tuple[str, str]:
         """
         Extract aggregation type and source feature name from a feature.
@@ -144,27 +166,16 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
         Raises:
             ValueError: If parameters cannot be extracted
         """
-        aggregation_type = None
-        source_feature_name: str | None = None
+        # Use the mixin method to extract source features
+        source_features = cls._extract_source_features(feature)
 
-        # string based
-        aggregation_type, source_feature_name = FeatureChainParser.parse_feature_name(
-            feature.name, [cls.PREFIX_PATTERN]
-        )
-        if aggregation_type is not None and source_feature_name is not None:
-            return aggregation_type, source_feature_name
+        # Extract aggregation type
+        aggregation_type = cls._extract_aggregation_type(feature)
 
-        # configuration based
-        source_features = feature.options.get_in_features()
-        source_feature = next(iter(source_features))
-        source_feature_name = source_feature.get_name()
+        if aggregation_type is None:
+            raise ValueError(f"Could not extract aggregation type from: {feature.name}")
 
-        aggregation_type = feature.options.get(cls.AGGREGATION_TYPE)
-
-        if aggregation_type is None or source_feature_name is None:
-            raise ValueError(f"Could not extract aggregation type and source feature from: {feature.name}")
-
-        return aggregation_type, source_feature_name
+        return aggregation_type, source_features[0]
 
     @classmethod
     def _supports_aggregation_type(cls, aggregation_type: str) -> bool:

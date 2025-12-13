@@ -131,32 +131,6 @@ services:
     networks:
       - agent-6-network
 
-  ai-agent-7:
-    <<: *agent-common
-    container_name: ai-agent-7
-    volumes:
-      - ai_agent_7_data:/workspace
-      - shared_locks:/shared
-      - ~/.gitconfig:/tmp/host-gitconfig:ro
-      - ~/.git-credentials:/tmp/host-git-credentials:ro
-    ports:
-      - "8006:8000"
-    networks:
-      - agent-7-network
-
-  ai-agent-8:
-    <<: *agent-common
-    container_name: ai-agent-8
-    volumes:
-      - ai_agent_8_data:/workspace
-      - shared_locks:/shared
-      - ~/.gitconfig:/tmp/host-gitconfig:ro
-      - ~/.git-credentials:/tmp/host-git-credentials:ro
-    ports:
-      - "8007:8000"
-    networks:
-      - agent-8-network
-
   context7:
     # claude mcp add --transport http context7 http://localhost:8765/mcp
     image: mcp/context7
@@ -171,8 +145,6 @@ volumes:
   ai_agent_4_data:
   ai_agent_5_data:
   ai_agent_6_data:
-  ai_agent_7_data:
-  ai_agent_8_data:
 
 networks:
   agent-1-network:
@@ -186,10 +158,6 @@ networks:
   agent-5-network:
     driver: bridge
   agent-6-network:
-    driver: bridge
-  agent-7-network:
-    driver: bridge
-  agent-8-network:
     driver: bridge
   shared-network:
     driver: bridge

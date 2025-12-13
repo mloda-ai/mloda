@@ -8,6 +8,8 @@ This setup allows you to develop and test your code inside a Docker container. I
 - **ai-agent-2**: Port 8001
 - **ai-agent-3**: Port 8002
 - **ai-agent-4**: Port 8003
+- **ai-agent-5**: Port 8004
+- **ai-agent-6**: Port 8005
 
 ## How to Attach to a Dev Container via vscode
 
@@ -21,10 +23,12 @@ This setup allows you to develop and test your code inside a Docker container. I
 - **docker exec -it ai-agent-2 /bin/bash**
 - **docker exec -it ai-agent-3 /bin/bash**
 - **docker exec -it ai-agent-4 /bin/bash**
+- **docker exec -it ai-agent-5 /bin/bash**
+- **docker exec -it ai-agent-6 /bin/bash**
 
 ## Building and Starting Containers
 
-### Build and Start ALL Containers (4 containers)
+### Build and Start ALL Containers (6 containers)
 
 ```sh
 cd .devcontainer && docker compose --profile build-only build && docker compose up -d
@@ -49,6 +53,12 @@ cd .devcontainer && docker compose up --build -d ai-agent-3
 
 # For ai-agent-4
 cd .devcontainer && docker compose up --build -d ai-agent-4
+
+# For ai-agent-5
+cd .devcontainer && docker compose up --build -d ai-agent-5
+
+# For ai-agent-6
+cd .devcontainer && docker compose up --build -d ai-agent-6
 ```
 
 ### Build and Start Multiple Specific Containers
@@ -93,6 +103,12 @@ docker compose stop ai-agent-3
 
 # For ai-agent-4
 docker compose stop ai-agent-4
+
+# For ai-agent-5
+docker compose stop ai-agent-5
+
+# For ai-agent-6
+docker compose stop ai-agent-6
 ```
 
 ### Remove a SINGLE Container (keeping volume)
@@ -122,3 +138,4 @@ docker volume ls | grep devcontainer
 
 ```sh
 docker volume prune -f
+```

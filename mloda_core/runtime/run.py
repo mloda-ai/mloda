@@ -1,22 +1,21 @@
 from __future__ import annotations
 
-from collections import defaultdict
 import multiprocessing
-import queue
 import threading
 import time
 import traceback
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Type, Union
 from uuid import UUID, uuid4
 import logging
 
-from mloda_core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
 from mloda_core.abstract_plugins.function_extender import WrapperFunctionExtender
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 from mloda_core.prepare.execution_plan import ExecutionPlan
 from mloda_core.runtime.worker.multiprocessing_worker import worker
 from mloda_core.runtime.worker.thread_worker import thread_worker
+from mloda_core.runtime.worker_manager import WorkerManager
+from mloda_core.runtime.data_lifecycle_manager import DataLifecycleManager
 from mloda_core.core.cfw_manager import CfwManager, MyManager
 from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
 from mloda_core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
@@ -24,7 +23,6 @@ from mloda_core.core.step.feature_group_step import FeatureGroupStep
 from mloda_core.core.step.join_step import JoinStep
 from mloda_core.core.step.transform_frame_work_step import TransformFrameworkStep
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.runtime.flight.flight_server import FlightServer
 
 
 logger = logging.getLogger(__name__)
@@ -54,21 +52,13 @@ class Runner:
         self.execution_planner = execution_planner
 
         self.cfw_register: CfwManager
-        self.result_data_collection: Dict[UUID, Any] = {}
-        self.track_data_to_drop: Dict[UUID, Set[UUID]] = {}
-        self.artifacts: Dict[str, Any] = {}
 
-        # multiprocessing
+        # multiprocessing - delegate to WorkerManager
         self.location: Optional[str] = None
-        self.tasks: List[Union[threading.Thread, multiprocessing.Process]] = []
-        self.process_register: Dict[
-            UUID, Tuple[multiprocessing.Process, multiprocessing.Queue[Any], multiprocessing.Queue[Any]]
-        ] = defaultdict()
-        self.result_queues_collection: Set[multiprocessing.Queue[Any]] = set()
-        self.result_uuids_collection: Set[UUID] = set()
+        self.worker_manager = WorkerManager()
 
-        # Initialize framework transformer
-        self.transformer = ComputeFrameworkTransformer()
+        # Data lifecycle - delegate to DataLifecycleManager
+        self.data_lifecycle_manager = DataLifecycleManager()
 
         self.flight_server = None
         if flight_server:
@@ -84,25 +74,7 @@ class Runner:
         """
         Handles the dropping of intermediate data based on finished steps.
         """
-        if not finished_ids:
-            return
-
-        cfw_to_delete = set()
-        for cfw_uuid, step_uuids in self.track_data_to_drop.items():
-            if all(step_id in finished_ids for step_id in step_uuids):
-                self._drop_cfw_data(cfw_uuid)
-                cfw_to_delete.add(cfw_uuid)
-
-        for cfw_uuid in cfw_to_delete:
-            del self.track_data_to_drop[cfw_uuid]
-
-    def _drop_cfw_data(self, cfw_uuid: UUID) -> None:
-        """Drops data associated with a CFW."""
-        if self.location:
-            # FlightServer.drop_tables(self.location, {str(self.cfw_collection[cfw_uuid].uuid)})
-            pass
-        else:
-            self.cfw_collection[cfw_uuid].drop_last_data()
+        self.data_lifecycle_manager.drop_data_for_finished_cfws(finished_ids, self.cfw_collection, self.location)
 
     def compute(self) -> None:
         """
@@ -155,22 +127,8 @@ class Runner:
                 time.sleep(0.01)
 
         finally:
-            self.artifacts = self.cfw_register.get_artifacts()
+            self.data_lifecycle_manager.set_artifacts(self.cfw_register.get_artifacts())
             self.join()
-
-    def get_done_steps_of_multiprocessing_result_queue(self) -> None:
-        """
-        Retrieves UUIDs of finished steps from multiprocessing result queues.
-
-        This method iterates through the result queues and adds any available UUIDs
-        to the collection of finished UUIDs.
-        """
-        for r_queue in self.result_queues_collection:
-            try:
-                result_uuid = r_queue.get(block=False)
-                self.result_uuids_collection.add(UUID(result_uuid))
-            except queue.Empty:
-                continue
 
     def _process_step_result(self, step: Any) -> Union[Any, bool]:
         """
@@ -180,8 +138,8 @@ class Runner:
         on the step's type, such as adding results to the data collection or dropping data.
         """
         # set step.is_done from other processes via result queue
-        self.get_done_steps_of_multiprocessing_result_queue()
-        if step.uuid in self.result_uuids_collection:
+        self.worker_manager.poll_result_queues()
+        if step.uuid in self.worker_manager.result_uuids_collection:
             step.step_is_done = True
 
         if not step.step_is_done:
@@ -207,7 +165,7 @@ class Runner:
         This method checks if data can be dropped based on the CFW's dependencies
         and either drops the data directly or sends a command to a worker process to do so.
         """
-        process, command_queue, result_queue = self.process_register.get(cfw.uuid, (None, None, None))
+        process, command_queue, result_queue = self.worker_manager.process_register.get(cfw.uuid, (None, None, None))
 
         feature_uuids_to_possible_drop = {f.uuid for f in step.features.features}
 
@@ -216,13 +174,13 @@ class Runner:
                 feature_uuids_to_possible_drop, self.location
             )
             if isinstance(data_to_drop, frozenset):
-                self.track_data_to_drop[cfw.uuid] = set(data_to_drop)
+                self.data_lifecycle_manager.track_data_to_drop[cfw.uuid] = set(data_to_drop)
         else:
             command_queue.put(feature_uuids_to_possible_drop)
 
             flyway_datasets = self.cfw_register.get_uuid_flyway_datasets(cfw.uuid)
             if flyway_datasets:
-                self.track_data_to_drop[cfw.uuid] = flyway_datasets
+                self.data_lifecycle_manager.track_data_to_drop[cfw.uuid] = flyway_datasets
 
             if result_queue is not None:
                 self._wait_for_drop_completion(result_queue, cfw.uuid)
@@ -238,17 +196,7 @@ class Runner:
             cfw_uuid: The UUID of the compute framework being dropped.
             timeout: Maximum time to wait for completion in seconds.
         """
-        start_time = time.time()
-        while time.time() - start_time < timeout:
-            try:
-                msg = result_queue.get(block=False)
-                if isinstance(msg, tuple) and len(msg) == 2 and msg[0] == "DROP_COMPLETE" and msg[1] == cfw_uuid:
-                    return
-                # Put back other messages (e.g., step completion UUIDs)
-                result_queue.put(msg, block=False)
-            except queue.Empty:
-                time.sleep(0.001)
-        logger.warning(f"Drop operation for CFW {cfw_uuid} timed out after {timeout}s")
+        self.worker_manager.wait_for_drop_completion(result_queue, cfw_uuid, timeout)
 
     def get_cfw(self, compute_framework: Type[ComputeFrameWork], feature_uuid: UUID) -> ComputeFrameWork:
         """
@@ -395,8 +343,7 @@ class Runner:
             args=(step, self.cfw_register, self.cfw_collection[cfw_uuid], from_cfw),
         )
 
-        self.tasks.append(task)
-        task.start()
+        self.worker_manager.add_thread_task(task)
 
     def multi_execute_step(self, step: Any) -> None:
         """
@@ -408,52 +355,30 @@ class Runner:
         if isinstance(step, TransformFrameworkStep):
             from_cfw = self.prepare_tfs_right_cfw(step)
 
-        process, command_queue, result_queue = self.process_register.get(
-            cfw_uuid, (None, multiprocessing.Queue(), multiprocessing.Queue())
-        )
+        existing = self.worker_manager.get_process_queues(cfw_uuid)
 
-        if process is None:
-            process = multiprocessing.Process(
-                target=worker,
-                args=(command_queue, result_queue, self.cfw_register, self.cfw_collection[cfw_uuid], from_cfw),
+        if existing is None:
+            process, command_queue, result_queue = self.worker_manager.create_worker_process(
+                cfw_uuid,
+                worker,
+                (self.cfw_register, self.cfw_collection[cfw_uuid], from_cfw),
             )
-            self.process_register[cfw_uuid] = (process, command_queue, result_queue)
-            process.start()
-            self.tasks.append(process)
-            self.result_queues_collection.add(result_queue)
-
-        if command_queue:
-            command_queue.put(step)
         else:
-            raise ValueError("Command queue should not be None.")
+            process, command_queue, result_queue = existing
+
+        self.worker_manager.send_command(cfw_uuid, step)
 
     def join(self) -> None:
         """
         Joins all tasks (threads or processes) and terminates multiprocessing processes.
         """
-        failed = False
-        for task in self.tasks:
-            try:
-                if isinstance(task, multiprocessing.Process):
-                    task.terminate()
-
-                task.join()
-            except Exception as e:
-                logger.error(f"Error joining task: {e}")
-                failed = True
-
-        if failed:
-            raise Exception("Error while joining tasks")
+        self.worker_manager.join_all()
 
     def add_to_result_data_collection(self, cfw: ComputeFrameWork, features: FeatureSet, step_uuid: UUID) -> None:
         """
         Adds the result data to the result data collection.
         """
-        if initial_requested_features := features.get_initial_requested_features():
-            result = None
-            result = self.get_result_data(cfw, initial_requested_features, self.location)
-            if result is not None:
-                self.result_data_collection[step_uuid] = result
+        self.data_lifecycle_manager.add_to_result_data_collection(cfw, features, step_uuid, self.location)
 
     def get_result_data(
         self, cfw: ComputeFrameWork, selected_feature_names: Set[FeatureName], location: Optional[str] = None
@@ -461,15 +386,7 @@ class Runner:
         """
         Gets result data from the compute framework.
         """
-        if cfw.data is not None:
-            data = cfw.data
-        elif location:
-            data = FlightServer.download_table(location, str(cfw.uuid))
-            data = cfw.convert_flyserver_data_back(data, self.transformer)
-        else:
-            raise ValueError("Not implemented.")
-
-        return cfw.select_data_by_column_names(data, selected_feature_names)
+        return self.data_lifecycle_manager.get_result_data(cfw, selected_feature_names, location)
 
     def add_compute_framework(
         self,
@@ -578,7 +495,7 @@ class Runner:
         """
         Gets the artifacts.
         """
-        return self.artifacts
+        return self.data_lifecycle_manager.get_artifacts()
 
     def _can_run_step(
         self,
@@ -628,10 +545,4 @@ class Runner:
         """
         Gets the results.
         """
-        # TODO: This is a temporary solution. We need to return the data in a more structured way.
-        # Idea: return a dictionary with the feature name as key and the data as value.
-        # Idea: list can keep history for debug more
-        results = [v for k, v in self.result_data_collection.items()]
-        if len(results) > 0:
-            return results
-        raise ValueError("No results found.")
+        return self.data_lifecycle_manager.get_results()

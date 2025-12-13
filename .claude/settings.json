@@ -10,6 +10,8 @@
       "Bash(python -m pytest:*)",
       "Bash(python -m mypy:*)",
       "Bash(python3 -m pytest:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(tox:*)",
       "Bash(git add:*)",
       "Bash(cat:*)",
       "Bash(find:*)",

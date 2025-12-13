@@ -25,8 +25,7 @@ class TestTimeWindowFeatureGroup:
 
         # Test that FeatureChainParser methods work with the PREFIX_PATTERN
         assert (
-            FeatureChainParser.extract_source_feature(feature_name, TimeWindowFeatureGroup.PREFIX_PATTERN)
-            == "temperature"
+            FeatureChainParser.extract_in_feature(feature_name, TimeWindowFeatureGroup.PREFIX_PATTERN) == "temperature"
         )
 
     def test_parse_time_window_prefix(self) -> None:

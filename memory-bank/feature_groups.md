@@ -42,6 +42,49 @@ graph TD
 
 ## Key Architecture
 
+### FeatureChainParserMixin
+
+All feature groups that use feature chain parsing inherit from `FeatureChainParserMixin`, which provides default implementations for `input_features()` and `match_feature_group_criteria()`.
+
+```python
+from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
+    FeatureChainParserMixin,
+)
+
+class MyFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
+    PREFIX_PATTERN = r".*__my_operation$"
+
+    # In-feature constraints
+    MIN_IN_FEATURES = 1
+    MAX_IN_FEATURES = 1  # Or None for unlimited
+
+    PROPERTY_MAPPING = {...}
+
+    # input_features() inherited from FeatureChainParserMixin
+    # match_feature_group_criteria() inherited from FeatureChainParserMixin
+```
+
+**Customization Hooks:**
+- `_validate_string_match()`: Override for custom validation of string-based features
+- Custom `input_features()`: Override when adding extra features (e.g., time_filter)
+- Custom `match_feature_group_criteria()`: Override for complex pre-check logic
+
+**Feature Groups Using Mixin:**
+| Feature Group | Customization |
+|---------------|---------------|
+| AggregatedFeatureGroup | Simple inheritance |
+| ClusteringFeatureGroup | `_validate_string_match` hook |
+| ForecastingFeatureGroup | Custom `input_features` + `_validate_string_match` |
+| TimeWindowFeatureGroup | Custom `input_features` (time_filter) |
+| MissingValueFeatureGroup | Simple inheritance |
+| DimensionalityReductionFeatureGroup | Custom `input_features` + `_validate_string_match` |
+| GeoDistanceFeatureGroup | `MIN=2, MAX=2`, custom `input_features` |
+| NodeCentralityFeatureGroup | Simple inheritance |
+| EncodingFeatureGroup | Custom `input_features` (~suffix handling) |
+| SklearnPipelineFeatureGroup | Custom `match_feature_group_criteria` |
+| ScalingFeatureGroup | Simple inheritance |
+| TextCleaningFeatureGroup | Simple inheritance |
+
 ### PROPERTY_MAPPING Configuration
 
 ```mermaid
@@ -134,7 +177,7 @@ for col in cols:
 
 ### 1. Aggregated Pattern
 
-**Convention**: `{source_feature}__{aggregation_type}_aggr`
+**Convention**: `{in_feature}__{aggregation_type}_aggr`
 
 ```mermaid
 graph LR
@@ -156,7 +199,7 @@ PROPERTY_MAPPING = {
 
 ### 2. Time Window Pattern
 
-**Convention**: `{source_feature}__{function}_{size}_{unit}_window`
+**Convention**: `{in_feature}__{function}_{size}_{unit}_window`
 
 ```mermaid
 graph LR

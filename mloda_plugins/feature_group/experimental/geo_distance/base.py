@@ -12,10 +12,13 @@ from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
+from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
+    FeatureChainParserMixin,
+)
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 
-class GeoDistanceFeatureGroup(AbstractFeatureGroup):
+class GeoDistanceFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
     """
     Base class for all geo distance feature groups.
 
@@ -91,6 +94,11 @@ class GeoDistanceFeatureGroup(AbstractFeatureGroup):
 
     # Define the prefix pattern for this feature group
     PREFIX_PATTERN = r".*__([\w]+)_distance$"
+
+    # In-feature configuration for FeatureChainParserMixin
+    # Geo distance requires exactly 2 point features
+    MIN_IN_FEATURES = 2
+    MAX_IN_FEATURES = 2
 
     # Property mapping for configuration-based features with group/context separation
     PROPERTY_MAPPING = {
@@ -173,23 +181,6 @@ class GeoDistanceFeatureGroup(AbstractFeatureGroup):
             )
 
         return point_parts[0], point_parts[1]
-
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: Union[FeatureName, str],
-        options: Options,
-        data_access_collection: Optional[Any] = None,
-    ) -> bool:
-        """Check if feature name matches the expected pattern for geo distance features."""
-
-        # Use the unified parser with property mapping for full configuration support
-        return FeatureChainParser.match_configuration_feature_chain_parser(
-            feature_name,
-            options,
-            property_mapping=cls.PROPERTY_MAPPING,
-            prefix_patterns=[cls.PREFIX_PATTERN],
-        )
 
     @classmethod
     def _supports_distance_type(cls, distance_type: str) -> bool:

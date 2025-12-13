@@ -312,16 +312,16 @@ class FeatureChainParser:
         return False
 
     @classmethod
-    def extract_source_feature(cls, feature_name: str, suffix_pattern: str) -> str:
+    def extract_in_feature(cls, feature_name: str, suffix_pattern: str) -> str:
         """
-        Extract the source feature from a feature name based on the suffix pattern.
+        Extract the in_feature from a feature name based on the suffix pattern.
 
         Args:
             feature_name: The feature name to parse
             suffix_pattern: Regex pattern for the suffix (e.g., r"^.+__([w]+)$")
 
         Returns:
-            The source feature part of the name
+            The in_feature part of the name
 
         Raises:
             ValueError: If the feature name doesn't match the expected pattern

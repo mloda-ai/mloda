@@ -13,12 +13,15 @@ from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
+from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
+    FeatureChainParserMixin,
+)
 from mloda_core.abstract_plugins.components.base_artifact import BaseArtifact
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import SklearnArtifact
 
 
-class ScalingFeatureGroup(AbstractFeatureGroup):
+class ScalingFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
     """
     Base class for scikit-learn scaling feature groups.
 
@@ -82,6 +85,10 @@ class ScalingFeatureGroup(AbstractFeatureGroup):
     PATTERN = "__"
     PREFIX_PATTERN = r".*__(standard|minmax|robust|normalizer)_scaled$"
 
+    # In-feature configuration for FeatureChainParserMixin
+    MIN_IN_FEATURES = 1
+    MAX_IN_FEATURES = 1
+
     # Property mapping for new configuration-based approach
     PROPERTY_MAPPING = {
         SCALER_TYPE: {
@@ -101,22 +108,6 @@ class ScalingFeatureGroup(AbstractFeatureGroup):
         """Return the artifact class for sklearn scaler persistence."""
         return SklearnArtifact
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
-        """Extract source feature from either configuration-based options or string parsing."""
-
-        # Try string-based parsing first
-        _, source_feature = FeatureChainParser.parse_feature_name(feature_name, [self.PREFIX_PATTERN])
-        if source_feature is not None:
-            return {Feature(source_feature)}
-
-        # Fall back to configuration-based approach
-        source_features = options.get_in_features()
-        if len(source_features) != 1:
-            raise ValueError(
-                f"Expected exactly one source feature, but found {len(source_features)}: {source_features}"
-            )
-        return set(source_features)
-
     @classmethod
     def get_scaler_type(cls, feature_name: str) -> str:
         """Extract the scaler type from the feature name."""
@@ -132,22 +123,6 @@ class ScalingFeatureGroup(AbstractFeatureGroup):
             )
 
         return scaler_type
-
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: Union[FeatureName, str],
-        options: Options,
-        data_access_collection: Optional[Any] = None,
-    ) -> bool:
-        """Check if feature name matches the expected pattern using unified parser."""
-        # Use the unified parser with property mapping for full configuration support
-        return FeatureChainParser.match_configuration_feature_chain_parser(
-            feature_name,
-            options,
-            property_mapping=cls.PROPERTY_MAPPING,
-            prefix_patterns=[cls.PREFIX_PATTERN],
-        )
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -221,7 +196,7 @@ class ScalingFeatureGroup(AbstractFeatureGroup):
 
         if FeatureChainParser.is_chained_feature(feature_name_str):
             scaler_type = cls.get_scaler_type(feature_name_str)
-            source_feature_name = FeatureChainParser.extract_source_feature(feature_name_str, cls.PREFIX_PATTERN)
+            source_feature_name = FeatureChainParser.extract_in_feature(feature_name_str, cls.PREFIX_PATTERN)
             return scaler_type, source_feature_name
 
         # Fall back to configuration-based approach

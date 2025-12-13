@@ -9,13 +9,16 @@ from typing import Any, Optional, Set, Union
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
+from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
+    FeatureChainParserMixin,
+)
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 
-class TextCleaningFeatureGroup(AbstractFeatureGroup):
+class TextCleaningFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
     # Option key for the list of operations
     CLEANING_OPERATIONS = "cleaning_operations"
 
@@ -32,6 +35,10 @@ class TextCleaningFeatureGroup(AbstractFeatureGroup):
     # Define prefix pattern and pattern
     PATTERN = "__"
     PREFIX_PATTERN = r".*__cleaned_text$"
+
+    # In-feature configuration for FeatureChainParserMixin
+    MIN_IN_FEATURES = 1
+    MAX_IN_FEATURES = 1
 
     # Property mapping for configuration-based features
     PROPERTY_MAPPING = {
@@ -114,41 +121,6 @@ class TextCleaningFeatureGroup(AbstractFeatureGroup):
     - The input data must contain the source feature to be used for text cleaning
     - The source feature must contain text data
     """
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
-        """Extract source feature from either configuration-based options or string parsing."""
-
-        source_feature: str | None = None
-
-        # Try string-based parsing first
-        _, source_feature = FeatureChainParser.parse_feature_name(feature_name, [self.PREFIX_PATTERN])
-        if source_feature is not None:
-            return {Feature(source_feature)}
-
-        # Fall back to configuration-based approach
-        source_features = options.get_in_features()
-        if len(source_features) != 1:
-            raise ValueError(
-                f"Expected exactly one source feature, but found {len(source_features)}: {source_features}"
-            )
-        return set(source_features)
-
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: Union[FeatureName, str],
-        options: Options,
-        data_access_collection: Optional[Any] = None,
-    ) -> bool:
-        """Check if feature name matches the expected pattern for text cleaning features."""
-
-        # Use the unified parser with property mapping for full configuration support
-        return FeatureChainParser.match_configuration_feature_chain_parser(
-            feature_name,
-            options,
-            property_mapping=cls.PROPERTY_MAPPING,
-            prefix_patterns=[cls.PREFIX_PATTERN],
-        )
 
     @classmethod
     def _extract_operations_and_source_feature(cls, feature: Feature) -> tuple[tuple[Any, Any], str]:

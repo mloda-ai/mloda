@@ -9,13 +9,16 @@ from typing import Any, Optional, Set, Type, Union
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
+from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
+    FeatureChainParserMixin,
+)
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 
-class NodeCentralityFeatureGroup(AbstractFeatureGroup):
+class NodeCentralityFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
     # Option keys for centrality configuration
     CENTRALITY_TYPE = "centrality_type"
     GRAPH_TYPE = "graph_type"
@@ -131,6 +134,10 @@ class NodeCentralityFeatureGroup(AbstractFeatureGroup):
     # Define the suffix pattern for this feature group (L→R format: source__operation)
     PREFIX_PATTERN = r".*__([\w]+)_centrality$"
 
+    # In-feature configuration for FeatureChainParserMixin
+    MIN_IN_FEATURES = 1
+    MAX_IN_FEATURES = 1
+
     # Property mapping for configuration-based feature creation
     PROPERTY_MAPPING = {
         # Context parameters (don't affect Feature Group resolution)
@@ -155,24 +162,6 @@ class NodeCentralityFeatureGroup(AbstractFeatureGroup):
             DefaultOptionKeys.mloda_context: True,
         },
     }
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
-        """Extract source feature from either configuration-based options or string parsing."""
-
-        source_feature: str | None = None
-
-        # string based
-        _, source_feature = FeatureChainParser.parse_feature_name(feature_name, [self.PREFIX_PATTERN])
-        if source_feature is not None:
-            return {Feature(source_feature)}
-
-        # configuration based
-        source_features = options.get_in_features()
-        if len(source_features) != 1:
-            raise ValueError(
-                f"Expected exactly one source feature, but found {len(source_features)}: {source_features}"
-            )
-        return set(source_features)
 
     @classmethod
     def parse_centrality_prefix(cls, feature_name: str) -> str:
@@ -220,24 +209,6 @@ class NodeCentralityFeatureGroup(AbstractFeatureGroup):
     def get_centrality_type(cls, feature_name: str) -> str:
         """Extract the centrality type from the feature name."""
         return cls.parse_centrality_prefix(feature_name)
-
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: Union[FeatureName, str],
-        options: Options,
-        data_access_collection: Optional[Any] = None,
-    ) -> bool:
-        """Check if feature name matches the expected pattern for centrality features."""
-        if isinstance(feature_name, FeatureName):
-            feature_name = feature_name.name
-
-        return FeatureChainParser.match_configuration_feature_chain_parser(
-            feature_name,
-            options,
-            property_mapping=cls.PROPERTY_MAPPING,
-            prefix_patterns=[cls.PREFIX_PATTERN],
-        )
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

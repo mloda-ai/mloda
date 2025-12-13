@@ -343,16 +343,16 @@ Methods inconsistently return `False`, `None`, or raise exceptions for "not foun
 ## 10. Extract Common Feature Group Utilities
 
 ### Status
-- [ ] Create FeatureChainParserMixin
+- [x] Create FeatureChainParserMixin
 - [ ] Create SourceFeatureExtractorMixin
 - [ ] Create ValidationMixin
 - [ ] Create PropertyMappingMixin
-- [ ] Refactor AggregatedFeatureGroup to use mixins
-- [ ] Refactor ClusteringFeatureGroup to use mixins
+- [x] Refactor AggregatedFeatureGroup to use mixins
+- [x] Refactor ClusteringFeatureGroup to use mixins
 - [ ] Refactor ForecastingFeatureGroup to use mixins
 - [ ] Refactor remaining experimental feature groups
-- [ ] Update tests for mixin behavior
-- [ ] Run tox validation
+- [x] Update tests for mixin behavior
+- [x] Run tox validation
 
 ### Rationale
 Every experimental feature group reimplements identical logic: feature chain parsing (`FeatureChainParser.parse_feature_name`), source feature extraction from options, property mapping validation, and match criteria logic. This results in 50+ occurrences of near-identical code across the codebase. Extracting these into composable mixins eliminates duplication, centralizes bug fixes, and makes adding new feature groups straightforward.

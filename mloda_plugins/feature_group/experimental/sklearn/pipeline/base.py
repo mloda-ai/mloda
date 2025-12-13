@@ -13,12 +13,15 @@ from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
+from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
+    FeatureChainParserMixin,
+)
 from mloda_core.abstract_plugins.components.base_artifact import BaseArtifact
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import SklearnArtifact
 
 
-class SklearnPipelineFeatureGroup(AbstractFeatureGroup):
+class SklearnPipelineFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
     """
     Base class for scikit-learn pipeline feature groups.
 
@@ -111,6 +114,13 @@ class SklearnPipelineFeatureGroup(AbstractFeatureGroup):
     PATTERN = "__"
     PREFIX_PATTERN = r".*__sklearn_pipeline_([\w]+)$"
 
+    # In-feature configuration for FeatureChainParserMixin
+    # Pipelines support variable number of in_features
+    MIN_IN_FEATURES = 1
+    MAX_IN_FEATURES: Optional[int] = None  # Unlimited
+
+    # Custom input_features needed to handle comma-separated multiple source features
+
     @staticmethod
     def artifact() -> Type[BaseArtifact] | None:
         """Return the artifact class for sklearn pipeline persistence."""
@@ -143,6 +153,8 @@ class SklearnPipelineFeatureGroup(AbstractFeatureGroup):
         # The regex already extracts just the pipeline name (e.g., "scaling" from "income__sklearn_pipeline_scaling")
         return prefix_part
 
+    # Note: Custom match_feature_group_criteria() required instead of inheriting from mixin
+    # because this feature group has unique pre-check logic (PIPELINE_NAME vs PIPELINE_STEPS mutual exclusivity)
     @classmethod
     def match_feature_group_criteria(
         cls,

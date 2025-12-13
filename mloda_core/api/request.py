@@ -71,7 +71,7 @@ class mlodaAPI:
             self._add_api_input_data(feature, api_input_data_collection)
             # Propagate strict_type_enforcement to typed features only
             if self.strict_type_enforcement and feature.data_type is not None:
-                feature.options.add(DefaultOptionKeys.mloda_strict_type_enforcement, True)
+                feature.options.add(DefaultOptionKeys.strict_type_enforcement, True)
 
         return features
 

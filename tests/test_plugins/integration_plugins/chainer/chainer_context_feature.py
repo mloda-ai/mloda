@@ -24,27 +24,27 @@ class ChainedContextFeatureGroupTest(AbstractFeatureGroup):
         "ident": {
             "identifier1": "explanation",
             "identifier2": "explanation",
-            DefaultOptionKeys.mloda_context: True,  # Mark as context parameter
-            DefaultOptionKeys.mloda_strict_validation: True,  # Enable strict validation for ident
+            DefaultOptionKeys.context: True,  # Mark as context parameter
+            DefaultOptionKeys.strict_validation: True,  # Enable strict validation for ident
         },
         "property2": {
             "value1": "explanation",
             "value2": "explanation",
             "specific_val_3_test": "explanation",  # Special case for testing
-            DefaultOptionKeys.mloda_strict_validation: True,  # Enable strict validation for property2
-            DefaultOptionKeys.mloda_default: "value1",  # Default value
+            DefaultOptionKeys.strict_validation: True,  # Enable strict validation for property2
+            DefaultOptionKeys.default: "value1",  # Default value
             # Not marked as context -> defaults to group parameter
         },
         "property3": {
             "opt_val1": "explanation",
             "opt_val2": "explanation",
-            DefaultOptionKeys.mloda_default: "opt_val1",  # Default value
-            DefaultOptionKeys.mloda_context: True,  # Mark as context parameter
-            DefaultOptionKeys.mloda_strict_validation: False,  # Disable strict validation for property3
+            DefaultOptionKeys.default: "opt_val1",  # Default value
+            DefaultOptionKeys.context: True,  # Mark as context parameter
+            DefaultOptionKeys.strict_validation: False,  # Disable strict validation for property3
         },
         DefaultOptionKeys.in_features: {
             "explanation": "explanation",
-            DefaultOptionKeys.mloda_context: True,  # Mark as context parameter
+            DefaultOptionKeys.context: True,  # Mark as context parameter
             # No strict validation for source feature -> defaults to flexible
         },
     }
@@ -79,7 +79,7 @@ class ChainedContextFeatureGroupTest(AbstractFeatureGroup):
                 options=Options(
                     group={
                         "property2": "value1",  # default group parameter
-                        DefaultOptionKeys.mloda_feature_chainer_parser_key: frozenset(
+                        DefaultOptionKeys.feature_chainer_parser_key: frozenset(
                             ["ident", DefaultOptionKeys.in_features.value, "property2", "property3"]
                         ),
                     },
@@ -96,7 +96,7 @@ class ChainedContextFeatureGroupTest(AbstractFeatureGroup):
         source_features = options.get_in_features()
         for source_feature in source_features:
             source_feature.options.add(
-                DefaultOptionKeys.mloda_feature_chainer_parser_key,
+                DefaultOptionKeys.feature_chainer_parser_key,
                 frozenset(["ident", DefaultOptionKeys.in_features.value, "property2", "property3"]),
             )
             features.add(source_feature)

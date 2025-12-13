@@ -56,7 +56,7 @@ class Features:
 
         Protected keys are determined dynamically by reading:
         - in_features (always protected)
-        - Keys listed in feature_options.get(mloda_feature_chainer_parser_key)
+        - Keys listed in feature_options.get(feature_chainer_parser_key)
 
         Args:
             feature_options: Parent feature's options (will be updated)
@@ -67,8 +67,8 @@ class Features:
         """
         # Get protected keys dynamically from the feature options
         protected_keys = {DefaultOptionKeys.in_features}
-        if feature_options.get(DefaultOptionKeys.mloda_feature_chainer_parser_key):
-            protected_keys.update(feature_options.get(DefaultOptionKeys.mloda_feature_chainer_parser_key))
+        if feature_options.get(DefaultOptionKeys.feature_chainer_parser_key):
+            protected_keys.update(feature_options.get(DefaultOptionKeys.feature_chainer_parser_key))
 
         # Check for conflicts in non-protected keys only
         for key_child, value_child in child_options.items():
@@ -87,7 +87,7 @@ class Features:
                         )
 
         # Merge child options into parent, excluding protected keys
-        # update_with_protected_keys will read mloda_feature_chainer_parser_key dynamically
+        # update_with_protected_keys will read feature_chainer_parser_key dynamically
         feature_options.update_with_protected_keys(child_options)
 
     def check_duplicate_feature(self, feature: Feature) -> None:

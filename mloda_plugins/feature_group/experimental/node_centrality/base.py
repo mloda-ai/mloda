@@ -143,23 +143,23 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
         # Context parameters (don't affect Feature Group resolution)
         CENTRALITY_TYPE: {
             **CENTRALITY_TYPES,  # All supported centrality types as valid options
-            DefaultOptionKeys.mloda_context: True,
-            DefaultOptionKeys.mloda_strict_validation: True,
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
         },
         GRAPH_TYPE: {
             **GRAPH_TYPES,  # All supported graph types as valid options
-            DefaultOptionKeys.mloda_context: True,
-            DefaultOptionKeys.mloda_strict_validation: True,
-            DefaultOptionKeys.mloda_default: "undirected",
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
+            DefaultOptionKeys.default: "undirected",
         },
         WEIGHT_COLUMN: {
             "explanation": "Column name for edge weights (optional)",
-            DefaultOptionKeys.mloda_context: True,
-            DefaultOptionKeys.mloda_default: None,
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.default: None,
         },
         DefaultOptionKeys.in_features: {
             "explanation": "Source feature representing the nodes for centrality calculation",
-            DefaultOptionKeys.mloda_context: True,
+            DefaultOptionKeys.context: True,
         },
     }
 

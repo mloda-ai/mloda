@@ -85,7 +85,7 @@ class DataTypeValidator:
 
             strict_mode = False
             if feature.options:
-                strict_value = feature.options.get(DefaultOptionKeys.mloda_strict_type_enforcement)
+                strict_value = feature.options.get(DefaultOptionKeys.strict_type_enforcement)
                 strict_mode = strict_value if strict_value is not None else False
 
             if strict_mode:

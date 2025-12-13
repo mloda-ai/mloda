@@ -116,27 +116,27 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
     PROPERTY_MAPPING = {
         ALGORITHM: {
             **CLUSTERING_ALGORITHMS,  # All supported algorithms as valid values
-            DefaultOptionKeys.mloda_context: True,  # Mark as context parameter
-            DefaultOptionKeys.mloda_strict_validation: True,  # Enable strict validation
+            DefaultOptionKeys.context: True,  # Mark as context parameter
+            DefaultOptionKeys.strict_validation: True,  # Enable strict validation
         },
         K_VALUE: {
             "explanation": "Number of clusters or 'auto' for automatic determination",
-            DefaultOptionKeys.mloda_context: True,  # Mark as context parameter
-            DefaultOptionKeys.mloda_strict_validation: True,  # Enable strict validation
-            DefaultOptionKeys.mloda_validation_function: lambda value: value == "auto"
+            DefaultOptionKeys.context: True,  # Mark as context parameter
+            DefaultOptionKeys.strict_validation: True,  # Enable strict validation
+            DefaultOptionKeys.validation_function: lambda value: value == "auto"
             or (isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0),
         },
         DefaultOptionKeys.in_features: {
             "explanation": "Source features to use for clustering",
-            DefaultOptionKeys.mloda_context: True,  # Mark as context parameter
-            DefaultOptionKeys.mloda_strict_validation: False,  # Flexible validation
+            DefaultOptionKeys.context: True,  # Mark as context parameter
+            DefaultOptionKeys.strict_validation: False,  # Flexible validation
         },
         OUTPUT_PROBABILITIES: {
             "explanation": "Whether to output cluster probabilities/distances as separate columns using ~N suffix pattern",
-            DefaultOptionKeys.mloda_context: True,  # Mark as context parameter
-            DefaultOptionKeys.mloda_strict_validation: False,  # Flexible validation
-            DefaultOptionKeys.mloda_default: False,  # Default is False (don't output probabilities)
-            DefaultOptionKeys.mloda_validation_function: lambda value: isinstance(value, bool),
+            DefaultOptionKeys.context: True,  # Mark as context parameter
+            DefaultOptionKeys.strict_validation: False,  # Flexible validation
+            DefaultOptionKeys.default: False,  # Default is False (don't output probabilities)
+            DefaultOptionKeys.validation_function: lambda value: isinstance(value, bool),
         },
     }
 

@@ -123,38 +123,38 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, AbstractFeatu
     PROPERTY_MAPPING = {
         ALGORITHM: {
             **REDUCTION_ALGORITHMS,
-            DefaultOptionKeys.mloda_context: True,
-            DefaultOptionKeys.mloda_strict_validation: True,
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
         },
         DIMENSION: {
             "explanation": "Target dimension for the reduction (positive integer)",
-            DefaultOptionKeys.mloda_context: True,
-            DefaultOptionKeys.mloda_strict_validation: True,
-            DefaultOptionKeys.mloda_validation_function: lambda value: isinstance(value, (int, str))
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
+            DefaultOptionKeys.validation_function: lambda value: isinstance(value, (int, str))
             and str(value).isdigit()
             and int(value) > 0,
         },
         DefaultOptionKeys.in_features: {
             "explanation": "Source features to use for dimensionality reduction",
-            DefaultOptionKeys.mloda_context: True,
-            DefaultOptionKeys.mloda_strict_validation: False,
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: False,
         },
         # t-SNE specific parameters
         TSNE_MAX_ITER: {
             "explanation": "Maximum number of iterations for t-SNE optimization",
-            DefaultOptionKeys.mloda_context: True,
-            DefaultOptionKeys.mloda_strict_validation: False,
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: False,
             "default": 250,
-            DefaultOptionKeys.mloda_validation_function: lambda value: isinstance(value, (int, str))
+            DefaultOptionKeys.validation_function: lambda value: isinstance(value, (int, str))
             and str(value).isdigit()
             and int(value) > 0,
         },
         TSNE_N_ITER_WITHOUT_PROGRESS: {
             "explanation": "Maximum iterations without progress before early stopping (t-SNE)",
-            DefaultOptionKeys.mloda_context: True,
-            DefaultOptionKeys.mloda_strict_validation: False,
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: False,
             "default": 50,
-            DefaultOptionKeys.mloda_validation_function: lambda value: isinstance(value, (int, str))
+            DefaultOptionKeys.validation_function: lambda value: isinstance(value, (int, str))
             and str(value).isdigit()
             and int(value) > 0,
         },
@@ -162,8 +162,8 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, AbstractFeatu
             "barnes_hut": "Barnes-Hut approximation (faster, O(n log n))",
             "exact": "Exact method (slower, O(n^2))",
             "explanation": "t-SNE computation method",
-            DefaultOptionKeys.mloda_context: True,
-            DefaultOptionKeys.mloda_strict_validation: False,
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: False,
             "default": "barnes_hut",
         },
         # PCA specific parameters
@@ -173,27 +173,27 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, AbstractFeatu
             "arpack": "Truncated SVD using ARPACK",
             "randomized": "Randomized SVD",
             "explanation": "SVD solver algorithm for PCA",
-            DefaultOptionKeys.mloda_context: True,
-            DefaultOptionKeys.mloda_strict_validation: False,
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: False,
             "default": "auto",
         },
         # ICA specific parameters
         ICA_MAX_ITER: {
             "explanation": "Maximum number of iterations for ICA",
-            DefaultOptionKeys.mloda_context: True,
-            DefaultOptionKeys.mloda_strict_validation: False,
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: False,
             "default": 200,
-            DefaultOptionKeys.mloda_validation_function: lambda value: isinstance(value, (int, str))
+            DefaultOptionKeys.validation_function: lambda value: isinstance(value, (int, str))
             and str(value).isdigit()
             and int(value) > 0,
         },
         # Isomap specific parameters
         ISOMAP_N_NEIGHBORS: {
             "explanation": "Number of neighbors for Isomap",
-            DefaultOptionKeys.mloda_context: True,
-            DefaultOptionKeys.mloda_strict_validation: False,
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: False,
             "default": 5,
-            DefaultOptionKeys.mloda_validation_function: lambda value: isinstance(value, (int, str))
+            DefaultOptionKeys.validation_function: lambda value: isinstance(value, (int, str))
             and str(value).isdigit()
             and int(value) > 0,
         },

@@ -38,13 +38,13 @@ PROPERTY_MAPPING = {
         "sum": "Sum aggregation",
         "avg": "Average aggregation",
         "max": "Maximum aggregation",
-        DefaultOptionKeys.mloda_context: True,
-        DefaultOptionKeys.mloda_strict_validation: True,
+        DefaultOptionKeys.context: True,
+        DefaultOptionKeys.strict_validation: True,
     },
     DefaultOptionKeys.in_features: {
         "explanation": "Source feature for aggregation",
-        DefaultOptionKeys.mloda_context: True,
-        DefaultOptionKeys.mloda_strict_validation: False,
+        DefaultOptionKeys.context: True,
+        DefaultOptionKeys.strict_validation: False,
     },
 }
 ```
@@ -78,9 +78,9 @@ For complex validation beyond simple value lists:
 PROPERTY_MAPPING = {
     "window_size": {
         "explanation": "Size of the time window",
-        DefaultOptionKeys.mloda_context: True,
-        DefaultOptionKeys.mloda_strict_validation: True,
-        DefaultOptionKeys.mloda_validation_function: lambda x: isinstance(x, int) and x > 0,
+        DefaultOptionKeys.context: True,
+        DefaultOptionKeys.strict_validation: True,
+        DefaultOptionKeys.validation_function: lambda x: isinstance(x, int) and x > 0,
     },
 }
 ```

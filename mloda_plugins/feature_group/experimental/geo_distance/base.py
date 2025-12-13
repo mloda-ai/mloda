@@ -104,14 +104,14 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
     PROPERTY_MAPPING = {
         DISTANCE_TYPE: {
             **DISTANCE_TYPES,
-            DefaultOptionKeys.mloda_context: True,
-            DefaultOptionKeys.mloda_strict_validation: True,
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
         },
         DefaultOptionKeys.in_features: {
             "explanation": "Source features (exactly 2 point features required)",
-            DefaultOptionKeys.mloda_context: True,
-            DefaultOptionKeys.mloda_strict_validation: True,
-            DefaultOptionKeys.mloda_validation_function: lambda x: (
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
+            DefaultOptionKeys.validation_function: lambda x: (
                 # Accept individual strings (when parser iterates over list elements)
                 isinstance(x, str)
                 or

@@ -189,10 +189,10 @@ graph LR
 PROPERTY_MAPPING = {
     AGGREGATION_TYPE: {
         **AGGREGATION_TYPES_DICT,
-        DefaultOptionKeys.mloda_context: True,  # Context parameter
+        DefaultOptionKeys.context: True,  # Context parameter
     },
     DefaultOptionKeys.in_features: {
-        DefaultOptionKeys.mloda_context: True,
+        DefaultOptionKeys.context: True,
     },
 }
 ```

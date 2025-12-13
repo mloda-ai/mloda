@@ -126,28 +126,28 @@ class TimeWindowFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
         # Window function parameter (context parameter)
         WINDOW_FUNCTION: {
             **WINDOW_FUNCTIONS,  # Reference existing WINDOW_FUNCTIONS dict
-            DefaultOptionKeys.mloda_context: True,  # Mark as context parameter
-            DefaultOptionKeys.mloda_strict_validation: True,  # Enable strict validation
+            DefaultOptionKeys.context: True,  # Mark as context parameter
+            DefaultOptionKeys.strict_validation: True,  # Enable strict validation
         },
         # Window size parameter (context parameter)
         WINDOW_SIZE: {
             "explanation": "Size of the time window (must be positive integer)",
-            DefaultOptionKeys.mloda_context: True,  # Mark as context parameter
-            DefaultOptionKeys.mloda_strict_validation: True,  # Enable strict validation
-            DefaultOptionKeys.mloda_validation_function: lambda x: (isinstance(x, int) and x > 0)
+            DefaultOptionKeys.context: True,  # Mark as context parameter
+            DefaultOptionKeys.strict_validation: True,  # Enable strict validation
+            DefaultOptionKeys.validation_function: lambda x: (isinstance(x, int) and x > 0)
             or (isinstance(x, str) and x.isdigit() and int(x) > 0),
         },
         # Time unit parameter (context parameter)
         TIME_UNIT: {
             **TIME_UNITS,  # Reference existing TIME_UNITS dict
-            DefaultOptionKeys.mloda_context: True,  # Mark as context parameter
-            DefaultOptionKeys.mloda_strict_validation: True,  # Enable strict validation
+            DefaultOptionKeys.context: True,  # Mark as context parameter
+            DefaultOptionKeys.strict_validation: True,  # Enable strict validation
         },
         # Source feature parameter (context parameter)
         DefaultOptionKeys.in_features: {
             "explanation": "Source feature to apply time window operation to",
-            DefaultOptionKeys.mloda_context: True,  # Mark as context parameter
-            DefaultOptionKeys.mloda_strict_validation: False,  # Flexible validation
+            DefaultOptionKeys.context: True,  # Mark as context parameter
+            DefaultOptionKeys.strict_validation: False,  # Flexible validation
         },
     }
 

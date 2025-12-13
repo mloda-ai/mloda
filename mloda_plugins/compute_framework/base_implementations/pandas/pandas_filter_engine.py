@@ -23,11 +23,19 @@ class PandasFilterEngine(BaseFilterEngine):
 
     @classmethod
     def do_min_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        return data[data[filter_feature.name] >= filter_feature.parameter]
+        value = filter_feature.parameter.value
+        if value is None:
+            raise ValueError(f"Filter parameter 'value' not found in {filter_feature.parameter}")
+        return data[data[filter_feature.name] >= value]
 
     @classmethod
     def do_max_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        if isinstance(filter_feature.parameter, tuple):
+        # Check if this is a complex parameter with max/max_exclusive or a simple one with value
+        has_max = filter_feature.parameter.max_value is not None
+        has_value = filter_feature.parameter.value is not None
+
+        if has_max:
+            # Complex parameter - use get_min_max_operator
             min_parameter, max_parameter, max_operator = cls.get_min_max_operator(filter_feature)
 
             if min_parameter is not None:
@@ -40,21 +48,36 @@ class PandasFilterEngine(BaseFilterEngine):
                     f"Filter parameter {filter_feature.parameter} is None although expected: {filter_feature.name}"
                 )
 
-            return (
-                data[data[filter_feature.name] < max_parameter]
-                if max_operator
-                else data[data[filter_feature.name] <= max_parameter]
-            )
-        return data[data[filter_feature.name] <= filter_feature.parameter]
+            if max_operator is True:
+                return data[data[filter_feature.name] < max_parameter]
+            else:
+                return data[data[filter_feature.name] <= max_parameter]
+        elif has_value:
+            # Simple parameter - extract the value
+            value = filter_feature.parameter.value
+            if value is None:
+                raise ValueError(f"Filter parameter 'value' not found in {filter_feature.parameter}")
+            return data[data[filter_feature.name] <= value]
+        else:
+            raise ValueError(f"No valid filter parameter found in {filter_feature.parameter}")
 
     @classmethod
     def do_equal_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        return data[data[filter_feature.name] == filter_feature.parameter]
+        value = filter_feature.parameter.value
+        if value is None:
+            raise ValueError(f"Filter parameter 'value' not found in {filter_feature.parameter}")
+        return data[data[filter_feature.name] == value]
 
     @classmethod
     def do_regex_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        return data[data[filter_feature.name].astype(str).str.match(filter_feature.parameter)]
+        value = filter_feature.parameter.value
+        if value is None:
+            raise ValueError(f"Filter parameter 'value' not found in {filter_feature.parameter}")
+        return data[data[filter_feature.name].astype(str).str.match(value)]
 
     @classmethod
     def do_categorical_inclusion_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        return data[data[filter_feature.name].isin(filter_feature.parameter)]
+        values = filter_feature.parameter.values
+        if values is None:
+            raise ValueError(f"Filter parameter 'values' not found in {filter_feature.parameter}")
+        return data[data[filter_feature.name].isin(values)]

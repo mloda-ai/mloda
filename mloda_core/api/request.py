@@ -8,7 +8,7 @@ from mloda_core.abstract_plugins.components.plugin_option.plugin_collector impor
 from mloda_core.core.engine import Engine
 from mloda_core.api.prepare.setup_compute_framework import SetupComputeFramework
 from mloda_core.filter.global_filter import GlobalFilter
-from mloda_core.runtime.run import Runner
+from mloda_core.runtime.run import ExecutionOrchestrator
 from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 from mloda_core.abstract_plugins.function_extender import WrapperFunctionExtender
 from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
@@ -53,7 +53,7 @@ class mlodaAPI:
         self.api_data = api_data
         self.plugin_collector = plugin_collector
 
-        self.runner: None | Runner = None
+        self.runner: None | ExecutionOrchestrator = None
         self.engine: None | Engine = None
 
         self.engine = self._create_engine()
@@ -160,7 +160,7 @@ class mlodaAPI:
         api_data: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Runs the engine computation within a context manager."""
-        if not isinstance(self.runner, Runner):
+        if not isinstance(self.runner, ExecutionOrchestrator):
             raise ValueError("You need to run setup_engine_runner beforehand.")
 
         try:
@@ -228,8 +228,8 @@ class mlodaAPI:
             else self.engine.compute()
         )
 
-        if not isinstance(self.runner, Runner):
-            raise ValueError("Runner initialization failed.")
+        if not isinstance(self.runner, ExecutionOrchestrator):
+            raise ValueError("ExecutionOrchestrator initialization failed.")
 
     def get_result(self) -> List[Any]:
         if self.runner is None:

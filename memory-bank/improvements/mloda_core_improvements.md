@@ -7,7 +7,7 @@ This document identifies 10 high-impact code improvements for mloda_core. These 
 ## Improvement Checklist
 
 - [will not do] 1. Decompose ComputeFrameWork class into focused components
-- [ ] 2. Split Runner class into single-responsibility modules
+- [x] 2. Split Runner class into single-responsibility modules
 - [ ] 3. Replace get_all_subclasses() reflection with dependency injection
 - [x] 4. Make FeatureName immutable
 - [ ] 5. Standardize Abstract/Base prefix naming convention

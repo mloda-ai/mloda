@@ -34,7 +34,7 @@ from mloda_core.api.request import mlodaAPI
 from mloda_core.filter.global_filter import GlobalFilter
 from mloda_core.core.engine import Engine
 from mloda_core.runtime.flight.flight_server import FlightServer
-from mloda_core.runtime.run import Runner
+from mloda_core.runtime.run import ExecutionOrchestrator
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
@@ -44,7 +44,7 @@ class RunResult:
 
     results: List[Any] = field(default_factory=list)
     artifacts: Dict[str, Any] = field(default_factory=dict)
-    runner: Optional[Runner] = None
+    runner: Optional[ExecutionOrchestrator] = None
 
 
 class MlodaTestRunner:
@@ -59,7 +59,7 @@ class MlodaTestRunner:
     Methods:
         run_api: Full access to results and artifacts (recommended for most tests)
         run_api_simple: Quick runs when only results are needed
-        run_engine: Full control over execution via Engine + Runner
+        run_engine: Full control over execution via Engine + ExecutionOrchestrator
     """
 
     @staticmethod
@@ -170,11 +170,11 @@ class MlodaTestRunner:
         links: Optional[Set[Link]] = None,
         global_filter: Optional[GlobalFilter] = None,
         api_data: Optional[Dict[str, Any]] = None,
-    ) -> Runner:
+    ) -> ExecutionOrchestrator:
         """
-        Run using Engine + Runner for full control over execution.
+        Run using Engine + ExecutionOrchestrator for full control over execution.
 
-        Use when you need access to the Runner internals (execution plan, CFW collection, etc.).
+        Use when you need access to the ExecutionOrchestrator internals (execution plan, CFW collection, etc.).
 
         Args:
             features: The feature set to compute
@@ -187,7 +187,7 @@ class MlodaTestRunner:
             api_data: Optional API data dictionary
 
         Returns:
-            Runner instance after execution
+            ExecutionOrchestrator instance after execution
         """
         if compute_frameworks is None:
             compute_frameworks = {PyArrowTable}

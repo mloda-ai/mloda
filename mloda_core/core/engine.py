@@ -19,7 +19,7 @@ from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
 from mloda_core.prepare.execution_plan import ExecutionPlan
 from mloda_core.prepare.graph.build_graph import BuildGraph
 from mloda_core.prepare.resolve_graph import ResolveGraph
-from mloda_core.runtime.run import Runner
+from mloda_core.runtime.run import ExecutionOrchestrator
 from mloda_core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda_core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
@@ -67,11 +67,11 @@ class Engine:
         self.data_access_collection = data_access_collection
         self.execution_planner = self.create_setup_execution_plan(features)
 
-    def compute(self, flight_server: Optional[ParallelRunnerFlightServer] = None) -> Runner:
-        runner = Runner(self.execution_planner, flight_server)
-        if isinstance(runner, Runner):
-            return runner
-        raise ValueError("Runner setup failed.")
+    def compute(self, flight_server: Optional[ParallelRunnerFlightServer] = None) -> ExecutionOrchestrator:
+        orchestrator = ExecutionOrchestrator(self.execution_planner, flight_server)
+        if isinstance(orchestrator, ExecutionOrchestrator):
+            return orchestrator
+        raise ValueError("ExecutionOrchestrator setup failed.")
 
     def create_setup_execution_plan(self, features: Features) -> ExecutionPlan:
         self.setup_features_recursion(features)

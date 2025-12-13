@@ -14,8 +14,9 @@
       "Bash(cat:*)",
       "Bash(find:*)",
       "Bash(mypy:*)",
-      "Bash(python -m py_compile:*)"
-      "Bash(tree:*)"
+      "Bash(python -m py_compile:*)",
+      "Bash(tree:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []

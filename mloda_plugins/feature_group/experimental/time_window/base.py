@@ -10,13 +10,16 @@ from typing import Any, List, Optional, Set, Type, Union
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
+from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
+    FeatureChainParserMixin,
+)
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 
-class TimeWindowFeatureGroup(AbstractFeatureGroup):
+class TimeWindowFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
     # Option keys for time window configuration
     WINDOW_FUNCTION = "window_function"
     WINDOW_SIZE = "window_size"
@@ -152,6 +155,11 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
     PATTERN = "__"
     PREFIX_PATTERN = r".*__([\w]+)_(\d+)_([\w]+)_window$"
 
+    # In-feature configuration for FeatureChainParserMixin
+    MIN_IN_FEATURES = 1
+    MAX_IN_FEATURES = 1
+
+    # Custom input_features needed to add time_filter_feature
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         """Extract source feature from either configuration-based options or string parsing."""
 
@@ -243,24 +251,7 @@ class TimeWindowFeatureGroup(AbstractFeatureGroup):
         """Extract the time unit from the feature name."""
         return cls.parse_time_window_prefix(feature_name)[2]
 
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: Union[FeatureName, str],
-        options: Options,
-        data_access_collection: Optional[Any] = None,
-    ) -> bool:
-        """Check if feature name matches the expected pattern for time window features."""
-        if isinstance(feature_name, FeatureName):
-            feature_name = feature_name.name
-
-        # Use unified parser approach with PROPERTY_MAPPING
-        return FeatureChainParser.match_configuration_feature_chain_parser(
-            feature_name,
-            options,
-            property_mapping=cls.PROPERTY_MAPPING,
-            prefix_patterns=[cls.PREFIX_PATTERN],
-        )
+    # match_feature_group_criteria() inherited from FeatureChainParserMixin
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

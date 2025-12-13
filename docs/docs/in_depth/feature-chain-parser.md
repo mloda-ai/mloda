@@ -31,7 +31,7 @@ from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser
 Feature chaining allows feature groups to be composed, where the output of one feature group becomes the input to another. This is reflected in the feature name using the chain separator (`__`):
 
 ```
-{source_feature}__{operation}
+{in_feature}__{operation}
 ```
 
 For example:
@@ -104,6 +104,133 @@ feature = Feature(
 )
 ```
 
+## FeatureChainParserMixin
+
+The `FeatureChainParserMixin` provides default implementations for common feature chain parsing operations. Feature groups that use feature chaining should inherit from this mixin to reduce boilerplate code.
+
+### Basic Usage
+
+``` python
+from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
+from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
+    FeatureChainParserMixin,
+)
+from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+
+class MyFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
+    PREFIX_PATTERN = r".*__my_operation$"
+
+    # In-feature constraints
+    MIN_IN_FEATURES = 1
+    MAX_IN_FEATURES = 1  # Or None for unlimited
+
+    PROPERTY_MAPPING = {
+        "operation_type": {
+            "sum": "Sum operation",
+            "avg": "Average operation",
+            DefaultOptionKeys.mloda_context: True,
+        },
+        DefaultOptionKeys.in_features: {
+            "explanation": "Source feature",
+            DefaultOptionKeys.mloda_context: True,
+        },
+    }
+
+    # input_features() inherited from FeatureChainParserMixin
+    # match_feature_group_criteria() inherited from FeatureChainParserMixin
+```
+
+### Mixin Configuration
+
+| Attribute | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `PREFIX_PATTERN` | `str` | Required | Regex pattern for matching feature names |
+| `PROPERTY_MAPPING` | `dict` | Required | Parameter validation configuration |
+| `MIN_IN_FEATURES` | `int` | `1` | Minimum required in_features |
+| `MAX_IN_FEATURES` | `int \| None` | `None` | Maximum allowed in_features (None = unlimited) |
+| `IN_FEATURE_SEPARATOR` | `str` | `"&"` | Separator for multiple in_features |
+
+### Customization Hooks
+
+#### 1. Custom Validation with `_validate_string_match()`
+
+Override this hook when you need custom validation for string-based feature names:
+
+``` python
+class ClusteringFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
+    @classmethod
+    def _validate_string_match(cls, feature_name: str, operation_config: str, in_feature: str) -> bool:
+        """Validate clustering-specific patterns."""
+        if FeatureChainParser.is_chained_feature(feature_name):
+            try:
+                cls.parse_clustering_prefix(feature_name)
+            except ValueError:
+                return False
+        return True
+```
+
+#### 2. Custom `input_features()` Method
+
+Override when you need to add additional input features (e.g., time filter):
+
+``` python
+class TimeWindowFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+        # Try string-based parsing first
+        _, in_feature = FeatureChainParser.parse_feature_name(feature_name.name, [self.PREFIX_PATTERN])
+        if in_feature is not None:
+            time_filter_feature = Feature(self.get_reference_time_column(options))
+            return {Feature(in_feature), time_filter_feature}
+
+        # Fall back to configuration-based approach
+        in_features = options.get_in_features()
+        time_filter_feature = Feature(self.get_reference_time_column(options))
+        return set(in_features) | {time_filter_feature}
+```
+
+#### 3. Custom `match_feature_group_criteria()` Method
+
+Override for complex pre-check logic that can't be captured by the hook:
+
+``` python
+class SklearnPipelineFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
+    @classmethod
+    def match_feature_group_criteria(cls, feature_name, options, data_access_collection=None) -> bool:
+        """Custom matching with mutual exclusivity validation."""
+        has_pipeline_name = options.get(cls.PIPELINE_NAME)
+        has_pipeline_steps = options.get(cls.PIPELINE_STEPS)
+
+        # Pre-check: require pattern in name if no config provided
+        if has_pipeline_name is None and has_pipeline_steps is None:
+            if "sklearn_pipeline_" not in str(feature_name):
+                return False
+
+        # Use base matching
+        base_match = FeatureChainParser.match_configuration_feature_chain_parser(...)
+
+        # Post-check: mutual exclusivity
+        if base_match and has_pipeline_name and has_pipeline_steps:
+            return False
+        return base_match
+```
+
+### Feature Groups Using the Mixin
+
+| Feature Group | MIN | MAX | Customization |
+|---------------|-----|-----|---------------|
+| AggregatedFeatureGroup | 1 | 1 | Simple inheritance |
+| ClusteringFeatureGroup | 1 | None | `_validate_string_match` hook |
+| ForecastingFeatureGroup | 1 | 1 | Custom `input_features` + `_validate_string_match` |
+| TimeWindowFeatureGroup | 1 | 1 | Custom `input_features` (time_filter) |
+| MissingValueFeatureGroup | 1 | 1 | Simple inheritance |
+| DimensionalityReductionFeatureGroup | 1 | 1 | Custom `input_features` + `_validate_string_match` |
+| GeoDistanceFeatureGroup | 2 | 2 | Custom `input_features` (& separator) |
+| NodeCentralityFeatureGroup | 1 | 1 | Simple inheritance |
+| EncodingFeatureGroup | 1 | 1 | Custom `input_features` (~suffix handling) |
+| SklearnPipelineFeatureGroup | 1 | None | Custom `match_feature_group_criteria` |
+| ScalingFeatureGroup | 1 | 1 | Simple inheritance |
+| TextCleaningFeatureGroup | 1 | 1 | Simple inheritance |
+
 ## Modern Implementation in Feature Groups
 
 ### 1. Define PROPERTY_MAPPING Configuration
@@ -160,19 +287,19 @@ def input_features(self, options: Options, feature_name: FeatureName) -> Optiona
     """Extract source feature from either configuration-based options or string parsing."""
 
     # Try string-based parsing first
-    _, source_feature = FeatureChainParser.parse_feature_name(
+    _, in_feature = FeatureChainParser.parse_feature_name(
         feature_name, [self.PREFIX_PATTERN]
     )
-    if source_feature is not None:
-        return {Feature(source_feature)}
-    
+    if in_feature is not None:
+        return {Feature(in_feature)}
+
     # Fall back to configuration-based approach
-    source_features = options.get_source_features()
-    if len(source_features) != 1:
+    in_features = options.get_in_features()
+    if len(in_features) != 1:
         raise ValueError(
-            f"Expected exactly one source feature, but found {len(source_features)}: {source_features}"
+            f"Expected exactly one in_feature, but found {len(in_features)}: {in_features}"
         )
-    return set(source_features)
+    return set(in_features)
 ```
 
 ### 4. Update calculate_feature Method
@@ -184,16 +311,16 @@ def calculate_feature(self, features, options):
     for feature in features.features:
         # Try configuration-based approach first
         try:
-            source_features = feature.options.get_source_features()
-            source_feature = next(iter(source_features))
-            source_feature_name = source_feature.get_name()
+            in_features = feature.options.get_in_features()
+            in_feature = next(iter(in_features))
+            in_feature_name = in_feature.get_name()
             
             # Extract parameters from options
             operation_type = feature.options.get("operation_type")
             
         except (ValueError, StopIteration):
             # Fall back to string-based approach for legacy features
-            operation_type, source_feature_name = FeatureChainParser.parse_feature_name(
+            operation_type, in_feature_name = FeatureChainParser.parse_feature_name(
                 feature.name, [cls.PREFIX_PATTERN]
             )
         

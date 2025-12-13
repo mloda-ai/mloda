@@ -10,13 +10,16 @@ from typing import Any, List, Optional, Set, Union
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
+from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
+    FeatureChainParserMixin,
+)
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 
-class ClusteringFeatureGroup(AbstractFeatureGroup):
+class ClusteringFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
     # Option keys for clustering configuration
     """
     Base class for all clustering feature groups.
@@ -105,6 +108,10 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
     # Define the prefix pattern for this feature group
     PREFIX_PATTERN = r".*__cluster_([\w]+)_([\w]+)$"
 
+    # In-feature configuration for FeatureChainParserMixin
+    MIN_IN_FEATURES = 1
+    MAX_IN_FEATURES = None  # Unlimited in_features allowed
+
     # Property mapping for configuration-based feature creation
     PROPERTY_MAPPING = {
         ALGORITHM: {
@@ -133,25 +140,17 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
         },
     }
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
-        """Extract source features from either string parsing or configuration-based options."""
-
-        # string based
-        source_features_str: str | None = None
-        _, source_features_str = FeatureChainParser.parse_feature_name(feature_name, [self.PREFIX_PATTERN])
-
-        if source_features_str is not None:
-            # Handle multiple source features (ampersand-separated)
-            source_features = set()
-            for feature in source_features_str.split("&"):
-                source_features.add(Feature(feature.strip()))
-            return source_features
-
-        # configuration based
-        source_features_frozen = options.get_in_features()
-        if len(source_features_frozen) < 1:
-            raise ValueError(f"Feature '{feature_name}' requires at least one source feature, but none were provided.")
-        return set(source_features_frozen)
+    @classmethod
+    def _validate_string_match(cls, feature_name: str, operation_config: str, source_feature: str) -> bool:
+        """Validate clustering-specific string patterns using parse_clustering_prefix()."""
+        if FeatureChainParser.is_chained_feature(feature_name):
+            try:
+                # Use existing validation logic that validates algorithm and k_value
+                cls.parse_clustering_prefix(feature_name)
+            except ValueError:
+                # If validation fails, this feature doesn't match
+                return False
+        return True
 
     @classmethod
     def parse_clustering_prefix(cls, feature_name: str) -> tuple[str, str]:
@@ -213,36 +212,7 @@ class ClusteringFeatureGroup(AbstractFeatureGroup):
         k_value = cls.parse_clustering_prefix(feature_name)[1]
         return k_value if k_value == "auto" else int(k_value)
 
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: Union[FeatureName, str],
-        options: Options,
-        data_access_collection: Optional[Any] = None,
-    ) -> bool:
-        """Check if feature name matches the expected pattern for clustering features."""
-
-        # Use the unified parser with property mapping for full configuration support
-        result = FeatureChainParser.match_configuration_feature_chain_parser(
-            feature_name,
-            options,
-            property_mapping=cls.PROPERTY_MAPPING,
-            prefix_patterns=[cls.PREFIX_PATTERN],
-        )
-
-        # If it matches and it's a string-based feature, validate with our custom logic
-        if result:
-            feature_name_str = feature_name.name if isinstance(feature_name, FeatureName) else feature_name
-
-            # Check if this is a string-based feature (contains the pattern)
-            if FeatureChainParser.is_chained_feature(feature_name_str):
-                try:
-                    # Use existing validation logic that validates algorithm and k_value
-                    cls.parse_clustering_prefix(feature_name_str)
-                except ValueError:
-                    # If validation fails, this feature doesn't match
-                    return False
-        return result
+    # Custom validation done via _validate_string_match() hook
 
     @classmethod
     def _extract_algorithm_k_value_and_source_features(cls, feature: Feature) -> tuple[str, Union[int, str], list[str]]:

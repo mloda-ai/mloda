@@ -13,12 +13,15 @@ from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
+from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
+    FeatureChainParserMixin,
+)
 from mloda_core.abstract_plugins.components.base_artifact import BaseArtifact
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import SklearnArtifact
 
 
-class EncodingFeatureGroup(AbstractFeatureGroup):
+class EncodingFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
     """
     Base class for scikit-learn encoding feature groups.
 
@@ -168,7 +171,11 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
 
     # Define patterns for parsing
     PATTERN = "__"
-    SUFFIX_PATTERN = r".*__(onehot|label|ordinal)_encoded(~\d+)?$"
+    PREFIX_PATTERN = r".*__(onehot|label|ordinal)_encoded(~\d+)?$"
+
+    # In-feature configuration for FeatureChainParserMixin
+    MIN_IN_FEATURES = 1
+    MAX_IN_FEATURES = 1
 
     # Property mapping for new configuration-based approach
     PROPERTY_MAPPING = {
@@ -193,7 +200,7 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
         """Extract source feature from either configuration-based options or string parsing."""
 
         # Try string-based parsing first
-        _, source_feature = FeatureChainParser.parse_feature_name(feature_name, [self.SUFFIX_PATTERN])
+        _, source_feature = FeatureChainParser.parse_feature_name(feature_name, [self.PREFIX_PATTERN])
         if source_feature is not None:
             # Remove ~suffix if present (for OneHot column patterns like category~1)
             base_feature = self.get_column_base_feature(source_feature)
@@ -210,7 +217,7 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
     @classmethod
     def get_encoder_type(cls, feature_name: str) -> str:
         """Extract the encoder type from the feature name."""
-        encoder_type, _ = FeatureChainParser.parse_feature_name(feature_name, [cls.SUFFIX_PATTERN])
+        encoder_type, _ = FeatureChainParser.parse_feature_name(feature_name, [cls.PREFIX_PATTERN])
         if encoder_type is None:
             raise ValueError(f"Invalid encoding feature name format: {feature_name}")
 
@@ -222,22 +229,6 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
             )
 
         return encoder_type
-
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: Union[FeatureName, str],
-        options: Options,
-        data_access_collection: Optional[Any] = None,
-    ) -> bool:
-        """Check if feature name matches the expected pattern using unified parser."""
-        # Use the unified parser with property mapping for full configuration support
-        return FeatureChainParser.match_configuration_feature_chain_parser(
-            feature_name,
-            options,
-            property_mapping=cls.PROPERTY_MAPPING,
-            prefix_patterns=[cls.SUFFIX_PATTERN],
-        )
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -315,7 +306,7 @@ class EncodingFeatureGroup(AbstractFeatureGroup):
 
         if FeatureChainParser.is_chained_feature(feature_name_str):
             encoder_type = cls.get_encoder_type(feature_name_str)
-            source_feature_name = FeatureChainParser.extract_source_feature(feature_name_str, cls.SUFFIX_PATTERN)
+            source_feature_name = FeatureChainParser.extract_in_feature(feature_name_str, cls.PREFIX_PATTERN)
             return encoder_type, source_feature_name
 
         # Fall back to configuration-based approach

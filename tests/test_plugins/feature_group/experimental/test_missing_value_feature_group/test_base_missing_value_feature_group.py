@@ -48,9 +48,7 @@ class TestMissingValueFeatureGroup:
         assert hasattr(MissingValueFeatureGroup, "PREFIX_PATTERN")
 
         # Test that FeatureChainParser methods work with the PREFIX_PATTERN
-        assert (
-            FeatureChainParser.extract_source_feature(feature_name, MissingValueFeatureGroup.PREFIX_PATTERN) == "income"
-        )
+        assert FeatureChainParser.extract_in_feature(feature_name, MissingValueFeatureGroup.PREFIX_PATTERN) == "income"
 
     def test_get_imputation_method(self) -> None:
         """Test extraction of imputation method from feature name."""

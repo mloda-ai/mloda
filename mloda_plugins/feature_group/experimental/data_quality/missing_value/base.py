@@ -11,13 +11,16 @@ from typing import Any, List, Optional, Set, Union
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
+from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
+    FeatureChainParserMixin,
+)
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 
-class MissingValueFeatureGroup(AbstractFeatureGroup):
+class MissingValueFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
     """
     Base class for all missing value imputation feature groups.
 
@@ -160,6 +163,10 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
 
     PREFIX_PATTERN = r".*__([\w]+)_imputed$"
 
+    # In-feature configuration for FeatureChainParserMixin
+    MIN_IN_FEATURES = 1
+    MAX_IN_FEATURES = 1
+
     PROPERTY_MAPPING = {
         IMPUTATION_METHOD: {
             **IMPUTATION_METHODS,
@@ -180,25 +187,6 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
             DefaultOptionKeys.mloda_default: None,  # Default is None (no grouping)
         },
     }
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
-        """Extract source feature from either configuration-based options or string parsing."""
-
-        source_feature: str | None = None
-
-        # Try string-based parsing first
-        # parse_feature_name returns (operation_config, source_feature)
-        operation_config, source_feature = FeatureChainParser.parse_feature_name(feature_name, [self.PREFIX_PATTERN])
-        if source_feature is not None:
-            return {Feature(source_feature)}
-
-        # Fall back to configuration-based approach
-        source_features = options.get_in_features()
-        if len(source_features) != 1:
-            raise ValueError(
-                f"Expected exactly one source feature, but found {len(source_features)}: {source_features}"
-            )
-        return set(source_features)
 
     @classmethod
     def get_imputation_method(cls, feature_name: str) -> str:
@@ -221,23 +209,6 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
             )
 
         return imputation_method
-
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: Union[FeatureName, str],
-        options: Options,
-        data_access_collection: Optional[Any] = None,
-    ) -> bool:
-        """Check if feature name matches the expected pattern for missing value features."""
-
-        # Use the unified parser with property mapping for full configuration support
-        return FeatureChainParser.match_configuration_feature_chain_parser(
-            feature_name,
-            options,
-            property_mapping=cls.PROPERTY_MAPPING,
-            prefix_patterns=[cls.PREFIX_PATTERN],
-        )
 
     @classmethod
     def _extract_imputation_method_and_source_feature(cls, feature: Feature) -> tuple[str, str]:
@@ -264,8 +235,8 @@ class MissingValueFeatureGroup(AbstractFeatureGroup):
         if FeatureChainParser.is_chained_feature(feature_name_str):
             # Use get_imputation_method which already handles parse_feature_name correctly
             imputation_method = cls.get_imputation_method(feature_name_str)
-            # Use extract_source_feature which returns everything before the last __
-            source_feature_name = FeatureChainParser.extract_source_feature(feature_name_str, cls.PREFIX_PATTERN)
+            # Use extract_in_feature which returns everything before the last __
+            source_feature_name = FeatureChainParser.extract_in_feature(feature_name_str, cls.PREFIX_PATTERN)
             return imputation_method, source_feature_name
 
         # Fall back to configuration-based approach

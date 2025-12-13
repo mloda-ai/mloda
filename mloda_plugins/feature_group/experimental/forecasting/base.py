@@ -14,6 +14,9 @@ from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser
     CHAIN_SEPARATOR,
     FeatureChainParser,
 )
+from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
+    FeatureChainParserMixin,
+)
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.options import Options
@@ -21,7 +24,7 @@ from mloda_plugins.feature_group.experimental.default_options_key import Default
 from mloda_plugins.feature_group.experimental.forecasting.forecasting_artifact import ForecastingArtifact
 
 
-class ForecastingFeatureGroup(AbstractFeatureGroup):
+class ForecastingFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
     """
     Base class for all forecasting feature groups.
 
@@ -132,6 +135,10 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
 
     # Define the prefix pattern for this feature group
     PREFIX_PATTERN = r".*__([\w]+)_forecast_(\d+)([\w]+)$"
+
+    # In-feature configuration for FeatureChainParserMixin
+    MIN_IN_FEATURES = 1
+    MAX_IN_FEATURES = 1
 
     # Property mapping for configuration-based features with group/context separation
     PROPERTY_MAPPING = {
@@ -287,35 +294,28 @@ class ForecastingFeatureGroup(AbstractFeatureGroup):
         return algorithm, horizon, time_unit
 
     @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: Union[FeatureName, str],
-        options: Options,
-        data_access_collection: Optional[Any] = None,
-    ) -> bool:
-        """Check if feature name matches the expected pattern for forecasting features."""
+    def _validate_string_match(cls, feature_name: str, _operation_config: str, _source_feature: str) -> bool:
+        """
+        Validate that a string-based feature name has valid forecasting components.
 
-        # Use the unified parser with property mapping for full configuration support
-        result = FeatureChainParser.match_configuration_feature_chain_parser(
-            feature_name,
-            options,
-            property_mapping=cls.PROPERTY_MAPPING,
-            prefix_patterns=[cls.PREFIX_PATTERN],
-        )
+        Validates algorithm, horizon, and time_unit using parse_forecast_suffix().
 
-        # If it matches and it's a string-based feature, validate with our custom logic
-        if result:
-            feature_name_str = feature_name.name if isinstance(feature_name, FeatureName) else feature_name
+        Args:
+            feature_name: The full feature name to validate
+            _operation_config: The operation config extracted by the regex (unused)
+            _source_feature: The source feature extracted by the regex (unused)
 
-            # Check if this is a string-based feature (contains the pattern)
-            if FeatureChainParser.is_chained_feature(feature_name_str):
-                try:
-                    # Use existing validation logic that validates algorithm, horizon, and time_unit
-                    cls.parse_forecast_suffix(feature_name_str)
-                except ValueError:
-                    # If validation fails, this feature doesn't match
-                    return False
-        return result
+        Returns:
+            True if valid, False otherwise
+        """
+        if FeatureChainParser.is_chained_feature(feature_name):
+            try:
+                # Use existing validation logic that validates algorithm, horizon, and time_unit
+                cls.parse_forecast_suffix(feature_name)
+            except ValueError:
+                # If validation fails, this feature doesn't match
+                return False
+        return True
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

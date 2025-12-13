@@ -10,13 +10,16 @@ from typing import Any, Optional, Set, Union
 from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
 from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
+from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
+    FeatureChainParserMixin,
+)
 from mloda_core.abstract_plugins.components.feature_name import FeatureName
 from mloda_core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_core.abstract_plugins.components.options import Options
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 
-class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
+class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
     """
     Base class for all dimensionality reduction feature groups.
 
@@ -112,6 +115,10 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
 
     # Define the prefix pattern for this feature group
     PREFIX_PATTERN = r".*__([\w]+)_(\d+)d$"
+
+    # In-feature configuration for FeatureChainParserMixin
+    MIN_IN_FEATURES = 1
+    MAX_IN_FEATURES = 1
 
     PROPERTY_MAPPING = {
         ALGORITHM: {
@@ -265,35 +272,28 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
             raise ValueError(f"Invalid dimension: {dimension_str}. Must be a positive integer.")
 
     @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: Union[FeatureName, str],
-        options: Options,
-        data_access_collection: Optional[Any] = None,
-    ) -> bool:
-        """Check if feature name matches the expected pattern for dimensionality reduction features."""
+    def _validate_string_match(cls, feature_name: str, _operation_config: str, _source_feature: str) -> bool:
+        """
+        Validate that a string-based feature name has valid dimensionality reduction components.
 
-        # Use the unified parser with property mapping for full configuration support
-        result = FeatureChainParser.match_configuration_feature_chain_parser(
-            feature_name,
-            options,
-            property_mapping=cls.PROPERTY_MAPPING,
-            prefix_patterns=[cls.PREFIX_PATTERN],
-        )
+        Validates algorithm and dimension using parse_reduction_suffix().
 
-        # If it matches and it's a string-based feature, validate with our custom logic
-        if result:
-            feature_name_str = feature_name.name if isinstance(feature_name, FeatureName) else feature_name
+        Args:
+            feature_name: The full feature name to validate
+            _operation_config: The operation config extracted by the regex (unused)
+            _source_feature: The source feature extracted by the regex (unused)
 
-            # Check if this is a string-based feature (contains the pattern)
-            if FeatureChainParser.is_chained_feature(feature_name_str):
-                try:
-                    # Use existing validation logic that validates algorithm and dimension
-                    cls.parse_reduction_suffix(feature_name_str)
-                except ValueError:
-                    # If validation fails, this feature doesn't match
-                    return False
-        return result
+        Returns:
+            True if valid, False otherwise
+        """
+        if FeatureChainParser.is_chained_feature(feature_name):
+            try:
+                # Use existing validation logic that validates algorithm and dimension
+                cls.parse_reduction_suffix(feature_name)
+            except ValueError:
+                # If validation fails, this feature doesn't match
+                return False
+        return True
 
     @classmethod
     def _extract_algorithm_dimension_and_source_features(cls, feature: Feature) -> tuple[str, int, list[str], Options]:
@@ -320,7 +320,7 @@ class DimensionalityReductionFeatureGroup(AbstractFeatureGroup):
 
         if FeatureChainParser.is_chained_feature(feature_name_str):
             algorithm, dimension = cls.parse_reduction_suffix(feature_name_str)
-            source_features_str = FeatureChainParser.extract_source_feature(feature_name_str, cls.PREFIX_PATTERN)
+            source_features_str = FeatureChainParser.extract_in_feature(feature_name_str, cls.PREFIX_PATTERN)
             source_features = [feature.strip() for feature in source_features_str.split(",")]
             # For string-based features, still extract algorithm-specific options from feature.options
             return algorithm, dimension, source_features, feature.options

@@ -118,9 +118,7 @@ class TestEncodingFeatureGroup:
         ]
 
         for feature_name, expected_source in test_cases:
-            source_feature = FeatureChainParser.extract_source_feature(
-                feature_name, EncodingFeatureGroup.SUFFIX_PATTERN
-            )
+            source_feature = FeatureChainParser.extract_in_feature(feature_name, EncodingFeatureGroup.PREFIX_PATTERN)
             assert source_feature == expected_source, f"Expected {expected_source}, got {source_feature}"
 
     def test_supported_encoders(self) -> None:
@@ -137,10 +135,10 @@ class TestEncodingFeatureGroup:
         """Test that encoder type option key is properly defined."""
         assert EncodingFeatureGroup.ENCODER_TYPE == "encoder_type"
 
-    def test_suffix_pattern(self) -> None:
-        """Test that suffix pattern is properly defined."""
+    def test_prefix_pattern(self) -> None:
+        """Test that prefix pattern is properly defined."""
         expected_pattern = r".*__(onehot|label|ordinal)_encoded(~\d+)?$"
-        assert EncodingFeatureGroup.SUFFIX_PATTERN == expected_pattern
+        assert EncodingFeatureGroup.PREFIX_PATTERN == expected_pattern
 
     def test_input_features(self) -> None:
         """Test input_features method extracts correct source features."""

@@ -86,7 +86,7 @@
         <ul>
     <li class="toctree-l3"><a class="reference internal" href="#baseartifact">BaseArtifact</a>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#abstractfeaturegroup">AbstractFeatureGroup</a>
+    <li class="toctree-l3"><a class="reference internal" href="#featuregroup">FeatureGroup</a>
     </li>
         </ul>
     </li>
@@ -199,26 +199,22 @@ Example use cases are embeddings, Feature Matrices, Model Checkpoints and more.<
 <p>Artifacts are managed through a set of abstract and concrete classes that define how artifacts are created, saved, and loaded. The primary classes involved in artifact management include:</p>
 <ul>
 <li><code>BaseArtifact</code>: The base class for all artifacts.</li>
-<li><code>AbstractFeatureGroup</code>: An abstract class that defines the structure for feature groups, including methods for artifact management. This class may contain a <code>BaseArtfact</code>.</li>
+<li><code>FeatureGroup</code>: The base class for feature groups, including methods for artifact management. This class may contain a <code>BaseArtfact</code>.</li>
 </ul>
 <h2 id="key-components">Key Components</h2>
 <h4 id="baseartifact">BaseArtifact</h4>
 <p>The <code>BaseArtifact</code> class serves as the foundation for all artifacts. It provides the basic interface and functionality required for artifact management.</p>
-<h4 id="abstractfeaturegroup">AbstractFeatureGroup</h4>
-<p>The <code>AbstractFeatureGroup</code> class defines the structure for feature groups, including methods for creating data, calculating features, and managing artifacts. It includes methods such as <code>artifact</code> and <code>load_artifact</code> to handle artifact operations.</p>
+<h4 id="featuregroup">FeatureGroup</h4>
+<p>The <code>FeatureGroup</code> class defines the structure for feature groups, including methods for creating data, calculating features, and managing artifacts. It includes methods such as <code>artifact</code> and <code>load_artifact</code> to handle artifact operations.</p>
 <h2 id="example">Example</h2>
 <h4 id="feature-group-with-artifact-implementation">Feature Group with Artifact implementation</h4>
 <p>The following example demonstrates how to implement and test an artifact.</p>
 <p>Here, we create a <code>FeatureGroup</code> with a configured <code>BaseArtifact</code>.</p>
 <pre><code class="language-python">from typing import Type, Any, Optional
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.base_artifact import BaseArtifact
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
+from mloda.provider import FeatureGroup, FeatureSet, BaseArtifact, DataCreator, BaseInputData
 
 
-class BaseExampleArtifactFeature(AbstractFeatureGroup):
+class BaseExampleArtifactFeature(FeatureGroup):
     @classmethod
     def input_data(cls) -&gt; Optional[BaseInputData]:
         return DataCreator({cls.get_class_name()})
@@ -239,10 +235,10 @@ class BaseExampleArtifactFeature(AbstractFeatureGroup):
         return {cls.get_class_name(): [1, 2, 3]}
 </code></pre>
 <p>Now, we run the query to the feature group to save the artifact. This example is very basic, but could be a much more complex artifact.</p>
-<pre><code class="language-python">from mloda_core.api.request import mlodaAPI
+<pre><code class="language-python">from mloda.user import API
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
-api = mlodaAPI([&quot;BaseExampleArtifactFeature&quot;], {PyArrowTable})
+api = API([&quot;BaseExampleArtifactFeature&quot;], {PyArrowTable})
 api._batch_run()
 artifacts = api.get_artifacts()
 print(artifacts)
@@ -251,10 +247,10 @@ print(artifacts)
 <pre><code class="language-python">{'BaseExampleArtifactFeature': 'BasicArtifact'}
 </code></pre>
 <p>Now, let us use this artifact.</p>
-<pre><code class="language-python">from mloda_core.abstract_plugins.components.feature import Feature
+<pre><code class="language-python">from mloda.user import Feature, API
 
 feat = Feature(name=&quot;BaseExampleArtifactFeature&quot;, options=artifacts)
-api = mlodaAPI([feat], {PyArrowTable})
+api = API([feat], {PyArrowTable})
 api._batch_run()
 </code></pre>
 <p>Result:</p>
@@ -267,7 +263,7 @@ api._batch_run()
 <p>For more advanced use cases, artifacts can handle complex data structures and multiple objects. The <code>SklearnArtifact</code> demonstrates this with fitted scikit-learn transformers:</p>
 <pre><code class="language-python">from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import SklearnArtifact
 
-class MySklearnFeatureGroup(AbstractFeatureGroup):
+class MySklearnFeatureGroup(FeatureGroup):
     @staticmethod
     def artifact() -&gt; Type[BaseArtifact] | None:
         return SklearnArtifact

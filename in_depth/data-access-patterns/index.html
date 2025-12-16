@@ -269,9 +269,9 @@
 </ul>
 <p>For detailed examples of these use cases, see the <a href="../access-feature-data/">data access documentation</a>.</p>
 <h3 id="example-implementation">Example Implementation</h3>
-<pre><code class="language-python">from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
+<pre><code class="language-python">from mloda.provider import BaseInputData, FeatureGroup, FeatureSet
 
-class ReadFileFeature(AbstractFeatureGroup):
+class ReadFileFeature(FeatureGroup):
     @classmethod
     def input_data(cls) -&gt; Optional[BaseInputData]:
         return ReadFile()  # BaseInputData implementation
@@ -314,9 +314,9 @@ class ReadFileFeature(AbstractFeatureGroup):
 <li>Enabling flexible connection configuration for stateful frameworks</li>
 </ul>
 <h3 id="example-implementation_1">Example Implementation</h3>
-<pre><code class="language-python">from mloda_core.abstract_plugins.components.match_data.match_data import MatchData
+<pre><code class="language-python">from mloda.provider import ConnectionMatcherMixin, FeatureGroup
 
-class DuckDBFeatureGroup(AbstractFeatureGroup, MatchData):
+class DuckDBFeatureGroup(FeatureGroup, ConnectionMatcherMixin):
     @classmethod
     def match_data_access(
         cls,
@@ -360,7 +360,7 @@ class DuckDBFeatureGroup(AbstractFeatureGroup, MatchData):
 <tr>
 <td><strong>Usage Pattern</strong></td>
 <td><code>input_data()</code> method in feature groups</td>
-<td>Multiple inheritance: <code>AbstractFeatureGroup, MatchData</code></td>
+<td>Multiple inheritance: <code>FeatureGroup, ConnectionMatcherMixin</code></td>
 </tr>
 <tr>
 <td><strong>Connection Dependency</strong></td>
@@ -389,17 +389,17 @@ class DuckDBFeatureGroup(AbstractFeatureGroup, MatchData):
 <li><strong>Only applies</strong> to specific compute frameworks like DuckDB that require persistent connections</li>
 </ol>
 <h3 id="combined-usage-example">Combined Usage Example</h3>
-<pre><code class="language-python">class DuckDBAnalyticsFeature(AbstractFeatureGroup, MatchData):
+<pre><code class="language-python">class DuckDBAnalyticsFeature(FeatureGroup, ConnectionMatcherMixin):
     @classmethod
     def input_data(cls) -&gt; Optional[BaseInputData]:
         # BaseInputData for general data loading
         return ReadFile()
 
     @classmethod
-    def match_data_access(cls, feature_name: str, options: Options, 
+    def match_data_access(cls, feature_name: str, options: Options,
                          data_access_collection: Optional[DataAccessCollection] = None,
                          framework_connection_object: Optional[Any] = None) -&gt; Any:
-        # MatchData for connection object matching
+        # ConnectionMatcherMixin for connection object matching
         if framework_connection_object and isinstance(framework_connection_object, duckdb.DuckDBPyConnection):
             return framework_connection_object
         return None
@@ -408,7 +408,7 @@ class DuckDBFeatureGroup(AbstractFeatureGroup, MatchData):
 <h3 id="scenario-1-standard-file-processing-baseinputdata-only">Scenario 1: Standard File Processing (BaseInputData Only)</h3>
 <p><strong>Use Case</strong>: Reading CSV files with Pandas
 <strong>Pattern</strong>: Only BaseInputData is needed</p>
-<pre><code class="language-python">class CsvProcessingFeature(AbstractFeatureGroup):
+<pre><code class="language-python">class CsvProcessingFeature(FeatureGroup):
     @classmethod
     def input_data(cls) -&gt; Optional[BaseInputData]:
         return ReadFile()  # BaseInputData handles file reading
@@ -416,21 +416,21 @@ class DuckDBFeatureGroup(AbstractFeatureGroup, MatchData):
 <h3 id="scenario-2-duckdb-analytics-baseinputdata-matchdata">Scenario 2: DuckDB Analytics (BaseInputData + MatchData)</h3>
 <p><strong>Use Case</strong>: Analytics with DuckDB requiring connection objects
 <strong>Pattern</strong>: Both BaseInputData and MatchData are needed</p>
-<pre><code class="language-python">class DuckDBAnalyticsFeature(AbstractFeatureGroup, MatchData):
+<pre><code class="language-python">class DuckDBAnalyticsFeature(FeatureGroup, ConnectionMatcherMixin):
     @classmethod
     def input_data(cls) -&gt; Optional[BaseInputData]:
         return ReadFile()  # BaseInputData for data loading
 
     @classmethod
     def match_data_access(cls, ...):
-        # MatchData for connection matching
+        # ConnectionMatcherMixin for connection matching
         return appropriate_duckdb_connection
 </code></pre>
 <p>For database connection patterns, see <a href="../framework-connection-object/">Framework Connection Object</a>.</p>
 <h3 id="scenario-3-in-memory-processing-baseinputdata-only">Scenario 3: In-Memory Processing (BaseInputData Only)</h3>
 <p><strong>Use Case</strong>: Creating synthetic data with Pandas
 <strong>Pattern</strong>: Only BaseInputData is needed</p>
-<pre><code class="language-python">class SyntheticDataFeature(AbstractFeatureGroup):
+<pre><code class="language-python">class SyntheticDataFeature(FeatureGroup):
     @classmethod
     def input_data(cls) -&gt; Optional[BaseInputData]:
         return DataCreator({&quot;synthetic_data&quot;})  # BaseInputData for data creation

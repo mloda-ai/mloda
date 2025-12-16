@@ -184,8 +184,8 @@
 <p>This example demonstrates a simple request to the mloda API. In this case, mloda automatically determines that a <strong>CsvReader</strong> feature group will fulfill the request and respond with the resulting DataFrame.</p>
 <h4 id="1-import-the-required-modules">1. Import the Required Modules</h4>
 <p>We first need to import the necessary components to set up our request:</p>
-<pre><code class="language-python">from mloda_core.api.request import mlodaAPI
-from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
+<pre><code class="language-python">import mloda
+from mloda.user import DataAccessCollection
 </code></pre>
 <h4 id="2-define-data-sources">2. Define Data Sources</h4>
 <p>Next, we define the data source by specifying the file path and creating a <strong>DataAccessCollection</strong> object:</p>
@@ -199,8 +199,8 @@ feature_list = feature_list.split(&quot;,&quot;)
 </code></pre>
 <h4 id="4-execute-the-request-and-retrieve-results">4. Execute the Request and Retrieve Results</h4>
 <p>Finally, we send the request to the mloda API, specifying the compute framework and the data source. The result is returned as a DataFrame:</p>
-<pre><code class="language-python">result = mlodaAPI.run_all(
-    feature_list, 
+<pre><code class="language-python">result = mloda.run_all(
+    feature_list,
     compute_frameworks=[&quot;PyArrowTable&quot;],
     data_access_collection=data_access_collection)
 result[0]

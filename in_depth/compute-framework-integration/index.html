@@ -202,7 +202,7 @@
 <h3 id="compute-framework-specification">Compute Framework Specification</h3>
 <p>Feature groups specify which compute frameworks they support through the <code>compute_framework_rule</code> method:</p>
 <pre><code class="language-python">@classmethod
-def compute_framework_rule(cls) -&gt; set[type[ComputeFrameWork]]:
+def compute_framework_rule(cls) -&gt; set[type[ComputeFramework]]:
     &quot;&quot;&quot;Define the compute frameworks this feature group supports.&quot;&quot;&quot;
     return {PandasDataFrame}  # Support only Pandas
     # Or return True to support all available compute frameworks
@@ -211,7 +211,7 @@ def compute_framework_rule(cls) -&gt; set[type[ComputeFrameWork]]:
 <p>Feature groups follow a layered architecture:
 - Base class defines the interface and common functionality
 - Framework-specific classes implement the actual calculations</p>
-<pre><code>AbstractFeatureGroup
+<pre><code>FeatureGroup
   └── BaseFeatureGroup (e.g., ClusteringFeatureGroup)
         ├── PandasImplementation
         ├── PyArrowImplementation
@@ -220,7 +220,7 @@ def compute_framework_rule(cls) -&gt; set[type[ComputeFrameWork]]:
 <h2 id="implementation-pattern">Implementation Pattern</h2>
 <h3 id="1-base-class">1. Base Class</h3>
 <p>The base class defines the interface and common functionality:</p>
-<pre><code class="language-python">class MyFeatureGroup(AbstractFeatureGroup):
+<pre><code class="language-python">class MyFeatureGroup(FeatureGroup):
     &quot;&quot;&quot;Base class for MyFeatureGroup.&quot;&quot;&quot;
 
     def input_features(self, options, feature_name):
@@ -268,7 +268,7 @@ def compute_framework_rule(cls) -&gt; set[type[ComputeFrameWork]]:
 <h2 id="example">Example</h2>
 <p>For a clustering feature group:</p>
 <pre><code class="language-python"># Base class (framework-agnostic)
-class ClusteringFeatureGroup(AbstractFeatureGroup):
+class ClusteringFeatureGroup(FeatureGroup):
     def input_features(self, options, feature_name):
         # Extract source features from feature name
 
@@ -298,7 +298,7 @@ class PyArrowClusteringFeatureGroup(ClusteringFeatureGroup):
 </code></pre>
 <p>For an aggregated feature group with Polars support:</p>
 <pre><code class="language-python"># Base class (framework-agnostic)
-class AggregatedFeatureGroup(AbstractFeatureGroup):
+class AggregatedFeatureGroup(FeatureGroup):
     def input_features(self, options, feature_name):
         # Extract source features from feature name
 
@@ -320,7 +320,7 @@ class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
 <p>Note that Polars supports both eager (<code>PolarsDataFrame</code>) and lazy (<code>PolarsLazyDataFrame</code>) evaluation modes, allowing you to choose the appropriate strategy based on your performance requirements.</p>
 <p>For an analytical feature group with DuckDB support:</p>
 <pre><code class="language-python"># Base class (framework-agnostic)
-class AnalyticalFeatureGroup(AbstractFeatureGroup):
+class AnalyticalFeatureGroup(FeatureGroup):
     def input_features(self, options, feature_name):
         # Extract source features from feature name
 
@@ -344,7 +344,7 @@ class DuckDBAnalyticalFeatureGroup(AnalyticalFeatureGroup):
 <p><strong>Important</strong>: DuckDB feature groups require a connection object to be available. The framework will automatically handle connection management, but ensure your data access collection includes the necessary connection information.</p>
 <p>For a distributed processing feature group with Spark support:</p>
 <pre><code class="language-python"># Base class (framework-agnostic)
-class DistributedFeatureGroup(AbstractFeatureGroup):
+class DistributedFeatureGroup(FeatureGroup):
     def input_features(self, options, feature_name):
         # Extract source features from feature name
 

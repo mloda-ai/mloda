@@ -206,7 +206,7 @@
 <p>The recommended approach uses <code>FeatureChainParser.match_configuration_feature_chain_parser</code> which provides:</p>
 <h3 id="1-dual-approach-support">1. Dual Approach Support</h3>
 <pre><code class="language-python">from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
-from mloda_core.abstract_plugins.components.options import Options
+from mloda.user import Options
 
 @classmethod
 def match_feature_group_criteria(cls, feature_name, options, data_access_collection=None):
@@ -224,13 +224,13 @@ def match_feature_group_criteria(cls, feature_name, options, data_access_collect
         &quot;sum&quot;: &quot;Sum aggregation&quot;,
         &quot;avg&quot;: &quot;Average aggregation&quot;,
         &quot;max&quot;: &quot;Maximum aggregation&quot;,
-        DefaultOptionKeys.mloda_context: True,
-        DefaultOptionKeys.mloda_strict_validation: True,
+        DefaultOptionKeys.context: True,
+        DefaultOptionKeys.strict_validation: True,
     },
     DefaultOptionKeys.in_features: {
         &quot;explanation&quot;: &quot;Source feature for aggregation&quot;,
-        DefaultOptionKeys.mloda_context: True,
-        DefaultOptionKeys.mloda_strict_validation: False,
+        DefaultOptionKeys.context: True,
+        DefaultOptionKeys.strict_validation: False,
     },
 }
 </code></pre>
@@ -254,9 +254,9 @@ options = Options(context={&quot;in_features&quot;: &quot;custom_feature&quot;})
 <pre><code class="language-python">PROPERTY_MAPPING = {
     &quot;window_size&quot;: {
         &quot;explanation&quot;: &quot;Size of the time window&quot;,
-        DefaultOptionKeys.mloda_context: True,
-        DefaultOptionKeys.mloda_strict_validation: True,
-        DefaultOptionKeys.mloda_validation_function: lambda x: isinstance(x, int) and x &gt; 0,
+        DefaultOptionKeys.context: True,
+        DefaultOptionKeys.strict_validation: True,
+        DefaultOptionKeys.validation_function: lambda x: isinstance(x, int) and x &gt; 0,
     },
 }
 </code></pre>

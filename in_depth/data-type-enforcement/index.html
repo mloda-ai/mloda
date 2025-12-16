@@ -5,15 +5,15 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       <link rel="shortcut icon" href="../../img/favicon.ico" />
-    <title>Multiple Result Columns - mloda docs</title>
+    <title>Data Type Enforcement - mloda docs</title>
     <link rel="stylesheet" href="../../css/theme.css" />
     <link rel="stylesheet" href="../../css/theme_extra.css" />
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
     
       <script>
         // Current page data
-        var mkdocs_page_name = "Multiple Result Columns";
-        var mkdocs_page_input_path = "in_depth/multiple_result_columns.md";
+        var mkdocs_page_name = "Data Type Enforcement";
+        var mkdocs_page_input_path = "in_depth/data-type-enforcement.md";
         var mkdocs_page_url = null;
       </script>
     
@@ -82,7 +82,7 @@
                   </li>
               </ul>
               <p class="caption"><span class="caption-text">In Depth - Advanced</span></p>
-              <ul class="current">
+              <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../data-quality/">Data quality</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../domain/">Domain concept</a>
@@ -99,8 +99,8 @@
                 </li>
     </ul>
                   </li>
-                  <li class="toctree-l1 current"><a class="reference internal current" >Feature Groups</a>
-    <ul class="current">
+                  <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
+    <ul>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-chain-parser/">Feature Chain Parser</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-group-matching/">Feature Group Matching</a>
@@ -111,29 +111,7 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-group-version/">Feature Group Versioning</a>
                 </li>
-                <li class="toctree-l2 current"><a class="reference internal current" href="#">Multiple Result Columns</a>
-    <ul class="current">
-    <li class="toctree-l3"><a class="reference internal" href="#overview">Overview</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#naming-convention">Naming Convention</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#example">Example</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#implementation">Implementation</a>
-        <ul>
-    <li class="toctree-l4"><a class="reference internal" href="#returning-multiple-columns">Returning Multiple Columns</a>
-    </li>
-    <li class="toctree-l4"><a class="reference internal" href="#consuming-multiple-columns">Consuming Multiple Columns</a>
-    </li>
-        </ul>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#how-it-works">How It Works</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#best-practices">Best Practices</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#available-utilities">Available Utilities</a>
-    </li>
-    </ul>
+                <li class="toctree-l2"><a class="reference internal" href="../multiple_result_columns/">Multiple Result Columns</a>
                 </li>
     </ul>
                   </li>
@@ -180,9 +158,7 @@
         <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
   <ul class="wy-breadcrumbs">
     <li><a href="../.." class="icon icon-home" aria-label="Docs"></a></li>
-          <li class="breadcrumb-item">In Depth - Advanced</li>
-          <li class="breadcrumb-item">Feature Groups</li>
-      <li class="breadcrumb-item active">Multiple Result Columns</li>
+      <li class="breadcrumb-item active">Data Type Enforcement</li>
     <li class="wy-breadcrumbs-aside">
     </li>
   </ul>
@@ -191,164 +167,93 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
             <div class="section" itemprop="articleBody">
               
-                <h1 id="multiple-result-columns">Multiple Result Columns</h1>
-<h2 id="overview">Overview</h2>
-<p>Feature groups in mloda can return multiple related columns using a naming convention pattern. This allows for more flexible and powerful feature engineering, especially when a single feature computation produces multiple related outputs.</p>
-<h2 id="naming-convention">Naming Convention</h2>
-<p>The naming convention for multiple result columns follows this pattern:</p>
-<pre><code>feature_name~column_suffix
+                <h1 id="data-type-enforcement">Data Type Enforcement</h1>
+<p>mloda supports optional data type declarations on Features, enabling runtime validation that computed data matches declared types.</p>
+<h2 id="declaring-feature-types">Declaring Feature Types</h2>
+<p>Use typed constructors to declare the expected data type:</p>
+<pre><code class="language-python">from mloda.user import Feature
+
+# Typed features - will be validated at runtime
+feature_int = Feature.int32_of(&quot;user_count&quot;)
+feature_double = Feature.double_of(&quot;price&quot;)
+feature_str = Feature.str_of(&quot;name&quot;)
+
+# Untyped feature - no validation
+feature_any = Feature.not_typed(&quot;legacy_column&quot;)
 </code></pre>
-<p>Where:
-- <code>feature_name</code> is the base name of the feature
-- <code>~</code> is the separator character
-- <code>column_suffix</code> is a unique identifier for each related column</p>
-<h2 id="example">Example</h2>
-<p>A feature group that computes statistical properties might return multiple columns:</p>
-<pre><code>temperature~mean
-temperature~min
-temperature~max
-temperature~std
-</code></pre>
-<h2 id="implementation">Implementation</h2>
-<h3 id="returning-multiple-columns">Returning Multiple Columns</h3>
-<p>When implementing a feature group that returns multiple columns:</p>
-<pre><code class="language-python">class MultiColumnFeatureGroup(FeatureGroup):
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:
-        feature_name = features.get_name_of_one_feature().name
-
-        # Return multiple columns with the naming convention
-        return {
-            f&quot;{feature_name}~mean&quot;: [1, 2, 3],
-            f&quot;{feature_name}~max&quot;: [4, 5, 6],
-            f&quot;{feature_name}~min&quot;: [0, 1, 2]
-        }
-</code></pre>
-<h3 id="consuming-multiple-columns">Consuming Multiple Columns</h3>
-<h4 id="automatic-column-discovery-recommended">Automatic Column Discovery (Recommended)</h4>
-<p>Use the <code>resolve_multi_column_feature()</code> utility to automatically discover all columns matching the pattern:</p>
-<pre><code class="language-python">class MultiColumnConsumer(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -&gt; Optional[Set[Feature]]:
-        return {Feature.not_typed(&quot;MultiColumnFeature&quot;)}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:
-        # Automatically discover all columns matching the pattern
-        columns = cls.resolve_multi_column_feature(
-            &quot;MultiColumnFeature&quot;,
-            set(data.columns)
-        )
-        # Returns: [&quot;MultiColumnFeature~mean&quot;, &quot;MultiColumnFeature~max&quot;, &quot;MultiColumnFeature~min&quot;]
-
-        # Process all discovered columns
-        result = sum(data[col] for col in columns)
-
-        feature_name = features.get_name_of_one_feature().name
-        return {feature_name: result}
-</code></pre>
-<p><strong>Benefits</strong>:
-- No need to manually enumerate column names
-- Automatically adapts if number of columns changes
-- Cleaner, more maintainable code</p>
-<h4 id="manual-column-access-legacy">Manual Column Access (Legacy)</h4>
-<p>For backwards compatibility, you can still access columns manually:</p>
-<pre><code class="language-python">class MultiColumnConsumer(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -&gt; Optional[Set[Feature]]:
-        return {Feature.not_typed(&quot;MultiColumnFeature&quot;)}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:
-        # Manual access to specific columns
-        mean_values = data[&quot;MultiColumnFeature~mean&quot;]
-        max_values = data[&quot;MultiColumnFeature~max&quot;]
-
-        # Perform calculations using these columns
-        result = mean_values + max_values
-
-        feature_name = features.get_name_of_one_feature().name
-        return {feature_name: result}
-</code></pre>
-<h2 id="how-it-works">How It Works</h2>
-<p>The mloda framework automatically handles the selection of columns that follow this naming convention:</p>
-<ol>
-<li>When a feature group requests a feature by name, the framework identifies all columns that either:</li>
-<li>Match the feature name exactly, or</li>
-<li>
-<p>Follow the pattern <code>feature_name~suffix</code></p>
-</li>
-<li>
-<p>This is implemented in the <code>identify_naming_convention</code> method in the <code>ComputeFramework</code> class:</p>
-</li>
-</ol>
-<pre><code class="language-python">def identify_naming_convention(self, selected_feature_names: Set[FeatureName], column_names: Set[str]) -&gt; Set[str]:
-    feature_name_strings = {f.name for f in selected_feature_names}
-    _selected_feature_names: Set[str] = set()
-
-    for col in column_names:
-        for feature_name in feature_name_strings:
-            if col == feature_name:
-                _selected_feature_names.add(col)
-                continue
-
-            if col.startswith(f&quot;{feature_name}~&quot;):
-                _selected_feature_names.add(col)
-
-    if not _selected_feature_names:
-        raise ValueError(
-            f&quot;No columns found that match feature names {feature_name_strings} or follow the naming convention 'feature_name~column_name'&quot;
-        )
-
-    return _selected_feature_names
-</code></pre>
-<h2 id="best-practices">Best Practices</h2>
-<ol>
-<li><strong>Use Automatic Discovery</strong>: Prefer <code>resolve_multi_column_feature()</code> over manual column enumeration</li>
-<li><strong>Consistent Naming</strong>: Use consistent suffixes across related feature groups</li>
-<li><strong>Use <code>apply_naming_convention()</code></strong>: When producing multi-column outputs, use the utility for consistency</li>
-<li><strong>Documentation</strong>: Document the meaning of each suffix in your feature group's docstring</li>
-<li><strong>Validation</strong>: Consider validating that all expected columns are present when consuming multiple columns</li>
-<li><strong>Error Handling</strong>: Handle cases where expected columns might be missing</li>
-</ol>
-<h2 id="available-utilities">Available Utilities</h2>
-<p>mloda provides several utilities for working with multi-column features:</p>
+<p>Available typed constructors:
+- <code>int32_of()</code>, <code>int64_of()</code> - Integer types
+- <code>float_of()</code>, <code>double_of()</code> - Floating point types
+- <code>str_of()</code> - String type
+- <code>boolean_of()</code> - Boolean type
+- <code>date_of()</code>, <code>timestamp_millis_of()</code>, <code>timestamp_micros_of()</code> - Date/time types
+- <code>decimal_of()</code>, <code>binary_of()</code> - Other types</p>
+<h2 id="validation-behavior">Validation Behavior</h2>
+<h3 id="default-lenient-mode">Default (Lenient) Mode</h3>
+<p>By default, validation allows compatible type conversions within categories:</p>
 <table>
 <thead>
 <tr>
-<th>Method</th>
-<th>Purpose</th>
-<th>Use Case</th>
+<th>Declared Type</th>
+<th>Compatible Actual Types</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>apply_naming_convention(result, feature_name)</code></td>
-<td>Create multi-column outputs</td>
-<td>Producer: Generate <code>~N</code> suffixed columns from arrays</td>
+<td>INT64</td>
+<td>INT32, INT64</td>
 </tr>
 <tr>
-<td><code>resolve_multi_column_feature(feature_name, columns)</code></td>
-<td>Discover multi-column inputs</td>
-<td>Consumer: Auto-find all <code>~N</code> columns</td>
+<td>DOUBLE</td>
+<td>INT32, INT64, FLOAT, DOUBLE</td>
 </tr>
 <tr>
-<td><code>expand_feature_columns(feature_name, num_columns)</code></td>
-<td>Generate column name list</td>
-<td>Producer: Pre-generate expected column names</td>
-</tr>
-<tr>
-<td><code>get_column_base_feature(column_name)</code></td>
-<td>Strip suffix from column</td>
-<td>Both: Extract base feature from <code>feature~N</code></td>
+<td>TIMESTAMP_MICROS</td>
+<td>TIMESTAMP_MILLIS, TIMESTAMP_MICROS</td>
 </tr>
 </tbody>
 </table>
+<p>Cross-category mismatches (e.g., STRING declared but INT64 returned) raise <code>DataTypeMismatchError</code>.</p>
+<h3 id="strict-mode">Strict Mode</h3>
+<p>Enable strict validation per-feature via options:</p>
+<pre><code class="language-python">feature = Feature.int32_of(
+    &quot;exact_count&quot;,
+    options={&quot;strict_type_enforcement&quot;: True}
+)
+</code></pre>
+<p>In strict mode, only exact type matches or standard widening conversions are allowed.</p>
+<h2 id="execution-plan-grouping">Execution Plan Grouping</h2>
+<p>Features with different explicit data types are separated into different execution groups at plan time. This allows type-specific processing paths.</p>
+<p>Untyped features (<code>data_type=None</code>) are "lenient" and can be grouped with any typed features, preserving compatibility with index columns and legacy code.</p>
+<pre><code class="language-python"># These will be in DIFFERENT execution groups
+Feature.int32_of(&quot;amount&quot;)
+Feature.int64_of(&quot;amount&quot;)
+
+# This can join ANY group (lenient)
+Feature.not_typed(&quot;id&quot;)
+</code></pre>
+<h2 id="database-reader-type-awareness">Database Reader Type Awareness</h2>
+<p>When reading from databases (e.g., SQLite), declared types are used to build the PyArrow schema:</p>
+<pre><code class="language-python"># Declared type is used for schema, not inferred from data
+feature = Feature.int64_of(
+    &quot;user_id&quot;,
+    options={&quot;sqlite&quot;: &quot;/path/to/db.sqlite&quot;}
+)
+</code></pre>
+<h2 id="error-handling">Error Handling</h2>
+<p>Type mismatches raise <code>DataTypeMismatchError</code>:</p>
+<p>```python title="Error handling example"
+import mloda
+from mloda.user import Feature
+from mloda.provider import DataTypeMismatchError</p>
+<p>try:
+    result = mloda.run_all([Feature.str_of("numeric_column")])
+except DataTypeMismatchError as e:
+    print(f"Feature '{e.feature_name}': declared {e.declared.name}, got {e.actual.name}")
+```</p>
               
             </div>
           </div><footer>
-    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
-        <a href="../feature-group-version/" class="btn btn-neutral float-left" title="Feature Group Versioning"><span class="icon icon-circle-arrow-left"></span> Previous</a>
-        <a href="../plugin-loader/" class="btn btn-neutral float-right" title="Plugin Loader">Next <span class="icon icon-circle-arrow-right"></span></a>
-    </div>
 
   <hr/>
 
@@ -370,10 +275,6 @@ temperature~std
   <span class="rst-current-version" data-toggle="rst-current-version">
     
     
-      <span><a href="../feature-group-version/" style="color: #fcfcfc">&laquo; Previous</a></span>
-    
-    
-      <span><a href="../plugin-loader/" style="color: #fcfcfc">Next &raquo;</a></span>
     
   </span>
 </div>

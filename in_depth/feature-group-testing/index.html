@@ -195,7 +195,7 @@
 <p>Test that your feature group correctly identifies feature names it should handle.</p>
 <p><strong>Example:</strong></p>
 <pre><code class="language-python">from mloda_plugins.feature_group.experimental.clustering.base import ClusteringFeatureGroup
-from mloda_core.abstract_plugins.components.options import Options
+from mloda.user import Options
 
 # Test valid and invalid feature names
 assert ClusteringFeatureGroup.match_feature_group_criteria(&quot;customer_behavior__cluster_kmeans_5&quot;, Options())
@@ -211,8 +211,8 @@ assert Feature(&quot;sales&quot;) in input_features
 <h3 id="3-calculation-logic">3. Calculation Logic</h3>
 <p>Test that your feature group correctly transforms input data into output features.</p>
 <p><strong>Example:</strong></p>
-<pre><code class="language-python">from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
+<pre><code class="language-python">from mloda.user import Feature
+from mloda.provider import FeatureSet
 from mloda_plugins.feature_group.experimental.clustering.pandas import PandasClusteringFeatureGroup
 
 # Test calculation with sample data
@@ -235,11 +235,11 @@ assert feature_name == &quot;sales__sum_aggr&quot;
 <h3 id="5-integration-with-mloda-api">5. Integration with mloda API</h3>
 <p>Test that your feature group works correctly with the mloda API.</p>
 <p><strong>Example:</strong></p>
-<pre><code class="language-python">from mloda_core.api.request import mlodaAPI
+<pre><code class="language-python">import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 features = [&quot;source_feature&quot;, &quot;source_feature__my_operation&quot;]
-result = mlodaAPI.run_all(features, compute_frameworks={PandasDataFrame})
+result = mloda.run_all(features, compute_frameworks={PandasDataFrame})
 assert &quot;source_feature__my_operation&quot; in result[0].columns
 </code></pre>
 <h2 id="test-organization">Test Organization</h2>

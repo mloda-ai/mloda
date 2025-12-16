@@ -121,7 +121,7 @@
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#creating-custom-transformers">Creating Custom Transformers</a>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#integration-with-computeframework">Integration with ComputeFrameWork</a>
+    <li class="toctree-l3"><a class="reference internal" href="#integration-with-computeframework">Integration with ComputeFramework</a>
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#benefits-of-framework-transformers">Benefits of Framework Transformers</a>
     </li>
@@ -344,8 +344,8 @@ class CustomTransformer(BaseTransformer):
         # Convert from OtherFramework to CustomFramework
         return custom_framework.from_other(data)
 </code></pre>
-<h2 id="integration-with-computeframework">Integration with ComputeFrameWork</h2>
-<p>The <code>ComputeFrameWork</code> class uses the transformer system to convert data between different frameworks when needed. This happens in several scenarios:</p>
+<h2 id="integration-with-computeframework">Integration with ComputeFramework</h2>
+<p>The <code>ComputeFramework</code> class uses the transformer system to convert data between different frameworks when needed. This happens in several scenarios:</p>
 <ol>
 <li>When data needs to be transformed to match the expected framework of a feature group</li>
 <li>When data needs to be uploaded to a flight server (always converted to PyArrow Table)</li>

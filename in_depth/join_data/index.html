@@ -82,7 +82,9 @@
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#link">Link</a>
     </li>
-    <li class="toctree-l2"><a class="reference internal" href="#self-joins-with-pointer-fields">Self-Joins with Pointer Fields</a>
+    <li class="toctree-l2"><a class="reference internal" href="#convenience-_on-methods">Convenience _on Methods</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#self-joins-with-alias-fields">Self-Joins with Alias Fields</a>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#polymorphic-link-matching">Polymorphic Link Matching</a>
     </li>
@@ -206,7 +208,7 @@
 <li>Utility Methods: Provides methods to check if the index is a multi-index.</li>
 </ul>
 <p>Example:</p>
-<pre><code class="language-python">from mloda_core.abstract_plugins.components.index.index import Index
+<pre><code class="language-python">from mloda.user import Index
 
 # Create an Index with a single column
 single_column_index = Index(('user_id',))
@@ -247,12 +249,12 @@ join_type = JoinType.INNER
 <li>the feature groups involved,</li>
 <li>and the indexes to use for the join.</li>
 </ul>
-<pre><code class="language-python">from mloda_core.abstract_plugins.components.link import Link, JoinSpec
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
+<pre><code class="language-python">from mloda.user import Link, JoinSpec
+from mloda.provider import FeatureGroup
 
 # Assume FeatureGroupA and FeatureGroupB are defined feature groups
-feature_group_a = AbstractFeatureGroup()
-feature_group_b = AbstractFeatureGroup()
+feature_group_a = FeatureGroup()
+feature_group_b = FeatureGroup()
 
 # JoinSpec accepts multiple index formats:
 # - String for single column: &quot;id&quot;
@@ -277,22 +279,58 @@ link = Link.inner(
     right=JoinSpec(feature_group_b, Index((&quot;feature_a_id&quot;,)))
 )
 </code></pre>
-<h4 id="self-joins-with-pointer-fields">Self-Joins with Pointer Fields</h4>
-<p>When joining a feature group with itself, you need to distinguish between the left and right instances using <strong>pointer fields</strong>.</p>
-<p><strong>Pointer fields</strong> are optional dictionary parameters (<code>left_pointer</code> and <code>right_pointer</code>) that match against feature options:</p>
-<pre><code class="language-python">from mloda_core.abstract_plugins.components.feature import Feature
+<h4 id="convenience-_on-methods">Convenience _on Methods</h4>
+<p>For feature groups that define <code>index_columns()</code>, you can use the convenience <code>_on</code> methods to automatically derive the join index:</p>
+<pre><code class="language-python">from mloda.user import Link, Index
+
+# Define feature groups with index_columns
+class UserFeatureGroup(FeatureGroup):
+    @classmethod
+    def index_columns(cls):
+        return [Index((&quot;user_id&quot;,))]
+
+class OrderFeatureGroup(FeatureGroup):
+    @classmethod
+    def index_columns(cls):
+        return [Index((&quot;user_id&quot;,)), Index((&quot;order_id&quot;,))]
+
+# Instead of verbose JoinSpec construction:
+link = Link.inner(
+    JoinSpec(UserFeatureGroup, UserFeatureGroup.index_columns()[0]),
+    JoinSpec(OrderFeatureGroup, OrderFeatureGroup.index_columns()[0])
+)
+
+# Use the convenient _on method:
+link = Link.inner_on(UserFeatureGroup, OrderFeatureGroup)
+
+# Select specific index when feature group has multiple (0-based position):
+link = Link.inner_on(UserFeatureGroup, OrderFeatureGroup, left_index=0, right_index=1)
+</code></pre>
+<p>Available <code>_on</code> methods: <code>inner_on</code>, <code>left_on</code>, <code>right_on</code>, <code>outer_on</code>, <code>append_on</code>, <code>union_on</code></p>
+<p><strong>Note:</strong> The <code>_on</code> methods raise <code>ValueError</code> if the feature group doesn't define <code>index_columns()</code> or returns an empty list, and <code>IndexError</code> if the specified index position is out of range.</p>
+<h4 id="self-joins-with-alias-fields">Self-Joins with Alias Fields</h4>
+<p>When joining a feature group with itself, you need to distinguish between the left and right instances using <strong>alias fields</strong> (similar to SQL table aliases in self-joins).</p>
+<p><strong>Alias fields</strong> are optional dictionary parameters (<code>self_left_alias</code> and <code>self_right_alias</code>) that match against feature options:</p>
+<pre><code class="language-python">from mloda.user import Feature, Index, Link
 
 # Define an example feature group for demonstration
-class UserFeatureGroup(AbstractFeatureGroup):
-    pass
+class UserFeatureGroup(FeatureGroup):
+    @classmethod
+    def index_columns(cls):
+        return [Index((&quot;user_id&quot;,))]
 
-# 1. Create link with pointers
+# Option 1: Using _on method (recommended when index_columns is defined)
+link = Link.inner_on(UserFeatureGroup, UserFeatureGroup,
+                     self_left_alias={&quot;side&quot;: &quot;left&quot;},
+                     self_right_alias={&quot;side&quot;: &quot;right&quot;})
+
+# Option 2: Using explicit JoinSpec
 left = JoinSpec(UserFeatureGroup, &quot;user_id&quot;)
 right = JoinSpec(UserFeatureGroup, &quot;user_id&quot;)
 
 link = Link(&quot;inner&quot;, left, right,
-            left_pointer={&quot;side&quot;: &quot;left&quot;},
-            right_pointer={&quot;side&quot;: &quot;right&quot;})
+            self_left_alias={&quot;side&quot;: &quot;left&quot;},
+            self_right_alias={&quot;side&quot;: &quot;right&quot;})
 
 # 2. Tag features with matching options
 # Feature names reference the feature from the feature group
@@ -301,7 +339,7 @@ features = {
     Feature(&quot;age&quot;, options={&quot;side&quot;: &quot;right&quot;}),
 }
 </code></pre>
-<p>The execution planner validates that the pointer key-value pairs exist in the corresponding feature's options to correctly identify which instance belongs to which side of the join.</p>
+<p>The execution planner validates that the alias key-value pairs exist in the corresponding feature's options to correctly identify which instance belongs to which side of the join.</p>
 <h4 id="polymorphic-link-matching">Polymorphic Link Matching</h4>
 <p>Links support inheritance-based matching, allowing a link defined with base classes to automatically apply to subclasses. This enables defining generic join relationships that work across feature group hierarchies.</p>
 <p><strong>Matching Rules:</strong></p>
@@ -318,7 +356,7 @@ features = {
 </ol>
 <p><strong>Example:</strong></p>
 <pre><code class="language-python"># Define a base feature group hierarchy
-class BaseUserFeatureGroup(AbstractFeatureGroup):
+class BaseUserFeatureGroup(FeatureGroup):
     pass
 
 class PremiumUserFeatureGroup(BaseUserFeatureGroup):
@@ -343,11 +381,11 @@ link = Link.inner(
 </code></pre>
 <p>The balanced inheritance rule ensures that joins only occur between "parallel" subclasses - both sides must be at the same level in the inheritance hierarchy relative to the link definition.</p>
 <h4 id="mlodaapi">mlodaAPI</h4>
-<pre><code class="language-python">from mloda_core.api.request import mlodaAPI
+<pre><code class="language-python">import mloda
 
 set_of_links = {link}
 
-mlodaAPI.run_all(
+mloda.run_all(
     features=[&quot;Feature_of_FeatureGroupA&quot;, &quot;Feature_of_FeatureGroupB&quot;],
     links=set_of_links
     )
@@ -357,7 +395,7 @@ mlodaAPI.run_all(
 <h4 id="merging-data-in-the-compute-framework">Merging Data in the Compute Framework</h4>
 <p>The compute framework uses the base class BaseMergeEngine as configuration.
 In this example, we show the PandasMergeEngine.</p>
-<pre><code class="language-python">class PandasDataFrame(ComputeFrameWork):
+<pre><code class="language-python">class PandasDataFrame(ComputeFramework):
     def merge_engine(self) -&gt; Type[BaseMergeEngine]:
         return PandasMergeEngine
 </code></pre>

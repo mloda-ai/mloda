@@ -175,7 +175,7 @@
 <p>The framework itself will match the domains of features and feature groups. This means the domains are essentially <strong>filters</strong>! </p>
 <p>However, we only apply them <strong>if they are set for features</strong>. As default, this is not the case!</p>
 <p><strong>Feature parameter</strong></p>
-<pre><code class="language-python">from mloda_core.abstract_plugins.components.feature import Feature
+<pre><code class="language-python">from mloda.user import Feature
 
 Feature(name=&quot;Revenue&quot;,
         domain=&quot;Sales&quot;
@@ -188,10 +188,10 @@ Feature(name=&quot;Revenue&quot;,
 </code></pre>
 <p>The domain can also be set in the feature group.</p>
 <p><strong>Feature group</strong></p>
-<pre><code class="language-python">from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.domain import Domain
+<pre><code class="language-python">from mloda.provider import FeatureGroup
+from mloda.user import Domain
 
-class ExampleFeature(AbstractFeatureGroup):
+class ExampleFeature(FeatureGroup):
     @classmethod
     def get_domain(cls) -&gt; Domain:
         &quot;&quot;&quot;This function should return the domain for the feature group&quot;&quot;&quot;

@@ -73,6 +73,8 @@
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#5-advanced-feature-group-topics">5. Advanced Feature Group Topics</a>
     </li>
+    <li class="toctree-l2"><a class="reference internal" href="#6-discovering-feature-groups">6. Discovering Feature Groups</a>
+    </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../compute-frameworks/">Compute Frameworks</a>
@@ -187,8 +189,8 @@
 <pre><code class="language-python">import pyarrow.compute as pc
 import pyarrow as pa
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.provider import FeatureGroup
+from mloda.user import DataAccessCollection
 
 file_path = &quot;tests/test_plugins/feature_group/src/dataset/creditcard_2023_short.csv&quot;
 data_access_collection = DataAccessCollection(files={file_path})
@@ -200,7 +202,7 @@ example_feature_list = [f&quot;Example_{f}&quot; for f in feature_list]
 <h4 id="2-define-the-feature-group">2. Define the Feature Group</h4>
 <p>The custom feature group, Example, operates on a set of input features. It depends on the root features (e.g., "id", "V1", etc.) and renames them with the prefix "Example_". </p>
 <p>The calculation logic for multiplying each feature by 2 is implemented in the calculate_feature function.</p>
-<pre><code class="language-python">class Example(AbstractFeatureGroup):
+<pre><code class="language-python">class Example(FeatureGroup):
     def input_features(self, _, feature_name):
         return {feature_name.name.split(&quot;_&quot;)[1]}
 
@@ -213,9 +215,9 @@ example_feature_list = [f&quot;Example_{f}&quot; for f in feature_list]
 </code></pre>
 <h4 id="3-execute-the-request-using-the-new-feature-group">3. Execute the Request Using the New Feature Group</h4>
 <p>To use the newly defined feature group, simply add the <strong>"Example_"</strong> prefix to each feature name. mloda will automatically resolve the dependency between the <strong>CsvReader</strong> and the <strong>Example</strong> feature group.</p>
-<pre><code class="language-python">from mloda_core.api.request import mlodaAPI
+<pre><code class="language-python">import mloda
 
-result = mlodaAPI.run_all(
+result = mloda.run_all(
             example_feature_list, 
             compute_frameworks=[&quot;PyArrowTable&quot;], 
             data_access_collection=data_access_collection
@@ -242,7 +244,10 @@ Example_id: [[0,2,4,...]]
 <li><a href="../../in_depth/feature-group-version/">Feature Group Versioning</a> - How versioning works in feature groups</li>
 <li><a href="../../in_depth/compute-framework-integration/">Compute Framework Integration</a> - How feature groups integrate with compute frameworks</li>
 <li><a href="../../in_depth/multiple_result_columns/">Multiple Result Columns</a> - Working with multi-column features using automatic discovery utilities</li>
+<li><a href="../../in_depth/data-type-enforcement/">Data Type Enforcement</a> - Runtime validation of declared feature data types</li>
 </ul>
+<h4 id="6-discovering-feature-groups">6. Discovering Feature Groups</h4>
+<p>To list all available feature groups and their documentation, use the <code>get_feature_group_docs()</code> function from <code>mloda.steward</code>.</p>
               
             </div>
           </div><footer>

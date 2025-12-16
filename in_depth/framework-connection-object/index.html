@@ -111,7 +111,7 @@
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#how-it-works">How it Works</a>
         <ul>
-    <li class="toctree-l4"><a class="reference internal" href="#in-computeframework-base-class">In ComputeFrameWork Base Class</a>
+    <li class="toctree-l4"><a class="reference internal" href="#in-computeframework-base-class">In ComputeFramework Base Class</a>
     </li>
     <li class="toctree-l4"><a class="reference internal" href="#in-framework-transformers">In Framework Transformers</a>
     </li>
@@ -242,9 +242,9 @@
 <li><strong>PythonDictFramework</strong>: Simple Python data structures</li>
 </ul>
 <h2 id="how-it-works">How it Works</h2>
-<h3 id="in-computeframework-base-class">In ComputeFrameWork Base Class</h3>
-<p>The base <code>ComputeFrameWork</code> class provides methods to manage connection objects:</p>
-<pre><code class="language-python">class ComputeFrameWork:
+<h3 id="in-computeframework-base-class">In ComputeFramework Base Class</h3>
+<p>The base <code>ComputeFramework</code> class provides methods to manage connection objects:</p>
+<pre><code class="language-python">class ComputeFramework:
     def __init__(self) -&gt; None:
         # Connection object for frameworks that need persistent connections
         self.framework_connection_object: Optional[Any] = None
@@ -277,8 +277,8 @@ def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Option
     &quot;&quot;&quot;
 </code></pre>
 <h3 id="using-duckdb-with-mloda-api">Using DuckDB with mloda API</h3>
-<pre><code class="language-python">from mloda_core.api.request import mlodaAPI
-from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
+<pre><code class="language-python">import mloda
+from mloda.user import DataAccessCollection
 import duckdb
 
 # Create DuckDB connection
@@ -288,15 +288,15 @@ connection = duckdb.connect()
 data_access_collection = DataAccessCollection(initialized_connection_object={connection})
 
 # Run with DuckDB framework
-result = mlodaAPI.run_all(
+result = mloda.run_all(
     [&quot;feature1&quot;, &quot;feature2&quot;],
     compute_frameworks=[&quot;DuckDBFramework&quot;],
     data_access_collection=data_access_collection
 )
 </code></pre>
 <h3 id="using-spark-with-mloda-api">Using Spark with mloda API</h3>
-<pre><code class="language-python">from mloda_core.api.request import mlodaAPI
-from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
+<pre><code class="language-python">import mloda
+from mloda.user import DataAccessCollection
 from pyspark.sql import SparkSession
 
 # Create SparkSession
@@ -310,7 +310,7 @@ spark = SparkSession.builder \
 data_access_collection = DataAccessCollection(initialized_connection_objects={spark})
 
 # Run with Spark framework
-result = mlodaAPI.run_all(
+result = mloda.run_all(
     [&quot;feature1&quot;, &quot;feature2&quot;],
     compute_frameworks=[&quot;SparkFramework&quot;],
     data_access_collection=data_access_collection

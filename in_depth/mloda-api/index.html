@@ -78,6 +78,8 @@
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#runner-execution-configuration">Runner &amp; Execution Configuration</a>
     </li>
+    <li class="toctree-l2"><a class="reference internal" href="#plugin-discovery">Plugin Discovery</a>
+    </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../access-feature-data/">(Feature) data</a>
@@ -211,6 +213,10 @@
 <li>parallelization_modes (optional): Choose between sync, threading, or multiprocessing modes. (Default: sync)</li>
 <li>flight_server (optional): Specify a flight server for multiprocessing only.</li>
 </ul>
+<h4 id="plugin-discovery">Plugin Discovery</h4>
+<p>To discover available plugins (feature groups, compute frameworks, extenders), use the functions <code>get_feature_group_docs()</code>, <code>get_compute_framework_docs()</code>, and <code>get_extender_docs()</code> from <code>mloda.steward</code>:</p>
+<pre><code class="language-python">from mloda.steward import get_feature_group_docs, get_compute_framework_docs, get_extender_docs
+</code></pre>
               
             </div>
           </div><footer>

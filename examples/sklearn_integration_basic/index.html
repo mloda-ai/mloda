@@ -923,12 +923,9 @@ Result: 8 columns total
 </clipboard-copy>
 </div>
 <div class="highlight-ipynb hl-python"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Any</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.abstract_feature_group</span><span class="w"> </span><span class="kn">import</span> <span class="n">AbstractFeatureGroup</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.components.input_data.base_input_data</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseInputData</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.components.input_data.creator.data_creator</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataCreator</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.components.feature_set</span><span class="w"> </span><span class="kn">import</span> <span class="n">FeatureSet</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.plugin_loader.plugin_loader</span><span class="w"> </span><span class="kn">import</span> <span class="n">PluginLoader</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.api.request</span><span class="w"> </span><span class="kn">import</span> <span class="n">mlodaAPI</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">mloda</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda.provider</span><span class="w"> </span><span class="kn">import</span> <span class="n">FeatureGroup</span><span class="p">,</span> <span class="n">BaseInputData</span><span class="p">,</span> <span class="n">DataCreator</span><span class="p">,</span> <span class="n">FeatureSet</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user</span><span class="w"> </span><span class="kn">import</span> <span class="n">PluginLoader</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.compute_framework.base_implementations.pandas.dataframe</span><span class="w"> </span><span class="kn">import</span> <span class="n">PandasDataFrame</span>
 
 <span class="c1"># In mloda, we have the concept of feature groups.</span>
@@ -940,7 +937,7 @@ Result: 8 columns total
 <span class="c1"># Very simply spoken: we load the data.</span>
 
 
-<span class="k">class</span><span class="w"> </span><span class="nc">SklearnDataCreator</span><span class="p">(</span><span class="n">AbstractFeatureGroup</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">SklearnDataCreator</span><span class="p">(</span><span class="n">FeatureGroup</span><span class="p">):</span>
     <span class="c1"># This function is core to mloda. In this spot, the data framework with the actual data representation meets the defined and resolved processes.</span>
     <span class="c1"># With this, we have access to the before and after state of a feature.</span>
 
@@ -968,7 +965,7 @@ Result: 8 columns total
 <span class="n">PluginLoader</span><span class="p">()</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
 
 <span class="c1"># And then we execute mloda, which will resolve its dependencies of its feature groups and data frame technologies automatically.</span>
-<span class="n">result</span> <span class="o">=</span> <span class="n">mlodaAPI</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span><span class="n">features</span><span class="p">,</span> <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">{</span><span class="n">PandasDataFrame</span><span class="p">})</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">mloda</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span><span class="n">features</span><span class="p">,</span> <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">{</span><span class="n">PandasDataFrame</span><span class="p">})</span>
 <span class="n">_result</span><span class="p">,</span> <span class="n">_result2</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">result</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
 <span class="nb">print</span><span class="p">(</span><span class="s2">"✅ Transformed dataset with split fit/transform:"</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">_result</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span>
@@ -982,12 +979,9 @@ Result: 8 columns total
 <span class="c1">#         I have yet to find a solution for this.</span>
 </pre></div>
 <div class="clipboard-copy-txt" id="cell-3">from typing import Optional, Any
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
-from mloda_core.api.request import mlodaAPI
+import mloda
+from mloda.provider import FeatureGroup, BaseInputData, DataCreator, FeatureSet
+from mloda.user import PluginLoader
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 # In mloda, we have the concept of feature groups.
@@ -999,7 +993,7 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 # Very simply spoken: we load the data.
 
 
-class SklearnDataCreator(AbstractFeatureGroup):
+class SklearnDataCreator(FeatureGroup):
     # This function is core to mloda. In this spot, the data framework with the actual data representation meets the defined and resolved processes.
     # With this, we have access to the before and after state of a feature.
 
@@ -1027,7 +1021,7 @@ features = [
 PluginLoader().all()
 
 # And then we execute mloda, which will resolve its dependencies of its feature groups and data frame technologies automatically.
-result = mlodaAPI.run_all(features, compute_frameworks={PandasDataFrame})
+result = mloda.run_all(features, compute_frameworks={PandasDataFrame})
 _result, _result2 = result[0], result[1]
 print("✅ Transformed dataset with split fit/transform:")
 print(_result.head(2))
@@ -1070,7 +1064,7 @@ print(f"Result: {list(_result.columns)} \n {list(_result2.columns)} columns tota
     <span class="s2">"state__onehot_encoded~0"</span><span class="p">,</span>  <span class="c1"># Access specific one-hot column</span>
 <span class="p">]</span>
 
-<span class="n">result</span> <span class="o">=</span> <span class="n">mlodaAPI</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span><span class="n">chained_features</span><span class="p">,</span> <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">{</span><span class="n">PandasDataFrame</span><span class="p">})</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">mloda</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span><span class="n">chained_features</span><span class="p">,</span> <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">{</span><span class="n">PandasDataFrame</span><span class="p">})</span>
 <span class="nb">print</span><span class="p">(</span>
     <span class="n">result</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span>
     <span class="n">result</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span>
@@ -1084,7 +1078,7 @@ chained_features = [
     "state__onehot_encoded~0",  # Access specific one-hot column
 ]
 
-result = mlodaAPI.run_all(chained_features, compute_frameworks={PandasDataFrame})
+result = mloda.run_all(chained_features, compute_frameworks={PandasDataFrame})
 print(
     result[0].head(2),
     result[1].head(2),
@@ -1115,10 +1109,10 @@ print(
 </clipboard-copy>
 </div>
 <div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># We can replace feature groups and dataframe plugins in an easy fashion.</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.components.plugin_option.plugin_collector</span><span class="w"> </span><span class="kn">import</span> <span class="n">PlugInCollector</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user</span><span class="w"> </span><span class="kn">import</span> <span class="n">PluginCollector</span>
 
 
-<span class="k">class</span><span class="w"> </span><span class="nc">SecondSklearnDataCreator</span><span class="p">(</span><span class="n">AbstractFeatureGroup</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">SecondSklearnDataCreator</span><span class="p">(</span><span class="n">FeatureGroup</span><span class="p">):</span>
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">input_data</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">BaseInputData</span><span class="p">]:</span>
         <span class="k">return</span> <span class="n">DataCreator</span><span class="p">({</span><span class="s2">"age"</span><span class="p">,</span> <span class="s2">"weight"</span><span class="p">,</span> <span class="s2">"state"</span><span class="p">,</span> <span class="s2">"gender"</span><span class="p">})</span>
@@ -1143,10 +1137,10 @@ print(
 <span class="p">]</span>
 
 <span class="c1"># We deactivated now the other feature group, so that we use SecondSklearnDataCreator.</span>
-<span class="n">result</span> <span class="o">=</span> <span class="n">mlodaAPI</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">mloda</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span>
     <span class="n">chained_features</span><span class="p">,</span>
     <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">{</span><span class="n">PandasDataFrame</span><span class="p">},</span>
-    <span class="n">plugin_collector</span><span class="o">=</span><span class="n">PlugInCollector</span><span class="o">.</span><span class="n">disabled_feature_groups</span><span class="p">(</span><span class="n">SklearnDataCreator</span><span class="p">),</span>
+    <span class="n">plugin_collector</span><span class="o">=</span><span class="n">PluginCollector</span><span class="o">.</span><span class="n">disabled_feature_groups</span><span class="p">(</span><span class="n">SklearnDataCreator</span><span class="p">),</span>
 <span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span>
     <span class="n">result</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span>
@@ -1155,10 +1149,10 @@ print(
 <span class="p">)</span>
 </pre></div>
 <div class="clipboard-copy-txt" id="cell-5"># We can replace feature groups and dataframe plugins in an easy fashion.
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
+from mloda.user import PluginCollector
 
 
-class SecondSklearnDataCreator(AbstractFeatureGroup):
+class SecondSklearnDataCreator(FeatureGroup):
     @classmethod
     def input_data(cls) -&gt; Optional[BaseInputData]:
         return DataCreator({"age", "weight", "state", "gender"})
@@ -1183,10 +1177,10 @@ chained_features = [
 ]
 
 # We deactivated now the other feature group, so that we use SecondSklearnDataCreator.
-result = mlodaAPI.run_all(
+result = mloda.run_all(
     chained_features,
     compute_frameworks={PandasDataFrame},
-    plugin_collector=PlugInCollector.disabled_feature_groups(SklearnDataCreator),
+    plugin_collector=PluginCollector.disabled_feature_groups(SklearnDataCreator),
 )
 print(
     result[0].head(2),

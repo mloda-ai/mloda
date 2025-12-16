@@ -121,6 +121,16 @@
     </li>
         </ul>
     </li>
+    <li class="toctree-l3"><a class="reference internal" href="#featurechainparsermixin">FeatureChainParserMixin</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#basic-usage">Basic Usage</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#mixin-configuration">Mixin Configuration</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#customization-hooks">Customization Hooks</a>
+    </li>
+        </ul>
+    </li>
     <li class="toctree-l3"><a class="reference internal" href="#modern-implementation-in-feature-groups">Modern Implementation in Feature Groups</a>
         <ul>
     <li class="toctree-l4"><a class="reference internal" href="#1-define-property_mapping-configuration">1. Define PROPERTY_MAPPING Configuration</a>
@@ -251,8 +261,8 @@
 </tr>
 </tbody>
 </table>
-<p>These constants are defined in <code>mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser</code>:</p>
-<pre><code class="language-python">from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
+<p>These constants are available from the <code>mloda.provider</code> facade:</p>
+<pre><code class="language-python">from mloda.provider import (
     CHAIN_SEPARATOR,    # &quot;__&quot;
     COLUMN_SEPARATOR,   # &quot;~&quot;
     INPUT_SEPARATOR,    # &quot;&amp;&quot;
@@ -260,7 +270,7 @@
 </code></pre>
 <h3 id="feature-chaining">Feature Chaining</h3>
 <p>Feature chaining allows feature groups to be composed, where the output of one feature group becomes the input to another. This is reflected in the feature name using the chain separator (<code>__</code>):</p>
-<pre><code>{source_feature}__{operation}
+<pre><code>{in_feature}__{operation}
 </code></pre>
 <p>For example:
 - <code>sales__sum_aggr</code> - Simple feature
@@ -285,7 +295,7 @@
 <li><strong>Group Parameters</strong>: Affect Feature Group resolution and splitting (stored in <code>options.group</code>)</li>
 <li><strong>Context Parameters</strong>: Metadata that doesn't affect splitting (stored in <code>options.context</code>)</li>
 </ul>
-<pre><code class="language-python">from mloda_core.abstract_plugins.components.options import Options
+<pre><code class="language-python">from mloda.user import Options
 from typing import Optional
 
 # New Options architecture
@@ -301,8 +311,7 @@ options = Options(
 </code></pre>
 <h3 id="configuration-based-feature-creation">Configuration-Based Feature Creation</h3>
 <p>Modern feature creation uses the Options architecture:</p>
-<pre><code class="language-python">from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.options import Options
+<pre><code class="language-python">from mloda.user import Feature, Options
 
 # Traditional string-based approach:
 feature = Feature(&quot;sales__sum_aggr&quot;)
@@ -318,14 +327,136 @@ feature = Feature(
     )
 )
 </code></pre>
+<h2 id="featurechainparsermixin">FeatureChainParserMixin</h2>
+<p>The <code>FeatureChainParserMixin</code> provides default implementations for common feature chain parsing operations. Feature groups that use feature chaining should inherit from this mixin to reduce boilerplate code.</p>
+<h3 id="basic-usage">Basic Usage</h3>
+<pre><code class="language-python">from mloda.provider import FeatureGroup, FeatureChainParserMixin
+from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+
+class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+    PREFIX_PATTERN = r&quot;.*__my_operation$&quot;
+
+    # In-feature constraints
+    MIN_IN_FEATURES = 1
+    MAX_IN_FEATURES = 1  # Or None for unlimited
+
+    PROPERTY_MAPPING = {
+        &quot;operation_type&quot;: {
+            &quot;sum&quot;: &quot;Sum operation&quot;,
+            &quot;avg&quot;: &quot;Average operation&quot;,
+            DefaultOptionKeys.mloda_context: True,
+        },
+        DefaultOptionKeys.in_features: {
+            &quot;explanation&quot;: &quot;Source feature&quot;,
+            DefaultOptionKeys.mloda_context: True,
+        },
+    }
+
+    # input_features() inherited from FeatureChainParserMixin
+    # match_feature_group_criteria() inherited from FeatureChainParserMixin
+</code></pre>
+<h3 id="mixin-configuration">Mixin Configuration</h3>
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>PREFIX_PATTERN</code></td>
+<td><code>str</code></td>
+<td>Required</td>
+<td>Regex pattern for matching feature names</td>
+</tr>
+<tr>
+<td><code>PROPERTY_MAPPING</code></td>
+<td><code>dict</code></td>
+<td>Required</td>
+<td>Parameter validation configuration</td>
+</tr>
+<tr>
+<td><code>MIN_IN_FEATURES</code></td>
+<td><code>int</code></td>
+<td><code>1</code></td>
+<td>Minimum required in_features</td>
+</tr>
+<tr>
+<td><code>MAX_IN_FEATURES</code></td>
+<td><code>int \| None</code></td>
+<td><code>None</code></td>
+<td>Maximum allowed in_features (None = unlimited)</td>
+</tr>
+<tr>
+<td><code>IN_FEATURE_SEPARATOR</code></td>
+<td><code>str</code></td>
+<td><code>"&amp;"</code></td>
+<td>Separator for multiple in_features</td>
+</tr>
+</tbody>
+</table>
+<h3 id="customization-hooks">Customization Hooks</h3>
+<h4 id="1-custom-validation-with-_validate_string_match">1. Custom Validation with <code>_validate_string_match()</code></h4>
+<p>Override this hook when you need custom validation for string-based feature names:</p>
+<pre><code class="language-python">class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+    @classmethod
+    def _validate_string_match(cls, feature_name: str, operation_config: str, in_feature: str) -&gt; bool:
+        &quot;&quot;&quot;Validate clustering-specific patterns.&quot;&quot;&quot;
+        if FeatureChainParser.is_chained_feature(feature_name):
+            try:
+                cls.parse_clustering_prefix(feature_name)
+            except ValueError:
+                return False
+        return True
+</code></pre>
+<h4 id="2-custom-input_features-method">2. Custom <code>input_features()</code> Method</h4>
+<p>Override when you need to add additional input features (e.g., time filter):</p>
+<pre><code class="language-python">class TimeWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+    def input_features(self, options: Options, feature_name: FeatureName) -&gt; Optional[Set[Feature]]:
+        # Try string-based parsing first
+        _, in_feature = FeatureChainParser.parse_feature_name(feature_name.name, [self.PREFIX_PATTERN])
+        if in_feature is not None:
+            time_filter_feature = Feature(self.get_reference_time_column(options))
+            return {Feature(in_feature), time_filter_feature}
+
+        # Fall back to configuration-based approach
+        in_features = options.get_in_features()
+        time_filter_feature = Feature(self.get_reference_time_column(options))
+        return set(in_features) | {time_filter_feature}
+</code></pre>
+<h4 id="3-custom-match_feature_group_criteria-method">3. Custom <code>match_feature_group_criteria()</code> Method</h4>
+<p>Override for complex pre-check logic that can't be captured by the hook:</p>
+<pre><code class="language-python">class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+    @classmethod
+    def match_feature_group_criteria(cls, feature_name, options, data_access_collection=None) -&gt; bool:
+        &quot;&quot;&quot;Custom matching with mutual exclusivity validation.&quot;&quot;&quot;
+        has_pipeline_name = options.get(cls.PIPELINE_NAME)
+        has_pipeline_steps = options.get(cls.PIPELINE_STEPS)
+
+        # Pre-check: require pattern in name if no config provided
+        if has_pipeline_name is None and has_pipeline_steps is None:
+            if &quot;sklearn_pipeline_&quot; not in str(feature_name):
+                return False
+
+        # Use base matching
+        base_match = FeatureChainParser.match_configuration_feature_chain_parser(...)
+
+        # Post-check: mutual exclusivity
+        if base_match and has_pipeline_name and has_pipeline_steps:
+            return False
+        return base_match
+</code></pre>
 <h2 id="modern-implementation-in-feature-groups">Modern Implementation in Feature Groups</h2>
 <h3 id="1-define-property_mapping-configuration">1. Define PROPERTY_MAPPING Configuration</h3>
 <p>The modern approach uses <code>PROPERTY_MAPPING</code> to define parameter validation and classification:</p>
-<pre><code class="language-python">from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
+<pre><code class="language-python">from mloda.provider import FeatureGroup
+from mloda.user import FeatureName
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
 
-class MyFeatureGroup(AbstractFeatureGroup):
+class MyFeatureGroup(FeatureGroup):
     PREFIX_PATTERN = r&quot;__([a-zA-Z_]+)_operation$&quot;
 
     PROPERTY_MAPPING = {
@@ -334,14 +465,14 @@ class MyFeatureGroup(AbstractFeatureGroup):
             &quot;sum&quot;: &quot;Sum aggregation&quot;,
             &quot;avg&quot;: &quot;Average aggregation&quot;, 
             &quot;max&quot;: &quot;Maximum aggregation&quot;,
-            DefaultOptionKeys.mloda_context: True,  # Context parameter
-            DefaultOptionKeys.mloda_strict_validation: True,  # Strict validation
+            DefaultOptionKeys.context: True,  # Context parameter
+            DefaultOptionKeys.strict_validation: True,  # Strict validation
         },
         # Source feature parameter
         DefaultOptionKeys.in_features: {
             &quot;explanation&quot;: &quot;Source feature for the operation&quot;,
-            DefaultOptionKeys.mloda_context: True,  # Context parameter
-            DefaultOptionKeys.mloda_strict_validation: False,  # Flexible validation
+            DefaultOptionKeys.context: True,  # Context parameter
+            DefaultOptionKeys.strict_validation: False,  # Flexible validation
         },
     }
 </code></pre>
@@ -362,19 +493,19 @@ def match_feature_group_criteria(cls, feature_name, options, data_access_collect
     &quot;&quot;&quot;Extract source feature from either configuration-based options or string parsing.&quot;&quot;&quot;
 
     # Try string-based parsing first
-    _, source_feature = FeatureChainParser.parse_feature_name(
+    _, in_feature = FeatureChainParser.parse_feature_name(
         feature_name, [self.PREFIX_PATTERN]
     )
-    if source_feature is not None:
-        return {Feature(source_feature)}
+    if in_feature is not None:
+        return {Feature(in_feature)}
 
     # Fall back to configuration-based approach
-    source_features = options.get_source_features()
-    if len(source_features) != 1:
+    in_features = options.get_in_features()
+    if len(in_features) != 1:
         raise ValueError(
-            f&quot;Expected exactly one source feature, but found {len(source_features)}: {source_features}&quot;
+            f&quot;Expected exactly one in_feature, but found {len(in_features)}: {in_features}&quot;
         )
-    return set(source_features)
+    return set(in_features)
 </code></pre>
 <h3 id="4-update-calculate_feature-method">4. Update calculate_feature Method</h3>
 <p>Support dual approach in feature processing:</p>
@@ -382,16 +513,16 @@ def match_feature_group_criteria(cls, feature_name, options, data_access_collect
     for feature in features.features:
         # Try configuration-based approach first
         try:
-            source_features = feature.options.get_source_features()
-            source_feature = next(iter(source_features))
-            source_feature_name = source_feature.get_name()
+            in_features = feature.options.get_in_features()
+            in_feature = next(iter(in_features))
+            in_feature_name = in_feature.get_name()
 
             # Extract parameters from options
             operation_type = feature.options.get(&quot;operation_type&quot;)
 
         except (ValueError, StopIteration):
             # Fall back to string-based approach for legacy features
-            operation_type, source_feature_name = FeatureChainParser.parse_feature_name(
+            operation_type, in_feature_name = FeatureChainParser.parse_feature_name(
                 feature.name, [cls.PREFIX_PATTERN]
             )
 
@@ -404,9 +535,9 @@ def match_feature_group_criteria(cls, feature_name, options, data_access_collect
 <pre><code class="language-python">PROPERTY_MAPPING = {
     &quot;dimension&quot;: {
         &quot;explanation&quot;: &quot;Number of dimensions for reduction&quot;,
-        DefaultOptionKeys.mloda_context: True,
-        DefaultOptionKeys.mloda_strict_validation: True,
-        DefaultOptionKeys.mloda_validation_function: lambda x: isinstance(x, int) and x &gt; 0,
+        DefaultOptionKeys.context: True,
+        DefaultOptionKeys.strict_validation: True,
+        DefaultOptionKeys.validation_function: lambda x: isinstance(x, int) and x &gt; 0,
     },
 }
 </code></pre>
@@ -416,8 +547,8 @@ def match_feature_group_criteria(cls, feature_name, options, data_access_collect
     &quot;window_size&quot;: {
         &quot;7&quot;: &quot;7-day window&quot;,
         &quot;30&quot;: &quot;30-day window&quot;,
-        DefaultOptionKeys.mloda_default: &quot;7&quot;,  # Default value
-        DefaultOptionKeys.mloda_context: True,
+        DefaultOptionKeys.default: &quot;7&quot;,  # Default value
+        DefaultOptionKeys.context: True,
     },
 }
 </code></pre>
@@ -427,15 +558,15 @@ def match_feature_group_criteria(cls, feature_name, options, data_access_collect
     &quot;data_source&quot;: {
         &quot;production&quot;: &quot;Production data&quot;,
         &quot;staging&quot;: &quot;Staging data&quot;, 
-        DefaultOptionKeys.mloda_group: True,  # Explicit group parameter
-        DefaultOptionKeys.mloda_strict_validation: True,
+        DefaultOptionKeys.group: True,  # Explicit group parameter
+        DefaultOptionKeys.strict_validation: True,
     },
     # Context parameter - doesn't affect resolution
     &quot;algorithm_type&quot;: {
         &quot;kmeans&quot;: &quot;K-means clustering&quot;,
         &quot;dbscan&quot;: &quot;DBSCAN clustering&quot;,
-        DefaultOptionKeys.mloda_context: True,  # Context parameter
-        DefaultOptionKeys.mloda_strict_validation: False,  # Flexible validation
+        DefaultOptionKeys.context: True,  # Context parameter
+        DefaultOptionKeys.strict_validation: False,  # Flexible validation
     },
 }
 </code></pre>
@@ -443,9 +574,9 @@ def match_feature_group_criteria(cls, feature_name, options, data_access_collect
 <p>Some feature groups produce multiple result columns from a single input feature. mloda provides utilities to work with these patterns seamlessly.</p>
 <h3 id="producer-side-creating-multi-column-outputs">Producer Side: Creating Multi-Column Outputs</h3>
 <p>Use <code>apply_naming_convention()</code> to create properly named columns:</p>
-<pre><code class="language-python">from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
+<pre><code class="language-python">from mloda.provider import FeatureGroup, FeatureSet
 
-class MultiColumnProducer(AbstractFeatureGroup):
+class MultiColumnProducer(FeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:
         # Compute results (e.g., from sklearn OneHotEncoder)
@@ -460,7 +591,7 @@ class MultiColumnProducer(AbstractFeatureGroup):
 </code></pre>
 <h3 id="consumer-side-discovering-multi-column-features">Consumer Side: Discovering Multi-Column Features</h3>
 <p>Use <code>resolve_multi_column_feature()</code> to automatically discover columns:</p>
-<pre><code class="language-python">class MultiColumnConsumer(AbstractFeatureGroup):
+<pre><code class="language-python">class MultiColumnConsumer(FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -&gt; Optional[Set[Feature]]:
         # Request base feature without ~N suffix
         return {Feature(&quot;category__onehot_encoded&quot;)}

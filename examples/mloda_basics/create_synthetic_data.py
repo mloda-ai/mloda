@@ -5,15 +5,9 @@ from typing import Any, List, Optional
 
 import pandas as pd
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda_core.abstract_plugins.components.domain import Domain
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.api.request import mlodaAPI
+import mloda
+from mloda.provider import FeatureGroup, FeatureSet, BaseInputData, DataCreator
+from mloda.user import DataAccessCollection, Domain, Feature, Options
 
 
 class MlLifeCycleDataCreator(DataCreator):
@@ -29,7 +23,7 @@ class MlLifeCycleDataCreator(DataCreator):
         return False
 
 
-class OrderSyntheticDataSet(AbstractFeatureGroup):
+class OrderSyntheticDataSet(FeatureGroup):
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         return MlLifeCycleDataCreator({"order_id", "product_id", "quantity", "item_price", "created_at"})
@@ -76,7 +70,7 @@ class PaymentSyntheticDataSet(OrderSyntheticDataSet):
         )
 
 
-class LocationSyntheticDataSet(AbstractFeatureGroup):
+class LocationSyntheticDataSet(FeatureGroup):
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         return MlLifeCycleDataCreator({"transaction_id", "user_location", "merchant_location", "update_date"})
@@ -99,7 +93,7 @@ class LocationSyntheticDataSet(AbstractFeatureGroup):
         return Domain("Location")
 
 
-class CategoricalSyntheticDataSet(AbstractFeatureGroup):
+class CategoricalSyntheticDataSet(FeatureGroup):
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         return MlLifeCycleDataCreator({"transaction_id", "user_age_group", "product_category", "transaction_type"})
@@ -155,7 +149,7 @@ def create_ml_lifecylce_data() -> None:
         else:
             feature_list.append(Feature(name=feature, options=options))
 
-    results = mlodaAPI.run_all(feature_list, compute_frameworks=["PandasDataFrame"])
+    results = mloda.run_all(feature_list, compute_frameworks=["PandasDataFrame"])
 
     results[0].to_csv("base_data/output.csv", index=False)
     results[1].to_parquet("base_data/output.parquet", index=False)

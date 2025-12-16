@@ -685,13 +685,13 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [1]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-1">
@@ -708,11 +708,9 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.components.feature</span><span class="w"> </span><span class="kn">import</span> <span class="n">Feature</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.components.data_access_collection</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataAccessCollection</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">mloda</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user</span><span class="w"> </span><span class="kn">import</span> <span class="n">Feature</span><span class="p">,</span> <span class="n">DataAccessCollection</span><span class="p">,</span> <span class="n">PluginLoader</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.feature_group.input_data.read_dbs.sqlite</span><span class="w"> </span><span class="kn">import</span> <span class="n">SQLITEReader</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.plugin_loader.plugin_loader</span><span class="w"> </span><span class="kn">import</span> <span class="n">PluginLoader</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.api.request</span><span class="w"> </span><span class="kn">import</span> <span class="n">mlodaAPI</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.compute_framework.base_implementations.pyarrow.table</span><span class="w"> </span><span class="kn">import</span> <span class="n">PyArrowTable</span>
 
 <span class="n">plugin_loader</span> <span class="o">=</span> <span class="n">PluginLoader</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
@@ -740,17 +738,15 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <span class="n">categorical_features</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Feature</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"user_age_group"</span><span class="p">,</span> <span class="s2">"product_category"</span><span class="p">,</span> <span class="s2">"transaction_type"</span><span class="p">]</span>
 <span class="n">all_features</span> <span class="o">=</span> <span class="n">order_features</span> <span class="o">+</span> <span class="n">payment_features</span> <span class="o">+</span> <span class="n">location_features</span> <span class="o">+</span> <span class="n">categorical_features</span>
 
-<span class="n">mlodaAPI</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span><span class="n">all_features</span><span class="p">,</span> <span class="n">data_access_collection</span><span class="o">=</span><span class="n">data_access_collection</span><span class="p">,</span> <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">{</span><span class="n">PyArrowTable</span><span class="p">})</span>
+<span class="n">mloda</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span><span class="n">all_features</span><span class="p">,</span> <span class="n">data_access_collection</span><span class="o">=</span><span class="n">data_access_collection</span><span class="p">,</span> <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">{</span><span class="n">PyArrowTable</span><span class="p">})</span>
 </pre></div>
 <div class="clipboard-copy-txt" id="cell-1"># We reuse the data from the first example and just rerun it for the sake of the example, but just in one cell.
 
 import os
 from typing import List
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
+import mloda
+from mloda.user import Feature, DataAccessCollection, PluginLoader
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
-from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
-from mloda_core.api.request import mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 plugin_loader = PluginLoader.all()
@@ -778,54 +774,7 @@ location_features: List[str | Feature] = ["user_location", "merchant_location", 
 categorical_features: List[str | Feature] = ["user_age_group", "product_category", "transaction_type"]
 all_features = order_features + payment_features + location_features + categorical_features
 
-mlodaAPI.run_all(all_features, data_access_collection=data_access_collection, compute_frameworks={PyArrowTable})</div>
-</div>
-</div>
-</div>
-</div>
-<div class="jp-Cell-outputWrapper">
-<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
-</div>
-<div class="jp-OutputArea jp-Cell-outputArea">
-<div class="jp-OutputArea-child jp-OutputArea-executeResult">
-<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[1]:</div>
-<div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain" tabindex="0">
-<pre>[pyarrow.Table
- user_location: string
- update_date: int64
- merchant_location: string
- ----
- user_location: [["East","West","North","West","West",...,"West","North","North","North","East"]]
- update_date: [[1640995200000,1641632290909,1642269381818,1642906472727,1643543563636,...,1701518836363,1702155927272,1702793018181,1703430109090,1704067200000]]
- merchant_location: [["North","East","East","East","North",...,"North","South","East","South","North"]],
- pyarrow.Table
- product_id: int64
- item_price: double
- quantity: int64
- order_id: int64
- ----
- product_id: [[282,355,395,319,275,...,170,328,361,192,271]]
- item_price: [[74.86,154.56,67.7,186.21,118.69,...,80.51,98.91,162.98,194.98,107.73]]
- quantity: [[6,2,4,9,5,...,4,3,5,5,6]]
- order_id: [[1,2,3,4,5,...,96,97,98,99,100]],
- pyarrow.Table
- payment_type: string
- valid_datetime: timestamp[ns, tz=UTC]
- payment_status: string
- payment_id: int64
- ----
- payment_type: [["debit card","debit card","store credit","credit card","store credit",...,"paypal","debit card","credit card","store credit","paypal"]]
- valid_datetime: [[2024-01-11 23:01:49.090909090Z,2024-01-15 09:41:49.090909090Z,2024-01-29 19:23:38.181818181Z,2024-01-04 18:10:54.545454545Z,2024-01-06 15:16:21.818181818Z,...,2024-01-13 12:36:21.818181818Z,2024-01-10 01:56:21.818181818Z,2024-01-15 02:10:54.545454545Z,2024-01-28 20:50:54.545454545Z,2024-01-06 00:14:32.727272727Z]]
- payment_status: [["failed","pending","completed","pending","failed",...,"completed","pending","completed","failed","completed"]]
- payment_id: [[1,2,3,4,5,...,96,97,98,99,100]],
- pyarrow.Table
- product_category: string
- transaction_type: string
- user_age_group: string
- ----
- product_category: [["clothing","home","clothing","clothing","clothing",...,"clothing","home","books","beauty","clothing"]]
- transaction_type: [["online","online","telephone","telephone","mail-order",...,"mail-order","in-store","telephone","mail-order","mail-order"]]
- user_age_group: [["26-35","26-35","36-45","55+","26-35",...,"26-35","46-55","36-45","26-35","36-45"]]]</pre>
+mloda.run_all(all_features, data_access_collection=data_access_collection, compute_frameworks={PyArrowTable})</div>
 </div>
 </div>
 </div>
@@ -839,7 +788,7 @@ mlodaAPI.run_all(all_features, data_access_collection=data_access_collection, co
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
 <h3 id="featuregroup-api-plug-in-in-short">FeatureGroup API (plug-in) in short<a class="anchor-link" href="#featuregroup-api-plug-in-in-short">¶</a></h3><p>In mloda, a data producer defines access by creating feature groups. Here's an example implementation:</p>
-<div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">FeatureGroupClass</span><span class="p">(</span><span class="n">AbstractFeatureGroup</span><span class="p">):</span>
+<div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">FeatureGroupClass</span><span class="p">(</span><span class="n">FeatureGroup</span><span class="p">):</span>
 
     <span class="c1"># Root feature definition</span>
     <span class="nd">@classmethod</span>
@@ -865,7 +814,7 @@ mlodaAPI.run_all(all_features, data_access_collection=data_access_collection, co
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
 <h3 id="simple-example-implementation-of-the-featuregroup-api">Simple example implementation of the FeatureGroup API<a class="anchor-link" href="#simple-example-implementation-of-the-featuregroup-api">¶</a></h3><p>In the background, mloda loads the plug-ins, which were created before, like this one.</p>
-<div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">ReadFileFeature</span><span class="p">(</span><span class="n">AbstractFeatureGroup</span><span class="p">):</span>
+<div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">ReadFileFeature</span><span class="p">(</span><span class="n">FeatureGroup</span><span class="p">):</span>
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">input_data</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">BaseInputData</span><span class="p">]:</span>
         <span class="k">return</span> <span class="n">ReadFile</span><span class="p">()</span>
@@ -908,7 +857,7 @@ mlodaAPI.run_all(all_features, data_access_collection=data_access_collection, co
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [2]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-2">
@@ -927,8 +876,7 @@ mlodaAPI.run_all(all_features, data_access_collection=data_access_collection, co
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="kn">import</span> <span class="n">csv</span> <span class="k">as</span> <span class="n">pyarrow_csv</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.components.feature_set</span><span class="w"> </span><span class="kn">import</span> <span class="n">FeatureSet</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.components.input_data.base_input_data</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseInputData</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda.provider</span><span class="w"> </span><span class="kn">import</span> <span class="n">FeatureSet</span><span class="p">,</span> <span class="n">BaseInputData</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.feature_group.input_data.read_file_feature</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReadFileFeature</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.feature_group.input_data.read_files.csv</span><span class="w"> </span><span class="kn">import</span> <span class="n">CsvReader</span>
 
@@ -969,8 +917,7 @@ from typing import Any, Optional
 
 from pyarrow import csv as pyarrow_csv
 
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
+from mloda.provider import FeatureSet, BaseInputData
 from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
 from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 
@@ -1009,13 +956,13 @@ class ReadFileFeature2(ReadFileFeature):
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [3]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-3">
@@ -1028,42 +975,29 @@ class ReadFileFeature2(ReadFileFeature):
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.components.plugin_option.plugin_collector</span><span class="w"> </span><span class="kn">import</span> <span class="n">PlugInCollector</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user</span><span class="w"> </span><span class="kn">import</span> <span class="n">PluginCollector</span>
 
-<span class="n">result</span> <span class="o">=</span> <span class="n">mlodaAPI</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">mloda</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span>
     <span class="n">order_features</span><span class="p">,</span>
     <span class="n">data_access_collection</span><span class="o">=</span><span class="n">data_access_collection</span><span class="p">,</span>
     <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">{</span><span class="n">PyArrowTable</span><span class="p">},</span>
-    <span class="n">plugin_collector</span><span class="o">=</span><span class="n">PlugInCollector</span><span class="o">.</span><span class="n">enabled_feature_groups</span><span class="p">({</span><span class="n">ReadFileFeature2</span><span class="p">}),</span>
+    <span class="n">plugin_collector</span><span class="o">=</span><span class="n">PluginCollector</span><span class="o">.</span><span class="n">enabled_feature_groups</span><span class="p">({</span><span class="n">ReadFileFeature2</span><span class="p">}),</span>
 <span class="p">)</span>
 
 <span class="c1"># We can see that the data was loaded using the new CsvReader2.</span>
 <span class="c1"># However, this is a rather simple use case. In a real-world scenario, we would have more complex data and more complex operations.</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-3">from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
+<div class="clipboard-copy-txt" id="cell-3">from mloda.user import PluginCollector
 
-result = mlodaAPI.run_all(
+result = mloda.run_all(
     order_features,
     data_access_collection=data_access_collection,
     compute_frameworks={PyArrowTable},
-    plugin_collector=PlugInCollector.enabled_feature_groups({ReadFileFeature2}),
+    plugin_collector=PluginCollector.enabled_feature_groups({ReadFileFeature2}),
 )
 
 # We can see that the data was loaded using the new CsvReader2.
 # However, this is a rather simple use case. In a real-world scenario, we would have more complex data and more complex operations.</div>
-</div>
-</div>
-</div>
-</div>
-<div class="jp-Cell-outputWrapper">
-<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
-</div>
-<div class="jp-OutputArea jp-Cell-outputArea">
-<div class="jp-OutputArea-child">
-<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>We used CsvReader2 to load the data.
-</pre>
 </div>
 </div>
 </div>
@@ -1150,17 +1084,17 @@ result = mlodaAPI.run_all(
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">requested_features</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Features</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">Feature</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]],</span>
-        <span class="n">compute_frameworks</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Set</span><span class="p">[</span><span class="n">Type</span><span class="p">[</span><span class="n">ComputeFrameWork</span><span class="p">]],</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">compute_frameworks</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Set</span><span class="p">[</span><span class="n">Type</span><span class="p">[</span><span class="n">ComputeFramework</span><span class="p">]],</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">links</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Set</span><span class="p">[</span><span class="n">Link</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">data_access_collection</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">DataAccessCollection</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">global_filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">GlobalFilter</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">api_input_data_collection</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ApiInputDataCollection</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">plugin_collector</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">PlugInCollector</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">plugin_collector</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">PluginCollector</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 
 <span class="n">data</span> <span class="o">=</span> <span class="n">mlodaAPI</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span><span class="n">requested_feature</span><span class="p">,</span><span class="o">...</span><span class="p">)</span>
 </pre></div>
-<p>Let’s use the API to further explain the Data User role. As shown above, there are several configurations to consider. The key ones are:</p>
+<p>Let's use the API to further explain the Data User role. As shown above, there are several configurations to consider. The key ones are:</p>
 <ul>
 <li>Which features to request and if the compute_frameworks should be limited?</li>
 <li>How data is linked?</li>
@@ -1195,15 +1129,15 @@ result = mlodaAPI.run_all(
 <p>It can be the one who produces the data, the business stakeholder responsible for the service, or, in some cases, may not be explicitly defined.</p>
 <p>In mloda, the data owner is the one in control of the governance. However, as to date, this system is not included in this open-source offering, as this platform is reserved for development until the plugin ecosystem has a higher degree of maturity.</p>
 <p>We have the plug-in functionalities to integrate governance and operations systems in place. Two simple examples can be:</p>
-<h4 id="using-organization-wide-logging">Using organization wide logging<a class="anchor-link" href="#using-organization-wide-logging">¶</a></h4><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">OtelExtender</span><span class="p">(</span><span class="n">WrapperFunctionExtender</span><span class="p">):</span>
+<h4 id="using-organization-wide-logging">Using organization wide logging<a class="anchor-link" href="#using-organization-wide-logging">¶</a></h4><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">OtelExtender</span><span class="p">(</span><span class="n">Extender</span><span class="p">):</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">trace</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span>
 
         <span class="c1"># Function to be wrapped by the Extender</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">wrapped</span> <span class="o">=</span> <span class="p">{</span><span class="n">WrapperFunctionEnum</span><span class="o">.</span><span class="n">FEATURE_GROUP_CALCULATE_FEATURE</span><span class="p">}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">wrapped</span> <span class="o">=</span> <span class="p">{</span><span class="n">ExtenderHook</span><span class="o">.</span><span class="n">FEATURE_GROUP_CALCULATE_FEATURE</span><span class="p">}</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">wraps</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Set</span><span class="p">[</span><span class="n">WrapperFunctionEnum</span><span class="p">]:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">wraps</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Set</span><span class="p">[</span><span class="n">ExtenderHook</span><span class="p">]:</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">wrapped</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">func</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
@@ -1211,11 +1145,11 @@ result = mlodaAPI.run_all(
         <span class="n">result</span> <span class="o">=</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">result</span>
 </pre></div>
-<h4 id="logging-data-size">Logging data size<a class="anchor-link" href="#logging-data-size">¶</a></h4><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">LogSizeOfData</span><span class="p">(</span><span class="n">WrapperFunctionExtender</span><span class="p">):</span>
+<h4 id="logging-data-size">Logging data size<a class="anchor-link" href="#logging-data-size">¶</a></h4><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">LogSizeOfData</span><span class="p">(</span><span class="n">Extender</span><span class="p">):</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">wraps</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Set</span><span class="p">[</span><span class="n">WrapperFunctionEnum</span><span class="p">]:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">wraps</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Set</span><span class="p">[</span><span class="n">ExtenderHook</span><span class="p">]:</span>
         <span class="c1"># Function to be wrapped by the Extender</span>
-        <span class="k">return</span> <span class="p">{</span><span class="n">WrapperFunctionEnum</span><span class="o">.</span><span class="n">VALIDATE_INPUT_FEATURE</span><span class="p">}</span>
+        <span class="k">return</span> <span class="p">{</span><span class="n">ExtenderHook</span><span class="o">.</span><span class="n">VALIDATE_INPUT_FEATURE</span><span class="p">}</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">func</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
         <span class="n">result</span> <span class="o">=</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>

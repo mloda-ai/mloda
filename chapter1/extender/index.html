@@ -73,6 +73,8 @@
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#3-summary">3. Summary</a>
     </li>
+    <li class="toctree-l2"><a class="reference internal" href="#4-discovering-extenders">4. Discovering Extenders</a>
+    </li>
     </ul>
                   </li>
               </ul>
@@ -177,22 +179,22 @@
             <div class="section" itemprop="articleBody">
               
                 <h2 id="overview">Overview</h2>
-<p>The <strong>WrapperFunctionExtender</strong> class is an abstract base class (ABC) that provides an extensible framework for enhancing and wrapping functions with additional capabilities. It is especially useful for automating and monitoring various operations such as metadata harvesting, messaging integration, and event logging. This class offers a standardized approach to augmenting functions with critical features like performance monitoring, audit trails, and impact analysis.</p>
+<p>The <strong>Extender</strong> class is an abstract base class (ABC) that provides an extensible framework for enhancing and wrapping functions with additional capabilities. It is especially useful for automating and monitoring various operations such as metadata harvesting, messaging integration, and event logging. This class offers a standardized approach to augmenting functions with critical features like performance monitoring, audit trails, and impact analysis.</p>
 <p>In the following example, we will reuse the previous feature group example and demonstrate how to monitor the execution time of the <strong>calculate_feature</strong> function using a custom extender.</p>
 <p><strong>Monitoring Execution Time</strong></p>
 <p>We will create a DokuExtender class to monitor and log the time taken for the calculate_feature function of the feature group to execute.</p>
 <h4 id="1-define-the-extender">1. Define the Extender</h4>
 <pre><code class="language-python">from typing import Set, Any
 import time
-from mloda_core.abstract_plugins.function_extender import WrapperFunctionEnum, WrapperFunctionExtender
+from mloda.steward import Extender, ExtenderHook
 import logging
 
 logger = logging.getLogger(__name__)
 </code></pre>
 <p>A simple DokuExtender class:</p>
-<pre><code class="language-python">class DokuExtender(WrapperFunctionExtender):
-    def wraps(self) -&gt; Set[WrapperFunctionEnum]:
-        return {WrapperFunctionEnum.FEATURE_GROUP_CALCULATE_FEATURE}
+<pre><code class="language-python">class DokuExtender(Extender):
+    def wraps(self) -&gt; Set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -&gt; Any:
         start = time.time()
         result = func(*args, **kwargs)
@@ -201,8 +203,8 @@ logger = logging.getLogger(__name__)
 </code></pre>
 <h4 id="2-run-the-example-with-the-extender">2. Run the Example with the Extender</h4>
 <p>We will now run the <strong>mlodaAPI</strong> call, including our custom <strong>DokuExtender</strong> to monitor the execution time of the <strong>calculate_feature</strong> function.</p>
-<pre><code class="language-python">from mloda_core.api.request import mlodaAPI
-from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
+<pre><code class="language-python">import mloda
+from mloda.user import DataAccessCollection
 from tests.test_documentation.test_documentation import DokuExtender
 
 file_path = &quot;tests/test_plugins/feature_group/src/dataset/creditcard_2023_short.csv&quot;
@@ -213,7 +215,7 @@ feature_list = [&quot;id&quot;,&quot;V1&quot;,&quot;V2&quot;,&quot;V3&quot;]
 example_feature_list = [f&quot;ExampleB_{f}&quot; for f in feature_list]
 
 
-mlodaAPI.run_all(
+mloda.run_all(
     feature_list,
     compute_frameworks={&quot;PyArrowTable&quot;},
     data_access_collection=data_access_collection,
@@ -225,7 +227,10 @@ mlodaAPI.run_all(
 ERROR    test_getting_started:test_getting_started.py:29 Time taken: 0.001033782958984375
 </code></pre>
 <h4 id="3-summary">3. Summary</h4>
-<p>With this simple extender, you can easily log and monitor the execution time of any functionality within feature groups. By extending the WrapperFunctionExtender class, you can wrap additional behavior—such as performance monitoring, logging, or auditing—around critical functions to enhance observability and traceability in your data processing workflows.</p>
+<p>With this simple extender, you can easily log and monitor the execution time of any functionality within feature groups. By extending the Extender class, you can wrap additional behavior—such as performance monitoring, logging, or auditing—around critical functions to enhance observability and traceability in your data processing workflows.</p>
+<p>When multiple extenders are provided, they are automatically chained and executed in priority order (lower values first).</p>
+<h4 id="4-discovering-extenders">4. Discovering Extenders</h4>
+<p>To list all available extenders and their documentation, use the <code>get_extender_docs()</code> function from <code>mloda.steward</code>.</p>
               
             </div>
           </div><footer>

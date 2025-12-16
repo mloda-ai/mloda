@@ -201,13 +201,13 @@ PROPERTY_MAPPING = {
     &quot;parameter_name&quot;: {
         &quot;value1&quot;: &quot;Description of value1&quot;,
         &quot;value2&quot;: &quot;Description of value2&quot;,
-        DefaultOptionKeys.mloda_context: True,  # Parameter classification
-        DefaultOptionKeys.mloda_strict_validation: True,  # Validation mode
+        DefaultOptionKeys.context: True,  # Parameter classification
+        DefaultOptionKeys.strict_validation: True,  # Validation mode
     },
     DefaultOptionKeys.in_features: {
         &quot;explanation&quot;: &quot;Source feature description&quot;,
-        DefaultOptionKeys.mloda_context: True,
-        DefaultOptionKeys.mloda_strict_validation: False,  # Flexible validation
+        DefaultOptionKeys.context: True,
+        DefaultOptionKeys.strict_validation: False,  # Flexible validation
     },
 }
 </code></pre>
@@ -215,13 +215,13 @@ PROPERTY_MAPPING = {
 <pre><code class="language-python"># Context parameter (doesn't affect Feature Group splitting)
 &quot;aggregation_type&quot;: {
     &quot;sum&quot;: &quot;Sum aggregation&quot;,
-    DefaultOptionKeys.mloda_context: True,
+    DefaultOptionKeys.context: True,
 }
 
 # Group parameter (affects Feature Group splitting)  
 &quot;data_source&quot;: {
     &quot;production&quot;: &quot;Production data&quot;,
-    DefaultOptionKeys.mloda_group: True,
+    DefaultOptionKeys.group: True,
 }
 </code></pre>
 <h2 id="validation-modes">Validation Modes</h2>
@@ -229,35 +229,35 @@ PROPERTY_MAPPING = {
 <pre><code class="language-python">&quot;algorithm_type&quot;: {
     &quot;kmeans&quot;: &quot;K-means clustering&quot;,
     &quot;dbscan&quot;: &quot;DBSCAN clustering&quot;, 
-    DefaultOptionKeys.mloda_strict_validation: True,  # Only listed values allowed
+    DefaultOptionKeys.strict_validation: True,  # Only listed values allowed
 }
 </code></pre>
 <h3 id="custom-validation-functions">Custom Validation Functions</h3>
 <pre><code class="language-python">&quot;window_size&quot;: {
     &quot;explanation&quot;: &quot;Size of time window&quot;,
-    DefaultOptionKeys.mloda_validation_function: lambda x: isinstance(x, int) and x &gt; 0,
-    DefaultOptionKeys.mloda_strict_validation: True,
+    DefaultOptionKeys.validation_function: lambda x: isinstance(x, int) and x &gt; 0,
+    DefaultOptionKeys.strict_validation: True,
 }
 </code></pre>
 <h3 id="default-values">Default Values</h3>
 <pre><code class="language-python">&quot;method&quot;: {
     &quot;linear&quot;: &quot;Linear interpolation&quot;,
     &quot;cubic&quot;: &quot;Cubic interpolation&quot;,
-    DefaultOptionKeys.mloda_default: &quot;linear&quot;,  # Default if not specified
+    DefaultOptionKeys.default: &quot;linear&quot;,  # Default if not specified
 }
 </code></pre>
 <h2 id="usage-in-feature-groups">Usage in Feature Groups</h2>
-<pre><code class="language-python">class MyFeatureGroup(AbstractFeatureGroup):
+<pre><code class="language-python">class MyFeatureGroup(FeatureGroup):
     PROPERTY_MAPPING = {
         &quot;operation_type&quot;: {
             &quot;sum&quot;: &quot;Sum operation&quot;,
             &quot;avg&quot;: &quot;Average operation&quot;,
-            DefaultOptionKeys.mloda_context: True,
-            DefaultOptionKeys.mloda_strict_validation: True,
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
         },
         DefaultOptionKeys.in_features: {
             &quot;explanation&quot;: &quot;Source feature&quot;,
-            DefaultOptionKeys.mloda_context: True,
+            DefaultOptionKeys.context: True,
         },
     }
 

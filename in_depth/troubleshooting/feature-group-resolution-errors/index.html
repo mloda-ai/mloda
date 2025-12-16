@@ -190,20 +190,20 @@
 <p>If you are running this in a notebook, please restart the kernel to clear any cached plugins. 
 If you experience this multiple times, please open an <a href="https://github.com/mloda-ai/mloda/issues/">issue</a> or <a href="mailto:info@mloda.ai">contact the maintainers</a>, so that we prioritize this.</p>
 <h3 id="solutions">Solutions</h3>
-<h4 id="1-use-plugincollector-to-enable-or-disable-feature-groups">1. Use PlugInCollector to enable or disable feature groups</h4>
+<h4 id="1-use-plugincollector-to-enable-or-disable-feature-groups">1. Use PluginCollector to enable or disable feature groups</h4>
 <p>Control which feature groups are loaded to prevent conflicts:</p>
-<pre><code class="language-python">from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
+<pre><code class="language-python">from mloda.user import PluginCollector
 
 # Disable specific conflicting feature groups
-collector = PlugInCollector.disabled_feature_groups({ConflictingFeatureGroupA, ConflictingFeatureGroupB})
+collector = PluginCollector.disabled_feature_groups({ConflictingFeatureGroupA, ConflictingFeatureGroupB})
 
 # Or enable only specific feature groups you need
-collector = PlugInCollector.enabled_feature_groups({RequiredFeatureGroupA, RequiredFeatureGroupB})
+collector = PluginCollector.enabled_feature_groups({RequiredFeatureGroupA, RequiredFeatureGroupB})
 </code></pre>
 <h4 id="2-avoid-loading-all-plugins">2. Avoid loading all plugins</h4>
 <p>You can load plugins by importing the module as a class.</p>
 <p>But you can also import just plugins from subfolders.</p>
-<pre><code class="language-python">from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
+<pre><code class="language-python">from mloda.user import PluginLoader
 
 plugin_loader = PluginLoader()
 plugin_loader.load_group(&quot;feature_group&quot;) # load plugins only from mloda_plugins.feature_group

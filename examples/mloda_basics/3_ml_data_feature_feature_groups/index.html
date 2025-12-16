@@ -812,7 +812,7 @@ graph LR
     <span class="p">)</span>
     <span class="o">...</span>
 </pre></div>
-<p>Every feature group must implement this function. However, most will inherit the default behaviour from the AbstractFeatureGroup.</p>
+<p>Every feature group must implement this function. However, most will inherit the default behaviour from the FeatureGroup base class.</p>
 <p>The default behaviour covers mostly name based approaches to identify a feature (equal or prefix of a feature name).
 But this can be also a call to a webservice, which knows which data supports or could be any other algorithmic solution.</p>
 <p>As example could be this sqlite database, where we check the table for metainformation.</p>

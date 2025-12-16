@@ -629,7 +629,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [1]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-1">
@@ -643,11 +643,10 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </clipboard-copy>
 </div>
 <div class="highlight-ipynb hl-python"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.abstract_feature_group</span><span class="w"> </span><span class="kn">import</span> <span class="n">AbstractFeatureGroup</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.components.input_data.creator.data_creator</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataCreator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda.provider</span><span class="w"> </span><span class="kn">import</span> <span class="n">FeatureGroup</span><span class="p">,</span> <span class="n">DataCreator</span>
 
 
-<span class="k">class</span><span class="w"> </span><span class="nc">DummyData</span><span class="p">(</span><span class="n">AbstractFeatureGroup</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">DummyData</span><span class="p">(</span><span class="n">FeatureGroup</span><span class="p">):</span>
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">calculate_feature</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">features</span><span class="p">):</span>
         <span class="n">n_samples</span> <span class="o">=</span> <span class="n">features</span><span class="o">.</span><span class="n">get_options_key</span><span class="p">(</span><span class="s2">"n_samples"</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">100</span>
@@ -663,11 +662,10 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
         <span class="k">return</span> <span class="n">DataCreator</span><span class="p">({</span><span class="s2">"age"</span><span class="p">,</span> <span class="s2">"weight"</span><span class="p">,</span> <span class="s2">"state"</span><span class="p">,</span> <span class="s2">"gender"</span><span class="p">})</span>
 </pre></div>
 <div class="clipboard-copy-txt" id="cell-1">import numpy as np
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
+from mloda.provider import FeatureGroup, DataCreator
 
 
-class DummyData(AbstractFeatureGroup):
+class DummyData(FeatureGroup):
     @classmethod
     def calculate_feature(cls, data, features):
         n_samples = features.get_options_key("n_samples") or 100
@@ -697,13 +695,13 @@ class DummyData(AbstractFeatureGroup):
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=60f1395e">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=60f1395e">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [2]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-2">
@@ -717,56 +715,30 @@ class DummyData(AbstractFeatureGroup):
 </clipboard-copy>
 </div>
 <div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># We load dependencies.</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.api.request</span><span class="w"> </span><span class="kn">import</span> <span class="n">mlodaAPI</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">mloda</span>
 
 <span class="c1"># Load plugins into namespace</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.compute_framework.base_implementations.pandas.dataframe</span><span class="w"> </span><span class="kn">import</span> <span class="n">PandasDataFrame</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.compute_framework.base_implementations.pyarrow.table</span><span class="w"> </span><span class="kn">import</span> <span class="n">PyArrowTable</span>
 
-<span class="c1"># from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader</span>
+<span class="c1"># from mloda.user import PluginLoader</span>
 <span class="c1"># plugin_loader = PluginLoader.all()</span>
 
-<span class="n">result</span> <span class="o">=</span> <span class="n">mlodaAPI</span><span class="o">.</span><span class="n">run_all</span><span class="p">([</span><span class="s2">"age"</span><span class="p">,</span> <span class="s2">"weight"</span><span class="p">,</span> <span class="s2">"state"</span><span class="p">,</span> <span class="s2">"gender"</span><span class="p">],</span> <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">[</span><span class="s2">"PyArrowTable"</span><span class="p">,</span> <span class="s2">"PandasDataFrame"</span><span class="p">])</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">mloda</span><span class="o">.</span><span class="n">run_all</span><span class="p">([</span><span class="s2">"age"</span><span class="p">,</span> <span class="s2">"weight"</span><span class="p">,</span> <span class="s2">"state"</span><span class="p">,</span> <span class="s2">"gender"</span><span class="p">],</span> <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">[</span><span class="s2">"PyArrowTable"</span><span class="p">,</span> <span class="s2">"PandasDataFrame"</span><span class="p">])</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
 </pre></div>
 <div class="clipboard-copy-txt" id="cell-2"># We load dependencies.
-from mloda_core.api.request import mlodaAPI
+import mloda
 
 # Load plugins into namespace
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
-# from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
+# from mloda.user import PluginLoader
 # plugin_loader = PluginLoader.all()
 
-result = mlodaAPI.run_all(["age", "weight", "state", "gender"], compute_frameworks=["PyArrowTable", "PandasDataFrame"])
+result = mloda.run_all(["age", "weight", "state", "gender"], compute_frameworks=["PyArrowTable", "PandasDataFrame"])
 print(result)</div>
-</div>
-</div>
-</div>
-</div>
-<div class="jp-Cell-outputWrapper">
-<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
-</div>
-<div class="jp-OutputArea jp-Cell-outputArea">
-<div class="jp-OutputArea-child">
-<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>[   state     weight gender  age
-0     CA  64.880888      F   76
-1     TX  55.829132      F   37
-2     NY  93.605064      F   31
-3     NY  52.031323      F   27
-4     TX  73.107226      F   25
-..   ...        ...    ...  ...
-95    TX  52.434296      M   21
-96    NY  88.033971      F   52
-97    FL  80.829318      M   57
-98    CA  55.786040      M   73
-99    TX  65.051152      F   60
-
-[100 rows x 4 columns]]
-</pre>
 </div>
 </div>
 </div>
@@ -827,7 +799,7 @@ print(result)</div>
 <span class="p">)</span>
 
 
-<span class="n">result</span> <span class="o">=</span> <span class="n">mlodaAPI</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">mloda</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span>
     <span class="p">[</span><span class="s2">"age__sum_aggr"</span><span class="p">],</span>
     <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">[</span><span class="s2">"PolarsLazyDataFrame"</span><span class="p">],</span>
 <span class="p">)</span>
@@ -840,7 +812,7 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.polars_la
 )
 
 
-result = mlodaAPI.run_all(
+result = mloda.run_all(
     ["age__sum_aggr"],
     compute_frameworks=["PolarsLazyDataFrame"],
 )
@@ -862,13 +834,13 @@ print(result)</div>
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=cf0a57a7">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=cf0a57a7">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [4]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-4">
@@ -881,57 +853,31 @@ print(result)</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.components.feature</span><span class="w"> </span><span class="kn">import</span> <span class="n">Feature</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_core.abstract_plugins.components.options</span><span class="w"> </span><span class="kn">import</span> <span class="n">Options</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user</span><span class="w"> </span><span class="kn">import</span> <span class="n">Feature</span><span class="p">,</span> <span class="n">Options</span>
 
 <span class="n">feature</span> <span class="o">=</span> <span class="n">Feature</span><span class="p">(</span>
     <span class="n">name</span><span class="o">=</span><span class="s2">"CustomConfiguration"</span><span class="p">,</span>
     <span class="n">options</span><span class="o">=</span><span class="n">Options</span><span class="p">(</span><span class="n">context</span><span class="o">=</span><span class="p">{</span><span class="s2">"aggregation_type"</span><span class="p">:</span> <span class="s2">"sum"</span><span class="p">,</span> <span class="s2">"in_features"</span><span class="p">:</span> <span class="n">Feature</span><span class="p">(</span><span class="s2">"age"</span><span class="p">,</span> <span class="n">options</span><span class="o">=</span><span class="p">{</span><span class="s2">"n_samples"</span><span class="p">:</span> <span class="mi">5</span><span class="p">})}),</span>
 <span class="p">)</span>
 
-<span class="n">result</span> <span class="o">=</span> <span class="n">mlodaAPI</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">mloda</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span>
     <span class="p">[</span><span class="n">feature</span><span class="p">],</span>
     <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">[</span><span class="s2">"PolarsLazyDataFrame"</span><span class="p">],</span>
 <span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-4">from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.options import Options
+<div class="clipboard-copy-txt" id="cell-4">from mloda.user import Feature, Options
 
 feature = Feature(
     name="CustomConfiguration",
     options=Options(context={"aggregation_type": "sum", "in_features": Feature("age", options={"n_samples": 5})}),
 )
 
-result = mlodaAPI.run_all(
+result = mloda.run_all(
     [feature],
     compute_frameworks=["PolarsLazyDataFrame"],
 )
 print(result)</div>
-</div>
-</div>
-</div>
-</div>
-<div class="jp-Cell-outputWrapper">
-<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
-</div>
-<div class="jp-OutputArea jp-Cell-outputArea">
-<div class="jp-OutputArea-child">
-<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>[shape: (5, 1)
-┌─────────────────────┐
-│ CustomConfiguration │
-│ ---                 │
-│ i64                 │
-╞═════════════════════╡
-│ 211                 │
-│ 211                 │
-│ 211                 │
-│ 211                 │
-│ 211                 │
-└─────────────────────┘]
-</pre>
 </div>
 </div>
 </div>
@@ -944,7 +890,7 @@ print(result)</div>
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h3 id="how-the-chaining-essentially-works">How the chaining essentially works<a class="anchor-link" href="#how-the-chaining-essentially-works">¶</a></h3><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">AbstractFeatureGroup</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
+<h3 id="how-the-chaining-essentially-works">How the chaining essentially works<a class="anchor-link" href="#how-the-chaining-essentially-works">¶</a></h3><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">FeatureGroup</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">input_features</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">options</span><span class="p">:</span> <span class="n">Options</span><span class="p">,</span> <span class="n">feature_name</span><span class="p">:</span> <span class="n">FeatureName</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Set</span><span class="p">[</span><span class="n">Feature</span><span class="p">]]:</span>
         
@@ -974,7 +920,7 @@ print(result)</div>
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">AbstractFeatureGroup</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
+<div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">FeatureGroup</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
 
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">calculate_feature</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">features</span><span class="p">:</span> <span class="n">FeatureSet</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>

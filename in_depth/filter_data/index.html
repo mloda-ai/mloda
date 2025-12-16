@@ -80,7 +80,7 @@
     <ul class="current">
     <li class="toctree-l2"><a class="reference internal" href="#singlefilter">SingleFilter</a>
     </li>
-    <li class="toctree-l2"><a class="reference internal" href="#filtertypeenum">FilterTypeEnum</a>
+    <li class="toctree-l2"><a class="reference internal" href="#filtertype">FilterType</a>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#globalfilter">GlobalFilter</a>
     </li>
@@ -191,11 +191,11 @@
 <ul>
 <li>filter_feature: It can be a Feature or a feature name as string.</li>
 <li>parameter: A dictionary of parameters to filter. Example: {"min": 2, "max": 3}</li>
-<li>filter_type: It can be a str or a FilterTypeEnum.</li>
+<li>filter_type: It can be a str or a FilterType.</li>
 </ul>
-<h4 id="filtertypeenum">FilterTypeEnum</h4>
+<h4 id="filtertype">FilterType</h4>
 <p>This class is supposed to created similarity in the framework and by framework users.</p>
-<pre><code class="language-python">class FilterTypeEnum(Enum):
+<pre><code class="language-python">class FilterType(Enum):
     min = &quot;min&quot;
     max = &quot;max&quot;
     equal = &quot;equal&quot;
@@ -222,15 +222,15 @@
 <li>event_to (datetime): End of the time range (with timezone).</li>
 <li>valid_from (Optional[datetime]): Start of the validity period (optional, with timezone).</li>
 <li>valid_to (Optional[datetime]): End of the validity period (optional, with timezone).</li>
-<li>max_exclusive (bool): If True, <strong>valid_to</strong> values are treated as exclusive.</li>
-<li>time_filter_feature: the feature description for the time filter. Default is "time_filter".</li>
-<li>time_travel_filter_feature: the feature description for the time travel filter. Default is "time_travel_filter".</li>
+<li>max_exclusive (bool): If True, the upper bounds (event_to, valid_to) are treated as exclusive.</li>
+<li>event_time_column: The column name containing event timestamps. Default is "reference_time".</li>
+<li>validity_time_column: The column name containing validity timestamps. Default is "time_travel_filter".</li>
 </ul>
 <p>The <strong>single_filters</strong> created will be converted to UTC as ISO 8601 formatted strings to ensure consistency
     across time zones and avoid ambiguity when comparing or processing time-based data.</p>
 <h4 id="how-to-create-a-collection-of-single-filters-globalfilter">How to create a collection of single filters (GlobalFilter)</h4>
 <p>In this example, we simply instantiate a GlobalFilter and add a SingleFilter.</p>
-<pre><code class="language-python">from mloda_core.filter.global_filter import GlobalFilter
+<pre><code class="language-python">from mloda.user import GlobalFilter
 
 global_filter = GlobalFilter()
 global_filter.add_filter(&quot;example_order_id&quot;, &quot;equal&quot;, {&quot;value&quot;: 1})
@@ -254,23 +254,19 @@ global_filter.add_time_and_time_travel_filters(event_from, event_to, valid_from,
 global_filter.filters
 </code></pre>
 <p>Result</p>
-<pre><code class="language-python">{&lt;SingleFilter(feature_name=time_travel_filter, type=range, parameters=(('max', '2022-12-31T00:00:00+00:00'), ('max_exclusive', True), ('min', '2022-01-01T00:00:00+00:00')))&gt;, 
- &lt;SingleFilter(feature_name=time_filter, type=range, parameters=(('max', '2023-12-31T00:00:00+00:00'), ('max_exclusive', True), ('min', '2023-01-01T00:00:00+00:00')))&gt;}
+<pre><code class="language-python">{&lt;SingleFilter(feature_name=time_travel_filter, type=range, parameters=(('max', '2022-12-31T00:00:00+00:00'), ('max_exclusive', True), ('min', '2022-01-01T00:00:00+00:00')))&gt;,
+ &lt;SingleFilter(feature_name=reference_time, type=range, parameters=(('max', '2023-12-31T00:00:00+00:00'), ('max_exclusive', True), ('min', '2023-01-01T00:00:00+00:00')))&gt;}
 </code></pre>
 <h4 id="example-access-to-filters-in-the-feature-group">Example access to Filters in the Feature Group</h4>
 <p>Now, we need to also use a FeatureGroup which supports it. In this example, we show where we can access the SingleFilters.
 The implementation of the concrete filters is dependent on the feature group. This example is rather complex as we filter a python dictionary. </p>
 <p>Further, the feature is a data creator, so we create the data here itself. </p>
-<pre><code class="language-python">from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
+<pre><code class="language-python">import mloda
+from mloda.provider import FeatureGroup, FeatureSet, ComputeFramework, BaseInputData, DataCreator
 from typing import Any, Union, Set, Type, Optional
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from mloda_core.api.request import mlodaAPI
 
-class ExampleOrderFilter(AbstractFeatureGroup):
+class ExampleOrderFilter(FeatureGroup):
     @classmethod
     def input_data(cls) -&gt; Optional[BaseInputData]:
         return DataCreator({cls.get_class_name(), &quot;example_order_id&quot;})
@@ -297,11 +293,11 @@ class ExampleOrderFilter(AbstractFeatureGroup):
         }
         return filtered_data
     @classmethod
-    def compute_framework_rule(cls) -&gt; Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -&gt; Union[bool, Set[Type[ComputeFramework]]]:
         return {PyArrowTable}
 
-result = mlodaAPI.run_all(
-    [&quot;ExampleOrderFilter&quot;], 
+result = mloda.run_all(
+    [&quot;ExampleOrderFilter&quot;],
     global_filter=global_filter
 )
 result[0]
@@ -311,7 +307,7 @@ result[0]
 </code></pre>
 <p>Although this example is complex, it is noteworthy, that the framework considers filters as features and setup as that in the framework. </p>
 <h3 id="summary">Summary</h3>
-<p>This filtering system improves data preprocessing through GlobalFilter and SingleFilters, allowing flexible, condition-based refinement, including time-based filtering. It maintains consistency using FilterTypeEnum and supports complex machine learning use cases. If you encounter a commonly used filter not yet included, feel free to open an issue or submit a pull request.</p>
+<p>This filtering system improves data preprocessing through GlobalFilter and SingleFilters, allowing flexible, condition-based refinement, including time-based filtering. It maintains consistency using FilterType and supports complex machine learning use cases. If you encounter a commonly used filter not yet included, feel free to open an issue or submit a pull request.</p>
               
             </div>
           </div><footer>

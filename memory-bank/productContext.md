@@ -30,4 +30,4 @@ flowchart TD
 ## User Experience
 - Streamlined feature engineering
 - Repeatable, reusable features
-- Clear communication between users, engineers, and owners
+- Clear communication between users, engineers, and stewards

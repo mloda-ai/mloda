@@ -7,7 +7,7 @@ nav:
     - Intro to the core interfaces of mloda: examples/mloda_basics/1_ml_mloda_intro.ipynb
     - What makes mloda unique: examples/mloda_basics/2_ml_advantage_process_focus.ipynb
     - Data, Feature, FeatureSets and FeatureGroups in mloda: examples/mloda_basics/3_ml_data_feature_feature_groups.ipynb
-    - Data Producer, User, Owner in mloda: examples/mloda_basics/4_ml_data_producers_user_owner.ipynb
+    - Provider, User, Steward in mloda: examples/mloda_basics/4_ml_data_providers_user_steward.ipynb
   - Getting Started:
     - Installation: chapter1/installation.md
     - sklearn Integration Tutorial: examples/sklearn_integration_basic.ipynb

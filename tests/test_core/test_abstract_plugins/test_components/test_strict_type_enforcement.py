@@ -2,8 +2,8 @@ import inspect
 from unittest.mock import patch
 
 
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.api.request import mlodaAPI
+from mloda import Feature
+from mloda import API
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 
@@ -14,8 +14,8 @@ def test_default_option_key_exists() -> None:
 
 
 def test_mloda_api_accepts_strict_type_enforcement_parameter() -> None:
-    """Test that mlodaAPI constructor accepts strict_type_enforcement parameter."""
-    sig = inspect.signature(mlodaAPI.__init__)
+    """Test that API constructor accepts strict_type_enforcement parameter."""
+    sig = inspect.signature(API.__init__)
     params = sig.parameters
     assert "strict_type_enforcement" in params
     # Default should be False
@@ -29,18 +29,18 @@ def test_strict_type_enforcement_propagates_to_features() -> None:
     # Create API with strict mode enabled
     # This should propagate the setting to features
     with (
-        patch("mloda_core.prepare.accessible_plugins.PreFilterPlugins.get_featuregroup_subclasses") as mock_fg,
+        patch("mloda.core.prepare.accessible_plugins.PreFilterPlugins.get_featuregroup_subclasses") as mock_fg,
         patch(
-            "mloda_core.prepare.accessible_plugins.PreFilterPlugins.resolve_feature_group_compute_framework_limitations"
+            "mloda.core.prepare.accessible_plugins.PreFilterPlugins.resolve_feature_group_compute_framework_limitations"
         ),
-        patch("mloda_core.core.engine.Engine.create_setup_execution_plan"),
+        patch("mloda.core.core.engine.Engine.create_setup_execution_plan"),
     ):
         # Mock to return at least one feature group so initialization doesn't fail
         from tests.test_core.test_abstract_plugins.test_abstract_feature_group import BaseTestFeatureGroup1
 
         mock_fg.return_value = {BaseTestFeatureGroup1}
 
-        api = mlodaAPI(
+        api = API(
             requested_features=features,
             strict_type_enforcement=True,
         )

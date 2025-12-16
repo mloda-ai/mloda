@@ -1,11 +1,9 @@
 from typing import Any, Optional
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
+from mloda import FeatureGroup
+from mloda.provider import FeatureSet, ApiData as ApiInputData, BaseInputData
 
 
-class ApiInputDataFeature(AbstractFeatureGroup):
+class ApiInputDataFeature(FeatureGroup):
     """
     Base class for API-based input data feature groups.
 
@@ -39,9 +37,9 @@ class ApiInputDataFeature(AbstractFeatureGroup):
     Uses Options to specify API data access configuration:
 
     ```python
-    from mloda_core.abstract_plugins.components.feature import Feature
-    from mloda_core.abstract_plugins.components.options import Options
-    from mloda_core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
+    from mloda import Feature
+    from mloda import Options
+    from mloda.core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
 
     feature = Feature(
         name="user_profile",
@@ -60,8 +58,8 @@ class ApiInputDataFeature(AbstractFeatureGroup):
     ### Basic API Data Access
 
     ```python
-    from mloda_core.abstract_plugins.components.feature import Feature
-    from mloda_core.abstract_plugins.components.options import Options
+    from mloda import Feature
+    from mloda import Options
 
     # Simple API feature reference
     feature = Feature(name="api_user_score")
@@ -70,7 +68,7 @@ class ApiInputDataFeature(AbstractFeatureGroup):
     ### Configuration-Based with Endpoint Mapping
 
     ```python
-    from mloda_core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
+    from mloda.core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
 
     # Map multiple API response fields
     feature = Feature(

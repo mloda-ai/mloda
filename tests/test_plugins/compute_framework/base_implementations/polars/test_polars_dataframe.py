@@ -2,9 +2,9 @@ import os
 from typing import Any, Optional, Type
 import pytest
 from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
-from mloda_core.abstract_plugins.components.index.index import Index
+from mloda.user import FeatureName
+from mloda.user import ParallelizationMode
+from mloda.user import Index
 from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
@@ -50,7 +50,7 @@ class TestPolarsDataFrameComputeFramework:
     @pytest.fixture
     def pl_dataframe(self) -> PolarsDataFrame:
         """Create a fresh PolarsDataFrame instance for each test."""
-        return PolarsDataFrame(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        return PolarsDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
     @pytest.fixture
     def expected_data(self, dict_data: dict[str, list[int]]) -> Any:
@@ -68,7 +68,7 @@ class TestPolarsDataFrameComputeFramework:
 
     def test_transform_arrays(self) -> None:
         data = PolarsDataFrame.pl_series()([1, 2, 3])
-        _plDf = PolarsDataFrame(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        _plDf = PolarsDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         _plDf.set_data(PolarsDataFrame.pl_dataframe()({"existing_column": [4, 5, 6]}))
 
         result = _plDf.transform(data=data, feature_names={"new_column"})

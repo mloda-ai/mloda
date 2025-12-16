@@ -190,9 +190,9 @@ class CustomTransformer(BaseTransformer):
         return custom_framework.from_other(data)
 ```
 
-## Integration with ComputeFrameWork
+## Integration with ComputeFramework
 
-The `ComputeFrameWork` class uses the transformer system to convert data between different frameworks when needed. This happens in several scenarios:
+The `ComputeFramework` class uses the transformer system to convert data between different frameworks when needed. This happens in several scenarios:
 
 1. When data needs to be transformed to match the expected framework of a feature group
 2. When data needs to be uploaded to a flight server (always converted to PyArrow Table)

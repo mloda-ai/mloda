@@ -1,10 +1,10 @@
 import logging
 from typing import Any, Set, Type, Optional
-from mloda_core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
+from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_merge_engine import DuckDBMergeEngine
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
-from mloda_core.filter.filter_engine import BaseFilterEngine
+from mloda.user import FeatureName
+from mloda import ComputeFramework
+from mloda.provider import BaseFilterEngine
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_filter_engine import DuckDBFilterEngine
 
 try:
@@ -15,8 +15,8 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-class DuckDBFramework(ComputeFrameWork):
-    """DuckDB framework implementation for ComputeFrameWork.
+class DuckDBFramework(ComputeFramework):
+    """DuckDB framework implementation for ComputeFramework.
 
     This framework does not support multiprocessing, so it should not be used with multiprocessing.
     """

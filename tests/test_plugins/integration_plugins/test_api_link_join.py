@@ -2,31 +2,31 @@
 Integration test: ApiInputDataCollection with Links and Joins.
 
 Three features:
-1. ApiInputDataFeature (existing) - receives API data
+1. ApiDataFeatureGroup (existing) - receives API data
 2. CreatorDataFeature (custom) - creates own data via DataCreator
 3. JoinedFeature (custom) - depends on both with a join
 """
 
 from typing import Any, List, Optional, Set, Union
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.components.link import Link, JoinSpec
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
+from mloda import FeatureGroup
+from mloda import Feature
+from mloda.user import FeatureName
+from mloda.provider import FeatureSet
+from mloda.user import Index
+from mloda.provider import BaseInputData
+from mloda.provider import DataCreator
+from mloda.user import Link, JoinSpec
+from mloda import Options
+from mloda.user import PluginCollector
+import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda_plugins.feature_group.input_data.api_data.api_data import ApiInputDataFeature
+from mloda.provider import ApiDataFeatureGroup
 
 
 # ============================================================================
 # Feature B: Data Creator Feature
 # ============================================================================
-class CreatorDataFeature(AbstractFeatureGroup):
+class CreatorDataFeature(FeatureGroup):
     """Creates its own data via DataCreator."""
 
     @classmethod
@@ -45,7 +45,7 @@ class CreatorDataFeature(AbstractFeatureGroup):
 # ============================================================================
 # Feature C: Joined Feature (depends on API and Creator)
 # ============================================================================
-class LeftJoinedFeature(AbstractFeatureGroup):
+class LeftJoinedFeature(FeatureGroup):
     """Joins API data with Creator data using LEFT join."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
@@ -53,7 +53,7 @@ class LeftJoinedFeature(AbstractFeatureGroup):
 
         # Create the link: LEFT join on api_id = creator_id
         link = Link.left(
-            JoinSpec(ApiInputDataFeature, Index(("api_id",))), JoinSpec(CreatorDataFeature, Index(("creator_id",)))
+            JoinSpec(ApiDataFeatureGroup, Index(("api_id",))), JoinSpec(CreatorDataFeature, Index(("creator_id",)))
         )
 
         # Return features - attach link to one of them
@@ -73,7 +73,7 @@ class LeftJoinedFeature(AbstractFeatureGroup):
         return {cls.get_class_name()}
 
 
-class AppendedFeature(AbstractFeatureGroup):
+class AppendedFeature(FeatureGroup):
     """Appends API data with Creator data (stacks vertically)."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
@@ -81,7 +81,7 @@ class AppendedFeature(AbstractFeatureGroup):
 
         # Create the link: APPEND stacks data vertically
         link = Link.append(
-            JoinSpec(ApiInputDataFeature, Index(("api_id",))), JoinSpec(CreatorDataFeature, Index(("creator_id",)))
+            JoinSpec(ApiDataFeatureGroup, Index(("api_id",))), JoinSpec(CreatorDataFeature, Index(("creator_id",)))
         )
 
         # Return features - attach link to one of them
@@ -107,17 +107,17 @@ class AppendedFeature(AbstractFeatureGroup):
 class TestApiLinkJoin:
     """Integration tests for ApiInputDataCollection with Links."""
 
-    _enabled_left = PlugInCollector.enabled_feature_groups(
+    _enabled_left = PluginCollector.enabled_feature_groups(
         {
-            ApiInputDataFeature,
+            ApiDataFeatureGroup,
             CreatorDataFeature,
             LeftJoinedFeature,
         }
     )
 
-    _enabled_append = PlugInCollector.enabled_feature_groups(
+    _enabled_append = PluginCollector.enabled_feature_groups(
         {
-            ApiInputDataFeature,
+            ApiDataFeatureGroup,
             CreatorDataFeature,
             AppendedFeature,
         }
@@ -134,7 +134,7 @@ class TestApiLinkJoin:
         # Request the joined feature
         feature_list: List[Union[Feature, str]] = [Feature(name="LeftJoinedFeature")]
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list,
             plugin_collector=self._enabled_left,
             compute_frameworks={PandasDataFrame},
@@ -157,7 +157,7 @@ class TestApiLinkJoin:
         # Request the appended feature
         feature_list: List[Union[Feature, str]] = [Feature(name="AppendedFeature")]
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list,
             plugin_collector=self._enabled_append,
             compute_frameworks={PandasDataFrame},

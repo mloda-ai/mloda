@@ -1,15 +1,15 @@
 import os
 from typing import Any, List, Optional
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.api.request import mlodaAPI
+from mloda import FeatureGroup
+from mloda import Feature
+from mloda.provider import FeatureSet
+from mloda.provider import BaseInputData
+from mloda.provider import DataCreator
+import mloda
 
 
-class InputDataTestFeatureGroup(AbstractFeatureGroup):
+class InputDataTestFeatureGroup(FeatureGroup):
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         return DataCreator(
@@ -37,7 +37,7 @@ class TestInputData:
 
     def test_data_creator(self) -> Any:
         features = [f"InputDataTestFeatureGroup_{f}" for f in self.feature_list]
-        result = mlodaAPI.run_all(features, compute_frameworks=["PyArrowTable"])  # type: ignore
+        result = mloda.run_all(features, compute_frameworks=["PyArrowTable"])  # type: ignore
         assert result[0].to_pydict() == {
             "InputDataTestFeatureGroup_id": [12, 2, 3],
             "InputDataTestFeatureGroup_V1": [1, 2, 3],
@@ -47,7 +47,7 @@ class TestInputData:
     def test_api_input_data(self) -> None:
         features = [f"ApiInputDataTestFeatureGroup_{f}" for f in self.feature_list]
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             features,  # type: ignore
             compute_frameworks=["PyArrowTable"],
             api_data={
@@ -79,7 +79,7 @@ class TestInputData:
             },
         )
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             [_agg_creator, _agg_api_input_feature],
             compute_frameworks=["PyArrowTable"],
             api_data={

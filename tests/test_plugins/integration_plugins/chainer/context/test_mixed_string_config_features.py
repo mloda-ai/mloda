@@ -1,10 +1,10 @@
 from copy import copy
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.options import Options
+from mloda import Feature
+from mloda import Options
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
+from mloda.user import PluginCollector
+import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from tests.test_plugins.integration_plugins.chainer.chainer_context_feature import (
     ChainedContextFeatureGroupTest,
@@ -17,7 +17,7 @@ from tests.test_plugins.integration_plugins.chainer.context.test_chained_optiona
 class TestMixedStringConfigFeatures:
     """Test mixing string-based and config-based features in chained feature groups."""
 
-    plugin_collector = PlugInCollector.enabled_feature_groups(
+    plugin_collector = PluginCollector.enabled_feature_groups(
         {ChainedContextFeatureGroupTest, ChainerContextParserTestDataCreator}
     )
 
@@ -73,7 +73,7 @@ class TestMixedStringConfigFeatures:
         )
 
         # Test resolution behavior
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             [
                 string_feature_name,  # String-based
                 # config_feature1,  # Config-based          --> Known resolution bug
@@ -126,7 +126,7 @@ class TestMixedStringConfigFeatures:
             ),
         )
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             [config_target, "Sales"],
             compute_frameworks={PandasDataFrame},
             plugin_collector=self.plugin_collector,
@@ -176,7 +176,7 @@ class TestMixedStringConfigFeatures:
             ),
         )
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             [string_feature, config_feature_same_group, config_feature_diff_group, "Sales"],
             compute_frameworks={PandasDataFrame},
             plugin_collector=self.plugin_collector,

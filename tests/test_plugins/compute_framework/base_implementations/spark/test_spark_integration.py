@@ -1,7 +1,7 @@
 """
 Spark Integration Tests
 
-This module contains integration tests for the Spark compute framework with mlodaAPI.
+This module contains integration tests for the Spark compute framework with API.
 
 Requirements:
 - PySpark must be installed (pip install pyspark)
@@ -15,7 +15,7 @@ Test Coverage:
 - Multi-step feature pipelines
 - Aggregation operations
 - Cross-framework transformations (Spark to PyArrow)
-- Integration with mlodaAPI
+- Integration with API
 
 The tests use a shared SparkSession fixture to avoid Java gateway conflicts and
 ensure proper resource management across all test methods.
@@ -24,20 +24,20 @@ ensure proper resource management across all test methods.
 from typing import Any, Dict, Optional, Set, Type, Union
 import pytest
 
-from mloda_core.abstract_plugins.components.match_data.match_data import MatchData
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
+from mloda.provider import ConnectionMatcherMixin
+from mloda import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
-from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
+from mloda import FeatureGroup
+from mloda import Feature
+from mloda.user import FeatureName
+from mloda.provider import FeatureSet
+from mloda import Options
+from mloda.user import PluginCollector
+import mloda
+from mloda.user import ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.spark.spark_framework import SparkFramework
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
-from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.user import DataAccessCollection
 
 # Import shared fixtures and availability flags from conftest.py
 from tests.test_plugins.compute_framework.base_implementations.spark.conftest import PYSPARK_AVAILABLE
@@ -93,7 +93,7 @@ class SparkTestDataCreator(ATestDataCreator):
         return spark_test_dict
 
 
-class ATestSparkFeatureGroup(AbstractFeatureGroup, MatchData):
+class ATestSparkFeatureGroup(FeatureGroup, ConnectionMatcherMixin):
     @classmethod
     def match_data_access(
         cls,
@@ -126,7 +126,7 @@ class ATestSparkFeatureGroup(AbstractFeatureGroup, MatchData):
         return None
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         return {SparkFramework}
 
 
@@ -230,7 +230,7 @@ class SparkAggregationFeatureGroup(ATestSparkFeatureGroup):
         return {"avg_value_by_category", "count_by_category"}
 
 
-class CheckData(AbstractFeatureGroup):
+class CheckData(FeatureGroup):
     """Feature group for testing cross-framework transformation (Spark to PyArrow)."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
@@ -252,7 +252,7 @@ class CheckData(AbstractFeatureGroup):
         return {"pyarrow_avg_value_by_category"}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         return {PyArrowTable}
 
 
@@ -260,18 +260,18 @@ class CheckData(AbstractFeatureGroup):
     not PYSPARK_AVAILABLE or pa is None, reason="PySpark or PyArrow is not installed. Skipping this test."
 )
 class TestSparkIntegrationWithMlodaAPI:
-    """Integration tests for SparkFramework with mlodaAPI."""
+    """Integration tests for SparkFramework with API."""
 
     @pytest.mark.parametrize(
         "modes",
-        [({ParallelizationModes.SYNC})],
+        [({ParallelizationMode.SYNC})],
     )
     def test_basic_spark_feature_calculation(
-        self, modes: Set[ParallelizationModes], flight_server: Any, spark_session: Any
+        self, modes: Set[ParallelizationMode], flight_server: Any, spark_session: Any
     ) -> None:
         """Test basic feature calculation with Spark DataFrames."""
         # Enable the test feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {SparkTestDataCreator, SparkSimpleTransformFeatureGroup}
         )
 
@@ -284,7 +284,7 @@ class TestSparkIntegrationWithMlodaAPI:
         data_access_collection = DataAccessCollection(initialized_connection_objects={spark_session})
 
         # Run with Spark framework
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list,  # type: ignore
             flight_server=flight_server,
             parallelization_modes=modes,
@@ -315,7 +315,7 @@ class TestSparkIntegrationWithMlodaAPI:
     def test_spark_aggregation_features(self, flight_server: Any, spark_session: Any) -> None:
         """Test Spark aggregation capabilities."""
         # Enable the test feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups({SparkTestDataCreator, SparkAggregationFeatureGroup})
+        plugin_collector = PluginCollector.enabled_feature_groups({SparkTestDataCreator, SparkAggregationFeatureGroup})
 
         # Define features to calculate
         feature_list = [
@@ -324,10 +324,10 @@ class TestSparkIntegrationWithMlodaAPI:
         ]
 
         # Run with Spark framework
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list,  # type: ignore
             flight_server=flight_server,
-            parallelization_modes={ParallelizationModes.SYNC},
+            parallelization_modes={ParallelizationMode.SYNC},
             compute_frameworks={SparkFramework},
             plugin_collector=plugin_collector,
         )
@@ -365,19 +365,19 @@ class TestSparkIntegrationWithMlodaAPI:
     def test_multiple_feature_groups_spark_pipeline(self, flight_server: Any, spark_session: Any) -> None:
         """Test a pipeline with multiple feature groups using Spark."""
         # Enable all feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {SparkTestDataCreator, SparkSimpleTransformFeatureGroup, SparkSecondTransformFeatureGroup}
         )
 
         feature_list = [Feature(name="quadrupled_value", options={"SparkTestDataCreator": spark_session})]
 
         # Run the multi-step pipeline
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list,  # type: ignore
             flight_server=flight_server,
             compute_frameworks={SparkFramework},
             plugin_collector=plugin_collector,
-            parallelization_modes={ParallelizationModes.SYNC},
+            parallelization_modes={ParallelizationMode.SYNC},
         )
 
         # Verify results
@@ -395,7 +395,7 @@ class TestSparkIntegrationWithMlodaAPI:
     def test_transform_to_pyarrow(self, flight_server: Any, spark_session: Any) -> None:
         """Test a pipeline with cross-framework transformation (Spark to PyArrow)."""
         # Enable all feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {
                 SparkTestDataCreator,
                 SparkSimpleTransformFeatureGroup,
@@ -408,12 +408,12 @@ class TestSparkIntegrationWithMlodaAPI:
         feature_list = [Feature(name="pyarrow_avg_value_by_category", options={"SparkTestDataCreator": spark_session})]
 
         # Run the multi-step pipeline with cross-framework transformation
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list,  # type: ignore
             flight_server=flight_server,
             compute_frameworks={SparkFramework, PyArrowTable},
             plugin_collector=plugin_collector,
-            parallelization_modes={ParallelizationModes.SYNC},
+            parallelization_modes={ParallelizationMode.SYNC},
         )
 
         assert len(result) == 1
@@ -422,7 +422,7 @@ class TestSparkIntegrationWithMlodaAPI:
     def test_spark_with_complex_transformations(self, flight_server: Any, spark_session: Any) -> None:
         """Test Spark with more complex DataFrame transformations."""
         # Enable the test feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {SparkTestDataCreator, SparkSimpleTransformFeatureGroup, SparkAggregationFeatureGroup}
         )
 
@@ -433,10 +433,10 @@ class TestSparkIntegrationWithMlodaAPI:
         ]
 
         # Run with Spark framework
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list,  # type: ignore
             flight_server=flight_server,
-            parallelization_modes={ParallelizationModes.SYNC},
+            parallelization_modes={ParallelizationMode.SYNC},
             compute_frameworks={SparkFramework},
             plugin_collector=plugin_collector,
         )
@@ -483,16 +483,16 @@ class TestSparkIntegrationWithMlodaAPI:
                 return {"error_feature"}
 
         # Enable the error feature group
-        plugin_collector = PlugInCollector.enabled_feature_groups({SparkTestDataCreator, SparkErrorFeatureGroup})
+        plugin_collector = PluginCollector.enabled_feature_groups({SparkTestDataCreator, SparkErrorFeatureGroup})
 
         feature_list = [Feature(name="error_feature", options={"SparkTestDataCreator": spark_session})]
 
         # This should raise an exception due to the non-existent column
         with pytest.raises(Exception):
-            mlodaAPI.run_all(
+            mloda.run_all(
                 feature_list,  # type: ignore
                 flight_server=flight_server,
-                parallelization_modes={ParallelizationModes.SYNC},
+                parallelization_modes={ParallelizationMode.SYNC},
                 compute_frameworks={SparkFramework},
                 plugin_collector=plugin_collector,
             )

@@ -2,7 +2,7 @@ from typing import Any, Tuple
 
 from pyarrow import json as pyarrow_json
 
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.provider import FeatureSet
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
 
@@ -39,8 +39,8 @@ class JsonReader(ReadFile):
     ### 2. Configuration-Based Creation
 
     ```python
-    from mloda_core.abstract_plugins.components.feature import Feature
-    from mloda_core.abstract_plugins.components.options import Options
+    from mloda import Feature
+    from mloda import Options
 
     feature = Feature(
         name="user_name",
@@ -57,8 +57,8 @@ class JsonReader(ReadFile):
     ### Basic JSON Feature Access
 
     ```python
-    from mloda_core.abstract_plugins.components.feature import Feature
-    from mloda_core.abstract_plugins.components.options import Options
+    from mloda import Feature
+    from mloda import Options
 
     # Simple field reference from JSON file
     feature = Feature(

@@ -1,8 +1,8 @@
 import pytest
-from mloda_core.abstract_plugins.components.link import JoinType
+from mloda.user import JoinType
 from mloda_plugins.compute_framework.base_implementations.polars.polars_merge_engine import PolarsMergeEngine
 from mloda_plugins.compute_framework.base_implementations.polars.polars_lazy_merge_engine import PolarsLazyMergeEngine
-from mloda_core.abstract_plugins.components.index.index import Index
+from mloda.user import Index
 
 import logging
 
@@ -151,9 +151,9 @@ class TestRefactoredMergeEngineIntegration:
     def test_eager_framework_uses_eager_merge_engine(self) -> None:
         """Test that PolarsDataFrame uses PolarsMergeEngine."""
         from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
-        from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
+        from mloda.user import ParallelizationMode
 
-        df = PolarsDataFrame(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        df = PolarsDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         merge_engine_class = df.merge_engine()
 
         assert merge_engine_class == PolarsMergeEngine
@@ -161,9 +161,9 @@ class TestRefactoredMergeEngineIntegration:
     def test_lazy_framework_uses_lazy_merge_engine(self) -> None:
         """Test that PolarsLazyDataFrame uses PolarsLazyMergeEngine."""
         from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame
-        from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
+        from mloda.user import ParallelizationMode
 
-        lazy_df = PolarsLazyDataFrame(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        lazy_df = PolarsLazyDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         merge_engine_class = lazy_df.merge_engine()
 
         assert merge_engine_class == PolarsLazyMergeEngine

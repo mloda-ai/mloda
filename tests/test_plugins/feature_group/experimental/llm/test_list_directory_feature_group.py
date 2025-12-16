@@ -1,10 +1,10 @@
 from pathlib import PosixPath
 from typing import List
-from mloda_core.abstract_plugins.components.feature import Feature
+from mloda import Feature
 from mloda_plugins.feature_group.experimental.llm.list_directory_feature_group import ListDirectoryFeatureGroup
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.provider import FeatureSet
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda_core.api.request import mlodaAPI
+import mloda
 
 
 def test_list_directory_feature_group(tmp_path: PosixPath) -> None:
@@ -21,13 +21,13 @@ def test_list_directory_feature_group(tmp_path: PosixPath) -> None:
 
     assert ListDirectoryFeatureGroup.get_class_name() in result
     assert isinstance(result[ListDirectoryFeatureGroup.get_class_name()], list)
-    assert "mloda_core" in result[ListDirectoryFeatureGroup.get_class_name()][0]
+    assert "mloda" in result[ListDirectoryFeatureGroup.get_class_name()][0]
 
 
 def test_list_directory_feature_group_mlodaAPI() -> None:
-    # This test checks if ListDirectoryFeatureGroup can be run via mlodaAPI
+    # This test checks if ListDirectoryFeatureGroup can be run via API
     features: List[Feature | str] = [ListDirectoryFeatureGroup.get_class_name()]
-    result = mlodaAPI.run_all(features, compute_frameworks={PandasDataFrame})
+    result = mloda.run_all(features, compute_frameworks={PandasDataFrame})
     for res in result:
         assert "__init__.py" not in res[ListDirectoryFeatureGroup.get_class_name()].values[0]
     assert len(result) == 1

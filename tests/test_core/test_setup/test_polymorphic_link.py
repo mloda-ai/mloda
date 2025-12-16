@@ -14,26 +14,26 @@ Expected behavior after implementation:
 
 from typing import Any, Optional, Set, cast
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.prepare.graph.graph import Graph
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.link import Link, JoinSpec
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.prepare.resolve_links import ResolveLinks
+from mloda import FeatureGroup
+from mloda.core.prepare.graph.graph import Graph
+from mloda.user import FeatureName
+from mloda.user import Index
+from mloda.user import Link, JoinSpec
+from mloda import Options
+from mloda.core.prepare.resolve_links import ResolveLinks
 
 
 # ============================================================================
 # Test Feature Groups - Base Classes
 # ============================================================================
-class BaseGroupA(AbstractFeatureGroup):
+class BaseGroupA(FeatureGroup):
     """Base class A for testing polymorphic links."""
 
     def input_features(self, _options: Options, _feature_name: FeatureName) -> Optional[Set[Any]]:
         return None
 
 
-class BaseGroupB(AbstractFeatureGroup):
+class BaseGroupB(FeatureGroup):
     """Base class B for testing polymorphic links."""
 
     def input_features(self, _options: Options, _feature_name: FeatureName) -> Optional[Set[Any]]:
@@ -58,7 +58,7 @@ class ConcreteGroupB(BaseGroupB):
 # ============================================================================
 # Test Feature Groups - Unrelated
 # ============================================================================
-class UnrelatedGroup(AbstractFeatureGroup):
+class UnrelatedGroup(FeatureGroup):
     """Unrelated group for negative tests."""
 
     def input_features(self, _options: Options, _feature_name: FeatureName) -> Optional[Set[Any]]:
@@ -68,7 +68,7 @@ class UnrelatedGroup(AbstractFeatureGroup):
 # ============================================================================
 # Test Feature Groups - Multi-level Hierarchy for Distance Testing
 # ============================================================================
-class GrandparentGroup(AbstractFeatureGroup):
+class GrandparentGroup(FeatureGroup):
     """Three-level hierarchy root."""
 
     def input_features(self, _options: Options, _feature_name: FeatureName) -> Optional[Set[Any]]:

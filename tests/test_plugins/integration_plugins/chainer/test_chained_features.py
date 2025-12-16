@@ -1,10 +1,10 @@
 from typing import Any, Dict
 
-from mloda_core.abstract_plugins.components.feature import Feature
+from mloda import Feature
 import pytest
 
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
+from mloda.user import PluginCollector
+import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from tests.test_plugins.integration_plugins.chainer.chainer_test_feature import (
     ChainedFeatureGroupTest,
@@ -28,7 +28,7 @@ class ChainerParserTestDataCreator(ATestDataCreator):
 
 
 class TestChainedFeatures:
-    plugin_collector = PlugInCollector.enabled_feature_groups(
+    plugin_collector = PluginCollector.enabled_feature_groups(
         {ChainedFeatureGroupTest, ChainerParserTestDataCreator, ChainedFeatureGroupTest_B}
     )
 
@@ -38,7 +38,7 @@ class TestChainedFeatures:
             f"Sales__{ChainedFeatureGroupTest.OPERATION_ID}identifier1__{ChainedFeatureGroupTest_B.OPERATION_ID}identifier2",
         )
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             [
                 feature,
                 f"Sales__{ChainedFeatureGroupTest.OPERATION_ID}identifier2",
@@ -53,7 +53,7 @@ class TestChainedFeatures:
 
     def test_invalid_suffix_configuration(self) -> None:
         with pytest.raises(Exception) as exc_info:
-            mlodaAPI.run_all(
+            mloda.run_all(
                 [f"Sales__{ChainedFeatureGroupTest.OPERATION_ID}invalid_suffix"],
                 compute_frameworks={PandasDataFrame},
                 plugin_collector=self.plugin_collector,

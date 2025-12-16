@@ -7,11 +7,11 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from mloda_core.runtime.data_lifecycle_manager import DataLifecycleManager
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
+from mloda.core.runtime.data_lifecycle_manager import DataLifecycleManager
+from mloda import ComputeFramework
+from mloda.provider import FeatureSet
+from mloda.user import FeatureName
+from mloda.provider import ComputeFrameworkTransformer
 
 
 class TestDataLifecycleManagerInit:
@@ -52,7 +52,7 @@ class TestDataLifecycleManagerDropDataForFinishedCfws:
 
         manager.track_data_to_drop[cfw_uuid] = {step_uuid1, step_uuid2}
 
-        mock_cfw = Mock(spec=ComputeFrameWork)
+        mock_cfw = Mock(spec=ComputeFramework)
         mock_cfw.uuid = cfw_uuid
         cfw_collection = {cfw_uuid: mock_cfw}
 
@@ -74,7 +74,7 @@ class TestDataLifecycleManagerDropDataForFinishedCfws:
 
         manager.track_data_to_drop[cfw_uuid] = {step_uuid1, step_uuid2}
 
-        mock_cfw = Mock(spec=ComputeFrameWork)
+        mock_cfw = Mock(spec=ComputeFramework)
         mock_cfw.uuid = cfw_uuid
         cfw_collection = {cfw_uuid: mock_cfw}
 
@@ -95,7 +95,7 @@ class TestDataLifecycleManagerDropDataForFinishedCfws:
 
         manager.track_data_to_drop[cfw_uuid] = {step_uuid1}
 
-        mock_cfw = Mock(spec=ComputeFrameWork)
+        mock_cfw = Mock(spec=ComputeFramework)
         cfw_collection = {cfw_uuid: mock_cfw}
 
         manager.drop_data_for_finished_cfws(set(), cfw_collection)
@@ -116,8 +116,8 @@ class TestDataLifecycleManagerDropDataForFinishedCfws:
         manager.track_data_to_drop[cfw_uuid1] = {step_uuid1, step_uuid2}
         manager.track_data_to_drop[cfw_uuid2] = {step_uuid3}
 
-        mock_cfw1 = Mock(spec=ComputeFrameWork)
-        mock_cfw2 = Mock(spec=ComputeFrameWork)
+        mock_cfw1 = Mock(spec=ComputeFramework)
+        mock_cfw2 = Mock(spec=ComputeFramework)
         cfw_collection = {cfw_uuid1: mock_cfw1, cfw_uuid2: mock_cfw2}
 
         finished_ids = {step_uuid1, step_uuid2, step_uuid3}
@@ -140,7 +140,7 @@ class TestDataLifecycleManagerDropDataForFinishedCfws:
 
         manager.track_data_to_drop[cfw_uuid] = {step_uuid}
 
-        mock_cfw = Mock(spec=ComputeFrameWork)
+        mock_cfw = Mock(spec=ComputeFramework)
         cfw_collection = {cfw_uuid: mock_cfw}
 
         finished_ids = {step_uuid}
@@ -158,7 +158,7 @@ class TestDataLifecycleManagerDropCfwData:
         manager = DataLifecycleManager()
         cfw_uuid = uuid4()
 
-        mock_cfw = Mock(spec=ComputeFrameWork)
+        mock_cfw = Mock(spec=ComputeFramework)
         mock_cfw.uuid = cfw_uuid
         cfw_collection = {cfw_uuid: mock_cfw}
 
@@ -172,7 +172,7 @@ class TestDataLifecycleManagerDropCfwData:
         cfw_uuid = uuid4()
         location = "grpc://localhost:8815"
 
-        mock_cfw = Mock(spec=ComputeFrameWork)
+        mock_cfw = Mock(spec=ComputeFramework)
         cfw_collection = {cfw_uuid: mock_cfw}
 
         manager.drop_cfw_data(cfw_uuid, cfw_collection, location=location)
@@ -183,7 +183,7 @@ class TestDataLifecycleManagerDropCfwData:
         """Should handle missing CFW UUID in collection."""
         manager = DataLifecycleManager()
         cfw_uuid = uuid4()
-        cfw_collection: Dict[UUID, ComputeFrameWork] = {}
+        cfw_collection: Dict[UUID, ComputeFramework] = {}
 
         # Should raise KeyError when CFW not in collection
         with pytest.raises(KeyError):
@@ -236,7 +236,7 @@ class TestDataLifecycleManagerAddToResultDataCollection:
         manager = DataLifecycleManager()
         step_uuid = uuid4()
 
-        mock_cfw = Mock(spec=ComputeFrameWork)
+        mock_cfw = Mock(spec=ComputeFramework)
         mock_cfw.uuid = uuid4()
         mock_cfw.data = {"feature1": [1, 2, 3]}
         mock_cfw.select_data_by_column_names.return_value = {"feature1": [1, 2, 3]}
@@ -258,7 +258,7 @@ class TestDataLifecycleManagerAddToResultDataCollection:
         manager = DataLifecycleManager()
         step_uuid = uuid4()
 
-        mock_cfw = Mock(spec=ComputeFrameWork)
+        mock_cfw = Mock(spec=ComputeFramework)
         mock_features = Mock(spec=FeatureSet)
         mock_features.get_initial_requested_features.return_value = set()
 
@@ -271,7 +271,7 @@ class TestDataLifecycleManagerAddToResultDataCollection:
         manager = DataLifecycleManager()
         step_uuid = uuid4()
 
-        mock_cfw = Mock(spec=ComputeFrameWork)
+        mock_cfw = Mock(spec=ComputeFramework)
         mock_cfw.uuid = uuid4()
         mock_cfw.data = {"feature1": [1, 2, 3]}
 
@@ -290,7 +290,7 @@ class TestDataLifecycleManagerAddToResultDataCollection:
         step_uuid = uuid4()
         location = "grpc://localhost:8815"
 
-        mock_cfw = Mock(spec=ComputeFrameWork)
+        mock_cfw = Mock(spec=ComputeFramework)
         feature_name = Mock(spec=FeatureName)
         mock_features = Mock(spec=FeatureSet)
         mock_features.get_initial_requested_features.return_value = {feature_name}
@@ -305,7 +305,7 @@ class TestDataLifecycleManagerAddToResultDataCollection:
         manager = DataLifecycleManager()
         step_uuid = uuid4()
 
-        mock_cfw = Mock(spec=ComputeFrameWork)
+        mock_cfw = Mock(spec=ComputeFramework)
         feature_name = Mock(spec=FeatureName)
         mock_features = Mock(spec=FeatureSet)
         mock_features.get_initial_requested_features.return_value = {feature_name}
@@ -323,7 +323,7 @@ class TestDataLifecycleManagerGetResultData:
         """Should return selected data from CFW when data is available."""
         manager = DataLifecycleManager()
 
-        mock_cfw = Mock(spec=ComputeFrameWork)
+        mock_cfw = Mock(spec=ComputeFramework)
         mock_cfw.uuid = uuid4()
         mock_cfw.data = {"feature1": [1, 2, 3], "feature2": [4, 5, 6]}
 
@@ -344,7 +344,7 @@ class TestDataLifecycleManagerGetResultData:
         manager = DataLifecycleManager()
         location = "grpc://localhost:8815"
 
-        mock_cfw = Mock(spec=ComputeFrameWork)
+        mock_cfw = Mock(spec=ComputeFramework)
         mock_cfw.uuid = uuid4()
         mock_cfw.data = None
 
@@ -358,7 +358,7 @@ class TestDataLifecycleManagerGetResultData:
         feature_name = Mock(spec=FeatureName)
         selected_feature_names = {feature_name}
 
-        with patch("mloda_core.runtime.data_lifecycle_manager.FlightServer") as mock_flight_server:
+        with patch("mloda.core.runtime.data_lifecycle_manager.FlightServer") as mock_flight_server:
             mock_flight_server.download_table.return_value = downloaded_data
 
             result = manager.get_result_data(mock_cfw, selected_feature_names, location=location)
@@ -372,7 +372,7 @@ class TestDataLifecycleManagerGetResultData:
         """Should raise ValueError when CFW has no data and no location is provided."""
         manager = DataLifecycleManager()
 
-        mock_cfw = Mock(spec=ComputeFrameWork)
+        mock_cfw = Mock(spec=ComputeFramework)
         mock_cfw.data = None
 
         feature_name = Mock(spec=FeatureName)
@@ -484,12 +484,12 @@ class TestDataLifecycleManagerIntegration:
         step_uuid1 = uuid4()
         step_uuid2 = uuid4()
 
-        mock_cfw1 = Mock(spec=ComputeFrameWork)
+        mock_cfw1 = Mock(spec=ComputeFramework)
         mock_cfw1.uuid = cfw_uuid1
         mock_cfw1.data = {"feature1": [1, 2, 3]}
         mock_cfw1.select_data_by_column_names.return_value = {"feature1": [1, 2, 3]}
 
-        mock_cfw2 = Mock(spec=ComputeFrameWork)
+        mock_cfw2 = Mock(spec=ComputeFramework)
         mock_cfw2.uuid = cfw_uuid2
         mock_cfw2.data = {"feature2": [4, 5, 6]}
         mock_cfw2.select_data_by_column_names.return_value = {"feature2": [4, 5, 6]}
@@ -545,7 +545,7 @@ class TestDataLifecycleManagerIntegration:
         # CFW with local data
         cfw_uuid1 = uuid4()
         step_uuid1 = uuid4()
-        mock_cfw1 = Mock(spec=ComputeFrameWork)
+        mock_cfw1 = Mock(spec=ComputeFramework)
         mock_cfw1.uuid = cfw_uuid1
         mock_cfw1.data = {"feature1": [1, 2, 3]}
         mock_cfw1.select_data_by_column_names.return_value = {"feature1": [1, 2, 3]}
@@ -553,7 +553,7 @@ class TestDataLifecycleManagerIntegration:
         # CFW with flight server data
         cfw_uuid2 = uuid4()
         step_uuid2 = uuid4()
-        mock_cfw2 = Mock(spec=ComputeFrameWork)
+        mock_cfw2 = Mock(spec=ComputeFramework)
         mock_cfw2.uuid = cfw_uuid2
         mock_cfw2.data = None
         mock_cfw2.convert_flyserver_data_back.return_value = {"feature2": [4, 5, 6]}
@@ -572,7 +572,7 @@ class TestDataLifecycleManagerIntegration:
         # Add results with different locations
         manager.add_to_result_data_collection(mock_cfw1, features1, step_uuid1)
 
-        with patch("mloda_core.runtime.data_lifecycle_manager.FlightServer") as mock_flight_server:
+        with patch("mloda.core.runtime.data_lifecycle_manager.FlightServer") as mock_flight_server:
             mock_flight_server.download_table.return_value = Mock()
             manager.add_to_result_data_collection(mock_cfw2, features2, step_uuid2, location=location)
 

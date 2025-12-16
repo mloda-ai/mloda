@@ -6,10 +6,10 @@ from typing import Any, Dict, List
 
 import numpy as np
 
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
+import mloda
+from mloda import Feature
+from mloda import Options
+from mloda.user import PluginCollector
 
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.dimensionality_reduction.base import DimensionalityReductionFeatureGroup
@@ -61,7 +61,7 @@ def validate_dimensionality_reduction_results(result: List) -> None:  # type: ig
     Validate the results of the dimensionality reduction feature test.
 
     Args:
-        result: List of DataFrames from the mlodaAPI.run_all call
+        result: List of DataFrames from the mloda.run_all call
 
     Raises:
         AssertionError: If validation fails
@@ -105,9 +105,9 @@ class TestDimensionalityReductionFeatureGroupIntegration:
     """Integration tests for the DimensionalityReductionFeatureGroup."""
 
     def test_integration_with_feature_names_dimension(self) -> None:
-        """Test integration with mlodaAPI using explicit feature names."""
+        """Test integration with API using explicit feature names."""
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {DimensionalityReductionFeatureTestDataCreator, PandasDimensionalityReductionFeatureGroup}
         )
 
@@ -121,15 +121,15 @@ class TestDimensionalityReductionFeatureGroupIntegration:
         ]
 
         # Run the API
-        result = mlodaAPI.run_all(features, compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
+        result = mloda.run_all(features, compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
 
         # Validate the results
         validate_dimensionality_reduction_results(result)
 
     def atest_integration_with_feature_parser(self) -> None:
-        """Test integration with mlodaAPI using the parser."""
+        """Test integration with API using the parser."""
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {DimensionalityReductionFeatureTestDataCreator, PandasDimensionalityReductionFeatureGroup}
         )
 
@@ -160,15 +160,15 @@ class TestDimensionalityReductionFeatureGroupIntegration:
         features: List[str | Feature] = ["feature0", "feature1", "feature2", pca_feature, tsne_feature]
 
         # Run the API
-        result = mlodaAPI.run_all(features, compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
+        result = mloda.run_all(features, compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
 
         # Validate the results
         validate_dimensionality_reduction_results(result)
 
     def test_integration_with_different_algorithms(self) -> None:
-        """Test integration with mlodaAPI using different dimensionality reduction algorithms."""
+        """Test integration with API using different dimensionality reduction algorithms."""
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {DimensionalityReductionFeatureTestDataCreator, PandasDimensionalityReductionFeatureGroup}
         )
 
@@ -183,7 +183,7 @@ class TestDimensionalityReductionFeatureGroupIntegration:
         ]
 
         # Run the API
-        result = mlodaAPI.run_all(features, compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
+        result = mloda.run_all(features, compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
 
         # Verify we have at least one result
         assert len(result) >= 1, "Expected at least one result"

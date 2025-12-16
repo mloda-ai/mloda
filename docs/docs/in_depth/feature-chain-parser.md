@@ -16,10 +16,10 @@ mloda uses three separator characters in feature names, each with a specific pur
 | `~` | `COLUMN_SEPARATOR` | Separates multi-column output index | `feature__pca~0` |
 | `&` | `INPUT_SEPARATOR` | Separates multiple input features | `point1&point2__distance` |
 
-These constants are defined in `mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser`:
+These constants are available from the `mloda.provider` facade:
 
 ```python
-from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
+from mloda.provider import (
     CHAIN_SEPARATOR,    # "__"
     COLUMN_SEPARATOR,   # "~"
     INPUT_SEPARATOR,    # "&"
@@ -66,7 +66,7 @@ The new `Options` class separates parameters into two categories:
 - **Context Parameters**: Metadata that doesn't affect splitting (stored in `options.context`)
 
 ``` python
-from mloda_core.abstract_plugins.components.options import Options
+from mloda.user import Options
 from typing import Optional
 
 # New Options architecture
@@ -86,8 +86,7 @@ options = Options(
 Modern feature creation uses the Options architecture:
 
 ``` python
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.options import Options
+from mloda.user import Feature, Options
 
 # Traditional string-based approach:
 feature = Feature("sales__sum_aggr")
@@ -111,13 +110,10 @@ The `FeatureChainParserMixin` provides default implementations for common featur
 ### Basic Usage
 
 ``` python
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
-    FeatureChainParserMixin,
-)
+from mloda.provider import FeatureGroup, FeatureChainParserMixin
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
-class MyFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
+class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     PREFIX_PATTERN = r".*__my_operation$"
 
     # In-feature constraints
@@ -157,7 +153,7 @@ class MyFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
 Override this hook when you need custom validation for string-based feature names:
 
 ``` python
-class ClusteringFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
+class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     @classmethod
     def _validate_string_match(cls, feature_name: str, operation_config: str, in_feature: str) -> bool:
         """Validate clustering-specific patterns."""
@@ -174,7 +170,7 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
 Override when you need to add additional input features (e.g., time filter):
 
 ``` python
-class TimeWindowFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
+class TimeWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         # Try string-based parsing first
         _, in_feature = FeatureChainParser.parse_feature_name(feature_name.name, [self.PREFIX_PATTERN])
@@ -193,7 +189,7 @@ class TimeWindowFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
 Override for complex pre-check logic that can't be captured by the hook:
 
 ``` python
-class SklearnPipelineFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
+class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     @classmethod
     def match_feature_group_criteria(cls, feature_name, options, data_access_collection=None) -> bool:
         """Custom matching with mutual exclusivity validation."""
@@ -221,11 +217,11 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup)
 The modern approach uses `PROPERTY_MAPPING` to define parameter validation and classification:
 
 ``` python
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
+from mloda.provider import FeatureGroup
+from mloda.user import FeatureName
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
 
-class MyFeatureGroup(AbstractFeatureGroup):
+class MyFeatureGroup(FeatureGroup):
     PREFIX_PATTERN = r"__([a-zA-Z_]+)_operation$"
 
     PROPERTY_MAPPING = {
@@ -373,9 +369,9 @@ Some feature groups produce multiple result columns from a single input feature.
 Use `apply_naming_convention()` to create properly named columns:
 
 ``` python
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
+from mloda.provider import FeatureGroup, FeatureSet
 
-class MultiColumnProducer(AbstractFeatureGroup):
+class MultiColumnProducer(FeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         # Compute results (e.g., from sklearn OneHotEncoder)
@@ -394,7 +390,7 @@ class MultiColumnProducer(AbstractFeatureGroup):
 Use `resolve_multi_column_feature()` to automatically discover columns:
 
 ``` python
-class MultiColumnConsumer(AbstractFeatureGroup):
+class MultiColumnConsumer(FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         # Request base feature without ~N suffix
         return {Feature("category__onehot_encoded")}

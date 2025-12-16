@@ -20,16 +20,13 @@ Example: Input Feature Validation Using Custom Validators
 
 ```python
 from typing import Any, Optional, Set
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.api.request import mlodaAPI
+import mloda
+from mloda.provider import FeatureGroup, FeatureSet
+from mloda.user import Options, FeatureName, Feature
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
-class DocSimpleValidateInputFeatures(AbstractFeatureGroup):
+class DocSimpleValidateInputFeatures(FeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -50,7 +47,7 @@ class DocSimpleValidateInputFeatures(AbstractFeatureGroup):
 As we run it, it will return an error.
 
 ``` python
-results = mlodaAPI.run_all(
+results = mloda.run_all(
             ["DocSimpleValidateInputFeatures"], {PyArrowTable}
         )
 ValueError: Data should have 3 elements
@@ -93,7 +90,7 @@ The DocExamplePanderaValidator is based on the BaseValidator, which provides bas
 We show here an example by using the tool [Pandera](https://github.com/unionai-oss/pandera).
 
 ```python
-from mloda_core.abstract_plugins.components.base_validator import BaseValidator
+from mloda.provider import BaseValidator
 import pyarrow as pa
 from pandera import pandas
 from pandera import Column, Check
@@ -122,7 +119,7 @@ class DocExamplePanderaValidator(BaseValidator):
 The validator should raise an error again.
 
 ``` python
-results = mlodaAPI.run_all(
+results = mloda.run_all(
             ["DocCustomValidateInputFeatures"], {PyArrowTable}
         )
 ```
@@ -133,12 +130,14 @@ results = mlodaAPI.run_all(
 -   We use the extender functionality to print out the runtime as an example.
 
 ```python
-from mloda_core.abstract_plugins.function_extender import WrapperFunctionEnum, WrapperFunctionExtender
+import mloda
+from mloda.steward import Extender, ExtenderHook
+from mloda.user import Feature
 from tests.test_documentation.test_documentation import DokuValidateInputFeatureExtender
 
 example_feature = Feature("DocCustomValidateInputFeatures", {"ValidationLevel": "warning"})
 
-results = mlodaAPI.run_all(
+results = mloda.run_all(
             [example_feature], {PyArrowTable}, function_extender={DokuValidateInputFeatureExtender()}
         )
 ```
@@ -161,12 +160,13 @@ Output features are validated to ensure they meet the expected outcomes and perf
 ###### Simple validator
 
 ```python
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
+import mloda
+from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet
+from mloda.user import Options
 from tests.test_plugins.integration_plugins.test_validate_features.example_validator import BaseValidateOutputFeaturesBase
 
 
-class DocBaseValidateOutputFeaturesBase(AbstractFeatureGroup):
+class DocBaseValidateOutputFeaturesBase(FeatureGroup):
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         return DataCreator({cls.get_class_name()})
@@ -183,7 +183,7 @@ class DocBaseValidateOutputFeaturesBase(AbstractFeatureGroup):
             raise ValueError("Data should have 3 elements")
         return True
 
-results = mlodaAPI.run_all(
+results = mloda.run_all(
             ["DocBaseValidateOutputFeaturesBase"], {PyArrowTable}
         )
 results
@@ -212,7 +212,7 @@ class DocBaseValidateOutputFeaturesBaseNegativePandera(DocBaseValidateOutputFeat
 This one should fail:
 
 ``` python
-results = mlodaAPI.run_all(
+results = mloda.run_all(
             ["DocBaseValidateOutputFeaturesBaseNegativePandera"], {PyArrowTable}
         )
 ```
@@ -224,7 +224,7 @@ We can of course also use an extender, which was defined somewhere else.
 ```python
 from tests.test_plugins.integration_plugins.test_validate_features.test_validate_output_features import ValidateOutputFeatureExtender
 
-results = mlodaAPI.run_all(
+results = mloda.run_all(
             ["DocBaseValidateOutputFeaturesBase"], {PyArrowTable},
             function_extender={ValidateOutputFeatureExtender()}
         )

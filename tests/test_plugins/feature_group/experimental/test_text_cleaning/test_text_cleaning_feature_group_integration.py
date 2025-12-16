@@ -1,14 +1,14 @@
 """
-Integration tests for the TextCleaningFeatureGroup with mlodaAPI.
+Integration tests for the TextCleaningFeatureGroup with API.
 """
 
 from typing import Any, Dict
 import pytest
 
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
+from mloda import Feature
+from mloda import Options
+from mloda.user import PluginCollector
+import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
 from mloda_plugins.feature_group.experimental.text_cleaning.pandas import PandasTextCleaningFeatureGroup
@@ -44,12 +44,12 @@ class TextCleaningTestDataCreator(ATestDataCreator):
 
 
 class TestTextCleaningFeatureGroupIntegration:
-    """Integration tests for the TextCleaningFeatureGroup with mlodaAPI."""
+    """Integration tests for the TextCleaningFeatureGroup with API."""
 
     def test_integration_with_feature_parser(self) -> None:
-        """Test integration with mlodaAPI using configuration-based features."""
+        """Test integration with API using configuration-based features."""
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {TextCleaningTestDataCreator, PandasTextCleaningFeatureGroup}
         )
 
@@ -75,7 +75,7 @@ class TestTextCleaningFeatureGroupIntegration:
         )
 
         # Test with configuration-based features directly
-        results = mlodaAPI.run_all(
+        results = mloda.run_all(
             [f1, f2],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
@@ -104,7 +104,7 @@ class TestTextCleaningFeatureGroupIntegration:
         assert "!" not in cleaned_df2["placeholder2"].iloc[0]
 
         # Test with mloda parsing the features
-        results2 = mlodaAPI.run_all(
+        results2 = mloda.run_all(
             [f1, f2],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,

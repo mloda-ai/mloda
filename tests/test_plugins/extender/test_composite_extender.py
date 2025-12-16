@@ -1,6 +1,6 @@
-"""Tests for composite extender functionality allowing multiple WrapperFunctionExtenders.
+"""Tests for composite extender functionality allowing multiple Extenders.
 
-This module tests the ability to have multiple WrapperFunctionExtender instances
+This module tests the ability to have multiple Extender instances
 wrapping the same function type, with priority-based execution order and error resilience.
 """
 
@@ -9,16 +9,16 @@ from unittest.mock import Mock
 import pytest
 import logging
 
-from mloda_core.abstract_plugins.function_extender import (
-    WrapperFunctionEnum,
-    WrapperFunctionExtender,
+from mloda.core.abstract_plugins.function_extender import (
+    ExtenderHook,
+    Extender,
 )
 from mloda_plugins.function_extender.base_implementations.otel.otel_extender import OtelExtender
-from mloda_core.abstract_plugins.function_extender import _CompositeExtender
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
+from mloda.core.abstract_plugins.function_extender import _CompositeExtender
+from mloda import ComputeFramework
 
 
-class MockExtender(WrapperFunctionExtender):
+class MockExtender(Extender):
     """Mock extender for testing purposes."""
 
     def __init__(self, name: str, priority: int = 100, should_fail: bool = False):
@@ -27,8 +27,8 @@ class MockExtender(WrapperFunctionExtender):
         self.should_fail = should_fail
         self.call_count = 0
 
-    def wraps(self) -> Set[WrapperFunctionEnum]:
-        return {WrapperFunctionEnum.FEATURE_GROUP_CALCULATE_FEATURE}
+    def wraps(self) -> Set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
         self.call_count += 1
@@ -38,16 +38,16 @@ class MockExtender(WrapperFunctionExtender):
         return result
 
 
-class TestWrapperFunctionExtenderPriority:
-    """Test that WrapperFunctionExtender has a priority property."""
+class TestExtenderPriority:
+    """Test that Extender has a priority property."""
 
     def test_priority_property_exists_on_base_class(self) -> None:
-        """Test that WrapperFunctionExtender base class defines priority."""
+        """Test that Extender base class defines priority."""
         # Check if priority is defined at the class level or in __init__
         # OtelExtender (a real implementation) should have priority after implementation
 
         otel = OtelExtender()
-        assert hasattr(otel, "priority"), "WrapperFunctionExtender implementations must have a priority property"
+        assert hasattr(otel, "priority"), "Extender implementations must have a priority property"
 
     def test_priority_default_value(self) -> None:
         """Test that priority defaults to 100 when not specified."""
@@ -58,12 +58,12 @@ class TestWrapperFunctionExtenderPriority:
         """Test that priority can be set to a custom value."""
 
         # This will fail until priority can be customized in __init__
-        class CustomPriorityExtender(WrapperFunctionExtender):
+        class CustomPriorityExtender(Extender):
             def __init__(self, priority: int = 100):
                 self.priority = priority
 
-            def wraps(self) -> Set[WrapperFunctionEnum]:
-                return {WrapperFunctionEnum.FEATURE_GROUP_CALCULATE_FEATURE}
+            def wraps(self) -> Set[ExtenderHook]:
+                return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
 
             def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
                 return func(*args, **kwargs)
@@ -81,12 +81,10 @@ class Test_CompositeExtender:
         assert _CompositeExtender is not None, "_CompositeExtender class must exist"
 
     def test_composite_extender_inherits_from_wrapper(self) -> None:
-        """Test that _CompositeExtender inherits from WrapperFunctionExtender."""
+        """Test that _CompositeExtender inherits from Extender."""
 
         # This will fail until _CompositeExtender inherits properly
-        assert issubclass(_CompositeExtender, WrapperFunctionExtender), (
-            "_CompositeExtender must inherit from WrapperFunctionExtender"
-        )
+        assert issubclass(_CompositeExtender, Extender), "_CompositeExtender must inherit from Extender"
 
     def test_composite_extender_accepts_list_of_extenders(self) -> None:
         """Test that _CompositeExtender can be initialized with a list of extenders."""
@@ -124,7 +122,7 @@ class Test_CompositeExtender:
 
         # This will fail until _CompositeExtender.wraps() returns proper union
         wrapped = composite.wraps()
-        assert WrapperFunctionEnum.FEATURE_GROUP_CALCULATE_FEATURE in wrapped, (
+        assert ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE in wrapped, (
             "_CompositeExtender should wrap all function types from child extenders"
         )
 
@@ -136,13 +134,13 @@ class TestExtenderExecutionOrder:
         """Test that extenders with lower priority execute first."""
         execution_order = []
 
-        class OrderTrackingExtender(WrapperFunctionExtender):
+        class OrderTrackingExtender(Extender):
             def __init__(self, name: str, priority: int):
                 self.name = name
                 self.priority = priority
 
-            def wraps(self) -> Set[WrapperFunctionEnum]:
-                return {WrapperFunctionEnum.FEATURE_GROUP_CALCULATE_FEATURE}
+            def wraps(self) -> Set[ExtenderHook]:
+                return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
 
             def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
                 execution_order.append(self.name)
@@ -230,22 +228,22 @@ class TestGetFunctionExtenderWithComposite:
     def test_get_function_extender_returns_composite_for_multiple_matches(self) -> None:
         """Test that get_function_extender returns a _CompositeExtender when multiple extenders match."""
 
-        # Create a mock ComputeFrameWork with multiple extenders
+        # Create a mock ComputeFramework with multiple extenders
         extender1 = MockExtender("first", priority=10)
         extender2 = MockExtender("second", priority=20)
 
         # This will fail until get_function_extender supports multiple extenders
         # Currently it raises ValueError for multiple matches
-        compute_fw = Mock(spec=ComputeFrameWork)
+        compute_fw = Mock(spec=ComputeFramework)
         compute_fw.function_extender = [extender1, extender2]
-        compute_fw.get_function_extender = ComputeFrameWork.get_function_extender.__get__(compute_fw)
+        compute_fw.get_function_extender = ComputeFramework.get_function_extender.__get__(compute_fw)
 
-        result = compute_fw.get_function_extender(WrapperFunctionEnum.FEATURE_GROUP_CALCULATE_FEATURE)
+        result = compute_fw.get_function_extender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
 
         assert isinstance(result, _CompositeExtender), (
             "get_function_extender should return _CompositeExtender for multiple matches"
         )
-        assert isinstance(result, WrapperFunctionExtender), "_CompositeExtender should be a WrapperFunctionExtender"
+        assert isinstance(result, Extender), "_CompositeExtender should be a Extender"
 
     def test_get_function_extender_preserves_priority_order(self) -> None:
         """Test that get_function_extender creates _CompositeExtender with correct priority order."""
@@ -255,12 +253,12 @@ class TestGetFunctionExtenderWithComposite:
         extender_low = MockExtender("low", priority=10)
         extender_mid = MockExtender("mid", priority=30)
 
-        compute_fw = Mock(spec=ComputeFrameWork)
+        compute_fw = Mock(spec=ComputeFramework)
         compute_fw.function_extender = [extender_high, extender_low, extender_mid]
-        compute_fw.get_function_extender = ComputeFrameWork.get_function_extender.__get__(compute_fw)
+        compute_fw.get_function_extender = ComputeFramework.get_function_extender.__get__(compute_fw)
 
         # This will fail until _CompositeExtender sorts extenders by priority
-        result = compute_fw.get_function_extender(WrapperFunctionEnum.FEATURE_GROUP_CALCULATE_FEATURE)
+        result = compute_fw.get_function_extender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
 
         assert isinstance(result, _CompositeExtender), "Should return _CompositeExtender"
 
@@ -290,11 +288,11 @@ class TestGetFunctionExtenderWithComposite:
         """Test that get_function_extender returns single extender directly when only one matches."""
         extender = MockExtender("only", priority=10)
 
-        compute_fw = Mock(spec=ComputeFrameWork)
+        compute_fw = Mock(spec=ComputeFramework)
         compute_fw.function_extender = [extender]
-        compute_fw.get_function_extender = ComputeFrameWork.get_function_extender.__get__(compute_fw)
+        compute_fw.get_function_extender = ComputeFramework.get_function_extender.__get__(compute_fw)
 
         # This should continue to work as before - single extender returned directly
-        result = compute_fw.get_function_extender(WrapperFunctionEnum.FEATURE_GROUP_CALCULATE_FEATURE)
+        result = compute_fw.get_function_extender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
 
         assert result is extender, "Single matching extender should be returned directly (backward compatibility)"

@@ -2,19 +2,19 @@
 Complex integration test for EncodingFeatureGroup with multiple feature chains in a single test.
 """
 
-from mloda_core.abstract_plugins.components.feature_collection import Features
+from mloda.user import Features
 import pytest
 import glob
 import os
 from typing import Any, Dict, List
 
-from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
-from mloda_core.filter.single_filter import SingleFilter
-from mloda_core.filter.filter_type_enum import FilterTypeEnum
+from mloda.user import PluginLoader
+from mloda import Feature
+from mloda import Options
+from mloda.user import PluginCollector
+from mloda import API
+from mloda.user import SingleFilter
+from mloda.user import FilterType
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
@@ -68,7 +68,7 @@ class TestComplexEncodingChaining:
         PluginLoader().all()
 
         # Enable all necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {
                 ComplexEncodingTestDataCreator,
                 PandasEncodingFeatureGroup,
@@ -93,7 +93,7 @@ class TestComplexEncodingChaining:
         ]
 
         # Phase 1: Train and save artifacts for all complex features
-        api1 = mlodaAPI(
+        api1 = API(
             complex_features,
             {PandasDataFrame},
             plugin_collector=plugin_collector,
@@ -176,7 +176,7 @@ class TestComplexEncodingChaining:
             for feature in complex_features
         ]
 
-        api2 = mlodaAPI(
+        api2 = API(
             complex_features_reuse,
             {PandasDataFrame},
             plugin_collector=plugin_collector,

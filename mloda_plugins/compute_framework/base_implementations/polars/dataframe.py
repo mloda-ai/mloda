@@ -1,9 +1,9 @@
 from typing import Any, Set, Type
-from mloda_core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
+from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.polars.polars_merge_engine import PolarsMergeEngine
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
-from mloda_core.filter.filter_engine import BaseFilterEngine
+from mloda.user import FeatureName
+from mloda import ComputeFramework
+from mloda.provider import BaseFilterEngine
 from mloda_plugins.compute_framework.base_implementations.polars.polars_filter_engine import PolarsFilterEngine
 
 try:
@@ -12,7 +12,7 @@ except ImportError:
     pl = None  # type: ignore[assignment]
 
 
-class PolarsDataFrame(ComputeFrameWork):
+class PolarsDataFrame(ComputeFramework):
     @staticmethod
     def is_available() -> bool:
         """Check if Polars is installed and available."""

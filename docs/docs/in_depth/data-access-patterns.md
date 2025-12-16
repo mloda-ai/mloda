@@ -29,9 +29,9 @@ For detailed examples of these use cases, see the [data access documentation](ac
 
 ### Example Implementation
 ``` python
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
+from mloda.provider import BaseInputData, FeatureGroup, FeatureSet
 
-class ReadFileFeature(AbstractFeatureGroup):
+class ReadFileFeature(FeatureGroup):
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         return ReadFile()  # BaseInputData implementation
@@ -76,9 +76,9 @@ MatchData is **only** used in these specific scenarios:
 
 ### Example Implementation
 ``` python
-from mloda_core.abstract_plugins.components.match_data.match_data import MatchData
+from mloda.provider import ConnectionMatcherMixin, FeatureGroup
 
-class DuckDBFeatureGroup(AbstractFeatureGroup, MatchData):
+class DuckDBFeatureGroup(FeatureGroup, ConnectionMatcherMixin):
     @classmethod
     def match_data_access(
         cls,
@@ -102,7 +102,7 @@ class DuckDBFeatureGroup(AbstractFeatureGroup, MatchData):
 | **Primary Purpose** | Data loading and access | Connection object matching for stateful frameworks |
 | **When Used** | All feature groups that load data | Only feature groups requiring framework connection objects |
 | **Scope** | Universal data access pattern | Specialized for stateful compute frameworks |
-| **Usage Pattern** | `input_data()` method in feature groups | Multiple inheritance: `AbstractFeatureGroup, MatchData` |
+| **Usage Pattern** | `input_data()` method in feature groups | Multiple inheritance: `FeatureGroup, ConnectionMatcherMixin` |
 | **Connection Dependency** | Works with or without connections | Specifically designed for connection objects |
 | **Framework Support** | All compute frameworks | Only stateful frameworks (DuckDB, database connections) |
 
@@ -122,17 +122,17 @@ BaseInputData and MatchData serve **different purposes** and are used in **diffe
 
 ### Combined Usage Example
 ``` python
-class DuckDBAnalyticsFeature(AbstractFeatureGroup, MatchData):
+class DuckDBAnalyticsFeature(FeatureGroup, ConnectionMatcherMixin):
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         # BaseInputData for general data loading
         return ReadFile()
-    
+
     @classmethod
-    def match_data_access(cls, feature_name: str, options: Options, 
+    def match_data_access(cls, feature_name: str, options: Options,
                          data_access_collection: Optional[DataAccessCollection] = None,
                          framework_connection_object: Optional[Any] = None) -> Any:
-        # MatchData for connection object matching
+        # ConnectionMatcherMixin for connection object matching
         if framework_connection_object and isinstance(framework_connection_object, duckdb.DuckDBPyConnection):
             return framework_connection_object
         return None
@@ -146,7 +146,7 @@ class DuckDBAnalyticsFeature(AbstractFeatureGroup, MatchData):
 **Pattern**: Only BaseInputData is needed
 
 ``` python
-class CsvProcessingFeature(AbstractFeatureGroup):
+class CsvProcessingFeature(FeatureGroup):
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         return ReadFile()  # BaseInputData handles file reading
@@ -158,14 +158,14 @@ class CsvProcessingFeature(AbstractFeatureGroup):
 **Pattern**: Both BaseInputData and MatchData are needed
 
 ``` python
-class DuckDBAnalyticsFeature(AbstractFeatureGroup, MatchData):
+class DuckDBAnalyticsFeature(FeatureGroup, ConnectionMatcherMixin):
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         return ReadFile()  # BaseInputData for data loading
-    
+
     @classmethod
     def match_data_access(cls, ...):
-        # MatchData for connection matching
+        # ConnectionMatcherMixin for connection matching
         return appropriate_duckdb_connection
 ```
 
@@ -177,7 +177,7 @@ For database connection patterns, see [Framework Connection Object](framework-co
 **Pattern**: Only BaseInputData is needed
 
 ``` python
-class SyntheticDataFeature(AbstractFeatureGroup):
+class SyntheticDataFeature(FeatureGroup):
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         return DataCreator({"synthetic_data"})  # BaseInputData for data creation

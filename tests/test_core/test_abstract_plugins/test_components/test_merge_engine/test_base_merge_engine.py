@@ -3,21 +3,21 @@ import uuid
 import pandas as pd
 import pandas.testing as pdt
 from typing import Any, List, Optional, Set, Tuple
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.components.link import Link, JoinSpec
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
+from mloda import FeatureGroup
+from mloda import Feature
+from mloda.user import FeatureName
+from mloda.provider import FeatureSet
+from mloda.user import Index
+from mloda.provider import BaseInputData
+from mloda.provider import DataCreator
+from mloda.user import Link, JoinSpec
+from mloda import Options
+from mloda.user import PluginCollector
+import mloda
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 
-class AppendMergeTestFeature(AbstractFeatureGroup):
+class AppendMergeTestFeature(FeatureGroup):
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         return DataCreator(supports_features={f"{cls.get_class_name()}{i}" for i in range(0, 99)})
@@ -38,7 +38,7 @@ class SecondAppendMergeTestFeature(AppendMergeTestFeature):
     pass
 
 
-class GroupedAppendMergeTestFeature(AbstractFeatureGroup):
+class GroupedAppendMergeTestFeature(FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         def add_run_id(some_uuid: UUID, right: int = 0) -> Tuple[str]:
             return (f"{some_uuid}{str(cnt + right)}",)
@@ -75,7 +75,7 @@ class GroupedAppendMergeTestFeature(AbstractFeatureGroup):
         return data
 
 
-class Call2GroupedAppendMergeTestFeature(AbstractFeatureGroup):
+class Call2GroupedAppendMergeTestFeature(FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         iteration = options.get("iteration")
 
@@ -113,10 +113,10 @@ class TestBaseMergeEngine:
     def test_prep_append(self) -> None:
         feature_list: List[str | Feature] = ["AppendMergeTestFeature1"]
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list,
             compute_frameworks=["PandasDataFrame"],
-            plugin_collector=PlugInCollector.enabled_feature_groups({AppendMergeTestFeature}),
+            plugin_collector=PluginCollector.enabled_feature_groups({AppendMergeTestFeature}),
         )
         assert len(result) == 1
 
@@ -133,10 +133,10 @@ class TestBaseMergeEngine:
             },
         )
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             [feature],
             compute_frameworks=["PandasDataFrame"],
-            plugin_collector=PlugInCollector.enabled_feature_groups(
+            plugin_collector=PluginCollector.enabled_feature_groups(
                 {GroupedAppendMergeTestFeature, AppendMergeTestFeature}
             ),
         )
@@ -181,10 +181,10 @@ class TestBaseMergeEngine:
             },
         )
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             [feature, feature2],
             compute_frameworks=["PandasDataFrame"],
-            plugin_collector=PlugInCollector.enabled_feature_groups(
+            plugin_collector=PluginCollector.enabled_feature_groups(
                 {GroupedAppendMergeTestFeature, AppendMergeTestFeature, SecondAppendMergeTestFeature}
             ),
         )
@@ -205,11 +205,11 @@ class TestBaseMergeEngine:
             JoinSpec(GroupedAppendMergeTestFeature, Index(("GroupedAppendMergeTestFeature2",))),
         )
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             [feature],
             links={link},
             compute_frameworks=["PandasDataFrame"],
-            plugin_collector=PlugInCollector.enabled_feature_groups(
+            plugin_collector=PluginCollector.enabled_feature_groups(
                 {
                     GroupedAppendMergeTestFeature,
                     AppendMergeTestFeature,

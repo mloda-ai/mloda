@@ -3,9 +3,9 @@ Integration tests for time window feature groups.
 """
 
 from typing import List
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
+import mloda
+from mloda import Feature
+from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindowFeatureGroup
@@ -31,15 +31,15 @@ class TestTimeWindowPandasIntegration:
     """Integration tests for the time window feature group using Pandas."""
 
     def test_time_window_with_data_creator(self) -> None:
-        """Test time window features with mlodaAPI using DataCreator."""
+        """Test time window features with API using DataCreator."""
 
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {PandasTimeWindowTestDataCreator, PandasTimeWindowFeatureGroup}
         )
 
         # Run the API with multiple time window features
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             [
                 "temperature",  # Source data
                 "temperature__avg_3_day_window",  # 3-day average temperature
@@ -71,15 +71,15 @@ class TestTimeWindowPyArrowIntegration:
     """Integration tests for the time window feature group using PyArrow."""
 
     def test_time_window_with_data_creator(self) -> None:
-        """Test time window features with mlodaAPI using DataCreator."""
+        """Test time window features with API using DataCreator."""
 
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {PyArrowTimeWindowTestDataCreator, PyArrowTimeWindowFeatureGroup}
         )
 
         # Run the API with multiple time window features
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             [
                 "temperature",  # Source data
                 "temperature__avg_3_day_window",  # 3-day average temperature

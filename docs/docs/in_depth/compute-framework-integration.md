@@ -12,7 +12,7 @@ Feature groups specify which compute frameworks they support through the `comput
 
 ``` python
 @classmethod
-def compute_framework_rule(cls) -> set[type[ComputeFrameWork]]:
+def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
     """Define the compute frameworks this feature group supports."""
     return {PandasDataFrame}  # Support only Pandas
     # Or return True to support all available compute frameworks
@@ -25,7 +25,7 @@ Feature groups follow a layered architecture:
 - Framework-specific classes implement the actual calculations
 
 ```
-AbstractFeatureGroup
+FeatureGroup
   └── BaseFeatureGroup (e.g., ClusteringFeatureGroup)
         ├── PandasImplementation
         ├── PyArrowImplementation
@@ -39,7 +39,7 @@ AbstractFeatureGroup
 The base class defines the interface and common functionality:
 
 ``` python
-class MyFeatureGroup(AbstractFeatureGroup):
+class MyFeatureGroup(FeatureGroup):
     """Base class for MyFeatureGroup."""
     
     def input_features(self, options, feature_name):
@@ -98,7 +98,7 @@ For a clustering feature group:
 
 ``` python
 # Base class (framework-agnostic)
-class ClusteringFeatureGroup(AbstractFeatureGroup):
+class ClusteringFeatureGroup(FeatureGroup):
     def input_features(self, options, feature_name):
         # Extract source features from feature name
         
@@ -131,7 +131,7 @@ For an aggregated feature group with Polars support:
 
 ``` python
 # Base class (framework-agnostic)
-class AggregatedFeatureGroup(AbstractFeatureGroup):
+class AggregatedFeatureGroup(FeatureGroup):
     def input_features(self, options, feature_name):
         # Extract source features from feature name
         
@@ -157,7 +157,7 @@ For an analytical feature group with DuckDB support:
 
 ``` python
 # Base class (framework-agnostic)
-class AnalyticalFeatureGroup(AbstractFeatureGroup):
+class AnalyticalFeatureGroup(FeatureGroup):
     def input_features(self, options, feature_name):
         # Extract source features from feature name
         
@@ -185,7 +185,7 @@ For a distributed processing feature group with Spark support:
 
 ``` python
 # Base class (framework-agnostic)
-class DistributedFeatureGroup(AbstractFeatureGroup):
+class DistributedFeatureGroup(FeatureGroup):
     def input_features(self, options, feature_name):
         # Extract source features from feature name
         

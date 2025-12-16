@@ -27,14 +27,14 @@ except ImportError:
     np = None  # type: ignore[assignment]
 
 
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
+from mloda import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.clustering.base import ClusteringFeatureGroup
 
 
 class PandasClusteringFeatureGroup(ClusteringFeatureGroup):
     @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFrameWork]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         """Define the compute framework for this feature group."""
         return {PandasDataFrame}
 

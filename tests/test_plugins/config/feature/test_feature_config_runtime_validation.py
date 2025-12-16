@@ -1,12 +1,12 @@
 """
 Runtime validation test for feature configuration integration JSON.
-Tests all features from test_config_features.json with mlodaAPI.run_all.
+Tests all features from test_config_features.json with mloda.run_all.
 """
 
 from pathlib import Path
 from typing import Any, Dict
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
+import mloda
+from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.config.feature.loader import load_features_from_config
 from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
@@ -43,7 +43,7 @@ class IntegrationDataCreator(ATestDataCreator):
 
 def test_features_runtime_one_by_one() -> None:
     """
-    Test all features from integration JSON with mlodaAPI.run_all.
+    Test all features from integration JSON with mloda.run_all.
 
     This test validates that features not only parse correctly,
     but also execute successfully through the full mloda pipeline.
@@ -89,10 +89,10 @@ def test_features_runtime_one_by_one() -> None:
     }
 
     # Create plugin collector
-    plugin_collector = PlugInCollector.enabled_feature_groups(plugins)
+    plugin_collector = PluginCollector.enabled_feature_groups(plugins)
 
-    # Run mlodaAPI with all features being tested
-    results = mlodaAPI.run_all(
+    # Run API with all features being tested
+    results = mloda.run_all(
         features_to_test,
         compute_frameworks={PandasDataFrame},
         plugin_collector=plugin_collector,
@@ -141,8 +141,8 @@ def test_feature_3_step1_onehot_encoding() -> None:
     2. Create "state__onehot_encoded~0__max_aggr" targeting a specific OneHot column
        (using string-based feature name for proper parsing)
     """
-    from mloda_core.abstract_plugins.components.feature import Feature
-    from mloda_core.abstract_plugins.components.options import Options
+    from mloda import Feature
+    from mloda import Options
     from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
     # Step 1: Create the intermediate feature "state__onehot_encoded" from "state"
@@ -163,10 +163,10 @@ def test_feature_3_step1_onehot_encoding() -> None:
     }
 
     # Create plugin collector
-    plugin_collector = PlugInCollector.enabled_feature_groups(plugins)
+    plugin_collector = PluginCollector.enabled_feature_groups(plugins)
 
     # Run with BOTH features - the intermediate one must be created first
-    results = mlodaAPI.run_all(
+    results = mloda.run_all(
         [intermediate_feature, chained_feature],
         compute_frameworks={PandasDataFrame},
         plugin_collector=plugin_collector,

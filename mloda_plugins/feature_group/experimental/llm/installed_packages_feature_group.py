@@ -2,14 +2,14 @@ import subprocess  # nosec
 import sys
 from typing import Any, Set, Type, Union
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
+from mloda import FeatureGroup
 
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
+from mloda.provider import FeatureSet
+from mloda import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 
-class InstalledPackagesFeatureGroup(AbstractFeatureGroup):
+class InstalledPackagesFeatureGroup(FeatureGroup):
     """
     Base class for retrieving installed Python packages in the current environment.
 
@@ -38,7 +38,7 @@ class InstalledPackagesFeatureGroup(AbstractFeatureGroup):
     ### Basic String-Based Creation
 
     ```python
-    from mloda_core.abstract_plugins.components.feature import Feature
+    from mloda import Feature
 
     # Create the feature
     feature = Feature(name="InstalledPackagesFeatureGroup")
@@ -50,8 +50,8 @@ class InstalledPackagesFeatureGroup(AbstractFeatureGroup):
     ### Configuration-Based Creation
 
     ```python
-    from mloda_core.abstract_plugins.components.feature import Feature
-    from mloda_core.abstract_plugins.components.options import Options
+    from mloda import Feature
+    from mloda import Options
 
     feature = Feature(
         name="placeholder",
@@ -111,5 +111,5 @@ class InstalledPackagesFeatureGroup(AbstractFeatureGroup):
             return {"error": error_message}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         return {PandasDataFrame}

@@ -8,9 +8,9 @@ for merge operations across all compute frameworks.
 from abc import ABC, abstractmethod
 from typing import Any, List, Optional, Type
 
-from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.link import JoinType
-from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
+from mloda.user import Index
+from mloda.user import JoinType
+from mloda.user import ParallelizationMode
 
 
 class DataFrameTestBase(ABC):
@@ -55,7 +55,7 @@ class DataFrameTestBase(ABC):
     def _create_test_framework(self) -> Any:
         """Create a framework instance with sync mode and empty children."""
         framework_cls = self.framework_class()
-        return framework_cls(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        return framework_cls(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
     def _get_merge_engine(self, framework: Any) -> Any:
         """Get merge engine class from framework."""

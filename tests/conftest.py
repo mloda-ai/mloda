@@ -4,7 +4,7 @@ import pytest
 from _pytest.terminal import TerminalReporter
 from _pytest.config import Config
 
-from mloda_core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
+from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
 
 
 @pytest.fixture(autouse=True)

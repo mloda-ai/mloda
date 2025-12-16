@@ -1,9 +1,9 @@
 import pytest
 from typing import Any, Optional, Type
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
-from mloda_core.abstract_plugins.components.index.index import Index
+from mloda.user import FeatureName
+from mloda.user import ParallelizationMode
+from mloda.user import Index
 from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
 
 import logging
@@ -22,7 +22,7 @@ class TestPandasDataFrameComputeFramework:
     @pytest.fixture
     def pd_dataframe(self) -> PandasDataFrame:
         """Create a fresh PandasDataFrame instance for each test."""
-        return PandasDataFrame(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        return PandasDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
     @pytest.fixture
     def expected_data(self, dict_data: dict[str, list[int]]) -> Any:
@@ -39,7 +39,7 @@ class TestPandasDataFrameComputeFramework:
 
     def test_transform_arrays(self) -> None:
         data = PandasDataFrame.pd_series()([1, 2, 3])
-        _pdDf = PandasDataFrame(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        _pdDf = PandasDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         _pdDf.set_data(PandasDataFrame.pd_dataframe().from_dict({"existing_column": [4, 5, 6]}))
 
         data = _pdDf.transform(data=data, feature_names={"new_column"})

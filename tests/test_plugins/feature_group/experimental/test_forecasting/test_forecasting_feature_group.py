@@ -7,9 +7,9 @@ import numpy as np
 from datetime import datetime, timedelta
 import pytest
 
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.options import Options
+from mloda import Feature
+from mloda.provider import FeatureSet
+from mloda import Options
 from mloda_plugins.feature_group.experimental.forecasting.base import ForecastingFeatureGroup
 from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecastingFeatureGroup
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys

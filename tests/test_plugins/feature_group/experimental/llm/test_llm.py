@@ -1,25 +1,25 @@
 import os
 from typing import List, Optional, Union
 
-from mloda_core.abstract_plugins.components.index.index import Index
+from mloda.user import Index
 from mloda_plugins.feature_group.experimental.llm.cli import format_array
 from mloda_plugins.feature_group.experimental.llm.installed_packages_feature_group import InstalledPackagesFeatureGroup
 
 from mloda_plugins.feature_group.experimental.llm.llm_api.claude import ClaudeRequestLoop
 from mloda_plugins.feature_group.experimental.llm.llm_api.openai import OpenAIRequestLoop
 from mloda_plugins.feature_group.experimental.llm.tools.available.multiply import MultiplyTool
-from mloda_plugins.feature_group.input_data.api_data.api_data import ApiInputDataFeature
+from mloda.provider import ApiDataFeatureGroup
 import pytest
 
 from mloda_plugins.feature_group.experimental.llm.llm_api.gemini import GeminiRequestLoop
 from mloda_plugins.feature_group.experimental.llm.tools.tool_collection import ToolCollection
 from mloda_plugins.feature_group.input_data.read_context_files import ConcatenatedFileContent, find_file_paths
-from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.link import JoinSpec, Link
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.api.request import mlodaAPI
+from mloda.user import DataAccessCollection
+from mloda import Feature
+from mloda.user import FeatureName
+from mloda.user import JoinSpec, Link
+from mloda import Options
+import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 from mloda_plugins.feature_group.input_data.read_files.text_file_reader import PyFileReader
@@ -53,7 +53,7 @@ class TestReadLLMFiles:
             feat = Feature(name=LLMBasic.get_class_name(), options={PyFileReader.__name__: f})
             new_features.append(feat)
 
-        result = mlodaAPI.run_all(new_features[:3], compute_frameworks={PandasDataFrame})
+        result = mloda.run_all(new_features[:3], compute_frameworks={PandasDataFrame})
         assert len(result) == 3
 
 
@@ -82,7 +82,7 @@ class TestPlugInLLM:
             ]
 
             # Run the API
-            results = mlodaAPI.run_all(
+            results = mloda.run_all(
                 features,
             )
             for i, res in enumerate(results):
@@ -101,7 +101,7 @@ class TestPlugInLLM:
         api_data_index = Index(("InputData1",))
 
         link = Link.outer(
-            JoinSpec(InstalledPackagesFeatureGroup, installed), JoinSpec(ApiInputDataFeature, api_data_index)
+            JoinSpec(InstalledPackagesFeatureGroup, installed), JoinSpec(ApiDataFeatureGroup, api_data_index)
         )
 
         _test_classes = [OpenAIRequestLoop, GeminiRequestLoop]
@@ -121,7 +121,7 @@ class TestPlugInLLM:
             ]
 
             # Run the API
-            results = mlodaAPI.run_all(
+            results = mloda.run_all(
                 features,
                 api_data={api_input_key: {"InputData1": [" Strawberries "]}},
                 compute_frameworks={PandasDataFrame},
@@ -157,9 +157,9 @@ class TestGeminiLLMFiles:
                         "target_folder": frozenset(
                             [
                                 os.getcwd() + "/mloda_plugins",
-                                # os.getcwd() + "/mloda_core/abstract_plugins/",
+                                # os.getcwd() + "/mloda/core/abstract_plugins/",
                                 os.getcwd() + "/tests/test_plugins/feature_group/experimental//",
-                                # os.getcwd() + "/mloda_core/api/",
+                                # os.getcwd() + "/mloda/core/api/",
                             ]
                         ),
                         "disallowed_files": frozenset(["__init__.py"]),
@@ -169,7 +169,7 @@ class TestGeminiLLMFiles:
             ]
 
             # Run the API
-            results = mlodaAPI.run_all(
+            results = mloda.run_all(
                 features,
                 compute_frameworks={PandasDataFrame},
             )
@@ -222,10 +222,10 @@ class TestGeminiLLMFiles:
                             [
                                 os.getcwd() + "/tests/test_core/test_index",
                                 # os.getcwd() + "/mloda_plugins",
-                                # os.getcwd() + "/mloda_core/",
-                                # os.getcwd() + "/mloda_core/abstract_plugins/",
+                                # os.getcwd() + "/mloda/core/",
+                                # os.getcwd() + "/mloda/core/abstract_plugins/",
                                 # os.getcwd() + "/tests/test_plugins/feature_group/experimental/",
-                                # os.getcwd() + "/mloda_core/api/",
+                                # os.getcwd() + "/mloda/core/api/",
                             ]
                         ),
                         "disallowed_files": frozenset(
@@ -241,7 +241,7 @@ class TestGeminiLLMFiles:
             ]
 
             # Run the API
-            results = mlodaAPI.run_all(
+            results = mloda.run_all(
                 features,
                 compute_frameworks={PandasDataFrame},
             )

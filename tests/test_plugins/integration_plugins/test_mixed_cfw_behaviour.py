@@ -2,18 +2,18 @@ import os
 from typing import Any, List, Set
 import time
 
-from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
+from mloda.user import PluginLoader
 import pytest
 
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.link import Link, JoinSpec
-from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
+from mloda import FeatureGroup
+from mloda.user import DataAccessCollection
+from mloda import Feature
+from mloda.user import Index
+from mloda.user import Link, JoinSpec
+from mloda.user import ParallelizationMode
+from mloda.user import PluginCollector
+import mloda
 from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
 from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 
@@ -28,7 +28,7 @@ except ImportError:
     pd = None
 
 
-class TestMixComputeFrameWork:
+class TestMixComputeFramework:
     file_path = f"{os.getcwd()}/tests/test_plugins/feature_group/src/dataset/creditcard_2023_short.csv"
 
     feature_names = "id,V1,V2,V3,V4,V5,V6,V7,V8,V9,V10,V11,V12,V13,V14,V15,V16,V17,V18,V19,V20,V21,V22,V23,V24,V25,V26,V27,V28,Amount,Class"
@@ -57,7 +57,7 @@ class TestMixComputeFrameWork:
     def test_mix_cfw_can_work_in_parallel(self) -> None:
         feature_list = self.feature_list
         features = self.get_feature_list_from_local_scope(feature_list, self.file_path)
-        result_data = mlodaAPI.run_all(features, compute_frameworks=["PandasDataFrame", "PyArrowTable"])
+        result_data = mloda.run_all(features, compute_frameworks=["PandasDataFrame", "PyArrowTable"])
 
         for data in result_data:
             if isinstance(data, pd.DataFrame):
@@ -69,14 +69,14 @@ class TestMixComputeFrameWork:
     @pytest.mark.parametrize(
         "modes",
         [
-            ({ParallelizationModes.SYNC}),
-            ({ParallelizationModes.THREADING}),
-            # ({ParallelizationModes.MULTIPROCESSING}),
+            ({ParallelizationMode.SYNC}),
+            ({ParallelizationMode.THREADING}),
+            # ({ParallelizationMode.MULTIPROCESSING}),
         ],
     )
     def test_mix_cfw_can_be_called_from_same_feature(
         self,
-        modes: Set[ParallelizationModes],
+        modes: Set[ParallelizationMode],
         flight_server: Any,  # noqa: F811
     ) -> None:
         from tests.test_plugins.integration_plugins.features_for_testing import MixedCfwFeature
@@ -94,31 +94,31 @@ class TestMixComputeFrameWork:
         right = JoinSpec(ReadFileFeature, idx)
         links = {Link("inner", left, right)}
 
-        result_data = mlodaAPI.run_all(
+        result_data = mloda.run_all(
             [feature],
             links=links,
             data_access_collection=DataAccessCollection(files={self.file_path}),
             parallelization_modes=modes,
             flight_server=flight_server,
-            plugin_collector=PlugInCollector.enabled_feature_groups({MixedCfwFeature, ReadFileFeature}),
+            plugin_collector=PluginCollector.enabled_feature_groups({MixedCfwFeature, ReadFileFeature}),
         )
 
         assert len(result_data[0]["MixedCfwFeature"]) == 9
 
-        if modes == {ParallelizationModes.MULTIPROCESSING}:
+        if modes == {ParallelizationMode.MULTIPROCESSING}:
             time.sleep(1)
 
     @pytest.mark.parametrize(
         "modes",
         [
-            ({ParallelizationModes.SYNC}),
-            ({ParallelizationModes.THREADING}),
-            # ({ParallelizationModes.MULTIPROCESSING}),
+            ({ParallelizationMode.SYNC}),
+            ({ParallelizationMode.THREADING}),
+            # ({ParallelizationMode.MULTIPROCESSING}),
         ],
     )
     def test_duplicate_feature_setup(
         self,
-        modes: Set[ParallelizationModes],
+        modes: Set[ParallelizationMode],
         flight_server: Any,  # noqa: F811
     ) -> None:
         from tests.test_plugins.integration_plugins.features_for_testing import DuplicateFeatureSetup
@@ -136,13 +136,13 @@ class TestMixComputeFrameWork:
         right = JoinSpec(ReadFileFeature, idx)
         links = {Link("inner", left, right, {"self_left_alias": "dummy"}, {"self_right_alias": "dummy"})}
 
-        result_data = mlodaAPI.run_all(
+        result_data = mloda.run_all(
             [feature],
             links=links,
             data_access_collection=DataAccessCollection(files={self.file_path}),
             parallelization_modes=modes,
             flight_server=flight_server,
-            plugin_collector=PlugInCollector.enabled_feature_groups({DuplicateFeatureSetup, ReadFileFeature}),
+            plugin_collector=PluginCollector.enabled_feature_groups({DuplicateFeatureSetup, ReadFileFeature}),
         )
 
         assert len(result_data[0]["DuplicateFeatureSetup"]) == 9

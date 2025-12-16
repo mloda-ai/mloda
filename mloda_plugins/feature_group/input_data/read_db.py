@@ -1,9 +1,7 @@
 from typing import Any, Dict, List, Optional, Tuple, Union
-from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.hashable_dict import HashableDict
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda_core.abstract_plugins.components.options import Options
+from mloda.user import DataAccessCollection
+from mloda.provider import FeatureSet, HashableDict, BaseInputData
+from mloda import Options
 
 
 class ReadDB(BaseInputData):

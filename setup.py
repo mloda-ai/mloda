@@ -27,5 +27,5 @@ name, version = get_metadata()
 setup(
     name=name,
     version=version,
-    packages=find_packages(include=["mloda_core*", "mloda_plugins*"] + (["docs"] if os.getenv("ML_DEV_MODE") else [])),
+    packages=find_packages(include=["mloda*", "mloda_plugins*"] + (["docs"] if os.getenv("ML_DEV_MODE") else [])),
 )

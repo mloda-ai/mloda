@@ -1,15 +1,15 @@
 import pytest
-from mloda_core.api.plugin_info import (
+from mloda.core.api.plugin_info import (
     FeatureGroupInfo,
     ComputeFrameworkInfo,
     ExtenderInfo,
 )
-from mloda_core.api.plugin_docs import (
+from mloda.core.api.plugin_docs import (
     get_feature_group_docs,
     get_compute_framework_docs,
     get_extender_docs,
 )
-from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
+from mloda.user import PluginLoader
 
 
 @pytest.fixture(scope="module", autouse=True)

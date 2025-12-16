@@ -1,13 +1,13 @@
 from typing import Any, Dict, List, Optional, Tuple, Type, Set, Union
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.data_types import DataType
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
-from mloda_core.abstract_plugins.components.index.index import Index
+from mloda import FeatureGroup
+from mloda import Feature
+from mloda import Options
+from mloda.user import FeatureName
+from mloda.user import DataAccessCollection
+from mloda.provider import FeatureSet
+from mloda.user import DataType
+from mloda import ComputeFramework
+from mloda.user import Index
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.dynamic_feature_group_factory.dynamic_feature_group_factory import (
@@ -57,8 +57,8 @@ class TestDynamicFeatureGroupFactory:
         result_names = DynamicTestFeatureGroup().input_features(options, Any)  # type: ignore
         assert result_names is None
 
-        # Test that the created class is a subclass of AbstractFeatureGroup
-        assert issubclass(DynamicTestFeatureGroup, AbstractFeatureGroup)
+        # Test that the created class is a subclass of FeatureGroup
+        assert issubclass(DynamicTestFeatureGroup, FeatureGroup)
 
     def test_dynamic_feature_group_creator_with_readfile_feature(self) -> None:
         class MockReadFile(ReadFile):
@@ -98,8 +98,8 @@ class TestDynamicFeatureGroupFactory:
         result = DynamicTestFeatureGroup.calculate_feature(data, features)
         assert result == "Calculated with DynamicTestFileFeatureGroup and mock_data"
 
-        # Test that the created class is a subclass of AbstractFeatureGroup
-        assert issubclass(DynamicTestFeatureGroup, AbstractFeatureGroup)
+        # Test that the created class is a subclass of FeatureGroup
+        assert issubclass(DynamicTestFeatureGroup, FeatureGroup)
         assert issubclass(DynamicTestFeatureGroup, ReadFileFeature)
 
     def test_dynamic_feature_group_creator_with_complex_logic(self) -> None:
@@ -107,7 +107,7 @@ class TestDynamicFeatureGroupFactory:
             return FeatureName(f"custom_{feature_name.name}")
 
         def custom_match_criteria(
-            cls: Type[AbstractFeatureGroup],
+            cls: Type[FeatureGroup],
             feature_name: Union[FeatureName, str],
             options: Options,
             data_access_collection: Optional[DataAccessCollection] = None,
@@ -119,7 +119,7 @@ class TestDynamicFeatureGroupFactory:
         def custom_input_features(self: Any, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
             return {Feature(name="custom_input_feature")}
 
-        def custom_compute_framework_rule() -> Union[bool, Set[Type[ComputeFrameWork]]]:
+        def custom_compute_framework_rule() -> Union[bool, Set[Type[ComputeFramework]]]:
             return {PandasDataFrame}
 
         def custom_index_columns() -> Optional[List[Index]]:
@@ -166,8 +166,8 @@ class TestDynamicFeatureGroupFactory:
         assert DynamicTestFeatureGroup.supports_index(Index(("a",))) is True
         assert DynamicTestFeatureGroup.supports_index(Index(("a", "b"))) is False
 
-        # Test that the created class is a subclass of AbstractFeatureGroup
-        assert issubclass(DynamicTestFeatureGroup, AbstractFeatureGroup)
+        # Test that the created class is a subclass of FeatureGroup
+        assert issubclass(DynamicTestFeatureGroup, FeatureGroup)
 
     def test_dynamic_feature_group_with_source_input_composite_with_initial_requested_data_and_simple_string(
         self,
@@ -205,7 +205,7 @@ class TestDynamicFeatureGroupFactory:
         assert feature.name == "source_feature_1"
         assert feature.initial_requested_data is True
 
-        assert issubclass(DynamicTestFeatureGroup, AbstractFeatureGroup)
+        assert issubclass(DynamicTestFeatureGroup, FeatureGroup)
 
     def test_dynamic_feature_group_with_source_input_composite_inheritance(self) -> None:
         """
@@ -249,5 +249,5 @@ class TestDynamicFeatureGroupFactory:
         assert feature.name == "source_feature_1"
         assert feature.options.get("ReadFileFeature") == "test.csv"
 
-        assert issubclass(ConcreteFeatureGroup, AbstractFeatureGroup)
+        assert issubclass(ConcreteFeatureGroup, FeatureGroup)
         assert issubclass(ConcreteFeatureGroup, SourceInputFeature)

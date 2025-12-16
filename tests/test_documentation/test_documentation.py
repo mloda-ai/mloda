@@ -8,8 +8,8 @@ from mktestdocs import check_md_file
 
 from typing import Set, Any
 import time
-from mloda_core.abstract_plugins.function_extender import WrapperFunctionEnum, WrapperFunctionExtender
-from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
+from mloda.steward import ExtenderHook, Extender
+from mloda.user import PluginLoader
 import logging
 
 logger = logging.getLogger(__name__)
@@ -19,9 +19,9 @@ PluginLoader.all()
 
 
 # We need this to test DokuExtender
-class DokuExtender(WrapperFunctionExtender):
-    def wraps(self) -> Set[WrapperFunctionEnum]:
-        return {WrapperFunctionEnum.FEATURE_GROUP_CALCULATE_FEATURE}
+class DokuExtender(Extender):
+    def wraps(self) -> Set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
         start = time.time()
@@ -30,9 +30,9 @@ class DokuExtender(WrapperFunctionExtender):
         return result
 
 
-class DokuValidateInputFeatureExtender(WrapperFunctionExtender):
-    def wraps(self) -> Set[WrapperFunctionEnum]:
-        return {WrapperFunctionEnum.VALIDATE_INPUT_FEATURE}
+class DokuValidateInputFeatureExtender(Extender):
+    def wraps(self) -> Set[ExtenderHook]:
+        return {ExtenderHook.VALIDATE_INPUT_FEATURE}
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
         start = time.time()

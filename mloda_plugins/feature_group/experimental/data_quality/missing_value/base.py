@@ -8,19 +8,19 @@ import copy
 from abc import abstractmethod
 from typing import Any, List, Optional, Set, Union
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
-from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
+from mloda import FeatureGroup
+from mloda import Feature
+from mloda.provider import FeatureChainParser
+from mloda.provider import (
     FeatureChainParserMixin,
 )
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.options import Options
+from mloda.user import FeatureName
+from mloda.provider import FeatureSet
+from mloda import Options
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 
-class MissingValueFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
+class MissingValueFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     """
     Base class for all missing value imputation feature groups.
 
@@ -86,7 +86,7 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
     ### String-Based Creation
 
     ```python
-    from mloda_core.abstract_plugins.components.feature import Feature
+    from mloda import Feature
 
     # Impute missing income values with mean
     feature = Feature(name="income__mean_imputed")
@@ -104,8 +104,8 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
     ### Configuration-Based Creation
 
     ```python
-    from mloda_core.abstract_plugins.components.feature import Feature
-    from mloda_core.abstract_plugins.components.options import Options
+    from mloda import Feature
+    from mloda import Options
     from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
     # Mean imputation using configuration

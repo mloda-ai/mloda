@@ -1,15 +1,15 @@
 """
-Integration test for ScalingFeatureGroup with mlodaAPI and artifact management.
+Integration test for ScalingFeatureGroup with API and artifact management.
 """
 
-from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
+from mloda.user import PluginLoader
 import pytest
 from typing import Any, Dict
 
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
+from mloda import Feature
+from mloda import Options
+from mloda.user import PluginCollector
+from mloda import API
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.scaling.base import ScalingFeatureGroup
@@ -47,7 +47,7 @@ class TestScalingFeatureGroupIntegration:
         PluginLoader().all()
 
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {ScalingIntegrationTestDataCreator, PandasScalingFeatureGroup, PandasAggregatedFeatureGroup}
         )
 
@@ -55,7 +55,7 @@ class TestScalingFeatureGroupIntegration:
         scaling_feature = Feature("Sales__sum_aggr__standard_scaled")
 
         # Phase 1: Train and save artifacts
-        api1 = mlodaAPI(
+        api1 = API(
             [scaling_feature],
             {PandasDataFrame},
             plugin_collector=plugin_collector,
@@ -80,7 +80,7 @@ class TestScalingFeatureGroupIntegration:
         assert scaled_values.std() == 0.0
 
         # Phase 2: Load artifacts and apply to same data (simulating reuse)
-        from mloda_core.abstract_plugins.components.options import Options
+        from mloda import Options
 
         # Create features with artifact options for reuse
         scaling_feature_reuse = Feature(
@@ -88,7 +88,7 @@ class TestScalingFeatureGroupIntegration:
             Options(artifacts1),
         )
 
-        api2 = mlodaAPI(
+        api2 = API(
             [scaling_feature_reuse],
             {PandasDataFrame},
             plugin_collector=plugin_collector,

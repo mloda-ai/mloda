@@ -5,10 +5,10 @@ Simple demonstration of encoding + scaling chaining.
 import pytest
 from typing import Any, Dict
 
-from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
+from mloda.user import PluginLoader
+from mloda import Feature
+from mloda.user import PluginCollector
+from mloda import API
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
@@ -44,7 +44,7 @@ class TestSimpleChaining:
         PluginLoader().all()
 
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {SimpleChainTestDataCreator, PandasEncodingFeatureGroup, PandasScalingFeatureGroup}
         )
 
@@ -52,7 +52,7 @@ class TestSimpleChaining:
         print("Step 1: Creating OneHot encoding...")
         # L→R: category__onehot_encoded~0__standard_scaled
         onehot_feature = Feature("category__onehot_encoded~0__standard_scaled")
-        api1 = mlodaAPI([onehot_feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+        api1 = API([onehot_feature], {PandasDataFrame}, plugin_collector=plugin_collector)
         api1._batch_run()
         results1 = api1.get_result()
         df1 = results1[0]

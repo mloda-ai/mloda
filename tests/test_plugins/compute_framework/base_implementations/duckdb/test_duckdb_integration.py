@@ -1,22 +1,22 @@
 from calendar import c
-from mloda_core.abstract_plugins.components.match_data.match_data import MatchData
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
+from mloda.provider import ConnectionMatcherMixin
+from mloda import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 import pytest
 
 from typing import Any, Dict, List, Optional, Set, Type, Union
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
-from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
+from mloda import FeatureGroup
+from mloda import Feature
+from mloda.user import FeatureName
+from mloda.provider import FeatureSet
+from mloda import Options
+from mloda.user import PluginCollector
+import mloda
+from mloda.user import ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
-from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.user import DataAccessCollection
 
 import logging
 
@@ -68,7 +68,7 @@ class DuckDBTestDataCreator(ATestDataCreator):
         return duckdb_test_dict
 
 
-class ATestDuckDBFeatureGroup(AbstractFeatureGroup, MatchData):
+class ATestDuckDBFeatureGroup(FeatureGroup, ConnectionMatcherMixin):
     @classmethod
     def match_data_access(
         cls,
@@ -101,7 +101,7 @@ class ATestDuckDBFeatureGroup(AbstractFeatureGroup, MatchData):
         return None
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         return {DuckDBFramework}
 
 
@@ -201,7 +201,7 @@ class DuckDBAggregationFeatureGroup(ATestDuckDBFeatureGroup):
         return {"avg_value_by_category", "count_by_category"}
 
 
-class CheckData(AbstractFeatureGroup):
+class CheckData(FeatureGroup):
     """Feature group for testing DuckDB aggregation capabilities."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
@@ -222,24 +222,24 @@ class CheckData(AbstractFeatureGroup):
         return {"pyarrow_avg_value_by_category"}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         return {PyArrowTable}
 
 
 @pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB or PyArrow is not installed. Skipping this test.")
 class TestDuckDBIntegrationWithMlodaAPI:
-    """Integration tests for DuckDBFramework with mlodaAPI."""
+    """Integration tests for DuckDBFramework with API."""
 
     @pytest.mark.parametrize(
         "modes",
-        [({ParallelizationModes.SYNC})],
+        [({ParallelizationMode.SYNC})],
     )
     def test_basic_duckdb_feature_calculation(
-        self, modes: Set[ParallelizationModes], flight_server: Any, duckdb_conn: Any
+        self, modes: Set[ParallelizationMode], flight_server: Any, duckdb_conn: Any
     ) -> None:
         """Test basic feature calculation with DuckDB."""
         # Enable the test feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {DuckDBTestDataCreator, DuckDBSimpleTransformFeatureGroup}
         )
 
@@ -254,7 +254,7 @@ class TestDuckDBIntegrationWithMlodaAPI:
         data_access_collection = DataAccessCollection(initialized_connection_objects={duckdb_conn})
 
         # Run with DuckDB framework
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list,
             flight_server=flight_server,
             parallelization_modes=modes,
@@ -281,7 +281,7 @@ class TestDuckDBIntegrationWithMlodaAPI:
     def test_duckdb_aggregation_features(self, flight_server: Any, duckdb_conn: Any) -> None:
         """Test DuckDB aggregation capabilities."""
         # Enable the test feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {DuckDBTestDataCreator, DuckDBAggregationFeatureGroup}
         )
 
@@ -294,10 +294,10 @@ class TestDuckDBIntegrationWithMlodaAPI:
         ]
 
         # Run with DuckDB framework
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list,
             flight_server=flight_server,
-            parallelization_modes={ParallelizationModes.SYNC},
+            parallelization_modes={ParallelizationMode.SYNC},
             compute_frameworks={DuckDBFramework},
             plugin_collector=plugin_collector,
         )
@@ -321,19 +321,19 @@ class TestDuckDBIntegrationWithMlodaAPI:
     def test_multiple_feature_groups_duckdb_pipeline(self, flight_server: Any, duckdb_conn: Any) -> None:
         """Test a pipeline with multiple feature groups using DuckDB."""
         # Enable all feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {DuckDBTestDataCreator, DuckDBSimpleTransformFeatureGroup, DuckDBSecondTransformFeatureGroup}
         )
 
         feature_list = [Feature(name="quadrupled_value", options={"DuckDBTestDataCreator": duckdb_conn})]
 
         # Run the multi-step pipeline
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list,  # type: ignore
             flight_server=flight_server,
             compute_frameworks={DuckDBFramework},
             plugin_collector=plugin_collector,
-            parallelization_modes={ParallelizationModes.SYNC},
+            parallelization_modes={ParallelizationMode.SYNC},
         )
 
         # Verify results
@@ -348,7 +348,7 @@ class TestDuckDBIntegrationWithMlodaAPI:
     def test_transform_to_pyarrow(self, flight_server: Any, duckdb_conn: Any) -> None:
         """Test a pipeline with multiple feature groups using DuckDB."""
         # Enable all feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {
                 DuckDBTestDataCreator,
                 DuckDBSimpleTransformFeatureGroup,
@@ -361,12 +361,12 @@ class TestDuckDBIntegrationWithMlodaAPI:
         feature_list = [Feature(name="pyarrow_avg_value_by_category", options={"DuckDBTestDataCreator": duckdb_conn})]
 
         # Run the multi-step pipeline
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list,  # type: ignore
             flight_server=flight_server,
             compute_frameworks={DuckDBFramework, PyArrowTable},
             plugin_collector=plugin_collector,
-            parallelization_modes={ParallelizationModes.SYNC},
+            parallelization_modes={ParallelizationMode.SYNC},
         )
 
         assert len(result) == 1

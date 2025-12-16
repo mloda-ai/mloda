@@ -1,18 +1,18 @@
 from typing import Any, Optional, Set
 import pyarrow as pa
 import pytest
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_collection import Features
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.data_types import DataType
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.abstract_plugins.components.validators.datatype_validator import (
+from mloda.provider import BaseInputData
+from mloda.provider import DataCreator
+from mloda import FeatureGroup
+from mloda import Feature
+from mloda.user import Features
+from mloda.user import FeatureName
+from mloda.provider import FeatureSet
+from mloda.user import DataType
+from mloda import Options
+from mloda.user import ParallelizationMode
+from mloda.user import PluginCollector
+from mloda.core.abstract_plugins.components.validators.datatype_validator import (
     DataTypeValidator,
     DataTypeMismatchError,
 )
@@ -20,7 +20,7 @@ from mloda_plugins.feature_group.experimental.default_options_key import Default
 from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_SYNC_THREADING
 
 
-class TypedFeatureSource(AbstractFeatureGroup):
+class TypedFeatureSource(FeatureGroup):
     """Feature group that returns typed data for testing."""
 
     @classmethod
@@ -34,7 +34,7 @@ class TypedFeatureSource(AbstractFeatureGroup):
         return DataCreator({cls.get_class_name()})
 
 
-class StringDataSource(AbstractFeatureGroup):
+class StringDataSource(FeatureGroup):
     """Feature group that returns string data for testing type mismatches."""
 
     @classmethod
@@ -47,7 +47,7 @@ class StringDataSource(AbstractFeatureGroup):
         return DataCreator({cls.get_class_name()})
 
 
-class Int64DataSource(AbstractFeatureGroup):
+class Int64DataSource(FeatureGroup):
     """Feature group that returns int64 data for testing widening."""
 
     @classmethod
@@ -305,10 +305,10 @@ class TestUntypedFeatures:
 
 @PARALLELIZATION_MODES_SYNC_THREADING
 class TestEndToEndIntegration:
-    """Test complete datatype enforcement pipeline through mlodaAPI."""
+    """Test complete datatype enforcement pipeline through API."""
 
     def test_same_feature_different_types_separate_execution(
-        self, modes: Set[ParallelizationModes], flight_server: Any
+        self, modes: Set[ParallelizationMode], flight_server: Any
     ) -> None:
         """Same feature requested with different types should execute separately."""
         features = Features(
@@ -330,7 +330,7 @@ class TestEndToEndIntegration:
 
         assert all_columns.count("TypedFeatureSource") == 2, "Should have feature computed twice"
 
-    def test_typed_feature_validates_correctly(self, modes: Set[ParallelizationModes], flight_server: Any) -> None:
+    def test_typed_feature_validates_correctly(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
         """Typed features should validate data types correctly during execution."""
         features = Features(
             [
@@ -345,7 +345,7 @@ class TestEndToEndIntegration:
         assert "TypedFeatureSource" in result.column_names
         assert result.to_pydict()["TypedFeatureSource"] == [25, 30, 35]
 
-    def test_type_mismatch_fails_at_validation(self, modes: Set[ParallelizationModes], flight_server: Any) -> None:
+    def test_type_mismatch_fails_at_validation(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
         """Type mismatches should be caught during validation."""
         features = Features(
             [
@@ -357,7 +357,7 @@ class TestEndToEndIntegration:
         with pytest.raises(Exception):
             MlodaTestRunner.run_api(features, parallelization_modes=modes, flight_server=flight_server)
 
-    def test_widening_allowed_in_pipeline(self, modes: Set[ParallelizationModes], flight_server: Any) -> None:
+    def test_widening_allowed_in_pipeline(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
         """Type widening should be allowed throughout the pipeline."""
         features = Features(
             [
@@ -371,7 +371,7 @@ class TestEndToEndIntegration:
         result = run_result.results[0]
         assert "Int64DataSource" in result.column_names
 
-    def test_untyped_feature_bypasses_validation(self, modes: Set[ParallelizationModes], flight_server: Any) -> None:
+    def test_untyped_feature_bypasses_validation(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
         """Untyped features should bypass all type validation."""
         features = Features(
             [
@@ -448,10 +448,10 @@ class TestValidatorEdgeCases:
 
 @PARALLELIZATION_MODES_SYNC_THREADING
 class TestStrictTypeEnforcementPropagation:
-    """Test that mlodaAPI strict_type_enforcement propagates and works end-to-end."""
+    """Test that API strict_type_enforcement propagates and works end-to-end."""
 
     def test_strict_enforcement_raises_on_mismatch_but_lenient_passes(
-        self, modes: Set[ParallelizationModes], flight_server: Any
+        self, modes: Set[ParallelizationMode], flight_server: Any
     ) -> None:
         """
         Test both strict and lenient mode behavior:
@@ -460,7 +460,7 @@ class TestStrictTypeEnforcementPropagation:
         """
 
         # FeatureGroup that returns INT64 regardless of declared type
-        class ReturnsInt64(AbstractFeatureGroup):
+        class ReturnsInt64(FeatureGroup):
             @classmethod
             def input_data(cls) -> Optional[BaseInputData]:
                 return DataCreator(supports_features={"ReturnsInt64"})
@@ -469,7 +469,7 @@ class TestStrictTypeEnforcementPropagation:
             def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
                 return {"ReturnsInt64": pa.array([1, 2, 3], type=pa.int64())}
 
-        plugin_collector = PlugInCollector.enabled_feature_groups({ReturnsInt64})
+        plugin_collector = PluginCollector.enabled_feature_groups({ReturnsInt64})
 
         # STRICT MODE: Should raise because INT32 declared but INT64 returned
         # Note: DataTypeMismatchError is wrapped in Exception by Runner
@@ -496,7 +496,7 @@ class TestStrictTypeEnforcementPropagation:
         assert len(result.results) == 1
 
     def test_strict_enforcement_propagates_to_dependencies(
-        self, modes: Set[ParallelizationModes], flight_server: Any
+        self, modes: Set[ParallelizationMode], flight_server: Any
     ) -> None:
         """
         Test that strict_type_enforcement propagates to dependency features.
@@ -507,7 +507,7 @@ class TestStrictTypeEnforcementPropagation:
         """
 
         # Dependency: returns INT64 regardless of declared type
-        class BaseFG(AbstractFeatureGroup):
+        class BaseFG(FeatureGroup):
             @classmethod
             def input_data(cls) -> Optional[BaseInputData]:
                 return DataCreator(supports_features={"BaseFG"})
@@ -517,7 +517,7 @@ class TestStrictTypeEnforcementPropagation:
                 return {"BaseFG": pa.array([1, 2, 3], type=pa.int64())}
 
         # Parent: depends on BaseFG with INT32 type
-        class DerivedFG(AbstractFeatureGroup):
+        class DerivedFG(FeatureGroup):
             @classmethod
             def input_data(cls) -> Optional[BaseInputData]:
                 return DataCreator(supports_features={"DerivedFG"})
@@ -529,7 +529,7 @@ class TestStrictTypeEnforcementPropagation:
             def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
                 return {"DerivedFG": pa.array([10, 20, 30], type=pa.int64())}
 
-        plugin_collector = PlugInCollector.enabled_feature_groups({BaseFG, DerivedFG})
+        plugin_collector = PluginCollector.enabled_feature_groups({BaseFG, DerivedFG})
 
         # STRICT MODE: Should raise on BaseFG (dependency) type mismatch
         # Note: DataTypeMismatchError is wrapped in Exception by Runner

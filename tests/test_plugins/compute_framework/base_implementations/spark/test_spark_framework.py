@@ -22,12 +22,12 @@ ensure proper resource management across all test methods.
 
 import os
 from typing import Any
-from mloda_core.abstract_plugins.components.link import JoinType
+from mloda.user import JoinType
 import pytest
 from mloda_plugins.compute_framework.base_implementations.spark.spark_framework import SparkFramework
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
-from mloda_core.abstract_plugins.components.index.index import Index
+from mloda.user import FeatureName
+from mloda.user import ParallelizationMode
+from mloda.user import Index
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )
@@ -86,11 +86,11 @@ class TestSparkFrameworkComputeFramework:
     def test_expected_data_framework(self, spark_session: Any) -> None:
         from pyspark.sql import DataFrame
 
-        spark_framework = SparkFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        spark_framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         assert spark_framework.expected_data_framework() == DataFrame
 
     def test_transform_dict_to_dataframe(self, spark_session: Any) -> None:
-        spark_framework = SparkFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        spark_framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         spark_framework.set_framework_connection_object(spark_session)
 
         dict_data = {"column1": [1, 2, 3], "column2": [4, 5, 6]}
@@ -107,14 +107,14 @@ class TestSparkFrameworkComputeFramework:
         assert set(result.columns) == set(expected_data.columns)
 
     def test_transform_invalid_data(self, spark_session: Any) -> None:
-        spark_framework = SparkFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        spark_framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         spark_framework.set_framework_connection_object(spark_session)
 
         with pytest.raises(ValueError):
             spark_framework.transform(data=["a"], feature_names=set())
 
     def test_select_data_by_column_names(self, spark_session: Any) -> None:
-        spark_framework = SparkFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        spark_framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
         expected_data = spark_session.createDataFrame(
             [{"column1": 1, "column2": 4}, {"column1": 2, "column2": 5}, {"column1": 3, "column2": 6}]
@@ -123,7 +123,7 @@ class TestSparkFrameworkComputeFramework:
         assert data.columns == ["column1"]
 
     def test_set_column_names(self, spark_session: Any) -> None:
-        spark_framework = SparkFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        spark_framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
         expected_data = spark_session.createDataFrame(
             [{"column1": 1, "column2": 4}, {"column1": 2, "column2": 5}, {"column1": 3, "column2": 6}]
@@ -133,7 +133,7 @@ class TestSparkFrameworkComputeFramework:
         assert spark_framework.column_names == {"column1", "column2"}
 
     def test_merge_inner(self, spark_session: Any) -> None:
-        spark_framework = SparkFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        spark_framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         spark_framework.set_framework_connection_object(spark_session)
 
         left_data = spark_session.createDataFrame([{"idx": 1, "col1": "a"}, {"idx": 3, "col1": "b"}])
@@ -152,7 +152,7 @@ class TestSparkFrameworkComputeFramework:
         assert result_count == 1  # Should have 1 matching row
 
     def test_merge_left(self, spark_session: Any) -> None:
-        spark_framework = SparkFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        spark_framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         spark_framework.set_framework_connection_object(spark_session)
 
         left_data = spark_session.createDataFrame([{"idx": 1, "col1": "a"}, {"idx": 3, "col1": "b"}])
@@ -171,7 +171,7 @@ class TestSparkFrameworkComputeFramework:
         assert result_count == 2  # Should have 2 rows (all from left)
 
     def test_merge_append(self, spark_session: Any) -> None:
-        spark_framework = SparkFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        spark_framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         spark_framework.set_framework_connection_object(spark_session)
 
         left_data = spark_session.createDataFrame([{"idx": 1, "col1": "a"}, {"idx": 3, "col1": "b"}])
@@ -190,7 +190,7 @@ class TestSparkFrameworkComputeFramework:
         assert result_count == 4  # Should have 2 + 2 rows
 
     def test_merge_union(self, spark_session: Any) -> None:
-        spark_framework = SparkFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        spark_framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         spark_framework.set_framework_connection_object(spark_session)
 
         left_data = spark_session.createDataFrame([{"idx": 1, "col1": "a"}, {"idx": 3, "col1": "b"}])
@@ -211,7 +211,7 @@ class TestSparkFrameworkComputeFramework:
 
     def test_framework_connection_object(self, spark_session: Any) -> None:
         """Test that framework connection object is properly set and retrieved."""
-        framework = SparkFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         framework.set_framework_connection_object(spark_session)
 
         connection = framework.get_framework_connection_object()
@@ -221,14 +221,14 @@ class TestSparkFrameworkComputeFramework:
 
     def test_framework_connection_object_invalid_type(self, spark_session: Any) -> None:
         """Test that setting invalid connection object raises error."""
-        framework = SparkFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
         with pytest.raises(ValueError, match="Expected a SparkSession object"):
             framework.set_framework_connection_object("invalid")
 
     def test_transform_empty_dict(self, spark_session: Any) -> None:
         """Test transformation of empty dictionary."""
-        spark_framework = SparkFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        spark_framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         spark_framework.set_framework_connection_object(spark_session)
 
         result = spark_framework.transform({}, set())
@@ -239,7 +239,7 @@ class TestSparkFrameworkComputeFramework:
         """Test Spark type inference."""
         from pyspark.sql.types import BooleanType, IntegerType, DoubleType, StringType
 
-        spark_framework = SparkFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        spark_framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
         assert isinstance(spark_framework._infer_spark_type(True), BooleanType)
         assert isinstance(spark_framework._infer_spark_type(42), IntegerType)

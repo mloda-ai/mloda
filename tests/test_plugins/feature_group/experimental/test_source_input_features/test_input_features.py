@@ -3,36 +3,28 @@ from typing import Any, List, Optional, Set
 
 import pandas as pd
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.data_access_collection import (
-    DataAccessCollection,
-)
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.input_data.base_input_data import (
-    BaseInputData,
-)
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import (
-    DataCreator,
-)
-from mloda_core.abstract_plugins.components.link import JoinType
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import (
-    PlugInCollector,
-)
-from mloda_core.api.request import mlodaAPI
+import mloda
+from mloda import FeatureGroup
+from mloda.user import DataAccessCollection
+from mloda import Feature
+from mloda.provider import FeatureSet
+from mloda.user import Index
+from mloda.provider import BaseInputData
+from mloda.provider import DataCreator
+from mloda.user import JoinType
+from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import (
     PandasDataFrame,
 )
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.source_input_feature import SourceInputFeature
 
-from mloda_plugins.feature_group.input_data.api_data.api_data import ApiInputDataFeature
+from mloda.provider import ApiDataFeatureGroup
 from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
 from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 
 
-class FeatureInputFeatureTest(AbstractFeatureGroup):
+class FeatureInputFeatureTest(FeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): ["TestValue", "TestValue2"]}
@@ -57,7 +49,7 @@ class InputFeatureMergeTest(SourceInputFeature):
 
 
 class TestInputFeatures:
-    class FeatureInputCreatorTest(AbstractFeatureGroup):
+    class FeatureInputCreatorTest(FeatureGroup):
         @classmethod
         def input_data(cls) -> Optional[BaseInputData]:
             return DataCreator({cls.get_class_name()})
@@ -67,9 +59,9 @@ class TestInputFeatures:
             return {cls.get_class_name(): ["TestValue5", "TestValue6"]}
 
     _requested_name = "InputFeatureGroupTest"
-    _enabled = PlugInCollector.enabled_feature_groups(
+    _enabled = PluginCollector.enabled_feature_groups(
         {
-            ApiInputDataFeature,
+            ApiDataFeatureGroup,
             InputFeatureGroupTest,
             FeatureInputFeatureTest,
             FeatureInputCreatorTest,
@@ -90,7 +82,7 @@ class TestInputFeatures:
             )
         )
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list,
             plugin_collector=self._enabled,
             compute_frameworks={PandasDataFrame},
@@ -121,7 +113,7 @@ class TestInputFeatures:
             )
         )
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list,
             plugin_collector=self._enabled,
             compute_frameworks={PandasDataFrame},
@@ -147,7 +139,7 @@ class TestInputFeatures:
             )
         )
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list,
             plugin_collector=self._enabled,
             compute_frameworks={PandasDataFrame},
@@ -174,7 +166,7 @@ class TestInputFeatures:
             )
         )
 
-        result = mlodaAPI.run_all(feature_list, compute_frameworks=["PandasDataFrame"])
+        result = mloda.run_all(feature_list, compute_frameworks=["PandasDataFrame"])
         for res in result:
             assert len(res) == 2
             if "InputFeatureGroupTest" in res:
@@ -199,7 +191,7 @@ class TestInputFeatures:
             )
         )
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list, compute_frameworks=["PandasDataFrame"], data_access_collection=data_access_collection
         )
         for res in result:
@@ -270,7 +262,7 @@ class TestInputFeatures:
             )
         )
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list,
             compute_frameworks=["PandasDataFrame"],
             data_access_collection=data_access_collection,
@@ -317,7 +309,7 @@ class TestInputFeatures:
             )
         )
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list,
             compute_frameworks=["PandasDataFrame"],
             data_access_collection=data_access_collection,
@@ -372,7 +364,7 @@ class TestInputFeatures:
             )
         )
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list,
             compute_frameworks=["PandasDataFrame"],
             data_access_collection=data_access_collection,

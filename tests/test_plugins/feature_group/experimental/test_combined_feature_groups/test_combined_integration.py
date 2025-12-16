@@ -4,10 +4,10 @@ Integration tests for combined feature groups.
 
 from typing import List
 
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
+import mloda
+from mloda import Feature
+from mloda import Options
+from mloda.user import PluginCollector
 
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -41,7 +41,7 @@ class TestCombinedFeatureGroupsPandas:
         """
 
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {
                 PandasCombinedFeatureTestDataCreator,
                 PandasMissingValueFeatureGroup,
@@ -59,7 +59,7 @@ class TestCombinedFeatureGroupsPandas:
         ]
 
         # Run the API with the feature chain
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             features,
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
@@ -68,7 +68,7 @@ class TestCombinedFeatureGroupsPandas:
         # Validate the results
         validate_combined_features(result)
 
-        result2 = mlodaAPI.run_all(
+        result2 = mloda.run_all(
             ["price__mean_imputed__sum_7_day_window__max_aggr"],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
@@ -100,7 +100,7 @@ class TestCombinedFeatureGroupsPyArrow:
         """
 
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {
                 PyArrowCombinedFeatureTestDataCreator,
                 PyArrowMissingValueFeatureGroup,
@@ -118,7 +118,7 @@ class TestCombinedFeatureGroupsPyArrow:
         ]
 
         # Run the API with the feature chain
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             features,
             compute_frameworks={PyArrowTable},
             plugin_collector=plugin_collector,

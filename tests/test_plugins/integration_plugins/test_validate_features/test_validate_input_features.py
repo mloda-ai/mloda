@@ -5,23 +5,23 @@ from typing import Any, Dict, List, Optional, Set
 import pytest
 from pandera import Check, Column
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_collection import Features
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
-from mloda_core.abstract_plugins.function_extender import WrapperFunctionEnum, WrapperFunctionExtender
+from mloda import FeatureGroup
+from mloda import Feature
+from mloda.user import Features
+from mloda.user import FeatureName
+from mloda.provider import FeatureSet
+from mloda.provider import BaseInputData
+from mloda.provider import DataCreator
+from mloda import Options
+from mloda.user import ParallelizationMode
+from mloda.steward import ExtenderHook, Extender
 from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_SYNC_THREADING
 from tests.test_plugins.integration_plugins.test_validate_features.example_validator import ExamplePanderaValidator
 
 logger = logging.getLogger(__name__)
 
 
-class BaseValidateInputFeaturesBase(AbstractFeatureGroup):
+class BaseValidateInputFeaturesBase(FeatureGroup):
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         return DataCreator({cls.get_class_name()})
@@ -31,7 +31,7 @@ class BaseValidateInputFeaturesBase(AbstractFeatureGroup):
         return {cls.get_class_name(): [1, 2, 3]}
 
 
-class SimpleValidateInputFeatures(AbstractFeatureGroup):
+class SimpleValidateInputFeatures(FeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): [1, 2, 3]}
@@ -48,7 +48,7 @@ class SimpleValidateInputFeatures(AbstractFeatureGroup):
         return True
 
 
-class CustomValidateInputFeatures(AbstractFeatureGroup):
+class CustomValidateInputFeatures(FeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): [1, 2, 3]}  # dummy return
@@ -75,9 +75,9 @@ class CustomValidateInputFeatures(AbstractFeatureGroup):
         return validator.validate(data)
 
 
-class ValidateInputFeatureExtender(WrapperFunctionExtender):
-    def wraps(self) -> Set[WrapperFunctionEnum]:
-        return {WrapperFunctionEnum.VALIDATE_INPUT_FEATURE}
+class ValidateInputFeatureExtender(Extender):
+    def wraps(self) -> Set[ExtenderHook]:
+        return {ExtenderHook.VALIDATE_INPUT_FEATURE}
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
         start = time.time()
@@ -86,7 +86,7 @@ class ValidateInputFeatureExtender(WrapperFunctionExtender):
         return result
 
 
-class TrackingExtender(WrapperFunctionExtender):
+class TrackingExtender(Extender):
     """Extender that tracks execution order for testing multiple extenders."""
 
     execution_log: List[str] = []
@@ -95,8 +95,8 @@ class TrackingExtender(WrapperFunctionExtender):
         self.name = name
         self.priority = priority
 
-    def wraps(self) -> Set[WrapperFunctionEnum]:
-        return {WrapperFunctionEnum.VALIDATE_INPUT_FEATURE}
+    def wraps(self) -> Set[ExtenderHook]:
+        return {ExtenderHook.VALIDATE_INPUT_FEATURE}
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
         TrackingExtender.execution_log.append(self.name)
@@ -108,7 +108,7 @@ class TestValidateInputFeatures:
     def get_features(self, feature_list: List[str], options: Dict[str, Any] = {}) -> Features:
         return Features([Feature(name=f_name, options=options, initial_requested_data=True) for f_name in feature_list])
 
-    def test_basic_validate_input_features(self, modes: Set[ParallelizationModes], flight_server: Any) -> None:
+    def test_basic_validate_input_features(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
         _features = "SimpleValidateInputFeatures"
 
         features = self.get_features([_features])
@@ -116,7 +116,7 @@ class TestValidateInputFeatures:
         with pytest.raises(Exception):
             MlodaTestRunner.run_api_simple(features, parallelization_modes=modes, flight_server=flight_server)
 
-    def test_custom_validate_input_features_error(self, modes: Set[ParallelizationModes], flight_server: Any) -> None:
+    def test_custom_validate_input_features_error(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
         _features = "CustomValidateInputFeatures"
 
         features = self.get_features([_features])
@@ -129,14 +129,14 @@ class TestValidateInputFeatures:
         assert "failure cases: 3" in str(excinfo.value)
 
     def test_custom_validate_input_features_warning(
-        self, modes: Set[ParallelizationModes], flight_server: Any, caplog: Any
+        self, modes: Set[ParallelizationMode], flight_server: Any, caplog: Any
     ) -> None:
         _features = "CustomValidateInputFeatures"
 
         features = self.get_features([_features], {"ValidationLevel": "warning"})
 
         # Current mp version, logging is broken. This is known and not a focus for now.
-        if ParallelizationModes.MULTIPROCESSING not in modes:
+        if ParallelizationMode.MULTIPROCESSING not in modes:
             MlodaTestRunner.run_api_simple(features, parallelization_modes=modes, flight_server=flight_server)
 
             assert (
@@ -145,7 +145,7 @@ class TestValidateInputFeatures:
             )
 
     def test_custom_validate_input_features_given_example_valiator(
-        self, modes: Set[ParallelizationModes], flight_server: Any
+        self, modes: Set[ParallelizationMode], flight_server: Any
     ) -> None:
         _features = "CustomValidateInputFeatures"
 
@@ -163,7 +163,7 @@ class TestValidateInputFeatures:
         assert "failure cases: 3" in str(excinfo.value)
 
     def test_custom_validate_input_features_extender(
-        self, modes: Set[ParallelizationModes], flight_server: Any, caplog: Any
+        self, modes: Set[ParallelizationMode], flight_server: Any, caplog: Any
     ) -> None:
         _features = "CustomValidateInputFeatures"
 
@@ -177,11 +177,11 @@ class TestValidateInputFeatures:
         )
 
         # Current mp version, logging is broken. This is known and not a focus for now.
-        if ParallelizationModes.MULTIPROCESSING not in modes:
+        if ParallelizationMode.MULTIPROCESSING not in modes:
             assert "Time taken" in caplog.text
 
     def test_multiple_extenders_execute_in_priority_order(
-        self, modes: Set[ParallelizationModes], flight_server: Any
+        self, modes: Set[ParallelizationMode], flight_server: Any
     ) -> None:
         """Integration test: multiple extenders are chained and execute in priority order."""
         _features = "CustomValidateInputFeatures"

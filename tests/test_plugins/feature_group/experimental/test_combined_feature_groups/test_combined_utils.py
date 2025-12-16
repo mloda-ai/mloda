@@ -6,7 +6,8 @@ from typing import Any, Dict, List
 
 import pandas as pd
 
-from mloda_core.abstract_plugins.components.feature import Feature
+from mloda import Feature
+from mloda import API
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
@@ -50,7 +51,7 @@ def validate_combined_features(result: List[Any]) -> None:
     Validate the results of the combined feature test.
 
     Args:
-        result: List of DataFrames or Tables from the mlodaAPI.run_all call
+        result: List of DataFrames or Tables from the mloda.run_all call
 
     Raises:
         AssertionError: If validation fails

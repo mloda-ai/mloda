@@ -2,20 +2,20 @@ from typing import Any, Dict, List, Optional, Set, Union
 import pyarrow as pa
 import pyarrow.compute as pc
 import pytest
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_collection import Features
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.options import Options
+from mloda.provider import BaseInputData
+from mloda.provider import DataCreator
+from mloda.user import DataAccessCollection
+from mloda.user import FeatureName
+from mloda.user import ParallelizationMode
+from mloda import FeatureGroup
+from mloda import Feature
+from mloda.user import Features
+from mloda.provider import FeatureSet
+from mloda import Options
 from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_SYNC_THREADING
 
 
-class EngineRunnerTest(AbstractFeatureGroup):
+class EngineRunnerTest(FeatureGroup):
     f_name = "EngineRunnerTest1"
 
     @classmethod
@@ -29,7 +29,7 @@ class EngineRunnerTest(AbstractFeatureGroup):
         return DataCreator({cls.f_name})
 
 
-class EngineRunnerTest2(AbstractFeatureGroup):
+class EngineRunnerTest2(FeatureGroup):
     f_name = "EngineRunnerTest2"
     f_name2 = "EngineRunnerTest1"
 
@@ -57,7 +57,7 @@ class EngineRunnerTest2(AbstractFeatureGroup):
         return FeatureName(self.get_class_name())
 
 
-class EngineRunnerTest3(AbstractFeatureGroup):
+class EngineRunnerTest3(FeatureGroup):
     feature_2 = Feature.int32_of("EngineRunnerTest2")
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
@@ -68,7 +68,7 @@ class EngineRunnerTest3(AbstractFeatureGroup):
         return pc.multiply(data.column(cls.feature_2.get_name()), 3)
 
 
-class EngineRunnerTest4(AbstractFeatureGroup):
+class EngineRunnerTest4(FeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         data = {
@@ -87,7 +87,7 @@ class EngineRunnerTest4(AbstractFeatureGroup):
         return DataCreator({f"{cls.get_class_name()}_{cnt}" for cnt in range(4)})
 
 
-class SumFeature(AbstractFeatureGroup):
+class SumFeature(FeatureGroup):
     @classmethod
     def match_feature_group_criteria(
         cls,
@@ -124,7 +124,7 @@ class TestEngineRunnerOneComputeFramework:
     def get_features(self, feature_list: List[str], options: Dict[str, Any] = {}) -> Features:
         return Features([Feature(name=f_name, options=options, initial_requested_data=True) for f_name in feature_list])
 
-    def test_runner_cfw_single_feature(self, modes: Set[ParallelizationModes], flight_server: Any) -> None:
+    def test_runner_cfw_single_feature(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
         features = self.get_features(["EngineRunnerTest1"])
         result = MlodaTestRunner.run_api_simple(features, parallelization_modes=modes, flight_server=flight_server)[0]
 
@@ -132,7 +132,7 @@ class TestEngineRunnerOneComputeFramework:
         assert result.column_names == ["EngineRunnerTest1"]
         assert result.to_pydict() == {"EngineRunnerTest1": [1, 2, 3]}
 
-    def test_runner_single_feature(self, modes: Set[ParallelizationModes], flight_server: Any) -> None:
+    def test_runner_single_feature(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
         features = self.get_features(["EngineRunnerTest1"])
         result = MlodaTestRunner.run_api_simple(features, parallelization_modes=modes, flight_server=flight_server)[0]
 
@@ -141,7 +141,7 @@ class TestEngineRunnerOneComputeFramework:
         assert result.to_pydict() == {"EngineRunnerTest1": [1, 2, 3]}
 
     def test_runner_dependent_a_feature_only_child_given(
-        self, modes: Set[ParallelizationModes], flight_server: Any
+        self, modes: Set[ParallelizationMode], flight_server: Any
     ) -> None:
         features = self.get_features(["EngineRunnerTest2"])
         result = MlodaTestRunner.run_api_simple(features, parallelization_modes=modes, flight_server=flight_server)[0]
@@ -149,21 +149,21 @@ class TestEngineRunnerOneComputeFramework:
         assert result.to_pydict() == {"EngineRunnerTest2": [2, 4, 6]}
 
     def test_runner_dependent_single_feature_config_given(
-        self, modes: Set[ParallelizationModes], flight_server: Any
+        self, modes: Set[ParallelizationMode], flight_server: Any
     ) -> None:
         features = self.get_features(["EngineRunnerTest1"], {"config": "test"})
         result = MlodaTestRunner.run_api_simple(features, parallelization_modes=modes, flight_server=flight_server)[0]
         assert result.to_pydict() == {"EngineRunnerTest1": [2, 4, 6]}
 
     def test_runner_single_feature_with_config_modifies_output(
-        self, modes: Set[ParallelizationModes], flight_server: Any
+        self, modes: Set[ParallelizationMode], flight_server: Any
     ) -> None:
         features = self.get_features(["EngineRunnerTest2"], {"config": "test"})
         result = MlodaTestRunner.run_api_simple(features, parallelization_modes=modes, flight_server=flight_server)[0]
         assert result.to_pydict() == {"EngineRunnerTest2-test": [4, 8, 12]}
 
     def test_runner_multiple_features_with_same_config(
-        self, modes: Set[ParallelizationModes], flight_server: Any
+        self, modes: Set[ParallelizationMode], flight_server: Any
     ) -> None:
         features = self.get_features(["EngineRunnerTest2", "EngineRunnerTest1"], {"config": "test"})
         result = MlodaTestRunner.run_api_simple(features, parallelization_modes=modes, flight_server=flight_server)
@@ -171,7 +171,7 @@ class TestEngineRunnerOneComputeFramework:
         assert result[1].to_pydict() == {"EngineRunnerTest2-test": [4, 8, 12]}
 
     def test_runner_same_feature_with_different_configs(
-        self, modes: Set[ParallelizationModes], flight_server: Any
+        self, modes: Set[ParallelizationMode], flight_server: Any
     ) -> None:
         features = Features(
             [
@@ -190,7 +190,7 @@ class TestEngineRunnerOneComputeFramework:
         ), "Inverted order because calculation order is not guaranteed."
 
     def test_runner_same_feature_different_configs_custom_naming(
-        self, modes: Set[ParallelizationModes], flight_server: Any
+        self, modes: Set[ParallelizationMode], flight_server: Any
     ) -> None:
         features = Features(
             [
@@ -212,7 +212,7 @@ class TestEngineRunnerOneComputeFramework:
         assert config_res["EngineRunnerTest2-test"] == [4, 8, 12]
 
     def test_runner_dependency_chain_with_config_propagation(
-        self, modes: Set[ParallelizationModes], flight_server: Any
+        self, modes: Set[ParallelizationMode], flight_server: Any
     ) -> None:
         features = Features(
             [Feature(name="EngineRunnerTest3", options={"config": "test"}, initial_requested_data=True)]
@@ -223,7 +223,7 @@ class TestEngineRunnerOneComputeFramework:
         assert res == {"EngineRunnerTest3": [12, 24, 36]}
 
     def test_runner_features_4_multiple_colums_from_one_source(
-        self, modes: Set[ParallelizationModes], flight_server: Any
+        self, modes: Set[ParallelizationMode], flight_server: Any
     ) -> None:
         features = self.get_features(
             ["EngineRunnerTest4_1", "EngineRunnerTest4_2", "EngineRunnerTest4_3", "EngineRunnerTest4_0"]
@@ -239,7 +239,7 @@ class TestEngineRunnerOneComputeFramework:
         }
 
     def test_runner_aggregated_feature_via_config_multiple(
-        self, modes: Set[ParallelizationModes], flight_server: Any
+        self, modes: Set[ParallelizationMode], flight_server: Any
     ) -> None:
         features = Features(
             [

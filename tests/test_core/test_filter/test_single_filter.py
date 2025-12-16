@@ -1,16 +1,16 @@
 import pytest
 
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.filter.single_filter import SingleFilter
-from mloda_core.filter.filter_type_enum import FilterTypeEnum
-from mloda_core.filter.filter_parameter import FilterParameterImpl
+from mloda import Feature
+from mloda.user import SingleFilter
+from mloda.user import FilterType
+from mloda.core.filter.filter_parameter import FilterParameterImpl
 
 
 class TestSingleFilter:
     def setup_method(self) -> None:
         """Set up test variables."""
         self.feature = Feature("age")
-        self.filter_type = FilterTypeEnum.range
+        self.filter_type = FilterType.range
         self.parameter = {"min": 25, "max": 50}
 
     def test_single_filter_initialization(self) -> None:

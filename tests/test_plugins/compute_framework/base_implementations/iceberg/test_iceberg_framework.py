@@ -1,8 +1,8 @@
 import pytest
 from unittest.mock import Mock, patch
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework import IcebergFramework
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
+from mloda.user import FeatureName
+from mloda.user import ParallelizationMode
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )
@@ -30,7 +30,7 @@ except ImportError:
 class TestIcebergFrameworkComputeFramework:
     def setup_method(self) -> None:
         """Set up test fixtures."""
-        self.iceberg_framework = IcebergFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        self.iceberg_framework = IcebergFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         self.dict_data = {"column1": [1, 2, 3], "column2": [4, 5, 6]}
         self.expected_arrow_data = pa.Table.from_pydict(self.dict_data)
 
@@ -138,7 +138,7 @@ class TestIcebergFrameworkUnavailable:
 
     def test_set_framework_connection_object_raises_when_not_installed(self) -> None:
         """Test that set_framework_connection_object raises ImportError when PyIceberg is not installed."""
-        framework = IcebergFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        framework = IcebergFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
         with patch("mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework.Catalog", None):
             with pytest.raises(ImportError, match="PyIceberg is not installed"):

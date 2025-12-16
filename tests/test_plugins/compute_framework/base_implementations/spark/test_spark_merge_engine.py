@@ -22,7 +22,7 @@ ensure proper resource management across all test methods.
 
 from typing import Any
 import pytest
-from mloda_core.abstract_plugins.components.index.index import Index
+from mloda.user import Index
 from mloda_plugins.compute_framework.base_implementations.spark.spark_merge_engine import SparkMergeEngine
 
 # Import shared fixtures and availability flags from conftest.py

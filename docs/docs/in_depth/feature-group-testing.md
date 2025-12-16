@@ -14,7 +14,7 @@ Test that your feature group correctly identifies feature names it should handle
 **Example:**
 ```python
 from mloda_plugins.feature_group.experimental.clustering.base import ClusteringFeatureGroup
-from mloda_core.abstract_plugins.components.options import Options
+from mloda.user import Options
 
 # Test valid and invalid feature names
 assert ClusteringFeatureGroup.match_feature_group_criteria("customer_behavior__cluster_kmeans_5", Options())
@@ -38,8 +38,8 @@ Test that your feature group correctly transforms input data into output feature
 
 **Example:**
 ``` python
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.user import Feature
+from mloda.provider import FeatureSet
 from mloda_plugins.feature_group.experimental.clustering.pandas import PandasClusteringFeatureGroup
 
 # Test calculation with sample data
@@ -70,11 +70,11 @@ Test that your feature group works correctly with the mloda API.
 
 **Example:**
 ``` python
-from mloda_core.api.request import mlodaAPI
+import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 features = ["source_feature", "source_feature__my_operation"]
-result = mlodaAPI.run_all(features, compute_frameworks={PandasDataFrame})
+result = mloda.run_all(features, compute_frameworks={PandasDataFrame})
 assert "source_feature__my_operation" in result[0].columns
 ```
 

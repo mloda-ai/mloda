@@ -1,5 +1,5 @@
 """
-Integration tests for the ForecastingFeatureGroup artifacts with mlodaAPI.
+Integration tests for the ForecastingFeatureGroup artifacts with API.
 
 This test demonstrates how the ForecastingFeatureGroup artifacts can be saved and loaded,
 allowing trained models to be reused for future forecasts.
@@ -8,10 +8,10 @@ allowing trained models to be reused for future forecasts.
 from typing import Any, Dict
 from datetime import datetime, timedelta
 
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
+from mloda import Feature
+from mloda import Options
+from mloda.user import PluginCollector
+from mloda import API
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecastingFeatureGroup
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
@@ -41,7 +41,7 @@ class TestForecastingArtifactIntegration:
     def test_artifact_save_and_load(self) -> None:
         """Test saving and loading forecasting artifacts."""
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {ForecastingArtifactTestDataCreator, PandasForecastingFeatureGroup}
         )
 
@@ -54,7 +54,7 @@ class TestForecastingArtifactIntegration:
         feature.options = options
 
         # First run: Train and save the model artifact
-        api = mlodaAPI(
+        api = API(
             [feature],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
@@ -77,7 +77,7 @@ class TestForecastingArtifactIntegration:
         feature2.options.add_to_group(feature_name, artifacts[feature_name])
 
         # Create a new API with the artifact
-        api2 = mlodaAPI(
+        api2 = API(
             [feature2],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,

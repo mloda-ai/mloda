@@ -10,25 +10,25 @@ during the data joining phase. Covers:
 
 from typing import Any, List, Optional, Set, Union
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.components.link import JoinSpec, Link
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
+from mloda import FeatureGroup
+from mloda import Feature
+from mloda.user import FeatureName
+from mloda.provider import FeatureSet
+from mloda.user import Index
+from mloda.provider import BaseInputData
+from mloda.provider import DataCreator
+from mloda.user import JoinSpec, Link
+from mloda import Options
+from mloda.user import PluginCollector
+import mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from mloda_plugins.feature_group.input_data.api_data.api_data import ApiInputDataFeature
+from mloda.provider import ApiDataFeatureGroup
 
 
 # =============================================================================
 # Base Classes
 # =============================================================================
-class BaseFeatureGroupA(AbstractFeatureGroup):
+class BaseFeatureGroupA(FeatureGroup):
     """Base class A - provides index_columns()."""
 
     FEATURE_NAME = "feature_a"
@@ -39,7 +39,7 @@ class BaseFeatureGroupA(AbstractFeatureGroup):
         return [Index((cls.ROW_INDEX,))]
 
 
-class BaseFeatureGroupB(AbstractFeatureGroup):
+class BaseFeatureGroupB(FeatureGroup):
     """Base class B - provides index_columns()."""
 
     FEATURE_NAME = "feature_b"
@@ -80,7 +80,7 @@ class ConcreteFeatureGroupB(BaseFeatureGroupB):
 # =============================================================================
 # Assembler that joins A and B
 # =============================================================================
-class AssemblerWithConcreteLinks(AbstractFeatureGroup):
+class AssemblerWithConcreteLinks(FeatureGroup):
     """Assembler using CONCRETE classes in links - THIS WORKS."""
 
     FEATURE_NAME = "assembled_concrete"
@@ -112,7 +112,7 @@ class AssemblerWithConcreteLinks(AbstractFeatureGroup):
         return {cls.FEATURE_NAME: [f"a={a}, b={b}"]}
 
 
-class AssemblerWithPolymorphicLinks(AbstractFeatureGroup):
+class AssemblerWithPolymorphicLinks(FeatureGroup):
     """Assembler using BASE classes in links - THIS FAILS."""
 
     FEATURE_NAME = "assembled_polymorphic"
@@ -164,10 +164,10 @@ class TestPolymorphicLinkResolution:
         """Assembler with concrete classes in links works correctly."""
         feature = Feature(name=AssemblerWithConcreteLinks.FEATURE_NAME)
 
-        results = mlodaAPI.run_all(
+        results = mloda.run_all(
             [feature],
             compute_frameworks={PythonDictFramework},
-            plugin_collector=PlugInCollector.enabled_feature_groups(
+            plugin_collector=PluginCollector.enabled_feature_groups(
                 {AssemblerWithConcreteLinks, ConcreteFeatureGroupA, ConcreteFeatureGroupB}
             ),
         )
@@ -179,10 +179,10 @@ class TestPolymorphicLinkResolution:
         """Assembler with base classes in links resolves to concrete classes."""
         feature = Feature(name=AssemblerWithPolymorphicLinks.FEATURE_NAME)
 
-        results = mlodaAPI.run_all(
+        results = mloda.run_all(
             [feature],
             compute_frameworks={PythonDictFramework},
-            plugin_collector=PlugInCollector.enabled_feature_groups(
+            plugin_collector=PluginCollector.enabled_feature_groups(
                 {AssemblerWithPolymorphicLinks, ConcreteFeatureGroupA, ConcreteFeatureGroupB}
             ),
         )
@@ -194,7 +194,7 @@ class TestPolymorphicLinkResolution:
 # =============================================================================
 # Asymmetric Case: Base Class + External Concrete Class
 # =============================================================================
-class AssemblerWithMixedLink(AbstractFeatureGroup):
+class AssemblerWithMixedLink(FeatureGroup):
     """Assembler using base class + external concrete class (asymmetric polymorphic matching)."""
 
     FEATURE_NAME = "assembled_mixed"
@@ -209,10 +209,10 @@ class AssemblerWithMixedLink(AbstractFeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         idx = Index((BaseFeatureGroupA.ROW_INDEX,))
 
-        # Base class + External concrete class (ApiInputDataFeature has no subclass)
+        # Base class + External concrete class (ApiDataFeatureGroup has no subclass)
         link = Link.inner(
             JoinSpec(BaseFeatureGroupA, idx),  # Base class -> resolves to ConcreteFeatureGroupA
-            JoinSpec(ApiInputDataFeature, idx),  # External concrete class (no subclass)
+            JoinSpec(ApiDataFeatureGroup, idx),  # External concrete class (no subclass)
         )
 
         return {
@@ -236,12 +236,12 @@ class TestAsymmetricPolymorphicLinkResolution:
         """Assembler with base class + external concrete class in link resolves correctly."""
         feature = Feature(name=AssemblerWithMixedLink.FEATURE_NAME)
 
-        results = mlodaAPI.run_all(
+        results = mloda.run_all(
             [feature],
             compute_frameworks={PythonDictFramework},
             api_data={"UserQuery": {"_idx": [0], "user_query": ["test query"]}},
-            plugin_collector=PlugInCollector.enabled_feature_groups(
-                {AssemblerWithMixedLink, ConcreteFeatureGroupA, ApiInputDataFeature}
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {AssemblerWithMixedLink, ConcreteFeatureGroupA, ApiDataFeatureGroup}
             ),
         )
 

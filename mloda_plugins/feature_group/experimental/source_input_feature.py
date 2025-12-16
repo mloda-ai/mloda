@@ -39,16 +39,16 @@ Further, it allows defining:
 """
 
 from typing import Any, Dict, NamedTuple, Optional, Set, Tuple, Type, Union
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.link import JoinType, Link, JoinSpec
-from mloda_core.abstract_plugins.components.options import Options
+from mloda import FeatureGroup
+from mloda import Feature
+from mloda.user import FeatureName
+from mloda.user import Index
+from mloda.user import JoinType, Link, JoinSpec
+from mloda import Options
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 
-class SourceInputFeature(AbstractFeatureGroup):
+class SourceInputFeature(FeatureGroup):
     """
     This feature group focuses on defining input features, especially when they originate
     from other sources or require joins/merges.
@@ -100,19 +100,19 @@ class SourceTuple(NamedTuple):
 
     Attributes:
         feature_name: The name of the feature.
-        source_class: (Optional) The source class of the feature, can be an `AbstractFeatureGroup` class or a `str` representing a scope.
+        source_class: (Optional) The source class of the feature, can be an `FeatureGroup` class or a `str` representing a scope.
         source_value: (Optional) The value associated with the source class, if applicable.
-        left_link: (Optional)  A tuple containing the left-side `AbstractFeatureGroup` class and index for join operations.
-        right_link: (Optional) A tuple containing the right-side `AbstractFeatureGroup` class and index for join operations.
+        left_link: (Optional)  A tuple containing the left-side `FeatureGroup` class and index for join operations.
+        right_link: (Optional) A tuple containing the right-side `FeatureGroup` class and index for join operations.
         join_type: (Optional) The type of join operation (`JoinType`).
         merge_index: (Optional) The index to use for merge operations.
     """
 
     feature_name: str
-    source_class: Optional[Type[Union[AbstractFeatureGroup, str]]] = None
+    source_class: Optional[Type[Union[FeatureGroup, str]]] = None
     source_value: Optional[str] = None
-    left_link: Optional[Tuple[Type[AbstractFeatureGroup], Union[str, Index]]] = None
-    right_link: Optional[Tuple[Type[AbstractFeatureGroup], Union[str, Index]]] = None
+    left_link: Optional[Tuple[Type[FeatureGroup], Union[str, Index]]] = None
+    right_link: Optional[Tuple[Type[FeatureGroup], Union[str, Index]]] = None
     join_type: Optional[JoinType] = None
     merge_index: Optional[Union[str, Index]] = None
 
@@ -207,8 +207,8 @@ class SourceInputFeatureComposite:
     @classmethod
     def _handle_link(
         cls,
-        left_link: Tuple[Type[AbstractFeatureGroup], Union[str, Index]],
-        right_link: Tuple[Type[AbstractFeatureGroup], Union[str, Index]],
+        left_link: Tuple[Type[FeatureGroup], Union[str, Index]],
+        right_link: Tuple[Type[FeatureGroup], Union[str, Index]],
         join_type: Any,
     ) -> Link:
         """

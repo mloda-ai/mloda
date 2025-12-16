@@ -1,18 +1,18 @@
 from typing import Any
 from unittest.mock import patch
-from mloda_core.abstract_plugins.components.data_types import DataType
+from mloda.user import DataType
 
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.core.engine import Engine
-from mloda_core.prepare.execution_plan import ExecutionPlan
-from mloda_core.core.step.feature_group_step import FeatureGroupStep
-from mloda_core.abstract_plugins.components.feature_collection import Features
-from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.link import Link, JoinSpec
+from mloda.user import FeatureName
+from mloda.core.core.engine import Engine
+from mloda.core.prepare.execution_plan import ExecutionPlan
+from mloda.core.core.step.feature_group_step import FeatureGroupStep
+from mloda.user import Features
+from mloda.user import Index
+from mloda.user import Link, JoinSpec
 
 from tests.test_core.test_abstract_plugins.test_abstract_compute_framework import (
-    BaseTestComputeFrameWork1,
-    BaseTestComputeFrameWork2,
+    BaseTestComputeFramework1,
+    BaseTestComputeFramework2,
 )
 from tests.test_core.test_setup.test_graph_builder import BaseTestGraphFeatureGroup3
 from tests.test_core.test_setup.test_link_resolver import BaseLinkTestFeatureGroup1
@@ -26,16 +26,16 @@ class TestEngine:
     def test_init_engine(self) -> None:
         with (
             patch(
-                "mloda_core.prepare.accessible_plugins.PreFilterPlugins.resolve_feature_group_compute_framework_limitations"
+                "mloda.core.prepare.accessible_plugins.PreFilterPlugins.resolve_feature_group_compute_framework_limitations"
             ) as mocked_derived_accessible_plugins,
-            patch("mloda_core.core.engine.Engine.create_setup_execution_plan"),
+            patch("mloda.core.core.engine.Engine.create_setup_execution_plan"),
         ):
             mocked_derived_accessible_plugins.return_value = {
-                BaseTestFeatureGroup1: [BaseTestComputeFrameWork1, BaseTestComputeFrameWork2],
-                BaseTestFeatureGroup2: [BaseTestComputeFrameWork1],
+                BaseTestFeatureGroup1: [BaseTestComputeFramework1, BaseTestComputeFramework2],
+                BaseTestFeatureGroup2: [BaseTestComputeFramework1],
             }
 
-            compute_framework = {BaseTestComputeFrameWork1, BaseTestComputeFrameWork2}
+            compute_framework = {BaseTestComputeFramework1, BaseTestComputeFramework2}
             features = Features(["BaseTestFeature1", "BaseTestFeature2"])
             links = {
                 Link.inner(
@@ -48,18 +48,18 @@ class TestEngine:
     def test_setup_features_recursion(self) -> None:
         with (
             patch(
-                "mloda_core.prepare.accessible_plugins.PreFilterPlugins.resolve_feature_group_compute_framework_limitations"
+                "mloda.core.prepare.accessible_plugins.PreFilterPlugins.resolve_feature_group_compute_framework_limitations"
             ) as mocked_derived_accessible_plugins,
-            patch("mloda_core.core.engine.Engine.create_setup_execution_plan"),
+            patch("mloda.core.core.engine.Engine.create_setup_execution_plan"),
         ):
             # setup
             mocked_derived_accessible_plugins.return_value = {
-                BaseTestFeatureGroup1: [BaseTestComputeFrameWork1, BaseTestComputeFrameWork2],
-                BaseTestFeatureGroup2: [BaseTestComputeFrameWork1],
+                BaseTestFeatureGroup1: [BaseTestComputeFramework1, BaseTestComputeFramework2],
+                BaseTestFeatureGroup2: [BaseTestComputeFramework1],
             }
 
             features = Features(["BaseTestFeature1", "BaseTestFeature2"])
-            compute_framework = {BaseTestComputeFrameWork1, BaseTestComputeFrameWork2}
+            compute_framework = {BaseTestComputeFramework1, BaseTestComputeFramework2}
 
             # test init
             engine = Engine(features, compute_framework, None)
@@ -84,16 +84,16 @@ class TestEngine:
 
     def test_create_setup_execution_plan(self) -> None:
         with patch(
-            "mloda_core.prepare.accessible_plugins.PreFilterPlugins.resolve_feature_group_compute_framework_limitations"
+            "mloda.core.prepare.accessible_plugins.PreFilterPlugins.resolve_feature_group_compute_framework_limitations"
         ) as mocked_derived_accessible_plugins:
             # setup
             mocked_derived_accessible_plugins.return_value = {
-                BaseTestFeatureGroup1: {BaseTestComputeFrameWork1, BaseTestComputeFrameWork2},
-                BaseTestFeatureGroup2: {BaseTestComputeFrameWork2},
+                BaseTestFeatureGroup1: {BaseTestComputeFramework1, BaseTestComputeFramework2},
+                BaseTestFeatureGroup2: {BaseTestComputeFramework2},
             }
 
             features = Features(["BaseTestFeature1", "BaseTestFeature2"])
-            compute_framework = {BaseTestComputeFrameWork1, BaseTestComputeFrameWork2}
+            compute_framework = {BaseTestComputeFramework1, BaseTestComputeFramework2}
 
             links = {
                 Link.inner(

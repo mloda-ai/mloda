@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from mloda_core.abstract_plugins.components.index.index import Index
+from mloda.user import Index
 
 
 @pytest.fixture

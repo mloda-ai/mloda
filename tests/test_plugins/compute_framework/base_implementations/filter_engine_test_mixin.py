@@ -14,9 +14,9 @@ from typing import Any, List
 
 import pytest
 
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.filter.single_filter import SingleFilter
-from mloda_core.filter.filter_type_enum import FilterTypeEnum
+from mloda import Feature
+from mloda.user import SingleFilter
+from mloda.user import FilterType
 
 
 class FilterEngineTestMixin:
@@ -67,7 +67,7 @@ class FilterEngineTestMixin:
     def test_do_range_filter(self, filter_engine: Any, sample_data: Any) -> None:
         """Test range filter with min and max values."""
         feature = Feature("age")
-        filter_type = FilterTypeEnum.range
+        filter_type = FilterType.range
         parameter = {"min": 30, "max": 40, "max_exclusive": False}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -80,7 +80,7 @@ class FilterEngineTestMixin:
     def test_do_range_filter_exclusive(self, filter_engine: Any, sample_data: Any) -> None:
         """Test range filter with exclusive max value."""
         feature = Feature("age")
-        filter_type = FilterTypeEnum.range
+        filter_type = FilterType.range
         parameter = {"min": 30, "max": 40, "max_exclusive": True}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -93,7 +93,7 @@ class FilterEngineTestMixin:
     def test_do_min_filter(self, filter_engine: Any, sample_data: Any) -> None:
         """Test min filter."""
         feature = Feature("age")
-        filter_type = FilterTypeEnum.min
+        filter_type = FilterType.min
         parameter = {"value": 40}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -106,7 +106,7 @@ class FilterEngineTestMixin:
     def test_do_max_filter(self, filter_engine: Any, sample_data: Any) -> None:
         """Test max filter."""
         feature = Feature("age")
-        filter_type = FilterTypeEnum.max
+        filter_type = FilterType.max
         parameter = {"value": 30}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -119,7 +119,7 @@ class FilterEngineTestMixin:
     def test_do_max_filter_with_tuple(self, filter_engine: Any, sample_data: Any) -> None:
         """Test max filter with tuple parameter."""
         feature = Feature("age")
-        filter_type = FilterTypeEnum.max
+        filter_type = FilterType.max
         parameter = {"max": 35, "max_exclusive": True}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -132,7 +132,7 @@ class FilterEngineTestMixin:
     def test_do_equal_filter(self, filter_engine: Any, sample_data: Any) -> None:
         """Test equal filter."""
         feature = Feature("age")
-        filter_type = FilterTypeEnum.equal
+        filter_type = FilterType.equal
         parameter = {"value": 35}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -145,7 +145,7 @@ class FilterEngineTestMixin:
     def test_do_regex_filter(self, filter_engine: Any, sample_data: Any) -> None:
         """Test regex filter."""
         feature = Feature("name")
-        filter_type = FilterTypeEnum.regex
+        filter_type = FilterType.regex
         parameter = {"value": "^A"}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -158,7 +158,7 @@ class FilterEngineTestMixin:
     def test_do_categorical_inclusion_filter(self, filter_engine: Any, sample_data: Any) -> None:
         """Test categorical inclusion filter."""
         feature = Feature("category")
-        filter_type = FilterTypeEnum.categorical_inclusion
+        filter_type = FilterType.categorical_inclusion
         parameter = {"values": ["A", "B"]}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -172,8 +172,8 @@ class FilterEngineTestMixin:
         """Test applying multiple filters."""
         feature = Feature("age")
         filters = [
-            SingleFilter(feature, FilterTypeEnum.min, {"value": 30}),
-            SingleFilter(Feature("category"), FilterTypeEnum.equal, {"value": "A"}),
+            SingleFilter(feature, FilterType.min, {"value": 30}),
+            SingleFilter(Feature("category"), FilterType.equal, {"value": "A"}),
         ]
 
         class MockFeatureSet:
@@ -199,7 +199,7 @@ class FilterEngineTestMixin:
     def test_do_range_filter_missing_parameters(self, filter_engine: Any, sample_data: Any) -> None:
         """Test range filter with missing parameters."""
         feature = Feature("age")
-        filter_type = FilterTypeEnum.range
+        filter_type = FilterType.range
         parameter = {"min": 30}  # Missing max parameter
         single_filter = SingleFilter(feature, filter_type, parameter)
 

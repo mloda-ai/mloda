@@ -1,17 +1,17 @@
 from typing import Any, Set, Type, List, Dict
-from mloda_core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
+from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_merge_engine import (
     PythonDictMergeEngine,
 )
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
-from mloda_core.filter.filter_engine import BaseFilterEngine
+from mloda.user import FeatureName
+from mloda import ComputeFramework
+from mloda.provider import BaseFilterEngine
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_filter_engine import (
     PythonDictFilterEngine,
 )
 
 
-class PythonDictFramework(ComputeFrameWork):
+class PythonDictFramework(ComputeFramework):
     """
     PythonDict Compute Framework
 

@@ -6,12 +6,12 @@ from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFea
 from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 import pyarrow as pa
 
-from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.api.request import mlodaAPI
+from mloda.user import DataAccessCollection
+from mloda import Feature
+from mloda.user import FeatureName
+from mloda.provider import FeatureSet
+from mloda import Options
+import mloda
 
 
 class OverwrittenReadCsvInputDataTestFeatureGroup(ReadFileFeature):
@@ -73,17 +73,17 @@ class TestInputData:
 
     def test_local_scope_file(self) -> Any:
         features = self.get_features(self.feature_list, self.file_path)
-        result = mlodaAPI.run_all(features, compute_frameworks=["PyArrowTable"])
+        result = mloda.run_all(features, compute_frameworks=["PyArrowTable"])
         assert "V2" in result[0].to_pydict()
 
     def test_local_scope_folder(self) -> Any:
         file_path = self.file_path.replace("creditcard_2023_short.csv", "")
         features = self.get_features(self.feature_list, file_path)
-        result = mlodaAPI.run_all(features, compute_frameworks=["PyArrowTable"])
+        result = mloda.run_all(features, compute_frameworks=["PyArrowTable"])
         assert "V2" in result[0].to_pydict()
 
     def test_global_scope_file(self) -> Any:
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             self.feature_list,  # type: ignore
             compute_frameworks=["PyArrowTable"],
             data_access_collection=DataAccessCollection(files={self.file_path}),
@@ -92,7 +92,7 @@ class TestInputData:
 
     def test_global_scope_folder(self) -> Any:
         file_path = self.file_path.replace("creditcard_2023_short.csv", "")
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             self.feature_list,  # type: ignore
             compute_frameworks=["PyArrowTable"],
             data_access_collection=DataAccessCollection(folders={file_path}),
@@ -121,7 +121,7 @@ class TestInputData:
         """
         features = self.get_features(self.feature_list, None, {"OverwrittenReadCsvInputDataTestFeatureGroup": "dummy"})
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             features,
             compute_frameworks=["PyArrowTable"],
             data_access_collection=DataAccessCollection(files={self.file_path}),
@@ -141,7 +141,7 @@ class TestInputData:
             self.feature_list, self.file_path, {"OverwrittenReadCsvInputDataTestFeatureGroup": "dummy"}
         )
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             features,
             compute_frameworks=["PyArrowTable"],
         )
@@ -156,7 +156,7 @@ class TestInputData:
             options={"sum": ("V1", "V2")},
         )
         file_path = self.file_path.replace("creditcard_2023_short.csv", "")
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             [f],
             compute_frameworks=["PyArrowTable"],
             data_access_collection=DataAccessCollection(folders={file_path}),
@@ -171,7 +171,7 @@ class TestInputData:
             name="sum_of_",
             options={"sum": ("V1", "V2"), CsvReader.__name__: self.file_path},
         )
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             [f],
             compute_frameworks=["PyArrowTable"],
         )
@@ -189,7 +189,7 @@ class TestInputData:
                 "OverwrittenReadCsvInputDataTestFeatureGroup": "dummy",
             },
         )
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             [f],
             compute_frameworks=["PyArrowTable"],
         )

@@ -1,10 +1,10 @@
 from typing import Any, Dict
 
-from mloda_core.abstract_plugins.components.feature import Feature
+from mloda import Feature
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
+from mloda.user import PluginCollector
+import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from tests.test_plugins.integration_plugins.chainer.chainer_context_feature import (
     ChainedContextFeatureGroupTest,
@@ -28,7 +28,7 @@ class ChainerContextParserTestDataCreator(ATestDataCreator):
 
 
 class TestChainedFeatures:
-    plugin_collector = PlugInCollector.enabled_feature_groups(
+    plugin_collector = PluginCollector.enabled_feature_groups(
         {ChainedContextFeatureGroupTest, ChainerContextParserTestDataCreator}
     )
 
@@ -73,7 +73,7 @@ class TestChainedFeatures:
             },
         )
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             [
                 feature4,
                 feature3,
@@ -87,7 +87,7 @@ class TestChainedFeatures:
         # Currently, we duplicate here the data. This can be changed in the future.
         assert len(result) == 5
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             [
                 feature4,
             ],

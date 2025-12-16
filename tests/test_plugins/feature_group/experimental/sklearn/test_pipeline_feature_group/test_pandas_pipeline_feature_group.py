@@ -8,8 +8,8 @@ import pandas as pd
 import numpy as np
 from unittest.mock import patch
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.pandas import PandasSklearnPipelineFeatureGroup
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.feature import Feature
+from mloda.provider import FeatureSet
+from mloda import Feature
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 

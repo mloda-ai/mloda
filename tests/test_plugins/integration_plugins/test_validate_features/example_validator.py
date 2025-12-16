@@ -2,15 +2,15 @@ from typing import Any, Optional
 
 from pandera import Column, Check
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
+from mloda import FeatureGroup
+from mloda.provider import FeatureSet
+from mloda.provider import BaseInputData
+from mloda.provider import DataCreator
 from pandera import pandas
 import pyarrow as pa
 from pandera.errors import SchemaError
 
-from mloda_core.abstract_plugins.components.base_validator import BaseValidator
+from mloda.provider import BaseValidator
 
 
 class ExamplePanderaValidator(BaseValidator):
@@ -32,7 +32,7 @@ class ExamplePanderaValidator(BaseValidator):
         return True
 
 
-class BaseValidateOutputFeaturesBase(AbstractFeatureGroup):
+class BaseValidateOutputFeaturesBase(FeatureGroup):
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         return DataCreator({cls.get_class_name()})

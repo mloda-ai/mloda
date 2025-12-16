@@ -19,20 +19,20 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import pytest
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
+from mloda import FeatureGroup
+from mloda import Feature
+from mloda.user import FeatureName
+from mloda.provider import FeatureSet
+from mloda.provider import BaseInputData
+from mloda.provider import DataCreator
+from mloda import Options
+from mloda.user import PluginCollector
+import mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
 # Test Feature Groups
-class RootFeatureA(AbstractFeatureGroup):
+class RootFeatureA(FeatureGroup):
     """First root feature for testing"""
 
     @classmethod
@@ -48,7 +48,7 @@ class RootFeatureA(AbstractFeatureGroup):
         return {"id": [1, 2, 3], cls.get_class_name(): [10, 20, 30]}
 
 
-class RootFeatureB(AbstractFeatureGroup):
+class RootFeatureB(FeatureGroup):
     """Second root feature for testing"""
 
     @classmethod
@@ -64,7 +64,7 @@ class RootFeatureB(AbstractFeatureGroup):
         return {"id": [1, 2, 3], cls.get_class_name(): [100, 200, 300]}
 
 
-class MultiDependencyFeature(AbstractFeatureGroup):
+class MultiDependencyFeature(FeatureGroup):
     """
     Feature with multiple dependencies - requires explicit Links to merge them.
     This will trigger the validation error when Links are not provided.
@@ -106,11 +106,11 @@ class TestMissingLinksError:
             - Lists available join types
         """
         with pytest.raises(Exception) as exc_info:
-            mlodaAPI.run_all(
+            mloda.run_all(
                 features=[Feature.int32_of("MultiDependencyFeature")],
                 links=set(),  # EMPTY - this should trigger the error
                 compute_frameworks={PyArrowTable},
-                plugin_collector=PlugInCollector.enabled_feature_groups(
+                plugin_collector=PluginCollector.enabled_feature_groups(
                     {RootFeatureA, RootFeatureB, MultiDependencyFeature}
                 ),
             )

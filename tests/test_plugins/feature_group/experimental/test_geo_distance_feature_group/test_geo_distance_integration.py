@@ -5,10 +5,10 @@ Integration tests for geo distance feature groups.
 from typing import Any, Dict, FrozenSet, List
 import pandas as pd
 
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
+import mloda
+from mloda import Feature
+from mloda import Options
+from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.geo_distance.base import GeoDistanceFeatureGroup
@@ -87,15 +87,15 @@ class TestGeoDistancePandasIntegration:
     """Integration tests for the geo distance feature group using Pandas."""
 
     def test_geo_distance_with_data_creator(self) -> None:
-        """Test geo distance features with mlodaAPI using DataCreator."""
+        """Test geo distance features with API using DataCreator."""
 
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {PandasGeoDistanceTestDataCreator, PandasGeoDistanceFeatureGroup}
         )
 
         # Run the API with multiple geo distance features
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             [
                 "sf",  # Source data - San Francisco coordinates
                 "nyc",  # Source data - New York coordinates
@@ -125,10 +125,10 @@ class TestGeoDistancePandasIntegration:
         validate_geo_distance_features(distance_df, GEO_DISTANCE_FEATURES)
 
     def test_geo_distance_with_configuration(self) -> None:
-        """Test geo distance features with mlodaAPI using configuration-based feature creation."""
+        """Test geo distance features with API using configuration-based feature creation."""
 
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {PandasGeoDistanceTestDataCreator, PandasGeoDistanceFeatureGroup}
         )
 
@@ -164,7 +164,7 @@ class TestGeoDistancePandasIntegration:
         )
 
         # Run the API with configuration-based features
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             [
                 "sf",  # Source data - San Francisco coordinates
                 "nyc",  # Source data - New York coordinates

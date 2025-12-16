@@ -3,9 +3,9 @@ from typing import Any
 import pyarrow as pa
 import pyarrow.compute as pc
 
-from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.link import JoinType
-from mloda_core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
+from mloda.user import Index
+from mloda.user import JoinType
+from mloda.provider import BaseMergeEngine
 
 
 class PyArrowMergeEngine(BaseMergeEngine):

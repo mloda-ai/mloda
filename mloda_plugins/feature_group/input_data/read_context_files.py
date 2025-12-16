@@ -3,12 +3,12 @@ from pathlib import Path
 from typing import Any, List, Set
 
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.link import JoinType
-from mloda_core.abstract_plugins.components.options import Options
+from mloda import FeatureGroup
+from mloda import Feature
+from mloda.user import FeatureName
+from mloda.provider import FeatureSet
+from mloda.user import JoinType
+from mloda import Options
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.dynamic_feature_group_factory.dynamic_feature_group_factory import (
     DynamicFeatureGroupCreator,
@@ -27,7 +27,7 @@ except ImportError:
     pd = None
 
 
-class ConcatenatedFileContent(AbstractFeatureGroup):
+class ConcatenatedFileContent(FeatureGroup):
     """
     A feature group that reads and combines content from files within a directory (default: python files).
 

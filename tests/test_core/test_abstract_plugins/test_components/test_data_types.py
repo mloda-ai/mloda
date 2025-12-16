@@ -3,7 +3,7 @@
 import pytest
 import pyarrow as pa
 
-from mloda_core.abstract_plugins.components.data_types import DataType
+from mloda.user import DataType
 
 
 class TestFromArrowType:

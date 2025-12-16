@@ -1,7 +1,7 @@
 import pytest
 from typing import Any, Dict, Set
 
-from mloda_core.abstract_plugins.components.validators.options_validator import OptionsValidator
+from mloda.provider import OptionsValidator
 
 
 class TestValidateNoDuplicateKeys:

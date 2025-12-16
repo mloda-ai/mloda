@@ -35,12 +35,12 @@ Other frameworks don't require connection objects:
 
 ## How it Works
 
-### In ComputeFrameWork Base Class
+### In ComputeFramework Base Class
 
-The base `ComputeFrameWork` class provides methods to manage connection objects:
+The base `ComputeFramework` class provides methods to manage connection objects:
 
 ``` python
-class ComputeFrameWork:
+class ComputeFramework:
     def __init__(self) -> None:
         # Connection object for frameworks that need persistent connections
         self.framework_connection_object: Optional[Any] = None
@@ -80,8 +80,8 @@ def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Option
 ### Using DuckDB with mloda API
 
 ``` python
-from mloda_core.api.request import mlodaAPI
-from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
+import mloda
+from mloda.user import DataAccessCollection
 import duckdb
 
 # Create DuckDB connection
@@ -91,7 +91,7 @@ connection = duckdb.connect()
 data_access_collection = DataAccessCollection(initialized_connection_object={connection})
 
 # Run with DuckDB framework
-result = mlodaAPI.run_all(
+result = mloda.run_all(
     ["feature1", "feature2"],
     compute_frameworks=["DuckDBFramework"],
     data_access_collection=data_access_collection
@@ -101,8 +101,8 @@ result = mlodaAPI.run_all(
 ### Using Spark with mloda API
 
 ``` python
-from mloda_core.api.request import mlodaAPI
-from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
+import mloda
+from mloda.user import DataAccessCollection
 from pyspark.sql import SparkSession
 
 # Create SparkSession
@@ -116,7 +116,7 @@ spark = SparkSession.builder \
 data_access_collection = DataAccessCollection(initialized_connection_objects={spark})
 
 # Run with Spark framework
-result = mlodaAPI.run_all(
+result = mloda.run_all(
     ["feature1", "feature2"],
     compute_frameworks=["SparkFramework"],
     data_access_collection=data_access_collection

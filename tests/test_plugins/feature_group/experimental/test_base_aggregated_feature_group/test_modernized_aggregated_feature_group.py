@@ -6,9 +6,9 @@ from typing import Any, List, Set
 
 import pytest
 
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.options import Options
+from mloda import Feature
+from mloda.user import FeatureName
+from mloda import Options
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 

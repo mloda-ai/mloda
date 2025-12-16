@@ -2,11 +2,11 @@ import logging
 import os
 from typing import Any, Optional, Set
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.options import Options
+from mloda import FeatureGroup
+from mloda import Feature
+from mloda.user import FeatureName
+from mloda.provider import FeatureSet
+from mloda import Options
 from mloda_plugins.feature_group.experimental.llm.llm_api.gemini import GeminiRequestLoop
 from mloda_plugins.feature_group.input_data.read_context_files import ConcatenatedFileContent
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
@@ -14,7 +14,7 @@ from mloda_plugins.feature_group.experimental.default_options_key import Default
 logger = logging.getLogger(__name__)
 
 
-class LLMFileSelector(AbstractFeatureGroup):
+class LLMFileSelector(FeatureGroup):
     """
     Base class for using LLMs to intelligently select relevant files from directories.
 
@@ -60,8 +60,8 @@ class LLMFileSelector(AbstractFeatureGroup):
     ### 2. Configuration-Based Creation
 
     ```python
-    from mloda_core.abstract_plugins.components.feature import Feature
-    from mloda_core.abstract_plugins.components.options import Options
+    from mloda import Feature
+    from mloda import Options
 
     feature = Feature(
         name="LLMFileSelector",
@@ -81,8 +81,8 @@ class LLMFileSelector(AbstractFeatureGroup):
     ### Finding Feature Implementation Files
 
     ```python
-    from mloda_core.abstract_plugins.components.feature import Feature
-    from mloda_core.abstract_plugins.components.options import Options
+    from mloda import Feature
+    from mloda import Options
 
     feature = Feature(
         name="LLMFileSelector",

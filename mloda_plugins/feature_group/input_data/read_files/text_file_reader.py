@@ -4,7 +4,7 @@ from typing import Any, Tuple
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
 from pyarrow import fs as pyarrow_fs
 
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.provider import FeatureSet
 
 try:
     import pandas as pd
@@ -43,8 +43,8 @@ class TextFileReader(ReadFile):
     ### 2. Configuration-Based Creation
 
     ```python
-    from mloda_core.abstract_plugins.components.feature import Feature
-    from mloda_core.abstract_plugins.components.options import Options
+    from mloda import Feature
+    from mloda import Options
 
     feature = Feature(
         name="TextFileReader",
@@ -62,8 +62,8 @@ class TextFileReader(ReadFile):
     ### Basic Text File Loading
 
     ```python
-    from mloda_core.abstract_plugins.components.feature import Feature
-    from mloda_core.abstract_plugins.components.options import Options
+    from mloda import Feature
+    from mloda import Options
 
     # Load entire text file as a feature
     feature = Feature(

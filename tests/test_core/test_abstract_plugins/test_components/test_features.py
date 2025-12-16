@@ -1,9 +1,9 @@
 import pytest
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
+from mloda.user import FeatureName
 
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_collection import Features
-from mloda_core.abstract_plugins.components.options import Options
+from mloda import Feature
+from mloda.user import Features
+from mloda import Options
 
 
 def test_features_init() -> None:

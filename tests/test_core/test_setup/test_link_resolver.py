@@ -1,17 +1,17 @@
 import uuid
-from mloda_core.prepare.graph.graph import Graph
-from mloda_core.prepare.graph.properties import EdgeProperties, NodeProperties
-from mloda_core.prepare.resolve_graph import ResolveGraph
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.link import Link, JoinSpec
+from mloda.core.prepare.graph.graph import Graph
+from mloda.core.prepare.graph.properties import EdgeProperties, NodeProperties
+from mloda.core.prepare.resolve_graph import ResolveGraph
+from mloda import FeatureGroup
+from mloda import Feature
+from mloda.user import Index
+from mloda.user import Link, JoinSpec
 from tests.test_core.test_setup.test_graph_builder import BaseTestGraphFeatureGroup3
 from tests.test_core.test_abstract_plugins.test_abstract_feature_group import BaseTestFeatureGroup1
 from tests.test_core.test_abstract_plugins.test_abstract_compute_framework import (
-    BaseTestComputeFrameWork1,
-    BaseTestComputeFrameWork2,
-    BaseTestComputeFrameWork3,
+    BaseTestComputeFramework1,
+    BaseTestComputeFramework2,
+    BaseTestComputeFramework3,
 )
 
 
@@ -33,13 +33,13 @@ uuid_1, uuid_2, uuid_3, uuid_4, uuid_5, uuid_6, uuid_7 = (
 class TestResolveGraph:
     def create_graph(self) -> Graph:
         f1, f2, f3, f4, f5, f6, f7 = (
-            Feature("GraphFeature1")._set_uuid(uuid_1)._set_compute_frameworks({BaseTestComputeFrameWork1}),
-            Feature("GraphFeature2")._set_uuid(uuid_2)._set_compute_frameworks({BaseTestComputeFrameWork1}),
-            Feature("GraphFeature3")._set_uuid(uuid_3)._set_compute_frameworks({BaseTestComputeFrameWork1}),
-            Feature("GraphFeature4")._set_uuid(uuid_4)._set_compute_frameworks({BaseTestComputeFrameWork2}),
-            Feature("GraphFeature5")._set_uuid(uuid_5)._set_compute_frameworks({BaseTestComputeFrameWork3}),
-            Feature("GraphFeature6")._set_uuid(uuid_6)._set_compute_frameworks({BaseTestComputeFrameWork1}),
-            Feature("GraphFeature7")._set_uuid(uuid_7)._set_compute_frameworks({BaseTestComputeFrameWork1}),
+            Feature("GraphFeature1")._set_uuid(uuid_1)._set_compute_frameworks({BaseTestComputeFramework1}),
+            Feature("GraphFeature2")._set_uuid(uuid_2)._set_compute_frameworks({BaseTestComputeFramework1}),
+            Feature("GraphFeature3")._set_uuid(uuid_3)._set_compute_frameworks({BaseTestComputeFramework1}),
+            Feature("GraphFeature4")._set_uuid(uuid_4)._set_compute_frameworks({BaseTestComputeFramework2}),
+            Feature("GraphFeature5")._set_uuid(uuid_5)._set_compute_frameworks({BaseTestComputeFramework3}),
+            Feature("GraphFeature6")._set_uuid(uuid_6)._set_compute_frameworks({BaseTestComputeFramework1}),
+            Feature("GraphFeature7")._set_uuid(uuid_7)._set_compute_frameworks({BaseTestComputeFramework1}),
         )
 
         graph = Graph()
@@ -138,7 +138,7 @@ class TestResolveGraph:
         assert len(link_trekker) == 2
 
         result_link = links.pop()
-        expected_link_tuple = (result_link, BaseTestComputeFrameWork1, BaseTestComputeFrameWork1)
+        expected_link_tuple = (result_link, BaseTestComputeFramework1, BaseTestComputeFramework1)
         assert link_trekker[expected_link_tuple] == {uuid_7, uuid_3, uuid_4}
 
         collector = []
@@ -148,7 +148,7 @@ class TestResolveGraph:
                 continue
             if isinstance(e, tuple):
                 if not isinstance(e[0], Link):
-                    assert issubclass(e[0], AbstractFeatureGroup)
+                    assert issubclass(e[0], FeatureGroup)
                     assert e[0] in [BaseLinkTestFeatureGroup1, BaseTestGraphFeatureGroup3]
                     for feature in e[1]:
                         collector.append(feature.uuid)  # type: ignore

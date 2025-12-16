@@ -2,21 +2,21 @@ from typing import Any, Optional, Set
 
 import pytest
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.components.link import Link, JoinSpec
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
+from mloda import FeatureGroup
+from mloda import Feature
+from mloda.user import FeatureName
+from mloda.provider import FeatureSet
+from mloda.user import Index
+from mloda.provider import BaseInputData
+from mloda.provider import DataCreator
+from mloda.user import Link, JoinSpec
+from mloda import Options
+from mloda.user import ParallelizationMode
+from mloda.user import PluginCollector
+import mloda
 
 
-class NonRootJoinTestFeature(AbstractFeatureGroup):
+class NonRootJoinTestFeature(FeatureGroup):
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         return DataCreator(supports_features={cls.get_class_name()})
@@ -40,7 +40,7 @@ class SecondNonRootJoinTestFeature(NonRootJoinTestFeature):
     pass
 
 
-class GroupedNonRootJoinTestFeature(AbstractFeatureGroup):
+class GroupedNonRootJoinTestFeature(FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         if options.get("test_non_root_merge_multiple_join"):
             return {Feature(name="NonRootJoinTestFeature"), Feature(name="NonRootJoinTestFeatureB")}
@@ -69,7 +69,7 @@ class GroupedSecondNonRootJoinTestFeature(GroupedNonRootJoinTestFeature):
         return data
 
 
-class Call2GroupedNonRootJoinTestFeature(AbstractFeatureGroup):
+class Call2GroupedNonRootJoinTestFeature(FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         return {
             Feature(name=GroupedNonRootJoinTestFeature.get_class_name()),
@@ -91,13 +91,13 @@ class Call2GroupedNonRootJoinTestFeature(AbstractFeatureGroup):
 @pytest.mark.parametrize(
     "modes",
     [
-        ({ParallelizationModes.SYNC}),
-        ({ParallelizationModes.THREADING}),
-        # ({ParallelizationModes.MULTIPROCESSING}),
+        ({ParallelizationMode.SYNC}),
+        ({ParallelizationMode.THREADING}),
+        # ({ParallelizationMode.MULTIPROCESSING}),
     ],
 )
 class TestNonRootMerge:
-    def test_non_root_merge_simple(self, modes: Set[ParallelizationModes], flight_server: Any) -> None:
+    def test_non_root_merge_simple(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
         """
         This test is for testing a merge on the second level of the feature graph.
         """
@@ -109,11 +109,11 @@ class TestNonRootMerge:
             right=JoinSpec(GroupedSecondNonRootJoinTestFeature, Index(("GroupedSecondNonRootJoinTestFeature",))),
         )
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             [feature],
             links={link},
             compute_frameworks=["PandasDataFrame"],
-            plugin_collector=PlugInCollector.enabled_feature_groups(
+            plugin_collector=PluginCollector.enabled_feature_groups(
                 {
                     NonRootJoinTestFeature,
                     SecondNonRootJoinTestFeature,
@@ -131,7 +131,7 @@ class TestNonRootMerge:
             assert len(res.columns) == 1
             assert len(res) == 1
 
-    def test_non_root_merge_multiple_join(self, modes: Set[ParallelizationModes], flight_server: Any) -> None:
+    def test_non_root_merge_multiple_join(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
         """
         This test is for testing a merge on the first and second level of the feature graph.
         """
@@ -153,11 +153,11 @@ class TestNonRootMerge:
 
         links = set([link, link_first_level])
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             [feature],
             links=links,
             compute_frameworks=["PandasDataFrame"],
-            plugin_collector=PlugInCollector.enabled_feature_groups(
+            plugin_collector=PluginCollector.enabled_feature_groups(
                 {
                     NonRootJoinTestFeature,
                     SecondNonRootJoinTestFeature,

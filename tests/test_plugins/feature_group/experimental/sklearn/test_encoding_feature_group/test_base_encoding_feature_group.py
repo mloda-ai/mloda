@@ -6,8 +6,8 @@ from typing import Any
 import pytest
 from unittest.mock import Mock, patch
 
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.options import Options
+from mloda.user import FeatureName
+from mloda import Options
 from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
@@ -109,7 +109,7 @@ class TestEncodingFeatureGroup:
 
     def test_parse_feature_suffix_valid(self) -> None:
         """Test parsing of feature suffix from valid feature names."""
-        from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
+        from mloda.provider import FeatureChainParser
 
         test_cases = [
             ("category__onehot_encoded", "category"),

@@ -2,11 +2,11 @@ import pandas as pd
 import pytest
 from typing import List
 
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
+import mloda
+from mloda import Feature
+from mloda.provider import FeatureSet
+from mloda import Options
+from mloda.user import PluginCollector
 
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import PandasMissingValueFeatureGroup
@@ -281,10 +281,10 @@ class TestMissingValuePandasIntegration:
     """Integration tests for the missing value feature group using DataCreator."""
 
     def test_imputation_with_data_creator(self) -> None:
-        """Test imputation features with mlodaAPI using DataCreator."""
+        """Test imputation features with API using DataCreator."""
 
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {PandasMissingValueTestDataCreator, PandasMissingValueFeatureGroup}
         )
 
@@ -307,7 +307,7 @@ class TestMissingValuePandasIntegration:
         feature_list: List[Feature | str] = [Feature(name=feature, options=options) for feature in feature_str]
 
         # Run the API with multiple imputation features
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list,
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,

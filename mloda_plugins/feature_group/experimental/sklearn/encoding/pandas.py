@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any, Set, Type, Union
 
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
+from mloda import ComputeFramework
 
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
@@ -21,7 +21,7 @@ class PandasEncodingFeatureGroup(EncodingFeatureGroup):
     """
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         """Specify that this feature group works with Pandas."""
         return {PandasDataFrame}
 

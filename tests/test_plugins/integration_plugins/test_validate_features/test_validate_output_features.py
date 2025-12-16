@@ -4,11 +4,11 @@ from typing import Any, Dict, List, Optional, Set
 
 import pytest
 
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_collection import Features
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
-from mloda_core.abstract_plugins.function_extender import WrapperFunctionEnum, WrapperFunctionExtender
+from mloda import Feature
+from mloda.user import Features
+from mloda.provider import FeatureSet
+from mloda.user import ParallelizationMode
+from mloda.steward import ExtenderHook, Extender
 from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_SYNC_THREADING
 from tests.test_documentation.test_documentation import DokuExtender
 from tests.test_plugins.integration_plugins.test_validate_features.example_validator import (
@@ -31,8 +31,8 @@ class BaseValidateOutputFeaturesBaseNegative(BaseValidateOutputFeaturesBase):
 
 
 class ValidateOutputFeatureExtender(DokuExtender):
-    def wraps(self) -> Set[WrapperFunctionEnum]:
-        return {WrapperFunctionEnum.VALIDATE_OUTPUT_FEATURE}
+    def wraps(self) -> Set[ExtenderHook]:
+        return {ExtenderHook.VALIDATE_OUTPUT_FEATURE}
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
         start = time.time()
@@ -48,7 +48,7 @@ class TestValidateOutputFeatures:
     def get_features(self, feature_list: List[str], options: Dict[str, Any] = {}) -> Features:
         return Features([Feature(name=f_name, options=options, initial_requested_data=True) for f_name in feature_list])
 
-    def test_basic_validate_output_features(self, modes: Set[ParallelizationModes], flight_server: Any) -> None:
+    def test_basic_validate_output_features(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
         features = self.get_features(["BaseValidateOutputFeaturesBase"])
         MlodaTestRunner.run_api_simple(features, parallelization_modes=modes, flight_server=flight_server)
 
@@ -56,7 +56,7 @@ class TestValidateOutputFeatures:
         with pytest.raises(Exception):
             MlodaTestRunner.run_api_simple(features, parallelization_modes=modes, flight_server=flight_server)
 
-    def test_pandera_validate_output_features(self, modes: Set[ParallelizationModes], flight_server: Any) -> None:
+    def test_pandera_validate_output_features(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
         features = self.get_features(["BaseValidateOutputFeaturesBaseNegativePandera"])
 
         with pytest.raises(Exception) as excinfo:
@@ -66,7 +66,7 @@ class TestValidateOutputFeatures:
         assert "BaseValidateOutputFeaturesBaseNegativePandera" in str(excinfo.value)
 
     def test_extender_validate_output_features(
-        self, modes: Set[ParallelizationModes], flight_server: Any, caplog: Any
+        self, modes: Set[ParallelizationMode], flight_server: Any, caplog: Any
     ) -> None:
         features = self.get_features(["BaseValidateOutputFeaturesBase"])
 
@@ -77,5 +77,5 @@ class TestValidateOutputFeatures:
             function_extender={ValidateOutputFeatureExtender()},
         )
 
-        if ParallelizationModes.MULTIPROCESSING not in modes:
+        if ParallelizationMode.MULTIPROCESSING not in modes:
             assert "Time taken" in caplog.text

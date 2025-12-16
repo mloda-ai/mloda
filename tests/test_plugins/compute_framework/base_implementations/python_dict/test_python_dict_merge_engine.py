@@ -1,9 +1,9 @@
 from typing import Any, Optional, Type
 import pytest
 
-from mloda_core.abstract_plugins.components.link import JoinType
-from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
+from mloda.user import JoinType
+from mloda.user import Index
+from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_merge_engine import (
     PythonDictMergeEngine,
 )

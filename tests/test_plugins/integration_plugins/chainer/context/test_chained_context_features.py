@@ -1,9 +1,9 @@
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.options import Options
+from mloda import Feature
+from mloda import Options
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
+from mloda.user import PluginCollector
+import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from tests.test_plugins.integration_plugins.chainer.chainer_context_feature import (
     ChainedContextFeatureGroupTest,
@@ -14,7 +14,7 @@ from tests.test_plugins.integration_plugins.chainer.context.test_chained_optiona
 
 
 class TestChainedFeatures:
-    plugin_collector = PlugInCollector.enabled_feature_groups(
+    plugin_collector = PluginCollector.enabled_feature_groups(
         {ChainedContextFeatureGroupTest, ChainerContextParserTestDataCreator}
     )
 
@@ -82,7 +82,7 @@ class TestChainedFeatures:
         )
 
         # Test resolution behavior
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             [
                 feature4,
                 feature3,
@@ -126,7 +126,7 @@ class TestChainedFeatures:
             ),
         )
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             [feature4, feature5, feature6],
             compute_frameworks={PandasDataFrame},
             plugin_collector=self.plugin_collector,

@@ -3,16 +3,16 @@ from unittest.mock import patch
 
 import pytest
 
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
-from mloda_core.prepare.accessible_plugins import PreFilterPlugins
+from mloda import ComputeFramework
+from mloda.core.prepare.accessible_plugins import PreFilterPlugins
 
 
 class TestComputeFrameworkAvailability:
     """Test that compute frameworks are properly filtered based on dependency availability."""
 
     def test_base_compute_framework_is_available_by_default(self) -> None:
-        """Test that the base ComputeFrameWork class returns True for is_available()."""
-        assert ComputeFrameWork.is_available()
+        """Test that the base ComputeFramework class returns True for is_available()."""
+        assert ComputeFramework.is_available()
 
     def test_pyarrow_framework_available_when_pyarrow_installed(self) -> None:
         """Test that PyArrowTable.is_available() returns True when pyarrow is installed."""

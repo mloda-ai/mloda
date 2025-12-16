@@ -6,7 +6,7 @@ Feature Groups are core components that define feature dependencies and calculat
 
 ```mermaid
 graph TD
-    AFG[AbstractFeatureGroup] --> |Base Class| Implementations
+    AFG[FeatureGroup] --> |Base Class| Implementations
     
     subgraph Implementations
         AGG[AggregatedFeatureGroup]
@@ -47,11 +47,9 @@ graph TD
 All feature groups that use feature chain parsing inherit from `FeatureChainParserMixin`, which provides default implementations for `input_features()` and `match_feature_group_criteria()`.
 
 ```python
-from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
-    FeatureChainParserMixin,
-)
+from mloda.provider import FeatureGroup, FeatureChainParserMixin
 
-class MyFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
+class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     PREFIX_PATTERN = r".*__my_operation$"
 
     # In-feature constraints
@@ -113,7 +111,7 @@ flowchart LR
 ### Core Methods
 
 ```python
-class AbstractFeatureGroup:
+class FeatureGroup:
     # Required Implementation
     def calculate_feature(features: FeatureCollection) -> DataCreator
 
@@ -133,10 +131,10 @@ Features support optional type declarations via typed constructors (e.g., `Featu
 
 ### Multi-Column Utilities
 
-AbstractFeatureGroup provides utilities for working with multi-column features (pattern: `feature~0`, `~1`, `~2`):
+FeatureGroup provides utilities for working with multi-column features (pattern: `feature~0`, `~1`, `~2`):
 
 ```python
-class AbstractFeatureGroup:
+class FeatureGroup:
     # Producer utilities - creating multi-column outputs
     @staticmethod
     def apply_naming_convention(result, feature_name, suffix_generator=None) -> Dict[str, Any]

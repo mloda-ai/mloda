@@ -26,7 +26,7 @@ root_dir = root_dir.joinpath("docs").joinpath("docs").joinpath("examples").joinp
 
 lifecycle_path = root_dir.joinpath("1_ml_mloda_intro.ipynb")
 lifecycle_path_2 = root_dir.joinpath("2_ml_advantage_process_focus.ipynb")
-lifecycle_path_4 = root_dir.joinpath("4_ml_data_producers_user_owner.ipynb")
+lifecycle_path_4 = root_dir.joinpath("4_ml_data_providers_user_steward.ipynb")
 
 
 class TestMlodaBasicsNotebooks:

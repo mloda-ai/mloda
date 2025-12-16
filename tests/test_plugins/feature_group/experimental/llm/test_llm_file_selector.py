@@ -1,15 +1,15 @@
 import os
 from typing import List
 
-from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
+from mloda.user import PluginLoader
 from mloda_plugins.feature_group.experimental.llm.cli import format_array
 from mloda_plugins.feature_group.experimental.llm.llm_api.openai import OpenAIRequestLoop
 import pytest
 
-from mloda_core.abstract_plugins.components.feature import Feature
+from mloda import Feature
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.llm.llm_file_selector import LLMFileSelector
-from mloda_core.api.request import mlodaAPI
+import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.input_data.read_context_files import ConcatenatedFileContent
 
@@ -18,7 +18,7 @@ from mloda_plugins.feature_group.input_data.read_context_files import Concatenat
 def test_llm_file_selector() -> None:
     target_folder = [
         os.getcwd() + "/mloda_plugins",
-        os.getcwd() + "/mloda_core",
+        os.getcwd() + "/mloda/core",
         os.getcwd() + "/tests/test_plugins",
     ]
 
@@ -54,7 +54,7 @@ def test_llm_file_selector() -> None:
         )
     ]
 
-    results = mlodaAPI.run_all(
+    results = mloda.run_all(
         features,
         compute_frameworks={PandasDataFrame},
     )
@@ -95,7 +95,7 @@ def test_llm_file_selector() -> None:
     )
 
     try:
-        results = mlodaAPI.run_all(
+        results = mloda.run_all(
             [llm_feature],
             compute_frameworks={PandasDataFrame},
         )

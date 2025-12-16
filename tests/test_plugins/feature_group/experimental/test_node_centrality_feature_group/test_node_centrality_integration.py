@@ -6,10 +6,10 @@ from typing import Any, Dict, List
 
 import pandas as pd
 
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
+import mloda
+from mloda import Feature
+from mloda import Options
+from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.node_centrality.base import NodeCentralityFeatureGroup
 from mloda_plugins.feature_group.experimental.node_centrality.pandas import PandasNodeCentralityFeatureGroup
@@ -78,15 +78,15 @@ class TestNodeCentralityPandasIntegration:
     """Integration tests for the node centrality feature group using Pandas."""
 
     def test_node_centrality_with_data_creator(self) -> None:
-        """Test node centrality features with mlodaAPI using DataCreator."""
+        """Test node centrality features with API using DataCreator."""
 
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {NodeCentralityTestDataCreator, PandasNodeCentralityFeatureGroup}
         )
 
         # Run the API with multiple node centrality features
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             [
                 "source",  # Source node feature
                 "target",  # Target node feature
@@ -102,7 +102,7 @@ class TestNodeCentralityPandasIntegration:
         )
 
         # Verify the results
-        assert len(result) > 0, "No results returned from mlodaAPI"
+        assert len(result) > 0, "No results returned from API"
 
         # Find the DataFrame with the node centrality features
         centrality_df = None
@@ -121,7 +121,7 @@ class TestNodeCentralityPandasIntegration:
         Test node centrality features using the configuration-based approach
         """
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {NodeCentralityTestDataCreator, PandasNodeCentralityFeatureGroup}
         )
 
@@ -152,7 +152,7 @@ class TestNodeCentralityPandasIntegration:
         )
 
         # Run the API with the configured features
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             [
                 "source",  # Source node feature
                 "target",  # Target node feature
@@ -165,7 +165,7 @@ class TestNodeCentralityPandasIntegration:
         )
 
         # Verify the results
-        assert len(result) > 0, "No results returned from mlodaAPI"
+        assert len(result) > 0, "No results returned from API"
 
         # Find the DataFrame with the node centrality features
         centrality_df = None
@@ -183,7 +183,7 @@ class TestNodeCentralityPandasIntegration:
         """Test node centrality features with different graph types."""
 
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {NodeCentralityTestDataCreator, PandasNodeCentralityFeatureGroup}
         )
 
@@ -213,7 +213,7 @@ class TestNodeCentralityPandasIntegration:
         )
 
         # Run the API with the configured features
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             [
                 "source",  # Source node feature
                 "target",  # Target node feature
@@ -226,7 +226,7 @@ class TestNodeCentralityPandasIntegration:
         )
 
         # Verify the results
-        assert len(result) > 0, "No results returned from mlodaAPI"
+        assert len(result) > 0, "No results returned from API"
 
         # Find the DataFrames with the node centrality features
         source_df = None

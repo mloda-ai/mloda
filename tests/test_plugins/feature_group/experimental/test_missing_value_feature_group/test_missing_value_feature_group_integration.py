@@ -1,13 +1,13 @@
 """
-Integration tests for the MissingValueFeatureGroup with mlodaAPI.
+Integration tests for the MissingValueFeatureGroup with API.
 """
 
 from typing import Any, Dict
 
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
+import mloda
+from mloda import Feature
+from mloda import Options
+from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import PandasMissingValueFeatureGroup
@@ -32,9 +32,9 @@ class MissingValueParserTestDataCreator(ATestDataCreator):
 
 class TestMissingValueFeatureGroupIntegration:
     def test_integration_with_feature_parser(self) -> None:
-        """Test integration with mlodaAPI using the parser."""
+        """Test integration with API using the parser."""
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {MissingValueParserTestDataCreator, PandasMissingValueFeatureGroup}
         )
 
@@ -59,7 +59,7 @@ class TestMissingValueFeatureGroupIntegration:
         )
 
         # test with pre parsing the features
-        results = mlodaAPI.run_all(
+        results = mloda.run_all(
             [f1, f2],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
@@ -83,7 +83,7 @@ class TestMissingValueFeatureGroupIntegration:
         assert imputed_df["x2"].iloc[4] == "A"
 
         # test with mloda parsing the features
-        results2 = mlodaAPI.run_all(
+        results2 = mloda.run_all(
             [f1, f2],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
@@ -93,9 +93,9 @@ class TestMissingValueFeatureGroupIntegration:
         assert results[0].sort_index(axis=1).equals(results2[0].sort_index(axis=1))
 
     def test_integration_with_constant_imputation(self) -> None:
-        """Test integration with mlodaAPI using constant imputation."""
+        """Test integration with API using constant imputation."""
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {MissingValueParserTestDataCreator, PandasMissingValueFeatureGroup}
         )
 
@@ -112,7 +112,7 @@ class TestMissingValueFeatureGroupIntegration:
         )
 
         # test with pre parsing the features
-        results = mlodaAPI.run_all([f1], compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
+        results = mloda.run_all([f1], compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
 
         assert len(results) == 1
 
@@ -130,7 +130,7 @@ class TestMissingValueFeatureGroupIntegration:
         assert imputed_df["category__constant_imputed"].iloc[4] == "Unknown"
 
         # test with mloda parsing the features
-        results2 = mlodaAPI.run_all([f1], compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
+        results2 = mloda.run_all([f1], compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
 
         assert len(results2) == 1
         assert results[0].sort_index(axis=1).equals(results2[0].sort_index(axis=1))

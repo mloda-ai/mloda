@@ -13,10 +13,10 @@ Tests verify:
 from typing import Set
 import pytest
 
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.filter.single_filter import SingleFilter
-from mloda_core.abstract_plugins.components.validators.feature_set_validator import FeatureSetValidator
+from mloda import Feature
+from mloda import Options
+from mloda.user import SingleFilter
+from mloda.provider import FeatureSetValidator
 
 
 class TestValidateOptionsInitialized:

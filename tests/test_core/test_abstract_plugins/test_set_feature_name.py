@@ -1,14 +1,14 @@
 from typing import Any, Optional, Set, Union
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.api.request import mlodaAPI
+from mloda import FeatureGroup
+from mloda.user import DataAccessCollection
+from mloda import Feature
+from mloda.user import FeatureName
+from mloda.provider import FeatureSet
+from mloda import Options
+import mloda
 
 
-class ATestSetFeatureNameBase(AbstractFeatureGroup):
+class ATestSetFeatureNameBase(FeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {"ATestSetFeatureNameBaseL": [12, 2, 3], "ATestSetFeatureNameBaseR": [1, 2, 3]}
@@ -37,7 +37,7 @@ class ATestSetFeatureNameBase(AbstractFeatureGroup):
         return False
 
 
-class ATestSetFeatureNameFeature(AbstractFeatureGroup):
+class ATestSetFeatureNameFeature(FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         return {Feature.int64_of("ATestSetFeatureNameBase1"), Feature.int64_of("ATestSetFeatureNameBase2")}
 
@@ -48,7 +48,7 @@ class ATestSetFeatureNameFeature(AbstractFeatureGroup):
 
 class TestSetFeatureName:
     def test_set_feature_name(self) -> None:
-        mlodaAPI.run_all(
+        mloda.run_all(
             ["ATestSetFeatureNameFeature"],
             compute_frameworks=["PyArrowTable"],
         )

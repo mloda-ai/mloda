@@ -4,10 +4,9 @@ from typing import Any
 import pyarrow as pa
 import sqlite3
 
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.hashable_dict import HashableDict
-from mloda_core.abstract_plugins.components.data_types import DataType
-from mloda_core.abstract_plugins.components.options import Options
+from mloda.provider import FeatureSet, HashableDict
+from mloda.user import DataType
+from mloda import Options
 from mloda_plugins.feature_group.input_data.read_db import ReadDB
 
 
@@ -46,9 +45,9 @@ class SQLITEReader(ReadDB):
     Uses Options with database credentials and configuration:
 
     ```python
-    from mloda_core.abstract_plugins.components.feature import Feature
-    from mloda_core.abstract_plugins.components.options import Options
-    from mloda_core.abstract_plugins.components.hashable_dict import HashableDict
+    from mloda import Feature
+    from mloda import Options
+    from mloda.core.abstract_plugins.components.hashable_dict import HashableDict
 
     feature = Feature(
         name="customer_name",
@@ -68,8 +67,8 @@ class SQLITEReader(ReadDB):
     ### Basic SQLite Feature Access
 
     ```python
-    from mloda_core.abstract_plugins.components.feature import Feature
-    from mloda_core.abstract_plugins.components.hashable_dict import HashableDict
+    from mloda import Feature
+    from mloda.core.abstract_plugins.components.hashable_dict import HashableDict
 
     # Simple column reference from SQLite database
     feature = Feature(
@@ -117,7 +116,7 @@ class SQLITEReader(ReadDB):
     ### Using DataAccessCollection
 
     ```python
-    from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
+    from mloda.user import DataAccessCollection
 
     # Configure database access at the collection level
     data_access = DataAccessCollection(

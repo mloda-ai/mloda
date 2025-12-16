@@ -1,14 +1,14 @@
 """
-Integration tests for the SklearnPipelineFeatureGroup with mlodaAPI.
+Integration tests for the SklearnPipelineFeatureGroup with API.
 """
 
 import pytest
 from typing import Any, Dict
 
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
+from mloda import Feature
+from mloda import Options
+from mloda.user import PluginCollector
+import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import SklearnPipelineFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.pandas import PandasSklearnPipelineFeatureGroup
@@ -36,7 +36,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
     """Integration tests for sklearn pipeline feature groups."""
 
     def test_integration_with_scaling_pipeline(self) -> None:
-        """Test integration with mlodaAPI using scaling pipeline."""
+        """Test integration with API using scaling pipeline."""
         # Skip test if sklearn not available
         try:
             import sklearn
@@ -44,7 +44,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
             pytest.skip("scikit-learn not available")
 
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {SklearnPipelineTestDataCreator, PandasSklearnPipelineFeatureGroup}
         )
 
@@ -52,7 +52,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         feature = Feature("income__sklearn_pipeline_scaling")
 
         # Test with mloda API
-        results = mlodaAPI.run_all(
+        results = mloda.run_all(
             [feature],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
@@ -75,7 +75,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         assert abs(scaled_values.std() - 1.0) < 0.2, "Scaled values should have std close to 1"
 
     def test_integration_with_preprocessing_pipeline(self) -> None:
-        """Test integration with mlodaAPI using preprocessing pipeline."""
+        """Test integration with API using preprocessing pipeline."""
         # Skip test if sklearn not available
         try:
             import sklearn
@@ -83,7 +83,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
             pytest.skip("scikit-learn not available")
 
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {SklearnPipelineTestDataCreator, PandasSklearnPipelineFeatureGroup}
         )
 
@@ -91,7 +91,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         feature = Feature("income__sklearn_pipeline_preprocessing")
 
         # Test with mloda API
-        results = mlodaAPI.run_all(
+        results = mloda.run_all(
             [feature],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
@@ -114,7 +114,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         assert abs(preprocessed_values.std() - 1.0) < 0.2, "Preprocessed values should have std close to 1"
 
     def test_integration_with_multiple_features(self) -> None:
-        """Test integration with mlodaAPI using multiple source features."""
+        """Test integration with API using multiple source features."""
         # Skip test if sklearn not available
         try:
             import sklearn
@@ -122,7 +122,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
             pytest.skip("scikit-learn not available")
 
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {SklearnPipelineTestDataCreator, PandasSklearnPipelineFeatureGroup}
         )
 
@@ -130,7 +130,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         feature = Feature("income,age__sklearn_pipeline_scaling")
 
         # Test with mloda API
-        results = mlodaAPI.run_all(
+        results = mloda.run_all(
             [feature],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
@@ -161,7 +161,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
             assert abs(scaled_values.mean()) < 1e-10, f"Scaled values in {col} should have mean close to 0"
 
     def test_integration_with_feature_parser(self) -> None:
-        """Test integration with mlodaAPI using the feature parser."""
+        """Test integration with API using the feature parser."""
         # Skip test if sklearn not available
         try:
             import sklearn
@@ -169,7 +169,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
             pytest.skip("scikit-learn not available")
 
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {SklearnPipelineTestDataCreator, PandasSklearnPipelineFeatureGroup}
         )
 
@@ -188,7 +188,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
             raise ValueError("Failed to create feature using the parser.")
 
         # Test with pre-parsed features
-        results = mlodaAPI.run_all(
+        results = mloda.run_all(
             [f1],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
@@ -210,7 +210,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         assert abs(scaled_values.mean()) < 1e-10, "Scaled values should have mean close to 0"
 
         # Test with mloda parsing the features
-        results2 = mlodaAPI.run_all(
+        results2 = mloda.run_all(
             [f1],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
@@ -220,7 +220,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         assert results[0].sort_index(axis=1).equals(results2[0].sort_index(axis=1))
 
     def test_integration_with_custom_pipeline_steps(self) -> None:
-        """Test integration with mlodaAPI using custom pipeline steps."""
+        """Test integration with API using custom pipeline steps."""
         # Skip test if sklearn not available
         try:
             from sklearn.preprocessing import StandardScaler, MinMaxScaler
@@ -229,7 +229,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
             pytest.skip("scikit-learn not available")
 
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {SklearnPipelineTestDataCreator, PandasSklearnPipelineFeatureGroup}
         )
 
@@ -262,7 +262,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         )
 
         # Test with custom pipeline
-        results = mlodaAPI.run_all(
+        results = mloda.run_all(
             [f1],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
@@ -295,7 +295,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
             pytest.skip("scikit-learn not available")
 
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {SklearnPipelineTestDataCreator, PandasSklearnPipelineFeatureGroup}
         )
 
@@ -303,14 +303,14 @@ class TestSklearnPipelineFeatureGroupIntegration:
         feature = Feature("income__sklearn_pipeline_scaling")
 
         # First run - should create and save artifact
-        results1 = mlodaAPI.run_all(
+        results1 = mloda.run_all(
             [feature],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
         )
 
         # Second run - should reuse artifact
-        results2 = mlodaAPI.run_all(
+        results2 = mloda.run_all(
             [feature],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
@@ -338,13 +338,13 @@ class TestSklearnPipelineFeatureGroupIntegration:
         """Test artifact persistence with both fallback and custom storage paths following proper mloda lifecycle."""
         # Skip test if sklearn not available
         try:
-            import sklearn
+            import sklearn  # noqa: F401
             import os
         except ImportError:
             pytest.skip("scikit-learn not available")
 
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {SklearnPipelineTestDataCreator, PandasSklearnPipelineFeatureGroup}
         )
 
@@ -358,7 +358,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         # First run - create feature WITHOUT artifact options (mloda will set artifact_to_save)
         feature1 = Feature("income__sklearn_pipeline_scaling", Options(feature_options))
 
-        api1 = mlodaAPI([feature1], {PandasDataFrame}, plugin_collector=plugin_collector)
+        api1 = mloda.API([feature1], {PandasDataFrame}, plugin_collector=plugin_collector)
         api1._batch_run()
         results1 = api1.get_result()
         artifacts1 = api1.get_artifacts()
@@ -370,7 +370,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
 
         # Verify artifact file was created in expected location
         from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import SklearnArtifact
-        from mloda_core.abstract_plugins.components.feature_set import FeatureSet
+        from mloda.provider import FeatureSet
 
         mock_features = FeatureSet()
         mock_features.add(Feature("income__sklearn_pipeline_scaling", Options(feature_options)))
@@ -391,7 +391,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         combined_options = {**feature_options, **artifacts1}
         feature2 = Feature("income__sklearn_pipeline_scaling", Options(combined_options))
 
-        api2 = mlodaAPI([feature2], {PandasDataFrame}, plugin_collector=plugin_collector)
+        api2 = mloda.API([feature2], {PandasDataFrame}, plugin_collector=plugin_collector)
         api2._batch_run()
         results2 = api2.get_result()
         artifacts2 = api2.get_artifacts()

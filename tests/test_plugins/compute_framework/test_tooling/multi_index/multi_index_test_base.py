@@ -9,8 +9,8 @@ from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict, List, Optional, Type
 import logging
 
-from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
+from mloda.user import Index
+from mloda.provider import BaseMergeEngine
 
 from .test_scenarios import SCENARIOS, MergeScenario
 from .test_data_converter import DataConverter

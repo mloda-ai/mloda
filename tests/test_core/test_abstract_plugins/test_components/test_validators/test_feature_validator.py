@@ -1,17 +1,17 @@
 import pytest
 from typing import Set, Type
 
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
-from mloda_core.abstract_plugins.components.utils import get_all_subclasses
-from mloda_core.abstract_plugins.components.validators.feature_validator import FeatureValidator
+from mloda import ComputeFramework
+from mloda.core.abstract_plugins.components.utils import get_all_subclasses
+from mloda.provider import FeatureValidator
 
 
 class TestValidateAndResolveComputeFramework:
     """Test the validate_and_resolve_compute_framework static method."""
 
     def test_valid_framework_name_returns_subclass(self) -> None:
-        """Should return the matching ComputeFrameWork subclass when a valid framework name is provided."""
-        available_frameworks = get_all_subclasses(ComputeFrameWork)
+        """Should return the matching ComputeFramework subclass when a valid framework name is provided."""
+        available_frameworks = get_all_subclasses(ComputeFramework)
 
         # Get a valid framework name
         valid_framework = next(iter(available_frameworks))
@@ -24,11 +24,11 @@ class TestValidateAndResolveComputeFramework:
 
         # Assert
         assert result == valid_framework
-        assert issubclass(result, ComputeFrameWork)
+        assert issubclass(result, ComputeFramework)
 
     def test_invalid_framework_name_raises_value_error(self) -> None:
         """Should raise ValueError when framework name doesn't match any available framework."""
-        available_frameworks = get_all_subclasses(ComputeFrameWork)
+        available_frameworks = get_all_subclasses(ComputeFramework)
         invalid_framework_name = "NonExistentFramework"
 
         # Act & Assert
@@ -42,7 +42,7 @@ class TestValidateAndResolveComputeFramework:
 
     def test_empty_available_frameworks_raises_value_error(self) -> None:
         """Should raise ValueError when no frameworks are available."""
-        empty_frameworks: Set[Type[ComputeFrameWork]] = set()
+        empty_frameworks: Set[Type[ComputeFramework]] = set()
 
         # Act & Assert
         with pytest.raises(ValueError):
@@ -52,7 +52,7 @@ class TestValidateAndResolveComputeFramework:
 
     def test_error_message_includes_source_parameter(self) -> None:
         """Should include 'parameter' source in error message when framework not found."""
-        available_frameworks = get_all_subclasses(ComputeFrameWork)
+        available_frameworks = get_all_subclasses(ComputeFramework)
         invalid_framework_name = "InvalidFramework"
 
         # Act & Assert
@@ -66,7 +66,7 @@ class TestValidateAndResolveComputeFramework:
 
     def test_error_message_includes_source_options(self) -> None:
         """Should include 'options' source in error message when framework not found."""
-        available_frameworks = get_all_subclasses(ComputeFrameWork)
+        available_frameworks = get_all_subclasses(ComputeFramework)
         invalid_framework_name = "InvalidFramework"
 
         # Act & Assert
@@ -80,7 +80,7 @@ class TestValidateAndResolveComputeFramework:
 
     def test_case_sensitive_framework_matching(self) -> None:
         """Should match framework names case-sensitively."""
-        available_frameworks = get_all_subclasses(ComputeFrameWork)
+        available_frameworks = get_all_subclasses(ComputeFramework)
 
         if available_frameworks:
             valid_framework = next(iter(available_frameworks))
@@ -108,7 +108,7 @@ class TestValidateComputeFrameworksResolved:
 
     def test_empty_set_does_not_raise(self) -> None:
         """Empty set is valid (different from None) and should not raise."""
-        empty_frameworks: Set[Type[ComputeFrameWork]] = set()
+        empty_frameworks: Set[Type[ComputeFramework]] = set()
 
         # Act & Assert - should not raise
         FeatureValidator.validate_compute_frameworks_resolved(
@@ -128,7 +128,7 @@ class TestValidateComputeFrameworksResolved:
 
     def test_valid_set_does_not_raise(self) -> None:
         """Should not raise when compute_frameworks is populated with valid frameworks."""
-        available_frameworks = get_all_subclasses(ComputeFrameWork)
+        available_frameworks = get_all_subclasses(ComputeFramework)
 
         # Act & Assert - should not raise
         FeatureValidator.validate_compute_frameworks_resolved(

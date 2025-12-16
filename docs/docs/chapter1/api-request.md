@@ -5,8 +5,8 @@ This example demonstrates a simple request to the mloda API. In this case, mloda
 #### 1. Import the Required Modules
 We first need to import the necessary components to set up our request:
 ```python
-from mloda_core.api.request import mlodaAPI
-from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
+import mloda
+from mloda.user import DataAccessCollection
 ```
 
 #### 2. Define Data Sources
@@ -26,8 +26,8 @@ feature_list = feature_list.split(",")
 #### 4. Execute the Request and Retrieve Results
 Finally, we send the request to the mloda API, specifying the compute framework and the data source. The result is returned as a DataFrame:
 ```python
-result = mlodaAPI.run_all(
-    feature_list, 
+result = mloda.run_all(
+    feature_list,
     compute_frameworks=["PyArrowTable"],
     data_access_collection=data_access_collection)
 result[0]

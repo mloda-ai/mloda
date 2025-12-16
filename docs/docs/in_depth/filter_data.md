@@ -8,14 +8,14 @@ That however means that a data project typically contains multiple filters. For 
 
 -    filter_feature: It can be a Feature or a feature name as string.
 -    parameter: A dictionary of parameters to filter. Example: {"min": 2, "max": 3}
--    filter_type: It can be a str or a FilterTypeEnum.
+-    filter_type: It can be a str or a FilterType.
 
-#### FilterTypeEnum
+#### FilterType
 
 This class is supposed to created similarity in the framework and by framework users.
 
 ``` python
-class FilterTypeEnum(Enum):
+class FilterType(Enum):
     min = "min"
     max = "max"
     equal = "equal"
@@ -62,7 +62,7 @@ The **single_filters** created will be converted to UTC as ISO 8601 formatted st
 In this example, we simply instantiate a GlobalFilter and add a SingleFilter.
 
 ```python
-from mloda_core.filter.global_filter import GlobalFilter
+from mloda.user import GlobalFilter
 
 global_filter = GlobalFilter()
 global_filter.add_filter("example_order_id", "equal", {"value": 1})
@@ -109,16 +109,12 @@ The implementation of the concrete filters is dependent on the feature group. Th
 Further, the feature is a data creator, so we create the data here itself. 
 
 ``` python
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
+import mloda
+from mloda.provider import FeatureGroup, FeatureSet, ComputeFramework, BaseInputData, DataCreator
 from typing import Any, Union, Set, Type, Optional
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from mloda_core.api.request import mlodaAPI
 
-class ExampleOrderFilter(AbstractFeatureGroup):
+class ExampleOrderFilter(FeatureGroup):
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         return DataCreator({cls.get_class_name(), "example_order_id"})
@@ -145,11 +141,11 @@ class ExampleOrderFilter(AbstractFeatureGroup):
         }
         return filtered_data
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         return {PyArrowTable}
 
-result = mlodaAPI.run_all(
-    ["ExampleOrderFilter"], 
+result = mloda.run_all(
+    ["ExampleOrderFilter"],
     global_filter=global_filter
 )
 result[0]
@@ -164,4 +160,4 @@ Although this example is complex, it is noteworthy, that the framework considers
 
 ### Summary
 
-This filtering system improves data preprocessing through GlobalFilter and SingleFilters, allowing flexible, condition-based refinement, including time-based filtering. It maintains consistency using FilterTypeEnum and supports complex machine learning use cases. If you encounter a commonly used filter not yet included, feel free to open an issue or submit a pull request.
+This filtering system improves data preprocessing through GlobalFilter and SingleFilters, allowing flexible, condition-based refinement, including time-based filtering. It maintains consistency using FilterType and supports complex machine learning use cases. If you encounter a commonly used filter not yet included, feel free to open an issue or submit a pull request.

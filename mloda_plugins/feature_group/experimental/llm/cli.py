@@ -1,7 +1,7 @@
 import argparse
 from typing import Any
-from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
-from mloda_core.api.request import mlodaAPI
+from mloda.user import PluginLoader
+import mloda
 
 import logging
 
@@ -25,7 +25,7 @@ def print_results(feature_group: str, results: Any) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run mlodaAPI.run_all() with a specified feature group.")
+    parser = argparse.ArgumentParser(description="Run mloda.run_all() with a specified feature group.")
     parser.add_argument("feature_group", help="The feature group to process.")
     args = parser.parse_args()
 
@@ -33,5 +33,5 @@ def main() -> None:
 
     feature_group = args.feature_group
 
-    results = mlodaAPI.run_all(features=[feature_group])
+    results = mloda.run_all(features=[feature_group])
     print_results(feature_group, results)

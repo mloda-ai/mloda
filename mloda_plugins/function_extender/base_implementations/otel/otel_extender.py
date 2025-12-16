@@ -1,5 +1,5 @@
 from typing import Any, Set
-from mloda_core.abstract_plugins.function_extender import WrapperFunctionEnum, WrapperFunctionExtender
+from mloda.steward import Extender, ExtenderHook
 
 
 import logging
@@ -12,14 +12,14 @@ except ImportError:
     trace = None  # type: ignore[assignment]
 
 
-class OtelExtender(WrapperFunctionExtender):
+class OtelExtender(Extender):
     def __init__(self) -> None:
         if trace is None:
             return
 
-        self.wrapped = {WrapperFunctionEnum.FEATURE_GROUP_CALCULATE_FEATURE}
+        self.wrapped = {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
 
-    def wraps(self) -> Set[WrapperFunctionEnum]:
+    def wraps(self) -> Set[ExtenderHook]:
         return self.wrapped
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:

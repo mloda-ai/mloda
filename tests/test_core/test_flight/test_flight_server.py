@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 import pyarrow as pa
 import pyarrow.flight as flight
-from mloda_core.runtime.flight.flight_server import FlightServer
+from mloda.core.runtime.flight.flight_server import FlightServer
 
 
 class TestFlightServerUnit:

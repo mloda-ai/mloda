@@ -5,9 +5,9 @@ import logging
 
 import pytest
 
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.filter.single_filter import SingleFilter
-from mloda_core.filter.filter_type_enum import FilterTypeEnum
+from mloda import Feature
+from mloda.user import SingleFilter
+from mloda.user import FilterType
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_filter_engine import DuckDBFilterEngine
 
 from tests.test_plugins.compute_framework.base_implementations.filter_engine_test_mixin import (
@@ -70,7 +70,7 @@ class TestDuckDBFilterEngine(FilterEngineTestMixin):
         extended_data = conn.from_arrow(arrow_table)
 
         feature = Feature("age")
-        filter_type = FilterTypeEnum.min
+        filter_type = FilterType.min
         parameter = {"value": 30}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -96,7 +96,7 @@ class TestDuckDBFilterEngine(FilterEngineTestMixin):
         empty_data = conn.from_arrow(arrow_table)
 
         feature = Feature("age")
-        filter_type = FilterTypeEnum.min
+        filter_type = FilterType.min
         parameter = {"value": 30}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -117,7 +117,7 @@ class TestDuckDBFilterEngine(FilterEngineTestMixin):
         data = conn.from_arrow(arrow_table)
 
         feature = Feature("status")
-        filter_type = FilterTypeEnum.equal
+        filter_type = FilterType.equal
         parameter = {"value": "active"}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -140,7 +140,7 @@ class TestDuckDBFilterEngine(FilterEngineTestMixin):
         data = conn.from_arrow(arrow_table)
 
         feature = Feature("is_active")
-        filter_type = FilterTypeEnum.equal
+        filter_type = FilterType.equal
         parameter = {"value": True}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -168,7 +168,7 @@ class TestDuckDBFilterEngine(FilterEngineTestMixin):
         data = conn.from_arrow(arrow_table)
 
         feature = Feature("email")
-        filter_type = FilterTypeEnum.regex
+        filter_type = FilterType.regex
         parameter = {"value": r"\.com$"}
         single_filter = SingleFilter(feature, filter_type, parameter)
 

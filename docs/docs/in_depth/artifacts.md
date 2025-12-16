@@ -8,7 +8,7 @@ Example use cases are embeddings, Feature Matrices, Model Checkpoints and more.
 Artifacts are managed through a set of abstract and concrete classes that define how artifacts are created, saved, and loaded. The primary classes involved in artifact management include:
 
 - `BaseArtifact`: The base class for all artifacts.
-- `AbstractFeatureGroup`: An abstract class that defines the structure for feature groups, including methods for artifact management. This class may contain a `BaseArtfact`.
+- `FeatureGroup`: The base class for feature groups, including methods for artifact management. This class may contain a `BaseArtfact`.
 
 ## Key Components
 
@@ -17,9 +17,9 @@ Artifacts are managed through a set of abstract and concrete classes that define
 The `BaseArtifact` class serves as the foundation for all artifacts. It provides the basic interface and functionality required for artifact management.
 
 
-#### AbstractFeatureGroup
+#### FeatureGroup
 
-The `AbstractFeatureGroup` class defines the structure for feature groups, including methods for creating data, calculating features, and managing artifacts. It includes methods such as `artifact` and `load_artifact` to handle artifact operations.
+The `FeatureGroup` class defines the structure for feature groups, including methods for creating data, calculating features, and managing artifacts. It includes methods such as `artifact` and `load_artifact` to handle artifact operations.
 
 ## Example
 
@@ -31,14 +31,10 @@ Here, we create a `FeatureGroup` with a configured `BaseArtifact`.
 
 ```python
 from typing import Type, Any, Optional
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.base_artifact import BaseArtifact
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
+from mloda.provider import FeatureGroup, FeatureSet, BaseArtifact, DataCreator, BaseInputData
 
 
-class BaseExampleArtifactFeature(AbstractFeatureGroup):
+class BaseExampleArtifactFeature(FeatureGroup):
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         return DataCreator({cls.get_class_name()})
@@ -62,10 +58,10 @@ class BaseExampleArtifactFeature(AbstractFeatureGroup):
 Now, we run the query to the feature group to save the artifact. This example is very basic, but could be a much more complex artifact.
 
 ```python
-from mloda_core.api.request import mlodaAPI
+from mloda.user import API
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
-api = mlodaAPI(["BaseExampleArtifactFeature"], {PyArrowTable})
+api = API(["BaseExampleArtifactFeature"], {PyArrowTable})
 api._batch_run()
 artifacts = api.get_artifacts()
 print(artifacts)
@@ -80,10 +76,10 @@ Result:
 Now, let us use this artifact.
 
 ```python
-from mloda_core.abstract_plugins.components.feature import Feature
+from mloda.user import Feature, API
 
 feat = Feature(name="BaseExampleArtifactFeature", options=artifacts)
-api = mlodaAPI([feat], {PyArrowTable})
+api = API([feat], {PyArrowTable})
 api._batch_run()
 ```
 
@@ -106,7 +102,7 @@ For more advanced use cases, artifacts can handle complex data structures and mu
 ```python
 from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import SklearnArtifact
 
-class MySklearnFeatureGroup(AbstractFeatureGroup):
+class MySklearnFeatureGroup(FeatureGroup):
     @staticmethod
     def artifact() -> Type[BaseArtifact] | None:
         return SklearnArtifact

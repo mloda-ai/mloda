@@ -1,15 +1,15 @@
 from typing import Optional, Set, Union
 import numpy as np
 import pytest
-from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda_core.abstract_plugins.components.data_types import DataType
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.options import Options
+from mloda.user import DataAccessCollection
+from mloda.user import DataType
+from mloda.user import FeatureName
+from mloda import FeatureGroup
+from mloda import Feature
+from mloda import Options
 
 
-class BaseTestFeatureGroup1(AbstractFeatureGroup):
+class BaseTestFeatureGroup1(FeatureGroup):
     @classmethod
     def match_feature_group_criteria(
         cls,
@@ -22,7 +22,7 @@ class BaseTestFeatureGroup1(AbstractFeatureGroup):
         return False
 
 
-class BaseTestFeatureGroup2(AbstractFeatureGroup):
+class BaseTestFeatureGroup2(FeatureGroup):
     @classmethod
     def match_feature_group_criteria(
         cls,
@@ -59,7 +59,7 @@ def test_apply_naming_convention_basic_multi_column() -> None:
     feature_name = "test_feature"
 
     # Act: Apply naming convention
-    output = AbstractFeatureGroup.apply_naming_convention(result, feature_name)
+    output = FeatureGroup.apply_naming_convention(result, feature_name)
 
     # Assert: Verify the output structure
     assert isinstance(output, dict), "Output should be a dictionary"
@@ -93,7 +93,7 @@ def test_get_column_base_feature_strips_suffix(column_name: str, expected_base_f
     - Return the original name if no ~N suffix exists (e.g., "plain_name" -> "plain_name")
     """
     # Act: Extract base feature name
-    result = AbstractFeatureGroup.get_column_base_feature(column_name)
+    result = FeatureGroup.get_column_base_feature(column_name)
 
     # Assert: Verify correct base feature name
     assert result == expected_base_feature, f"Expected {expected_base_feature}, got {result}"
@@ -111,7 +111,7 @@ def test_expand_feature_columns_generates_list() -> None:
     num_columns = 3
 
     # Act: Generate column names
-    result = AbstractFeatureGroup.expand_feature_columns(feature_name, num_columns)
+    result = FeatureGroup.expand_feature_columns(feature_name, num_columns)
 
     # Assert: Verify the output structure and content
     assert isinstance(result, list), "Output should be a list"
@@ -136,9 +136,7 @@ def test_apply_naming_convention_with_custom_suffix_generator() -> None:
     custom_suffix_generator = lambda i: f"dim{i + 1}"
 
     # Act: Apply naming convention with custom suffix generator
-    output = AbstractFeatureGroup.apply_naming_convention(
-        result, feature_name, suffix_generator=custom_suffix_generator
-    )
+    output = FeatureGroup.apply_naming_convention(result, feature_name, suffix_generator=custom_suffix_generator)
 
     # Assert: Verify the output uses custom suffixes
     assert isinstance(output, dict), "Output should be a dictionary"
@@ -169,7 +167,7 @@ def test_resolve_multi_column_feature_discovers_tilde_columns() -> None:
     available_columns = {"my_feature~0", "my_feature~1", "my_feature~2"}
 
     # Act: Resolve multi-column feature
-    result = AbstractFeatureGroup.resolve_multi_column_feature(feature_name, available_columns)
+    result = FeatureGroup.resolve_multi_column_feature(feature_name, available_columns)
 
     # Assert: Should return all matching columns sorted
     assert isinstance(result, list), "Output should be a list"

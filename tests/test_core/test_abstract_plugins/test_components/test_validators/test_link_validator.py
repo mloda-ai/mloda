@@ -1,9 +1,9 @@
 import pytest
 from typing import Set
 
-from mloda_core.abstract_plugins.components.link import Link, JoinSpec, JoinType
-from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.validators.link_validator import LinkValidator
+from mloda.user import Link, JoinSpec, JoinType
+from mloda.user import Index
+from mloda.provider import LinkValidator
 
 
 # Mock feature group classes for testing

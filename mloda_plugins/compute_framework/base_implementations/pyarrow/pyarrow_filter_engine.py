@@ -2,8 +2,8 @@ from typing import Any
 import pyarrow as pa
 import pyarrow.compute as pc
 
-from mloda_core.filter.filter_engine import BaseFilterEngine
-from mloda_core.filter.single_filter import SingleFilter
+from mloda.provider import BaseFilterEngine
+from mloda.user import SingleFilter
 
 
 class PyArrowFilterEngine(BaseFilterEngine):

@@ -2,22 +2,22 @@ from typing import Any, Dict, List, Optional, Set, Type, Union
 
 import pyarrow as pa
 
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.filter.global_filter import GlobalFilter
+from mloda.user import FeatureName
+from mloda.provider import BaseInputData
+from mloda.provider import DataCreator
+from mloda import Options
+from mloda.user import GlobalFilter
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_collection import Features
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
+from mloda.user import ParallelizationMode
+from mloda import FeatureGroup
+from mloda import Feature
+from mloda.user import Features
+from mloda.provider import FeatureSet
+from mloda import ComputeFramework
 from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_ALL
 
 
-class GlobalFilterBasicTest(AbstractFeatureGroup):
+class GlobalFilterBasicTest(FeatureGroup):
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         return DataCreator({cls.get_class_name()})
@@ -33,7 +33,7 @@ class GlobalFilterBasicTest(AbstractFeatureGroup):
         return pa.table({cls.get_class_name(): [1, 2, 3]})
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         return {PyArrowTable}
 
 
@@ -85,7 +85,7 @@ class TestGlobalFilter:
     def get_features(self, feature_list: List[str], options: Dict[str, Any] = {}) -> Features:
         return Features([Feature(name=f_name, options=options, initial_requested_data=True) for f_name in feature_list])
 
-    def test_basic_global_filter(self, modes: Set[ParallelizationModes], flight_server: Any) -> None:
+    def test_basic_global_filter(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
         global_filter_test_basic = "GlobalFilterBasicTest"
 
         features = self.get_features([global_filter_test_basic])
@@ -107,7 +107,7 @@ class TestGlobalFilter:
 
         # test registration of used filters
         for key, value in result_global_filter.collection.items():
-            assert issubclass(key[0], AbstractFeatureGroup)
+            assert issubclass(key[0], FeatureGroup)
             assert isinstance(key[1], FeatureName)
             assert key[0].get_class_name() == global_filter_test_basic
             assert key[1].name == global_filter_test_basic
@@ -121,7 +121,7 @@ class TestGlobalFilter:
             assert next(iter(global_filter.filters)).uuid == single_feature.uuid
 
     def test_global_filter_filter_requests_other_column(
-        self, modes: Set[ParallelizationModes], flight_server: Any
+        self, modes: Set[ParallelizationMode], flight_server: Any
     ) -> None:
         base_feature_name = "GlobalFilterFromDifferentColumn"
 
@@ -130,7 +130,7 @@ class TestGlobalFilter:
         global_filter = GlobalFilter()
 
         # We could have parametized this test, but we don t want to add too many tests for no reason.
-        if ParallelizationModes.MULTIPROCESSING in modes:
+        if ParallelizationMode.MULTIPROCESSING in modes:
             filter_feat: Union[str, Feature] = f"{base_feature_name}2"
         else:
             filter_feat = Feature(name=f"{base_feature_name}2")
@@ -144,9 +144,7 @@ class TestGlobalFilter:
             res = result.to_pydict()
             assert res == {"GlobalFilterFromDifferentColumn1": [1]}
 
-    def test_global_filter_filter_has_different_name(
-        self, modes: Set[ParallelizationModes], flight_server: Any
-    ) -> None:
+    def test_global_filter_filter_has_different_name(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
         base_feature_name = "GlobalFilterHasDifferentName"
 
         features = self.get_features([f"{base_feature_name}1"])
@@ -154,7 +152,7 @@ class TestGlobalFilter:
         global_filter = GlobalFilter()
 
         # We could have parametized this test, but we don t want to add too many tests for no reason.
-        if ParallelizationModes.MULTIPROCESSING not in modes:
+        if ParallelizationMode.MULTIPROCESSING not in modes:
             filter_feat: Union[str, Feature] = f"{base_feature_name}2"
         else:
             filter_feat = Feature(name=f"{base_feature_name}2")

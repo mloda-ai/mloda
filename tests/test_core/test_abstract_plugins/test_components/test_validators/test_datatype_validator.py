@@ -1,13 +1,13 @@
 import pytest
 import pyarrow as pa
 
-from mloda_core.abstract_plugins.components.validators.datatype_validator import (
+from mloda.core.abstract_plugins.components.validators.datatype_validator import (
     DataTypeMismatchError,
     DataTypeValidator,
 )
-from mloda_core.abstract_plugins.components.data_types import DataType
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.user import DataType
+from mloda import Feature
+from mloda.provider import FeatureSet
 
 
 class TestDataTypeMismatchError:

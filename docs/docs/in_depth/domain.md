@@ -8,7 +8,7 @@ However, we only apply them **if they are set for features**. As default, this i
 
 **Feature parameter**
 ```python
-from mloda_core.abstract_plugins.components.feature import Feature
+from mloda.user import Feature
 
 Feature(name="Revenue",
         domain="Sales"
@@ -26,10 +26,10 @@ The domain can also be set in the feature group.
 
 **Feature group**
 ```python
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.domain import Domain
+from mloda.provider import FeatureGroup
+from mloda.user import Domain
 
-class ExampleFeature(AbstractFeatureGroup):
+class ExampleFeature(FeatureGroup):
     @classmethod
     def get_domain(cls) -> Domain:
         """This function should return the domain for the feature group"""

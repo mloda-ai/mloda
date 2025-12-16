@@ -9,7 +9,7 @@ from typing import Any, Set, Type, Union
 
 import numpy as np
 
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
+from mloda import ComputeFramework
 
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.geo_distance.base import GeoDistanceFeatureGroup
@@ -17,7 +17,7 @@ from mloda_plugins.feature_group.experimental.geo_distance.base import GeoDistan
 
 class PandasGeoDistanceFeatureGroup(GeoDistanceFeatureGroup):
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         """Specify that this feature group works with Pandas."""
         return {PandasDataFrame}
 

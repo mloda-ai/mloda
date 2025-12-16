@@ -5,9 +5,9 @@ import logging
 
 import pytest
 
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.filter.single_filter import SingleFilter
-from mloda_core.filter.filter_type_enum import FilterTypeEnum
+from mloda import Feature
+from mloda.user import SingleFilter
+from mloda.user import FilterType
 from mloda_plugins.compute_framework.base_implementations.polars.polars_filter_engine import PolarsFilterEngine
 
 from tests.test_plugins.compute_framework.base_implementations.filter_engine_test_mixin import (
@@ -57,7 +57,7 @@ class TestPolarsFilterEngine(FilterEngineTestMixin):
         )
 
         feature = Feature("age")
-        filter_type = FilterTypeEnum.min
+        filter_type = FilterType.min
         parameter = {"value": 30}
         single_filter = SingleFilter(feature, filter_type, parameter)
 

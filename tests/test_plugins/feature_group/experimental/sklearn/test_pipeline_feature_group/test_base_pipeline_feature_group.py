@@ -5,8 +5,8 @@ Tests for base SklearnPipelineFeatureGroup.
 import pytest
 from unittest.mock import Mock, patch
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import SklearnPipelineFeatureGroup
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.options import Options
+from mloda.user import FeatureName
+from mloda import Options
 
 
 class TestSklearnPipelineFeatureGroup:

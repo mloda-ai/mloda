@@ -10,7 +10,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from mloda_core.runtime.worker_manager import WorkerManager
+from mloda.core.runtime.worker_manager import WorkerManager
 
 
 class TestWorkerManagerInit:

@@ -1,21 +1,21 @@
 from typing import Any, Dict, List, Optional, Set, Type, Union
 import pytest
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
+from mloda.provider import BaseInputData
+from mloda.provider import DataCreator
+from mloda import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_collection import Features
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.link import Link, JoinSpec
+from mloda.user import FeatureName
+from mloda.user import ParallelizationMode
+from mloda import FeatureGroup
+from mloda import Feature
+from mloda.user import Features
+from mloda.provider import FeatureSet
+from mloda import Options
+from mloda.user import Index
+from mloda.user import Link, JoinSpec
 
 # Import transformers to ensure they're registered
 import mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_pyarrow_transformer  # noqa: F401
@@ -31,7 +31,7 @@ from tests.test_plugins.compute_framework.test_tooling.shared_compute_frameworks
 from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_SYNC_THREADING
 
 
-COMPUTE_FRAMEWORKS: Set[Type[ComputeFrameWork]] = {
+COMPUTE_FRAMEWORKS: Set[Type[ComputeFramework]] = {
     PyArrowTable,
     SecondCfw,
     ThirdCfw,
@@ -42,7 +42,7 @@ COMPUTE_FRAMEWORKS: Set[Type[ComputeFrameWork]] = {
 }
 
 
-class JoinCfwTest1(AbstractFeatureGroup):
+class JoinCfwTest1(FeatureGroup):
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         return DataCreator({cls.get_class_name()})
@@ -52,11 +52,11 @@ class JoinCfwTest1(AbstractFeatureGroup):
         return {cls.get_class_name(): [1, 2, 3], "idx": ["a", "b", "c"]}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         return {PyArrowTable}
 
 
-class JoinCfwTest2(AbstractFeatureGroup):
+class JoinCfwTest2(FeatureGroup):
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         return DataCreator({cls.get_class_name()})
@@ -66,11 +66,11 @@ class JoinCfwTest2(AbstractFeatureGroup):
         return {cls.get_class_name(): [4, 5, 6], "idx": ["a", "b", "c"]}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         return {SecondCfw}
 
 
-class JoinCfwTest3(AbstractFeatureGroup):
+class JoinCfwTest3(FeatureGroup):
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         return DataCreator({cls.get_class_name()})
@@ -80,11 +80,11 @@ class JoinCfwTest3(AbstractFeatureGroup):
         return {cls.get_class_name(): [7, 8, 9], "idx": ["a", "b", "c"]}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         return {ThirdCfw}
 
 
-class JoinCfwTest4(AbstractFeatureGroup):
+class JoinCfwTest4(FeatureGroup):
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         return DataCreator({cls.get_class_name()})
@@ -94,14 +94,14 @@ class JoinCfwTest4(AbstractFeatureGroup):
         return {cls.get_class_name(): [12, 13, 14], "idx": ["a", "b", "c"]}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         return {FourthCfw}
 
 
 ############################################
 
 
-class Join2CfwTest(AbstractFeatureGroup):
+class Join2CfwTest(FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         return {Feature.int32_of("JoinCfwTest1"), Feature.int32_of("JoinCfwTest2")}
 
@@ -112,7 +112,7 @@ class Join2CfwTest(AbstractFeatureGroup):
         return {cls.get_class_name(): [10, 2, 3]}
 
 
-class Join3CfwTest(AbstractFeatureGroup):
+class Join3CfwTest(FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         return {Feature.int32_of("JoinCfwTest1"), Feature.int32_of("JoinCfwTest2"), Feature.int32_of("JoinCfwTest3")}
 
@@ -124,7 +124,7 @@ class Join3CfwTest(AbstractFeatureGroup):
         return {cls.get_class_name(): [33, 2, 3]}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         return {PyArrowTable}
 
 
@@ -146,11 +146,11 @@ class Join4CfwTest(Join3CfwTest):
         return {cls.get_class_name(): [33, 2, 3]}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         return {PyArrowTable}
 
 
-class MultiIndexJoinTest1(AbstractFeatureGroup):
+class MultiIndexJoinTest1(FeatureGroup):
     """Feature group using Pandas framework with 2-column multi-index."""
 
     @classmethod
@@ -166,11 +166,11 @@ class MultiIndexJoinTest1(AbstractFeatureGroup):
         }
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         return {PandasDataFrame}
 
 
-class MultiIndexJoinTest2(AbstractFeatureGroup):
+class MultiIndexJoinTest2(FeatureGroup):
     """Feature group using PolarsLazy framework with 2-column multi-index."""
 
     @classmethod
@@ -186,11 +186,11 @@ class MultiIndexJoinTest2(AbstractFeatureGroup):
         }
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         return {PolarsLazyDataFrame}
 
 
-class MultiIndexJoinTest3(AbstractFeatureGroup):
+class MultiIndexJoinTest3(FeatureGroup):
     """Feature group using PyArrow framework with 2-column multi-index."""
 
     @classmethod
@@ -206,11 +206,11 @@ class MultiIndexJoinTest3(AbstractFeatureGroup):
         }
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         return {PyArrowTable}
 
 
-class MultiIndexJoinTest4(AbstractFeatureGroup):
+class MultiIndexJoinTest4(FeatureGroup):
     """Feature group using PythonDict framework with 2-column multi-index."""
 
     @classmethod
@@ -226,11 +226,11 @@ class MultiIndexJoinTest4(AbstractFeatureGroup):
         }
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         return {PythonDictFramework}
 
 
-class JoinMultiIndexTest(AbstractFeatureGroup):
+class JoinMultiIndexTest(FeatureGroup):
     """Consumer feature group that uses all 4 multi-index feature groups."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
@@ -251,7 +251,7 @@ class JoinMultiIndexTest(AbstractFeatureGroup):
         return {cls.get_class_name(): [999, 888, 777]}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         return {PyArrowTable}
 
 
@@ -260,7 +260,7 @@ class TestEngineMultipleJoinCfw:
     def get_features(self, feature_list: List[str], options: Dict[str, Any] = {}) -> Features:
         return Features([Feature(name=f_name, options=options, initial_requested_data=True) for f_name in feature_list])
 
-    def test_runner_join_multiple_cfw1_most_basic(self, modes: Set[ParallelizationModes], flight_server: Any) -> None:
+    def test_runner_join_multiple_cfw1_most_basic(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
         def inner_loop(join_type: str) -> None:
             idx = Index(
                 ("idx",),
@@ -286,7 +286,7 @@ class TestEngineMultipleJoinCfw:
             inner_loop(join_type)
 
     def base_join_runner(
-        self, modes: Set[ParallelizationModes], flight_server: Any, links: Set[Link], f_name: str = "3"
+        self, modes: Set[ParallelizationMode], flight_server: Any, links: Set[Link], f_name: str = "3"
     ) -> None:
         f_name = f"Join{f_name}CfwTest"
         features = self.get_features([f_name])
@@ -301,7 +301,7 @@ class TestEngineMultipleJoinCfw:
         assert res[0].to_pydict() == {f_name: [33, 2, 3]}
 
     def test_runner_join_multiple_cfw2_join_to_same_base(
-        self, modes: Set[ParallelizationModes], flight_server: Any
+        self, modes: Set[ParallelizationMode], flight_server: Any
     ) -> None:
         idx = Index(
             ("idx",),
@@ -315,7 +315,7 @@ class TestEngineMultipleJoinCfw:
         self.base_join_runner(modes, flight_server, links)
 
     def test_runner_join_multiple_cfw3_join_to_right_base(
-        self, modes: Set[ParallelizationModes], flight_server: Any
+        self, modes: Set[ParallelizationMode], flight_server: Any
     ) -> None:
         idx = Index(
             ("idx",),
@@ -328,7 +328,7 @@ class TestEngineMultipleJoinCfw:
 
         self.base_join_runner(modes, flight_server, links)
 
-    def test_runner_join_multiple_cfw4_chained_join(self, modes: Set[ParallelizationModes], flight_server: Any) -> None:
+    def test_runner_join_multiple_cfw4_chained_join(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
         idx = Index(
             ("idx",),
         )
@@ -341,7 +341,7 @@ class TestEngineMultipleJoinCfw:
         self.base_join_runner(modes, flight_server, links)
 
     def test_runner_join_multiple_cfw5_double_chained_join(
-        self, modes: Set[ParallelizationModes], flight_server: Any
+        self, modes: Set[ParallelizationMode], flight_server: Any
     ) -> None:
         idx = Index(
             ("idx",),
@@ -358,7 +358,7 @@ class TestEngineMultipleJoinCfw:
         self.base_join_runner(modes, flight_server, links, f_name="4")
 
     def test_runner_join_multiple_cfw6_double_chained_join(
-        self, modes: Set[ParallelizationModes], flight_server: Any
+        self, modes: Set[ParallelizationMode], flight_server: Any
     ) -> None:
         idx = Index(
             ("idx",),
@@ -378,7 +378,7 @@ class TestEngineMultipleJoinCfw:
         self.base_join_runner(modes, flight_server, links, f_name="4")
 
     def test_runner_join_multiple_cfw6_double_chained_join_left(
-        self, modes: Set[ParallelizationModes], flight_server: Any
+        self, modes: Set[ParallelizationMode], flight_server: Any
     ) -> None:
         idx = Index(
             ("idx",),
@@ -399,7 +399,7 @@ class TestEngineMultipleJoinCfw:
         self.base_join_runner(modes, flight_server, links, f_name="4")
 
     def test_runner_join_multiple_cfw6_double_chained_join_right(
-        self, modes: Set[ParallelizationModes], flight_server: Any
+        self, modes: Set[ParallelizationMode], flight_server: Any
     ) -> None:
         idx = Index(
             ("idx",),
@@ -422,7 +422,7 @@ class TestEngineMultipleJoinCfw:
             self.base_join_runner(modes, flight_server, links, f_name="4")
 
     def test_runner_join_multiple_cfw7_double_chained_join(
-        self, modes: Set[ParallelizationModes], flight_server: Any
+        self, modes: Set[ParallelizationMode], flight_server: Any
     ) -> None:
         idx = Index(
             ("idx",),
@@ -440,7 +440,7 @@ class TestEngineMultipleJoinCfw:
         self.base_join_runner(modes, flight_server, links, f_name="4")
 
     def test_raise_exception_if_duplicated_links_given(
-        self, modes: Set[ParallelizationModes], flight_server: Any
+        self, modes: Set[ParallelizationMode], flight_server: Any
     ) -> None:
         """This test should be moved to a unit test rather as it tests that Link.validate in engine init is working correctly. Was faster to test here."""
 

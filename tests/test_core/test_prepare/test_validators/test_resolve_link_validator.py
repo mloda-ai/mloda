@@ -3,9 +3,9 @@ from collections import OrderedDict
 from typing import Any, Set, Type
 from uuid import UUID, uuid4
 
-from mloda_core.abstract_plugins.components.link import Link, JoinSpec, JoinType
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
-from mloda_core.prepare.validators.resolve_link_validator import ResolveLinkValidator
+from mloda.user import Link, JoinSpec, JoinType
+from mloda import ComputeFramework
+from mloda.core.prepare.validators.resolve_link_validator import ResolveLinkValidator
 
 
 # Mock feature group classes for testing
@@ -34,7 +34,7 @@ class MockFeatureGroupC:
 
 
 # Mock compute framework for testing
-class MockComputeFramework(ComputeFrameWork):
+class MockComputeFramework(ComputeFramework):
     """Mock compute framework for testing."""
 
     pass

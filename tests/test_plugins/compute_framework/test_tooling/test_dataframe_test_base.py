@@ -10,8 +10,8 @@ from abc import ABC
 from typing import Any, Optional, Type
 from unittest.mock import Mock, MagicMock
 
-from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
+from mloda.user import Index
+from mloda.user import ParallelizationMode
 from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
 
 
@@ -106,7 +106,7 @@ class TestDataFrameTestBaseHelpers:
         concrete = MockFrameworkTestClass()
         framework = concrete._create_test_framework()
 
-        mock_framework_class.assert_called_once_with(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        mock_framework_class.assert_called_once_with(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         assert framework == mock_framework_instance
 
     def test_get_merge_engine(self) -> None:

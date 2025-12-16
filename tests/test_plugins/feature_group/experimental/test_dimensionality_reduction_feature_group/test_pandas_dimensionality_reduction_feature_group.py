@@ -6,9 +6,9 @@ import pytest
 import pandas as pd
 import numpy as np
 
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.options import Options
+from mloda import Feature
+from mloda.provider import FeatureSet
+from mloda import Options
 from mloda_plugins.feature_group.experimental.dimensionality_reduction.pandas import (
     PandasDimensionalityReductionFeatureGroup,
 )

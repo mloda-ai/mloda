@@ -2,7 +2,7 @@
 
 import pytest
 from typing import Any, Dict
-from mloda_core.filter.filter_parameter import FilterParameter, FilterParameterImpl
+from mloda.core.filter.filter_parameter import FilterParameter, FilterParameterImpl
 
 
 # --- Creation tests ---

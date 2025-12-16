@@ -1,5 +1,5 @@
 """
-Unified test runner infrastructure for mlodaAPI integration tests.
+Unified test runner infrastructure for API integration tests.
 
 This module provides consistent patterns for:
 - Running with different parallelization modes (SYNC, THREADING, MULTIPROCESSING)
@@ -24,17 +24,17 @@ from typing import Any, Dict, List, Optional, Set, Type
 
 import pytest
 
-from mloda_core.abstract_plugins.components.feature_collection import Features
-from mloda_core.abstract_plugins.components.link import Link
-from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
-from mloda_core.abstract_plugins.function_extender import WrapperFunctionExtender
-from mloda_core.api.request import mlodaAPI
-from mloda_core.filter.global_filter import GlobalFilter
-from mloda_core.core.engine import Engine
-from mloda_core.runtime.flight.flight_server import FlightServer
-from mloda_core.runtime.run import ExecutionOrchestrator
+from mloda.user import Features
+from mloda.user import Link
+from mloda.user import ParallelizationMode
+from mloda.user import PluginCollector
+from mloda import ComputeFramework
+from mloda.steward import Extender
+import mloda
+from mloda.user import GlobalFilter
+from mloda.core.core.engine import Engine
+from mloda.core.runtime.flight.flight_server import FlightServer
+from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
@@ -49,7 +49,7 @@ class RunResult:
 
 class MlodaTestRunner:
     """
-    Unified test runner for mlodaAPI integration tests.
+    Unified test runner for API integration tests.
 
     Provides consistent patterns for:
     - Running with different parallelization modes
@@ -65,22 +65,22 @@ class MlodaTestRunner:
     @staticmethod
     def run_api(
         features: Features,
-        compute_frameworks: Optional[Set[Type[ComputeFrameWork]]] = None,
-        parallelization_modes: Optional[Set[ParallelizationModes]] = None,
+        compute_frameworks: Optional[Set[Type[ComputeFramework]]] = None,
+        parallelization_modes: Optional[Set[ParallelizationMode]] = None,
         flight_server: Any = None,
-        function_extender: Optional[Set[WrapperFunctionExtender]] = None,
+        function_extender: Optional[Set[Extender]] = None,
         links: Optional[Set[Link]] = None,
         global_filter: Optional[GlobalFilter] = None,
         api_data: Optional[Dict[str, Any]] = None,
         cleanup_flight_server: bool = True,
-        plugin_collector: Optional[PlugInCollector] = None,
+        plugin_collector: Optional[PluginCollector] = None,
         strict_type_enforcement: bool = False,
     ) -> RunResult:
         """
-        Run mlodaAPI with the given configuration.
+        Run API with the given configuration.
 
         This is the recommended method for most integration tests.
-        Uses mlodaAPI instance + _batch_run() for full access to results and artifacts.
+        Uses API instance + _batch_run() for full access to results and artifacts.
 
         Args:
             features: The feature set to compute
@@ -101,9 +101,9 @@ class MlodaTestRunner:
         if compute_frameworks is None:
             compute_frameworks = {PyArrowTable}
         if parallelization_modes is None:
-            parallelization_modes = {ParallelizationModes.SYNC}
+            parallelization_modes = {ParallelizationMode.SYNC}
 
-        api = mlodaAPI(
+        api = mloda.API(
             features,
             compute_frameworks,
             links=links,
@@ -125,13 +125,13 @@ class MlodaTestRunner:
     @staticmethod
     def run_api_simple(
         features: Features,
-        compute_frameworks: Optional[Set[Type[ComputeFrameWork]]] = None,
-        parallelization_modes: Optional[Set[ParallelizationModes]] = None,
+        compute_frameworks: Optional[Set[Type[ComputeFramework]]] = None,
+        parallelization_modes: Optional[Set[ParallelizationMode]] = None,
         flight_server: Any = None,
-        function_extender: Optional[Set[WrapperFunctionExtender]] = None,
+        function_extender: Optional[Set[Extender]] = None,
     ) -> List[Any]:
         """
-        Simplified runner using mlodaAPI.run_all().
+        Simplified runner using mloda.run_all().
 
         Use when you only need results (no artifacts).
 
@@ -148,9 +148,9 @@ class MlodaTestRunner:
         if compute_frameworks is None:
             compute_frameworks = {PyArrowTable}
         if parallelization_modes is None:
-            parallelization_modes = {ParallelizationModes.SYNC}
+            parallelization_modes = {ParallelizationMode.SYNC}
 
-        return mlodaAPI.run_all(
+        return mloda.run_all(
             features,
             compute_frameworks,
             None,  # links
@@ -163,10 +163,10 @@ class MlodaTestRunner:
     @staticmethod
     def run_engine(
         features: Features,
-        compute_frameworks: Optional[Set[Type[ComputeFrameWork]]] = None,
-        parallelization_modes: Optional[Set[ParallelizationModes]] = None,
+        compute_frameworks: Optional[Set[Type[ComputeFramework]]] = None,
+        parallelization_modes: Optional[Set[ParallelizationMode]] = None,
         flight_server: Any = None,
-        function_extender: Optional[Set[WrapperFunctionExtender]] = None,
+        function_extender: Optional[Set[Extender]] = None,
         links: Optional[Set[Link]] = None,
         global_filter: Optional[GlobalFilter] = None,
         api_data: Optional[Dict[str, Any]] = None,
@@ -192,11 +192,11 @@ class MlodaTestRunner:
         if compute_frameworks is None:
             compute_frameworks = {PyArrowTable}
         if parallelization_modes is None:
-            parallelization_modes = {ParallelizationModes.SYNC}
+            parallelization_modes = {ParallelizationMode.SYNC}
 
         engine = Engine(features, compute_frameworks, links, global_filter=global_filter)
 
-        use_flight = ParallelizationModes.MULTIPROCESSING in parallelization_modes
+        use_flight = ParallelizationMode.MULTIPROCESSING in parallelization_modes
         runner = engine.compute(flight_server if use_flight else None)
 
         try:
@@ -213,7 +213,7 @@ class MlodaTestRunner:
 
     @staticmethod
     def assert_flight_server_clean(
-        parallelization_modes: Set[ParallelizationModes],
+        parallelization_modes: Set[ParallelizationMode],
         flight_server: Any,
         timeout: float = 1.0,
     ) -> None:
@@ -230,7 +230,7 @@ class MlodaTestRunner:
         Raises:
             AssertionError: If datasets remain on the flight server after timeout
         """
-        if ParallelizationModes.MULTIPROCESSING not in parallelization_modes:
+        if ParallelizationMode.MULTIPROCESSING not in parallelization_modes:
             return
         if flight_server is None:
             return
@@ -251,16 +251,16 @@ class MlodaTestRunner:
 PARALLELIZATION_MODES_SYNC_THREADING = pytest.mark.parametrize(
     "modes",
     [
-        ({ParallelizationModes.SYNC}),
-        ({ParallelizationModes.THREADING}),
+        ({ParallelizationMode.SYNC}),
+        ({ParallelizationMode.THREADING}),
     ],
 )
 
 PARALLELIZATION_MODES_ALL = pytest.mark.parametrize(
     "modes",
     [
-        ({ParallelizationModes.SYNC}),
-        ({ParallelizationModes.THREADING}),
-        ({ParallelizationModes.MULTIPROCESSING}),
+        ({ParallelizationMode.SYNC}),
+        ({ParallelizationMode.THREADING}),
+        ({ParallelizationMode.MULTIPROCESSING}),
     ],
 )

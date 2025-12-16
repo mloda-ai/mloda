@@ -1,22 +1,22 @@
 from typing import Any, Optional, Set, Union
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.api.request import mlodaAPI
+from mloda import FeatureGroup
+from mloda.user import DataAccessCollection
+from mloda import Feature
+from mloda.user import FeatureName
+from mloda.provider import FeatureSet
+from mloda import Options
+import mloda
 
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 
-class NFeatureNameBase(AbstractFeatureGroup):
+class NFeatureNameBase(FeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {"NFeatureNameBase~1": [1, 2, 3], "NFeatureNameBase~2": [1, 2, 3]}
 
 
-class NFeatureConsumer(AbstractFeatureGroup):
+class NFeatureConsumer(FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         return {Feature.not_typed("NFeatureNameBase")}
 
@@ -31,7 +31,7 @@ class NFeatureConsumer(AbstractFeatureGroup):
 
 class TestNFeature:
     def test_n_feature_name(self) -> None:
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             ["NFeatureNameBase"],
             compute_frameworks=["PyArrowTable"],
         )
@@ -45,7 +45,7 @@ class TestNFeature:
 
     def test_n_feature_as_input(self) -> None:
         # Run the API with NFeatureConsumer, which depends on NFeatureNameBase
-        result = mlodaAPI.run_all(["NFeatureConsumer"], compute_frameworks={PandasDataFrame})
+        result = mloda.run_all(["NFeatureConsumer"], compute_frameworks={PandasDataFrame})
 
         # Verify the results
         res = result[0]

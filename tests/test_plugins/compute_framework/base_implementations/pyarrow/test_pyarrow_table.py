@@ -2,9 +2,9 @@ from typing import Any, Optional, Type
 import pytest
 import pyarrow as pa
 
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
-from mloda_core.abstract_plugins.components.index.index import Index
+from mloda.user import FeatureName
+from mloda.user import ParallelizationMode
+from mloda.user import Index
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
@@ -22,7 +22,7 @@ class TestPyArrowTableComputeFramework:
     @pytest.fixture
     def pyarrow_table(self) -> PyArrowTable:
         """Create a fresh PyArrowTable instance for each test."""
-        return PyArrowTable(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        return PyArrowTable(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
     @pytest.fixture
     def expected_data(self, dict_data: dict[str, list[int]]) -> Any:
@@ -42,7 +42,7 @@ class TestPyArrowTableComputeFramework:
         pa_array = pa.array([1, 2, 3])
 
         for data in [chunked_array, pa_array]:
-            _pytable = PyArrowTable(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+            _pytable = PyArrowTable(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
             _pytable.set_data(pa.table({"existing_column": [4, 5, 6]}))
 
             data = _pytable.transform(data=data, feature_names={"new_column"})

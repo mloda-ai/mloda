@@ -4,7 +4,7 @@ import time
 from typing import Any, Dict, List, Tuple
 
 
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.provider import FeatureSet
 
 from mloda_plugins.feature_group.experimental.llm.llm_api.llm_base_request import LLMBaseApi
 
@@ -219,8 +219,8 @@ class GeminiRequestLoop(RequestLoop):
     ### Basic Text Generation
 
     ```python
-    from mloda_core.abstract_plugins.components.feature import Feature
-    from mloda_core.abstract_plugins.components.options import Options
+    from mloda import Feature
+    from mloda import Options
 
     feature = Feature(
         name="GeminiRequestLoop",

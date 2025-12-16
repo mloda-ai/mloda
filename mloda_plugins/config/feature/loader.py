@@ -6,8 +6,8 @@ to mloda Feature instances.
 """
 
 from typing import List, Union, Dict, Any
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.options import Options
+from mloda import Feature
+from mloda import Options
 from mloda_plugins.config.feature.parser import parse_json
 from mloda_plugins.config.feature.models import FeatureConfig
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys

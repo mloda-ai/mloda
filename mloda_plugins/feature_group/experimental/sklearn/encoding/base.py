@@ -7,21 +7,21 @@ from __future__ import annotations
 import datetime
 from typing import Any, Dict, Optional, Set, Type, Union
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
-from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
+from mloda import FeatureGroup
+from mloda import Feature
+from mloda.user import FeatureName
+from mloda.provider import FeatureSet
+from mloda import Options
+from mloda.provider import FeatureChainParser
+from mloda.provider import (
     FeatureChainParserMixin,
 )
-from mloda_core.abstract_plugins.components.base_artifact import BaseArtifact
+from mloda.provider import BaseArtifact
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import SklearnArtifact
 
 
-class EncodingFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
+class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     """
     Base class for scikit-learn encoding feature groups.
 
@@ -58,8 +58,8 @@ class EncodingFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
     Uses Options with proper group/context parameter separation:
 
     ```python
-    from mloda_core.abstract_plugins.components.feature import Feature
-    from mloda_core.abstract_plugins.components.options import Options
+    from mloda import Feature
+    from mloda import Options
     from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
     feature = Feature(
@@ -78,7 +78,7 @@ class EncodingFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
     ### String-Based Creation
 
     ```python
-    from mloda_core.abstract_plugins.components.feature import Feature
+    from mloda import Feature
 
     # OneHot encoding - creates multiple binary columns
     feature = Feature(name="product_category__onehot_encoded")
@@ -95,8 +95,8 @@ class EncodingFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
     ### Configuration-Based Creation
 
     ```python
-    from mloda_core.abstract_plugins.components.feature import Feature
-    from mloda_core.abstract_plugins.components.options import Options
+    from mloda import Feature
+    from mloda import Options
 
     # OneHot encoding using configuration
     feature = Feature(

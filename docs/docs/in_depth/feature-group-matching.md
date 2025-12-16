@@ -16,7 +16,7 @@ The recommended approach uses `FeatureChainParser.match_configuration_feature_ch
 
 ```python
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
-from mloda_core.abstract_plugins.components.options import Options
+from mloda.user import Options
 
 @classmethod
 def match_feature_group_criteria(cls, feature_name, options, data_access_collection=None):

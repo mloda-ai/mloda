@@ -1,10 +1,10 @@
 from unittest.mock import patch
 
 import pytest
-from mloda_core.prepare.accessible_plugins import PreFilterPlugins
+from mloda.core.prepare.accessible_plugins import PreFilterPlugins
 from tests.test_core.test_abstract_plugins.test_abstract_compute_framework import (
-    BaseTestComputeFrameWork2,
-    BaseTestComputeFrameWork1,
+    BaseTestComputeFramework2,
+    BaseTestComputeFramework1,
 )
 
 
@@ -18,10 +18,10 @@ class TestAccessibleCollecton:
     def test_accessible_plugins(self) -> None:
         with (
             patch(
-                "mloda_core.prepare.accessible_plugins.PreFilterPlugins.get_featuregroup_subclasses"
+                "mloda.core.prepare.accessible_plugins.PreFilterPlugins.get_featuregroup_subclasses"
             ) as mocked_accessible_feature_groups,
             patch(
-                "mloda_core.prepare.accessible_plugins.PreFilterPlugins.get_cfw_subclasses"
+                "mloda.core.prepare.accessible_plugins.PreFilterPlugins.get_cfw_subclasses"
             ) as mocked_accessible_environments,
         ):
             mocked_accessible_feature_groups.return_value = {
@@ -29,7 +29,7 @@ class TestAccessibleCollecton:
                 BaseTestFeatureGroup2,
             }
 
-            fw = {BaseTestComputeFrameWork1, BaseTestComputeFrameWork2}
+            fw = {BaseTestComputeFramework1, BaseTestComputeFramework2}
             mocked_accessible_environments.return_value = fw
 
             accessible_plugins = PreFilterPlugins(fw)
@@ -43,20 +43,20 @@ class TestAccessibleCollecton:
             assert mapping.keys() == {BaseTestFeatureGroup1, BaseTestFeatureGroup2}
 
             for _, v in mapping.items():
-                assert v == {BaseTestComputeFrameWork1, BaseTestComputeFrameWork2}
+                assert v == {BaseTestComputeFramework1, BaseTestComputeFramework2}
 
     def test_accessible_feature_groups_empty(self) -> None:
         with (
             patch(
-                "mloda_core.prepare.accessible_plugins.PreFilterPlugins.get_featuregroup_subclasses"
+                "mloda.core.prepare.accessible_plugins.PreFilterPlugins.get_featuregroup_subclasses"
             ) as mocked_accessible_feature_groups,
             patch(
-                "mloda_core.prepare.accessible_plugins.PreFilterPlugins.get_cfw_subclasses"
+                "mloda.core.prepare.accessible_plugins.PreFilterPlugins.get_cfw_subclasses"
             ) as mocked_accessible_environments,
         ):
             mocked_accessible_feature_groups.return_value = set()
 
-            fw = {BaseTestComputeFrameWork1, BaseTestComputeFrameWork2}
+            fw = {BaseTestComputeFramework1, BaseTestComputeFramework2}
             mocked_accessible_environments.return_value = fw
 
             with pytest.raises(ValueError):

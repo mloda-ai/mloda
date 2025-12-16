@@ -1,12 +1,12 @@
 from typing import Tuple
 import uuid
-from mloda_core.prepare.execution_plan import ExecutionPlan
-from mloda_core.prepare.resolve_graph import PlannedQueue
-from mloda_core.prepare.resolve_links import LinkFrameworkTrekker, LinkTrekker
-from mloda_core.abstract_plugins.components.feature_collection import Features
-from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.link import Link, JoinSpec
-from tests.test_core.test_abstract_plugins.test_abstract_compute_framework import BaseTestComputeFrameWork1
+from mloda.core.prepare.execution_plan import ExecutionPlan
+from mloda.core.prepare.resolve_graph import PlannedQueue
+from mloda.core.prepare.resolve_links import LinkFrameworkTrekker, LinkTrekker
+from mloda.user import Features
+from mloda.user import Index
+from mloda.user import Link, JoinSpec
+from tests.test_core.test_abstract_plugins.test_abstract_compute_framework import BaseTestComputeFramework1
 from tests.test_core.test_setup.test_link_resolver import BaseLinkTestFeatureGroup1
 from tests.test_core.test_abstract_plugins.test_abstract_feature_group import (
     BaseTestFeatureGroup1,
@@ -22,7 +22,7 @@ class TestExecutionPlan:
             JoinSpec(BaseTestFeatureGroup2, Index(tuple(["Index1"]))),
         )
 
-        link_framework_trekker = (link, BaseTestComputeFrameWork1, BaseTestComputeFrameWork1)
+        link_framework_trekker = (link, BaseTestComputeFramework1, BaseTestComputeFramework1)
         link_trekker.update(link_framework_trekker, uuid.UUID(int=1))
         return link_trekker, link_framework_trekker
 
@@ -33,7 +33,7 @@ class TestExecutionPlan:
 
         features = set(Features(["BaseTestFeature1", "BaseTestFeature2"]))
         for feat in features:
-            feat.compute_frameworks = {BaseTestComputeFrameWork1}
+            feat.compute_frameworks = {BaseTestComputeFramework1}
 
         feature_group_features = (BaseTestFeatureGroup1, features)
         planned_queue.append(feature_group_features)

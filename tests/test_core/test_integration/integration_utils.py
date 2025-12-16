@@ -1,6 +1,6 @@
 import time
 from typing import Any
-from mloda_core.runtime.flight.flight_server import FlightServer
+from mloda.core.runtime.flight.flight_server import FlightServer
 
 
 def assert_flight_infos(flight_server: Any) -> None:

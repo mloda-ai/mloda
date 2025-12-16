@@ -37,5 +37,9 @@ This means, depending on your needs, you can run them all at once (**batch run**
 
 #### Plugin Discovery
 
-To discover available plugins (feature groups, compute frameworks, extenders), use the functions `get_feature_group_docs()`, `get_compute_framework_docs()`, and `get_extender_docs()` from `mloda_core.api.plugin_docs`.
+To discover available plugins (feature groups, compute frameworks, extenders), use the functions `get_feature_group_docs()`, `get_compute_framework_docs()`, and `get_extender_docs()` from `mloda.steward`:
+
+```python
+from mloda.steward import get_feature_group_docs, get_compute_framework_docs, get_extender_docs
+```
 

@@ -3,20 +3,19 @@ from typing import Any, List, Optional, Union
 
 import tempfile
 import sqlite3
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.options import Options
+from mloda.user import FeatureName
+from mloda import Options
 from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 import pytest
 import pyarrow as pa
 
-from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.hashable_dict import HashableDict
-from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.link import Link, JoinSpec
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
+from mloda.user import DataAccessCollection
+from mloda import Feature
+from mloda.provider import FeatureSet, HashableDict
+from mloda.user import Index
+from mloda.user import Link, JoinSpec
+from mloda.user import PluginCollector
+import mloda
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
 from tests.test_plugins.feature_group.input_data.test_classes.test_input_classes import (
@@ -65,10 +64,10 @@ class TestTwoReader:
             f = Feature(name=feature, options={CsvReader.__name__: self.file_path})
             feature_list.append(f)
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list,  # type: ignore
             compute_frameworks=["PyArrowTable"],
-            plugin_collector=PlugInCollector.enabled_feature_groups({DBInputDataTestFeatureGroup, ReadFileFeature}),
+            plugin_collector=PluginCollector.enabled_feature_groups({DBInputDataTestFeatureGroup, ReadFileFeature}),
         )
         assert result[0].to_pydict()["id"] != result[1].to_pydict()["id"]
 
@@ -87,7 +86,7 @@ class TestTwoReader:
             feature_list.append(f)
 
         with pytest.raises(ValueError) as excinfo:
-            mlodaAPI.run_all(
+            mloda.run_all(
                 feature_list,  # type: ignore
                 compute_frameworks=["PyArrowTable"],
             )
@@ -107,7 +106,7 @@ class TestTwoReader:
             feature_list.append(f)
 
         with pytest.raises(ValueError) as excinfo:
-            mlodaAPI.run_all(
+            mloda.run_all(
                 feature_list,  # type: ignore
                 compute_frameworks=["PyArrowTable"],
                 data_access_collection=DataAccessCollection(files={self.file_path}),
@@ -181,22 +180,22 @@ class TestTwoReader:
             },
         )
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             [f],
             compute_frameworks=["PyArrowTable"],
             links={link},
-            plugin_collector=PlugInCollector.enabled_feature_groups(
+            plugin_collector=PluginCollector.enabled_feature_groups(
                 {ReadFileFeatureWithIndex, DBInputDataTestFeatureGroupWithIndex, SumFeature}
             ),
         )
         assert result[0].to_pydict()["SumFeature_any_numAmount"] == [9051.91, 9051.91]
 
         with pytest.raises(ValueError):
-            mlodaAPI.run_all(
+            mloda.run_all(
                 [f],
                 compute_frameworks=["PyArrowTable"],
                 links={link},
-                plugin_collector=PlugInCollector.enabled_feature_groups(
+                plugin_collector=PluginCollector.enabled_feature_groups(
                     {ReadFileFeature, DBInputDataTestFeatureGroupWithIndex}
                 ),
             )

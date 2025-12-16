@@ -2,9 +2,9 @@ from abc import ABC
 from typing import Any, Dict, Set, Type, Union, List
 
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
+from mloda import FeatureGroup
+from mloda.provider import FeatureSet
+from mloda import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.llm.tools.tool_collection import ToolCollection
 from mloda_plugins.feature_group.experimental.llm.tools.tool_data_classes import PytestResult, ToolFunctionDeclaration
@@ -69,7 +69,7 @@ class LLMBaseApi(ABC):
         return return_tool_result
 
 
-class LLMBaseRequest(AbstractFeatureGroup):
+class LLMBaseRequest(FeatureGroup):
     model = "model"
     prompt = "prompt"
     temperature = "temperature"
@@ -127,5 +127,5 @@ class LLMBaseRequest(AbstractFeatureGroup):
         return f"{option_prompt}\nContext:\n{data_prompt} End Context\n "
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         return {PandasDataFrame}

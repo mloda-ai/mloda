@@ -1,14 +1,14 @@
 import pytest
 from typing import Any, Dict, List, Optional, Set
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
-from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
+from mloda import FeatureGroup
+from mloda import Feature
+from mloda.user import FeatureName
+from mloda.provider import FeatureSet
+from mloda import Options
+from mloda.user import PluginCollector
+import mloda
+from mloda.user import ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
 from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
@@ -66,7 +66,7 @@ class PolarsEagerTestDataCreator(ATestDataCreator):
         return polars_test_dict
 
 
-class PolarsLazySimpleTransformFeatureGroup(AbstractFeatureGroup):
+class PolarsLazySimpleTransformFeatureGroup(FeatureGroup):
     """Simple feature group for testing lazy transformations."""
 
     @classmethod
@@ -108,7 +108,7 @@ class PolarsLazySimpleTransformFeatureGroup(AbstractFeatureGroup):
         return set(["doubled_value", "score_plus_ten"])
 
 
-class SecondTransformFeatureGroup(AbstractFeatureGroup):
+class SecondTransformFeatureGroup(FeatureGroup):
     """Second transformation that depends on the first."""
 
     @classmethod
@@ -137,16 +137,16 @@ class SecondTransformFeatureGroup(AbstractFeatureGroup):
 
 @pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
 class TestPolarsLazyIntegrationWithMlodaAPI:
-    """Integration tests for PolarsLazyDataFrame with mlodaAPI."""
+    """Integration tests for PolarsLazyDataFrame with API."""
 
     @pytest.mark.parametrize(
         "modes",
-        [({ParallelizationModes.SYNC})],
+        [({ParallelizationMode.SYNC})],
     )
-    def test_basic_lazy_feature_calculation(self, modes: Set[ParallelizationModes], flight_server: Any) -> None:
+    def test_basic_lazy_feature_calculation(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
         """Test basic feature calculation with lazy evaluation."""
         # Enable the test feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {PolarsLazyTestDataCreator, PolarsLazySimpleTransformFeatureGroup}
         )
 
@@ -154,7 +154,7 @@ class TestPolarsLazyIntegrationWithMlodaAPI:
         feature_list: List[Feature | str] = ["doubled_value", "score_plus_ten"]
 
         # Run with lazy framework
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list,
             flight_server=flight_server,
             parallelization_modes=modes,
@@ -183,20 +183,20 @@ class TestPolarsLazyIntegrationWithMlodaAPI:
         feature_list: List[Feature | str] = ["id", "value", "score", "doubled_value", "score_plus_ten"]
 
         # Run with eager framework
-        eager_plugin_collector = PlugInCollector.enabled_feature_groups(
+        eager_plugin_collector = PluginCollector.enabled_feature_groups(
             {PolarsEagerTestDataCreator, PolarsLazySimpleTransformFeatureGroup}
         )
-        eager_result = mlodaAPI.run_all(
+        eager_result = mloda.run_all(
             feature_list,
             compute_frameworks={PolarsDataFrame},
             plugin_collector=eager_plugin_collector,
         )
 
         # Run with lazy framework
-        lazy_plugin_collector = PlugInCollector.enabled_feature_groups(
+        lazy_plugin_collector = PluginCollector.enabled_feature_groups(
             {PolarsLazyTestDataCreator, PolarsLazySimpleTransformFeatureGroup}
         )
-        lazy_result = mlodaAPI.run_all(
+        lazy_result = mloda.run_all(
             feature_list,
             compute_frameworks={PolarsLazyDataFrame},
             plugin_collector=lazy_plugin_collector,
@@ -221,7 +221,7 @@ class TestPolarsLazyIntegrationWithMlodaAPI:
         """Test a pipeline with multiple feature groups using lazy evaluation."""
 
         # Enable all feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {PolarsLazyTestDataCreator, PolarsLazySimpleTransformFeatureGroup, SecondTransformFeatureGroup}
         )
 
@@ -229,12 +229,12 @@ class TestPolarsLazyIntegrationWithMlodaAPI:
         feature_list: List[Feature | str] = ["quadrupled_value"]
 
         # Run the multi-step pipeline
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list,
             flight_server=flight_server,
             compute_frameworks={PolarsLazyDataFrame},
             plugin_collector=plugin_collector,
-            parallelization_modes={ParallelizationModes.SYNC},
+            parallelization_modes={ParallelizationMode.SYNC},
         )
 
         # Verify results

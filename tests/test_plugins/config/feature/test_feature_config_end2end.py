@@ -3,9 +3,9 @@ from pathlib import Path
 from typing import Any, Dict
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 import pytest
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
+import mloda
+from mloda import Feature
+from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.config.feature.loader import load_features_from_config
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
@@ -125,7 +125,7 @@ class ChainedFeatureTestDataCreator(ATestDataCreator):
 
 
 def test_end2end_chained_features() -> None:
-    """Test that chained features work with mlodaAPI.run_all in a real scenario."""
+    """Test that chained features work with mloda.run_all in a real scenario."""
     # Skip test if sklearn not available (needed for scaling)
     try:
         import sklearn  # noqa: F401
@@ -161,12 +161,12 @@ def test_end2end_chained_features() -> None:
     assert len(features) == 4
 
     # Enable the necessary feature groups
-    plugin_collector = PlugInCollector.enabled_feature_groups(
+    plugin_collector = PluginCollector.enabled_feature_groups(
         {ChainedFeatureTestDataCreator, PandasScalingFeatureGroup, PandasMissingValueFeatureGroup}
     )
 
-    # Run mlodaAPI with the features
-    results = mlodaAPI.run_all(
+    # Run API with the features
+    results = mloda.run_all(
         features,
         compute_frameworks={PandasDataFrame},
         plugin_collector=plugin_collector,
@@ -226,7 +226,7 @@ def test_end2end_group_context_options() -> None:
 
 
 def test_end2end_multi_column_access() -> None:
-    """Test that column_index features work with mlodaAPI.run_all in a real scenario."""
+    """Test that column_index features work with mloda.run_all in a real scenario."""
     # Skip test if sklearn not available (needed for one-hot encoding)
     try:
         import sklearn  # noqa: F401
@@ -281,10 +281,10 @@ def test_end2end_multi_column_access() -> None:
             }
 
     # Enable the necessary feature groups
-    plugin_collector = PlugInCollector.enabled_feature_groups({StateTestDataCreator, PandasEncodingFeatureGroup})
+    plugin_collector = PluginCollector.enabled_feature_groups({StateTestDataCreator, PandasEncodingFeatureGroup})
 
-    # Run mlodaAPI with the features
-    results = mlodaAPI.run_all(
+    # Run API with the features
+    results = mloda.run_all(
         features,
         compute_frameworks={PandasDataFrame},
         plugin_collector=plugin_collector,

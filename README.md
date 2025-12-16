@@ -37,14 +37,11 @@ pip install mloda
 
 ```python
 # Step 1: Create a sample data source using DataCreator
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.provider import FeatureGroup, DataCreator, FeatureSet, BaseInputData
 from typing import Any, Optional
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 import pandas as pd
 
-class SampleData(AbstractFeatureGroup):
+class SampleData(FeatureGroup):
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         return DataCreator({"customer_id", "age", "income"})
@@ -58,13 +55,13 @@ class SampleData(AbstractFeatureGroup):
         })
 
 # Step 2: Load mloda plugins and run pipeline
-from mloda_core.api.request import mlodaAPI
-from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
+from mloda.user import PluginLoader
+import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 PluginLoader.all()
 
-result = mlodaAPI.run_all(
+result = mloda.run_all(
     features=[
         "customer_id",                    # Original column
         "age",                            # Original column
@@ -82,7 +79,7 @@ print(data.head())
 **What just happened?**
 1. **SampleData class** - Created a data source using DataCreator (generates data in-memory)
 2. **PluginLoader.all()** - Loaded all available transformations (scaling, encoding, imputation, etc.)
-3. **mlodaAPI.run_all()** - Executed the feature pipeline:
+3. **mloda.run_all()** - Executed the feature pipeline:
    - Got data from `SampleData`
    - Extracted `customer_id` and `age` as-is
    - Applied StandardScaler to `income` → `income__standard_scaled`
@@ -157,8 +154,7 @@ For truly custom configurations, you can use `Feature` objects:
 
 ```python
 # Example (for custom feature configurations):
-# from mloda_core.abstract_plugins.components.feature import Feature
-# from mloda_core.abstract_plugins.components.options import Options
+# from mloda import Feature, Options
 #
 # features = [
 #     "customer_id",                                   # Simple string
@@ -171,7 +167,7 @@ For truly custom configurations, you can use `Feature` objects:
 #     ),
 # ]
 #
-# result = mlodaAPI.run_all(
+# result = mloda.run_all(
 #     features=features,
 #     compute_frameworks={PandasDataFrame}
 # )
@@ -190,7 +186,7 @@ mloda supports multiple data access patterns depending on your use case:
 # Perfect for creating sample/test data in-memory
 # See Section 1 for the SampleData class definition using DataCreator:
 #
-# class SampleData(AbstractFeatureGroup):
+# class SampleData(FeatureGroup):
 #     @classmethod
 #     def input_data(cls) -> Optional[BaseInputData]:
 #         return DataCreator({"customer_id", "age", "income"})
@@ -207,7 +203,7 @@ mloda supports multiple data access patterns depending on your use case:
 **2. DataAccessCollection** - For production file/database access
 ```python
 # Example (requires actual files/databases):
-# from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
+# from mloda.user import DataAccessCollection
 #
 # # Read from files, folders, or databases
 # data_access = DataAccessCollection(
@@ -216,7 +212,7 @@ mloda supports multiple data access patterns depending on your use case:
 #     credential_dicts={"host": "db.example.com"}           # Database credentials
 # )
 #
-# result = mlodaAPI.run_all(
+# result = mloda.run_all(
 #     features=["customer_id", "income__standard_scaled"],
 #     compute_frameworks={PandasDataFrame},
 #     data_access_collection=data_access
@@ -226,15 +222,15 @@ mloda supports multiple data access patterns depending on your use case:
 **3. ApiData** - For runtime data injection (web requests, real-time predictions)
 ```python
 # Example (for API endpoints and real-time predictions):
-# from mloda_core.abstract_plugins.components.input_data.api.api_input_data_collection import ApiInputDataCollection
+# from mloda.provider import ApiDataCollection
 #
-# api_input_data_collection = ApiInputDataCollection()
+# api_input_data_collection = ApiDataCollection()
 # api_data = api_input_data_collection.setup_key_api_data(
 #     key_name="PredictionData",
 #     api_input_data={"customer_id": ["C001", "C002"], "age": [25, 30]}
 # )
 #
-# result = mlodaAPI.run_all(
+# result = mloda.run_all(
 #     features=["customer_id", "age__standard_scaled"],
 #     compute_frameworks={PandasDataFrame},
 #     api_input_data_collection=api_input_data_collection,
@@ -253,7 +249,7 @@ mloda supports multiple compute frameworks (pandas, polars, pyarrow, etc.). Most
 ```python
 # Using the SampleData class from Section 1
 # Default: Everything processes with pandas
-result = mlodaAPI.run_all(
+result = mloda.run_all(
     features=["customer_id", "income__standard_scaled"],
     compute_frameworks={PandasDataFrame}  # Use pandas for all features
 )
@@ -312,7 +308,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
 
-result = mlodaAPI.run_all(
+result = mloda.run_all(
     features=[
         "customer_id",
         "age__standard_scaled",

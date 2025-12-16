@@ -1,9 +1,9 @@
 from typing import Any, Set, Type
-from mloda_core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
+from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.pandas.pandas_merge_engine import PandasMergeEngine
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
-from mloda_core.filter.filter_engine import BaseFilterEngine
+from mloda.user import FeatureName
+from mloda import ComputeFramework
+from mloda.provider import BaseFilterEngine
 from mloda_plugins.compute_framework.base_implementations.pandas.pandas_filter_engine import PandasFilterEngine
 
 try:
@@ -12,7 +12,7 @@ except ImportError:
     pd = None
 
 
-class PandasDataFrame(ComputeFrameWork):
+class PandasDataFrame(ComputeFramework):
     @staticmethod
     def is_available() -> bool:
         """Check if Pandas is installed and available."""

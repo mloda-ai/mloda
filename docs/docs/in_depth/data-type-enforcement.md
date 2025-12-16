@@ -7,7 +7,7 @@ mloda supports optional data type declarations on Features, enabling runtime val
 Use typed constructors to declare the expected data type:
 
 ```python
-from mloda_core.abstract_plugins.components.feature import Feature
+from mloda.user import Feature
 
 # Typed features - will be validated at runtime
 feature_int = Feature.int32_of("user_count")
@@ -85,14 +85,12 @@ feature = Feature.int64_of(
 Type mismatches raise `DataTypeMismatchError`:
 
 ```python title="Error handling example"
-from mloda_core.api.request import mlodaAPI
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.validators.datatype_validator import (
-    DataTypeMismatchError
-)
+import mloda
+from mloda.user import Feature
+from mloda.provider import DataTypeMismatchError
 
 try:
-    result = mlodaAPI.run_all([Feature.str_of("numeric_column")])
+    result = mloda.run_all([Feature.str_of("numeric_column")])
 except DataTypeMismatchError as e:
     print(f"Feature '{e.feature_name}': declared {e.declared.name}, got {e.actual.name}")
 ```

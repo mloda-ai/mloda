@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from typing import Any, List
 
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
+from mloda.user import PluginCollector
 from testbook import testbook
 
 from docs.docs.examples.mloda_basics.create_synthetic_data import (
@@ -15,9 +15,9 @@ from docs.docs.examples.mloda_basics.create_synthetic_data import (
     OrderSyntheticDataSet,
     PaymentSyntheticDataSet,
 )
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.api.request import mlodaAPI
-from mloda_core.filter.global_filter import GlobalFilter
+from mloda import Feature
+import mloda
+from mloda.user import GlobalFilter
 
 
 root_dir = Path(os.path.abspath(os.curdir))
@@ -95,11 +95,11 @@ class TestMlodaBasicsNotebooks:
             event_time_column=Feature("update_date", options=example_options),
         )
 
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {OrderSyntheticDataSet, PaymentSyntheticDataSet, LocationSyntheticDataSet, CategoricalSyntheticDataSet}
         )
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list,
             compute_frameworks=["PandasDataFrame"],
             global_filter=global_filter,

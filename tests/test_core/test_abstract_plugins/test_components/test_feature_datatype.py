@@ -7,7 +7,7 @@ These tests validate:
 """
 
 import pytest
-from mloda_core.abstract_plugins.components.feature import Feature
+from mloda import Feature
 
 
 def test_has_similarity_properties_includes_data_type() -> None:

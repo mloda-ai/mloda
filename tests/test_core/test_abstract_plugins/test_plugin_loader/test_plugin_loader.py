@@ -1,4 +1,4 @@
-from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
+from mloda.user import PluginLoader
 
 
 class TestPluginLoader:

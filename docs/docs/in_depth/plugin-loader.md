@@ -5,7 +5,7 @@ The PluginLoader dynamically loads and manages plugins from the `mloda_plugins` 
 ## Quick Start
 
 ```python
-from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
+from mloda.user import PluginLoader
 
 # Load all plugins
 loader = PluginLoader.all()

@@ -10,11 +10,11 @@ from typing import Any, Dict, List, Union
 
 import pytest
 
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_collection import Features
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
+from mloda import Feature
+from mloda.user import Features
+from mloda import Options
+from mloda.user import PluginCollector
+from mloda import API
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.geo_distance.base import GeoDistanceFeatureGroup
 from mloda_plugins.feature_group.experimental.geo_distance.pandas import PandasGeoDistanceFeatureGroup
@@ -53,7 +53,7 @@ class TestGeoDistanceModernization:
     def test_string_based_feature_creation(self) -> None:
         """Test that string-based feature creation still works (legacy approach)."""
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {GeoDistanceModernizationTestDataCreator, PandasGeoDistanceFeatureGroup}
         )
 
@@ -65,7 +65,7 @@ class TestGeoDistanceModernization:
         ]
 
         # Run the API
-        api = mlodaAPI(
+        api = API(
             features,
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
@@ -91,7 +91,7 @@ class TestGeoDistanceModernization:
     def test_configuration_based_feature_creation(self) -> None:
         """Test that configuration-based feature creation works (modern approach)."""
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {GeoDistanceModernizationTestDataCreator, PandasGeoDistanceFeatureGroup}
         )
 
@@ -127,7 +127,7 @@ class TestGeoDistanceModernization:
         ]
 
         # Run the API
-        api = mlodaAPI(
+        api = API(
             features,
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
@@ -153,7 +153,7 @@ class TestGeoDistanceModernization:
     def test_both_approaches_produce_equivalent_results(self) -> None:
         """Test that both string-based and configuration-based approaches produce equivalent functionality."""
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {GeoDistanceModernizationTestDataCreator, PandasGeoDistanceFeatureGroup}
         )
 
@@ -172,11 +172,11 @@ class TestGeoDistanceModernization:
         )
 
         # Run both approaches
-        api1 = mlodaAPI([string_feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+        api1 = API([string_feature], {PandasDataFrame}, plugin_collector=plugin_collector)
         api1._batch_run()
         results1 = api1.get_result()
 
-        api2 = mlodaAPI([config_feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+        api2 = API([config_feature], {PandasDataFrame}, plugin_collector=plugin_collector)
         api2._batch_run()
         results2 = api2.get_result()
 
@@ -197,7 +197,7 @@ class TestGeoDistanceModernization:
     def test_parameter_validation_in_configuration_based_features(self) -> None:
         """Test that parameter validation works correctly for configuration-based features."""
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {GeoDistanceModernizationTestDataCreator, PandasGeoDistanceFeatureGroup}
         )
 
@@ -212,7 +212,7 @@ class TestGeoDistanceModernization:
                     }
                 ),
             )
-            api = mlodaAPI([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+            api = API([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
             api._batch_run()
 
         # Test invalid number of source features (only 1 instead of 2)
@@ -226,7 +226,7 @@ class TestGeoDistanceModernization:
                     }
                 ),
             )
-            api = mlodaAPI([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+            api = API([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
             api._batch_run()
 
         # Test invalid number of source features (3 instead of 2)
@@ -240,13 +240,13 @@ class TestGeoDistanceModernization:
                     }
                 ),
             )
-            api = mlodaAPI([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+            api = API([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
             api._batch_run()
 
     def test_multiple_distance_types_configuration_based(self) -> None:
         """Test multiple distance types using configuration-based approach."""
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {GeoDistanceModernizationTestDataCreator, PandasGeoDistanceFeatureGroup}
         )
 
@@ -277,7 +277,7 @@ class TestGeoDistanceModernization:
             features.append(feature)
 
         # Run the API with multiple features
-        api = mlodaAPI(features, {PandasDataFrame}, plugin_collector=plugin_collector)
+        api = API(features, {PandasDataFrame}, plugin_collector=plugin_collector)
         api._batch_run()
         results = api.get_result()
 
@@ -290,7 +290,7 @@ class TestGeoDistanceModernization:
     def test_context_parameters_dont_affect_feature_group_resolution(self) -> None:
         """Test that context parameters don't affect Feature Group resolution/splitting."""
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {GeoDistanceModernizationTestDataCreator, PandasGeoDistanceFeatureGroup}
         )
 
@@ -321,7 +321,7 @@ class TestGeoDistanceModernization:
         )
 
         # Run the API with both features
-        api = mlodaAPI([feature1, feature2], {PandasDataFrame}, plugin_collector=plugin_collector)
+        api = API([feature1, feature2], {PandasDataFrame}, plugin_collector=plugin_collector)
         api._batch_run()
         results = api.get_result()
 
@@ -374,7 +374,7 @@ class TestGeoDistanceModernization:
     def test_dual_approach_in_single_run(self) -> None:
         """Test that both string-based and configuration-based features can be used together in a single run."""
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {GeoDistanceModernizationTestDataCreator, PandasGeoDistanceFeatureGroup}
         )
 
@@ -405,7 +405,7 @@ class TestGeoDistanceModernization:
         ]
 
         # Run the API with mixed features
-        api = mlodaAPI(features, {PandasDataFrame}, plugin_collector=plugin_collector)
+        api = API(features, {PandasDataFrame}, plugin_collector=plugin_collector)
         api._batch_run()
         results = api.get_result()
 
@@ -427,7 +427,7 @@ class TestGeoDistanceModernization:
         feature_group = GeoDistanceFeatureGroup()
 
         # Test string-based approach
-        from mloda_core.abstract_plugins.components.feature_name import FeatureName
+        from mloda.user import FeatureName
 
         string_feature_name = FeatureName("sf_location&nyc_location__haversine_distance")
         string_options = Options({})

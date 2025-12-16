@@ -72,7 +72,7 @@ PROPERTY_MAPPING = {
 ## Usage in Feature Groups
 
 ``` python
-class MyFeatureGroup(AbstractFeatureGroup):
+class MyFeatureGroup(FeatureGroup):
     PROPERTY_MAPPING = {
         "operation_type": {
             "sum": "Sum operation",

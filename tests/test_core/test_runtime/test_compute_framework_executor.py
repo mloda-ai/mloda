@@ -16,14 +16,14 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
-from mloda_core.core.cfw_manager import CfwManager
-from mloda_core.core.step.feature_group_step import FeatureGroupStep
-from mloda_core.core.step.join_step import JoinStep
-from mloda_core.core.step.transform_frame_work_step import TransformFrameworkStep
-from mloda_core.runtime.compute_framework_executor import ComputeFrameworkExecutor
-from mloda_core.runtime.worker_manager import WorkerManager
+from mloda.user import ParallelizationMode
+from mloda import ComputeFramework
+from mloda.core.core.cfw_manager import CfwManager
+from mloda.core.core.step.feature_group_step import FeatureGroupStep
+from mloda.core.core.step.join_step import JoinStep
+from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
+from mloda.core.runtime.compute_framework_executor import ComputeFrameworkExecutor
+from mloda.core.runtime.worker_manager import WorkerManager
 
 
 class TestComputeFrameworkExecutorConstruction:
@@ -70,7 +70,7 @@ class TestInitComputeFramework:
 
         # Mock CFW class and function extender
         mock_cfw_class = Mock()
-        mock_cfw_instance = Mock(spec=ComputeFrameWork)
+        mock_cfw_instance = Mock(spec=ComputeFramework)
         mock_cfw_class.return_value = mock_cfw_instance
         mock_cfw_class.get_class_name.return_value = "TestCFW"
 
@@ -81,7 +81,7 @@ class TestInitComputeFramework:
         cfw_register.get_function_extender.return_value = function_extender
 
         children = {uuid4(), uuid4()}
-        mode = ParallelizationModes.SYNC
+        mode = ParallelizationMode.SYNC
 
         cfw_uuid = executor.init_compute_framework(mock_cfw_class, mode, children, test_uuid)
 
@@ -98,7 +98,7 @@ class TestInitComputeFramework:
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         mock_cfw_class = Mock()
-        mock_cfw_instance = Mock(spec=ComputeFrameWork)
+        mock_cfw_instance = Mock(spec=ComputeFramework)
         mock_cfw_class.return_value = mock_cfw_instance
 
         generated_uuid = uuid4()
@@ -106,7 +106,7 @@ class TestInitComputeFramework:
 
         cfw_register.get_function_extender.return_value = None
 
-        cfw_uuid = executor.init_compute_framework(mock_cfw_class, ParallelizationModes.SYNC, set())
+        cfw_uuid = executor.init_compute_framework(mock_cfw_class, ParallelizationMode.SYNC, set())
 
         # Should receive some UUID (generated internally)
         assert isinstance(cfw_uuid, UUID)
@@ -118,7 +118,7 @@ class TestInitComputeFramework:
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         mock_cfw_class = Mock()
-        mock_cfw_instance = Mock(spec=ComputeFrameWork)
+        mock_cfw_instance = Mock(spec=ComputeFramework)
         mock_cfw_class.return_value = mock_cfw_instance
         mock_cfw_class.get_class_name.return_value = "TestCFW"
 
@@ -128,7 +128,7 @@ class TestInitComputeFramework:
         cfw_register.get_function_extender.return_value = None
 
         children = {uuid4()}
-        executor.init_compute_framework(mock_cfw_class, ParallelizationModes.SYNC, children, test_uuid)
+        executor.init_compute_framework(mock_cfw_class, ParallelizationMode.SYNC, children, test_uuid)
 
         cfw_register.add_cfw_to_compute_frameworks.assert_called_once_with(test_uuid, "TestCFW", children)
 
@@ -139,7 +139,7 @@ class TestInitComputeFramework:
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         mock_cfw_class = Mock()
-        mock_cfw_instance = Mock(spec=ComputeFrameWork)
+        mock_cfw_instance = Mock(spec=ComputeFramework)
         mock_cfw_class.return_value = mock_cfw_instance
 
         test_uuid = uuid4()
@@ -147,7 +147,7 @@ class TestInitComputeFramework:
 
         cfw_register.get_function_extender.return_value = None
 
-        executor.init_compute_framework(mock_cfw_class, ParallelizationModes.SYNC, set(), test_uuid)
+        executor.init_compute_framework(mock_cfw_class, ParallelizationMode.SYNC, set(), test_uuid)
 
         assert test_uuid in executor.cfw_collection
         assert executor.cfw_collection[test_uuid] is mock_cfw_instance
@@ -169,7 +169,7 @@ class TestAddComputeFramework:
         step.compute_framework = Mock()
         step.compute_framework.get_class_name.return_value = "TestCFW"
 
-        result = executor.add_compute_framework(step, ParallelizationModes.SYNC, uuid4(), set())
+        result = executor.add_compute_framework(step, ParallelizationMode.SYNC, uuid4(), set())
 
         assert result == existing_uuid
         # Should not call init_compute_framework
@@ -186,7 +186,7 @@ class TestAddComputeFramework:
 
         step = Mock()
         mock_cfw_class = Mock()
-        mock_cfw_instance = Mock(spec=ComputeFrameWork)
+        mock_cfw_instance = Mock(spec=ComputeFramework)
         mock_cfw_class.return_value = mock_cfw_instance
         mock_cfw_class.get_class_name.return_value = "TestCFW"
 
@@ -199,12 +199,12 @@ class TestAddComputeFramework:
         feature_uuid = uuid4()
         children = {uuid4()}
 
-        result = executor.add_compute_framework(step, ParallelizationModes.THREADING, feature_uuid, children)
+        result = executor.add_compute_framework(step, ParallelizationMode.THREADING, feature_uuid, children)
 
         assert result == new_uuid
         assert new_uuid in executor.cfw_collection
 
-    @patch("mloda_core.runtime.compute_framework_executor.multiprocessing.Lock")
+    @patch("mloda.core.runtime.compute_framework_executor.multiprocessing.Lock")
     def test_uses_multiprocessing_lock(self, mock_lock_class: Any) -> None:
         """Should use multiprocessing.Lock for thread safety."""
         mock_lock = MagicMock()
@@ -220,7 +220,7 @@ class TestAddComputeFramework:
         step.compute_framework = Mock()
         step.compute_framework.get_class_name.return_value = "TestCFW"
 
-        executor.add_compute_framework(step, ParallelizationModes.SYNC, uuid4(), set())
+        executor.add_compute_framework(step, ParallelizationMode.SYNC, uuid4(), set())
 
         # Verify lock was used as context manager
         mock_lock.__enter__.assert_called_once()
@@ -238,7 +238,7 @@ class TestGetCfw:
 
         # Set up CFW in collection
         cfw_uuid = uuid4()
-        mock_cfw = Mock(spec=ComputeFrameWork)
+        mock_cfw = Mock(spec=ComputeFramework)
         executor.cfw_collection[cfw_uuid] = mock_cfw
 
         # Mock register lookup
@@ -276,8 +276,8 @@ class TestGetExecutionFunction:
         worker_manager = Mock(spec=WorkerManager)
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
-        mode_by_cfw = {ParallelizationModes.MULTIPROCESSING, ParallelizationModes.SYNC}
-        mode_by_step = {ParallelizationModes.MULTIPROCESSING}
+        mode_by_cfw = {ParallelizationMode.MULTIPROCESSING, ParallelizationMode.SYNC}
+        mode_by_step = {ParallelizationMode.MULTIPROCESSING}
 
         result = executor._get_execution_function(mode_by_cfw, mode_by_step)
 
@@ -289,8 +289,8 @@ class TestGetExecutionFunction:
         worker_manager = Mock(spec=WorkerManager)
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
-        mode_by_cfw = {ParallelizationModes.THREADING, ParallelizationModes.SYNC}
-        mode_by_step = {ParallelizationModes.THREADING}
+        mode_by_cfw = {ParallelizationMode.THREADING, ParallelizationMode.SYNC}
+        mode_by_step = {ParallelizationMode.THREADING}
 
         result = executor._get_execution_function(mode_by_cfw, mode_by_step)
 
@@ -302,8 +302,8 @@ class TestGetExecutionFunction:
         worker_manager = Mock(spec=WorkerManager)
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
-        mode_by_cfw = {ParallelizationModes.SYNC}
-        mode_by_step = {ParallelizationModes.SYNC}
+        mode_by_cfw = {ParallelizationMode.SYNC}
+        mode_by_step = {ParallelizationMode.SYNC}
 
         result = executor._get_execution_function(mode_by_cfw, mode_by_step)
 
@@ -316,11 +316,11 @@ class TestGetExecutionFunction:
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         mode_by_cfw = {
-            ParallelizationModes.MULTIPROCESSING,
-            ParallelizationModes.THREADING,
-            ParallelizationModes.SYNC,
+            ParallelizationMode.MULTIPROCESSING,
+            ParallelizationMode.THREADING,
+            ParallelizationMode.SYNC,
         }
-        mode_by_step = {ParallelizationModes.MULTIPROCESSING, ParallelizationModes.THREADING}
+        mode_by_step = {ParallelizationMode.MULTIPROCESSING, ParallelizationMode.THREADING}
 
         result = executor._get_execution_function(mode_by_cfw, mode_by_step)
 
@@ -345,7 +345,7 @@ class TestPrepareExecuteStep:
         existing_uuid = uuid4()
         cfw_register.get_cfw_uuid.return_value = existing_uuid
 
-        result = executor.prepare_execute_step(step, ParallelizationModes.SYNC)
+        result = executor.prepare_execute_step(step, ParallelizationMode.SYNC)
 
         assert result == existing_uuid
 
@@ -365,7 +365,7 @@ class TestPrepareExecuteStep:
         step.children_if_root = [uuid4()]
 
         mock_cfw_class = Mock()
-        mock_cfw_instance = Mock(spec=ComputeFrameWork)
+        mock_cfw_instance = Mock(spec=ComputeFramework)
         mock_cfw_class.return_value = mock_cfw_instance
         mock_cfw_class.get_class_name.return_value = "TestCFW"
         step.compute_framework = mock_cfw_class
@@ -374,7 +374,7 @@ class TestPrepareExecuteStep:
         mock_cfw_instance.get_uuid.return_value = new_uuid
         cfw_register.get_function_extender.return_value = None
 
-        result = executor.prepare_execute_step(step, ParallelizationModes.SYNC)
+        result = executor.prepare_execute_step(step, ParallelizationMode.SYNC)
 
         assert result == new_uuid
 
@@ -390,7 +390,7 @@ class TestPrepareExecuteStep:
         step.features.any_uuid = None
 
         with pytest.raises(ValueError, match="from_feature_uuid should not be none"):
-            executor.prepare_execute_step(step, ParallelizationModes.SYNC)
+            executor.prepare_execute_step(step, ParallelizationMode.SYNC)
 
     def test_handles_transform_framework_step(self) -> None:
         """Should handle TransformFrameworkStep by creating new CFW with children."""
@@ -408,7 +408,7 @@ class TestPrepareExecuteStep:
         cfw_register.get_cfw_uuid.return_value = from_cfw_uuid
 
         # Mock the from_cfw in collection
-        from_cfw = Mock(spec=ComputeFrameWork)
+        from_cfw = Mock(spec=ComputeFramework)
         child_uuid = uuid4()
         from_cfw.children_if_root = {child_uuid}
         executor.cfw_collection[from_cfw_uuid] = from_cfw
@@ -418,7 +418,7 @@ class TestPrepareExecuteStep:
 
         # Mock to_framework
         mock_to_cfw_class = Mock()
-        mock_to_cfw_instance = Mock(spec=ComputeFrameWork)
+        mock_to_cfw_instance = Mock(spec=ComputeFramework)
         mock_to_cfw_class.return_value = mock_to_cfw_instance
         step.to_framework = mock_to_cfw_class
 
@@ -426,8 +426,8 @@ class TestPrepareExecuteStep:
         mock_to_cfw_instance.get_uuid.return_value = new_uuid
         cfw_register.get_function_extender.return_value = None
 
-        with patch("mloda_core.runtime.compute_framework_executor.multiprocessing.Lock"):
-            result = executor.prepare_execute_step(step, ParallelizationModes.THREADING)
+        with patch("mloda.core.runtime.compute_framework_executor.multiprocessing.Lock"):
+            result = executor.prepare_execute_step(step, ParallelizationMode.THREADING)
 
         assert result == new_uuid
 
@@ -446,7 +446,7 @@ class TestPrepareExecuteStep:
         cfw_uuid = uuid4()
         cfw_register.get_cfw_uuid.return_value = cfw_uuid
 
-        result = executor.prepare_execute_step(step, ParallelizationModes.SYNC)
+        result = executor.prepare_execute_step(step, ParallelizationMode.SYNC)
 
         assert result == cfw_uuid
 
@@ -461,7 +461,7 @@ class TestPrepareExecuteStep:
         step.__class__.__name__ = "UnknownStep"
 
         with pytest.raises(ValueError, match="This should not occur"):
-            executor.prepare_execute_step(step, ParallelizationModes.SYNC)
+            executor.prepare_execute_step(step, ParallelizationMode.SYNC)
 
 
 class TestPrepareTfsRightCfw:
@@ -543,7 +543,7 @@ class TestPrepareTfsAndJoinStep:
         from_cfw_uuid = uuid4()
         cfw_register.get_cfw_uuid.return_value = from_cfw_uuid
 
-        from_cfw = Mock(spec=ComputeFrameWork)
+        from_cfw = Mock(spec=ComputeFramework)
         executor.cfw_collection[from_cfw_uuid] = from_cfw
 
         result = executor.prepare_tfs_and_joinstep(step)
@@ -567,7 +567,7 @@ class TestPrepareTfsAndJoinStep:
         from_cfw_uuid = uuid4()
         cfw_register.get_cfw_uuid.return_value = from_cfw_uuid
 
-        from_cfw = Mock(spec=ComputeFrameWork)
+        from_cfw = Mock(spec=ComputeFramework)
         executor.cfw_collection[from_cfw_uuid] = from_cfw
 
         result = executor.prepare_tfs_and_joinstep(step)
@@ -595,7 +595,7 @@ class TestPrepareTfsAndJoinStep:
         from_cfw_uuid = uuid4()
         cfw_register.get_cfw_uuid.side_effect = [None, from_cfw_uuid]
 
-        from_cfw = Mock(spec=ComputeFrameWork)
+        from_cfw = Mock(spec=ComputeFramework)
         executor.cfw_collection[from_cfw_uuid] = from_cfw
 
         result = executor.prepare_tfs_and_joinstep(step)
@@ -654,7 +654,7 @@ class TestSyncExecuteStep:
         cfw_uuid = uuid4()
         cfw_register.get_cfw_uuid.return_value = cfw_uuid
 
-        mock_cfw = Mock(spec=ComputeFrameWork)
+        mock_cfw = Mock(spec=ComputeFramework)
         executor.cfw_collection[cfw_uuid] = mock_cfw
 
         executor.sync_execute_step(step)
@@ -680,7 +680,7 @@ class TestSyncExecuteStep:
         cfw_uuid = uuid4()
         cfw_register.get_cfw_uuid.return_value = cfw_uuid
 
-        mock_cfw = Mock(spec=ComputeFrameWork)
+        mock_cfw = Mock(spec=ComputeFramework)
         executor.cfw_collection[cfw_uuid] = mock_cfw
 
         executor.sync_execute_step(step)
@@ -704,7 +704,7 @@ class TestSyncExecuteStep:
         cfw_uuid = uuid4()
         cfw_register.get_cfw_uuid.return_value = cfw_uuid
 
-        mock_cfw = Mock(spec=ComputeFrameWork)
+        mock_cfw = Mock(spec=ComputeFramework)
         executor.cfw_collection[cfw_uuid] = mock_cfw
 
         # Make step.execute raise an exception
@@ -738,17 +738,17 @@ class TestThreadExecuteStep:
         cfw_uuid = uuid4()
         cfw_register.get_cfw_uuid.return_value = cfw_uuid
 
-        mock_cfw = Mock(spec=ComputeFrameWork)
+        mock_cfw = Mock(spec=ComputeFramework)
         executor.cfw_collection[cfw_uuid] = mock_cfw
 
-        with patch("mloda_core.runtime.compute_framework_executor.threading.Thread"):
+        with patch("mloda.core.runtime.compute_framework_executor.threading.Thread"):
             executor.thread_execute_step(step)
 
         # Verify CFW was retrieved
         assert cfw_uuid in executor.cfw_collection
 
-    @patch("mloda_core.runtime.compute_framework_executor.thread_worker")
-    @patch("mloda_core.runtime.compute_framework_executor.threading.Thread")
+    @patch("mloda.core.runtime.compute_framework_executor.thread_worker")
+    @patch("mloda.core.runtime.compute_framework_executor.threading.Thread")
     def test_creates_thread_with_correct_target_and_args(self, mock_thread_class: Any, mock_worker: Any) -> None:
         """Should create thread with thread_worker target and correct arguments."""
         cfw_register = Mock(spec=CfwManager)
@@ -766,7 +766,7 @@ class TestThreadExecuteStep:
         cfw_uuid = uuid4()
         cfw_register.get_cfw_uuid.return_value = cfw_uuid
 
-        mock_cfw = Mock(spec=ComputeFrameWork)
+        mock_cfw = Mock(spec=ComputeFramework)
         executor.cfw_collection[cfw_uuid] = mock_cfw
 
         mock_thread = Mock()
@@ -777,7 +777,7 @@ class TestThreadExecuteStep:
         # Verify thread was created with correct parameters
         mock_thread_class.assert_called_once_with(target=mock_worker, args=(step, cfw_register, mock_cfw, None))
 
-    @patch("mloda_core.runtime.compute_framework_executor.threading.Thread")
+    @patch("mloda.core.runtime.compute_framework_executor.threading.Thread")
     def test_adds_thread_to_worker_manager(self, mock_thread_class: Any) -> None:
         """Should add created thread to worker_manager."""
         cfw_register = Mock(spec=CfwManager)
@@ -795,7 +795,7 @@ class TestThreadExecuteStep:
         cfw_uuid = uuid4()
         cfw_register.get_cfw_uuid.return_value = cfw_uuid
 
-        mock_cfw = Mock(spec=ComputeFrameWork)
+        mock_cfw = Mock(spec=ComputeFramework)
         executor.cfw_collection[cfw_uuid] = mock_cfw
 
         mock_thread = Mock()
@@ -826,7 +826,7 @@ class TestMultiExecuteStep:
         cfw_uuid = uuid4()
         cfw_register.get_cfw_uuid.return_value = cfw_uuid
 
-        mock_cfw = Mock(spec=ComputeFrameWork)
+        mock_cfw = Mock(spec=ComputeFramework)
         executor.cfw_collection[cfw_uuid] = mock_cfw
 
         worker_manager.get_process_queues.return_value = (Mock(), Mock(), Mock())
@@ -836,7 +836,7 @@ class TestMultiExecuteStep:
         # Verify process queues were checked
         worker_manager.get_process_queues.assert_called_once_with(cfw_uuid)
 
-    @patch("mloda_core.runtime.compute_framework_executor.worker")
+    @patch("mloda.core.runtime.compute_framework_executor.worker")
     def test_creates_worker_process_if_not_exists(self, mock_worker: Any) -> None:
         """Should create new worker process if none exists for CFW UUID."""
         cfw_register = Mock(spec=CfwManager)
@@ -854,7 +854,7 @@ class TestMultiExecuteStep:
         cfw_uuid = uuid4()
         cfw_register.get_cfw_uuid.return_value = cfw_uuid
 
-        mock_cfw = Mock(spec=ComputeFrameWork)
+        mock_cfw = Mock(spec=ComputeFramework)
         executor.cfw_collection[cfw_uuid] = mock_cfw
 
         worker_manager.get_process_queues.return_value = None
@@ -887,7 +887,7 @@ class TestMultiExecuteStep:
         cfw_uuid = uuid4()
         cfw_register.get_cfw_uuid.return_value = cfw_uuid
 
-        mock_cfw = Mock(spec=ComputeFrameWork)
+        mock_cfw = Mock(spec=ComputeFramework)
         executor.cfw_collection[cfw_uuid] = mock_cfw
 
         existing_process = (Mock(), Mock(), Mock())
@@ -915,7 +915,7 @@ class TestMultiExecuteStep:
         cfw_uuid = uuid4()
         cfw_register.get_cfw_uuid.return_value = cfw_uuid
 
-        mock_cfw = Mock(spec=ComputeFrameWork)
+        mock_cfw = Mock(spec=ComputeFramework)
         executor.cfw_collection[cfw_uuid] = mock_cfw
 
         worker_manager.get_process_queues.return_value = (Mock(), Mock(), Mock())
@@ -939,7 +939,7 @@ class TestMultiExecuteStep:
         from_cfw_uuid = uuid4()
         cfw_register.get_cfw_uuid.side_effect = [from_cfw_uuid, from_cfw_uuid]
 
-        from_cfw = Mock(spec=ComputeFrameWork)
+        from_cfw = Mock(spec=ComputeFramework)
         from_cfw.children_if_root = set()
         executor.cfw_collection[from_cfw_uuid] = from_cfw
 
@@ -947,7 +947,7 @@ class TestMultiExecuteStep:
         step.uuid = uuid4()
 
         mock_to_cfw_class = Mock()
-        mock_to_cfw_instance = Mock(spec=ComputeFrameWork)
+        mock_to_cfw_instance = Mock(spec=ComputeFramework)
         mock_to_cfw_class.return_value = mock_to_cfw_instance
         step.to_framework = mock_to_cfw_class
 
@@ -957,7 +957,7 @@ class TestMultiExecuteStep:
 
         worker_manager.get_process_queues.return_value = (Mock(), Mock(), Mock())
 
-        with patch("mloda_core.runtime.compute_framework_executor.multiprocessing.Lock"):
+        with patch("mloda.core.runtime.compute_framework_executor.multiprocessing.Lock"):
             executor.multi_execute_step(step)
 
         # Verify from_cfw_uuid was prepared

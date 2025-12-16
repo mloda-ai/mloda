@@ -44,7 +44,7 @@ data_access.add_credential_dict({'host': 'example.com', 'password': 'example'})
 data_access.add_initialized_connection_object('InitializedDBConnection')
 data_access.add_uninitialized_connection_object('UninitializedDBConnection')
 
-mlodaAPI.run_all(
+mloda.run_all(
     feature_list,
     data_access_collection=data_access)
 ```
@@ -56,8 +56,8 @@ A concrete, simplified global scope data access is shown in this example:
 ```python
 import os
 
-from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda_core.api.request import mlodaAPI
+import mloda
+from mloda.user import DataAccessCollection
 
 
 file_path = os.getcwd()
@@ -65,9 +65,9 @@ file_path += "/docs/docs/in_depth"
 
 data_access_collection = DataAccessCollection(folders={str(file_path)})
 
-result = mlodaAPI.run_all(
-            ["AExample", "BExample"], 
-            compute_frameworks=["PandasDataFrame"], 
+result = mloda.run_all(
+            ["AExample", "BExample"],
+            compute_frameworks=["PandasDataFrame"],
             # Define data access on a global level
             data_access_collection=data_access_collection
         )
@@ -95,7 +95,7 @@ In this case, we need to provide the specific reader class: CsvReader.
 ``` python
 
 # This feature is already implemented as plug-in, so do not run it again. This will raise intentional errors.
-class ReadFileFeature(AbstractFeatureGroup):
+class ReadFileFeature(FeatureGroup):
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         return ReadFile()
@@ -114,16 +114,13 @@ As a side note, the ReadFileFeature was also used for the global scope automatis
 To use it, we can simply:
 
 ```python
-
-
 from typing import Optional, Any, List
 from pathlib import Path
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
+import mloda
+from mloda.provider import FeatureGroup, BaseInputData, FeatureSet
+from mloda.user import Feature
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
-from mloda_core.abstract_plugins.components.feature import Feature
 from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 
 
@@ -139,7 +136,7 @@ feature_list.append(
 )
 
 
-result = mlodaAPI.run_all(feature_list, compute_frameworks=["PandasDataFrame"])
+result = mloda.run_all(feature_list, compute_frameworks=["PandasDataFrame"])
 print(result)
 ```
 
@@ -168,14 +165,13 @@ Use cases:
 The following example shows a simple ApiData setup.
 
 ```python
-
 from typing import List
 
-from mloda_core.api.request import mlodaAPI
+import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 # Pass api_data directly as a dict - the framework handles registration internally
-result = mlodaAPI.run_all(
+result = mloda.run_all(
         ["FeatureInputAPITest"],
         compute_frameworks={PandasDataFrame},
         api_data={"ExampleApiData": {"FeatureInputAPITest": ["TestValue3", "TestValue4"]}},
@@ -208,13 +204,12 @@ Usage:
 One could imagine that for experimenting one wants to see data. Then one could use this feature as input feature to another feature instead of e.g. the true data.
 
 ```python
-
-
+import mloda
+from mloda.provider import FeatureGroup, BaseInputData, FeatureSet, DataCreator
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
 
 # Create a Creator FeatureGroup class, which delivers the data needed
-class AFeatureInputCreator(AbstractFeatureGroup):
+class AFeatureInputCreator(FeatureGroup):
 
     # Define input_data with using DataCreator
     @classmethod
@@ -226,7 +221,7 @@ class AFeatureInputCreator(AbstractFeatureGroup):
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {"AFeatureInputCreator": ["TestValue5", "TestValue6"]}
 
-result = mlodaAPI.run_all(
+result = mloda.run_all(
         ["AFeatureInputCreator"],
         compute_frameworks={PandasDataFrame},
 )
@@ -252,19 +247,18 @@ This is one of the key aspects in how we achieve to split data from processes.
 
 In the following example, we will use data from another feature.
 ```python
-
 from typing import Set
 
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
+import mloda
+from mloda.provider import FeatureGroup, FeatureSet
+from mloda.user import Options, FeatureName, Feature, PluginCollector
 
 # Set this variable as convention (internal key name)
 _in_features = "in_features"
 
 
 # First, we create a class, which uses input features from another class
-class AInputFeatureGroup(AbstractFeatureGroup):
+class AInputFeatureGroup(FeatureGroup):
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
 
@@ -293,10 +287,10 @@ feature_list.append(
     Feature(name="AInputFeatureGroup", options={_in_features: frozenset(["AFeatureInputCreator"])})
 )
 
-result = mlodaAPI.run_all(
+result = mloda.run_all(
     feature_list,
     compute_frameworks={PandasDataFrame},
-    plugin_collector=PlugInCollector.enabled_feature_groups({AInputFeatureGroup, AFeatureInputCreator})
+    plugin_collector=PluginCollector.enabled_feature_groups({AInputFeatureGroup, AFeatureInputCreator})
 
 )
 print(result)
@@ -321,11 +315,11 @@ As the input features can be fulfilled by **multiple other features**, we can ha
 When input features come from different sources (e.g., ApiData and DataCreator), you can join them using Links. Create a `Link` in `input_features()` and attach it to a `Feature`:
 
 ```python
-from mloda_core.abstract_plugins.components.link import Link
-from mloda_core.abstract_plugins.components.index.index import Index
+from mloda.user import Link, Index, Feature
+from mloda.provider import FeatureGroup, FeatureSet
 from mloda_plugins.feature_group.input_data.api_data.api_data import ApiInputDataFeature
 
-class JoinedFeature(AbstractFeatureGroup):
+class JoinedFeature(FeatureGroup):
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         # Create a LEFT join between API data and Creator data

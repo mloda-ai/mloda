@@ -87,11 +87,11 @@ class TestPandasDataFrameClassMethods:
 
     def test_methods_callable_on_instance(self) -> None:
         """Verify methods can be called on instances."""
-        from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
+        from mloda.user import ParallelizationMode
 
         import pandas as pd
 
-        instance = PandasDataFrame(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        instance = PandasDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         assert instance.pd_dataframe() == pd.DataFrame
         assert instance.pd_series() == pd.Series
         assert instance.pd_merge() == pd.merge
@@ -144,10 +144,10 @@ class TestPolarsDataFrameClassMethods:
 
     def test_methods_callable_on_instance(self) -> None:
         """Verify methods can be called on instances."""
-        from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
+        from mloda.user import ParallelizationMode
 
         assert _PolarsDataFrame is not None
-        instance = _PolarsDataFrame(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        instance = _PolarsDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         assert instance.pl_dataframe() == _pl.DataFrame
         assert instance.pl_series() == _pl.Series
 
@@ -211,10 +211,10 @@ class TestDuckDBFrameworkClassMethods:
 
     def test_methods_callable_on_instance(self) -> None:
         """Verify methods can be called on instances."""
-        from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
+        from mloda.user import ParallelizationMode
 
         assert _DuckDBFramework is not None
-        instance = _DuckDBFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        instance = _DuckDBFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         assert instance.duckdb_relation() == _duckdb.DuckDBPyRelation
 
 
@@ -244,11 +244,11 @@ class TestSparkFrameworkClassMethods:
 
     def test_methods_callable_on_instance(self) -> None:
         """Verify methods can be called on instances."""
-        from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
+        from mloda.user import ParallelizationMode
         from pyspark.sql import DataFrame
 
         assert _SparkFramework is not None
-        instance = _SparkFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        instance = _SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         assert instance.spark_dataframe() == DataFrame
         assert instance.spark_session() == _SparkSession
 
@@ -286,10 +286,10 @@ class TestPandasDataFrameEngineClassMethods:
 
     def test_engine_methods_callable_on_instance(self) -> None:
         """Verify engine methods work when called on instances."""
-        from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
+        from mloda.user import ParallelizationMode
         from mloda_plugins.compute_framework.base_implementations.pandas.pandas_filter_engine import PandasFilterEngine
 
-        instance = PandasDataFrame(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        instance = PandasDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         assert instance.merge_engine() == PandasMergeEngine
         assert instance.filter_engine() == PandasFilterEngine
 
@@ -329,12 +329,12 @@ class TestPolarsDataFrameEngineClassMethods:
 
     def test_engine_methods_callable_on_instance(self) -> None:
         """Verify engine methods work when called on instances."""
-        from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
+        from mloda.user import ParallelizationMode
         from mloda_plugins.compute_framework.base_implementations.polars.polars_merge_engine import PolarsMergeEngine
         from mloda_plugins.compute_framework.base_implementations.polars.polars_filter_engine import PolarsFilterEngine
 
         assert _PolarsDataFrame is not None
-        instance = _PolarsDataFrame(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        instance = _PolarsDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         assert instance.merge_engine() == PolarsMergeEngine
         assert instance.filter_engine() == PolarsFilterEngine
 
@@ -374,12 +374,12 @@ class TestDuckDBFrameworkEngineClassMethods:
 
     def test_engine_methods_callable_on_instance(self) -> None:
         """Verify engine methods work when called on instances."""
-        from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
+        from mloda.user import ParallelizationMode
         from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_merge_engine import DuckDBMergeEngine
         from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_filter_engine import DuckDBFilterEngine
 
         assert _DuckDBFramework is not None
-        instance = _DuckDBFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        instance = _DuckDBFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         assert instance.merge_engine() == DuckDBMergeEngine
         assert instance.filter_engine() == DuckDBFilterEngine
 
@@ -417,11 +417,11 @@ class TestSparkFrameworkEngineClassMethods:
 
     def test_engine_methods_callable_on_instance(self) -> None:
         """Verify engine methods work when called on instances."""
-        from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
+        from mloda.user import ParallelizationMode
         from mloda_plugins.compute_framework.base_implementations.spark.spark_merge_engine import SparkMergeEngine
         from mloda_plugins.compute_framework.base_implementations.spark.spark_filter_engine import SparkFilterEngine
 
         assert _SparkFramework is not None
-        instance = _SparkFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        instance = _SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         assert instance.merge_engine() == SparkMergeEngine
         assert instance.filter_engine() == SparkFilterEngine

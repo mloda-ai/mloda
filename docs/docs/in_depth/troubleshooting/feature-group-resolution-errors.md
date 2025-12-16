@@ -16,17 +16,17 @@ If you experience this multiple times, please open an [issue](https://github.com
 
 ### Solutions
 
-#### 1. Use PlugInCollector to enable or disable feature groups
+#### 1. Use PluginCollector to enable or disable feature groups
 Control which feature groups are loaded to prevent conflicts:
 
 ``` python
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
+from mloda.user import PluginCollector
 
 # Disable specific conflicting feature groups
-collector = PlugInCollector.disabled_feature_groups({ConflictingFeatureGroupA, ConflictingFeatureGroupB})
+collector = PluginCollector.disabled_feature_groups({ConflictingFeatureGroupA, ConflictingFeatureGroupB})
 
 # Or enable only specific feature groups you need
-collector = PlugInCollector.enabled_feature_groups({RequiredFeatureGroupA, RequiredFeatureGroupB})
+collector = PluginCollector.enabled_feature_groups({RequiredFeatureGroupA, RequiredFeatureGroupB})
 ```
 
 #### 2. Avoid loading all plugins
@@ -35,7 +35,7 @@ You can load plugins by importing the module as a class.
 But you can also import just plugins from subfolders.
 
 ```python
-from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
+from mloda.user import PluginLoader
 
 plugin_loader = PluginLoader()
 plugin_loader.load_group("feature_group") # load plugins only from mloda_plugins.feature_group

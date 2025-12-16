@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Any, List, Optional, Set, Type, Union
 
 
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
+from mloda import ComputeFramework
 
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
@@ -20,7 +20,7 @@ except ImportError:
 
 class PandasMissingValueFeatureGroup(MissingValueFeatureGroup):
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         return {PandasDataFrame}
 
     @classmethod

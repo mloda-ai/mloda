@@ -1,26 +1,26 @@
 from typing import Any, Optional, Set, Type, Union
 
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
+from mloda import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 import pytest
 import pyarrow as pa
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.components.link import Link, JoinSpec
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
+from mloda import FeatureGroup
+from mloda import Feature
+from mloda.user import FeatureName
+from mloda.provider import FeatureSet
+from mloda.user import Index
+from mloda.provider import BaseInputData
+from mloda.provider import DataCreator
+from mloda.user import Link, JoinSpec
+from mloda import Options
+from mloda.user import ParallelizationMode
+from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from mloda_core.api.request import mlodaAPI
+import mloda
 
 
-class NonCfwRootJoinTestFeature(AbstractFeatureGroup):
+class NonCfwRootJoinTestFeature(FeatureGroup):
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         return DataCreator(supports_features={cls.get_class_name()})
@@ -30,7 +30,7 @@ class NonCfwRootJoinTestFeature(AbstractFeatureGroup):
         return {cls.get_class_name(): ["Same Value"], "dummy": ["dummy"]}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         return {PyArrowTable}
 
 
@@ -50,11 +50,11 @@ class SecondNonCfwRootJoinTestFeature(NonCfwRootJoinTestFeature):
         return {cls.get_class_name(): ["Same Value"], "dummy4": ["dummy3"]}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         return {PandasDataFrame}
 
 
-class GroupedNonCfwRootJoinTestFeature(AbstractFeatureGroup):
+class GroupedNonCfwRootJoinTestFeature(FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         if options.get("test_non_root_merge_multiple_join"):
             return {Feature(name="NonCfwRootJoinTestFeature"), Feature(name="NonCfwRootJoinTestFeatureB")}
@@ -71,7 +71,7 @@ class GroupedNonCfwRootJoinTestFeature(AbstractFeatureGroup):
         return data
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         return {PyArrowTable}
 
 
@@ -85,11 +85,11 @@ class GroupedSecondNonCfwRootJoinTestFeature(GroupedNonCfwRootJoinTestFeature):
         return data
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         return {PandasDataFrame}
 
 
-class Call2GroupedNonCfwRootJoinTestFeature(AbstractFeatureGroup):
+class Call2GroupedNonCfwRootJoinTestFeature(FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         return {
             Feature(name=GroupedNonCfwRootJoinTestFeature.get_class_name()),
@@ -111,13 +111,13 @@ class Call2GroupedNonCfwRootJoinTestFeature(AbstractFeatureGroup):
 @pytest.mark.parametrize(
     "modes",
     [
-        ({ParallelizationModes.SYNC}),
-        ({ParallelizationModes.THREADING}),
-        # ({ParallelizationModes.MULTIPROCESSING}),
+        ({ParallelizationMode.SYNC}),
+        ({ParallelizationMode.THREADING}),
+        # ({ParallelizationMode.MULTIPROCESSING}),
     ],
 )
 class TestNonCfWRootMerge:
-    def test_non_cfw_root_merge_simple(self, modes: Set[ParallelizationModes], flight_server: Any) -> None:
+    def test_non_cfw_root_merge_simple(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
         """
         This test is for testing a merge on the second level of the feature graph with mixed cfw.
         """
@@ -129,11 +129,11 @@ class TestNonCfWRootMerge:
             right=JoinSpec(GroupedSecondNonCfwRootJoinTestFeature, Index(("GroupedSecondNonCfwRootJoinTestFeature",))),
         )
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             [feature],
             links={link},
             compute_frameworks=["PyArrowTable", "PandasDataFrame"],
-            plugin_collector=PlugInCollector.enabled_feature_groups(
+            plugin_collector=PluginCollector.enabled_feature_groups(
                 {
                     NonCfwRootJoinTestFeature,
                     SecondNonCfwRootJoinTestFeature,
@@ -151,7 +151,7 @@ class TestNonCfWRootMerge:
             assert res["Call2GroupedNonCfwRootJoinTestFeature"] == ["Same Value"]
             assert len(res) == 1
 
-    def test_non_cfw_root_multiple(self, modes: Set[ParallelizationModes], flight_server: Any) -> None:
+    def test_non_cfw_root_multiple(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
         feature = Feature(
             name=Call2GroupedNonCfwRootJoinTestFeature.get_class_name(),
             options={"test_non_root_merge_multiple_join": True},
@@ -169,11 +169,11 @@ class TestNonCfWRootMerge:
 
         links = set([link, link_first_level])
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             [feature],
             links=links,
             compute_frameworks=["PyArrowTable", "PandasDataFrame"],
-            plugin_collector=PlugInCollector.enabled_feature_groups(
+            plugin_collector=PluginCollector.enabled_feature_groups(
                 {
                     NonCfwRootJoinTestFeature,
                     NonCfwRootJoinTestFeatureB,

@@ -3,13 +3,13 @@ import os
 import re
 from typing import Any, List, Optional, Set, Type, Union
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
-from mloda_core.api.request import mlodaAPI
+from mloda import FeatureGroup
+from mloda import Feature
+from mloda.provider import FeatureSet
+from mloda.provider import BaseInputData
+from mloda.provider import DataCreator
+from mloda import ComputeFramework
+import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.llm.llm_api.claude import ClaudeRequestLoop
 from mloda_plugins.feature_group.experimental.llm.llm_api.gemini import GeminiRequestLoop
@@ -38,7 +38,7 @@ class RunRefactorGeminiRequestLoop(GeminiRequestLoop):
 
 class RunRefactorDiffCached:
     def __init__(self) -> None:
-        self.compute_frameworks: Set[Type[ComputeFrameWork]] = {PandasDataFrame}
+        self.compute_frameworks: Set[Type[ComputeFramework]] = {PandasDataFrame}
 
     def run(self) -> None:
         # check tests are passing
@@ -140,7 +140,7 @@ class RunRefactorDiffCached:
             },
         )
 
-        results = mlodaAPI.run_all(
+        results = mloda.run_all(
             [feature],
             compute_frameworks=self.compute_frameworks,
         )
@@ -206,7 +206,7 @@ class RunRefactorDiffCached:
             },
         )
 
-        results = mlodaAPI.run_all(
+        results = mloda.run_all(
             [feature],
             compute_frameworks=self.compute_frameworks,
         )
@@ -217,9 +217,9 @@ class RunRefactorDiffCached:
             return res
         raise ValueError("Wrong type of result")
 
-    def get_tool_output_by_feature_group_(self, tool_feature_group: Type[AbstractFeatureGroup]) -> str:
+    def get_tool_output_by_feature_group_(self, tool_feature_group: Type[FeatureGroup]) -> str:
         _feature_name = tool_feature_group.get_class_name()
-        results = mlodaAPI.run_all(
+        results = mloda.run_all(
             [_feature_name],
             compute_frameworks=self.compute_frameworks,
         )
@@ -232,7 +232,7 @@ class RunRefactorDiffCached:
     def run_tox_feature_group(self) -> None:
         print("Start tox")
         _feature_name = ToxFeatureGroup.get_class_name()
-        mlodaAPI.run_all(
+        mloda.run_all(
             [_feature_name],
             compute_frameworks=self.compute_frameworks,
         )
@@ -255,7 +255,7 @@ class RunRefactorDiffCached:
 
         target_folder = [
             os.getcwd() + "/mloda_plugins",
-            os.getcwd() + "/mloda_core",
+            os.getcwd() + "/mloda/core",
             os.getcwd() + "/tests/test_plugins",
         ]
 
@@ -274,7 +274,7 @@ class RunRefactorDiffCached:
             },
         )
 
-        results = mlodaAPI.run_all(
+        results = mloda.run_all(
             [feature],
             compute_frameworks=self.compute_frameworks,
         )
@@ -332,7 +332,7 @@ class RunRefactorDiffCached:
         return ",".join(sorted(list(relevant_files)))
 
 
-class RunToolFeatureGroup(AbstractFeatureGroup):
+class RunToolFeatureGroup(FeatureGroup):
     _tool: Type[BaseTool] | None = None
 
     @classmethod
@@ -340,7 +340,7 @@ class RunToolFeatureGroup(AbstractFeatureGroup):
         return DataCreator({cls.get_class_name()})
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         return {PandasDataFrame}
 
     @classmethod
@@ -370,9 +370,9 @@ class DiffFeatureGroup(RunToolFeatureGroup):
     _tool = GitDiffTool
 
 
-class ToxFeatureGroup(AbstractFeatureGroup):
+class ToxFeatureGroup(FeatureGroup):
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         return {PandasDataFrame}
 
     @classmethod

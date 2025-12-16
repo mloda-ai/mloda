@@ -1,21 +1,21 @@
-from mloda_core.abstract_plugins.components.feature_collection import Features
+from mloda.user import Features
 import pytest
 from typing import Any, Dict, List, Optional, Set, Type, Union
 from unittest.mock import Mock, patch
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda_core.abstract_plugins.components.match_data.match_data import MatchData
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
-from mloda_core.api.request import mlodaAPI
-from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
-from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda import FeatureGroup
+from mloda import Feature
+from mloda.user import FeatureName
+from mloda.provider import FeatureSet
+from mloda import Options
+from mloda.user import PluginCollector
+from mloda.provider import DataCreator
+from mloda.provider import BaseInputData
+from mloda.provider import ConnectionMatcherMixin
+from mloda import ComputeFramework
+import mloda
+from mloda.user import ParallelizationMode
+from mloda.user import DataAccessCollection
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework import IcebergFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
@@ -78,7 +78,7 @@ iceberg_test_dict = {
 }
 
 
-class IcebergTestDataCreator(AbstractFeatureGroup):
+class IcebergTestDataCreator(FeatureGroup):
     """Test data creator for Iceberg integration tests."""
 
     @classmethod
@@ -105,12 +105,12 @@ class IcebergTestDataCreator(AbstractFeatureGroup):
         return mock_table
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         """Return the Iceberg compute framework."""
         return {IcebergFramework}
 
 
-class ATestIcebergFeatureGroup(AbstractFeatureGroup, MatchData):
+class ATestIcebergFeatureGroup(FeatureGroup, ConnectionMatcherMixin):
     """Base class for Iceberg feature groups."""
 
     @classmethod
@@ -146,11 +146,11 @@ class ATestIcebergFeatureGroup(AbstractFeatureGroup, MatchData):
         return None
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         return {IcebergFramework}
 
 
-class IcebergSimpleTransformFeatureGroup(AbstractFeatureGroup):
+class IcebergSimpleTransformFeatureGroup(FeatureGroup):
     """Simple feature group for testing Iceberg transformations."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
@@ -199,11 +199,11 @@ class IcebergSimpleTransformFeatureGroup(AbstractFeatureGroup):
         return {"doubled_value", "score_plus_ten"}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         return {IcebergFramework}
 
 
-class IcebergToArrowFeatureGroup(AbstractFeatureGroup):
+class IcebergToArrowFeatureGroup(FeatureGroup):
     """Feature group that converts Iceberg data to PyArrow format."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
@@ -235,7 +235,7 @@ class IcebergToArrowFeatureGroup(AbstractFeatureGroup):
         return {"arrow_doubled_value"}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         return {PyArrowTable}
 
 
@@ -243,18 +243,18 @@ class IcebergToArrowFeatureGroup(AbstractFeatureGroup):
     pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
 )
 class TestIcebergIntegrationWithMlodaAPI:
-    """Integration tests for IcebergFramework with mlodaAPI."""
+    """Integration tests for IcebergFramework with API."""
 
     @pytest.mark.parametrize(
         "modes",
-        [({ParallelizationModes.SYNC})],
+        [({ParallelizationMode.SYNC})],
     )
     def test_basic_iceberg_feature_calculation(
-        self, modes: Set[ParallelizationModes], flight_server: Any, mock_iceberg_catalog: Mock
+        self, modes: Set[ParallelizationMode], flight_server: Any, mock_iceberg_catalog: Mock
     ) -> None:
         """Test basic feature calculation with Iceberg framework."""
         # Enable the test feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {IcebergTestDataCreator, IcebergSimpleTransformFeatureGroup}
         )
 
@@ -267,7 +267,7 @@ class TestIcebergIntegrationWithMlodaAPI:
         data_access_collection = DataAccessCollection(initialized_connection_objects={mock_iceberg_catalog})
 
         # Run with Iceberg framework
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list,
             flight_server=flight_server,
             parallelization_modes=modes,
@@ -295,7 +295,7 @@ class TestIcebergIntegrationWithMlodaAPI:
     def test_iceberg_to_pyarrow_transformation(self, flight_server: Any, mock_iceberg_catalog: Mock) -> None:
         """Test transformation from Iceberg to PyArrow framework."""
         # Enable feature groups for cross-framework transformation
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {IcebergTestDataCreator, IcebergSimpleTransformFeatureGroup, IcebergToArrowFeatureGroup}
         )
 
@@ -307,10 +307,10 @@ class TestIcebergIntegrationWithMlodaAPI:
         data_access_collection = DataAccessCollection(initialized_connection_objects={mock_iceberg_catalog})
 
         # Run with both Iceberg and PyArrow frameworks
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list,
             flight_server=flight_server,
-            parallelization_modes={ParallelizationModes.SYNC},
+            parallelization_modes={ParallelizationMode.SYNC},
             plugin_collector=plugin_collector,
             data_access_collection=data_access_collection,
             compute_frameworks={IcebergFramework, PyArrowTable},
@@ -333,7 +333,7 @@ class TestIcebergIntegrationWithMlodaAPI:
     def test_iceberg_data_creator_basic_functionality(self, flight_server: Any, mock_iceberg_catalog: Mock) -> None:
         """Test basic functionality of the Iceberg data creator."""
         # Enable just the data creator
-        plugin_collector = PlugInCollector.enabled_feature_groups({IcebergTestDataCreator})
+        plugin_collector = PluginCollector.enabled_feature_groups({IcebergTestDataCreator})
 
         # Request basic features from the data creator
         feature_list: Features | List[Feature | str] = [
@@ -345,10 +345,10 @@ class TestIcebergIntegrationWithMlodaAPI:
         data_access_collection = DataAccessCollection(initialized_connection_objects={mock_iceberg_catalog})
 
         # Run with Iceberg framework
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list,
             flight_server=flight_server,
-            parallelization_modes={ParallelizationModes.SYNC},
+            parallelization_modes={ParallelizationMode.SYNC},
             plugin_collector=plugin_collector,
             data_access_collection=data_access_collection,
             compute_frameworks={IcebergFramework},

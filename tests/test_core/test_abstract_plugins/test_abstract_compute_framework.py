@@ -1,13 +1,13 @@
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
+from mloda import ComputeFramework
 
 
-class BaseTestComputeFrameWork1(ComputeFrameWork):
+class BaseTestComputeFramework1(ComputeFramework):
     pass
 
 
-class BaseTestComputeFrameWork2(ComputeFrameWork):
+class BaseTestComputeFramework2(ComputeFramework):
     pass
 
 
-class BaseTestComputeFrameWork3(ComputeFrameWork):
+class BaseTestComputeFramework3(ComputeFramework):
     pass

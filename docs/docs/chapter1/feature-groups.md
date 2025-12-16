@@ -9,8 +9,8 @@ Start by importing the necessary modules to define the custom feature group and 
 import pyarrow.compute as pc
 import pyarrow as pa
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.provider import FeatureGroup
+from mloda.user import DataAccessCollection
 
 file_path = "tests/test_plugins/feature_group/src/dataset/creditcard_2023_short.csv"
 data_access_collection = DataAccessCollection(files={file_path})
@@ -26,7 +26,7 @@ The custom feature group, Example, operates on a set of input features. It depen
 The calculation logic for multiplying each feature by 2 is implemented in the calculate_feature function.
 
 ```python
-class Example(AbstractFeatureGroup):
+class Example(FeatureGroup):
     def input_features(self, _, feature_name):
         return {feature_name.name.split("_")[1]}
 
@@ -42,9 +42,9 @@ class Example(AbstractFeatureGroup):
 To use the newly defined feature group, simply add the **"Example_"** prefix to each feature name. mloda will automatically resolve the dependency between the **CsvReader** and the **Example** feature group.
 
 ```python
-from mloda_core.api.request import mlodaAPI
+import mloda
 
-result = mlodaAPI.run_all(
+result = mloda.run_all(
             example_feature_list, 
             compute_frameworks=["PyArrowTable"], 
             data_access_collection=data_access_collection
@@ -80,4 +80,4 @@ For more in-depth information about feature groups, check out these advanced top
 
 #### 6. Discovering Feature Groups
 
-To list all available feature groups and their documentation, use the `get_feature_group_docs()` function from `mloda_core.api.plugin_docs`.
+To list all available feature groups and their documentation, use the `get_feature_group_docs()` function from `mloda.steward`.

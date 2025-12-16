@@ -5,7 +5,7 @@ import sqlite3
 import tempfile
 from typing import Any, Set, Optional, Union, List
 
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
+from mloda.user import PluginCollector
 from mloda_plugins.feature_group.input_data.read_db_feature import ReadDBFeature
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
@@ -13,16 +13,15 @@ from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 import pyarrow as pa
 import pyarrow.compute as pc
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.hashable_dict import HashableDict
-from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.link import Link, JoinSpec
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.api.request import mlodaAPI
+from mloda import FeatureGroup
+from mloda.user import DataAccessCollection
+from mloda import Feature
+from mloda.user import FeatureName
+from mloda.provider import FeatureSet, HashableDict
+from mloda.user import Index
+from mloda.user import Link, JoinSpec
+from mloda import Options
+import mloda
 from tests.test_plugins.feature_group.input_data.test_classes.test_input_classes import (
     DBInputDataTestFeatureGroup,
 )
@@ -99,7 +98,7 @@ class TestAddIndex:
 
                 raise ValueError(f"Reading file failed for feature {features.get_name_of_one_feature()}.")
 
-        class AddIndexTest(AbstractFeatureGroup):
+        class AddIndexTest(FeatureGroup):
             @classmethod
             def match_feature_group_criteria(
                 cls,
@@ -135,11 +134,11 @@ class TestAddIndex:
             },
         )
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             [f],
             compute_frameworks=["PyArrowTable"],
             links={link},
-            plugin_collector=PlugInCollector.disabled_feature_groups({ReadDBFeature}),
+            plugin_collector=PluginCollector.disabled_feature_groups({ReadDBFeature}),
         )
         res = result[0].to_pydict()
         assert res == {"TestAddIndexFeature": [6534.37, 2517.54]}

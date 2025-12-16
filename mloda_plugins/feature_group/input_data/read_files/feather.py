@@ -2,7 +2,7 @@ from typing import Any, Tuple
 
 from pyarrow import feather as pyarrow_feather
 
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.provider import FeatureSet
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
 
@@ -39,8 +39,8 @@ class FeatherReader(ReadFile):
     ### 2. Configuration-Based Creation
 
     ```python
-    from mloda_core.abstract_plugins.components.feature import Feature
-    from mloda_core.abstract_plugins.components.options import Options
+    from mloda import Feature
+    from mloda import Options
 
     feature = Feature(
         name="measurement",
@@ -57,8 +57,8 @@ class FeatherReader(ReadFile):
     ### Basic Feather Feature Access
 
     ```python
-    from mloda_core.abstract_plugins.components.feature import Feature
-    from mloda_core.abstract_plugins.components.options import Options
+    from mloda import Feature
+    from mloda import Options
 
     # Simple column reference from Feather file
     feature = Feature(

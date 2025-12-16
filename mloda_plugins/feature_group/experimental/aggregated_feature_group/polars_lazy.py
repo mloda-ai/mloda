@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any, List, Set, Type, Union
 
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
+from mloda import ComputeFramework
 
 from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
@@ -26,7 +26,7 @@ class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
     """
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         """Specify that this feature group works with Polars Lazy DataFrames."""
         return {PolarsLazyDataFrame}
 

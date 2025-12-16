@@ -1,13 +1,13 @@
 from typing import Any, Optional, Set, Type
-from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda_core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
-from mloda_core.filter.filter_engine import BaseFilterEngine
+from mloda.user import DataAccessCollection
+from mloda.provider import BaseMergeEngine
+from mloda.provider import BaseFilterEngine
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_merge_engine import PyArrowMergeEngine
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_filter_engine import PyArrowFilterEngine
 import pyarrow as pa
 
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
+from mloda.user import FeatureName
+from mloda import ComputeFramework
 
 
 try:
@@ -16,7 +16,7 @@ except ImportError:
     pd = None
 
 
-class PyArrowTable(ComputeFrameWork):
+class PyArrowTable(ComputeFramework):
     @staticmethod
     def is_available() -> bool:
         """Check if PyArrow is installed and available."""

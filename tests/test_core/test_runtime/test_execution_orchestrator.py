@@ -12,18 +12,18 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
-from mloda_core.prepare.execution_plan import ExecutionPlan
+from mloda.user import ParallelizationMode
+from mloda import ComputeFramework
+from mloda.core.prepare.execution_plan import ExecutionPlan
 
-from mloda_core.runtime.run import ExecutionOrchestrator
+from mloda.core.runtime.run import ExecutionOrchestrator
 
 
 class TestExecutionOrchestratorImport:
     """Tests for importing ExecutionOrchestrator."""
 
     def test_execution_orchestrator_can_be_imported(self) -> None:
-        """ExecutionOrchestrator should be importable from mloda_core.runtime.run."""
+        """ExecutionOrchestrator should be importable from mloda.core.runtime.run."""
         assert ExecutionOrchestrator is not None
 
 

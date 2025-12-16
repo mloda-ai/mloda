@@ -3,14 +3,14 @@ from typing import Dict, List, Optional, Set, Type, Union
 from uuid import UUID
 import uuid
 
-from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
-from mloda_core.prepare.graph.build_graph import BuildGraph
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.index.index import Index
+from mloda.user import DataAccessCollection
+from mloda.user import FeatureName
+from mloda import ComputeFramework
+from mloda.core.prepare.graph.build_graph import BuildGraph
+from mloda import FeatureGroup
+from mloda import Feature
+from mloda import Options
+from mloda.user import Index
 from tests.test_core.test_abstract_plugins.test_abstract_feature_group import BaseTestFeatureGroup1
 
 
@@ -27,7 +27,7 @@ class BaseTestGraphFeatureGroup3(BaseTestFeatureGroup1):
         return False
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         return {GraphComputeFramework2, GraphComputeFramework3}
 
 
@@ -49,15 +49,15 @@ class BaseTestGraphFeatureGroup4(BaseTestGraphFeatureGroup3):
         return [index_1]
 
 
-class GraphComputeFramework1(ComputeFrameWork):
+class GraphComputeFramework1(ComputeFramework):
     pass
 
 
-class GraphComputeFramework2(ComputeFrameWork):
+class GraphComputeFramework2(ComputeFramework):
     pass
 
 
-class GraphComputeFramework3(ComputeFrameWork):
+class GraphComputeFramework3(ComputeFramework):
     pass
 
 
@@ -72,7 +72,7 @@ class TestGraphBuildGraph:
         feature_link_parents[uuid.UUID(int=3)] = {uuid.UUID(int=2), uuid.UUID(int=3)}
         feature_link_parents[uuid.UUID(int=4)] = {uuid.UUID(int=3)}
 
-        feature_group_collection: Dict[Type[AbstractFeatureGroup], Set[Feature]] = defaultdict(set)
+        feature_group_collection: Dict[Type[FeatureGroup], Set[Feature]] = defaultdict(set)
         f0, f1, f2, f3, f4 = (
             Feature("GraphFeature2")._set_uuid(uuid.UUID(int=0)),
             Feature("GraphFeature3")._set_uuid(uuid.UUID(int=1)),
@@ -90,7 +90,7 @@ class TestGraphBuildGraph:
         assert len(graph.get_edges()) == 4
 
     def test_add_fg_to_graph(self) -> None:
-        feature_group_collection: Dict[Type[AbstractFeatureGroup], Set[Feature]] = defaultdict(set)
+        feature_group_collection: Dict[Type[FeatureGroup], Set[Feature]] = defaultdict(set)
 
         f1 = Feature("BaseTestFeature1", compute_framework="GraphComputeFramework1")
         g2, g3 = Feature("GraphFeature2"), Feature("GraphFeature3")
@@ -130,7 +130,7 @@ class TestGraphBuildGraph:
         """
         This test expects that the compute frameworks for the features were set before correctly.
         """
-        feature_group_collection: Dict[Type[AbstractFeatureGroup], Set[Feature]] = defaultdict(set)
+        feature_group_collection: Dict[Type[FeatureGroup], Set[Feature]] = defaultdict(set)
 
         f1 = Feature("BaseTestFeature1", compute_framework="GraphComputeFramework1")
         g2, g3 = Feature("GraphFeature2"), Feature("GraphFeature3")

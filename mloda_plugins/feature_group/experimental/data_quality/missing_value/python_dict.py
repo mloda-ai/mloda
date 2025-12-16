@@ -8,7 +8,7 @@ import statistics
 from collections import Counter
 from typing import Any, Dict, List, Optional, Set, Type, Union
 
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
+from mloda import ComputeFramework
 
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
@@ -23,7 +23,7 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
     """
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         return {PythonDictFramework}
 
     @classmethod

@@ -7,12 +7,12 @@ Functions return data/results that can be used in subsequent cells.
 
 from copy import copy
 from typing import Any, Optional
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
+from mloda import FeatureGroup
+from mloda.provider import FeatureSet
+from mloda.provider import BaseInputData
+from mloda.provider import DataCreator
+from mloda.user import PluginCollector
+import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import PandasMissingValueFeatureGroup
@@ -23,7 +23,7 @@ import pandas as pd
 
 
 # Create a DataCreator feature group for our sample data
-class SklearnDataCreator(AbstractFeatureGroup):
+class SklearnDataCreator(FeatureGroup):
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         return DataCreator({"age", "weight", "state", "gender"})
@@ -122,17 +122,17 @@ def cell2_traditional_sklearn_pipeline(data: Any) -> None:
 
 def cell4_mloda_approach() -> Any:
     """mloda approach - using DataCreator pattern."""
-    from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
+    from mloda.user import PluginCollector
     from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
     from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
     from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import (
         PandasMissingValueFeatureGroup,
     )
-    from mloda_core.api.request import mlodaAPI
+    import mloda
     from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
     # Enable necessary feature groups
-    plugin_collector = PlugInCollector.enabled_feature_groups(
+    plugin_collector = PluginCollector.enabled_feature_groups(
         {
             SklearnDataCreator,
             PandasEncodingFeatureGroup,
@@ -150,7 +150,7 @@ def cell4_mloda_approach() -> Any:
     ]
 
     # Execute with mloda
-    result = mlodaAPI.run_all(features, compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)  # type: ignore
+    result = mloda.run_all(features, compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)  # type: ignore
     _result = result[0]
     _result2 = result[1]
     print("✅ Transformed dataset with split fit/transform:")
@@ -165,17 +165,17 @@ def cell4_mloda_approach() -> Any:
 def cell5_demonstrate_feature_chaining() -> None:
     """Feature chaining: The real power of mloda."""
     # Feature chaining: The real power of mloda
-    from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
+    from mloda.user import PluginCollector
     from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
     from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
     from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import (
         PandasMissingValueFeatureGroup,
     )
-    from mloda_core.api.request import mlodaAPI
+    import mloda
     from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
     # Enable necessary feature groups
-    plugin_collector = PlugInCollector.enabled_feature_groups(
+    plugin_collector = PluginCollector.enabled_feature_groups(
         {
             SklearnDataCreator,
             PandasEncodingFeatureGroup,
@@ -197,7 +197,7 @@ def cell5_demonstrate_feature_chaining() -> None:
     print("Step 2:   age__mean_imputed__standard_scaled")
     print("\nmloda automatically resolves dependencies!")
 
-    result = mlodaAPI.run_all(chained_features, compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)  # type: ignore
+    result = mloda.run_all(chained_features, compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)  # type: ignore
     print(
         result[0].head(2),
         result[1].head(2),
@@ -208,7 +208,7 @@ def cell5_demonstrate_feature_chaining() -> None:
 def cell6_reusability_demo() -> None:
     """Demonstrate reusability with new data."""
 
-    class SecondSklearnDataCreator(AbstractFeatureGroup):
+    class SecondSklearnDataCreator(FeatureGroup):
         @classmethod
         def input_data(cls) -> Optional[BaseInputData]:
             return DataCreator({"age", "weight", "state", "gender"})
@@ -230,7 +230,7 @@ def cell6_reusability_demo() -> None:
         "state__onehot_encoded~0",  # Access specific one-hot column
     ]
 
-    plugin_collector = PlugInCollector.enabled_feature_groups(
+    plugin_collector = PluginCollector.enabled_feature_groups(
         {
             SecondSklearnDataCreator,
             PandasEncodingFeatureGroup,
@@ -240,7 +240,7 @@ def cell6_reusability_demo() -> None:
         }
     )
 
-    result = mlodaAPI.run_all(chained_features, compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)  # type: ignore
+    result = mloda.run_all(chained_features, compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)  # type: ignore
     print(
         result[0].head(2),
         result[1].head(2),

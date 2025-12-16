@@ -1,14 +1,14 @@
 from typing import Any, Dict, List
 
-from mloda_core.abstract_plugins.components.link import JoinType
+from mloda.user import JoinType
 import pandas as pd
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda_core.api.request import mlodaAPI
+import mloda
+from mloda import FeatureGroup
+from mloda import Feature
+from mloda.user import FeatureName
+from mloda.provider import FeatureSet
+from mloda.provider import BaseInputData
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.dynamic_feature_group_factory.dynamic_feature_group_factory import (
@@ -17,7 +17,7 @@ from mloda_plugins.feature_group.experimental.dynamic_feature_group_factory.dyna
 from mloda_plugins.feature_group.experimental.source_input_feature import (
     SourceInputFeature,
 )
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
+from mloda.provider import DataCreator
 
 
 class TestDynamicFeatureGroupFactoryIntegration:
@@ -39,8 +39,8 @@ class TestDynamicFeatureGroupFactoryIntegration:
             Feature(name="input_feature"),
         ]
 
-        # 4. Run mlodaAPI with the Dynamic Feature Group
-        result = mlodaAPI.run_all(features=features)
+        # 4. Run API with the Dynamic Feature Group
+        result = mloda.run_all(features=features)
 
         # 5. Verification
         assert result
@@ -55,7 +55,7 @@ class TestDynamicFeatureGroupFactoryIntegration:
         """
 
         # 1. Create DataCreators for Source Features
-        class SourceFeature1(AbstractFeatureGroup):
+        class SourceFeature1(FeatureGroup):
             @classmethod
             def input_data(cls) -> BaseInputData | None:
                 return DataCreator({"source_feature_1"})
@@ -64,7 +64,7 @@ class TestDynamicFeatureGroupFactoryIntegration:
             def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
                 return pd.DataFrame({"idx": [1], "source_feature_1": [2]})
 
-        class SourceFeature2(AbstractFeatureGroup):
+        class SourceFeature2(FeatureGroup):
             @classmethod
             def input_data(cls) -> BaseInputData | None:
                 return DataCreator({"source_feature_2"})
@@ -109,8 +109,8 @@ class TestDynamicFeatureGroupFactoryIntegration:
             )
         ]
 
-        # 5. Run mlodaAPI with the Dynamic Feature Group
-        result = mlodaAPI.run_all(features=features, compute_frameworks={PandasDataFrame})  # type: ignore
+        # 5. Run API with the Dynamic Feature Group
+        result = mloda.run_all(features=features, compute_frameworks={PandasDataFrame})  # type: ignore
 
         # 6. Verification
         assert result

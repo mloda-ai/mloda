@@ -2,14 +2,14 @@ import pandas as pd
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
-from mloda_core.filter.global_filter import GlobalFilter
+import mloda
+from mloda import FeatureGroup
+from mloda import Feature
+from mloda.provider import FeatureSet
+from mloda.provider import DataCreator
+from mloda.provider import BaseInputData
+from mloda.user import PluginCollector
+from mloda.user import GlobalFilter
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindowFeatureGroup
@@ -30,7 +30,7 @@ class TestTimeWindowWithGlobalFilter:
 
         # Create a feature group that uses DataCreator to provide test data
         # with a wider date range than we'll filter to
-        class TestTimeDataCreator(AbstractFeatureGroup):
+        class TestTimeDataCreator(FeatureGroup):
             @classmethod
             def input_data(cls) -> Optional[BaseInputData]:
                 return DataCreator(
@@ -91,10 +91,10 @@ class TestTimeWindowWithGlobalFilter:
         )
 
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups({TestTimeDataCreator, PandasTimeWindowFeatureGroup})
+        plugin_collector = PluginCollector.enabled_feature_groups({TestTimeDataCreator, PandasTimeWindowFeatureGroup})
 
         # Run the API with time window features and the global filter
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             [
                 DefaultOptionKeys.reference_time,
                 "temperature",  # Source data
@@ -107,7 +107,7 @@ class TestTimeWindowWithGlobalFilter:
         )
 
         # Verify the results
-        assert len(result) > 0, "No results returned from mlodaAPI.run_all"
+        assert len(result) > 0, "No results returned from mloda.run_all"
 
         # Based on the test output, we need to handle the DataFrame structure differently
         # The result contains multiple DataFrames, and we need to verify the filtering worked
@@ -195,7 +195,7 @@ class TestTimeWindowWithGlobalFilter:
 
         # Create a feature group that uses DataCreator to provide test data
         # with the custom time filter feature name
-        class TestCustomTimeDataCreator(AbstractFeatureGroup):
+        class TestCustomTimeDataCreator(FeatureGroup):
             @classmethod
             def input_data(cls) -> Optional[BaseInputData]:
                 return DataCreator({"temperature", "humidity", custom_time_filter})
@@ -227,7 +227,7 @@ class TestTimeWindowWithGlobalFilter:
         )
 
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {TestCustomTimeDataCreator, CustomTimeWindowFeatureGroup}
         )
 
@@ -236,7 +236,7 @@ class TestTimeWindowWithGlobalFilter:
         )
         temperature = Feature(name="temperature", options={DefaultOptionKeys.reference_time: custom_time_filter})
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             [
                 temperature,
                 avg_3_day_window_temperature,
@@ -246,4 +246,4 @@ class TestTimeWindowWithGlobalFilter:
             global_filter=global_filter,
         )
 
-        assert len(result) > 0, "No results returned from mlodaAPI.run_all"
+        assert len(result) > 0, "No results returned from mloda.run_all"

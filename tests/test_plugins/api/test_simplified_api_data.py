@@ -1,11 +1,11 @@
 """
-Test simplified API data parameter for mlodaAPI.run_all().
+Test simplified API data parameter for mloda.run_all().
 
 These tests verify that run_all() accepts api_data as a simple dict.
 The ApiInputDataCollection is created automatically from the dict structure.
 
 Simplified API:
-    result = mlodaAPI.run_all(
+    result = mloda.run_all(
         features,
         api_data={"KeyName": {"col1": [1, 2], "col2": ["a", "b"]}}
     )
@@ -13,25 +13,25 @@ Simplified API:
 
 from typing import Any, List, Optional, Set, Union
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.components.link import Link, JoinSpec
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
+import mloda
+from mloda import FeatureGroup
+from mloda import Feature
+from mloda.user import FeatureName
+from mloda.provider import FeatureSet
+from mloda.user import Index
+from mloda.provider import BaseInputData
+from mloda.provider import DataCreator
+from mloda.user import Link, JoinSpec
+from mloda import Options
+from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda_plugins.feature_group.input_data.api_data.api_data import ApiInputDataFeature
+from mloda.provider import ApiDataFeatureGroup
 
 
 # ============================================================================
 # Test Feature: Simple API Consumer
 # ============================================================================
-class SimpleApiFeature(AbstractFeatureGroup):
+class SimpleApiFeature(FeatureGroup):
     """A simple feature that consumes API data."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
@@ -55,7 +55,7 @@ class SimpleApiFeature(AbstractFeatureGroup):
 # ============================================================================
 # Test Feature: Multi-key API Consumer
 # ============================================================================
-class MultiKeyApiFeature(AbstractFeatureGroup):
+class MultiKeyApiFeature(FeatureGroup):
     """A feature that consumes data from multiple API keys."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
@@ -80,7 +80,7 @@ class MultiKeyApiFeature(AbstractFeatureGroup):
 # ============================================================================
 # Test Feature: Joined with Creator
 # ============================================================================
-class CreatorDataFeature(AbstractFeatureGroup):
+class CreatorDataFeature(FeatureGroup):
     """Creates its own data via DataCreator."""
 
     @classmethod
@@ -96,14 +96,14 @@ class CreatorDataFeature(AbstractFeatureGroup):
         return {"creator_id", "creator_value"}
 
 
-class SimplifiedApiJoinFeature(AbstractFeatureGroup):
+class SimplifiedApiJoinFeature(FeatureGroup):
     """Joins simplified API data with Creator data using LEFT join."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         """Define input features with a LEFT join link."""
         # Create the link: LEFT join on api_id = creator_id
         link = Link.left(
-            JoinSpec(ApiInputDataFeature, Index(("api_id",))), JoinSpec(CreatorDataFeature, Index(("creator_id",)))
+            JoinSpec(ApiDataFeatureGroup, Index(("api_id",))), JoinSpec(CreatorDataFeature, Index(("creator_id",)))
         )
 
         return {
@@ -126,25 +126,25 @@ class SimplifiedApiJoinFeature(AbstractFeatureGroup):
 # Test Class
 # ============================================================================
 class TestSimplifiedApiData:
-    """Tests for simplified api_data parameter in mlodaAPI.run_all()."""
+    """Tests for simplified api_data parameter in mloda.run_all()."""
 
-    _enabled_simple = PlugInCollector.enabled_feature_groups(
+    _enabled_simple = PluginCollector.enabled_feature_groups(
         {
-            ApiInputDataFeature,
+            ApiDataFeatureGroup,
             SimpleApiFeature,
         }
     )
 
-    _enabled_multikey = PlugInCollector.enabled_feature_groups(
+    _enabled_multikey = PluginCollector.enabled_feature_groups(
         {
-            ApiInputDataFeature,
+            ApiDataFeatureGroup,
             MultiKeyApiFeature,
         }
     )
 
-    _enabled_join = PlugInCollector.enabled_feature_groups(
+    _enabled_join = PluginCollector.enabled_feature_groups(
         {
-            ApiInputDataFeature,
+            ApiDataFeatureGroup,
             CreatorDataFeature,
             SimplifiedApiJoinFeature,
         }
@@ -177,7 +177,7 @@ class TestSimplifiedApiData:
 
         feature_list: List[Union[Feature, str]] = [Feature(name="SimpleApiFeature")]
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list,
             plugin_collector=self._enabled_simple,
             compute_frameworks={PandasDataFrame},
@@ -212,7 +212,7 @@ class TestSimplifiedApiData:
         # Use SimpleApiFeature which only needs api_id and api_value (from FirstKey)
         feature_list: List[Union[Feature, str]] = [Feature(name="SimpleApiFeature")]
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list,
             plugin_collector=self._enabled_simple,
             compute_frameworks={PandasDataFrame},
@@ -249,7 +249,7 @@ class TestSimplifiedApiData:
         # Request feature from first key
         feature_list: List[Union[Feature, str]] = ["first_value"]
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list,
             compute_frameworks={PandasDataFrame},
             api_data=api_data,
@@ -284,7 +284,7 @@ class TestSimplifiedApiData:
         # Request feature from second key
         feature_list: List[Union[Feature, str]] = ["second_value"]
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list,
             compute_frameworks={PandasDataFrame},
             api_data=api_data,
@@ -312,7 +312,7 @@ class TestSimplifiedApiData:
 
         feature_list: List[Union[Feature, str]] = [Feature(name="SimplifiedApiJoinFeature")]
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list,
             plugin_collector=self._enabled_join,
             compute_frameworks={PandasDataFrame},
@@ -333,9 +333,9 @@ class TestSimplifiedApiData:
         """
         feature_list: List[Union[Feature, str]] = [Feature(name="creator_id")]
 
-        _enabled_creator_only = PlugInCollector.enabled_feature_groups({CreatorDataFeature})
+        _enabled_creator_only = PluginCollector.enabled_feature_groups({CreatorDataFeature})
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list,
             plugin_collector=_enabled_creator_only,
             compute_frameworks={PandasDataFrame},
@@ -356,9 +356,9 @@ class TestSimplifiedApiData:
         """
         feature_list: List[Union[Feature, str]] = [Feature(name="creator_id")]
 
-        _enabled_creator_only = PlugInCollector.enabled_feature_groups({CreatorDataFeature})
+        _enabled_creator_only = PluginCollector.enabled_feature_groups({CreatorDataFeature})
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             feature_list,
             plugin_collector=_enabled_creator_only,
             compute_frameworks={PandasDataFrame},

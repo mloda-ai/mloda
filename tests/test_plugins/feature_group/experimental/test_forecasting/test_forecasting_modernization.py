@@ -6,15 +6,15 @@ This test verifies that the modernization successfully supports both approaches:
 2. Configuration-based feature creation (modern)
 """
 
-from mloda_core.abstract_plugins.components.feature_collection import Features
+from mloda.user import Features
 import pytest
 from typing import Any, Dict, List
 from datetime import datetime, timedelta
 
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
+from mloda import Feature
+from mloda import Options
+from mloda.user import PluginCollector
+from mloda import API
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.forecasting.base import ForecastingFeatureGroup
 from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecastingFeatureGroup
@@ -47,7 +47,7 @@ class TestForecastingModernization:
     def test_string_based_feature_creation(self) -> None:
         """Test that string-based feature creation still works (legacy approach)."""
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {ForecastingModernizationTestDataCreator, PandasForecastingFeatureGroup}
         )
 
@@ -60,7 +60,7 @@ class TestForecastingModernization:
         feature.options = options
 
         # Run the API
-        api = mlodaAPI(
+        api = API(
             [feature],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
@@ -77,7 +77,7 @@ class TestForecastingModernization:
     def test_configuration_based_feature_creation(self) -> None:
         """Test that configuration-based feature creation works (modern approach)."""
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {ForecastingModernizationTestDataCreator, PandasForecastingFeatureGroup}
         )
 
@@ -96,7 +96,7 @@ class TestForecastingModernization:
         )
 
         # Run the API
-        api = mlodaAPI(
+        api = API(
             [feature],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
@@ -114,7 +114,7 @@ class TestForecastingModernization:
     def test_both_approaches_produce_equivalent_results(self) -> None:
         """Test that both string-based and configuration-based approaches produce equivalent functionality."""
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {ForecastingModernizationTestDataCreator, PandasForecastingFeatureGroup}
         )
 
@@ -137,11 +137,11 @@ class TestForecastingModernization:
         )
 
         # Run both approaches
-        api1 = mlodaAPI([string_feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+        api1 = API([string_feature], {PandasDataFrame}, plugin_collector=plugin_collector)
         api1._batch_run()
         results1 = api1.get_result()
 
-        api2 = mlodaAPI([config_feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+        api2 = API([config_feature], {PandasDataFrame}, plugin_collector=plugin_collector)
         api2._batch_run()
         results2 = api2.get_result()
 
@@ -157,7 +157,7 @@ class TestForecastingModernization:
     def test_parameter_validation_in_configuration_based_features(self) -> None:
         """Test that parameter validation works correctly for configuration-based features."""
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {ForecastingModernizationTestDataCreator, PandasForecastingFeatureGroup}
         )
 
@@ -174,7 +174,7 @@ class TestForecastingModernization:
                     }
                 ),
             )
-            api = mlodaAPI([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+            api = API([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
             api._batch_run()
 
         # Test invalid time unit
@@ -190,7 +190,7 @@ class TestForecastingModernization:
                     }
                 ),
             )
-            api = mlodaAPI([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+            api = API([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
             api._batch_run()
 
         # Test invalid horizon (negative)
@@ -206,13 +206,13 @@ class TestForecastingModernization:
                     }
                 ),
             )
-            api = mlodaAPI([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+            api = API([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
             api._batch_run()
 
     def test_multiple_algorithms_configuration_based(self) -> None:
         """Test multiple forecasting algorithms using configuration-based approach."""
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {ForecastingModernizationTestDataCreator, PandasForecastingFeatureGroup}
         )
 
@@ -235,7 +235,7 @@ class TestForecastingModernization:
             features.append(feature)
 
         # Run the API with multiple features
-        api = mlodaAPI(features, {PandasDataFrame}, plugin_collector=plugin_collector)
+        api = API(features, {PandasDataFrame}, plugin_collector=plugin_collector)
         api._batch_run()
         results = api.get_result()
 
@@ -248,7 +248,7 @@ class TestForecastingModernization:
     def test_context_parameters_dont_affect_feature_group_resolution(self) -> None:
         """Test that context parameters don't affect Feature Group resolution/splitting."""
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {ForecastingModernizationTestDataCreator, PandasForecastingFeatureGroup}
         )
 
@@ -280,7 +280,7 @@ class TestForecastingModernization:
         )
 
         # Run the API with both features
-        api = mlodaAPI([feature1, feature2], {PandasDataFrame}, plugin_collector=plugin_collector)
+        api = API([feature1, feature2], {PandasDataFrame}, plugin_collector=plugin_collector)
         api._batch_run()
         results = api.get_result()
 

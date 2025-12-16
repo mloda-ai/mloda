@@ -8,8 +8,8 @@ All conversions go through PyArrow as an intermediate format.
 
 from typing import Any, Dict, List, Optional, Type
 
-from mloda_core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
-from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
+from mloda.provider import ComputeFrameworkTransformer
+from mloda.user import PluginLoader
 
 try:
     import pyarrow as pa

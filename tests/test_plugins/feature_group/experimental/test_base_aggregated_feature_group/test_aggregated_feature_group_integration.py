@@ -1,13 +1,13 @@
 """
-Integration tests for the AggregatedFeatureGroup with mlodaAPI.
+Integration tests for the AggregatedFeatureGroup with API.
 """
 
 from typing import Any, Dict
 
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
+import mloda
+from mloda import Feature
+from mloda import Options
+from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
@@ -32,9 +32,9 @@ class AggregatedParserTestDataCreator(ATestDataCreator):
 
 class TestAggregatedFeatureGroupIntegration:
     def test_integration_with_feature_parser(self) -> None:
-        """Test integration with mlodaAPI using the parser."""
+        """Test integration with API using the parser."""
         # Enable the necessary feature groups
-        plugin_collector = PlugInCollector.enabled_feature_groups(
+        plugin_collector = PluginCollector.enabled_feature_groups(
             {AggregatedParserTestDataCreator, PandasAggregatedFeatureGroup}
         )
 
@@ -59,7 +59,7 @@ class TestAggregatedFeatureGroupIntegration:
         )
 
         # test with pre parsing the features
-        results = mlodaAPI.run_all(
+        results = mloda.run_all(
             [f1, f2],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
@@ -78,7 +78,7 @@ class TestAggregatedFeatureGroupIntegration:
         assert agg_df["sum_sales"].iloc[0] == 1500  # Sum of [100, 200, 300, 400, 500]
 
         # test with mloda parsing the features
-        results2 = mlodaAPI.run_all(
+        results2 = mloda.run_all(
             [f1, f2],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,

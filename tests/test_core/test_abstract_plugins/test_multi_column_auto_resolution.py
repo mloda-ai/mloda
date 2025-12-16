@@ -13,21 +13,21 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda_core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
-from mloda_core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
+from mloda import FeatureGroup
+from mloda import Feature
+from mloda.user import FeatureName
+from mloda.provider import FeatureSet
+from mloda.provider import BaseInputData
+from mloda.provider import DataCreator
+from mloda import Options
+from mloda import ComputeFramework
+from mloda.user import PluginLoader
+from mloda.user import PluginCollector
+from mloda import API
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 
-class MultiColumnTestDataCreator(AbstractFeatureGroup):
+class MultiColumnTestDataCreator(FeatureGroup):
     """Test data creator providing source data for multi-column tests."""
 
     @classmethod
@@ -45,12 +45,12 @@ class MultiColumnTestDataCreator(AbstractFeatureGroup):
         )
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         """Return the compute framework for this data creator."""
         return {PandasDataFrame}
 
 
-class MultiColumnProducer(AbstractFeatureGroup):
+class MultiColumnProducer(FeatureGroup):
     """
     Producer feature group that creates multi-column output.
 
@@ -100,12 +100,12 @@ class MultiColumnProducer(AbstractFeatureGroup):
         return data
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         """Support Pandas framework."""
         return {PandasDataFrame}
 
 
-class MultiColumnConsumer(AbstractFeatureGroup):
+class MultiColumnConsumer(FeatureGroup):
     """
     Consumer feature group that auto-discovers multi-column features.
 
@@ -169,12 +169,12 @@ class MultiColumnConsumer(AbstractFeatureGroup):
         return data
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         """Support Pandas framework."""
         return {PandasDataFrame}
 
 
-class ChainedProcessor(AbstractFeatureGroup):
+class ChainedProcessor(FeatureGroup):
     """
     Chained feature group that processes consumer's single-column output.
 
@@ -209,7 +209,7 @@ class ChainedProcessor(AbstractFeatureGroup):
         return data
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         """Support Pandas framework."""
         return {PandasDataFrame}
 
@@ -241,7 +241,7 @@ def test_multi_column_auto_resolution_with_chaining() -> None:
     PluginLoader().all()
 
     # Enable the necessary feature groups
-    plugin_collector = PlugInCollector.enabled_feature_groups(
+    plugin_collector = PluginCollector.enabled_feature_groups(
         {
             MultiColumnTestDataCreator,
             MultiColumnProducer,
@@ -261,7 +261,7 @@ def test_multi_column_auto_resolution_with_chaining() -> None:
     ]
 
     # Run the computation
-    api = mlodaAPI(
+    api = API(
         features_to_request,
         {PandasDataFrame},
         plugin_collector=plugin_collector,

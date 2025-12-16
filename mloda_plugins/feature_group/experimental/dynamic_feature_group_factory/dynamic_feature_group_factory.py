@@ -1,18 +1,18 @@
 from typing import Any, Dict, Optional, Type, Set, List, Union
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.data_types import DataType
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
-from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
+from mloda import FeatureGroup
+from mloda import Options
+from mloda.user import FeatureName
+from mloda.user import DataAccessCollection
+from mloda.provider import FeatureSet
+from mloda.user import DataType
+from mloda import ComputeFramework
+from mloda.user import Index
+from mloda.provider import BaseInputData
 
 
 class DynamicFeatureGroupCreator:
     """
-    Base class for dynamically creating AbstractFeatureGroup subclasses at runtime.
+    Base class for dynamically creating FeatureGroup subclasses at runtime.
 
     This factory enables programmatic creation of feature groups by specifying their
     behavior through a properties dictionary. It's useful for generating feature groups
@@ -23,7 +23,7 @@ class DynamicFeatureGroupCreator:
 
     - Create feature group classes at runtime without explicit class definitions
     - Override specific methods (calculate_feature, match_feature_group_criteria, etc.)
-    - Inherit from any AbstractFeatureGroup subclass (e.g., ReadFileFeature, SourceInputFeature)
+    - Inherit from any FeatureGroup subclass (e.g., ReadFileFeature, SourceInputFeature)
     - Cache created classes to avoid duplicate definitions
     - Support full feature group lifecycle customization
 
@@ -36,7 +36,7 @@ class DynamicFeatureGroupCreator:
 
     ## Available Method Overrides
 
-    All methods from AbstractFeatureGroup can be overridden via the properties dictionary:
+    All methods from FeatureGroup can be overridden via the properties dictionary:
 
     - `set_feature_name`: Customize feature name resolution
     - `match_feature_group_criteria`: Define custom matching logic
@@ -59,7 +59,7 @@ class DynamicFeatureGroupCreator:
     from mloda_plugins.feature_group.experimental.dynamic_feature_group_factory import (
         DynamicFeatureGroupCreator
     )
-    from mloda_core.abstract_plugins.components.feature_name import FeatureName
+    from mloda.user import FeatureName
 
     # Define custom behavior
     properties = {
@@ -126,7 +126,7 @@ class DynamicFeatureGroupCreator:
     ### Complex Custom Logic
 
     ```python
-    from mloda_core.abstract_plugins.components.feature import Feature
+    from mloda import Feature
 
     def custom_input_features(self, options, feature_name):
         # Return dynamically determined input features
@@ -156,22 +156,22 @@ class DynamicFeatureGroupCreator:
 
     - `properties`: Dictionary mapping method names to callable implementations
     - `class_name`: Name for the dynamically created class (used for caching)
-    - `feature_group_cls`: Base class to inherit from (default: AbstractFeatureGroup)
+    - `feature_group_cls`: Base class to inherit from (default: FeatureGroup)
 
     ## Implementation Details
 
     - Created classes are cached in `_created_classes` dictionary
     - Requesting the same `class_name` twice returns the cached class
     - Properties use lambda functions or regular functions as method implementations
-    - Method signatures must match the original AbstractFeatureGroup signatures
+    - Method signatures must match the original FeatureGroup signatures
     - Unspecified methods fall back to parent class implementations
 
     ## Requirements
 
-    - Properties dictionary with valid method names from AbstractFeatureGroup
+    - Properties dictionary with valid method names from FeatureGroup
     - Callable implementations matching expected method signatures
     - Unique class_name for each distinct feature group type
-    - Base class must be AbstractFeatureGroup or its subclass
+    - Base class must be FeatureGroup or its subclass
 
     ## Real-World Example
 
@@ -180,23 +180,23 @@ class DynamicFeatureGroupCreator:
     groups on-the-fly for joining multiple files.
     """
 
-    _created_classes: Dict[str, Type[AbstractFeatureGroup]] = {}  # Store created classes
+    _created_classes: Dict[str, Type[FeatureGroup]] = {}  # Store created classes
 
     @staticmethod
     def create(
         properties: Dict[str, Any],
         class_name: str = "DynamicFeatureGroup",
-        feature_group_cls: Type[AbstractFeatureGroup] = AbstractFeatureGroup,
-    ) -> Type[AbstractFeatureGroup]:
+        feature_group_cls: Type[FeatureGroup] = FeatureGroup,
+    ) -> Type[FeatureGroup]:
         """
-        Creates a new AbstractFeatureGroup subclass with the given properties.
+        Creates a new FeatureGroup subclass with the given properties.
 
         Args:
             properties: A dictionary containing the properties for the new class.
             class_name: The name of the new class.
 
         Returns:
-            A new AbstractFeatureGroup subclass.
+            A new FeatureGroup subclass.
         """
 
         if class_name in DynamicFeatureGroupCreator._created_classes:
@@ -242,7 +242,7 @@ class DynamicFeatureGroupCreator:
                 return properties["artifact"]()  # type: ignore[no-any-return]
             return super(new_class, cls).artifact()  # type: ignore[misc, arg-type, no-any-return]
 
-        def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:  # type: ignore[no-untyped-def]
+        def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:  # type: ignore[no-untyped-def]
             if "compute_framework_rule" in properties:
                 return properties["compute_framework_rule"]()  # type: ignore[no-any-return]
             return super(new_class, cls).compute_framework_rule()  # type: ignore[misc, arg-type, no-any-return]

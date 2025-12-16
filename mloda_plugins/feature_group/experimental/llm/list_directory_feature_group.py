@@ -2,15 +2,15 @@ import os
 from typing import Any, Dict, List, Set, Type, Union
 import logging
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
+from mloda import FeatureGroup
+from mloda.provider import FeatureSet
+from mloda import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 logger = logging.getLogger(__name__)
 
 
-class ListDirectoryFeatureGroup(AbstractFeatureGroup):
+class ListDirectoryFeatureGroup(FeatureGroup):
     """
     A Feature Group that generates a string representation of a directory's file structure.
 
@@ -139,5 +139,5 @@ class ListDirectoryFeatureGroup(AbstractFeatureGroup):
         return "\n".join(lines)
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         return {PandasDataFrame}

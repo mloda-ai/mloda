@@ -2,9 +2,9 @@ import os
 from typing import Any, Optional, Type
 import pytest
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
-from mloda_core.abstract_plugins.components.index.index import Index
+from mloda.user import FeatureName
+from mloda.user import ParallelizationMode
+from mloda.user import Index
 from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
@@ -57,7 +57,7 @@ class TestDuckDBFrameworkComputeFramework:
     @pytest.fixture
     def duckdb_framework(self) -> DuckDBFramework:
         """Create a fresh DuckDBFramework instance for each test."""
-        return DuckDBFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        return DuckDBFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
     @pytest.fixture
     def expected_data(self, connection: Any, dict_data: dict[str, list[int]]) -> Any:

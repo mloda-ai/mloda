@@ -1,7 +1,7 @@
 from typing import Any, Set, Tuple
-from mloda_core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
-from mloda_core.abstract_plugins.components.index.index import Index
-from mloda_core.abstract_plugins.components.link import JoinType
+from mloda.provider import BaseMergeEngine
+from mloda.user import Index
+from mloda.user import JoinType
 
 
 class PythonDictMergeEngine(BaseMergeEngine):

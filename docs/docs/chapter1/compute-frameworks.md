@@ -20,8 +20,8 @@ However, this flexibility introduces a bit of complexity. Let's look at an examp
 
 #### 3. Example Without a Specified Compute Framework
 ```python
-from mloda_core.api.request import mlodaAPI
-from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
+import mloda
+from mloda.user import DataAccessCollection
 
 file_path = "tests/test_plugins/feature_group/src/dataset/creditcard_2023_short.csv"
 data_access_collection = DataAccessCollection(files={file_path})
@@ -32,7 +32,7 @@ feature_list = ["id","V1","V2","V3"]
 Expected Error when running.
 
 ``` python
-mlodaAPI.run_all(
+mloda.run_all(
     feature_list,
     data_access_collection=data_access_collection
 )
@@ -61,12 +61,13 @@ There are several ways to resolve this ambiguity by explicitly defining the comp
 ##### Specific feature configuration
 You can configure individual features to use a specific compute framework. Here’s how to specify that a feature should use the PyArrowTable framework:
 ```python
-from mloda_core.abstract_plugins.components.feature import Feature
+import mloda
+from mloda.user import Feature
 
 feature = Feature("id", options={"compute_framework": "PyArrowTable"})
 
-result = mlodaAPI.run_all(
-    [feature], 
+result = mloda.run_all(
+    [feature],
     data_access_collection=data_access_collection
 )
 result[0]
@@ -87,10 +88,10 @@ import pyarrow as pa
 
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
+from mloda.provider import FeatureGroup
 
 
-class ExampleB(AbstractFeatureGroup):
+class ExampleB(FeatureGroup):
 
     @classmethod
     def compute_framework_rule(cls):
@@ -110,7 +111,7 @@ Running the ExampleB Feature Group
 ```python
 example_feature_list = [f"ExampleB_{f}" for f in feature_list]
 
-result = mlodaAPI.run_all(
+result = mloda.run_all(
     example_feature_list,
     compute_frameworks={PyArrowTable, PandasDataFrame},
     data_access_collection=data_access_collection,
@@ -146,12 +147,13 @@ For example, if `polars` is not installed, `PolarsDataFrame` will not be availab
 
 Example using PythonDictFramework:
 ``` python
-from mloda_core.abstract_plugins.components.feature import Feature
+import mloda
+from mloda.user import Feature
 
 feature = Feature("id", options={"compute_framework": "PythonDictFramework"})
 
-result = mlodaAPI.run_all(
-    [feature], 
+result = mloda.run_all(
+    [feature],
     data_access_collection=data_access_collection
 )
 result[0]  # Returns List[Dict[str, Any]]
@@ -159,7 +161,8 @@ result[0]  # Returns List[Dict[str, Any]]
 
 Example using Polars frameworks:
 ``` python
-from mloda_core.abstract_plugins.components.feature import Feature
+import mloda
+from mloda.user import Feature
 
 # Using Polars eager evaluation
 feature_eager = Feature("id", options={"compute_framework": "PolarsDataFrame"})
@@ -167,8 +170,8 @@ feature_eager = Feature("id", options={"compute_framework": "PolarsDataFrame"})
 # Using Polars lazy evaluation
 feature_lazy = Feature("id", options={"compute_framework": "PolarsLazyDataFrame"})
 
-result = mlodaAPI.run_all(
-    [feature_eager], 
+result = mloda.run_all(
+    [feature_eager],
     data_access_collection=data_access_collection
 )
 result[0]  # Returns polars.DataFrame
@@ -176,7 +179,8 @@ result[0]  # Returns polars.DataFrame
 
 Example using DuckDB framework:
 ``` python
-from mloda_core.abstract_plugins.components.feature import Feature
+import mloda
+from mloda.user import Feature, DataAccessCollection
 import duckdb
 
 # Create DuckDB connection
@@ -189,8 +193,8 @@ data_access_collection = DataAccessCollection(
 
 feature = Feature("id", options={"compute_framework": "DuckDBFramework"})
 
-result = mlodaAPI.run_all(
-    [feature], 
+result = mloda.run_all(
+    [feature],
     data_access_collection=data_access_collection
 )
 result[0]  # Returns duckdb.DuckDBPyRelation
@@ -200,7 +204,8 @@ result[0]  # Returns duckdb.DuckDBPyRelation
 
 Example using Iceberg framework:
 ``` python
-from mloda_core.abstract_plugins.components.feature import Feature
+import mloda
+from mloda.user import Feature, DataAccessCollection
 from pyiceberg.catalog import load_catalog
 
 # Create Iceberg catalog (example with REST catalog)
@@ -218,8 +223,8 @@ data_access_collection = DataAccessCollection(
 
 feature = Feature("id", options={"compute_framework": "IcebergFramework"})
 
-result = mlodaAPI.run_all(
-    [feature], 
+result = mloda.run_all(
+    [feature],
     data_access_collection=data_access_collection
 )
 result[0]  # Returns pyiceberg.table.Table or pyarrow.Table
@@ -229,7 +234,8 @@ result[0]  # Returns pyiceberg.table.Table or pyarrow.Table
 
 Example using Spark framework:
 ``` python
-from mloda_core.abstract_plugins.components.feature import Feature
+import mloda
+from mloda.user import Feature, DataAccessCollection
 from pyspark.sql import SparkSession
 
 # Create SparkSession (optional - framework will auto-create if not provided)
@@ -245,8 +251,8 @@ data_access_collection = DataAccessCollection(
 
 feature = Feature("id", options={"compute_framework": "SparkFramework"})
 
-result = mlodaAPI.run_all(
-    [feature], 
+result = mloda.run_all(
+    [feature],
     data_access_collection=data_access_collection
 )
 result[0]  # Returns pyspark.sql.DataFrame
@@ -270,4 +276,4 @@ For more in-depth information about compute frameworks, check out these advanced
 
 #### 7. Discovering Compute Frameworks
 
-To list all available compute frameworks and their documentation, use the `get_compute_framework_docs()` function from `mloda_core.api.plugin_docs`.
+To list all available compute frameworks and their documentation, use the `get_compute_framework_docs()` function from `mloda.steward`.

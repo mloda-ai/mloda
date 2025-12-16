@@ -1,11 +1,11 @@
 from typing import Any, Optional
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.input_data.base_input_data import BaseInputData
+from mloda import FeatureGroup
+from mloda.provider import FeatureSet
+from mloda.provider import BaseInputData
 from mloda_plugins.feature_group.input_data.read_db import ReadDB
 
 
-class DBInputDataTestFeatureGroup(AbstractFeatureGroup):
+class DBInputDataTestFeatureGroup(FeatureGroup):
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         return ReadDB()

@@ -1,5 +1,5 @@
 from typing import Any, Optional
-from mloda_core.abstract_plugins.components.framework_transformer.base_transformer import BaseTransformer
+from mloda.provider import BaseTransformer
 
 try:
     from pyiceberg.table import Table as IcebergTable

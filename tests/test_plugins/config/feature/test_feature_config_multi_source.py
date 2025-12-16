@@ -7,7 +7,7 @@ multiple source features (e.g., distance calculations requiring latitude and lon
 
 import pytest
 
-from mloda_core.abstract_plugins.components.feature import Feature
+from mloda import Feature
 from mloda_plugins.config.feature.loader import load_features_from_config
 from mloda_plugins.config.feature.models import FeatureConfig
 from mloda_plugins.config.feature.parser import parse_json

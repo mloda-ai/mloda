@@ -6,7 +6,7 @@ This module tests the load_features_from_config function from mloda_plugins.conf
 
 import pytest
 
-from mloda_core.abstract_plugins.components.feature import Feature
+from mloda import Feature
 from mloda_plugins.config.feature.loader import load_features_from_config
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 

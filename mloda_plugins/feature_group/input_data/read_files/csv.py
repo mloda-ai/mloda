@@ -2,7 +2,7 @@ from typing import Any, Tuple
 
 from pyarrow import csv as pyarrow_csv
 
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.provider import FeatureSet
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
 
@@ -41,8 +41,8 @@ class CsvReader(ReadFile):
     Uses Options with file path configuration:
 
     ```python
-    from mloda_core.abstract_plugins.components.feature import Feature
-    from mloda_core.abstract_plugins.components.options import Options
+    from mloda import Feature
+    from mloda import Options
 
     feature = Feature(
         name="customer_name",
@@ -59,8 +59,8 @@ class CsvReader(ReadFile):
     ### Basic CSV Feature Access
 
     ```python
-    from mloda_core.abstract_plugins.components.feature import Feature
-    from mloda_core.abstract_plugins.components.options import Options
+    from mloda import Feature
+    from mloda import Options
 
     # Simple column reference from CSV file
     feature = Feature(
@@ -108,7 +108,7 @@ class CsvReader(ReadFile):
     ### Using DataAccessCollection
 
     ```python
-    from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
+    from mloda.user import DataAccessCollection
 
     # Configure file access at the collection level
     data_access = DataAccessCollection(files=["/data/sales.csv"])

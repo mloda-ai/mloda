@@ -7,8 +7,8 @@ import pickle  # nosec
 import base64
 from typing import Any, Dict, Optional
 
-from mloda_core.abstract_plugins.components.base_artifact import BaseArtifact
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.provider import BaseArtifact
+from mloda.provider import FeatureSet
 
 
 class ForecastingArtifact(BaseArtifact):

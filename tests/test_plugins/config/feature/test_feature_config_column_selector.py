@@ -8,7 +8,7 @@ multi-output transformations (e.g., one-hot encoding that produces multiple colu
 from mloda_plugins.config.feature.models import FeatureConfig
 from mloda_plugins.config.feature.parser import parse_json
 from mloda_plugins.config.feature.loader import load_features_from_config
-from mloda_core.abstract_plugins.components.feature import Feature
+from mloda import Feature
 
 
 def test_parse_feature_with_column_index() -> None:

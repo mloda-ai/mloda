@@ -1,8 +1,8 @@
 from typing import Any, Set, Type, Optional
-from mloda_core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
-from mloda_core.filter.filter_engine import BaseFilterEngine
+from mloda.provider import BaseMergeEngine
+from mloda.user import FeatureName
+from mloda import ComputeFramework
+from mloda.provider import BaseFilterEngine
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_filter_engine import IcebergFilterEngine
 
 try:
@@ -15,7 +15,7 @@ except ImportError:
     pa = None
 
 
-class IcebergFramework(ComputeFrameWork):
+class IcebergFramework(ComputeFramework):
     """
     Iceberg compute framework implementation.
 

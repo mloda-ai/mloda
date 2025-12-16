@@ -1,10 +1,10 @@
 from typing import Any
-from mloda_core.abstract_plugins.components.link import JoinType
+from mloda.user import JoinType
 import pytest
 from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
-from mloda_core.abstract_plugins.components.index.index import Index
+from mloda.user import FeatureName
+from mloda.user import ParallelizationMode
+from mloda.user import Index
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )
@@ -29,7 +29,7 @@ class TestPolarsLazyDataFrameAvailability:
 @pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
 class TestPolarsLazyDataFrameComputeFramework:
     if pl:
-        lazy_df = PolarsLazyDataFrame(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        lazy_df = PolarsLazyDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         dict_data = {"column1": [1, 2, 3], "column2": [4, 5, 6]}
         expected_lazy_data = PolarsLazyDataFrame.pl_lazy_frame()(dict_data)
         left_data = PolarsLazyDataFrame.pl_lazy_frame()({"idx": [1, 3], "col1": ["a", "b"]})
@@ -51,7 +51,7 @@ class TestPolarsLazyDataFrameComputeFramework:
 
     def test_transform_arrays(self) -> None:
         data = PolarsLazyDataFrame.pl_series()([1, 2, 3])
-        _lazy_df = PolarsLazyDataFrame(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        _lazy_df = PolarsLazyDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         _lazy_df.set_data(PolarsLazyDataFrame.pl_lazy_frame()({"existing_column": [4, 5, 6]}))
 
         result = _lazy_df.transform(data=data, feature_names={"new_column"})
@@ -90,7 +90,7 @@ class TestPolarsLazyDataFrameComputeFramework:
             self.lazy_df.set_column_names()
 
     def test_merge_inner(self) -> None:
-        _lazy_df = PolarsLazyDataFrame(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        _lazy_df = PolarsLazyDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         _lazy_df.data = self.left_data
         merge_engine = _lazy_df.merge_engine()
         result = merge_engine().merge(_lazy_df.data, self.right_data, JoinType.INNER, self.idx, self.idx)
@@ -103,7 +103,7 @@ class TestPolarsLazyDataFrameComputeFramework:
         assert collected.equals(expected)
 
     def test_merge_left(self) -> None:
-        _lazy_df = PolarsLazyDataFrame(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        _lazy_df = PolarsLazyDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         _lazy_df.data = self.left_data
         merge_engine = _lazy_df.merge_engine()
         result = merge_engine().merge(_lazy_df.data, self.right_data, JoinType.LEFT, self.idx, self.idx)
@@ -115,7 +115,7 @@ class TestPolarsLazyDataFrameComputeFramework:
         assert collected.equals(expected)
 
     def test_merge_append(self) -> None:
-        _lazy_df = PolarsLazyDataFrame(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        _lazy_df = PolarsLazyDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         _lazy_df.data = self.left_data
         merge_engine = _lazy_df.merge_engine()
         result = merge_engine().merge(_lazy_df.data, self.right_data, JoinType.APPEND, self.idx, self.idx)
@@ -139,11 +139,11 @@ class TestLazyEagerEquivalence:
         from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
 
         # Eager transformation
-        eager_df = PolarsDataFrame(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        eager_df = PolarsDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         eager_result = eager_df.transform(self.dict_data, set())
 
         # Lazy transformation
-        lazy_df = PolarsLazyDataFrame(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        lazy_df = PolarsLazyDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         lazy_result = lazy_df.transform(self.dict_data, set())
 
         # Compare collected lazy result with eager result
@@ -159,11 +159,11 @@ class TestLazyEagerEquivalence:
         feature_names = {FeatureName("column1")}
 
         # Eager selection
-        eager_df = PolarsDataFrame(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        eager_df = PolarsDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         eager_result = eager_df.select_data_by_column_names(df_data, feature_names)
 
         # Lazy selection
-        lazy_df = PolarsLazyDataFrame(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        lazy_df = PolarsLazyDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         lazy_result = lazy_df.select_data_by_column_names(lazy_data, feature_names)
 
         # Compare results
@@ -179,7 +179,7 @@ class TestLazyExecutionTiming:
 
     def test_schema_access_without_execution(self) -> None:
         """Test that we can access schema without triggering execution"""
-        lazy_df = PolarsLazyDataFrame(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        lazy_df = PolarsLazyDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
         # Create lazy frame
         result = lazy_df.transform(self.dict_data, set())

@@ -2,11 +2,11 @@ from datetime import datetime, timezone
 
 import pytest
 
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.filter.global_filter import GlobalFilter
-from mloda_core.filter.single_filter import SingleFilter
-from mloda_core.filter.filter_type_enum import FilterTypeEnum
-from mloda_core.filter.filter_parameter import FilterParameterImpl
+from mloda import Feature
+from mloda.user import GlobalFilter
+from mloda.user import SingleFilter
+from mloda.user import FilterType
+from mloda.core.filter.filter_parameter import FilterParameterImpl
 
 
 class TestGlobalFilter:
@@ -14,7 +14,7 @@ class TestGlobalFilter:
         """Set up test variables."""
         self.global_filter = GlobalFilter()
         self.feature = Feature("age")
-        self.filter_type = FilterTypeEnum.range
+        self.filter_type = FilterType.range
         self.parameter = {"min": 25, "max": 50}
 
     def test_add_single_filter(self) -> None:
@@ -42,7 +42,7 @@ class TestGlobalFilter:
     def test_adding_different_filters(self) -> None:
         """Test that adding different filters works correctly."""
         self.global_filter.add_filter(self.feature, self.filter_type, self.parameter)
-        self.global_filter.add_filter(Feature("salary"), FilterTypeEnum.equal, {"value": 50000})
+        self.global_filter.add_filter(Feature("salary"), FilterType.equal, {"value": 50000})
 
         # Assert that two distinct filters have been added
         assert len(self.global_filter.filters) == 2
@@ -57,7 +57,7 @@ class TestGlobalFilterTimeTravel:
         """Set up test variables."""
         self.global_filter = GlobalFilter()
         self.feature = Feature("age")
-        self.filter_type = FilterTypeEnum.range
+        self.filter_type = FilterType.range
         self.parameter = {"min": 25, "max": 50}
 
     def test_add_single_filter(self) -> None:
@@ -85,7 +85,7 @@ class TestGlobalFilterTimeTravel:
     def test_adding_different_filters(self) -> None:
         """Test that adding different filters works correctly."""
         self.global_filter.add_filter(self.feature, self.filter_type, self.parameter)
-        self.global_filter.add_filter(Feature("salary"), FilterTypeEnum.equal, {"value": 50000})
+        self.global_filter.add_filter(Feature("salary"), FilterType.equal, {"value": 50000})
 
         # Assert that two distinct filters have been added
         assert len(self.global_filter.filters) == 2

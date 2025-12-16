@@ -9,7 +9,7 @@ from typing import Any, List, Optional, Set, Type, Union
 import pyarrow as pa
 import pyarrow.compute as pc
 
-from mloda_core.abstract_plugins.compute_frame_work import ComputeFrameWork
+from mloda import ComputeFramework
 
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
@@ -17,7 +17,7 @@ from mloda_plugins.feature_group.experimental.data_quality.missing_value.base im
 
 class PyArrowMissingValueFeatureGroup(MissingValueFeatureGroup):
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFrameWork]]]:
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
         return {PyArrowTable}
 
     @classmethod

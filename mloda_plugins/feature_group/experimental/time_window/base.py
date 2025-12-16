@@ -7,19 +7,19 @@ from __future__ import annotations
 from abc import abstractmethod
 from typing import Any, List, Optional, Set, Type, Union
 
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
-from mloda_core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
+from mloda import FeatureGroup
+from mloda import Feature
+from mloda.provider import FeatureChainParser
+from mloda.provider import (
     FeatureChainParserMixin,
 )
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.options import Options
+from mloda.user import FeatureName
+from mloda.provider import FeatureSet
+from mloda import Options
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 
-class TimeWindowFeatureGroup(FeatureChainParserMixin, AbstractFeatureGroup):
+class TimeWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     # Option keys for time window configuration
     WINDOW_FUNCTION = "window_function"
     WINDOW_SIZE = "window_size"

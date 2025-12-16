@@ -6,13 +6,12 @@ import sqlite3
 
 import pytest
 
-from mloda_core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda_core.abstract_plugins.components.feature import Feature
-from mloda_core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_core.abstract_plugins.components.hashable_dict import HashableDict
-from mloda_core.abstract_plugins.components.options import Options
-from mloda_core.abstract_plugins.components.plugin_option.plugin_collector import PlugInCollector
-from mloda_core.api.request import mlodaAPI
+from mloda.user import DataAccessCollection
+from mloda import Feature
+from mloda.provider import FeatureSet, HashableDict
+from mloda import Options
+from mloda.user import PluginCollector
+import mloda
 from mloda_plugins.feature_group.input_data.read_db import ReadDB
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 from tests.test_plugins.feature_group.input_data.test_classes.test_input_classes import DBInputDataTestFeatureGroup
@@ -47,19 +46,19 @@ class TestInputDataDB:
             },
         )
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             [f],
             compute_frameworks=["PyArrowTable"],
-            plugin_collector=PlugInCollector.enabled_feature_groups({DBInputDataTestFeatureGroup}),
+            plugin_collector=PluginCollector.enabled_feature_groups({DBInputDataTestFeatureGroup}),
         )
         assert "id" in result[0].to_pydict()
 
     def test_load_sqlite_found_in_data_access_collection(self) -> Any:
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             ["name", "id"],
             compute_frameworks=["PyArrowTable"],
             data_access_collection=DataAccessCollection(credential_dicts={SQLITEReader.db_path(): self.db_path}),
-            plugin_collector=PlugInCollector.enabled_feature_groups({DBInputDataTestFeatureGroup}),
+            plugin_collector=PluginCollector.enabled_feature_groups({DBInputDataTestFeatureGroup}),
         )
         assert "name" in result[0].to_pydict()
 
@@ -69,11 +68,11 @@ class TestInputDataDB:
             options={"sum": ("id", "id")},
         )
 
-        result = mlodaAPI.run_all(
+        result = mloda.run_all(
             [f],
             compute_frameworks=["PyArrowTable"],
             data_access_collection=DataAccessCollection(credential_dicts={SQLITEReader.db_path(): self.db_path}),
-            plugin_collector=PlugInCollector.enabled_feature_groups({DBInputDataTestFeatureGroup, SumFeature}),
+            plugin_collector=PluginCollector.enabled_feature_groups({DBInputDataTestFeatureGroup, SumFeature}),
         )
         assert "SumFeature_idid" in result[0].to_pydict()
 

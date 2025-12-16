@@ -1,6 +1,6 @@
-from mloda_core.abstract_plugins.components.parallelization_modes import ParallelizationModes
+from mloda.user import ParallelizationMode
 import pytest
-from mloda_core.abstract_plugins.components.feature_name import FeatureName
+from mloda.user import FeatureName
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
 
@@ -12,7 +12,7 @@ class TestPythonDictFramework:
 
     def test_transform_dict_to_list(self) -> None:
         """Test transformation from columnar dict to list of dicts."""
-        framework = PythonDictFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        framework = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
         # Test columnar dict transformation
         input_data = {"col1": [1, 2, 3], "col2": ["a", "b", "c"]}
@@ -23,7 +23,7 @@ class TestPythonDictFramework:
 
     def test_transform_single_dict(self) -> None:
         """Test transformation from single dict to list of dicts."""
-        framework = PythonDictFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        framework = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
         # Test single dict transformation
         input_data = {"col1": 1, "col2": "a"}
@@ -34,7 +34,7 @@ class TestPythonDictFramework:
 
     def test_transform_list_passthrough(self) -> None:
         """Test that list of dicts passes through unchanged."""
-        framework = PythonDictFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        framework = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
         # Test list passthrough
         input_data = [{"col1": 1, "col2": "a"}, {"col1": 2, "col2": "b"}]
@@ -44,21 +44,21 @@ class TestPythonDictFramework:
 
     def test_transform_empty_data_error(self) -> None:
         """Test that empty data raises an error."""
-        framework = PythonDictFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        framework = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
         with pytest.raises(ValueError, match="Data cannot be empty"):
             framework.transform(None, set())
 
     def test_transform_invalid_data(self) -> None:
         """Test that invalid data types raise errors."""
-        framework = PythonDictFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        framework = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
         with pytest.raises(ValueError, match="Data type .* is not supported"):
             framework.transform("invalid", set())
 
     def test_select_data_by_column_names(self) -> None:
         """Test column selection functionality."""
-        framework = PythonDictFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        framework = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
         data = [{"col1": 1, "col2": "a", "col3": 10}, {"col1": 2, "col2": "b", "col3": 20}]
 
@@ -71,7 +71,7 @@ class TestPythonDictFramework:
 
     def test_select_data_empty_error(self) -> None:
         """Test that empty data raises an error in column selection."""
-        framework = PythonDictFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        framework = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
         feature_names = {FeatureName("col1")}
 
@@ -80,7 +80,7 @@ class TestPythonDictFramework:
 
     def test_set_column_names(self) -> None:
         """Test setting column names from data."""
-        framework = PythonDictFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        framework = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
         framework.data = [{"col1": 1, "col2": "a"}, {"col1": 2, "col2": "b", "col3": 10}]
 
@@ -91,7 +91,7 @@ class TestPythonDictFramework:
 
     def test_set_column_names_empty_error(self) -> None:
         """Test that empty data raises an error when setting column names."""
-        framework = PythonDictFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        framework = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
         framework.data = []
 
@@ -104,7 +104,7 @@ class TestPythonDictFramework:
             PythonDictMergeEngine,
         )
 
-        framework = PythonDictFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        framework = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         assert framework.merge_engine() == PythonDictMergeEngine
 
     def test_filter_engine(self) -> None:
@@ -113,5 +113,5 @@ class TestPythonDictFramework:
             PythonDictFilterEngine,
         )
 
-        framework = PythonDictFramework(mode=ParallelizationModes.SYNC, children_if_root=frozenset())
+        framework = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         assert framework.filter_engine() == PythonDictFilterEngine

@@ -28,7 +28,7 @@ Properties:
 Example:
 
 ```python
-from mloda_core.abstract_plugins.components.index.index import Index
+from mloda.user import Index
 
 # Create an Index with a single column
 single_column_index = Index(('user_id',))
@@ -75,12 +75,12 @@ A Link specifies the relationship of:
 -   and the indexes to use for the join.
 
 ```python
-from mloda_core.abstract_plugins.components.link import Link, JoinSpec
-from mloda_core.abstract_plugins.abstract_feature_group import AbstractFeatureGroup
+from mloda.user import Link, JoinSpec
+from mloda.provider import FeatureGroup
 
 # Assume FeatureGroupA and FeatureGroupB are defined feature groups
-feature_group_a = AbstractFeatureGroup()
-feature_group_b = AbstractFeatureGroup()
+feature_group_a = FeatureGroup()
+feature_group_b = FeatureGroup()
 
 # JoinSpec accepts multiple index formats:
 # - String for single column: "id"
@@ -111,15 +111,15 @@ link = Link.inner(
 For feature groups that define `index_columns()`, you can use the convenience `_on` methods to automatically derive the join index:
 
 ```python
-from mloda_core.abstract_plugins.components.link import Link
+from mloda.user import Link, Index
 
 # Define feature groups with index_columns
-class UserFeatureGroup(AbstractFeatureGroup):
+class UserFeatureGroup(FeatureGroup):
     @classmethod
     def index_columns(cls):
         return [Index(("user_id",))]
 
-class OrderFeatureGroup(AbstractFeatureGroup):
+class OrderFeatureGroup(FeatureGroup):
     @classmethod
     def index_columns(cls):
         return [Index(("user_id",)), Index(("order_id",))]
@@ -148,10 +148,10 @@ When joining a feature group with itself, you need to distinguish between the le
 **Alias fields** are optional dictionary parameters (`self_left_alias` and `self_right_alias`) that match against feature options:
 
 ```python
-from mloda_core.abstract_plugins.components.feature import Feature
+from mloda.user import Feature, Index, Link
 
 # Define an example feature group for demonstration
-class UserFeatureGroup(AbstractFeatureGroup):
+class UserFeatureGroup(FeatureGroup):
     @classmethod
     def index_columns(cls):
         return [Index(("user_id",))]
@@ -195,7 +195,7 @@ Links support inheritance-based matching, allowing a link defined with base clas
 
 ```python
 # Define a base feature group hierarchy
-class BaseUserFeatureGroup(AbstractFeatureGroup):
+class BaseUserFeatureGroup(FeatureGroup):
     pass
 
 class PremiumUserFeatureGroup(BaseUserFeatureGroup):
@@ -224,11 +224,11 @@ The balanced inheritance rule ensures that joins only occur between "parallel" s
 #### mlodaAPI
 
 ``` python
-from mloda_core.api.request import mlodaAPI
+import mloda
 
 set_of_links = {link}
 
-mlodaAPI.run_all(
+mloda.run_all(
     features=["Feature_of_FeatureGroupA", "Feature_of_FeatureGroupB"],
     links=set_of_links
     )
@@ -244,7 +244,7 @@ The compute framework uses the base class BaseMergeEngine as configuration.
 In this example, we show the PandasMergeEngine.
 
 ``` python
-class PandasDataFrame(ComputeFrameWork):
+class PandasDataFrame(ComputeFramework):
     def merge_engine(self) -> Type[BaseMergeEngine]:
         return PandasMergeEngine
 ```

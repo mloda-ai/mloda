@@ -1,7 +1,6 @@
 from typing import Any, Dict, List, Optional, Set, Type, Union
 import pyarrow as pa
 import pyarrow.compute as pc
-import pytest
 from mloda.provider import BaseInputData
 from mloda.provider import DataCreator
 from mloda import ComputeFramework

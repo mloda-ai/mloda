@@ -6,7 +6,7 @@ This test verifies that the modernization successfully supports both approaches:
 2. Configuration-based feature creation (modern)
 """
 
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List
 
 import pytest
 

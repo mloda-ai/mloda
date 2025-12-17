@@ -9,7 +9,6 @@ Structure:
 """
 
 import os
-from mloda import API
 
 
 def test_import_quick_start() -> None:

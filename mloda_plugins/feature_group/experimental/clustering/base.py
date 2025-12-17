@@ -13,9 +13,7 @@ from mloda.provider import FeatureChainParser
 from mloda.provider import (
     FeatureChainParserMixin,
 )
-from mloda.user import FeatureName
 from mloda.provider import FeatureSet
-from mloda import Options
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 

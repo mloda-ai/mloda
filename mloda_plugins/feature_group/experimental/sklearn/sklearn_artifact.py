@@ -4,7 +4,6 @@ Artifact for storing fitted scikit-learn transformers and estimators.
 
 import json
 import base64
-import os
 import hashlib
 import tempfile
 from pathlib import Path

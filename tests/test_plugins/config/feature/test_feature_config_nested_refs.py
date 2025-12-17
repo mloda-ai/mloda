@@ -5,8 +5,6 @@ This module tests the support for referencing other features as sources
 using the `@feature_name` syntax in the mloda_source field.
 """
 
-import pytest
-
 from mloda_plugins.config.feature.models import FeatureConfig
 from mloda_plugins.config.feature.parser import parse_json
 

@@ -4,9 +4,8 @@ Base implementation for missing value imputation feature groups.
 
 from __future__ import annotations
 
-import copy
 from abc import abstractmethod
-from typing import Any, List, Optional, Set, Union
+from typing import Any, List, Optional, Set
 
 from mloda import FeatureGroup
 from mloda import Feature
@@ -14,9 +13,7 @@ from mloda.provider import FeatureChainParser
 from mloda.provider import (
     FeatureChainParserMixin,
 )
-from mloda.user import FeatureName
 from mloda.provider import FeatureSet
-from mloda import Options
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 

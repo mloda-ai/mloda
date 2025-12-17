@@ -110,7 +110,6 @@ class TestSklearnArtifact:
     def test_custom_loader_no_options(self) -> None:
         """Test custom_loader when no options are available."""
         import tempfile
-        import os
 
         # Use a unique temporary directory to ensure isolation
         with tempfile.TemporaryDirectory() as temp_dir:

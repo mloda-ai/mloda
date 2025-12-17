@@ -7,13 +7,11 @@ import pytest
 from typing import Any, Dict
 
 from mloda import Feature
-from mloda import Options
 from mloda.user import PluginCollector
 from mloda import API
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
-from mloda_plugins.feature_group.experimental.sklearn.scaling.base import ScalingFeatureGroup
-from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+from mloda_plugins.feature_group.experimental.sklearn.scaling.base import ScalingFeatureGroup  # noqa: F401
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
 
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator

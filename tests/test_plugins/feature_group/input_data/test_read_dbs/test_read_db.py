@@ -8,7 +8,7 @@ import pytest
 
 from mloda.user import DataAccessCollection
 from mloda import Feature
-from mloda.provider import FeatureSet, HashableDict
+from mloda.provider import HashableDict
 from mloda import Options
 from mloda.user import PluginCollector
 import mloda

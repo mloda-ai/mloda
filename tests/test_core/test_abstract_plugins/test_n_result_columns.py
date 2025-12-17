@@ -1,6 +1,5 @@
-from typing import Any, Optional, Set, Union
+from typing import Any, Optional, Set
 from mloda import FeatureGroup
-from mloda.user import DataAccessCollection
 from mloda import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet

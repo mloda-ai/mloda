@@ -1,5 +1,4 @@
-from typing import Any, Optional, Set, Type
-from mloda.user import DataAccessCollection
+from typing import Any, Set, Type
 from mloda.provider import BaseMergeEngine
 from mloda.provider import BaseFilterEngine
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_merge_engine import PyArrowMergeEngine

@@ -1,4 +1,3 @@
-from calendar import c
 from mloda.provider import ConnectionMatcherMixin
 from mloda import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable

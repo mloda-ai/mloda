@@ -7,11 +7,10 @@ This test shows the complete flow of:
 3. Chained processor works with consumer's single-column output
 """
 
-from typing import Any, Dict, List, Optional, Set, Type, Union
+from typing import Any, List, Optional, Set, Type, Union
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from mloda import FeatureGroup
 from mloda import Feature

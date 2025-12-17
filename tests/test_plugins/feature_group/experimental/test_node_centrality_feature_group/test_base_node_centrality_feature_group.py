@@ -8,7 +8,6 @@ from mloda import Feature
 from mloda.user import FeatureName
 from mloda import Options
 from mloda_plugins.feature_group.experimental.node_centrality.base import NodeCentralityFeatureGroup
-from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 
 class TestNodeCentralityFeatureGroup:

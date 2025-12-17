@@ -5,7 +5,7 @@ Base implementation for scikit-learn encoding feature groups.
 from __future__ import annotations
 
 import datetime
-from typing import Any, Dict, Optional, Set, Type, Union
+from typing import Any, Dict, Optional, Set, Type
 
 from mloda import FeatureGroup
 from mloda import Feature

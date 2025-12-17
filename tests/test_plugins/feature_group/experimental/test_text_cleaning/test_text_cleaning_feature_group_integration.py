@@ -3,7 +3,6 @@ Integration tests for the TextCleaningFeatureGroup with API.
 """
 
 from typing import Any, Dict
-import pytest
 
 from mloda import Feature
 from mloda import Options

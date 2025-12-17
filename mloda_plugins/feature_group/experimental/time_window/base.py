@@ -5,7 +5,7 @@ Base implementation for time window feature groups.
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Any, List, Optional, Set, Type, Union
+from typing import Any, List, Optional, Set
 
 from mloda import FeatureGroup
 from mloda import Feature

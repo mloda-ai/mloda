@@ -4,8 +4,7 @@ Pandas implementation for scikit-learn pipeline feature groups.
 
 from __future__ import annotations
 
-import numpy as np
-from typing import Any, List, Set, Type, Union
+from typing import Any, Set, Type, Union
 
 from mloda import ComputeFramework
 

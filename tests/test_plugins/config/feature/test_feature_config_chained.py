@@ -5,8 +5,6 @@ This module tests parsing and handling of chained features using the
 operation__source_feature pattern (e.g., "scale__age").
 """
 
-import pytest
-
 from mloda_plugins.config.feature.models import FeatureConfig
 from mloda_plugins.config.feature.parser import parse_json
 

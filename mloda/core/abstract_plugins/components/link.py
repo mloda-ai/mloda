@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import FrozenInstanceError
 from enum import Enum
 from uuid import uuid4
-from typing import Any, Dict, Optional, Set, Tuple, Type, Union
+from typing import Any, Dict, Optional, Tuple, Type, Union
 
 
 from mloda.core.abstract_plugins.components.index.index import Index

@@ -28,7 +28,6 @@ from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.abstract_plugins.components.validators.link_validator import LinkValidator
-from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 
 class Engine:

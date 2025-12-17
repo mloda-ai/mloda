@@ -1,9 +1,9 @@
 import pytest
 from collections import OrderedDict
-from typing import Any, Set, Type
+from typing import Any, Set
 from uuid import UUID, uuid4
 
-from mloda.user import Link, JoinSpec, JoinType
+from mloda.user import Link, JoinSpec
 from mloda import ComputeFramework
 from mloda.core.prepare.validators.resolve_link_validator import ResolveLinkValidator
 

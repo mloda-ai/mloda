@@ -2,7 +2,7 @@
 Integration tests for geo distance feature groups.
 """
 
-from typing import Any, Dict, FrozenSet, List
+from typing import Any, Dict, List
 import pandas as pd
 
 import mloda

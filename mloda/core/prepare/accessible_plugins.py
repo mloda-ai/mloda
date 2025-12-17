@@ -1,6 +1,5 @@
 from copy import deepcopy
 from typing import Optional, Set, Type
-from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 

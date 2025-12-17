@@ -4,7 +4,7 @@ Base implementation for geo distance feature groups.
 
 from __future__ import annotations
 
-from typing import Any, Optional, Set, Union
+from typing import Any, Optional, Set
 
 from mloda import FeatureGroup
 from mloda import Feature

@@ -9,7 +9,6 @@ from unittest.mock import Mock, patch
 from mloda.user import FeatureName
 from mloda import Options
 from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
-from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 
 class TestEncodingFeatureGroup:

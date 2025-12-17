@@ -1,7 +1,6 @@
 from abc import ABC
 from typing import Any, List, Optional, Set, Type, Union, final
 from uuid import UUID, uuid4
-from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import (
     ComputeFrameworkTransformer,
 )

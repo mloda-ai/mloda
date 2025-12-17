@@ -1,4 +1,3 @@
-from copy import copy
 from mloda import Feature
 from mloda import Options
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys

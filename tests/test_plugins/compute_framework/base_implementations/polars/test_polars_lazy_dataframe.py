@@ -1,4 +1,3 @@
-from typing import Any
 from mloda.user import JoinType
 import pytest
 from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame

@@ -35,7 +35,7 @@
   },
   {
     "name": "age__max_aggr",
-    "mloda_sources": ["minmaxscaledage"]
+    "in_features": ["minmaxscaledage"]
   },
   {
     "name": "min_max",
@@ -49,7 +49,7 @@
   },
   {
     "name": "custom_geo_distance",
-    "mloda_sources": ["customer_location", "store_location"],
+    "in_features": ["customer_location", "store_location"],
     "context_options": {
       "distance_type": "euclidean"
     }

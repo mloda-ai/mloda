@@ -15,7 +15,7 @@ class FeatureConfig:
 
     name: str
     options: Dict[str, Any] = field(default_factory=dict)
-    mloda_sources: Optional[List[str]] = None
+    in_features: Optional[List[str]] = None
     group_options: Optional[Dict[str, Any]] = None
     context_options: Optional[Dict[str, Any]] = None
     column_index: Optional[int] = None
@@ -37,7 +37,7 @@ def feature_config_schema() -> Dict[str, Any]:
         "properties": {
             "name": {"type": "string"},
             "options": {"type": "object", "default": {}},
-            "mloda_sources": {"type": "array", "items": {"type": "string"}},
+            "in_features": {"type": "array", "items": {"type": "string"}},
             "group_options": {"type": "object"},
             "context_options": {"type": "object"},
             "column_index": {"type": "integer"},

@@ -6,7 +6,7 @@ This module provides parsers for configuration files in JSON format.
 
 import json
 from typing import List
-from mloda_plugins.config.feature.models import FeatureConfig, FeatureConfigItem
+from mloda.core.api.feature_config.models import FeatureConfig, FeatureConfigItem
 
 
 def parse_json(config_str: str) -> List[FeatureConfigItem]:

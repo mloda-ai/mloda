@@ -5,7 +5,7 @@ This module tests the schema export function that provides JSON Schema
 for the FeatureConfig model.
 """
 
-from mloda_plugins.config.feature.models import feature_config_schema
+from mloda.core.api.feature_config.models import feature_config_schema
 
 
 def test_feature_config_schema_structure() -> None:

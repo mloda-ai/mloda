@@ -54,7 +54,7 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../3_ml_data_feature_feature_groups/">Data, Feature, FeatureSets and FeatureGroups in mloda</a>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../4_ml_data_producers_user_owner/">Data Producer, User, Owner in mloda</a>
+                  <li class="toctree-l1"><a class="reference internal" href="../4_ml_data_providers_user_steward/">Provider, User, Steward in mloda</a>
                   </li>
               </ul>
               <p class="caption"><span class="caption-text">Getting Started</span></p>
@@ -635,13 +635,13 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [1]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-1">
@@ -675,6 +675,28 @@ plugin_loader = PluginLoader.all()
 # Here, we demonstrate by listing the available 'read' and 'sql' plugins.
 print(plugin_loader.list_loaded_modules("read"))
 print(plugin_loader.list_loaded_modules("sql"))</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="application/vnd.jupyter.stderr" tabindex="0">
+<pre>/home/tom/envs/python310/lib/python3.10/site-packages/tqdm/auto.py:21: TqdmWarning: IProgress not found. Please update jupyter and ipywidgets. See https://ipywidgets.readthedocs.io/en/stable/user_install.html
+  from .autonotebook import tqdm as notebook_tqdm
+</pre>
+</div>
+</div>
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>['mloda_plugins.feature_group.experimental.llm.tools.available.read_file_tool', 'mloda_plugins.feature_group.input_data.read_context_files', 'mloda_plugins.feature_group.input_data.read_file', 'mloda_plugins.feature_group.input_data.read_db_feature', 'mloda_plugins.feature_group.input_data.read_db', 'mloda_plugins.feature_group.input_data.read_file_feature', 'mloda_plugins.feature_group.input_data.read_files.json', 'mloda_plugins.feature_group.input_data.read_files.csv', 'mloda_plugins.feature_group.input_data.read_files.parquet', 'mloda_plugins.feature_group.input_data.read_files.feather', 'mloda_plugins.feature_group.input_data.read_files.text_file_reader', 'mloda_plugins.feature_group.input_data.read_files.orc', 'mloda_plugins.feature_group.input_data.read_dbs.sqlite']
+['mloda_plugins.feature_group.input_data.read_dbs.sqlite']
+</pre>
 </div>
 </div>
 </div>
@@ -749,7 +771,7 @@ print(plugin_loader.list_loaded_modules("sql"))</div>
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [3]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-3">
@@ -796,7 +818,7 @@ categorical_features: List[str | Feature] = ["user_age_group", "product_category
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [4]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-4">
@@ -857,13 +879,13 @@ data_access_collection.add_credential_dict(
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [5]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-5">
@@ -907,14 +929,62 @@ for data in result:
 </div>
 </div>
 </div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>pyarrow.Table
+quantity: int64
+product_id: int64
+order_id: int64
+item_price: double
+----
+quantity: [[6,2]]
+product_id: [[282,355]]
+order_id: [[1,2]]
+item_price: [[74.86,154.56]] &lt;class 'pyarrow.lib.Table'&gt;
+pyarrow.Table
+valid_datetime: timestamp[ns, tz=UTC]
+payment_type: string
+payment_id: int64
+payment_status: string
+----
+valid_datetime: [[2024-01-11 23:01:49.090909090Z,2024-01-15 09:41:49.090909090Z]]
+payment_type: [["debit card","debit card"]]
+payment_id: [[1,2]]
+payment_status: [["failed","pending"]] &lt;class 'pyarrow.lib.Table'&gt;
+pyarrow.Table
+update_date: int64
+merchant_location: string
+user_location: string
+----
+update_date: [[1640995200000,1641632290909]]
+merchant_location: [["North","East"]]
+user_location: [["East","West"]] &lt;class 'pyarrow.lib.Table'&gt;
+pyarrow.Table
+user_age_group: string
+product_category: string
+transaction_type: string
+----
+user_age_group: [["26-35","26-35"]]
+product_category: [["clothing","home"]]
+transaction_type: [["online","online"]] &lt;class 'pyarrow.lib.Table'&gt;
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [6]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-6">
@@ -954,14 +1024,38 @@ for data in result:
 </div>
 </div>
 </div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>   quantity  product_id  order_id  item_price
+0         6         282         1       74.86
+1         2         355         2      154.56 &lt;class 'pandas.core.frame.DataFrame'&gt;
+                       valid_datetime payment_type  payment_id payment_status
+0 2024-01-11 23:01:49.090909090+00:00   debit card           1         failed
+1 2024-01-15 09:41:49.090909090+00:00   debit card           2        pending &lt;class 'pandas.core.frame.DataFrame'&gt;
+     update_date merchant_location user_location
+0  1640995200000             North          East
+1  1641632290909              East          West &lt;class 'pandas.core.frame.DataFrame'&gt;
+  user_age_group product_category transaction_type
+0          26-35         clothing           online
+1          26-35             home           online &lt;class 'pandas.core.frame.DataFrame'&gt;
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [7]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-7">
@@ -1003,14 +1097,38 @@ for res in result:
 </div>
 </div>
 </div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>The resulting data structure differs based on the compute framework:
+
+    order_id
+0         1
+1         2
+2         3 &lt;class 'pandas.core.frame.DataFrame'&gt;
+The resulting data structure differs based on the compute framework:
+
+ pyarrow.Table
+product_id: int64
+----
+product_id: [[282,355,395]] &lt;class 'pyarrow.lib.Table'&gt;
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [8]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-8">
@@ -1029,7 +1147,7 @@ for res in result:
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Set</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda.provider</span><span class="w"> </span><span class="kn">import</span> <span class="n">FeatureGroup</span><span class="p">,</span> <span class="n">FeatureSet</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user</span><span class="w"> </span><span class="kn">import</span> <span class="n">Feature</span><span class="p">,</span> <span class="n">FeatureName</span><span class="p">,</span> <span class="n">Options</span><span class="p">,</span> <span class="n">Index</span><span class="p">,</span> <span class="n">Link</span><span class="p">,</span> <span class="n">JoinType</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user</span><span class="w"> </span><span class="kn">import</span> <span class="n">Feature</span><span class="p">,</span> <span class="n">FeatureName</span><span class="p">,</span> <span class="n">Options</span><span class="p">,</span> <span class="n">Index</span><span class="p">,</span> <span class="n">Link</span><span class="p">,</span> <span class="n">JoinSpec</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.feature_group.input_data.read_file_feature</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReadFileFeature</span>
 
 
@@ -1044,8 +1162,8 @@ for res in result:
         <span class="k">return</span> <span class="p">[</span><span class="n">index</span><span class="p">]</span>
 
 
-<span class="c1"># Define the link between the features</span>
-<span class="n">link</span> <span class="o">=</span> <span class="n">Link</span><span class="p">(</span><span class="n">jointype</span><span class="o">=</span><span class="n">JoinType</span><span class="o">.</span><span class="n">INNER</span><span class="p">,</span> <span class="n">left</span><span class="o">=</span><span class="p">(</span><span class="n">ReadFileFeatureJoin</span><span class="p">,</span> <span class="n">index</span><span class="p">),</span> <span class="n">right</span><span class="o">=</span><span class="p">(</span><span class="n">ReadFileFeatureJoin</span><span class="p">,</span> <span class="n">index</span><span class="p">))</span>
+<span class="c1"># Define the link between the features using JoinSpec</span>
+<span class="n">link</span> <span class="o">=</span> <span class="n">Link</span><span class="o">.</span><span class="n">inner</span><span class="p">(</span><span class="n">JoinSpec</span><span class="p">(</span><span class="n">ReadFileFeatureJoin</span><span class="p">,</span> <span class="n">index</span><span class="p">),</span> <span class="n">JoinSpec</span><span class="p">(</span><span class="n">ReadFileFeatureJoin</span><span class="p">,</span> <span class="n">index</span><span class="p">))</span>
 
 
 <span class="c1"># Create an example feature group to demonstrate joining</span>
@@ -1088,7 +1206,7 @@ for res in result:
 from typing import Any, List, Optional, Set
 
 from mloda.provider import FeatureGroup, FeatureSet
-from mloda.user import Feature, FeatureName, Options, Index, Link, JoinType
+from mloda.user import Feature, FeatureName, Options, Index, Link, JoinSpec
 from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
 
 
@@ -1103,8 +1221,8 @@ class ReadFileFeatureJoin(ReadFileFeature):
         return [index]
 
 
-# Define the link between the features
-link = Link(jointype=JoinType.INNER, left=(ReadFileFeatureJoin, index), right=(ReadFileFeatureJoin, index))
+# Define the link between the features using JoinSpec
+link = Link.inner(JoinSpec(ReadFileFeatureJoin, index), JoinSpec(ReadFileFeatureJoin, index))
 
 
 # Create an example feature group to demonstrate joining
@@ -1140,6 +1258,33 @@ print(
 
 # Summary: mloda's abstraction layer enables complex process pipelines that handle different data technologies.
 # This decouples processes from the underlying data structure, ensuring flexibility and scalability.</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>Data from two different sources is now combined into one feature within one data technology: 
+ pyarrow.Table
+product_id: int64
+order_id: int64
+quantity: int64
+----
+product_id: [[282,355,395,319,275,...,170,328,361,192,271]]
+order_id: [[1,2,3,4,5,...,96,97,98,99,100]]
+quantity: [[6,2,4,9,5,...,4,3,5,5,6]] &lt;class 'pyarrow.lib.Table'&gt; 
+
+Final result:  pyarrow.Table
+ExampleMlLifeCycleJoin: int64
+----
+ExampleMlLifeCycleJoin: [[1,2,3]] 
+Note: As no specific compute framework was defined for the result, the output could be in either format.
+</pre>
 </div>
 </div>
 </div>

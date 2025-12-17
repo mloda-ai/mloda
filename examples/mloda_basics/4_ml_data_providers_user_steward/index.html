@@ -5,15 +5,15 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       <link rel="shortcut icon" href="../../../img/favicon.ico" />
-    <title>Data Producer, User, Owner in mloda - mloda docs</title>
+    <title>Provider, User, Steward in mloda - mloda docs</title>
     <link rel="stylesheet" href="../../../css/theme.css" />
     <link rel="stylesheet" href="../../../css/theme_extra.css" />
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
     
       <script>
         // Current page data
-        var mkdocs_page_name = "Data Producer, User, Owner in mloda";
-        var mkdocs_page_input_path = "examples/mloda_basics/4_ml_data_producers_user_owner.ipynb";
+        var mkdocs_page_name = "Provider, User, Steward in mloda";
+        var mkdocs_page_input_path = "examples/mloda_basics/4_ml_data_providers_user_steward.ipynb";
         var mkdocs_page_url = null;
       </script>
     
@@ -50,11 +50,11 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../3_ml_data_feature_feature_groups/">Data, Feature, FeatureSets and FeatureGroups in mloda</a>
                   </li>
-                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Data Producer, User, Owner in mloda</a>
+                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Provider, User, Steward in mloda</a>
     <ul class="current">
     <li class="toctree-l2"><a class="reference internal" href="#roles-in-mloda">Roles in mloda</a>
     </li>
-    <li class="toctree-l2"><a class="reference internal" href="#data-producer">Data Producer</a>
+    <li class="toctree-l2"><a class="reference internal" href="#provider">Provider</a>
         <ul>
     <li class="toctree-l3"><a class="reference internal" href="#featuregroup-api-plug-in-in-short">FeatureGroup API (plug-in) in short</a>
     </li>
@@ -70,7 +70,7 @@
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#data-user-role">Data User Role</a>
     </li>
-    <li class="toctree-l2"><a class="reference internal" href="#data-owner-role">Data Owner Role</a>
+    <li class="toctree-l2"><a class="reference internal" href="#steward-role">Steward Role</a>
         <ul>
     <li class="toctree-l3"><a class="reference internal" href="#using-organization-wide-logging">Using organization wide logging</a>
     </li>
@@ -191,7 +191,7 @@
   <ul class="wy-breadcrumbs">
     <li><a href="../../.." class="icon icon-home" aria-label="Docs"></a></li>
           <li class="breadcrumb-item">mloda Concepts</li>
-      <li class="breadcrumb-item active">Data Producer, User, Owner in mloda</li>
+      <li class="breadcrumb-item active">Provider, User, Steward in mloda</li>
     <li class="wy-breadcrumbs-aside">
     </li>
   </ul>
@@ -641,7 +641,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h1 id="data-producer-user-owner-in-mloda">Data Producer, User, Owner in mloda<a class="anchor-link" href="#data-producer-user-owner-in-mloda">¶</a></h1>
+<h1 id="provider-user-steward-in-mloda">Provider, User, Steward in mloda<a class="anchor-link" href="#provider-user-steward-in-mloda">¶</a></h1>
 </div>
 </div>
 </div>
@@ -654,7 +654,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
 <h2 id="roles-in-mloda">Roles in mloda<a class="anchor-link" href="#roles-in-mloda">¶</a></h2><p>In this notebook, we will describe three roles which exists in the mloda framework.</p>
 <ul>
-<li><p>Data Producers: Provide access to raw data, business-layer data, or aggregated data.</p>
+<li><p>Providers: Provide access to raw data, business-layer data, or aggregated data.</p>
 <ul>
 <li>A data scientist or analyst might create simpler datasets or analytical outputs</li>
 <li>A data engineer might design access to complex data infrastructures, such as data lakes or warehouses</li>
@@ -667,7 +667,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <li>Consumes features from other parts of the organizations</li>
 </ul>
 </li>
-<li><p>Data Owner: Ensures lifetime value, availability and governance of data and features</p>
+<li><p>Steward: Ensures lifetime value, availability and governance of data and features</p>
 </li>
 </ul>
 </div>
@@ -680,18 +680,18 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="data-producer">Data Producer<a class="anchor-link" href="#data-producer">¶</a></h2><p>Let us look closer into the role of a data producer.</p>
-<p>What could a data producer create?</p>
+<h2 id="provider">Provider<a class="anchor-link" href="#provider">¶</a></h2><p>Let us look closer into the role of a provider.</p>
+<p>What could a provider create?</p>
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [1]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-1">
@@ -779,6 +779,61 @@ mloda.run_all(all_features, data_access_collection=data_access_collection, compu
 </div>
 </div>
 </div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="application/vnd.jupyter.stderr" tabindex="0">
+<pre>/home/tom/envs/python310/lib/python3.10/site-packages/tqdm/auto.py:21: TqdmWarning: IProgress not found. Please update jupyter and ipywidgets. See https://ipywidgets.readthedocs.io/en/stable/user_install.html
+  from .autonotebook import tqdm as notebook_tqdm
+</pre>
+</div>
+</div>
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[1]:</div>
+<div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain" tabindex="0">
+<pre>[pyarrow.Table
+ user_location: string
+ update_date: int64
+ merchant_location: string
+ ----
+ user_location: [["East","West","North","West","West",...,"West","North","North","North","East"]]
+ update_date: [[1640995200000,1641632290909,1642269381818,1642906472727,1643543563636,...,1701518836363,1702155927272,1702793018181,1703430109090,1704067200000]]
+ merchant_location: [["North","East","East","East","North",...,"North","South","East","South","North"]],
+ pyarrow.Table
+ payment_id: int64
+ valid_datetime: timestamp[ns, tz=UTC]
+ payment_status: string
+ payment_type: string
+ ----
+ payment_id: [[1,2,3,4,5,...,96,97,98,99,100]]
+ valid_datetime: [[2024-01-11 23:01:49.090909090Z,2024-01-15 09:41:49.090909090Z,2024-01-29 19:23:38.181818181Z,2024-01-04 18:10:54.545454545Z,2024-01-06 15:16:21.818181818Z,...,2024-01-13 12:36:21.818181818Z,2024-01-10 01:56:21.818181818Z,2024-01-15 02:10:54.545454545Z,2024-01-28 20:50:54.545454545Z,2024-01-06 00:14:32.727272727Z]]
+ payment_status: [["failed","pending","completed","pending","failed",...,"completed","pending","completed","failed","completed"]]
+ payment_type: [["debit card","debit card","store credit","credit card","store credit",...,"paypal","debit card","credit card","store credit","paypal"]],
+ pyarrow.Table
+ item_price: double
+ product_id: int64
+ quantity: int64
+ order_id: int64
+ ----
+ item_price: [[74.86,154.56,67.7,186.21,118.69,...,80.51,98.91,162.98,194.98,107.73]]
+ product_id: [[282,355,395,319,275,...,170,328,361,192,271]]
+ quantity: [[6,2,4,9,5,...,4,3,5,5,6]]
+ order_id: [[1,2,3,4,5,...,96,97,98,99,100]],
+ pyarrow.Table
+ user_age_group: string
+ transaction_type: string
+ product_category: string
+ ----
+ user_age_group: [["26-35","26-35","36-45","55+","26-35",...,"26-35","46-55","36-45","26-35","36-45"]]
+ transaction_type: [["online","online","telephone","telephone","mail-order",...,"mail-order","in-store","telephone","mail-order","mail-order"]]
+ product_category: [["clothing","home","clothing","clothing","clothing",...,"clothing","home","books","beauty","clothing"]]]</pre>
+</div>
+</div>
+</div>
+</div>
 </div>
 </div>
 <div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
@@ -787,7 +842,7 @@ mloda.run_all(all_features, data_access_collection=data_access_collection, compu
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h3 id="featuregroup-api-plug-in-in-short">FeatureGroup API (plug-in) in short<a class="anchor-link" href="#featuregroup-api-plug-in-in-short">¶</a></h3><p>In mloda, a data producer defines access by creating feature groups. Here's an example implementation:</p>
+<h3 id="featuregroup-api-plug-in-in-short">FeatureGroup API (plug-in) in short<a class="anchor-link" href="#featuregroup-api-plug-in-in-short">¶</a></h3><p>In mloda, a provider defines access by creating feature groups. Here's an example implementation:</p>
 <div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">FeatureGroupClass</span><span class="p">(</span><span class="n">FeatureGroup</span><span class="p">):</span>
 
     <span class="c1"># Root feature definition</span>
@@ -857,7 +912,7 @@ mloda.run_all(all_features, data_access_collection=data_access_collection, compu
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [2]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-2">
@@ -956,13 +1011,13 @@ class ReadFileFeature2(ReadFileFeature):
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [3]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-3">
@@ -998,6 +1053,19 @@ result = mloda.run_all(
 
 # We can see that the data was loaded using the new CsvReader2.
 # However, this is a rather simple use case. In a real-world scenario, we would have more complex data and more complex operations.</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>We used CsvReader2 to load the data.
+</pre>
 </div>
 </div>
 </div>
@@ -1066,9 +1134,9 @@ result = mloda.run_all(
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h3 id="consequences">Consequences<a class="anchor-link" href="#consequences">¶</a></h3><p>Within mloda, the data producer is empowered as the primary driver, owing to the extensive and customizable range of available plugins.</p>
-<p>Unlike traditional data toolchains, mloda provides data producers with the flexibility to define their specific start and end points. This enables the versatile application of mloda across different parts of machine learning lifecycle, such as prototyping, training data preparation, or real-time result monitoring.</p>
-<p>This includes the autonomy to define the boundaries of the data producer's domain and to govern the outflow of data. Both aspects are managed through feature groups, which remain under the direct control of the data producer.</p>
+<h3 id="consequences">Consequences<a class="anchor-link" href="#consequences">¶</a></h3><p>Within mloda, the provider is empowered as the primary driver, owing to the extensive and customizable range of available plugins.</p>
+<p>Unlike traditional data toolchains, mloda provides providers with the flexibility to define their specific start and end points. This enables the versatile application of mloda across different parts of machine learning lifecycle, such as prototyping, training data preparation, or real-time result monitoring.</p>
+<p>This includes the autonomy to define the boundaries of the provider's domain and to govern the outflow of data. Both aspects are managed through feature groups, which remain under the direct control of the provider.</p>
 </div>
 </div>
 </div>
@@ -1125,9 +1193,9 @@ result = mloda.run_all(
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="data-owner-role">Data Owner Role<a class="anchor-link" href="#data-owner-role">¶</a></h2><p>Data owners typically operate at various levels within an organization.</p>
+<h2 id="steward-role">Steward Role<a class="anchor-link" href="#steward-role">¶</a></h2><p>Stewards typically operate at various levels within an organization.</p>
 <p>It can be the one who produces the data, the business stakeholder responsible for the service, or, in some cases, may not be explicitly defined.</p>
-<p>In mloda, the data owner is the one in control of the governance. However, as to date, this system is not included in this open-source offering, as this platform is reserved for development until the plugin ecosystem has a higher degree of maturity.</p>
+<p>In mloda, the steward is the one in control of the governance. However, as to date, this system is not included in this open-source offering, as this platform is reserved for development until the plugin ecosystem has a higher degree of maturity.</p>
 <p>We have the plug-in functionalities to integrate governance and operations systems in place. Two simple examples can be:</p>
 <h4 id="using-organization-wide-logging">Using organization wide logging<a class="anchor-link" href="#using-organization-wide-logging">¶</a></h4><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">OtelExtender</span><span class="p">(</span><span class="n">Extender</span><span class="p">):</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -1167,13 +1235,13 @@ result = mloda.run_all(
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="conclusion">Conclusion<a class="anchor-link" href="#conclusion">¶</a></h2><p>In this notebook, we explored the roles of Data Producers, Data Users, and Data Owners within mloda. We delved into the responsibilities and functionalities associated with each role, highlighting how they contribute to the overall data lifecycle.</p>
+<h2 id="conclusion">Conclusion<a class="anchor-link" href="#conclusion">¶</a></h2><p>In this notebook, we explored the roles of Providers, Data Users, and Stewards within mloda. We delved into the responsibilities and functionalities associated with each role, highlighting how they contribute to the overall data lifecycle.</p>
 <ul>
-<li><p>Data Producers are responsible for implementing the plugins, ensuring the accuracy of data access processes, and defining relevant configuration options</p>
+<li><p>Providers are responsible for implementing the plugins, ensuring the accuracy of data access processes, and defining relevant configuration options</p>
 </li>
 <li><p>Data Users create usage configuration and apply the mlodaAPI to receive data</p>
 </li>
-<li><p>Data Owners, while not fully covered in this open-source offering, they are critical for governance and ensuring the ongoing availability and maintenance of essential plugins</p>
+<li><p>Stewards, while not fully covered in this open-source offering, they are critical for governance and ensuring the ongoing availability and maintenance of essential plugins</p>
 </li>
 </ul>
 <p>Understanding these roles and their interactions, shows how mloda's modular and extensible design is vital in bringing the change to efficient data management practices and processing throughout the machine learning lifecycle</p>

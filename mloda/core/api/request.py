@@ -20,6 +20,11 @@ from mloda_plugins.feature_group.experimental.default_options_key import Default
 
 
 class mlodaAPI:
+    """Main API for executing mloda feature requests.
+
+    For JSON-based feature configuration, see `load_features_from_config()`.
+    """
+
     def __init__(
         self,
         requested_features: Union[Features, list[Union[Feature, str]]],

@@ -7,8 +7,8 @@ and context_options for performance optimization.
 
 import pytest
 
-from mloda_plugins.config.feature.models import FeatureConfig
-from mloda_plugins.config.feature.parser import parse_json
+from mloda.core.api.feature_config.models import FeatureConfig
+from mloda.core.api.feature_config.parser import parse_json
 
 
 def test_parse_group_options() -> None:
@@ -128,7 +128,7 @@ def test_load_creates_options_with_group_context() -> None:
     - options.group containing the group_options
     - options.context containing the context_options
     """
-    from mloda_plugins.config.feature.loader import load_features_from_config
+    from mloda.core.api.feature_config.loader import load_features_from_config
     from mloda import Feature
 
     config_str = """[
@@ -161,9 +161,9 @@ def test_load_creates_options_with_group_context() -> None:
 def test_validate_options_mutual_exclusion() -> None:
     """Test that options and group_options/context_options are mutually exclusive.
 
-    The new Options architecture uses either:
-    - The legacy `options` field (simple dict), OR
-    - The new `group_options` and/or `context_options` fields
+    The Options architecture uses either:
+    - The simple `options` field (simple dict), OR
+    - The `group_options` and/or `context_options` fields
 
     Users should NOT mix both formats together. This test verifies that
     FeatureConfig raises a ValueError when both formats are used.

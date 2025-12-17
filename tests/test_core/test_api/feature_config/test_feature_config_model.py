@@ -2,10 +2,10 @@
 Unit tests for FeatureConfig model.
 
 This module tests the validation and behavior of the FeatureConfig model
-defined in mloda_plugins.config.feature.models.
+defined in mloda.core.api.feature_config.models.
 """
 
-from mloda_plugins.config.feature.models import FeatureConfig
+from mloda.core.api.feature_config.models import FeatureConfig
 
 
 def test_valid_feature_config_with_name_only() -> None:

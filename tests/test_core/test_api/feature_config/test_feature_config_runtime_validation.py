@@ -8,7 +8,7 @@ from typing import Any, Dict
 import mloda
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda_plugins.config.feature.loader import load_features_from_config
+from mloda.core.api.feature_config.loader import load_features_from_config
 from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import PandasMissingValueFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
@@ -67,7 +67,7 @@ def test_features_runtime_one_by_one() -> None:
         features[8],  # ✅ Feature 8: "age__max_aggr" - aggregation with mloda_source and window_size option
         features[9],  # ✅ Feature 9: "min_max" - scaling with in_features in options
         features[10],  # ✅ Feature 10: "customer_location__store_location__haversine_distance" - geo distance feature
-        features[11],  # ✅ Feature 11: "custom_geo_distance" - config-based geo distance with mloda_sources and options
+        features[11],  # ✅ Feature 11: "custom_geo_distance" - config-based geo distance with in_features and options
         features[
             12
         ],  # ✅ Feature 12: "min_max_nested" - nested in_features with recursive dependencies (weight -> minmaxscaledweght -> max_aggregated -> min_max_nested)

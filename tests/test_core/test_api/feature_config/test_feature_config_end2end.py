@@ -7,7 +7,7 @@ import mloda
 from mloda import Feature
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda_plugins.config.feature.loader import load_features_from_config
+from mloda.core.api.feature_config.loader import load_features_from_config
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
 
@@ -81,10 +81,10 @@ def test_integration_json_file() -> None:
     assert features[7].options.group.get("in_features") == "age"
     assert features[7].options.group.get("scaler_type") == "minmax"
 
-    # Ninth feature: age__max_aggr with mloda_sources=["minmaxscaledage"]
+    # Ninth feature: age__max_aggr with in_features=["minmaxscaledage"]
     assert isinstance(features[8], Feature)
     assert features[8].name.name == "age__max_aggr"
-    # The mloda_sources should be a frozenset referencing feature 7
+    # The in_features should be a frozenset referencing feature 7
     mloda_source_8 = features[8].options.context.get("in_features")
     assert mloda_source_8 == frozenset({"minmaxscaledage"})
 
@@ -100,13 +100,13 @@ def test_integration_json_file() -> None:
     assert isinstance(features[10], Feature)
     assert features[10].name.name == "customer_location&store_location__haversine_distance"
 
-    # Twelfth feature: custom_geo_distance with mloda_sources (multiple sources)
+    # Twelfth feature: custom_geo_distance with in_features (multiple sources)
     assert isinstance(features[11], Feature)
     assert features[11].name.name == "custom_geo_distance"
-    # Verify mloda_sources is converted to frozenset and stored correctly
-    mloda_sources_11 = features[11].options.context.get(DefaultOptionKeys.in_features)
-    assert isinstance(mloda_sources_11, frozenset)
-    assert mloda_sources_11 == frozenset(["customer_location", "store_location"])
+    # Verify in_features is converted to frozenset and stored correctly
+    in_features_11 = features[11].options.context.get(DefaultOptionKeys.in_features)
+    assert isinstance(in_features_11, frozenset)
+    assert in_features_11 == frozenset(["customer_location", "store_location"])
     assert features[11].options.context.get("distance_type") == "euclidean"
 
 
@@ -145,11 +145,11 @@ def test_end2end_chained_features() -> None:
             "salary",
             {
                 "name": "age__mean_imputed",
-                "mloda_sources": ["age"],
+                "in_features": ["age"],
             },
             {
                 "name": "age__mean_imputed__standard_scaled",
-                "mloda_sources": ["age"],
+                "in_features": ["age"],
             },
         ]
     )
@@ -242,7 +242,7 @@ def test_end2end_multi_column_access() -> None:
             "state",
             {
                 "name": "state__onehot_encoded",
-                "mloda_sources": ["state"],
+                "in_features": ["state"],
             },
             {
                 "name": "state__onehot_encoded",
@@ -314,84 +314,8 @@ def test_end2end_multi_column_access() -> None:
     assert not (result_df["state__onehot_encoded~0"] == result_df["state__onehot_encoded~1"]).all()
 
 
-def test_end2end_nested_feature_references() -> None:
-    """Test that nested feature references work correctly with @ syntax."""
-    # Create a JSON config with nested feature references
-    config_str = json.dumps(
-        [
-            "age",
-            {
-                "name": "scaled_age",
-                "mloda_sources": ["age"],
-                "options": {"scaling_method": "standard"},
-            },
-            {
-                "name": "derived_from_scaled",
-                "mloda_sources": ["@scaled_age"],
-                "options": {"transformation": "log"},
-            },
-            {
-                "name": "nested_reference",
-                "mloda_sources": ["@derived_from_scaled"],
-                "options": {"normalization": "minmax"},
-            },
-        ]
-    )
-
-    # Parse the features from config
-    features = load_features_from_config(config_str, format="json")
-
-    # Verify we got 4 features
-    assert len(features) == 4
-
-    # First feature: simple string "age"
-    assert features[0] == "age"
-
-    # Second feature: scaled_age with mloda_sources pointing to "age"
-    assert isinstance(features[1], Feature)
-    assert features[1].name.name == "scaled_age"
-    mloda_sources_1 = features[1].options.context.get("in_features")
-    assert isinstance(mloda_sources_1, frozenset)
-    assert mloda_sources_1 == frozenset({"age"})
-    assert features[1].options.group.get("scaling_method") == "standard"
-
-    # Third feature: derived_from_scaled with mloda_sources pointing to scaled_age Feature object
-    assert isinstance(features[2], Feature)
-    assert features[2].name.name == "derived_from_scaled"
-    # The mloda_sources should be resolved to a frozenset containing a Feature object, not a string
-    mloda_sources_2 = features[2].options.context.get("in_features")
-    assert isinstance(mloda_sources_2, frozenset)
-    feature_list_2 = list(mloda_sources_2)
-    assert len(feature_list_2) == 1
-    assert isinstance(feature_list_2[0], Feature)
-    assert feature_list_2[0].name.name == "scaled_age"
-    assert features[2].options.group.get("transformation") == "log"
-
-    # Fourth feature: nested_reference with mloda_sources pointing to derived_from_scaled Feature object
-    assert isinstance(features[3], Feature)
-    assert features[3].name.name == "nested_reference"
-    # The mloda_sources should be resolved to a frozenset containing a Feature object
-    mloda_sources_3 = features[3].options.context.get("in_features")
-    assert isinstance(mloda_sources_3, frozenset)
-    feature_list_3 = list(mloda_sources_3)
-    assert len(feature_list_3) == 1
-    assert isinstance(feature_list_3[0], Feature)
-    assert feature_list_3[0].name.name == "derived_from_scaled"
-    assert features[3].options.group.get("normalization") == "minmax"
-
-    # Verify the dependency chain is correctly established
-    # nested_reference -> derived_from_scaled -> scaled_age -> age
-    chained_sources_3 = feature_list_3[0].options.context.get("in_features")
-    assert chained_sources_3 is not None
-    assert isinstance(chained_sources_3, frozenset)
-    chained_feature_list = list(chained_sources_3)
-    assert len(chained_feature_list) == 1
-    assert isinstance(chained_feature_list[0], Feature)
-    assert chained_feature_list[0].name.name == "scaled_age"
-
-
 def test_end2end_multiple_source_features() -> None:
-    """Test that features with mloda_sources (multiple sources) are correctly parsed and loaded."""
+    """Test that features with in_features (multiple sources) are correctly parsed and loaded."""
     # Create a JSON config with multiple source features
     config_str = json.dumps(
         [
@@ -402,17 +326,17 @@ def test_end2end_multiple_source_features() -> None:
             "profit",
             {
                 "name": "distance_feature",
-                "mloda_sources": ["latitude", "longitude"],
+                "in_features": ["latitude", "longitude"],
                 "options": {"distance_type": "euclidean"},
             },
             {
                 "name": "multi_source_aggregation",
-                "mloda_sources": ["sales", "revenue", "profit"],
+                "in_features": ["sales", "revenue", "profit"],
                 "options": {"aggregation": "sum"},
             },
             {
                 "name": "feature_with_both",
-                "mloda_sources": ["latitude", "longitude"],
+                "in_features": ["latitude", "longitude"],
                 "group_options": {"cache_enabled": True},
                 "context_options": {"precision": 6},
             },
@@ -432,33 +356,33 @@ def test_end2end_multiple_source_features() -> None:
     assert features[3] == "revenue"
     assert features[4] == "profit"
 
-    # Sixth feature: distance_feature with mloda_sources
+    # Sixth feature: distance_feature with in_features
     assert isinstance(features[5], Feature)
     assert features[5].name.name == "distance_feature"
-    # Verify mloda_sources is converted to frozenset
-    mloda_sources_5 = features[5].options.context.get(DefaultOptionKeys.in_features)
-    assert isinstance(mloda_sources_5, frozenset)
-    assert mloda_sources_5 == frozenset(["latitude", "longitude"])
+    # Verify in_features is converted to frozenset
+    in_features_5 = features[5].options.context.get(DefaultOptionKeys.in_features)
+    assert isinstance(in_features_5, frozenset)
+    assert in_features_5 == frozenset(["latitude", "longitude"])
     # Verify options are correctly set
     assert features[5].options.group.get("distance_type") == "euclidean"
 
-    # Seventh feature: multi_source_aggregation with mloda_sources
+    # Seventh feature: multi_source_aggregation with in_features
     assert isinstance(features[6], Feature)
     assert features[6].name.name == "multi_source_aggregation"
-    # Verify mloda_sources is converted to frozenset
-    mloda_sources_6 = features[6].options.context.get(DefaultOptionKeys.in_features)
-    assert isinstance(mloda_sources_6, frozenset)
-    assert mloda_sources_6 == frozenset(["sales", "revenue", "profit"])
+    # Verify in_features is converted to frozenset
+    in_features_6 = features[6].options.context.get(DefaultOptionKeys.in_features)
+    assert isinstance(in_features_6, frozenset)
+    assert in_features_6 == frozenset(["sales", "revenue", "profit"])
     # Verify options are correctly set
     assert features[6].options.group.get("aggregation") == "sum"
 
-    # Eighth feature: feature_with_both (mloda_sources with group_options and context_options)
+    # Eighth feature: feature_with_both (in_features with group_options and context_options)
     assert isinstance(features[7], Feature)
     assert features[7].name.name == "feature_with_both"
-    # Verify mloda_sources is converted to frozenset
-    mloda_sources_7 = features[7].options.context.get(DefaultOptionKeys.in_features)
-    assert isinstance(mloda_sources_7, frozenset)
-    assert mloda_sources_7 == frozenset(["latitude", "longitude"])
+    # Verify in_features is converted to frozenset
+    in_features_7 = features[7].options.context.get(DefaultOptionKeys.in_features)
+    assert isinstance(in_features_7, frozenset)
+    assert in_features_7 == frozenset(["latitude", "longitude"])
     # Verify group options are correctly set
     assert features[7].options.group.get("cache_enabled") is True
     # Verify context options are correctly set (in addition to in_features)
@@ -475,7 +399,7 @@ def test_complete_integration_json() -> None:
     - Group/context options separation
     - Multi-column access (column_index)
     - Feature references (@syntax)
-    - Multiple source features (mloda_sources)
+    - Multiple source features (in_features)
     """
     # Load the integration JSON file
     json_path = Path(__file__).parent / "test_config_features.json"
@@ -549,11 +473,11 @@ def test_complete_integration_json() -> None:
     assert features[7].name.name == "minmaxscaledage", "Base feature name should be 'minmaxscaledage'"
     assert features[7].options.group.get("in_features") == "age", "Base feature mloda_source should be 'age'"
 
-    # Feature index 8: age__max_aggr with mloda_sources=["minmaxscaledage"]
+    # Feature index 8: age__max_aggr with in_features=["minmaxscaledage"]
     assert isinstance(features[8], Feature), "Feature with aggregation should be a Feature object"
     assert features[8].name.name == "age__max_aggr", "Feature name should be 'age__max_aggr'"
     mloda_source_8 = features[8].options.context.get("in_features")
-    assert mloda_source_8 == frozenset({"minmaxscaledage"}), "mloda_sources should be frozenset with 'minmaxscaledage'"
+    assert mloda_source_8 == frozenset({"minmaxscaledage"}), "in_features should be frozenset with 'minmaxscaledage'"
     validated_patterns["feature_reference"] = True
 
     # Feature index 9: min_max with in_features="age__max_aggr" in options
@@ -570,16 +494,16 @@ def test_complete_integration_json() -> None:
         "Feature name should be 'customer_location&store_location__haversine_distance'"
     )
     # The string-based geo distance feature uses the pattern: {point1}&{point2}__{distance_type}_distance
-    # No mloda_sources or options needed - it's all encoded in the feature name
+    # No in_features or options needed - it's all encoded in the feature name
     validated_patterns["multiple_sources"] = True
 
-    # Feature index 11: custom_geo_distance with mloda_sources ["customer_location", "store_location"]
+    # Feature index 11: custom_geo_distance with in_features ["customer_location", "store_location"]
     assert isinstance(features[11], Feature), "Second multi-source feature should be a Feature object"
     assert features[11].name.name == "custom_geo_distance", "Feature name should be 'custom_geo_distance'"
-    mloda_sources_11 = features[11].options.context.get(DefaultOptionKeys.in_features)
-    assert isinstance(mloda_sources_11, frozenset), "mloda_sources should be converted to frozenset"
-    assert mloda_sources_11 == frozenset(["customer_location", "store_location"]), (
-        "mloda_sources should contain customer_location and store_location"
+    in_features_11 = features[11].options.context.get(DefaultOptionKeys.in_features)
+    assert isinstance(in_features_11, frozenset), "in_features should be converted to frozenset"
+    assert in_features_11 == frozenset(["customer_location", "store_location"]), (
+        "in_features should contain customer_location and store_location"
     )
     assert features[11].options.context.get("distance_type") == "euclidean", "distance_type should be 'euclidean'"
 
@@ -595,4 +519,4 @@ def test_complete_integration_json() -> None:
     print("  - Group/context options separation")
     print("  - Multi-column access (column_index)")
     print("  - Feature references (@syntax)")
-    print("  - Multiple source features (mloda_sources)")
+    print("  - Multiple source features (in_features)")

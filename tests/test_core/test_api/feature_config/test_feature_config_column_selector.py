@@ -5,9 +5,9 @@ This module tests the `~` syntax for accessing specific columns from
 multi-output transformations (e.g., one-hot encoding that produces multiple columns).
 """
 
-from mloda_plugins.config.feature.models import FeatureConfig
-from mloda_plugins.config.feature.parser import parse_json
-from mloda_plugins.config.feature.loader import load_features_from_config
+from mloda.core.api.feature_config.models import FeatureConfig
+from mloda.core.api.feature_config.parser import parse_json
+from mloda.core.api.feature_config.loader import load_features_from_config
 from mloda import Feature
 
 

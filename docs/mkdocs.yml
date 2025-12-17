@@ -30,6 +30,7 @@ nav:
       - Compute Framework Integration: in_depth/compute-framework-integration.md
       - Framework Connection Object: in_depth/framework-connection-object.md
     - Feature Groups:
+      - Feature Configuration: in_depth/feature-config.md
       - Feature Chain Parser: in_depth/feature-chain-parser.md
       - Feature Group Matching: in_depth/feature-group-matching.md
       - PROPERTY_MAPPING: in_depth/property-mapping.md

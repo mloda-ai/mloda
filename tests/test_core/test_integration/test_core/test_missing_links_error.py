@@ -15,7 +15,6 @@ the requirement for explicit Links when merging multiple dependencies.
 
 from typing import Any, Optional, Set
 
-import pyarrow as pa
 import pyarrow.compute as pc
 import pytest
 

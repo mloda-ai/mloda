@@ -5,8 +5,6 @@ This module tests the mloda_sources field which allows features to specify
 multiple source features (e.g., distance calculations requiring latitude and longitude).
 """
 
-import pytest
-
 from mloda import Feature
 from mloda_plugins.config.feature.loader import load_features_from_config
 from mloda_plugins.config.feature.models import FeatureConfig

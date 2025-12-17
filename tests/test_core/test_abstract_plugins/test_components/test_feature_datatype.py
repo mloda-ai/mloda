@@ -6,7 +6,6 @@ These tests validate:
 3. is_different_data_type() correctly identifies features with different data types
 """
 
-import pytest
 from mloda import Feature
 
 

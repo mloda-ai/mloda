@@ -2,7 +2,6 @@ import pytest
 from typing import Set
 
 from mloda.user import Link, JoinSpec, JoinType
-from mloda.user import Index
 from mloda.provider import LinkValidator
 
 

@@ -1,5 +1,5 @@
 import os
-from typing import Any, List, Optional
+from typing import Any, Optional
 
 from mloda import FeatureGroup
 from mloda import Feature

@@ -6,14 +6,10 @@ This test file defines the requirements for the ExecutionOrchestrator class.
 
 from __future__ import annotations
 
-from typing import Any, Optional, Set
 from unittest.mock import Mock
-from uuid import UUID, uuid4
 
-import pytest
 
-from mloda.user import ParallelizationMode
-from mloda import ComputeFramework
+from mloda import ComputeFramework  # noqa: F401
 from mloda.core.prepare.execution_plan import ExecutionPlan
 
 from mloda.core.runtime.run import ExecutionOrchestrator

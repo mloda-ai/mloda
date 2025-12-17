@@ -4,7 +4,6 @@ import pytest
 from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
-from mloda.user import Index
 from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,

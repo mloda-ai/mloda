@@ -1,7 +1,5 @@
-import os
 from pathlib import Path
 import pytest
-import shutil
 
 from mktestdocs import check_md_file
 

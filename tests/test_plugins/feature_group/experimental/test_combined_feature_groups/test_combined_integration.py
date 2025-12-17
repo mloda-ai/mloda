@@ -6,7 +6,6 @@ from typing import List
 
 import mloda
 from mloda import Feature
-from mloda import Options
 from mloda.user import PluginCollector
 
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame

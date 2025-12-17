@@ -4,8 +4,6 @@ Complex integration test for EncodingFeatureGroup with multiple feature chains i
 
 from mloda.user import Features
 import pytest
-import glob
-import os
 from typing import Any, Dict, List
 
 from mloda.user import PluginLoader
@@ -13,8 +11,6 @@ from mloda import Feature
 from mloda import Options
 from mloda.user import PluginCollector
 from mloda import API
-from mloda.user import SingleFilter
-from mloda.user import FilterType
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup

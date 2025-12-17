@@ -1,10 +1,8 @@
 import inspect
 import pyarrow as pa
-import pytest
 
 from mloda import Feature
 from mloda.provider import FeatureSet
-from mloda.user import DataType
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 
 

@@ -6,7 +6,6 @@ This test verifies that the modernization successfully supports both approaches:
 2. Configuration-based feature creation (modern)
 """
 
-from mloda.user import Features
 import pytest
 from typing import Any, Dict, List
 from datetime import datetime, timedelta

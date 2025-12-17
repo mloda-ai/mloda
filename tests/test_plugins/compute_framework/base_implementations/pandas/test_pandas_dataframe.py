@@ -3,7 +3,6 @@ from typing import Any, Optional, Type
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
-from mloda.user import Index
 from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
 
 import logging

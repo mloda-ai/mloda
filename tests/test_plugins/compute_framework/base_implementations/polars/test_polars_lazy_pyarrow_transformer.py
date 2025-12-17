@@ -1,5 +1,4 @@
 import pytest
-from typing import Optional
 from unittest.mock import patch
 
 from mloda_plugins.compute_framework.base_implementations.polars.polars_lazy_pyarrow_transformer import (

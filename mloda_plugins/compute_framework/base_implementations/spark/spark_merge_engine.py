@@ -1,7 +1,6 @@
 from typing import Any, Tuple
 
 from mloda.user import Index
-from mloda.user import JoinType
 from mloda.provider import BaseMergeEngine
 
 try:

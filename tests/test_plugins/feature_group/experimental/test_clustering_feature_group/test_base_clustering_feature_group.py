@@ -9,7 +9,6 @@ from mloda.user import FeatureName
 from mloda import Options
 from mloda_plugins.feature_group.experimental.clustering.base import ClusteringFeatureGroup
 from mloda_plugins.feature_group.experimental.clustering.pandas import PandasClusteringFeatureGroup
-from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 
 class TestClusteringFeatureGroup:

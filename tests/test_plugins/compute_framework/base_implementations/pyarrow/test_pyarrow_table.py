@@ -4,7 +4,6 @@ import pyarrow as pa
 
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
-from mloda.user import Index
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (

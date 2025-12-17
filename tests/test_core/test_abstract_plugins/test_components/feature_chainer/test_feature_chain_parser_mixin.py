@@ -1,7 +1,6 @@
 """Tests for FeatureChainParserMixin."""
 
 import pytest
-from typing import Any, Dict, List, Optional, Set, Union
 
 from mloda import Feature
 from mloda.user import FeatureName

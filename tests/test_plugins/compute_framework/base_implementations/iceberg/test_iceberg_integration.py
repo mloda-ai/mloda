@@ -1,7 +1,7 @@
 from mloda.user import Features
 import pytest
-from typing import Any, Dict, List, Optional, Set, Type, Union
-from unittest.mock import Mock, patch
+from typing import Any, List, Optional, Set, Type, Union
+from unittest.mock import Mock
 
 from mloda import FeatureGroup
 from mloda import Feature

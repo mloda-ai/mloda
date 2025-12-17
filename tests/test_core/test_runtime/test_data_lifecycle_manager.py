@@ -1,8 +1,8 @@
 # mypy: disable-error-code="arg-type, unused-ignore"
 """Tests for DataLifecycleManager class that manages data dropping, result collection, and artifacts."""
 
-from typing import Any, Dict, Optional, Set
-from unittest.mock import MagicMock, Mock, call, patch
+from typing import Dict
+from unittest.mock import Mock, patch
 from uuid import UUID, uuid4
 
 import pytest

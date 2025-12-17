@@ -4,7 +4,7 @@ Base implementation for node centrality feature groups.
 
 from __future__ import annotations
 
-from typing import Any, Optional, Set, Type, Union
+from typing import Any, Optional
 
 from mloda import FeatureGroup
 from mloda import Feature
@@ -12,9 +12,7 @@ from mloda.provider import FeatureChainParser
 from mloda.provider import (
     FeatureChainParserMixin,
 )
-from mloda.user import FeatureName
 from mloda.provider import FeatureSet
-from mloda import Options
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 

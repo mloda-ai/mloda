@@ -1,6 +1,10 @@
+### API Request Example
 
-### mloda Request Example
-This example demonstrates a simple request to the mloda API. In this case, mloda automatically determines that a **CsvReader** feature group will fulfill the request and respond with the resulting DataFrame.
+This example demonstrates a simple request to the mloda API. You describe WHAT data you need - mloda resolves HOW to get it.
+
+> **Tip:** For AI agents or quick prototyping, you can also use inline data with `api_data` - see the [30-second example](https://mloda-ai.github.io/mloda/#30-second-example).
+
+In this example, mloda automatically determines that a **CsvReader** feature group will fulfill the request and respond with the resulting DataFrame.
 
 #### 1. Import the Required Modules
 We first need to import the necessary components to set up our request:
@@ -43,4 +47,19 @@ id: [[0,1,2,...]]
 ....
 ```
 #### 5. Summary
-This example shows how easy it is to interact with the mloda API for data retrieval. By defining the data source and specifying the features, mloda handles the rest, ensuring you get the required data in an efficient and seamless manner.
+
+This example shows how easy it is to interact with the mloda API for data retrieval. By defining the data source and specifying the features, mloda handles the rest.
+
+#### For AI Agents: JSON-Based Requests
+
+LLMs can generate JSON feature requests without writing Python code:
+
+``` python
+from mloda.user import load_features_from_config
+
+llm_request = '["id", "V1", "V2", "Amount"]'
+features = load_features_from_config(llm_request, format="json")
+result = mloda.run_all(features=features, compute_frameworks=["PandasDataFrame"], ...)
+```
+
+See [Feature Configuration](https://mloda-ai.github.io/mloda/in_depth/feature-config/) for more details on JSON-based configuration.

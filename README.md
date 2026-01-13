@@ -1,364 +1,295 @@
-# mloda: Make data, feature and context engineering shareable
+# [mloda.ai](https://mloda.ai): Open Data Access for ML & AI
 
 [![Website](https://img.shields.io/badge/website-mloda.ai-blue.svg)](https://mloda.ai)
 [![Documentation](https://img.shields.io/badge/docs-github.io-blue.svg)](https://mloda-ai.github.io/mloda/)
 [![PyPI version](https://badge.fury.io/py/mloda.svg)](https://badge.fury.io/py/mloda)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/mloda-ai/mloda/blob/main/LICENSE.TXT)
-[![Tox](https://img.shields.io/badge/tested_with-tox-blue.svg)](https://tox.readthedocs.io/)
-[![Checked with mypy](https://img.shields.io/badge/type%20checked-mypy-blue.svg)](http://mypy-lang.org/)
-[![code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
+[![Tests](https://img.shields.io/badge/tests-1500%2B-green.svg)](https://github.com/mloda-ai/mloda)
 
-> **⚠️ Early Version Notice**: mloda is in active development. Some features described below are still being implemented. We're actively seeking feedback to shape the future of the framework. [Share your thoughts!](https://github.com/mloda-ai/mloda/issues/)
+> **Declarative data access for AI agents. Describe what you need - mloda delivers it.**
 
-## 🍳 Think of mloda Like Cooking Recipes
-
-**Traditional Data Pipelines** = Making everything from scratch
-- Want pasta? Make noodles, sauce, cheese from raw ingredients
-- Want pizza? Start over - make dough, sauce, cheese again
-- Want lasagna? Repeat everything once more
-- Can't share recipes easily - they're mixed with your kitchen setup
-
-**mloda** = Using recipe components
-- Create reusable recipes: "tomato sauce", "pasta dough", "cheese blend"
-- Use same "tomato sauce" for pasta, pizza, lasagna
-- Switch kitchens (home → restaurant → food truck) - same recipes work
-- Share your "tomato sauce" recipe with friends - they don't need your whole kitchen
-
-**Result**: Instead of rebuilding the same thing 10 times, build once and reuse everywhere!
-
-### Installation
 ```bash
 pip install mloda
 ```
 
-### 1. The Core API Call - Your Starting Point
+## 30-Second Example
 
-**Complete Working Example with DataCreator**
+Your AI describes what it needs. mloda figures out how to get it:
 
 ```python
-# Step 1: Create a sample data source using DataCreator
-from mloda.provider import FeatureGroup, DataCreator, FeatureSet, BaseInputData
-from typing import Any, Optional
-import pandas as pd
-
-class SampleData(FeatureGroup):
-    @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
-        return DataCreator({"customer_id", "age", "income"})
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return pd.DataFrame({
-            'customer_id': ['C001', 'C002', 'C003', 'C004', 'C005'],
-            'age': [25, 30, 35, None, 45],
-            'income': [50000, 75000, None, 60000, 85000]
-        })
-
-# Step 2: Load mloda plugins and run pipeline
 from mloda.user import PluginLoader, mloda
-
 PluginLoader.all()
 
 result = mloda.run_all(
-    features=[
-        "customer_id",                    # Original column
-        "age",                            # Original column
-        "income__standard_scaled"         # Transform: scale income to mean=0, std=1
-    ],
-    compute_frameworks=["PandasDataFrame"]
+    features=["customer_id", "income", "income__sum_aggr", "age__avg_aggr"],
+    compute_frameworks=["PandasDataFrame"],
+    api_data={"SampleData": {
+        "customer_id": ["C001", "C002", "C003", "C004", "C005"],
+        "age": [25, 35, 45, 30, 50],
+        "income": [50000, 75000, 90000, 60000, 85000]
+    }}
 )
-
-# Step 3: Get your processed data
-data = result[0]
-print(data.head())
-# Output: DataFrame with customer_id, age, and scaled income
 ```
 
-**What just happened?**
-1. **SampleData class** - Created a data source using DataCreator (generates data in-memory)
-2. **PluginLoader.all()** - Loaded all available transformations (scaling, encoding, imputation, etc.)
-3. **run_all()** - Executed the feature pipeline:
-   - Got data from `SampleData`
-   - Extracted `customer_id` and `age` as-is
-   - Applied StandardScaler to `income` → `income__standard_scaled`
-4. **result[0]** - Retrieved the processed pandas DataFrame
+Copy, paste, run. mloda resolves dependencies, chains plugins, delivers data.
 
-> **Key Insight**: The syntax `income__standard_scaled` is mloda's **feature chaining**. Behind the scenes, mloda creates a chain of **feature group** objects (`SourceFeatureGroup` → `StandardScalingFeatureGroup`), automatically resolving dependencies. See [Section 2](#2-understanding-feature-chaining-transformations) for full explanation of chaining syntax and [Section 4](#4-advanced-feature-objects-for-complex-configurations) to learn about the underlying feature group architecture.
+---
 
-### 2. Understanding Feature Chaining (Transformations)
+## What mloda Does
 
-**The Power of Double Underscore `__` Syntax**
-
-As mentioned in Section 1, feature chaining (like `income__standard_scaled`) is syntactic sugar that mloda converts into a chain of **feature group objects**. Each transformation (`standard_scaled`, `mean_imputed`, etc.) corresponds to a specific feature group class.
-
-mloda's chaining syntax lets you compose transformations using `__` as a separator:
-
-```python
-# Pattern examples (these show the syntax):
-#   "income__standard_scaled"                     # Scale income column
-#   "age__mean_imputed"                           # Fill missing age values with mean
-#   "category__onehot_encoded"                    # One-hot encode category column
-#
-# You can chain transformations!
-# Pattern: {source}__{transform1}__{transform2}
-#   "income__mean_imputed__standard_scaled"       # First impute, then scale
-
-# Real working example:
-_ = ["income__standard_scaled", "age__mean_imputed"]  # Valid feature names
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      DATA USERS                                 │
+│  AI Agents  •  ML Pipelines  •  Data Science  •  Analytics      │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │ describe what they need
+                            ▼
+                    ┌───────────────┐
+                    │     mloda     │  ← resolves HOW from WHAT
+                    │   [Plugins]   │
+                    └───────────────┘
+                            │ delivers trusted data
+                            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     DATA SOURCES                                │
+│  Databases  •  APIs  •  Files  •  Any source via plugins        │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-**Available Transformations:**
+---
 
-| Transformation | Purpose | Example |
-|---------------|---------|---------|
-| `__standard_scaled` | StandardScaler (mean=0, std=1) | `income__standard_scaled` |
-| `__minmax_scaled` | MinMaxScaler (range [0,1]) | `age__minmax_scaled` |
-| `__robust_scaled` | RobustScaler (median-based, handles outliers) | `price__robust_scaled` |
-| `__mean_imputed` | Fill missing values with mean | `salary__mean_imputed` |
-| `__median_imputed` | Fill missing values with median | `age__median_imputed` |
-| `__mode_imputed` | Fill missing values with mode | `category__mode_imputed` |
-| `__onehot_encoded` | One-hot encoding | `state__onehot_encoded` |
-| `__label_encoded` | Label encoding | `priority__label_encoded` |
+## Why mloda?
 
-> **Key Insight**: Transformations are read left-to-right. `income__mean_imputed__standard_scaled` means: take `income` → apply mean imputation → apply standard scaling.
+| You want to... | mloda gives you... |
+|----------------|-------------------|
+| Give AI agents data access | Declarative API - agents describe WHAT, not HOW |
+| Trace every result | Built-in lineage back to source |
+| Reuse across projects | Plugins work anywhere - notebook to production |
+| Mix data sources | One interface for DBs, APIs, files, anything |
 
-**When You Need More Control**
+---
 
-Most of the time, simple string syntax is enough:
-```python
-# Example feature list (simple strings)
-example_features = ["customer_id", "income__standard_scaled", "region__onehot_encoded"]
-```
+## AI Use Case: LLM Tool Function
 
-But for advanced configurations, you can explicitly create `Feature` objects with custom options (covered in Section 3).
-
-### 3. Advanced: Feature Objects for Complex Configurations
-
-**Understanding the Feature Group Architecture**
-
-Behind the scenes, chaining like `income__standard_scaled` creates feature group objects:
+Let LLMs request data without writing code:
 
 ```python
-# When you write this string:
-"income__standard_scaled"
+# LLM generates this JSON
+llm_request = '["customer_id", {"name": "income__sum_aggr"}]'
 
-# mloda creates this chain of feature groups:
-# StandardScalingFeatureGroup (reads from) → IncomeSourceFeatureGroup
-```
-
-**Explicit Feature Objects**
-
-For truly custom configurations, you can use `Feature` objects:
-
-```python
-# Example (for custom feature configurations):
-# from mloda import Feature, Options
-#
-# features = [
-#     "customer_id",                                   # Simple string
-#     Feature(
-#         "custom_feature",
-#         options=Options({
-#             "custom_param": "value",
-#             "in_features": "source_column",
-#         })
-#     ),
-# ]
-#
-# result = mloda.run_all(
-#     features=features,
-#     compute_frameworks=["PandasDataFrame"]
-# )
-```
-
-> **Deep Dive**: Each transformation type (`standard_scaled__`, `mean_imputed__`, etc.) maps to a feature group class in `mloda_plugins/feature_group/`. For example, `standard_scaled__` uses `ScalingFeatureGroup`. When you chain transformations, mloda builds a dependency graph of these feature groups and executes them in the correct order. This architecture makes mloda extensible - you can create custom feature groups for your own transformations!
-
-### 4. Data Access - Where Your Data Comes From
-
-**Three Ways to Provide Data**
-
-mloda supports multiple data access patterns depending on your use case:
-
-**1. DataCreator** - For testing and demos (used in our examples)
-```python
-# Perfect for creating sample/test data in-memory
-# See Section 1 for the SampleData class definition using DataCreator:
-#
-# class SampleData(FeatureGroup):
-#     @classmethod
-#     def input_data(cls) -> Optional[BaseInputData]:
-#         return DataCreator({"customer_id", "age", "income"})
-#
-#     @classmethod
-#     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-#         return pd.DataFrame({
-#             'customer_id': ['C001', 'C002'],
-#             'age': [25, 30],
-#             'income': [50000, 75000]
-#         })
-```
-
-**2. DataAccessCollection** - For production file/database access
-```python
-# Example (requires actual files/databases):
-# from mloda.user import DataAccessCollection
-#
-# # Read from files, folders, or databases
-# data_access = DataAccessCollection(
-#     files={"customers.csv", "orders.parquet"},           # CSV/Parquet/JSON files
-#     folders={"data/raw/"},                                # Entire directories
-#     credential_dicts={"host": "db.example.com"}           # Database credentials
-# )
-#
-# result = mloda.run_all(
-#     features=["customer_id", "income__standard_scaled"],
-#     compute_frameworks=["PandasDataFrame"],
-#     data_access_collection=data_access
-# )
-```
-
-**3. ApiData** - For runtime data injection (web requests, real-time predictions)
-```python
-# Example (for API endpoints and real-time predictions):
-# from mloda.provider import ApiDataCollection
-#
-# api_input_data_collection = ApiDataCollection()
-# api_data = api_input_data_collection.setup_key_api_data(
-#     key_name="PredictionData",
-#     api_input_data={"customer_id": ["C001", "C002"], "age": [25, 30]}
-# )
-#
-# result = mloda.run_all(
-#     features=["customer_id", "age__standard_scaled"],
-#     compute_frameworks=["PandasDataFrame"],
-#     api_input_data_collection=api_input_data_collection,
-#     api_data=api_data
-# )
-```
-
-> **Key Insight**: Use **DataCreator** for demos, **DataAccessCollection** for batch processing from files/databases, and **ApiData** for real-time predictions and web services.
-
-### 5. Compute Frameworks - Choose Your Processing Engine
-
-**Using Different Data Processing Libraries**
-
-mloda supports multiple compute frameworks (pandas, polars, pyarrow, etc.). Most users start with pandas:
-
-```python
-# Using the SampleData class from Section 1
-# Default: Everything processes with pandas
+# mloda executes it
+from mloda.user import load_features_from_config
+features = load_features_from_config(llm_request, format="json")
 result = mloda.run_all(
-    features=["customer_id", "income__standard_scaled"],
-    compute_frameworks=["PandasDataFrame"]  # Use pandas for all features
+    features=features,
+    compute_frameworks=["PandasDataFrame"],
+    api_data={"SampleData": {"customer_id": ["C001", "C002"], "income": [50000, 75000]}}
 )
-
-data = result[0]  # Returns pandas DataFrame
-print(type(data))  # <class 'pandas.core.frame.DataFrame'>
 ```
 
-**Why Compute Frameworks Matter:**
-- **Pandas**: Best for small-to-medium datasets, rich ecosystem, familiar API
-- **Polars**: High performance for larger datasets
-- **PyArrow**: Memory-efficient, great for columnar data
-- **Spark**: Distributed processing for big data
+More patterns: [Context Window Assembly](#2-context-window-assembly) • [RAG Pipelines](#3-rag-with-feature-chaining)
 
-### 6. Putting It All Together - Complete ML Pipeline
+---
 
-**Real-World Example: Customer Churn Prediction**
+## How mloda is Different
 
-Let's build a complete machine learning pipeline with mloda:
+mloda separates **WHAT** you need from **HOW** to get it - through plugins. Existing tools solve parts of this, but none bridge the full gap:
+
+| Category | Products | What it does | Why it's not enough |
+|----------|----------|--------------|---------------------|
+| Feature Stores | Feast, Tecton, Featureform | Store + serve features | Infrastructure-tied, storage-only |
+| Semantic Layers | dbt Semantic Layer, Cube | Declarative metrics | SQL-only, centralized |
+| DAG Frameworks | Hamilton, Kedro | Dataflows as code | Function-first, no plugin abstraction |
+| Data Catalogs | DataHub, Atlan | Metadata & discovery | No execution, no contracts |
+| ORMs | SQLAlchemy, Django ORM | Database abstraction | Single database, no ML lifecycle |
+
+**mloda is the connection layer** - separating WHAT you compute from HOW you compute it. Plugins define transformations. Users describe requirements. mloda resolves the pipeline.
+
+---
+
+## Plugins: The Building Blocks
+
+mloda's architecture follows three roles: **providers** (define plugins), **users** (access data), and **stewards** (govern execution). The module structure reflects this: `mloda.provider`, `mloda.user`, `mloda.steward`.
+
+mloda uses three types of plugins:
+
+| Type | What it does |
+|------|--------------|
+| **FeatureGroup** | Defines data transformations |
+| **ComputeFramework** | Execution backend (Pandas, Spark, etc.) |
+| **Extender** | Hooks for logging, validation, monitoring |
+
+Most of the time, you'll work with **FeatureGroups** - Python classes that define how to access and transform data (see Quick Example above).
+
+**Why plugins?**
+- **Steps, not pipelines** - Build transformations. mloda wires them together.
+- **Small and testable** - Each plugin is a focused unit. Easy to test, easy to debug.
+- **AI-friendly** - Small, template-like structures. Let AI generate plugins for you.
+- **Share what isn't secret** - Your pipeline runs steps a,b,c,d. Steps b,c,d have no proprietary logic? Share them across projects, teams, even organizations.
+- **Experiment to production** - Same plugins in your notebook and your cluster. No rewrite.
+- **Stand on shoulders** - Combine community plugins with your own. Build on what exists.
+
+---
+
+## AI Use Case Patterns
+
+### 1. LLM Tool Function
+
+Give LLMs deterministic data access - they declare what, mloda handles how:
 
 ```python
-# Step 1: Extend SampleData with more features for ML
-# (Reuse the same class to avoid conflicts)
-SampleData._original_calculate = SampleData.calculate_feature
+from mloda.user import PluginLoader, load_features_from_config, mloda
+PluginLoader.all()
 
-@classmethod
-def _extended_calculate(cls, data: Any, features: FeatureSet) -> Any:
-    import numpy as np
-    np.random.seed(42)
-    n = 100
-    return pd.DataFrame({
-        'customer_id': [f'C{i:03d}' for i in range(n)],
-        'age': np.random.randint(18, 70, n),
-        'income': np.random.randint(30000, 120000, n),
-        'account_balance': np.random.randint(0, 10000, n),
-        'subscription_tier': np.random.choice(['Basic', 'Premium', 'Enterprise'], n),
-        'region': np.random.choice(['North', 'South', 'East', 'West'], n),
-        'customer_segment': np.random.choice(['New', 'Regular', 'VIP'], n),
-        'churned': np.random.choice([0, 1], n)
+# LLM generates this JSON (no Python code needed)
+llm_output = '''
+[
+    "customer_id",
+    {"name": "income__sum_aggr"},
+    {"name": "age__avg_aggr"},
+    {"name": "total_spend", "options": {"aggregation_type": "sum", "in_features": "income"}}
+]
+'''
+
+# mloda parses JSON into Feature objects
+features = load_features_from_config(llm_output, format="json")
+
+result = mloda.run_all(
+    features=features,
+    compute_frameworks=["PandasDataFrame"],
+    api_data={"SampleData": {
+        "customer_id": ["C001", "C002", "C003"],
+        "income": [50000, 75000, 90000],
+        "age": [25, 35, 45]
+    }}
+)
+```
+
+**LLM-friendly:** The agent only declares what it needs - mloda handles the rest.
+
+### 2. Context Window Assembly
+
+Gather context from multiple sources declaratively - mloda validates and delivers. Why not let an AI agent do it?
+
+*Example: This shows the API pattern. Requires custom FeatureGroup implementations for your data sources.*
+
+```python
+from mloda.user import Feature, mloda
+
+# Build complete context from multiple sources
+features = [
+    Feature(name="system_instructions", options={"template": "support_agent"}),
+    Feature(name="user_profile", options={"user_id": user_id, "include_preferences": True}),
+    Feature(name="knowledge_base", options={"query": user_query, "top_k": 5}),
+    Feature(name="conversation_history", options={"limit": 20, "summarize_old": True}),
+    Feature(name="available_tools", options={"category": "customer_service"}),
+    Feature(name="output_format", options={"format": "markdown", "max_length": 500}),
+]
+
+result = mloda.run_all(
+    features=features,
+    compute_frameworks=["PythonDictFramework"],
+    api_data={"UserQuery": {"query": [user_query]}}
+)
+
+# Each feature resolved via its plugin, validated
+```
+
+### 3. RAG with Feature Chaining
+
+Build RAG pipelines declaratively - mloda chains the steps for you.
+
+*Example: This shows the chaining syntax. Requires custom FeatureGroup implementations for retrieval and processing.*
+
+```python
+# String-based chaining: query -> validate -> retrieve -> redact
+Feature(name="user_query__injection_checked__retrieved__pii_redacted")
+
+# Configuration-based chaining: explicit pipeline
+Feature(
+    name="safe_context",
+    options=Options(context={
+        "in_features": "documents__retrieved__pii_redacted",
+        "redact_types": ["email", "phone", "ssn"]
     })
-
-SampleData.calculate_feature = _extended_calculate
-SampleData._input_data_original = SampleData.input_data()
-
-@classmethod
-def _extended_input_data(cls) -> Optional[BaseInputData]:
-    return DataCreator({"customer_id", "age", "income", "account_balance",
-                       "subscription_tier", "region", "customer_segment", "churned"})
-
-SampleData.input_data = _extended_input_data
-
-# Step 2: Run feature engineering pipeline
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score
-
-result = mloda.run_all(
-    features=[
-        "customer_id",
-        "age__standard_scaled",
-        "income__standard_scaled",
-        "account_balance__robust_scaled",
-        "subscription_tier__label_encoded",
-        "region__label_encoded",
-        "customer_segment__label_encoded",
-        "churned"
-    ],
-    compute_frameworks=["PandasDataFrame"]
 )
-
-# Step 3: Prepare for ML
-processed_data = result[0]
-if len(processed_data.columns) > 2:  # Check we have features besides customer_id and churned
-    X = processed_data.drop(['customer_id', 'churned'], axis=1)
-    y = processed_data['churned']
-
-    # Step 4: Train and evaluate
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    model = RandomForestClassifier(n_estimators=100, random_state=42)
-    model.fit(X_train, y_train)
-    accuracy = accuracy_score(y_test, model.predict(X_test))
-    print(f"🎯 Model Accuracy: {accuracy:.2%}")
-else:
-    print("⚠️ Skipping ML - extend SampleData first with more features!")
 ```
 
-**What mloda Did For You:**
-1. ✅ Generated sample data with DataCreator
-2. ✅ Scaled numeric features (StandardScaler & RobustScaler)
-3. ✅ Encoded categorical features (Label encoding)
-4. ✅ Returned clean DataFrame ready for sklearn
+mloda resolves the full chain - you declare the end result, not the steps.
 
-> **🎉 You now understand mloda's complete workflow!** The same transformations work across pandas, polars, pyarrow, and other frameworks - just change `compute_frameworks`.
+**Automatic dependency resolution:** You only declare what you need. If `pii_redacted` depends on `retrieved` which depends on `documents`, just ask for `pii_redacted` - mloda traces back and resolves the full chain.
 
-## 📖 Documentation
+---
+
+## Compute Frameworks
+
+Mix multiple backends in a single pipeline - mloda routes each feature to the right framework:
+
+```python
+result = mloda.run_all(
+    features=[...],
+    compute_frameworks=["PandasDataFrame", "PolarsDataFrame", "SparkFramework"]
+)
+
+# Results may come from different frameworks based on plugin compatibility
+```
+
+Add your own frameworks - mloda is extensible.
+
+---
+
+## Extenders
+
+Wrap plugin execution for logging, validation, or lineage tracking:
+
+```python
+import time
+from mloda.steward import Extender, ExtenderHook
+
+class LogExecutionTime(Extender):
+    def wraps(self):
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func, *args, **kwargs):
+        start = time.time()
+        result = func(*args, **kwargs)
+        print(f"Took {time.time() - start:.2f}s")
+        return result
+
+# Use it
+result = mloda.run_all(features, function_extender={LogExecutionTime()})
+```
+
+Built-in and custom extenders give you full lineage - trace any result back to its source.
+
+---
+
+## When to Use mloda
+
+**Use mloda when:**
+- Your agents need data from multiple sources
+- You want consistent, validated data access
+- You need traceability (audit, debugging)
+- Multiple agents share the same data patterns
+
+**Don't use mloda for:**
+- Single database, simple queries → use an ORM
+- One-off scripts → just write the code
+- Real-time streaming (<5ms) → use Kafka/Flink
+
+---
+
+## Documentation
 
 - **[Getting Started](https://mloda-ai.github.io/mloda/chapter1/installation/)** - Installation and first steps
-- **[sklearn Integration](https://mloda-ai.github.io/mloda/examples/sklearn_integration_basic/)** - Complete tutorial
-- **[Feature Groups](https://mloda-ai.github.io/mloda/chapter1/feature-groups/)** - Core concepts
-- **[Compute Frameworks](https://mloda-ai.github.io/mloda/chapter1/compute-frameworks/)** - Technology integration
-- **[API Reference](https://mloda-ai.github.io/mloda/in_depth/mloda-api/)** - Complete API documentation
+- **[Plugin Development](https://mloda-ai.github.io/mloda/chapter1/feature-groups/)** - Build your own plugins
+- **[API Reference](https://mloda-ai.github.io/mloda/in_depth/mloda-api/)** - Complete API docs
 
-## 🤝 Contributing
-
-We welcome contributions! Whether you're building plugins, adding features, or improving documentation, your input is invaluable.
-
-- **[Development Guide](https://mloda-ai.github.io/mloda/development/)** - How to contribute
-- **[GitHub Issues](https://github.com/mloda-ai/mloda/issues/)** - Report bugs or request features
-- **[Email](mailto:info@mloda.ai)** - Direct contact
-
-## 📄 License
-
-This project is licensed under the [Apache License, Version 2.0](https://github.com/mloda-ai/mloda/blob/main/LICENSE.TXT).
 ---
+
+## Contributing
+
+We welcome contributions! Build plugins, improve docs, or add features.
+
+- **[GitHub Issues](https://github.com/mloda-ai/mloda/issues/)** - Report bugs or request features
+- **[Development Guide](https://mloda-ai.github.io/mloda/development/)** - How to contribute

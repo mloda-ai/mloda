@@ -2,11 +2,14 @@
 
 ## Overview
 
-The `load_features_from_config` function enables loading feature configurations from JSON strings. This is useful when:
+The `load_features_from_config` function enables loading feature configurations from JSON strings. This is the primary interface for **AI agents and LLMs** to request data from mloda - agents generate JSON, mloda executes it.
 
-- Feature configurations are stored externally (files, databases, APIs)
-- Features need to be defined dynamically at runtime
-- Configuration-driven feature pipelines are preferred over code-defined features
+Use cases:
+
+- **LLM Tool Functions** - LLMs generate JSON feature requests without writing Python code
+- Feature configurations stored externally (files, databases, APIs)
+- Dynamic feature definitions at runtime
+- Configuration-driven pipelines
 
 ## Basic Usage
 

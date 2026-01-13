@@ -1,34 +1,34 @@
-# mloda 
+# mloda
 
-## Transforming Data and Feature Engineering
+## Declarative Data Access for AI Agents
 
-mloda **rethinks data and feature engineering** by offering a **flexible, resilient framework** that adapts seamlessly to changes. It focuses on defining transformations rather than static states, facilitating smooth transitions between development phases, and reducing redundant work. 
+> **Describe what you need - mloda delivers it.**
 
-Teams can efficiently develop MVPs, scale to production, and adapt systems—all while maintaining high data quality, governance, and scalability.
-[Get started with mloda can be found here.](https://mloda-ai.github.io/mloda/chapter1/installation/)
+mloda provides **declarative data access** for AI agents, ML pipelines, and data teams. Instead of writing complex data retrieval code, users describe WHAT they need - mloda resolves HOW to get it through its plugin system.
 
-mloda's plug-in system **automatically selects the right plugins for each task**, enabling efficient querying and processing of complex features. [Learn more about the mloda API here.](https://mloda-ai.github.io/mloda/in_depth/mloda-api/) By defining feature dependencies, transformations, and metadata processes, mloda minimizes duplication and fosters reusability.
+[Get started with mloda here.](https://mloda-ai.github.io/mloda/chapter1/installation/)
 
-mloda's framework also allows **plug-ins to be shared and reused through a centralized repository**. This ensures consistency, reduces operational complexity, and promotes best practices. This collaborative approach significantly reduces redundant work.
+mloda's plugin system **automatically selects the right plugins for each task**, enabling efficient querying and processing of complex features. [Learn more about the mloda API here.](https://mloda-ai.github.io/mloda/in_depth/mloda-api/) By defining feature dependencies, transformations, and metadata processes, mloda minimizes duplication and fosters reusability.
 
-Finally, mloda aims to **unify various tools** such as data catalogs, feature stores, versioning systems, metadata stores, data contracts, and data lineage tools into one cohesive solution.
+Plugins are **small, template-like structures** - easy to test, easy to debug, and AI-friendly. Let AI generate plugins for you, or share them across projects, teams, and organizations.
 
-## Key Benefits 
+## Key Benefits
 
-The benefits are not limited to the features listed below.
+**AI & Agent Integration**
 
-**Feature Engineering and Data Processing**
+- declarative API - agents describe WHAT, not HOW
+- JSON-based feature requests for LLM tool functions
+- built-in lineage for traceability
 
-- automated feature engineering
-- data cleaning
-- synthetic data generation
-- time travel
+**Data Processing**
 
-**Data Management and Ownership**
+- automated feature engineering and dependency resolution
+- data cleaning and synthetic data generation
 
-- one data source
-- rich metadata like data lineage, data usage
-- clear split roles by users, engineers and owners speaking same language
+**Data Management**
+
+- rich metadata including data lineage and usage tracking
+- clear role separation: providers, users, and stewards
 
 **Data Quality and Security**
 
@@ -39,11 +39,11 @@ The benefits are not limited to the features listed below.
 **Scalability**
 
 - switch compute framework without changing feature logic
-- multi-environment support (offline, online, migrations)
+- same plugins work from notebook to production
 
 **Community Engagement by Design**
 
-- shareable plug-in ecosystem
+- shareable plugin ecosystem
 - fostering community
 
 ## Core Components and Architecture
@@ -62,12 +62,12 @@ mloda addresses common challenges in data and feature engineering by leveraging 
 
 ## Contributing to mloda
 
--   We welcome contributions from the community to help us improve and expand mloda. Whether you're interested in developing plug-ins, or adding new features, your input is invaluable. [Learn more here.](https://mloda-ai.github.io/mloda/development/)
+We welcome contributions from the community to help us improve and expand mloda. Whether you're interested in developing plugins or adding new features, your input is invaluable. [Learn more here.](https://mloda-ai.github.io/mloda/development/)
 
 
 ## Frequently Asked Questions (FAQ)
 
-If you have additional questions about mloda and how it can enhance your data and feature engineering workflow visit our [FAQ](https://mloda-ai.github.io/mloda/faq) section, raise an [issue](https://github.com/mloda-ai/mloda/issues/) on our GitHub repository, or email us at [info@mloda.ai](mailto:info@mloda.ai).
+If you have additional questions about mloda visit our [FAQ](https://mloda-ai.github.io/mloda/faq) section, raise an [issue](https://github.com/mloda-ai/mloda/issues/) on our GitHub repository, or email us at [info@mloda.ai](mailto:info@mloda.ai).
 
 
 ## License

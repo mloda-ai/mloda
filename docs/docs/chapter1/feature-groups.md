@@ -1,6 +1,8 @@
 ### Creating a Custom Feature Group
 
-In this example, we’ll create a custom feature group that multiplies the results of each feature by 2. We'll implement a new feature group and then use it within mloda.
+> **AI-Friendly Design:** Feature groups are small, template-like structures - easy to test, easy to debug, and easy for AI to generate. The declarative pattern makes them ideal for AI-assisted development.
+
+In this example, we'll create a custom feature group that multiplies the results of each feature by 2. We'll implement a new feature group and then use it within mloda.
 
 #### 1. Import the Required Modules and Set File References
 

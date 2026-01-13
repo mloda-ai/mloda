@@ -4,6 +4,8 @@
 
 The Feature Chain Parser system enables feature groups to work with both traditional string-based feature names and modern configuration-based feature creation. This unified approach provides flexibility while maintaining backward compatibility.
 
+> **For AI Agents:** Feature chaining enables LLMs to declare complex data pipelines through simple naming conventions. Instead of writing pipeline code, agents can request `user_query__validated__retrieved__pii_redacted` - mloda resolves the full chain automatically.
+
 ## Key Concepts
 
 ### Separator System

@@ -7,7 +7,7 @@ from typing import Any, Type
 from abc import ABC
 
 
-class FeatureGroupVersion(ABC):
+class BaseFeatureGroupVersion(ABC):
     @classmethod
     def mloda_version(cls) -> str:
         """

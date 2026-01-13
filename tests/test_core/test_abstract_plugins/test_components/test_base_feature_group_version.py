@@ -2,11 +2,11 @@ import importlib.metadata
 
 import pytest
 
-from mloda.provider import FeatureGroupVersion
+from mloda.provider import BaseFeatureGroupVersion
 from tests.test_core.test_abstract_plugins.test_abstract_feature_group import BaseTestFeatureGroup1
 
 
-class TestFeatureGroupVersion:
+class TestBaseFeatureGroupVersion:
     def test_version_composite(self) -> None:
         # Patch importlib.metadata.version to a known value.
         original_version = importlib.metadata.version
@@ -33,6 +33,6 @@ class TestFeatureGroupVersion:
             importlib.metadata.version = original_version
 
     def test_invalid_target_class_for_hash(self) -> None:
-        # Calling FeatureGroupVersion.class_source_hash with a class not inheriting from FeatureGroup should raise a ValueError.
+        # Calling BaseFeatureGroupVersion.class_source_hash with a class not inheriting from FeatureGroup should raise a ValueError.
         with pytest.raises(ValueError):
-            FeatureGroupVersion.class_source_hash(str)
+            BaseFeatureGroupVersion.class_source_hash(str)

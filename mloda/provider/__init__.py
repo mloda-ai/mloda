@@ -2,7 +2,7 @@
 from mloda.core.abstract_plugins.feature_group import FeatureGroup as FeatureGroup
 
 # Versioning
-from mloda.core.abstract_plugins.components.feature_group_version import FeatureGroupVersion
+from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework as ComputeFramework
 
 # Utilities
@@ -60,7 +60,7 @@ __all__ = [
     # Base classes
     "FeatureGroup",
     # Versioning
-    "FeatureGroupVersion",
+    "BaseFeatureGroupVersion",
     "ComputeFramework",
     # Utilities
     "HashableDict",

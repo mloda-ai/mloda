@@ -96,7 +96,7 @@ def test_import_provider_base_classes() -> None:
         FeatureGroup,
         ComputeFramework,
         # Versioning
-        FeatureGroupVersion,
+        BaseFeatureGroupVersion,
         # Feature set
         FeatureSet,
         # Input data
@@ -133,7 +133,7 @@ def test_import_provider_base_classes() -> None:
     assert FeatureGroup is not None
     assert ComputeFramework is not None
     # Versioning
-    assert FeatureGroupVersion is not None
+    assert BaseFeatureGroupVersion is not None
     # Feature set
     assert FeatureSet is not None
     # Input data
@@ -201,7 +201,7 @@ def test_all_roles_demo() -> None:
     from mloda.user import API, Feature, Options
 
     # Data Provider
-    from mloda.provider import FeatureGroup, FeatureGroupVersion
+    from mloda.provider import FeatureGroup, BaseFeatureGroupVersion
 
     # Data Steward
     from mloda.steward import get_feature_group_docs
@@ -210,5 +210,5 @@ def test_all_roles_demo() -> None:
     assert Feature is not None
     assert Options is not None
     assert FeatureGroup is not None
-    assert FeatureGroupVersion is not None
+    assert BaseFeatureGroupVersion is not None
     assert get_feature_group_docs is not None

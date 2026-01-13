@@ -8,7 +8,7 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.data_types import DataType
 
 from mloda.core.abstract_plugins.components.domain import Domain
-from mloda.core.abstract_plugins.components.feature_group_version import FeatureGroupVersion
+from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
@@ -68,9 +68,9 @@ class FeatureGroup(ABC):
         making it easier to detect changes, manage compatibility, and debug issues.
 
         If you need to change the version of the feature group, you can do so by subclassing
-        FeatureGroupVersion and overriding the version method. This allows you to create a new version system.
+        BaseFeatureGroupVersion and overriding the version method. This allows you to create a new version system.
         """
-        return FeatureGroupVersion.version(cls)
+        return BaseFeatureGroupVersion.version(cls)
 
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:

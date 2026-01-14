@@ -4,4 +4,9 @@ prune **/__pycache__
 include README.md
 include LICENSE.TXT
 include NOTICE.md
+include mloda/core/py.typed
+include mloda/provider/py.typed
+include mloda/steward/py.typed
+include mloda/user/py.typed
+include mloda_plugins/py.typed
 prune tests*

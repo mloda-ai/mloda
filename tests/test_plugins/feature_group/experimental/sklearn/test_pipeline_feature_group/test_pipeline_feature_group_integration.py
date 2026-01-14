@@ -147,9 +147,9 @@ class TestSklearnPipelineFeatureGroupIntegration:
             if col.startswith("income,age__sklearn_pipeline_scaling~"):
                 found_columns.append(col)
 
-        assert (
-            len(found_columns) == 2
-        ), f"Expected 2 scaled feature columns, found {len(found_columns)}: {found_columns}"
+        assert len(found_columns) == 2, (
+            f"Expected 2 scaled feature columns, found {len(found_columns)}: {found_columns}"
+        )
 
         # Verify that we have the expected columns
         assert "income,age__sklearn_pipeline_scaling~0" in found_columns
@@ -383,9 +383,9 @@ class TestSklearnPipelineFeatureGroupIntegration:
         assert expected_file_path.exists(), f"Artifact file should exist at {expected_file_path}"
 
         # Verify the file is in our isolated test directory
-        assert str(expected_file_path).startswith(
-            storage_path
-        ), f"Artifact should be in test directory {storage_path}, but found at {expected_file_path}"
+        assert str(expected_file_path).startswith(storage_path), (
+            f"Artifact should be in test directory {storage_path}, but found at {expected_file_path}"
+        )
 
         # Second run - create feature WITH artifact options (mloda will set artifact_to_load)
         combined_options = {**feature_options, **artifacts1}

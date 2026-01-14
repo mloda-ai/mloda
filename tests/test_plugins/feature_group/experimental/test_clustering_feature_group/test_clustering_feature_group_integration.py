@@ -6,9 +6,9 @@ from typing import Any, Dict, List
 
 import numpy as np
 
-import mloda
-from mloda import Feature
-from mloda import Options
+from mloda.user import mloda
+from mloda.user import Feature
+from mloda.user import Options
 from mloda.user import PluginCollector
 
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -111,7 +111,7 @@ class TestClusteringFeatureGroupIntegration:
     """Integration tests for the ClusteringFeatureGroup."""
 
     def test_integration_with_feature_names(self) -> None:
-        """Test integration with API using explicit feature names."""
+        """Test integration with mloda using explicit feature names."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
             {
@@ -129,7 +129,7 @@ class TestClusteringFeatureGroupIntegration:
             "feature1&feature2__cluster_hierarchical_2",
         ]
 
-        # Run the API
+        # Run the mloda
         result = mloda.run_all(
             features,
             compute_frameworks={PandasDataFrame},
@@ -140,7 +140,7 @@ class TestClusteringFeatureGroupIntegration:
         validate_clustering_results(result)
 
     def test_integration_with_feature_parser(self) -> None:
-        """Test integration with API using the parser."""
+        """Test integration with mloda using the parser."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
             {
@@ -192,7 +192,7 @@ class TestClusteringFeatureGroupIntegration:
             hierarchical_feature,
         ]
 
-        # Run the API
+        # Run the mloda
         result = mloda.run_all(
             features,
             compute_frameworks={PandasDataFrame},
@@ -202,7 +202,7 @@ class TestClusteringFeatureGroupIntegration:
         validate_clustering_results(result)
 
     def test_integration_with_different_algorithms(self) -> None:
-        """Test integration with API using different clustering algorithms."""
+        """Test integration with mloda using different clustering algorithms."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
             {
@@ -220,7 +220,7 @@ class TestClusteringFeatureGroupIntegration:
             "feature1&feature2__cluster_agglomerative_2",
         ]
 
-        # Run the API
+        # Run the mloda
         result = mloda.run_all(
             features,
             compute_frameworks={PandasDataFrame},

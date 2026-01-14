@@ -3,8 +3,8 @@ from pathlib import Path
 from typing import Any, Dict
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 import pytest
-import mloda
-from mloda import Feature
+from mloda.user import mloda
+from mloda.user import Feature
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda.core.api.feature_config.loader import load_features_from_config
@@ -165,7 +165,7 @@ def test_end2end_chained_features() -> None:
         {ChainedFeatureTestDataCreator, PandasScalingFeatureGroup, PandasMissingValueFeatureGroup}
     )
 
-    # Run API with the features
+    # Run mloda with the features
     results = mloda.run_all(
         features,
         compute_frameworks={PandasDataFrame},
@@ -283,7 +283,7 @@ def test_end2end_multi_column_access() -> None:
     # Enable the necessary feature groups
     plugin_collector = PluginCollector.enabled_feature_groups({StateTestDataCreator, PandasEncodingFeatureGroup})
 
-    # Run API with the features
+    # Run mloda with the features
     results = mloda.run_all(
         features,
         compute_frameworks={PandasDataFrame},

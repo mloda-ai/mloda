@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 def python_type_to_claude_type(python_type: str) -> str:
-    """Converts Python type strings to Claude API type strings."""
+    """Converts Python type strings to Claude mloda type strings."""
     type_mapping = {
         "float": "number",
         "int": "integer",
@@ -44,7 +44,7 @@ def python_type_to_claude_type(python_type: str) -> str:
 def parse_tool_function_for_claude(function_declaration: ToolFunctionDeclaration) -> Dict[str, Any]:
     """Parses a ToolFunctionDeclaration into a dict formatted for Claude function calling.
 
-    The output will have the following structure compatible with Anthropic's API:
+    The output will have the following structure compatible with Anthropic's mloda:
     {
         "name": <function name>,
         "description": <function description>,
@@ -218,11 +218,11 @@ class ClaudeAPI(LLMBaseApi):
 
 class ClaudeRequestLoop(RequestLoop):
     """
-    Base class for integrating Anthropic Claude LLM API into mloda feature pipelines.
+    Base class for integrating Anthropic Claude LLM mloda into mloda feature pipelines.
 
     This feature group provides integration with Anthropic's Claude models, handling
     message formatting, response parsing, tool calling, rate limiting, and multi-turn
-    conversation management for Claude API interactions.
+    conversation management for Claude mloda interactions.
 
     ## Key Capabilities
 
@@ -247,8 +247,8 @@ class ClaudeRequestLoop(RequestLoop):
     ### Basic Text Generation
 
     ```python
-    from mloda import Feature
-    from mloda import Options
+    from mloda.user import Feature
+    from mloda.user import Options
 
     feature = Feature(
         name="ClaudeRequestLoop",
@@ -322,7 +322,7 @@ class ClaudeRequestLoop(RequestLoop):
 
     ### Environment Variables
 
-    - `CLAUDE_API_KEY` (required): Anthropic API key for Claude access
+    - `CLAUDE_API_KEY` (required): Anthropic mloda key for Claude access
     - `CLAUDE_MAX_RETRIES`: Maximum retry attempts (default: 5)
     - `CLAUDE_INITIAL_RETRY_DELAY`: Initial retry delay in seconds (default: 10)
     - `CLAUDE_MAX_RETRY_DELAY`: Maximum retry delay in seconds (default: 60)
@@ -355,13 +355,13 @@ class ClaudeRequestLoop(RequestLoop):
 
     - `anthropic` package installed (`pip install anthropic`)
     - Valid CLAUDE_API_KEY environment variable
-    - Internet connection for API access
-    - Sufficient API credits/quota
+    - Internet connection for mloda access
+    - Sufficient mloda credits/quota
 
     ## Error Handling
 
     - Rate limits: Automatic retry with exponential backoff
-    - Invalid API key: Raises ValueError
+    - Invalid mloda key: Raises ValueError
     - Missing package: Raises ImportError
     - Invalid message format: Validates list of dicts (not single string)
     - Network errors: Propagates exception after retries exhausted
@@ -376,7 +376,7 @@ class ClaudeRequestLoop(RequestLoop):
 
     ## Related Classes
 
-    - `ClaudeAPI`: Low-level API wrapper for Claude requests
+    - `ClaudeAPI`: Low-level mloda wrapper for Claude requests
     - `RequestLoop`: Base class providing request/response loop logic
     - `ToolCollection`: Manages available tools for function calling
     - `GeminiRequestLoop`: Alternative LLM provider with different message format

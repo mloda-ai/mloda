@@ -70,7 +70,7 @@ Test that your feature group works correctly with the mloda API.
 
 **Example:**
 ``` python
-import mloda
+from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 features = ["source_feature", "source_feature__my_operation"]

@@ -14,12 +14,12 @@ Expected behavior after implementation:
 
 from typing import Any, Optional, Set, cast
 
-from mloda import FeatureGroup
+from mloda.provider import FeatureGroup
 from mloda.core.prepare.graph.graph import Graph
 from mloda.user import FeatureName
 from mloda.user import Index
 from mloda.user import Link, JoinSpec
-from mloda import Options
+from mloda.user import Options
 from mloda.core.prepare.resolve_links import ResolveLinks
 
 

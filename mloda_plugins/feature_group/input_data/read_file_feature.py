@@ -1,6 +1,6 @@
 from typing import Any, Optional
 
-from mloda import FeatureGroup
+from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.provider import BaseInputData
 from mloda_plugins.feature_group.input_data.read_file import ReadFile

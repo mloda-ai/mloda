@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 def python_type_to_gemini_type(python_type: str) -> str:
-    """Converts Python type strings to Gemini API type strings."""
+    """Converts Python type strings to Gemini mloda type strings."""
     type_mapping = {
         "float": "NUMBER",
         "int": "INTEGER",
@@ -190,11 +190,11 @@ class GeminiAPI(LLMBaseApi):
 
 class GeminiRequestLoop(RequestLoop):
     """
-    Base class for integrating Google Gemini LLM API into mloda feature pipelines.
+    Base class for integrating Google Gemini LLM mloda into mloda feature pipelines.
 
     This feature group provides a bridge between mloda's feature engineering framework
     and Google's Gemini generative AI models. It handles request formatting, response
-    parsing, tool calling, rate limiting, and error handling for Gemini API interactions.
+    parsing, tool calling, rate limiting, and error handling for Gemini mloda interactions.
 
     ## Key Capabilities
 
@@ -219,8 +219,8 @@ class GeminiRequestLoop(RequestLoop):
     ### Basic Text Generation
 
     ```python
-    from mloda import Feature
-    from mloda import Options
+    from mloda.user import Feature
+    from mloda.user import Options
 
     feature = Feature(
         name="GeminiRequestLoop",
@@ -297,7 +297,7 @@ class GeminiRequestLoop(RequestLoop):
 
     ### Environment Variables
 
-    - `GEMINI_API_KEY` (required): Google API key for Gemini access
+    - `GEMINI_API_KEY` (required): Google mloda key for Gemini access
     - `GEMINI_MAX_RETRIES`: Maximum retry attempts (default: 5)
     - `GEMINI_INITIAL_RETRY_DELAY`: Initial retry delay in seconds (default: 10)
     - `GEMINI_MAX_RETRY_DELAY`: Maximum retry delay in seconds (default: 60)
@@ -319,13 +319,13 @@ class GeminiRequestLoop(RequestLoop):
 
     - `google.generativeai` package installed (`pip install google-generativeai`)
     - Valid GEMINI_API_KEY environment variable
-    - Internet connection for API access
-    - Sufficient API quota/credits
+    - Internet connection for mloda access
+    - Sufficient mloda quota/credits
 
     ## Error Handling
 
     - Rate limits: Automatic retry with exponential backoff
-    - Invalid API key: Raises ValueError
+    - Invalid mloda key: Raises ValueError
     - Missing package: Raises ImportError
     - Network errors: Propagates exception after retries exhausted
     - Invalid prompts: Validates single string prompt (no list support)
@@ -339,7 +339,7 @@ class GeminiRequestLoop(RequestLoop):
 
     ## Related Classes
 
-    - `GeminiAPI`: Low-level API wrapper for Gemini requests
+    - `GeminiAPI`: Low-level mloda wrapper for Gemini requests
     - `RequestLoop`: Base class providing request/response loop logic
     - `ToolCollection`: Manages available tools for function calling
     - `LLMFileSelector`: Example feature using GeminiRequestLoop

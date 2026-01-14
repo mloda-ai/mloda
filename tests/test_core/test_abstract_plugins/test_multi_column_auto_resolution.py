@@ -12,17 +12,17 @@ from typing import Any, List, Optional, Set, Type, Union
 import numpy as np
 import pandas as pd
 
-from mloda import FeatureGroup
-from mloda import Feature
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.provider import BaseInputData
 from mloda.provider import DataCreator
-from mloda import Options
-from mloda import ComputeFramework
+from mloda.user import Options
+from mloda.provider import ComputeFramework
 from mloda.user import PluginLoader
 from mloda.user import PluginCollector
-from mloda import API
+from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 
@@ -260,7 +260,7 @@ def test_multi_column_auto_resolution_with_chaining() -> None:
     ]
 
     # Run the computation
-    api = API(
+    api = mloda(
         features_to_request,
         {PandasDataFrame},
         plugin_collector=plugin_collector,
@@ -269,7 +269,7 @@ def test_multi_column_auto_resolution_with_chaining() -> None:
     results = api.get_result()
 
     # Verify results
-    # The API returns separate DataFrames per feature group
+    # The mloda returns separate DataFrames per feature group
     assert len(results) == 3, "Should return 3 DataFrames (one per requested feature)"
 
     # Combine results into a single DataFrame for easier verification

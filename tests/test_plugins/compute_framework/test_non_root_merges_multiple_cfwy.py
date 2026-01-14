@@ -1,23 +1,23 @@
 from typing import Any, Optional, Set, Type, Union
 
-from mloda import ComputeFramework
+from mloda.provider import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 import pytest
 import pyarrow as pa
 
-from mloda import FeatureGroup
-from mloda import Feature
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.user import Index
 from mloda.provider import BaseInputData
 from mloda.provider import DataCreator
 from mloda.user import Link, JoinSpec
-from mloda import Options
+from mloda.user import Options
 from mloda.user import ParallelizationMode
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-import mloda
+from mloda.user import mloda
 
 
 class NonCfwRootJoinTestFeature(FeatureGroup):

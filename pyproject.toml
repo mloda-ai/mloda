@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "mloda"
 version = "0.4.1"
-description = "Make data, feature and context engineering shareable"
+description = "mloda: One Data Access for ML and AI"
 readme = { file = "README.md", content-type = "text/markdown" }
 license = { text = "Apache-2.0" }
 authors = [
@@ -27,8 +27,13 @@ classifiers = [
 "PyPI" = "https://pypi.org/project/mloda/"
 "Homepage" = "https://mloda.ai"
 
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["mloda.*", "mloda_plugins*"]
+exclude = ["mloda.community*", "mloda.enterprise*", "mloda.registry*", "mloda.testing*"]
+namespaces = true
+
 [tool.setuptools]
-packages = { find = { include = ["mloda*", "mloda_plugins*"] } }
 include-package-data = true
 
 [tool.setuptools.dynamic]
@@ -53,6 +58,10 @@ skips = [
     "B101", # Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
     "B104"  # Possible binding to all interfaces detected.
 ]
+
+[tool.mypy]
+explicit_package_bases = true
+namespace_packages = true
 
 [tool.ruff]
 line-length = 120

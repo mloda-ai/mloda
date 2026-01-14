@@ -20,7 +20,7 @@ However, this flexibility introduces a bit of complexity. Let's look at an examp
 
 #### 3. Example Without a Specified Compute Framework
 ```python
-import mloda
+from mloda.user import mloda
 from mloda.user import DataAccessCollection
 
 file_path = "tests/test_plugins/feature_group/src/dataset/creditcard_2023_short.csv"
@@ -55,13 +55,13 @@ There are several ways to resolve this ambiguity by explicitly defining the comp
 
 -   **Using specific feature configuration** to define compute frameworks for individual features.
 -   **Within the feature group definition**, by enforcing a specific compute framework rule.
--   **As part of the API request** (as shown in previous examples).
-##### Part of API request
+-   **As part of the mloda request** (as shown in previous examples).
+##### Part of mloda request
 
 ##### Specific feature configuration
 You can configure individual features to use a specific compute framework. Here’s how to specify that a feature should use the PyArrowTable framework:
 ```python
-import mloda
+from mloda.user import mloda
 from mloda.user import Feature
 
 feature = Feature("id", options={"compute_framework": "PyArrowTable"})
@@ -125,7 +125,7 @@ In this case, the feature group ExampleB will only run on the PyArrowTable frame
 
 | Framework | Technology | Strengths | Best For | Dependencies |
 |-----------|------------|-----------|----------|--------------|
-| **PandasDataFrame** | pandas DataFrame | Rich data transformation, familiar API | Development, data exploration, smaller datasets | pandas, numpy |
+| **PandasDataFrame** | pandas DataFrame | Rich data transformation, familiar mloda | Development, data exploration, smaller datasets | pandas, numpy |
 | **PyArrowTable** | Apache Arrow Tables | Memory-efficient, high performance, columnar format | Production, big data, interoperability | pyarrow |
 | **PolarsDataFrame** | Polars DataFrame | Fast, memory-efficient, eager evaluation | Development, immediate results | polars |
 | **PolarsLazyDataFrame** | Polars LazyFrame | Query optimization, lazy evaluation | Large datasets, performance optimization | polars |
@@ -147,7 +147,7 @@ For example, if `polars` is not installed, `PolarsDataFrame` will not be availab
 
 Example using PythonDictFramework:
 ``` python
-import mloda
+from mloda.user import mloda
 from mloda.user import Feature
 
 feature = Feature("id", options={"compute_framework": "PythonDictFramework"})
@@ -161,7 +161,7 @@ result[0]  # Returns List[Dict[str, Any]]
 
 Example using Polars frameworks:
 ``` python
-import mloda
+from mloda.user import mloda
 from mloda.user import Feature
 
 # Using Polars eager evaluation
@@ -179,7 +179,7 @@ result[0]  # Returns polars.DataFrame
 
 Example using DuckDB framework:
 ``` python
-import mloda
+from mloda.user import mloda
 from mloda.user import Feature, DataAccessCollection
 import duckdb
 
@@ -204,7 +204,7 @@ result[0]  # Returns duckdb.DuckDBPyRelation
 
 Example using Iceberg framework:
 ``` python
-import mloda
+from mloda.user import mloda
 from mloda.user import Feature, DataAccessCollection
 from pyiceberg.catalog import load_catalog
 
@@ -234,7 +234,7 @@ result[0]  # Returns pyiceberg.table.Table or pyarrow.Table
 
 Example using Spark framework:
 ``` python
-import mloda
+from mloda.user import mloda
 from mloda.user import Feature, DataAccessCollection
 from pyspark.sql import SparkSession
 

@@ -10,11 +10,11 @@ from typing import Any, Dict, List
 
 import pytest
 
-from mloda import Feature
+from mloda.user import Feature
 from mloda.user import Features
-from mloda import Options
+from mloda.user import Options
 from mloda.user import PluginCollector
-from mloda import API
+from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.geo_distance.base import GeoDistanceFeatureGroup
 from mloda_plugins.feature_group.experimental.geo_distance.pandas import PandasGeoDistanceFeatureGroup
@@ -64,8 +64,8 @@ class TestGeoDistanceModernization:
             Feature("origin&destination__manhattan_distance"),
         ]
 
-        # Run the API
-        api = API(
+        # Run the mloda
+        api = mloda(
             features,
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
@@ -126,8 +126,8 @@ class TestGeoDistanceModernization:
             ),
         ]
 
-        # Run the API
-        api = API(
+        # Run the mloda
+        api = mloda(
             features,
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
@@ -172,11 +172,11 @@ class TestGeoDistanceModernization:
         )
 
         # Run both approaches
-        api1 = API([string_feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+        api1 = mloda([string_feature], {PandasDataFrame}, plugin_collector=plugin_collector)
         api1._batch_run()
         results1 = api1.get_result()
 
-        api2 = API([config_feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+        api2 = mloda([config_feature], {PandasDataFrame}, plugin_collector=plugin_collector)
         api2._batch_run()
         results2 = api2.get_result()
 
@@ -212,7 +212,7 @@ class TestGeoDistanceModernization:
                     }
                 ),
             )
-            api = API([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+            api = mloda([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
             api._batch_run()
 
         # Test invalid number of source features (only 1 instead of 2)
@@ -226,7 +226,7 @@ class TestGeoDistanceModernization:
                     }
                 ),
             )
-            api = API([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+            api = mloda([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
             api._batch_run()
 
         # Test invalid number of source features (3 instead of 2)
@@ -240,7 +240,7 @@ class TestGeoDistanceModernization:
                     }
                 ),
             )
-            api = API([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+            api = mloda([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
             api._batch_run()
 
     def test_multiple_distance_types_configuration_based(self) -> None:
@@ -276,8 +276,8 @@ class TestGeoDistanceModernization:
                 )
             features.append(feature)
 
-        # Run the API with multiple features
-        api = API(features, {PandasDataFrame}, plugin_collector=plugin_collector)
+        # Run the mloda with multiple features
+        api = mloda(features, {PandasDataFrame}, plugin_collector=plugin_collector)
         api._batch_run()
         results = api.get_result()
 
@@ -320,8 +320,8 @@ class TestGeoDistanceModernization:
             ),
         )
 
-        # Run the API with both features
-        api = API([feature1, feature2], {PandasDataFrame}, plugin_collector=plugin_collector)
+        # Run the mloda with both features
+        api = mloda([feature1, feature2], {PandasDataFrame}, plugin_collector=plugin_collector)
         api._batch_run()
         results = api.get_result()
 
@@ -404,8 +404,8 @@ class TestGeoDistanceModernization:
             ),
         ]
 
-        # Run the API with mixed features
-        api = API(features, {PandasDataFrame}, plugin_collector=plugin_collector)
+        # Run the mloda with mixed features
+        api = mloda(features, {PandasDataFrame}, plugin_collector=plugin_collector)
         api._batch_run()
         results = api.get_result()
 

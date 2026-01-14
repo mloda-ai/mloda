@@ -10,7 +10,7 @@ import datetime
 import pyarrow as pa
 import pyarrow.compute as pc
 
-from mloda import ComputeFramework
+from mloda.provider import ComputeFramework
 
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup

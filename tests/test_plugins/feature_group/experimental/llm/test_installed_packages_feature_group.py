@@ -1,9 +1,9 @@
 from typing import List
-from mloda import Feature
+from mloda.user import Feature
 from mloda.provider import FeatureSet
 from mloda_plugins.feature_group.experimental.llm.installed_packages_feature_group import InstalledPackagesFeatureGroup
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-import mloda
+from mloda.user import mloda
 
 
 def test_installed_packages_feature_group() -> None:

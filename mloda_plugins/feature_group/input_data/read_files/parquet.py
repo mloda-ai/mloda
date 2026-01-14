@@ -39,8 +39,8 @@ class ParquetReader(ReadFile):
     ### 2. Configuration-Based Creation
 
     ```python
-    from mloda import Feature
-    from mloda import Options
+    from mloda.user import Feature
+    from mloda.user import Options
 
     feature = Feature(
         name="customer_segment",
@@ -57,8 +57,8 @@ class ParquetReader(ReadFile):
     ### Basic Parquet Feature Access
 
     ```python
-    from mloda import Feature
-    from mloda import Options
+    from mloda.user import Feature
+    from mloda.user import Options
 
     # Simple column reference from Parquet file
     feature = Feature(

@@ -2,9 +2,9 @@
 
 import pytest
 
-from mloda import Feature
+from mloda.user import Feature
 from mloda.user import FeatureName
-from mloda import Options
+from mloda.user import Options
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
 )

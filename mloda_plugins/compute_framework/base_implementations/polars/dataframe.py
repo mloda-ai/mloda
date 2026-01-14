@@ -2,7 +2,7 @@ from typing import Any, Set, Type
 from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.polars.polars_merge_engine import PolarsMergeEngine
 from mloda.user import FeatureName
-from mloda import ComputeFramework
+from mloda.provider import ComputeFramework
 from mloda.provider import BaseFilterEngine
 from mloda_plugins.compute_framework.base_implementations.polars.polars_filter_engine import PolarsFilterEngine
 

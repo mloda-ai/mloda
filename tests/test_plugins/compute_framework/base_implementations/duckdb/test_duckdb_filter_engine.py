@@ -5,7 +5,7 @@ import logging
 
 import pytest
 
-from mloda import Feature
+from mloda.user import Feature
 from mloda.user import SingleFilter
 from mloda.user import FilterType
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_filter_engine import DuckDBFilterEngine

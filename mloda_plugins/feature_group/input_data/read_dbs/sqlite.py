@@ -6,7 +6,7 @@ import sqlite3
 
 from mloda.provider import FeatureSet, HashableDict
 from mloda.user import DataType
-from mloda import Options
+from mloda.user import Options
 from mloda_plugins.feature_group.input_data.read_db import ReadDB
 
 
@@ -45,8 +45,8 @@ class SQLITEReader(ReadDB):
     Uses Options with database credentials and configuration:
 
     ```python
-    from mloda import Feature
-    from mloda import Options
+    from mloda.user import Feature
+    from mloda.user import Options
     from mloda.core.abstract_plugins.components.hashable_dict import HashableDict
 
     feature = Feature(
@@ -67,7 +67,7 @@ class SQLITEReader(ReadDB):
     ### Basic SQLite Feature Access
 
     ```python
-    from mloda import Feature
+    from mloda.user import Feature
     from mloda.core.abstract_plugins.components.hashable_dict import HashableDict
 
     # Simple column reference from SQLite database

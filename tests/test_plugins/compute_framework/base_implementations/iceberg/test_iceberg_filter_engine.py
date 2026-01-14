@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import Mock, patch
 
-from mloda import Feature
+from mloda.user import Feature
 from mloda.user import SingleFilter
 from mloda.user import FilterType
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_filter_engine import IcebergFilterEngine

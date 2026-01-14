@@ -20,7 +20,7 @@ Example: Input Feature Validation Using Custom Validators
 
 ```python
 from typing import Any, Optional, Set
-import mloda
+from mloda.user import mloda
 from mloda.provider import FeatureGroup, FeatureSet
 from mloda.user import Options, FeatureName, Feature
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -130,7 +130,7 @@ results = mloda.run_all(
 -   We use the extender functionality to print out the runtime as an example.
 
 ```python
-import mloda
+from mloda.user import mloda
 from mloda.steward import Extender, ExtenderHook
 from mloda.user import Feature
 from tests.test_documentation.test_documentation import DokuValidateInputFeatureExtender
@@ -160,7 +160,7 @@ Output features are validated to ensure they meet the expected outcomes and perf
 ###### Simple validator
 
 ```python
-import mloda
+from mloda.user import mloda
 from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Options
 from tests.test_plugins.integration_plugins.test_validate_features.example_validator import BaseValidateOutputFeaturesBase
@@ -237,7 +237,7 @@ Output similar to:
 
 #### Artifacts
 
-`Artifacts` can also be used for validation as the full API is available. A use case could be to store statistics of a feature and then validate them later on.
+`Artifacts` can also be used for validation as the full mloda is available. A use case could be to store statistics of a feature and then validate them later on.
 For more details on artifacts, refer to the [artifact documentation](https://mloda-ai.github.io/mloda/in_depth/artifacts/).
 
 #### Conclusion

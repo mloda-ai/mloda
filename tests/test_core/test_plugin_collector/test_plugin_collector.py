@@ -2,9 +2,9 @@ import os
 from typing import Any
 
 import pytest
-from mloda import FeatureGroup
+from mloda.provider import FeatureGroup
 from mloda.user import PluginCollector
-import mloda
+from mloda.user import mloda
 from tests.test_plugins.feature_group.input_data.test_input_data import InputDataTestFeatureGroup
 
 

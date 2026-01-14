@@ -4,10 +4,10 @@ import os
 
 from mloda.user import FeatureName
 
-from mloda import FeatureGroup
-from mloda import Feature
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
 from mloda.provider import FeatureSet
-from mloda import Options
+from mloda.user import Options
 
 
 from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader

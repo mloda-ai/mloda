@@ -1,42 +1,55 @@
 """
-Test file demonstrating the mloda namespace imports.
+Test file for mloda namespace package and imports.
 
 Structure:
-- `mloda` - Quick start essentials (5 items)
-- `mloda.user` - Full Data User toolkit (17 items)
-- `mloda.provider` - Data Provider base classes (23 items)
-- `mloda.steward` - Data Steward governance (8 items)
+- `mloda` - PEP 420 namespace package (no __init__.py)
+- `mloda.user` - Full Data User toolkit
+- `mloda.provider` - Data Provider base classes
+- `mloda.steward` - Data Steward governance
 """
 
 import os
 
 
-def test_import_quick_start() -> None:
-    """import mloda pattern for quick start"""
+# =============================================================================
+# PEP 420 Namespace Package Tests
+# =============================================================================
+
+
+def test_mloda_is_namespace_package() -> None:
+    """Verify mloda is a PEP 420 namespace package (no __init__.py at root)."""
     import mloda
-    from mloda import API
 
-    # Verify module-level function is callable
-    assert callable(mloda.run_all)
+    # Namespace packages have __path__ but __file__ is None
+    assert hasattr(mloda, "__path__")
+    assert mloda.__file__ is None, f"mloda should be namespace package but has __file__: {mloda.__file__}"
 
-    # Verify all expected exports exist
-    assert mloda.Feature is not None
-    assert mloda.Options is not None
-    assert mloda.FeatureGroup is not None
-    assert mloda.ComputeFramework is not None
-    assert mloda.API is not None
-    assert mloda.API is API
 
-    # When running in installed testenv, verify it's from site-packages
+def test_mloda_namespace_path_is_iterable() -> None:
+    """Verify mloda.__path__ is iterable (namespace package behavior)."""
+    import mloda
+
+    assert hasattr(mloda, "__path__")
+    paths = list(mloda.__path__)
+    assert len(paths) >= 1, "Namespace package should have at least one path"
+
+    # When running in installed testenv, verify it's from site-packages via __path__
     if os.environ.get("MLODA_INSTALLED_TEST"):
-        assert "site-packages" in mloda.__file__, f"Expected installed package, got: {mloda.__file__}"
+        path_str = str(paths)
+        assert "site-packages" in path_str, f"Expected installed package, got: {path_str}"
+
+
+# =============================================================================
+# mloda.user Module Tests (Data User toolkit)
+# =============================================================================
 
 
 def test_import_user_full() -> None:
-    """from mloda.user import ... (17 items for Data Users)"""
+    """from mloda.user import ... (Data User toolkit)"""
     from mloda.user import (
-        # API
-        API,
+        # mloda
+        mlodaAPI,
+        mloda,
         # Features
         Feature,
         Features,
@@ -62,8 +75,11 @@ def test_import_user_full() -> None:
         PluginCollector,
     )
 
-    # API
-    assert API is not None
+    # mloda
+    assert mloda is not None
+    assert mlodaAPI is not None
+    assert hasattr(mlodaAPI, "run_all")
+    assert callable(mloda.run_all)
     # Features
     assert Feature is not None
     assert Features is not None
@@ -89,8 +105,13 @@ def test_import_user_full() -> None:
     assert PluginCollector is not None
 
 
+# =============================================================================
+# mloda.provider Module Tests (Data Provider base classes)
+# =============================================================================
+
+
 def test_import_provider_base_classes() -> None:
-    """from mloda.provider import ... (23 items for Data Providers)"""
+    """from mloda.provider import ... (Data Provider base classes)"""
     from mloda.provider import (
         # Base classes
         FeatureGroup,
@@ -166,8 +187,13 @@ def test_import_provider_base_classes() -> None:
     assert BaseMergeEngine is not None
 
 
+# =============================================================================
+# mloda.steward Module Tests (Data Steward governance)
+# =============================================================================
+
+
 def test_import_steward_governance() -> None:
-    """from mloda.steward import ... (8 items for Data Stewards)"""
+    """from mloda.steward import ... (Data Steward governance)"""
     from mloda.steward import (
         # Plugin inspection
         FeatureGroupInfo,
@@ -195,10 +221,15 @@ def test_import_steward_governance() -> None:
     assert ExtenderHook is not None
 
 
+# =============================================================================
+# Cross-Module Integration Tests
+# =============================================================================
+
+
 def test_all_roles_demo() -> None:
     """Demo: Three roles with explicit modules"""
     # Data User
-    from mloda.user import API, Feature, Options
+    from mloda.user import mloda, Feature, Options
 
     # Data Provider
     from mloda.provider import FeatureGroup, BaseFeatureGroupVersion
@@ -206,7 +237,7 @@ def test_all_roles_demo() -> None:
     # Data Steward
     from mloda.steward import get_feature_group_docs
 
-    assert API is not None
+    assert mloda is not None
     assert Feature is not None
     assert Options is not None
     assert FeatureGroup is not None

@@ -2,9 +2,9 @@ import pandas as pd
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-import mloda
-from mloda import FeatureGroup
-from mloda import Feature
+from mloda.user import mloda
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
 from mloda.provider import FeatureSet
 from mloda.provider import DataCreator
 from mloda.provider import BaseInputData
@@ -93,7 +93,7 @@ class TestTimeWindowWithGlobalFilter:
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups({TestTimeDataCreator, PandasTimeWindowFeatureGroup})
 
-        # Run the API with time window features and the global filter
+        # Run the mloda with time window features and the global filter
         result = mloda.run_all(
             [
                 DefaultOptionKeys.reference_time,
@@ -103,7 +103,7 @@ class TestTimeWindowWithGlobalFilter:
             ],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
-            global_filter=global_filter,  # Pass the global filter to the API
+            global_filter=global_filter,  # Pass the global filter to the mloda
         )
 
         # Verify the results

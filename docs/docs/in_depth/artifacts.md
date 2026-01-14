@@ -58,10 +58,10 @@ class BaseExampleArtifactFeature(FeatureGroup):
 Now, we run the query to the feature group to save the artifact. This example is very basic, but could be a much more complex artifact.
 
 ```python
-from mloda.user import API
+from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
-api = API(["BaseExampleArtifactFeature"], {PyArrowTable})
+api = mloda(["BaseExampleArtifactFeature"], {PyArrowTable})
 api._batch_run()
 artifacts = api.get_artifacts()
 print(artifacts)
@@ -76,10 +76,10 @@ Result:
 Now, let us use this artifact.
 
 ```python
-from mloda.user import Feature, API
+from mloda.user import Feature, mloda
 
 feat = Feature(name="BaseExampleArtifactFeature", options=artifacts)
-api = API([feat], {PyArrowTable})
+api = mloda([feat], {PyArrowTable})
 api._batch_run()
 ```
 

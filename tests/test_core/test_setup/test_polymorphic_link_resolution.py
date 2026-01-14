@@ -10,17 +10,17 @@ during the data joining phase. Covers:
 
 from typing import Any, List, Optional, Set, Union
 
-from mloda import FeatureGroup
-from mloda import Feature
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.user import Index
 from mloda.provider import BaseInputData
 from mloda.provider import DataCreator
 from mloda.user import JoinSpec, Link
-from mloda import Options
+from mloda.user import Options
 from mloda.user import PluginCollector
-import mloda
+from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda.provider import ApiDataFeatureGroup
 

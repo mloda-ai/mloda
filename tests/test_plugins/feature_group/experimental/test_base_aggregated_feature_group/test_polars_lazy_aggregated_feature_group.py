@@ -1,8 +1,8 @@
 from typing import Any
 import pytest
 
-import mloda
-from mloda import Feature
+from mloda.user import mloda
+from mloda.user import Feature
 from mloda.provider import FeatureSet
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame
@@ -237,14 +237,14 @@ class TestPolarsLazyAggregationIntegration:
     """Integration tests for the Polars Lazy aggregated feature group using DataCreator."""
 
     def test_aggregation_with_data_creator(self) -> None:
-        """Test aggregation features with API using DataCreator."""
+        """Test aggregation features with mloda using DataCreator."""
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
             {PolarsLazyAggregatedTestDataCreator, PolarsLazyAggregatedFeatureGroup}
         )
 
-        # Run the API with multiple aggregation features
+        # Run the mloda with multiple aggregation features
         result = mloda.run_all(
             [
                 "sales",

@@ -7,7 +7,7 @@ import pyarrow as pa
 import pytest
 from typing import Any, Dict, List
 
-from mloda import Feature
+from mloda.user import Feature
 from mloda.provider import FeatureSet
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 

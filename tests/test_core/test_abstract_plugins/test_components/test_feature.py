@@ -1,6 +1,6 @@
 import pytest
-from mloda import ComputeFramework
-from mloda import Feature
+from mloda.provider import ComputeFramework
+from mloda.user import Feature
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame  # noqa: F401
 

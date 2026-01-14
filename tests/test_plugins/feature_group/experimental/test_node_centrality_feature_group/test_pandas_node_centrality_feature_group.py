@@ -5,7 +5,7 @@ Tests for the PandasNodeCentralityFeatureGroup class.
 import pytest
 import pandas as pd
 
-from mloda import Feature
+from mloda.user import Feature
 from mloda.provider import FeatureSet
 from mloda_plugins.feature_group.experimental.node_centrality.pandas import PandasNodeCentralityFeatureGroup
 

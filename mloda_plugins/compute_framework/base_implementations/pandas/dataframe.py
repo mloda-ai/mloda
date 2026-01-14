@@ -2,7 +2,7 @@ from typing import Any, Set, Type
 from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.pandas.pandas_merge_engine import PandasMergeEngine
 from mloda.user import FeatureName
-from mloda import ComputeFramework
+from mloda.provider import ComputeFramework
 from mloda.provider import BaseFilterEngine
 from mloda_plugins.compute_framework.base_implementations.pandas.pandas_filter_engine import PandasFilterEngine
 

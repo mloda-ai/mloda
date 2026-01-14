@@ -7,14 +7,14 @@ from __future__ import annotations
 from abc import abstractmethod
 from typing import Any, Optional
 
-from mloda import FeatureGroup
-from mloda import Feature
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
 from mloda.provider import FeatureChainParser
 from mloda.provider import (
     FeatureChainParserMixin,
 )
 from mloda.provider import FeatureSet
-from mloda import Options
+from mloda.user import Options
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 

@@ -1,5 +1,5 @@
 import pytest
-from mloda import Options
+from mloda.user import Options
 
 
 class TestOptions:
@@ -165,7 +165,7 @@ class TestOptions:
 
     def test_backward_compatibility_with_feature_class(self) -> None:
         """Test that Options work correctly with Feature class equality."""
-        from mloda import Feature
+        from mloda.user import Feature
 
         # Features with same group options should be equal
         feature1 = Feature("test_feature", Options(group={"data_source": "prod"}))

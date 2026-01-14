@@ -56,7 +56,7 @@ A concrete, simplified global scope data access is shown in this example:
 ```python
 import os
 
-import mloda
+from mloda.user import mloda
 from mloda.user import DataAccessCollection
 
 
@@ -117,7 +117,7 @@ To use it, we can simply:
 from typing import Optional, Any, List
 from pathlib import Path
 
-import mloda
+from mloda.user import mloda
 from mloda.provider import FeatureGroup, BaseInputData, FeatureSet
 from mloda.user import Feature
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
@@ -167,7 +167,7 @@ The following example shows a simple ApiData setup.
 ```python
 from typing import List
 
-import mloda
+from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 # Pass api_data directly as a dict - the framework handles registration internally
@@ -204,7 +204,7 @@ Usage:
 One could imagine that for experimenting one wants to see data. Then one could use this feature as input feature to another feature instead of e.g. the true data.
 
 ```python
-import mloda
+from mloda.user import mloda
 from mloda.provider import FeatureGroup, BaseInputData, FeatureSet, DataCreator
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
@@ -249,7 +249,7 @@ In the following example, we will use data from another feature.
 ```python
 from typing import Set
 
-import mloda
+from mloda.user import mloda
 from mloda.provider import FeatureGroup, FeatureSet
 from mloda.user import Options, FeatureName, Feature, PluginCollector
 
@@ -322,7 +322,7 @@ from mloda_plugins.feature_group.input_data.api_data.api_data import ApiInputDat
 class JoinedFeature(FeatureGroup):
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
-        # Create a LEFT join between API data and Creator data
+        # Create a LEFT join between mloda data and Creator data
         link = Link.left(
             (ApiInputDataFeature, Index(("api_id",))),
             (CreatorDataFeature, Index(("creator_id",)))

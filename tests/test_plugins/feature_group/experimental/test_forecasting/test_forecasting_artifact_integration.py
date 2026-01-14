@@ -1,5 +1,5 @@
 """
-Integration tests for the ForecastingFeatureGroup artifacts with API.
+Integration tests for the ForecastingFeatureGroup artifacts with mloda.
 
 This test demonstrates how the ForecastingFeatureGroup artifacts can be saved and loaded,
 allowing trained models to be reused for future forecasts.
@@ -8,10 +8,10 @@ allowing trained models to be reused for future forecasts.
 from typing import Any, Dict
 from datetime import datetime, timedelta
 
-from mloda import Feature
-from mloda import Options
+from mloda.user import Feature
+from mloda.user import Options
 from mloda.user import PluginCollector
-from mloda import API
+from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecastingFeatureGroup
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
@@ -54,13 +54,13 @@ class TestForecastingArtifactIntegration:
         feature.options = options
 
         # First run: Train and save the model artifact
-        api = API(
+        api = mloda(
             [feature],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
         )
 
-        # Run the API to generate forecasts and save the artifact
+        # Run the mloda to generate forecasts and save the artifact
         api._batch_run()
         results1 = api.get_result()
 
@@ -70,20 +70,20 @@ class TestForecastingArtifactIntegration:
         # Verify that an artifact was saved for our feature
         assert feature_name in artifacts, f"No artifact saved for {feature_name}"
 
-        # Create a new API instance for loading the artifact
+        # Create a new mloda instance for loading the artifact
         feature2 = Feature(feature_name, options=options)
 
         # Add the artifact to the feature's options
         feature2.options.add_to_group(feature_name, artifacts[feature_name])
 
-        # Create a new API with the artifact
-        api2 = API(
+        # Create a new mloda with the artifact
+        api2 = mloda(
             [feature2],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
         )
 
-        # Run the API to generate forecasts using the loaded artifact
+        # Run the mloda to generate forecasts using the loaded artifact
         api2._batch_run()
         results2 = api2.get_result()
 

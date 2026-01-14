@@ -117,7 +117,7 @@ class mlodaAPI:
             List of computed results.
 
         Example:
-            result = mlodaAPI.run_all(
+            result = mlodamloda.run_all(
                 features,
                 api_data={"UserQuery": {"row_index": [0], "query": ["hello"]}}
             )

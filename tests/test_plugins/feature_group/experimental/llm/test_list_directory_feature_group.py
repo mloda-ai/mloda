@@ -1,10 +1,10 @@
 from pathlib import PosixPath
 from typing import List
-from mloda import Feature
+from mloda.user import Feature
 from mloda_plugins.feature_group.experimental.llm.list_directory_feature_group import ListDirectoryFeatureGroup
 from mloda.provider import FeatureSet
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-import mloda
+from mloda.user import mloda
 
 
 def test_list_directory_feature_group(tmp_path: PosixPath) -> None:
@@ -25,7 +25,7 @@ def test_list_directory_feature_group(tmp_path: PosixPath) -> None:
 
 
 def test_list_directory_feature_group_mlodaAPI() -> None:
-    # This test checks if ListDirectoryFeatureGroup can be run via API
+    # This test checks if ListDirectoryFeatureGroup can be run via mloda
     features: List[Feature | str] = [ListDirectoryFeatureGroup.get_class_name()]
     result = mloda.run_all(features, compute_frameworks={PandasDataFrame})
     for res in result:

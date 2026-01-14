@@ -66,7 +66,7 @@ def test_load_chained_feature_as_string() -> None:
     2. The resulting Feature has in_features in its options
     3. The in_features value is correctly passed as a frozenset
     """
-    from mloda import Feature
+    from mloda.user import Feature
     from mloda.core.api.feature_config.loader import load_features_from_config
     from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
@@ -111,7 +111,7 @@ def test_load_chained_feature_from_config() -> None:
     - Regular features preserve their options in options.group
     - Simple string features remain as strings
     """
-    from mloda import Feature
+    from mloda.user import Feature
     from mloda.core.api.feature_config.loader import load_features_from_config
     from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 

@@ -6,7 +6,7 @@ The **mlodaAPI** class serves as the primary interface for interacting with the 
 
 1. **Configuration**
 
-    Initialize the API with features, compute frameworks, and other settings to configure your environment.
+    Initialize the mloda with features, compute frameworks, and other settings to configure your environment.
 
 2.  **Engine Setup**
 

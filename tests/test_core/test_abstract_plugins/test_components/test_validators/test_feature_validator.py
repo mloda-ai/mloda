@@ -1,7 +1,7 @@
 import pytest
 from typing import Set, Type
 
-from mloda import ComputeFramework
+from mloda.provider import ComputeFramework
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.provider import FeatureValidator
 

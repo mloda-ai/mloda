@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from mloda import FeatureGroup
-from mloda import Feature
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
 from mloda.provider import FeatureChainParser
 from mloda.provider import (
     FeatureChainParserMixin,

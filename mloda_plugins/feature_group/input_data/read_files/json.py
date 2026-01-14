@@ -39,8 +39,8 @@ class JsonReader(ReadFile):
     ### 2. Configuration-Based Creation
 
     ```python
-    from mloda import Feature
-    from mloda import Options
+    from mloda.user import Feature
+    from mloda.user import Options
 
     feature = Feature(
         name="user_name",
@@ -57,8 +57,8 @@ class JsonReader(ReadFile):
     ### Basic JSON Feature Access
 
     ```python
-    from mloda import Feature
-    from mloda import Options
+    from mloda.user import Feature
+    from mloda.user import Options
 
     # Simple field reference from JSON file
     feature = Feature(

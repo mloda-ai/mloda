@@ -1,12 +1,12 @@
 """
-Integration tests for the MissingValueFeatureGroup with API.
+Integration tests for the MissingValueFeatureGroup with mloda.
 """
 
 from typing import Any, Dict
 
-import mloda
-from mloda import Feature
-from mloda import Options
+from mloda.user import mloda
+from mloda.user import Feature
+from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
@@ -32,7 +32,7 @@ class MissingValueParserTestDataCreator(ATestDataCreator):
 
 class TestMissingValueFeatureGroupIntegration:
     def test_integration_with_feature_parser(self) -> None:
-        """Test integration with API using the parser."""
+        """Test integration with mloda using the parser."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
             {MissingValueParserTestDataCreator, PandasMissingValueFeatureGroup}
@@ -93,7 +93,7 @@ class TestMissingValueFeatureGroupIntegration:
         assert results[0].sort_index(axis=1).equals(results2[0].sort_index(axis=1))
 
     def test_integration_with_constant_imputation(self) -> None:
-        """Test integration with API using constant imputation."""
+        """Test integration with mloda using constant imputation."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
             {MissingValueParserTestDataCreator, PandasMissingValueFeatureGroup}

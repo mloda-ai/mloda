@@ -3,9 +3,9 @@ from typing import Any, Dict, List
 from mloda.user import JoinType
 import pandas as pd
 
-import mloda
-from mloda import FeatureGroup
-from mloda import Feature
+from mloda.user import mloda
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.provider import BaseInputData
@@ -39,7 +39,7 @@ class TestDynamicFeatureGroupFactoryIntegration:
             Feature(name="input_feature"),
         ]
 
-        # 4. Run API with the Dynamic Feature Group
+        # 4. Run mloda with the Dynamic Feature Group
         result = mloda.run_all(features=features)
 
         # 5. Verification
@@ -109,7 +109,7 @@ class TestDynamicFeatureGroupFactoryIntegration:
             )
         ]
 
-        # 5. Run API with the Dynamic Feature Group
+        # 5. Run mloda with the Dynamic Feature Group
         result = mloda.run_all(features=features, compute_frameworks={PandasDataFrame})  # type: ignore
 
         # 6. Verification

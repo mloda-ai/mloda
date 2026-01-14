@@ -15,7 +15,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from mloda.user import ParallelizationMode
-from mloda import ComputeFramework
+from mloda.provider import ComputeFramework
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep

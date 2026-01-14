@@ -4,7 +4,7 @@ from typing import Any, Set
 from uuid import UUID, uuid4
 
 from mloda.user import Link, JoinSpec
-from mloda import ComputeFramework
+from mloda.provider import ComputeFramework
 from mloda.core.prepare.validators.resolve_link_validator import ResolveLinkValidator
 
 

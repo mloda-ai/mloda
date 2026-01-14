@@ -13,8 +13,8 @@ Tests verify:
 from typing import Set
 import pytest
 
-from mloda import Feature
-from mloda import Options
+from mloda.user import Feature
+from mloda.user import Options
 from mloda.user import SingleFilter
 from mloda.provider import FeatureSetValidator
 

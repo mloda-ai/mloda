@@ -6,9 +6,9 @@ from typing import Any, Dict, List
 
 import numpy as np
 
-import mloda
-from mloda import Feature
-from mloda import Options
+from mloda.user import mloda
+from mloda.user import Feature
+from mloda.user import Options
 from mloda.user import PluginCollector
 
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -105,7 +105,7 @@ class TestDimensionalityReductionFeatureGroupIntegration:
     """Integration tests for the DimensionalityReductionFeatureGroup."""
 
     def test_integration_with_feature_names_dimension(self) -> None:
-        """Test integration with API using explicit feature names."""
+        """Test integration with mloda using explicit feature names."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
             {DimensionalityReductionFeatureTestDataCreator, PandasDimensionalityReductionFeatureGroup}
@@ -120,14 +120,14 @@ class TestDimensionalityReductionFeatureGroupIntegration:
             "feature0,feature1,feature2__tsne_2d",
         ]
 
-        # Run the API
+        # Run the mloda
         result = mloda.run_all(features, compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
 
         # Validate the results
         validate_dimensionality_reduction_results(result)
 
     def atest_integration_with_feature_parser(self) -> None:
-        """Test integration with API using the parser."""
+        """Test integration with mloda using the parser."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
             {DimensionalityReductionFeatureTestDataCreator, PandasDimensionalityReductionFeatureGroup}
@@ -159,14 +159,14 @@ class TestDimensionalityReductionFeatureGroupIntegration:
         # Define the features
         features: List[str | Feature] = ["feature0", "feature1", "feature2", pca_feature, tsne_feature]
 
-        # Run the API
+        # Run the mloda
         result = mloda.run_all(features, compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
 
         # Validate the results
         validate_dimensionality_reduction_results(result)
 
     def test_integration_with_different_algorithms(self) -> None:
-        """Test integration with API using different dimensionality reduction algorithms."""
+        """Test integration with mloda using different dimensionality reduction algorithms."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
             {DimensionalityReductionFeatureTestDataCreator, PandasDimensionalityReductionFeatureGroup}
@@ -182,7 +182,7 @@ class TestDimensionalityReductionFeatureGroupIntegration:
             "feature0,feature1,feature2__isomap_2d",
         ]
 
-        # Run the API
+        # Run the mloda
         result = mloda.run_all(features, compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
 
         # Verify we have at least one result

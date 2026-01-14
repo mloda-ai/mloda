@@ -43,8 +43,8 @@ class TextFileReader(ReadFile):
     ### 2. Configuration-Based Creation
 
     ```python
-    from mloda import Feature
-    from mloda import Options
+    from mloda.user import Feature
+    from mloda.user import Options
 
     feature = Feature(
         name="TextFileReader",
@@ -62,8 +62,8 @@ class TextFileReader(ReadFile):
     ### Basic Text File Loading
 
     ```python
-    from mloda import Feature
-    from mloda import Options
+    from mloda.user import Feature
+    from mloda.user import Options
 
     # Load entire text file as a feature
     feature = Feature(

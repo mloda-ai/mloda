@@ -1,13 +1,13 @@
 import pytest
 from typing import Any, Dict, List, Optional, Set
 
-from mloda import FeatureGroup
-from mloda import Feature
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
-from mloda import Options
+from mloda.user import Options
 from mloda.user import PluginCollector
-import mloda
+from mloda.user import mloda
 from mloda.user import ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
 from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame
@@ -137,7 +137,7 @@ class SecondTransformFeatureGroup(FeatureGroup):
 
 @pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
 class TestPolarsLazyIntegrationWithMlodaAPI:
-    """Integration tests for PolarsLazyDataFrame with API."""
+    """Integration tests for PolarsLazyDataFrame with mloda."""
 
     @pytest.mark.parametrize(
         "modes",

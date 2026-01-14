@@ -32,7 +32,7 @@ class DokuExtender(Extender):
 #### 2. Run the Example with the Extender
 We will now run the **mlodaAPI** call, including our custom **DokuExtender** to monitor the execution time of the **calculate_feature** function.
 ```python
-import mloda
+from mloda.user import mloda
 from mloda.user import DataAccessCollection
 from tests.test_documentation.test_documentation import DokuExtender
 

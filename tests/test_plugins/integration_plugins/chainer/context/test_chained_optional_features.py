@@ -1,10 +1,10 @@
 from typing import Any, Dict
 
-from mloda import Feature
+from mloda.user import Feature
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 from mloda.user import PluginCollector
-import mloda
+from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from tests.test_plugins.integration_plugins.chainer.chainer_context_feature import (
     ChainedContextFeatureGroupTest,

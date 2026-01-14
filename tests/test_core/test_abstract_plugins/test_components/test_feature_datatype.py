@@ -6,7 +6,7 @@ These tests validate:
 3. is_different_data_type() correctly identifies features with different data types
 """
 
-from mloda import Feature
+from mloda.user import Feature
 
 
 def test_has_similarity_properties_includes_data_type() -> None:

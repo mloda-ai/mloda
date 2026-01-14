@@ -55,8 +55,7 @@ class SampleData(FeatureGroup):
         })
 
 # Step 2: Load mloda plugins and run pipeline
-from mloda.user import PluginLoader
-import mloda
+from mloda.user import PluginLoader, mloda
 
 PluginLoader.all()
 
@@ -78,7 +77,7 @@ print(data.head())
 **What just happened?**
 1. **SampleData class** - Created a data source using DataCreator (generates data in-memory)
 2. **PluginLoader.all()** - Loaded all available transformations (scaling, encoding, imputation, etc.)
-3. **mloda.run_all()** - Executed the feature pipeline:
+3. **run_all()** - Executed the feature pipeline:
    - Got data from `SampleData`
    - Extracted `customer_id` and `age` as-is
    - Applied StandardScaler to `income` → `income__standard_scaled`

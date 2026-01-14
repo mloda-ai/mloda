@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any, List, Optional, Set, Type, Union
 
-from mloda import ComputeFramework
+from mloda.provider import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 

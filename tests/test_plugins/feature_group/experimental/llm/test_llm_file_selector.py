@@ -6,10 +6,10 @@ from mloda_plugins.feature_group.experimental.llm.cli import format_array
 from mloda_plugins.feature_group.experimental.llm.llm_api.openai import OpenAIRequestLoop
 import pytest
 
-from mloda import Feature
+from mloda.user import Feature
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.llm.llm_file_selector import LLMFileSelector
-import mloda
+from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.input_data.read_context_files import ConcatenatedFileContent
 

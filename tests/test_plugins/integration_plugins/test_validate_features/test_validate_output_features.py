@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional, Set
 
 import pytest
 
-from mloda import Feature
+from mloda.user import Feature
 from mloda.user import Features
 from mloda.provider import FeatureSet
 from mloda.user import ParallelizationMode

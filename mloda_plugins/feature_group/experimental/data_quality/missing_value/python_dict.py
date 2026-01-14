@@ -8,7 +8,7 @@ import statistics
 from collections import Counter
 from typing import Any, Dict, List, Optional, Set, Type, Union
 
-from mloda import ComputeFramework
+from mloda.provider import ComputeFramework
 
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup

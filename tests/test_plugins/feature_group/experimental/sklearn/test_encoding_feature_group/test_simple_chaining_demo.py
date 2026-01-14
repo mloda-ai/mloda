@@ -6,9 +6,9 @@ import pytest
 from typing import Any, Dict
 
 from mloda.user import PluginLoader
-from mloda import Feature
+from mloda.user import Feature
 from mloda.user import PluginCollector
-from mloda import API
+from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
@@ -52,7 +52,7 @@ class TestSimpleChaining:
         print("Step 1: Creating OneHot encoding...")
         # L→R: category__onehot_encoded~0__standard_scaled
         onehot_feature = Feature("category__onehot_encoded~0__standard_scaled")
-        api1 = API([onehot_feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+        api1 = mloda([onehot_feature], {PandasDataFrame}, plugin_collector=plugin_collector)
         api1._batch_run()
         results1 = api1.get_result()
         df1 = results1[0]

@@ -1,11 +1,11 @@
 from typing import Any, Dict, Optional, Type, Set, List, Union
-from mloda import FeatureGroup
-from mloda import Options
+from mloda.provider import FeatureGroup
+from mloda.user import Options
 from mloda.user import FeatureName
 from mloda.user import DataAccessCollection
 from mloda.provider import FeatureSet
 from mloda.user import DataType
-from mloda import ComputeFramework
+from mloda.provider import ComputeFramework
 from mloda.user import Index
 from mloda.provider import BaseInputData
 
@@ -126,7 +126,7 @@ class DynamicFeatureGroupCreator:
     ### Complex Custom Logic
 
     ```python
-    from mloda import Feature
+    from mloda.user import Feature
 
     def custom_input_features(self, options, feature_name):
         # Return dynamically determined input features

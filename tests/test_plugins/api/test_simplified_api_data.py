@@ -1,10 +1,10 @@
 """
-Test simplified API data parameter for mloda.run_all().
+Test simplified mloda data parameter for mloda.run_all().
 
 These tests verify that run_all() accepts api_data as a simple dict.
 The ApiInputDataCollection is created automatically from the dict structure.
 
-Simplified API:
+Simplified mloda:
     result = mloda.run_all(
         features,
         api_data={"KeyName": {"col1": [1, 2], "col2": ["a", "b"]}}
@@ -13,29 +13,29 @@ Simplified API:
 
 from typing import Any, List, Optional, Set, Union
 
-import mloda
-from mloda import FeatureGroup
-from mloda import Feature
+from mloda.user import mloda
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.user import Index
 from mloda.provider import BaseInputData
 from mloda.provider import DataCreator
 from mloda.user import Link, JoinSpec
-from mloda import Options
+from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda.provider import ApiDataFeatureGroup
 
 
 # ============================================================================
-# Test Feature: Simple API Consumer
+# Test Feature: Simple mloda Consumer
 # ============================================================================
 class SimpleApiFeature(FeatureGroup):
-    """A simple feature that consumes API data."""
+    """A simple feature that consumes mloda data."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
-        """Define input features from API data."""
+        """Define input features from mloda data."""
         return {
             Feature(name="api_id", index=Index(("api_id",))),
             Feature(name="api_value", index=Index(("api_id",))),
@@ -43,7 +43,7 @@ class SimpleApiFeature(FeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        """Concatenate API columns."""
+        """Concatenate mloda columns."""
         data["SimpleApiFeature"] = data["api_id"].astype(str) + "_" + data["api_value"]
         return data
 
@@ -53,13 +53,13 @@ class SimpleApiFeature(FeatureGroup):
 
 
 # ============================================================================
-# Test Feature: Multi-key API Consumer
+# Test Feature: Multi-key mloda Consumer
 # ============================================================================
 class MultiKeyApiFeature(FeatureGroup):
-    """A feature that consumes data from multiple API keys."""
+    """A feature that consumes data from multiple mloda keys."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
-        """Define input features from multiple API data sources."""
+        """Define input features from multiple mloda data sources."""
         # This will require data from both FirstKey and SecondKey
         return {
             Feature(name="first_id", index=Index(("first_id",))),
@@ -97,7 +97,7 @@ class CreatorDataFeature(FeatureGroup):
 
 
 class SimplifiedApiJoinFeature(FeatureGroup):
-    """Joins simplified API data with Creator data using LEFT join."""
+    """Joins simplified mloda data with Creator data using LEFT join."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         """Define input features with a LEFT join link."""
@@ -154,10 +154,10 @@ class TestSimplifiedApiData:
         """
         Test that run_all() accepts simplified api_data dict with a single key.
 
-        This test verifies the NEW simplified API:
+        This test verifies the NEW simplified mloda:
             api_data={"KeyName": {"col1": [...], "col2": [...]}}
 
-        Instead of the OLD verbose API:
+        Instead of the OLD verbose mloda:
             api_input_data_collection = ApiInputDataCollection()
             api_data = api_input_data_collection.setup_key_api_data(...)
             run_all(..., api_input_data_collection=..., api_data=...)
@@ -167,7 +167,7 @@ class TestSimplifiedApiData:
         - api_data dict keys become the collection key names
         - api_data dict values contain the actual column data
         """
-        # NEW simplified API - just pass a dict!
+        # NEW simplified mloda - just pass a dict!
         api_data = {
             "ApiExample": {
                 "api_id": [1, 2, 3, 4],
@@ -195,7 +195,7 @@ class TestSimplifiedApiData:
         """
         Test that run_all() accepts simplified api_data dict with multiple keys.
 
-        This verifies that multiple API data sources can be registered in a single dict.
+        This verifies that multiple mloda data sources can be registered in a single dict.
         The test uses only one key's data - combining data from multiple keys requires Links.
         """
         api_data = {
@@ -228,10 +228,10 @@ class TestSimplifiedApiData:
 
     def test_simplified_api_data_two_keys_first_key_used(self) -> None:
         """
-        Test that run_all() can register multiple API keys and use the first key's data.
+        Test that run_all() can register multiple mloda keys and use the first key's data.
 
         This verifies that:
-        - Multiple API keys can be registered in a single api_data dict
+        - Multiple mloda keys can be registered in a single api_data dict
         - The first key's data is accessible via its column names
         - Extra unused keys don't break the registration
         """
@@ -263,10 +263,10 @@ class TestSimplifiedApiData:
 
     def test_simplified_api_data_two_keys_second_key_used(self) -> None:
         """
-        Test that run_all() can register multiple API keys and use the second key's data.
+        Test that run_all() can register multiple mloda keys and use the second key's data.
 
         This verifies that:
-        - Multiple API keys can be registered in a single api_data dict
+        - Multiple mloda keys can be registered in a single api_data dict
         - The second key's data is accessible via its column names
         - Extra unused keys don't break the registration
         """
@@ -300,7 +300,7 @@ class TestSimplifiedApiData:
         """
         Test that simplified api_data works with Links/Joins.
 
-        This ensures the simplified API is compatible with existing
+        This ensures the simplified mloda is compatible with existing
         Link functionality (LEFT join, APPEND, etc).
         """
         api_data = {
@@ -323,13 +323,13 @@ class TestSimplifiedApiData:
         assert len(result) == 1
         df = result[0]
         assert "SimplifiedApiJoinFeature" in df.columns
-        assert len(df) == 4  # LEFT join keeps all API rows
+        assert len(df) == 4  # LEFT join keeps all mloda rows
 
     def test_none_api_data_still_works(self) -> None:
         """
         Test that passing None for api_data still works (no regression).
 
-        This ensures backward compatibility for features that don't use API data.
+        This ensures backward compatibility for features that don't use mloda data.
         """
         feature_list: List[Union[Feature, str]] = [Feature(name="creator_id")]
 
@@ -352,7 +352,7 @@ class TestSimplifiedApiData:
         """
         Test that passing an empty api_data dict behaves correctly.
 
-        Should either work (no API data) or raise a clear error.
+        Should either work (no mloda data) or raise a clear error.
         """
         feature_list: List[Union[Feature, str]] = [Feature(name="creator_id")]
 

@@ -4,9 +4,9 @@ Integration tests for the TimeWindowFeatureGroup
 
 from typing import Any, Dict
 
-import mloda
-from mloda import Feature
-from mloda import Options
+from mloda.user import mloda
+from mloda.user import Feature
+from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
@@ -35,7 +35,7 @@ class TimeWindowParserTestDataCreator(ATestDataCreator):
 
 class TestTimeWindowFeatureParserIntegration:
     def test_integration_with_feature_parser(self) -> None:
-        """Test integration with API using the parser."""
+        """Test integration with mloda using the parser."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
             {TimeWindowParserTestDataCreator, PandasTimeWindowFeatureGroup}
@@ -97,7 +97,7 @@ class TestTimeWindowFeatureParserIntegration:
         assert results[0].sort_index(axis=1).equals(results2[0].sort_index(axis=1))
 
     def test_integration_with_different_time_units(self) -> None:
-        """Test integration with API using different time units."""
+        """Test integration with mloda using different time units."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
             {TimeWindowParserTestDataCreator, PandasTimeWindowFeatureGroup}

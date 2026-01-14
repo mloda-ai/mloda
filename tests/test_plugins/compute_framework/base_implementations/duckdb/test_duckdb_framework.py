@@ -83,7 +83,7 @@ class TestDuckDBFrameworkComputeFramework:
             duckdb_framework.transform(data=["a"], feature_names=set())
 
     def test_select_data_by_column_names(self, duckdb_framework: DuckDBFramework, expected_data: Any) -> None:
-        # Note: This test might need adjustment based on actual DuckDB relation API
+        # Note: This test might need adjustment based on actual DuckDB relation mloda
         # For now, we'll test the basic functionality
         data = duckdb_framework.select_data_by_column_names(expected_data, {FeatureName("column1")})
         assert "column1" in data.columns

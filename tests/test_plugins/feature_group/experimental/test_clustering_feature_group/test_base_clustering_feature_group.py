@@ -4,9 +4,9 @@ Tests for the base ClusteringFeatureGroup class.
 
 import pytest
 
-from mloda import Feature
+from mloda.user import Feature
 from mloda.user import FeatureName
-from mloda import Options
+from mloda.user import Options
 from mloda_plugins.feature_group.experimental.clustering.base import ClusteringFeatureGroup
 from mloda_plugins.feature_group.experimental.clustering.pandas import PandasClusteringFeatureGroup
 

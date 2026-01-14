@@ -1,1 +1,1 @@
-"""Tests for API functionality."""
+"""Tests for mloda functionality."""

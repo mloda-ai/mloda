@@ -1,9 +1,9 @@
 import pytest
 from typing import Any, List, Optional, Set
 
-from mloda import Feature
+from mloda.user import Feature
 from mloda.user import FeatureName
-from mloda import Options
+from mloda.user import Options
 
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 from mloda.provider import FeatureChainParser

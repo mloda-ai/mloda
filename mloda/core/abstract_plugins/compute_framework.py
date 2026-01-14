@@ -383,7 +383,7 @@ Example:
         )
     }}
 
-    mlodaAPI.run_all(
+    mlodamloda.run_all(
         features=[Feature.int32_of("{feature_name}")],
         links=links,
         ...

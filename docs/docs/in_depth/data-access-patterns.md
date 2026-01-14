@@ -204,7 +204,7 @@ These patterns are fundamental to how feature groups access data. For more detai
 ### When to Use BaseInputData Only
 - Working with stateless compute frameworks (Pandas, PyArrow, Polars)
 - File-based data loading
-- API data injection
+- mloda data injection
 - Synthetic data generation
 - Most standard data processing scenarios
 

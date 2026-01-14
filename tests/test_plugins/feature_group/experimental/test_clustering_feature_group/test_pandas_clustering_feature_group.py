@@ -6,7 +6,7 @@ import pytest
 import pandas as pd
 import numpy as np
 
-from mloda import Feature
+from mloda.user import Feature
 from mloda.provider import FeatureSet
 from mloda_plugins.feature_group.experimental.clustering.pandas import PandasClusteringFeatureGroup
 

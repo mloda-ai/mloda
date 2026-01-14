@@ -10,10 +10,10 @@ import pytest
 from typing import Any, Dict, List
 from datetime import datetime, timedelta
 
-from mloda import Feature
-from mloda import Options
+from mloda.user import Feature
+from mloda.user import Options
 from mloda.user import PluginCollector
-from mloda import API
+from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.forecasting.base import ForecastingFeatureGroup
 from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecastingFeatureGroup
@@ -58,8 +58,8 @@ class TestForecastingModernization:
         options = Options({DefaultOptionKeys.reference_time.value: "time_filter"})
         feature.options = options
 
-        # Run the API
-        api = API(
+        # Run the mloda
+        api = mloda(
             [feature],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
@@ -94,8 +94,8 @@ class TestForecastingModernization:
             ),
         )
 
-        # Run the API
-        api = API(
+        # Run the mloda
+        api = mloda(
             [feature],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
@@ -136,11 +136,11 @@ class TestForecastingModernization:
         )
 
         # Run both approaches
-        api1 = API([string_feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+        api1 = mloda([string_feature], {PandasDataFrame}, plugin_collector=plugin_collector)
         api1._batch_run()
         results1 = api1.get_result()
 
-        api2 = API([config_feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+        api2 = mloda([config_feature], {PandasDataFrame}, plugin_collector=plugin_collector)
         api2._batch_run()
         results2 = api2.get_result()
 
@@ -173,7 +173,7 @@ class TestForecastingModernization:
                     }
                 ),
             )
-            api = API([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+            api = mloda([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
             api._batch_run()
 
         # Test invalid time unit
@@ -189,7 +189,7 @@ class TestForecastingModernization:
                     }
                 ),
             )
-            api = API([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+            api = mloda([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
             api._batch_run()
 
         # Test invalid horizon (negative)
@@ -205,7 +205,7 @@ class TestForecastingModernization:
                     }
                 ),
             )
-            api = API([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+            api = mloda([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
             api._batch_run()
 
     def test_multiple_algorithms_configuration_based(self) -> None:
@@ -233,8 +233,8 @@ class TestForecastingModernization:
             )
             features.append(feature)
 
-        # Run the API with multiple features
-        api = API(features, {PandasDataFrame}, plugin_collector=plugin_collector)
+        # Run the mloda with multiple features
+        api = mloda(features, {PandasDataFrame}, plugin_collector=plugin_collector)
         api._batch_run()
         results = api.get_result()
 
@@ -278,8 +278,8 @@ class TestForecastingModernization:
             ),
         )
 
-        # Run the API with both features
-        api = API([feature1, feature2], {PandasDataFrame}, plugin_collector=plugin_collector)
+        # Run the mloda with both features
+        api = mloda([feature1, feature2], {PandasDataFrame}, plugin_collector=plugin_collector)
         api._batch_run()
         results = api.get_result()
 

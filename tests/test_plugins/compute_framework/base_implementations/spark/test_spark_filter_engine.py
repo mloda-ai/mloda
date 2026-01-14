@@ -22,7 +22,7 @@ ensure proper resource management across all test methods.
 
 from typing import Any
 import pytest
-from mloda import Feature
+from mloda.user import Feature
 from mloda.user import SingleFilter
 from mloda.user import FilterType
 from mloda_plugins.compute_framework.base_implementations.spark.spark_filter_engine import SparkFilterEngine

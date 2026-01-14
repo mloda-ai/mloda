@@ -1,10 +1,10 @@
 from typing import Any, Optional, Set
-from mloda import FeatureGroup
-from mloda import Feature
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
-from mloda import Options
-import mloda
+from mloda.user import Options
+from mloda.user import mloda
 
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
@@ -43,7 +43,7 @@ class TestNFeature:
             assert v[2] == 1 or v[2] == 2 or v[2] == 3
 
     def test_n_feature_as_input(self) -> None:
-        # Run the API with NFeatureConsumer, which depends on NFeatureNameBase
+        # Run the mloda with NFeatureConsumer, which depends on NFeatureNameBase
         result = mloda.run_all(["NFeatureConsumer"], compute_frameworks={PandasDataFrame})
 
         # Verify the results

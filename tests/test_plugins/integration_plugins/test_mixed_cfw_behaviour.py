@@ -6,14 +6,14 @@ from mloda.user import PluginLoader
 import pytest
 
 
-from mloda import FeatureGroup
+from mloda.provider import FeatureGroup
 from mloda.user import DataAccessCollection
-from mloda import Feature
+from mloda.user import Feature
 from mloda.user import Index
 from mloda.user import Link, JoinSpec
 from mloda.user import ParallelizationMode
 from mloda.user import PluginCollector
-import mloda
+from mloda.user import mloda
 from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
 from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 

@@ -78,7 +78,7 @@ When a feature is requested:
 2. It checks which compute frameworks are supported by:
    - The feature definition
    - The feature group
-   - The API request
+   - The mloda request
 3. It selects a compatible compute framework
 4. It uses the framework-specific implementation for calculations
 

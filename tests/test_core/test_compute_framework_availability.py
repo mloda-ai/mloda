@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import pytest
 
-from mloda import ComputeFramework
+from mloda.provider import ComputeFramework
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins
 
 

@@ -224,7 +224,7 @@ The balanced inheritance rule ensures that joins only occur between "parallel" s
 #### mlodaAPI
 
 ``` python
-import mloda
+from mloda.user import mloda
 
 set_of_links = {link}
 

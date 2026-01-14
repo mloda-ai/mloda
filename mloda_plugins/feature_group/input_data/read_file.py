@@ -4,7 +4,7 @@ from typing import Any, List, Optional, Tuple
 from mloda.user import DataAccessCollection
 from mloda.provider import FeatureSet
 from mloda.provider import BaseInputData
-from mloda import Options
+from mloda.user import Options
 
 
 class ReadFile(BaseInputData):

@@ -1,7 +1,7 @@
 import inspect
 import pyarrow as pa
 
-from mloda import Feature
+from mloda.user import Feature
 from mloda.provider import FeatureSet
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 

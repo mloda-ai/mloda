@@ -3,8 +3,8 @@ import pandas as pd
 import pytest
 from typing import List
 
-import mloda
-from mloda import Feature
+from mloda.user import mloda
+from mloda.user import Feature
 from mloda.provider import FeatureSet
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -179,14 +179,14 @@ class TestAggPyArrowIntegration:
     """Integration tests for the aggregated feature group using DataCreator."""
 
     def test_aggregation_with_data_creator(self) -> None:
-        """Test aggregation features with API using DataCreator."""
+        """Test aggregation features with mloda using DataCreator."""
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
             {PyArrowAggregatedTestDataCreator, PyArrowAggregatedFeatureGroup}
         )
 
-        # Run the API with multiple aggregation features
+        # Run the mloda with multiple aggregation features
         result = mloda.run_all(
             [
                 "sales",

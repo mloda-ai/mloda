@@ -4,18 +4,18 @@ from typing import Any, List, Optional, Union
 import tempfile
 import sqlite3
 from mloda.user import FeatureName
-from mloda import Options
+from mloda.user import Options
 from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 import pytest
 import pyarrow as pa
 
 from mloda.user import DataAccessCollection
-from mloda import Feature
+from mloda.user import Feature
 from mloda.provider import FeatureSet, HashableDict
 from mloda.user import Index
 from mloda.user import Link, JoinSpec
 from mloda.user import PluginCollector
-import mloda
+from mloda.user import mloda
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
 from tests.test_plugins.feature_group.input_data.test_classes.test_input_classes import (

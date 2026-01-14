@@ -3,17 +3,17 @@ import pyarrow as pa
 import pyarrow.compute as pc
 from mloda.provider import BaseInputData
 from mloda.provider import DataCreator
-from mloda import ComputeFramework
+from mloda.provider import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
-from mloda import FeatureGroup
-from mloda import Feature
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
 from mloda.user import Features
 from mloda.provider import FeatureSet
-from mloda import Options
+from mloda.user import Options
 from tests.test_plugins.compute_framework.test_tooling.shared_compute_frameworks import (
     SecondCfw,
     ThirdCfw,

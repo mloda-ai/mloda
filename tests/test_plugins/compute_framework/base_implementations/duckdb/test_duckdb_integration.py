@@ -1,17 +1,17 @@
 from mloda.provider import ConnectionMatcherMixin
-from mloda import ComputeFramework
+from mloda.provider import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 import pytest
 
 from typing import Any, Dict, List, Optional, Set, Type, Union
 
-from mloda import FeatureGroup
-from mloda import Feature
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
-from mloda import Options
+from mloda.user import Options
 from mloda.user import PluginCollector
-import mloda
+from mloda.user import mloda
 from mloda.user import ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
@@ -227,7 +227,7 @@ class CheckData(FeatureGroup):
 
 @pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB or PyArrow is not installed. Skipping this test.")
 class TestDuckDBIntegrationWithMlodaAPI:
-    """Integration tests for DuckDBFramework with API."""
+    """Integration tests for DuckDBFramework with mloda."""
 
     @pytest.mark.parametrize(
         "modes",

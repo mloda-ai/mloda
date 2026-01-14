@@ -2,12 +2,12 @@
 Tests for SklearnArtifact.
 """
 
-from mloda import Feature
+from mloda.user import Feature
 import pytest
 from unittest.mock import Mock, patch
 from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import SklearnArtifact
 from mloda.provider import FeatureSet
-from mloda import Options
+from mloda.user import Options
 
 
 class TestSklearnArtifact:

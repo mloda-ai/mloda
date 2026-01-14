@@ -6,7 +6,7 @@ from typing import Any
 import pandas as pd
 import pytest
 
-from mloda import Feature
+from mloda.user import Feature
 from mloda.provider import FeatureSet
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys

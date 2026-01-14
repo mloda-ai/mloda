@@ -6,7 +6,7 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_filter
 import pyarrow as pa
 
 from mloda.user import FeatureName
-from mloda import ComputeFramework
+from mloda.provider import ComputeFramework
 
 
 try:

@@ -6,12 +6,12 @@ from __future__ import annotations
 
 from typing import Any, Optional, Set, Union
 
-from mloda import FeatureGroup
-from mloda import Feature
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
 
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
-from mloda import Options
+from mloda.user import Options
 from mloda.provider import FeatureChainParser
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 

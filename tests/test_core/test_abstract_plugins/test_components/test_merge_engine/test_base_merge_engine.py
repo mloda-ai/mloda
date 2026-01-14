@@ -3,17 +3,17 @@ import uuid
 import pandas as pd
 import pandas.testing as pdt
 from typing import Any, List, Optional, Set, Tuple
-from mloda import FeatureGroup
-from mloda import Feature
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.user import Index
 from mloda.provider import BaseInputData
 from mloda.provider import DataCreator
 from mloda.user import Link, JoinSpec
-from mloda import Options
+from mloda.user import Options
 from mloda.user import PluginCollector
-import mloda
+from mloda.user import mloda
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 

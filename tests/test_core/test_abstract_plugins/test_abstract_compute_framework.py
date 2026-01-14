@@ -1,4 +1,4 @@
-from mloda import ComputeFramework
+from mloda.provider import ComputeFramework
 
 
 class BaseTestComputeFramework1(ComputeFramework):

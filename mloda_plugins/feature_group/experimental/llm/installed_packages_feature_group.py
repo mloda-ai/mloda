@@ -2,10 +2,10 @@ import subprocess  # nosec
 import sys
 from typing import Any, Set, Type, Union
 
-from mloda import FeatureGroup
+from mloda.provider import FeatureGroup
 
 from mloda.provider import FeatureSet
-from mloda import ComputeFramework
+from mloda.provider import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 
@@ -38,7 +38,7 @@ class InstalledPackagesFeatureGroup(FeatureGroup):
     ### Basic String-Based Creation
 
     ```python
-    from mloda import Feature
+    from mloda.user import Feature
 
     # Create the feature
     feature = Feature(name="InstalledPackagesFeatureGroup")
@@ -50,8 +50,8 @@ class InstalledPackagesFeatureGroup(FeatureGroup):
     ### Configuration-Based Creation
 
     ```python
-    from mloda import Feature
-    from mloda import Options
+    from mloda.user import Feature
+    from mloda.user import Options
 
     feature = Feature(
         name="placeholder",

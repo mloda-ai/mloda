@@ -1,5 +1,7 @@
 # API
-from mloda.core.api.request import mlodaAPI as API
+from mloda.core.api.request import mlodaAPI
+
+mloda = mlodaAPI
 
 # Features
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -33,7 +35,8 @@ from mloda.core.api.feature_config.loader import load_features_from_config
 
 __all__ = [
     # API
-    "API",
+    "mlodaAPI",
+    "mloda",
     # Features
     "Feature",
     "Features",

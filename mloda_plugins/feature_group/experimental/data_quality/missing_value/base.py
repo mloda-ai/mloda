@@ -7,8 +7,8 @@ from __future__ import annotations
 from abc import abstractmethod
 from typing import Any, List, Optional, Set
 
-from mloda import FeatureGroup
-from mloda import Feature
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
 from mloda.provider import FeatureChainParser
 from mloda.provider import (
     FeatureChainParserMixin,
@@ -83,7 +83,7 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     ### String-Based Creation
 
     ```python
-    from mloda import Feature
+    from mloda.user import Feature
 
     # Impute missing income values with mean
     feature = Feature(name="income__mean_imputed")
@@ -101,8 +101,8 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     ### Configuration-Based Creation
 
     ```python
-    from mloda import Feature
-    from mloda import Options
+    from mloda.user import Feature
+    from mloda.user import Options
     from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
     # Mean imputation using configuration

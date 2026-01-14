@@ -3,10 +3,10 @@ from typing import Any, List, Optional, Set
 
 import pandas as pd
 
-import mloda
-from mloda import FeatureGroup
+from mloda.user import mloda
+from mloda.provider import FeatureGroup
 from mloda.user import DataAccessCollection
-from mloda import Feature
+from mloda.user import Feature
 from mloda.provider import FeatureSet
 from mloda.user import Index
 from mloda.provider import BaseInputData
@@ -98,7 +98,7 @@ class TestInputFeatures:
 
     def test_input_feature_api(self) -> None:
         """
-        This test is a bit more complex, as it requires the use of the API.
+        This test is a bit more complex, as it requires the use of the mloda.
 
         We pass api_data directly to run_all() - the ApiInputDataCollection is created internally.
         """

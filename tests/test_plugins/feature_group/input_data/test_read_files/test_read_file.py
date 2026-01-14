@@ -7,11 +7,11 @@ from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 import pyarrow as pa
 
 from mloda.user import DataAccessCollection
-from mloda import Feature
+from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
-from mloda import Options
-import mloda
+from mloda.user import Options
+from mloda.user import mloda
 
 
 class OverwrittenReadCsvInputDataTestFeatureGroup(ReadFileFeature):

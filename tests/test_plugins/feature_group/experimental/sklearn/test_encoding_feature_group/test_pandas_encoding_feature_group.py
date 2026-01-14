@@ -8,7 +8,7 @@ import numpy as np
 from unittest.mock import Mock, patch
 
 from mloda.provider import FeatureSet
-from mloda import Feature
+from mloda.user import Feature
 from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 

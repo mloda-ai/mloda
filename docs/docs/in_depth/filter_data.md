@@ -34,7 +34,7 @@ The GlobalFilter provides methods to add filters to the collection. The prefered
 -   filter_type
 -   parameter
 
-**add_time_and_time_travel_filters**: Adds time and time travel filtering to the GlobalFiltering. This is a convenience API. Due to the complexity of time in data/ml/ai projects, this function should be used.
+**add_time_and_time_travel_filters**: Adds time and time travel filtering to the GlobalFiltering. This is a convenience mloda. Due to the complexity of time in data/ml/ai projects, this function should be used.
 
 This method is useful for **filtering data based on time ranges** (event) and **validity periods** (valid).
 
@@ -109,7 +109,7 @@ The implementation of the concrete filters is dependent on the feature group. Th
 Further, the feature is a data creator, so we create the data here itself. 
 
 ``` python
-import mloda
+from mloda.user import mloda
 from mloda.provider import FeatureGroup, FeatureSet, ComputeFramework, BaseInputData, DataCreator
 from typing import Any, Union, Set, Type, Optional
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable

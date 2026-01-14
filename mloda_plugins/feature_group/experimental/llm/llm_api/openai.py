@@ -220,7 +220,7 @@ class OpenAIAPI(LLMBaseApi):
 
 class OpenAIRequestLoop(RequestLoop):
     """
-    Base class for integrating OpenAI LLM API into mloda feature pipelines.
+    Base class for integrating OpenAI LLM mloda into mloda feature pipelines.
 
     This feature group provides integration with OpenAI-compatible APIs (including
     Gemini's OpenAI compatibility layer), handling chat completion formatting,
@@ -242,15 +242,15 @@ class OpenAIRequestLoop(RequestLoop):
     - Code generation and analysis
     - Question answering with context
     - Multi-step reasoning with tool use
-    - API-agnostic LLM integration (works with compatible providers)
+    - mloda-agnostic LLM integration (works with compatible providers)
 
     ## Usage Examples
 
     ### Basic Chat Completion
 
     ```python
-    from mloda import Feature
-    from mloda import Options
+    from mloda.user import Feature
+    from mloda.user import Options
 
     feature = Feature(
         name="OpenAIRequestLoop",
@@ -341,7 +341,7 @@ class OpenAIRequestLoop(RequestLoop):
 
     ### Environment Variables
 
-    - `GEMINI_API_KEY` (required): API key (defaults to Gemini endpoint)
+    - `GEMINI_API_KEY` (required): mloda key (defaults to Gemini endpoint)
     - `OPENAI_MAX_RETRIES`: Maximum retry attempts (default: 5)
     - `OPENAI_INITIAL_RETRY_DELAY`: Initial retry delay in seconds (default: 10)
     - `OPENAI_MAX_RETRY_DELAY`: Maximum retry delay in seconds (default: 60)
@@ -380,14 +380,14 @@ class OpenAIRequestLoop(RequestLoop):
     ## Requirements
 
     - `openai` package installed (`pip install openai`)
-    - Valid API key in GEMINI_API_KEY (or OPENAI_API_KEY for OpenAI)
-    - Internet connection for API access
-    - Sufficient API credits/quota
+    - Valid mloda key in GEMINI_API_KEY (or OPENAI_API_KEY for OpenAI)
+    - Internet connection for mloda access
+    - Sufficient mloda credits/quota
 
     ## Error Handling
 
     - Rate limits: Automatic retry with exponential backoff
-    - Invalid API key: Raises ValueError
+    - Invalid mloda key: Raises ValueError
     - Missing package: Raises ImportError (if openai package not installed)
     - Invalid message format: Validates list of dicts (not single string)
     - Network errors: Propagates exception after retries exhausted
@@ -403,11 +403,11 @@ class OpenAIRequestLoop(RequestLoop):
 
     ## Related Classes
 
-    - `OpenAIAPI`: Low-level API wrapper for OpenAI requests
+    - `OpenAIAPI`: Low-level mloda wrapper for OpenAI requests
     - `RequestLoop`: Base class providing request/response loop logic
     - `ToolCollection`: Manages available tools for function calling
     - `ClaudeRequestLoop`: Alternative provider with native SDK
-    - `GeminiRequestLoop`: Native Gemini API (non-OpenAI compatible)
+    - `GeminiRequestLoop`: Native Gemini mloda (non-OpenAI compatible)
     """
 
     @classmethod

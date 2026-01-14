@@ -1,7 +1,7 @@
 """
 Spark Integration Tests
 
-This module contains integration tests for the Spark compute framework with API.
+This module contains integration tests for the Spark compute framework with mloda.
 
 Requirements:
 - PySpark must be installed (pip install pyspark)
@@ -15,7 +15,7 @@ Test Coverage:
 - Multi-step feature pipelines
 - Aggregation operations
 - Cross-framework transformations (Spark to PyArrow)
-- Integration with API
+- Integration with mloda
 
 The tests use a shared SparkSession fixture to avoid Java gateway conflicts and
 ensure proper resource management across all test methods.
@@ -25,15 +25,15 @@ from typing import Any, Dict, Optional, Set, Type, Union
 import pytest
 
 from mloda.provider import ConnectionMatcherMixin
-from mloda import ComputeFramework
+from mloda.provider import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from mloda import FeatureGroup
-from mloda import Feature
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
-from mloda import Options
+from mloda.user import Options
 from mloda.user import PluginCollector
-import mloda
+from mloda.user import mloda
 from mloda.user import ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.spark.spark_framework import SparkFramework
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
@@ -260,7 +260,7 @@ class CheckData(FeatureGroup):
     not PYSPARK_AVAILABLE or pa is None, reason="PySpark or PyArrow is not installed. Skipping this test."
 )
 class TestSparkIntegrationWithMlodaAPI:
-    """Integration tests for SparkFramework with API."""
+    """Integration tests for SparkFramework with mloda."""
 
     @pytest.mark.parametrize(
         "modes",

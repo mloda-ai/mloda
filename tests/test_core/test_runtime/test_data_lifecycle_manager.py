@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from mloda.core.runtime.data_lifecycle_manager import DataLifecycleManager
-from mloda import ComputeFramework
+from mloda.provider import ComputeFramework
 from mloda.provider import FeatureSet
 from mloda.user import FeatureName
 from mloda.provider import ComputeFrameworkTransformer

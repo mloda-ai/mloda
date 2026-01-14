@@ -7,10 +7,10 @@ import pytest
 from typing import Any, Dict, List
 
 from mloda.user import PluginLoader
-from mloda import Feature
-from mloda import Options
+from mloda.user import Feature
+from mloda.user import Options
 from mloda.user import PluginCollector
-from mloda import API
+from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
@@ -89,7 +89,7 @@ class TestComplexEncodingChaining:
         ]
 
         # Phase 1: Train and save artifacts for all complex features
-        api1 = API(
+        api1 = mloda(
             complex_features,
             {PandasDataFrame},
             plugin_collector=plugin_collector,
@@ -172,7 +172,7 @@ class TestComplexEncodingChaining:
             for feature in complex_features
         ]
 
-        api2 = API(
+        api2 = mloda(
             complex_features_reuse,
             {PandasDataFrame},
             plugin_collector=plugin_collector,

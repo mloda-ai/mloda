@@ -7,11 +7,11 @@ from __future__ import annotations
 import datetime
 from typing import Any, Dict, Optional, Set, Type
 
-from mloda import FeatureGroup
-from mloda import Feature
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
-from mloda import Options
+from mloda.user import Options
 from mloda.provider import FeatureChainParser
 from mloda.provider import (
     FeatureChainParserMixin,
@@ -58,8 +58,8 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     Uses Options with proper group/context parameter separation:
 
     ```python
-    from mloda import Feature
-    from mloda import Options
+    from mloda.user import Feature
+    from mloda.user import Options
     from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
     feature = Feature(
@@ -78,7 +78,7 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     ### String-Based Creation
 
     ```python
-    from mloda import Feature
+    from mloda.user import Feature
 
     # OneHot encoding - creates multiple binary columns
     feature = Feature(name="product_category__onehot_encoded")
@@ -95,8 +95,8 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     ### Configuration-Based Creation
 
     ```python
-    from mloda import Feature
-    from mloda import Options
+    from mloda.user import Feature
+    from mloda.user import Options
 
     # OneHot encoding using configuration
     feature = Feature(

@@ -1,8 +1,8 @@
 import pytest
 from mloda.core.api.prepare.setup_compute_framework import SetupComputeFramework
-from mloda import Feature
+from mloda.user import Feature
 from mloda.user import Features
-from mloda import ComputeFramework
+from mloda.provider import ComputeFramework
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 
 

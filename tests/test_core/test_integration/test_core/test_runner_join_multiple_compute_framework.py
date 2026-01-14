@@ -2,18 +2,18 @@ from typing import Any, Dict, List, Optional, Set, Type, Union
 import pytest
 from mloda.provider import BaseInputData
 from mloda.provider import DataCreator
-from mloda import ComputeFramework
+from mloda.provider import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
-from mloda import FeatureGroup
-from mloda import Feature
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
 from mloda.user import Features
 from mloda.provider import FeatureSet
-from mloda import Options
+from mloda.user import Options
 from mloda.user import Index
 from mloda.user import Link, JoinSpec
 

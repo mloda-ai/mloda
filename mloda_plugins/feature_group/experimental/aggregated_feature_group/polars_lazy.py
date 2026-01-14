@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any, List, Set, Type, Union
 
-from mloda import ComputeFramework
+from mloda.provider import ComputeFramework
 
 from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup

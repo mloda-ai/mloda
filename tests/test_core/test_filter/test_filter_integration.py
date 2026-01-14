@@ -5,15 +5,15 @@ import pyarrow as pa
 from mloda.user import FeatureName
 from mloda.provider import BaseInputData
 from mloda.provider import DataCreator
-from mloda import Options
+from mloda.user import Options
 from mloda.user import GlobalFilter
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda.user import ParallelizationMode
-from mloda import FeatureGroup
-from mloda import Feature
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
 from mloda.user import Features
 from mloda.provider import FeatureSet
-from mloda import ComputeFramework
+from mloda.provider import ComputeFramework
 from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_ALL
 
 

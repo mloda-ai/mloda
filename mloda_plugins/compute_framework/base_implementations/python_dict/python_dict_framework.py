@@ -4,7 +4,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
     PythonDictMergeEngine,
 )
 from mloda.user import FeatureName
-from mloda import ComputeFramework
+from mloda.provider import ComputeFramework
 from mloda.provider import BaseFilterEngine
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_filter_engine import (
     PythonDictFilterEngine,

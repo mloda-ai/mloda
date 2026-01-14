@@ -3,8 +3,8 @@ Integration tests for time window feature groups.
 """
 
 from typing import List
-import mloda
-from mloda import Feature
+from mloda.user import mloda
+from mloda.user import Feature
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -31,14 +31,14 @@ class TestTimeWindowPandasIntegration:
     """Integration tests for the time window feature group using Pandas."""
 
     def test_time_window_with_data_creator(self) -> None:
-        """Test time window features with API using DataCreator."""
+        """Test time window features with mloda using DataCreator."""
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
             {PandasTimeWindowTestDataCreator, PandasTimeWindowFeatureGroup}
         )
 
-        # Run the API with multiple time window features
+        # Run the mloda with multiple time window features
         result = mloda.run_all(
             [
                 "temperature",  # Source data
@@ -71,14 +71,14 @@ class TestTimeWindowPyArrowIntegration:
     """Integration tests for the time window feature group using PyArrow."""
 
     def test_time_window_with_data_creator(self) -> None:
-        """Test time window features with API using DataCreator."""
+        """Test time window features with mloda using DataCreator."""
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
             {PyArrowTimeWindowTestDataCreator, PyArrowTimeWindowFeatureGroup}
         )
 
-        # Run the API with multiple time window features
+        # Run the mloda with multiple time window features
         result = mloda.run_all(
             [
                 "temperature",  # Source data

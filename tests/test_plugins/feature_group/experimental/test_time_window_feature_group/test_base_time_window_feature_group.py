@@ -4,9 +4,9 @@ Tests for the TimeWindowFeatureGroup class.
 
 import pytest
 
-from mloda import Feature
+from mloda.user import Feature
 from mloda.user import FeatureName
-from mloda import Options
+from mloda.user import Options
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 from mloda.provider import FeatureChainParser

@@ -5,9 +5,9 @@ Integration tests for geo distance feature groups.
 from typing import Any, Dict, List
 import pandas as pd
 
-import mloda
-from mloda import Feature
-from mloda import Options
+from mloda.user import mloda
+from mloda.user import Feature
+from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
@@ -87,14 +87,14 @@ class TestGeoDistancePandasIntegration:
     """Integration tests for the geo distance feature group using Pandas."""
 
     def test_geo_distance_with_data_creator(self) -> None:
-        """Test geo distance features with API using DataCreator."""
+        """Test geo distance features with mloda using DataCreator."""
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
             {PandasGeoDistanceTestDataCreator, PandasGeoDistanceFeatureGroup}
         )
 
-        # Run the API with multiple geo distance features
+        # Run the mloda with multiple geo distance features
         result = mloda.run_all(
             [
                 "sf",  # Source data - San Francisco coordinates
@@ -125,7 +125,7 @@ class TestGeoDistancePandasIntegration:
         validate_geo_distance_features(distance_df, GEO_DISTANCE_FEATURES)
 
     def test_geo_distance_with_configuration(self) -> None:
-        """Test geo distance features with API using configuration-based feature creation."""
+        """Test geo distance features with mloda using configuration-based feature creation."""
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
@@ -163,7 +163,7 @@ class TestGeoDistancePandasIntegration:
             ),
         )
 
-        # Run the API with configuration-based features
+        # Run the mloda with configuration-based features
         result = mloda.run_all(
             [
                 "sf",  # Source data - San Francisco coordinates

@@ -3,11 +3,11 @@ from typing import Any, List, Set
 import pandas as pd
 import pytest
 
-import mloda
-from mloda import Feature
+from mloda.user import mloda
+from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
-from mloda import Options
+from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
@@ -271,14 +271,14 @@ class TestAggPandasIntegration:
     """Integration tests for the aggregated feature group using DataCreator."""
 
     def test_aggregation_with_data_creator(self) -> None:
-        """Test aggregation features with API using DataCreator."""
+        """Test aggregation features with mloda using DataCreator."""
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
             {PandasAggregatedTestDataCreator, PandasAggregatedFeatureGroup}
         )
 
-        # Run the API with multiple aggregation features
+        # Run the mloda with multiple aggregation features
         result = mloda.run_all(
             [
                 "sales",

@@ -1,11 +1,11 @@
 from typing import Any, Optional, Set, Union
-from mloda import FeatureGroup
+from mloda.provider import FeatureGroup
 from mloda.user import DataAccessCollection
-from mloda import Feature
+from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
-from mloda import Options
-import mloda
+from mloda.user import Options
+from mloda.user import mloda
 
 
 class ATestSetFeatureNameBase(FeatureGroup):

@@ -4,9 +4,9 @@ import pytest
 from mloda.user import DataAccessCollection
 from mloda.user import DataType
 from mloda.user import FeatureName
-from mloda import FeatureGroup
-from mloda import Feature
-from mloda import Options
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
+from mloda.user import Options
 
 
 class BaseTestFeatureGroup1(FeatureGroup):

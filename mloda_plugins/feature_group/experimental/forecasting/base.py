@@ -7,12 +7,12 @@ from __future__ import annotations
 from abc import abstractmethod
 from typing import Any, List, Optional, Set, Type
 
-from mloda import FeatureGroup
+from mloda.provider import FeatureGroup
 from mloda.provider import BaseArtifact
-from mloda import Feature
+from mloda.user import Feature
 from mloda.provider import FeatureChainParser, FeatureChainParserMixin, FeatureSet
 from mloda.user import FeatureName
-from mloda import Options
+from mloda.user import Options
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.forecasting.forecasting_artifact import ForecastingArtifact
 

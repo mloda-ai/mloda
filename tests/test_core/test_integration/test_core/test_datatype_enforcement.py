@@ -3,13 +3,13 @@ import pyarrow as pa
 import pytest
 from mloda.provider import BaseInputData
 from mloda.provider import DataCreator
-from mloda import FeatureGroup
-from mloda import Feature
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
 from mloda.user import Features
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.user import DataType
-from mloda import Options
+from mloda.user import Options
 from mloda.user import ParallelizationMode
 from mloda.user import PluginCollector
 from mloda.core.abstract_plugins.components.validators.datatype_validator import (
@@ -305,7 +305,7 @@ class TestUntypedFeatures:
 
 @PARALLELIZATION_MODES_SYNC_THREADING
 class TestEndToEndIntegration:
-    """Test complete datatype enforcement pipeline through API."""
+    """Test complete datatype enforcement pipeline through mloda."""
 
     def test_same_feature_different_types_separate_execution(
         self, modes: Set[ParallelizationMode], flight_server: Any
@@ -448,7 +448,7 @@ class TestValidatorEdgeCases:
 
 @PARALLELIZATION_MODES_SYNC_THREADING
 class TestStrictTypeEnforcementPropagation:
-    """Test that API strict_type_enforcement propagates and works end-to-end."""
+    """Test that mloda strict_type_enforcement propagates and works end-to-end."""
 
     def test_strict_enforcement_raises_on_mismatch_but_lenient_passes(
         self, modes: Set[ParallelizationMode], flight_server: Any

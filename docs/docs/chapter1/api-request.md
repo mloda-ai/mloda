@@ -1,11 +1,11 @@
 
-### API Request Example
+### mloda Request Example
 This example demonstrates a simple request to the mloda API. In this case, mloda automatically determines that a **CsvReader** feature group will fulfill the request and respond with the resulting DataFrame.
 
 #### 1. Import the Required Modules
 We first need to import the necessary components to set up our request:
 ```python
-import mloda
+from mloda.user import mloda
 from mloda.user import DataAccessCollection
 ```
 

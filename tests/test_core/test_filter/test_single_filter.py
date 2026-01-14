@@ -1,6 +1,6 @@
 import pytest
 
-from mloda import Feature
+from mloda.user import Feature
 from mloda.user import SingleFilter
 from mloda.user import FilterType
 from mloda.core.filter.filter_parameter import FilterParameterImpl

@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from mloda import Feature
+from mloda.user import Feature
 from mloda.user import GlobalFilter
 from mloda.user import SingleFilter
 from mloda.user import FilterType

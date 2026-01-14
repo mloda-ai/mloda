@@ -9,7 +9,7 @@ import string
 import unicodedata
 from typing import Any, Dict, List, Set, Type, Union
 
-from mloda import ComputeFramework
+from mloda.provider import ComputeFramework
 
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup

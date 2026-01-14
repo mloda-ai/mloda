@@ -5,7 +5,7 @@ This module tests the in_features field which allows features to specify
 multiple source features (e.g., distance calculations requiring latitude and longitude).
 """
 
-from mloda import Feature
+from mloda.user import Feature
 from mloda.core.api.feature_config.loader import load_features_from_config
 from mloda.core.api.feature_config.models import FeatureConfig
 from mloda.core.api.feature_config.parser import parse_json

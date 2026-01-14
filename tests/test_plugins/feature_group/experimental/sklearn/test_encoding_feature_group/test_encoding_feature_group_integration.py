@@ -6,10 +6,10 @@ import pytest
 from typing import Any, Dict
 
 from mloda.user import PluginLoader
-from mloda import Feature
-from mloda import Options
+from mloda.user import Feature
+from mloda.user import Options
 from mloda.user import PluginCollector
-from mloda import API
+from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
@@ -55,7 +55,7 @@ class TestEncodingFeatureGroupIntegration:
         label_feature = Feature("category__label_encoded", Options({"artifact_storage_path": str(tmp_path)}))
 
         # Phase 1: Train and save artifacts
-        api1 = API(
+        api1 = mloda(
             [label_feature],
             {PandasDataFrame},
             plugin_collector=plugin_collector,
@@ -85,7 +85,7 @@ class TestEncodingFeatureGroupIntegration:
             Options({**artifacts1, "artifact_storage_path": str(tmp_path)}),
         )
 
-        api2 = API(
+        api2 = mloda(
             [label_feature_reuse],
             {PandasDataFrame},
             plugin_collector=plugin_collector,
@@ -124,7 +124,7 @@ class TestEncodingFeatureGroupIntegration:
         onehot_feature = Feature("category__onehot_encoded", Options({"artifact_storage_path": str(tmp_path)}))
 
         # Phase 1: Train and save artifacts
-        api1 = API(
+        api1 = mloda(
             [onehot_feature],
             {PandasDataFrame},
             plugin_collector=plugin_collector,
@@ -171,7 +171,7 @@ class TestEncodingFeatureGroupIntegration:
         onehot_feature_1 = Feature("category__onehot_encoded~1")
 
         # Phase 1: Test individual column access
-        api1 = API(
+        api1 = mloda(
             [onehot_feature_0, onehot_feature_1],
             {PandasDataFrame},
             plugin_collector=plugin_collector,
@@ -206,7 +206,7 @@ class TestEncodingFeatureGroupIntegration:
         # Phase 2: Test that we can also get the full onehot encoding
         onehot_full_feature = Feature("category__onehot_encoded")
 
-        api2 = API(
+        api2 = mloda(
             [onehot_full_feature],
             {PandasDataFrame},
             plugin_collector=plugin_collector,
@@ -265,7 +265,7 @@ class TestEncodingFeatureGroupIntegration:
         )
 
         # Test configuration-based features with column suffixes
-        api = API(
+        api = mloda(
             [onehot_config_feature_0, onehot_config_feature_1],
             {PandasDataFrame},
             plugin_collector=plugin_collector,
@@ -295,7 +295,7 @@ class TestEncodingFeatureGroupIntegration:
         onehot_string_feature_0 = Feature("category__onehot_encoded~0")
         onehot_string_feature_1 = Feature("category__onehot_encoded~1")
 
-        api_string = API(
+        api_string = mloda(
             [onehot_string_feature_0, onehot_string_feature_1],
             {PandasDataFrame},
             plugin_collector=plugin_collector,

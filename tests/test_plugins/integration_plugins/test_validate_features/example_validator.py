@@ -2,7 +2,7 @@ from typing import Any, Optional
 
 from pandera import Column, Check
 
-from mloda import FeatureGroup
+from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.provider import BaseInputData
 from mloda.provider import DataCreator

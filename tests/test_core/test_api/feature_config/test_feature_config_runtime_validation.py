@@ -5,7 +5,7 @@ Tests all features from test_config_features.json with mloda.run_all.
 
 from pathlib import Path
 from typing import Any, Dict
-import mloda
+from mloda.user import mloda
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda.core.api.feature_config.loader import load_features_from_config
@@ -91,7 +91,7 @@ def test_features_runtime_one_by_one() -> None:
     # Create plugin collector
     plugin_collector = PluginCollector.enabled_feature_groups(plugins)
 
-    # Run API with all features being tested
+    # Run mloda with all features being tested
     results = mloda.run_all(
         features_to_test,
         compute_frameworks={PandasDataFrame},
@@ -141,8 +141,8 @@ def test_feature_3_step1_onehot_encoding() -> None:
     2. Create "state__onehot_encoded~0__max_aggr" targeting a specific OneHot column
        (using string-based feature name for proper parsing)
     """
-    from mloda import Feature
-    from mloda import Options
+    from mloda.user import Feature
+    from mloda.user import Options
     from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
     # Step 1: Create the intermediate feature "state__onehot_encoded" from "state"

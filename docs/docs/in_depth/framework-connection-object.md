@@ -80,7 +80,7 @@ def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Option
 ### Using DuckDB with mloda API
 
 ``` python
-import mloda
+from mloda.user import mloda
 from mloda.user import DataAccessCollection
 import duckdb
 
@@ -101,7 +101,7 @@ result = mloda.run_all(
 ### Using Spark with mloda API
 
 ``` python
-import mloda
+from mloda.user import mloda
 from mloda.user import DataAccessCollection
 from pyspark.sql import SparkSession
 

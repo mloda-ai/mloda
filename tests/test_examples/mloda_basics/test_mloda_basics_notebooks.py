@@ -15,8 +15,8 @@ from docs.docs.examples.mloda_basics.create_synthetic_data import (
     OrderSyntheticDataSet,
     PaymentSyntheticDataSet,
 )
-from mloda import Feature
-import mloda
+from mloda.user import Feature
+from mloda.user import mloda
 from mloda.user import GlobalFilter
 
 

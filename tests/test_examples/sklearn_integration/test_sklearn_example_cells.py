@@ -7,12 +7,12 @@ Functions return data/results that can be used in subsequent cells.
 
 from copy import copy
 from typing import Any, Optional
-from mloda import FeatureGroup
+from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.provider import BaseInputData
 from mloda.provider import DataCreator
 from mloda.user import PluginCollector
-import mloda
+from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import PandasMissingValueFeatureGroup
@@ -128,7 +128,7 @@ def cell4_mloda_approach() -> Any:
     from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import (
         PandasMissingValueFeatureGroup,
     )
-    import mloda
+    from mloda.user import mloda
     from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
     # Enable necessary feature groups
@@ -171,7 +171,7 @@ def cell5_demonstrate_feature_chaining() -> None:
     from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import (
         PandasMissingValueFeatureGroup,
     )
-    import mloda
+    from mloda.user import mloda
     from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
     # Enable necessary feature groups

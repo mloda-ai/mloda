@@ -13,15 +13,15 @@ from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 import pyarrow as pa
 import pyarrow.compute as pc
 
-from mloda import FeatureGroup
+from mloda.provider import FeatureGroup
 from mloda.user import DataAccessCollection
-from mloda import Feature
+from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet, HashableDict
 from mloda.user import Index
 from mloda.user import Link, JoinSpec
-from mloda import Options
-import mloda
+from mloda.user import Options
+from mloda.user import mloda
 from tests.test_plugins.feature_group.input_data.test_classes.test_input_classes import (
     DBInputDataTestFeatureGroup,
 )

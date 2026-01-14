@@ -1,5 +1,5 @@
 """
-Unified test runner infrastructure for API integration tests.
+Unified test runner infrastructure for mloda integration tests.
 
 This module provides consistent patterns for:
 - Running with different parallelization modes (SYNC, THREADING, MULTIPROCESSING)
@@ -28,9 +28,9 @@ from mloda.user import Features
 from mloda.user import Link
 from mloda.user import ParallelizationMode
 from mloda.user import PluginCollector
-from mloda import ComputeFramework
+from mloda.provider import ComputeFramework
 from mloda.steward import Extender
-import mloda
+from mloda.user import mloda
 from mloda.user import GlobalFilter
 from mloda.core.core.engine import Engine
 from mloda.core.runtime.flight.flight_server import FlightServer
@@ -49,7 +49,7 @@ class RunResult:
 
 class MlodaTestRunner:
     """
-    Unified test runner for API integration tests.
+    Unified test runner for mloda integration tests.
 
     Provides consistent patterns for:
     - Running with different parallelization modes
@@ -77,10 +77,10 @@ class MlodaTestRunner:
         strict_type_enforcement: bool = False,
     ) -> RunResult:
         """
-        Run API with the given configuration.
+        Run mloda with the given configuration.
 
         This is the recommended method for most integration tests.
-        Uses API instance + _batch_run() for full access to results and artifacts.
+        Uses mloda instance + _batch_run() for full access to results and artifacts.
 
         Args:
             features: The feature set to compute
@@ -90,7 +90,7 @@ class MlodaTestRunner:
             function_extender: Optional function extenders
             links: Optional links for joins
             global_filter: Optional global filter
-            api_data: Optional API data dictionary
+            api_data: Optional mloda data dictionary
             cleanup_flight_server: Whether to assert flight server cleanup (default: True)
             plugin_collector: Optional plugin collector for feature group filtering
             strict_type_enforcement: If True, enforce strict type matching for typed features
@@ -103,7 +103,7 @@ class MlodaTestRunner:
         if parallelization_modes is None:
             parallelization_modes = {ParallelizationMode.SYNC}
 
-        api = mloda.API(
+        api = mloda(
             features,
             compute_frameworks,
             links=links,
@@ -184,7 +184,7 @@ class MlodaTestRunner:
             function_extender: Optional function extenders
             links: Optional links for joins
             global_filter: Optional global filter
-            api_data: Optional API data dictionary
+            api_data: Optional mloda data dictionary
 
         Returns:
             ExecutionOrchestrator instance after execution

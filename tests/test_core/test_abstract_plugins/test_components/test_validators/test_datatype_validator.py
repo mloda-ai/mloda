@@ -6,7 +6,7 @@ from mloda.core.abstract_plugins.components.validators.datatype_validator import
     DataTypeValidator,
 )
 from mloda.user import DataType
-from mloda import Feature
+from mloda.user import Feature
 from mloda.provider import FeatureSet
 
 

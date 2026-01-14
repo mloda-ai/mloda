@@ -5,12 +5,12 @@ Tests for the PythonDictTextCleaningFeatureGroup implementation.
 import pytest
 from typing import Any, Dict, List
 
-from mloda import Feature
+from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
-from mloda import Options
+from mloda.user import Options
 from mloda.user import PluginCollector
-import mloda
+from mloda.user import mloda
 
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
@@ -310,7 +310,7 @@ class TestTextCleaningPythonDictIntegration:
     """Integration tests for the text cleaning feature group using PythonDict framework."""
 
     def test_text_cleaning_with_data_creator(self) -> None:
-        """Test text cleaning features with API using DataCreator."""
+        """Test text cleaning features with mloda using DataCreator."""
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
@@ -333,7 +333,7 @@ class TestTextCleaningPythonDictIntegration:
 
         feature_list = [Feature(name=feature, options=options) for feature in feature_str]
 
-        # Run the API with text cleaning features
+        # Run the mloda with text cleaning features
         result = mloda.run_all(
             feature_list,  # type: ignore
             compute_frameworks={PythonDictFramework},

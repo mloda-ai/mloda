@@ -13,11 +13,11 @@ from typing import Any, Optional, Set
 
 import pytest
 
-from mloda import FeatureGroup
+from mloda.provider import FeatureGroup
 from mloda.user import FeatureName
 from mloda.user import Index
 from mloda.user import JoinSpec  # This import will fail
-from mloda import Options
+from mloda.user import Options
 
 
 # ============================================================================

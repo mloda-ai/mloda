@@ -41,8 +41,8 @@ class CsvReader(ReadFile):
     Uses Options with file path configuration:
 
     ```python
-    from mloda import Feature
-    from mloda import Options
+    from mloda.user import Feature
+    from mloda.user import Options
 
     feature = Feature(
         name="customer_name",
@@ -59,8 +59,8 @@ class CsvReader(ReadFile):
     ### Basic CSV Feature Access
 
     ```python
-    from mloda import Feature
-    from mloda import Options
+    from mloda.user import Feature
+    from mloda.user import Options
 
     # Simple column reference from CSV file
     feature = Feature(

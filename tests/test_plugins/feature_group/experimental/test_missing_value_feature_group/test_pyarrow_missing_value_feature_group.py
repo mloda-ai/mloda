@@ -3,10 +3,10 @@ import pyarrow.compute as pc
 import pytest
 from typing import List
 
-import mloda
-from mloda import Feature
+from mloda.user import mloda
+from mloda.user import Feature
 from mloda.provider import FeatureSet
-from mloda import Options
+from mloda.user import Options
 from mloda.user import PluginCollector
 
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -286,7 +286,7 @@ class TestMissingValuePyArrowIntegration:
     """Integration tests for the missing value feature group using DataCreator."""
 
     def test_imputation_with_data_creator(self) -> None:
-        """Test imputation features with API using DataCreator."""
+        """Test imputation features with mloda using DataCreator."""
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
@@ -309,7 +309,7 @@ class TestMissingValuePyArrowIntegration:
 
         feature_list: List[str | Feature] = [Feature(name=feature, options=options) for feature in feature_str]
 
-        # Run the API with multiple imputation features
+        # Run the mloda with multiple imputation features
         result = mloda.run_all(
             feature_list,
             compute_frameworks={PyArrowTable},

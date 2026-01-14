@@ -6,9 +6,9 @@ from typing import Any, Dict, List
 
 import pandas as pd
 
-import mloda
-from mloda import Feature
-from mloda import Options
+from mloda.user import mloda
+from mloda.user import Feature
+from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.node_centrality.base import NodeCentralityFeatureGroup
@@ -78,14 +78,14 @@ class TestNodeCentralityPandasIntegration:
     """Integration tests for the node centrality feature group using Pandas."""
 
     def test_node_centrality_with_data_creator(self) -> None:
-        """Test node centrality features with API using DataCreator."""
+        """Test node centrality features with mloda using DataCreator."""
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
             {NodeCentralityTestDataCreator, PandasNodeCentralityFeatureGroup}
         )
 
-        # Run the API with multiple node centrality features
+        # Run the mloda with multiple node centrality features
         result = mloda.run_all(
             [
                 "source",  # Source node feature
@@ -102,7 +102,7 @@ class TestNodeCentralityPandasIntegration:
         )
 
         # Verify the results
-        assert len(result) > 0, "No results returned from API"
+        assert len(result) > 0, "No results returned from mloda"
 
         # Find the DataFrame with the node centrality features
         centrality_df = None
@@ -151,7 +151,7 @@ class TestNodeCentralityPandasIntegration:
             ),
         )
 
-        # Run the API with the configured features
+        # Run the mloda with the configured features
         result = mloda.run_all(
             [
                 "source",  # Source node feature
@@ -165,7 +165,7 @@ class TestNodeCentralityPandasIntegration:
         )
 
         # Verify the results
-        assert len(result) > 0, "No results returned from API"
+        assert len(result) > 0, "No results returned from mloda"
 
         # Find the DataFrame with the node centrality features
         centrality_df = None
@@ -212,7 +212,7 @@ class TestNodeCentralityPandasIntegration:
             ),
         )
 
-        # Run the API with the configured features
+        # Run the mloda with the configured features
         result = mloda.run_all(
             [
                 "source",  # Source node feature
@@ -226,7 +226,7 @@ class TestNodeCentralityPandasIntegration:
         )
 
         # Verify the results
-        assert len(result) > 0, "No results returned from API"
+        assert len(result) > 0, "No results returned from mloda"
 
         # Find the DataFrames with the node centrality features
         source_df = None

@@ -15,7 +15,7 @@ from mloda.core.abstract_plugins.function_extender import (
 )
 from mloda_plugins.function_extender.base_implementations.otel.otel_extender import OtelExtender
 from mloda.core.abstract_plugins.function_extender import _CompositeExtender
-from mloda import ComputeFramework
+from mloda.provider import ComputeFramework
 
 
 class MockExtender(Extender):

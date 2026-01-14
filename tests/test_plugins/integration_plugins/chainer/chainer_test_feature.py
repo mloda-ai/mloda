@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from mloda import Feature
+from mloda.user import Feature
 
 from mloda.provider import FeatureChainParser
 from tests.test_plugins.integration_plugins.chainer.chainer_context_feature import ChainedContextFeatureGroupTest

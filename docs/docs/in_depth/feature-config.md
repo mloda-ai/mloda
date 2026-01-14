@@ -11,7 +11,7 @@ The `load_features_from_config` function enables loading feature configurations 
 ## Basic Usage
 
 ``` python
-from mloda.user import load_features_from_config, API
+from mloda.user import load_features_from_config, mloda
 
 config = '''
 [
@@ -21,7 +21,7 @@ config = '''
 '''
 
 features = load_features_from_config(config)
-result = API.run_all(features, compute_frameworks=["PandasDataFrame"])
+result = mloda.run_all(features, compute_frameworks=["PandasDataFrame"])
 ```
 
 ## JSON Format
@@ -154,7 +154,7 @@ This produces a feature named `pca_result~0`.
 ## Complete Example
 
 ``` python
-from mloda.user import load_features_from_config, API
+from mloda.user import load_features_from_config, mloda
 
 config = '''
 [
@@ -177,7 +177,7 @@ config = '''
 
 features = load_features_from_config(config)
 
-result = API.run_all(
+result = mloda.run_all(
     features,
     compute_frameworks=["PandasDataFrame"],
     api_data={"customer_data": {"customer_id": [1, 2, 3]}}

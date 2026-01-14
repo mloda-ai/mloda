@@ -3,17 +3,17 @@ import pytest
 from typing import Any, List, Optional, Set, Type, Union
 from unittest.mock import Mock
 
-from mloda import FeatureGroup
-from mloda import Feature
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
-from mloda import Options
+from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda.provider import DataCreator
 from mloda.provider import BaseInputData
 from mloda.provider import ConnectionMatcherMixin
-from mloda import ComputeFramework
-import mloda
+from mloda.provider import ComputeFramework
+from mloda.user import mloda
 from mloda.user import ParallelizationMode
 from mloda.user import DataAccessCollection
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework import IcebergFramework
@@ -243,7 +243,7 @@ class IcebergToArrowFeatureGroup(FeatureGroup):
     pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
 )
 class TestIcebergIntegrationWithMlodaAPI:
-    """Integration tests for IcebergFramework with API."""
+    """Integration tests for IcebergFramework with mloda."""
 
     @pytest.mark.parametrize(
         "modes",

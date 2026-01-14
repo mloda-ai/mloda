@@ -7,8 +7,8 @@ from __future__ import annotations
 from abc import abstractmethod
 from typing import Any, List, Optional, Set, Union
 
-from mloda import FeatureGroup
-from mloda import Feature
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
 from mloda.provider import FeatureChainParser
 from mloda.provider import (
     FeatureChainParserMixin,

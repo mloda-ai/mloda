@@ -4,8 +4,8 @@ from mloda.provider import BaseArtifact
 from mloda.provider import BaseInputData
 from mloda.provider import DataCreator
 from mloda.user import ParallelizationMode
-from mloda import FeatureGroup
-from mloda import Feature
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
 from mloda.user import Features
 from mloda.provider import FeatureSet
 from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_ALL

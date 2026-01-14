@@ -1,12 +1,12 @@
 from typing import Any, Dict, List, Optional, Tuple, Type, Set, Union
-from mloda import FeatureGroup
-from mloda import Feature
-from mloda import Options
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
+from mloda.user import Options
 from mloda.user import FeatureName
 from mloda.user import DataAccessCollection
 from mloda.provider import FeatureSet
 from mloda.user import DataType
-from mloda import ComputeFramework
+from mloda.provider import ComputeFramework
 from mloda.user import Index
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys

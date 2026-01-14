@@ -8,7 +8,7 @@ from typing import Any, Set, Type, Union
 
 import numpy as np
 
-from mloda import ComputeFramework
+from mloda.provider import ComputeFramework
 
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.geo_distance.base import GeoDistanceFeatureGroup

@@ -7,11 +7,11 @@ from __future__ import annotations
 import datetime
 from typing import Any, Dict, FrozenSet, List, Optional, Set, Type, Union
 
-from mloda import FeatureGroup
-from mloda import Feature
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
-from mloda import Options
+from mloda.user import Options
 from mloda.provider import FeatureChainParser
 from mloda.provider import (
     FeatureChainParserMixin,

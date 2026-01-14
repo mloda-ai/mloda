@@ -4,8 +4,8 @@ Integration tests for combined feature groups.
 
 from typing import List
 
-import mloda
-from mloda import Feature
+from mloda.user import mloda
+from mloda.user import Feature
 from mloda.user import PluginCollector
 
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -57,7 +57,7 @@ class TestCombinedFeatureGroupsPandas:
             "price__mean_imputed__sum_7_day_window__max_aggr",  # Step 3: Max aggregation
         ]
 
-        # Run the API with the feature chain
+        # Run the mloda with the feature chain
         result = mloda.run_all(
             features,
             compute_frameworks={PandasDataFrame},
@@ -116,7 +116,7 @@ class TestCombinedFeatureGroupsPyArrow:
             "price__mean_imputed__sum_7_day_window__max_aggr",  # Step 3: Max aggregation
         ]
 
-        # Run the API with the feature chain
+        # Run the mloda with the feature chain
         result = mloda.run_all(
             features,
             compute_frameworks={PyArrowTable},

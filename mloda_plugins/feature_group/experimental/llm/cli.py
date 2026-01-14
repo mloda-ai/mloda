@@ -1,7 +1,7 @@
 import argparse
 from typing import Any
 from mloda.user import PluginLoader
-import mloda
+from mloda.user import mloda
 
 import logging
 

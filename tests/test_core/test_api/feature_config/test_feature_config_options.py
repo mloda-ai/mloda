@@ -129,7 +129,7 @@ def test_load_creates_options_with_group_context() -> None:
     - options.context containing the context_options
     """
     from mloda.core.api.feature_config.loader import load_features_from_config
-    from mloda import Feature
+    from mloda.user import Feature
 
     config_str = """[
         {

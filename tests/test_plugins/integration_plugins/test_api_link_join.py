@@ -2,23 +2,23 @@
 Integration test: ApiInputDataCollection with Links and Joins.
 
 Three features:
-1. ApiDataFeatureGroup (existing) - receives API data
+1. ApiDataFeatureGroup (existing) - receives mloda data
 2. CreatorDataFeature (custom) - creates own data via DataCreator
 3. JoinedFeature (custom) - depends on both with a join
 """
 
 from typing import Any, List, Optional, Set, Union
-from mloda import FeatureGroup
-from mloda import Feature
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.user import Index
 from mloda.provider import BaseInputData
 from mloda.provider import DataCreator
 from mloda.user import Link, JoinSpec
-from mloda import Options
+from mloda.user import Options
 from mloda.user import PluginCollector
-import mloda
+from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda.provider import ApiDataFeatureGroup
 
@@ -43,10 +43,10 @@ class CreatorDataFeature(FeatureGroup):
 
 
 # ============================================================================
-# Feature C: Joined Feature (depends on API and Creator)
+# Feature C: Joined Feature (depends on mloda and Creator)
 # ============================================================================
 class LeftJoinedFeature(FeatureGroup):
-    """Joins API data with Creator data using LEFT join."""
+    """Joins mloda data with Creator data using LEFT join."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         """Define input features with a LEFT join link."""
@@ -74,7 +74,7 @@ class LeftJoinedFeature(FeatureGroup):
 
 
 class AppendedFeature(FeatureGroup):
-    """Appends API data with Creator data (stacks vertically)."""
+    """Appends mloda data with Creator data (stacks vertically)."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         """Define input features with an APPEND link."""
@@ -125,11 +125,11 @@ class TestApiLinkJoin:
 
     def test_api_creator_left_join(self) -> None:
         """
-        Test LEFT join between API data and DataCreator data.
+        Test LEFT join between mloda data and DataCreator data.
 
-        API data (4 rows): ids 1, 2, 3, 4
+        mloda data (4 rows): ids 1, 2, 3, 4
         Creator data (3 rows): ids 1, 2, 3
-        Result: 4 rows (LEFT keeps all API rows, id 4 has null for creator_value)
+        Result: 4 rows (LEFT keeps all mloda rows, id 4 has null for creator_value)
         """
         # Request the joined feature
         feature_list: List[Union[Feature, str]] = [Feature(name="LeftJoinedFeature")]
@@ -144,13 +144,13 @@ class TestApiLinkJoin:
         assert len(result) == 1
         df = result[0]
         assert "LeftJoinedFeature" in df.columns
-        assert len(df) == 4  # LEFT join keeps all API rows
+        assert len(df) == 4  # LEFT join keeps all mloda rows
 
     def test_api_creator_append(self) -> None:
         """
-        Test APPEND between API data and DataCreator data.
+        Test APPEND between mloda data and DataCreator data.
 
-        API data (2 rows)
+        mloda data (2 rows)
         Creator data (3 rows)
         Result: 5 rows (stacked vertically)
         """
@@ -167,4 +167,4 @@ class TestApiLinkJoin:
         assert len(result) == 1
         df = result[0]
         assert "AppendedFeature" in df.columns
-        assert len(df) == 5  # APPEND stacks: 2 API + 3 Creator rows
+        assert len(df) == 5  # APPEND stacks: 2 mloda + 3 Creator rows

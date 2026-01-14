@@ -2,10 +2,10 @@ from typing import Union
 from unittest.mock import patch
 import pytest
 
-from mloda import ComputeFramework
+from mloda.provider import ComputeFramework
 from mloda.user import Features
-from mloda import Feature
-from mloda import API
+from mloda.user import Feature
+from mloda.user import mlodaAPI
 from mloda.core.core.engine import Engine
 from mloda.user import Index
 from mloda.user import Link, JoinSpec
@@ -19,8 +19,8 @@ class TestmlodaAPI:
     def features(self) -> list[str]:
         return ["some_feature"]
 
-    def init_with_no_params(self, features: list[Union[str, Feature]]) -> API:
-        api_request = API(features)
+    def init_with_no_params(self, features: list[Union[str, Feature]]) -> mlodaAPI:
+        api_request = mlodaAPI(features)
 
         assert isinstance(api_request.features, Features)
         assert isinstance(api_request.compute_framework, set)
@@ -38,7 +38,7 @@ class TestmlodaAPI:
             )
         }
 
-        api_request = API(features, compute_fws, links)  # type: ignore
+        api_request = mlodaAPI(features, compute_fws, links)  # type: ignore
         assert isinstance(api_request.features, Features)
         assert len(api_request.compute_framework) == len(get_all_subclasses(ComputeFramework))
         assert api_request.links is not None
@@ -56,10 +56,10 @@ class TestmlodaAPI:
             original_feature = original_features[0]
             assert isinstance(original_feature, Feature)
 
-            # Create API with default copy_features=True
-            api_request = API(original_features)
+            # Create mlodaAPI with default copy_features=True
+            api_request = mlodaAPI(original_features)
 
-            # Verify the feature in the API is a different object (was deep copied)
+            # Verify the feature in the mlodaAPI is a different object (was deep copied)
             api_feature = list(api_request.features)[0]
             assert api_feature is not original_feature
             assert api_feature.name == original_feature.name
@@ -71,10 +71,10 @@ class TestmlodaAPI:
             original_feature = original_features[0]
             assert isinstance(original_feature, Feature)
 
-            # Create API with copy_features=False
-            api_request = API(original_features, copy_features=False)
+            # Create mlodaAPI with copy_features=False
+            api_request = mlodaAPI(original_features, copy_features=False)
 
-            # Verify the feature in the API is the same object (was NOT copied)
+            # Verify the feature in the mlodaAPI is the same object (was NOT copied)
             api_feature = list(api_request.features)[0]
             assert api_feature is original_feature
             assert api_feature.name == original_feature.name

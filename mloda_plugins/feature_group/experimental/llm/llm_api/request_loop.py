@@ -2,12 +2,12 @@ from copy import copy
 from typing import Any, Set, Tuple
 
 
-from mloda import Feature
+from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.user import Index
 from mloda.user import JoinSpec, Link
-from mloda import Options
+from mloda.user import Options
 
 from mloda_plugins.feature_group.experimental.llm.installed_packages_feature_group import InstalledPackagesFeatureGroup
 from mloda_plugins.feature_group.experimental.llm.list_directory_feature_group import ListDirectoryFeatureGroup

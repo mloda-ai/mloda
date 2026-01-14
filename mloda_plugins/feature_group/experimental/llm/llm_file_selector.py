@@ -2,11 +2,11 @@ import logging
 import os
 from typing import Any, Optional, Set
 
-from mloda import FeatureGroup
-from mloda import Feature
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
-from mloda import Options
+from mloda.user import Options
 from mloda_plugins.feature_group.experimental.llm.llm_api.gemini import GeminiRequestLoop
 from mloda_plugins.feature_group.input_data.read_context_files import ConcatenatedFileContent
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
@@ -60,8 +60,8 @@ class LLMFileSelector(FeatureGroup):
     ### 2. Configuration-Based Creation
 
     ```python
-    from mloda import Feature
-    from mloda import Options
+    from mloda.user import Feature
+    from mloda.user import Options
 
     feature = Feature(
         name="LLMFileSelector",
@@ -81,8 +81,8 @@ class LLMFileSelector(FeatureGroup):
     ### Finding Feature Implementation Files
 
     ```python
-    from mloda import Feature
-    from mloda import Options
+    from mloda.user import Feature
+    from mloda.user import Options
 
     feature = Feature(
         name="LLMFileSelector",
@@ -156,7 +156,7 @@ class LLMFileSelector(FeatureGroup):
 
     ## Requirements
 
-    - Google Gemini API key set in environment (GEMINI_API_KEY)
+    - Google Gemini mloda key set in environment (GEMINI_API_KEY)
     - Target directory must exist and be accessible
     - Files must be readable
     - ConcatenatedFileContent feature group available
@@ -172,7 +172,7 @@ class LLMFileSelector(FeatureGroup):
     ## Related Feature Groups
 
     - `ConcatenatedFileContent`: Reads and combines file contents
-    - `GeminiRequestLoop`: Handles LLM API communication
+    - `GeminiRequestLoop`: Handles LLM mloda communication
     - `ListDirectoryFeatureGroup`: Provides directory structure context
     """
 

@@ -5,11 +5,11 @@ import uuid
 
 from mloda.user import DataAccessCollection
 from mloda.user import FeatureName
-from mloda import ComputeFramework
+from mloda.provider import ComputeFramework
 from mloda.core.prepare.graph.build_graph import BuildGraph
-from mloda import FeatureGroup
-from mloda import Feature
-from mloda import Options
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
+from mloda.user import Options
 from mloda.user import Index
 from tests.test_core.test_abstract_plugins.test_abstract_feature_group import BaseTestFeatureGroup1
 

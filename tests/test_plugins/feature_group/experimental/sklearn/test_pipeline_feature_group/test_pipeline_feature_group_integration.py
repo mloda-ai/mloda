@@ -1,14 +1,14 @@
 """
-Integration tests for the SklearnPipelineFeatureGroup with API.
+Integration tests for the SklearnPipelineFeatureGroup with mloda.
 """
 
 import pytest
 from typing import Any, Dict
 
-from mloda import Feature
-from mloda import Options
+from mloda.user import Feature
+from mloda.user import Options
 from mloda.user import PluginCollector
-import mloda
+from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import SklearnPipelineFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.pandas import PandasSklearnPipelineFeatureGroup
@@ -36,7 +36,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
     """Integration tests for sklearn pipeline feature groups."""
 
     def test_integration_with_scaling_pipeline(self) -> None:
-        """Test integration with API using scaling pipeline."""
+        """Test integration with mloda using scaling pipeline."""
         # Skip test if sklearn not available
         try:
             import sklearn
@@ -75,7 +75,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         assert abs(scaled_values.std() - 1.0) < 0.2, "Scaled values should have std close to 1"
 
     def test_integration_with_preprocessing_pipeline(self) -> None:
-        """Test integration with API using preprocessing pipeline."""
+        """Test integration with mloda using preprocessing pipeline."""
         # Skip test if sklearn not available
         try:
             import sklearn
@@ -114,7 +114,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         assert abs(preprocessed_values.std() - 1.0) < 0.2, "Preprocessed values should have std close to 1"
 
     def test_integration_with_multiple_features(self) -> None:
-        """Test integration with API using multiple source features."""
+        """Test integration with mloda using multiple source features."""
         # Skip test if sklearn not available
         try:
             import sklearn
@@ -147,9 +147,9 @@ class TestSklearnPipelineFeatureGroupIntegration:
             if col.startswith("income,age__sklearn_pipeline_scaling~"):
                 found_columns.append(col)
 
-        assert len(found_columns) == 2, (
-            f"Expected 2 scaled feature columns, found {len(found_columns)}: {found_columns}"
-        )
+        assert (
+            len(found_columns) == 2
+        ), f"Expected 2 scaled feature columns, found {len(found_columns)}: {found_columns}"
 
         # Verify that we have the expected columns
         assert "income,age__sklearn_pipeline_scaling~0" in found_columns
@@ -161,7 +161,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
             assert abs(scaled_values.mean()) < 1e-10, f"Scaled values in {col} should have mean close to 0"
 
     def test_integration_with_feature_parser(self) -> None:
-        """Test integration with API using the feature parser."""
+        """Test integration with mloda using the feature parser."""
         # Skip test if sklearn not available
         try:
             import sklearn
@@ -220,7 +220,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         assert results[0].sort_index(axis=1).equals(results2[0].sort_index(axis=1))
 
     def test_integration_with_custom_pipeline_steps(self) -> None:
-        """Test integration with API using custom pipeline steps."""
+        """Test integration with mloda using custom pipeline steps."""
         # Skip test if sklearn not available
         try:
             from sklearn.preprocessing import StandardScaler, MinMaxScaler
@@ -358,7 +358,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         # First run - create feature WITHOUT artifact options (mloda will set artifact_to_save)
         feature1 = Feature("income__sklearn_pipeline_scaling", Options(feature_options))
 
-        api1 = mloda.API([feature1], {PandasDataFrame}, plugin_collector=plugin_collector)
+        api1 = mloda([feature1], {PandasDataFrame}, plugin_collector=plugin_collector)
         api1._batch_run()
         results1 = api1.get_result()
         artifacts1 = api1.get_artifacts()
@@ -383,15 +383,15 @@ class TestSklearnPipelineFeatureGroupIntegration:
         assert expected_file_path.exists(), f"Artifact file should exist at {expected_file_path}"
 
         # Verify the file is in our isolated test directory
-        assert str(expected_file_path).startswith(storage_path), (
-            f"Artifact should be in test directory {storage_path}, but found at {expected_file_path}"
-        )
+        assert str(expected_file_path).startswith(
+            storage_path
+        ), f"Artifact should be in test directory {storage_path}, but found at {expected_file_path}"
 
         # Second run - create feature WITH artifact options (mloda will set artifact_to_load)
         combined_options = {**feature_options, **artifacts1}
         feature2 = Feature("income__sklearn_pipeline_scaling", Options(combined_options))
 
-        api2 = mloda.API([feature2], {PandasDataFrame}, plugin_collector=plugin_collector)
+        api2 = mloda([feature2], {PandasDataFrame}, plugin_collector=plugin_collector)
         api2._batch_run()
         results2 = api2.get_result()
         artifacts2 = api2.get_artifacts()

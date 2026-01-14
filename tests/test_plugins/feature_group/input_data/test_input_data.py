@@ -1,12 +1,12 @@
 import os
 from typing import Any, Optional
 
-from mloda import FeatureGroup
-from mloda import Feature
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
 from mloda.provider import FeatureSet
 from mloda.provider import BaseInputData
 from mloda.provider import DataCreator
-import mloda
+from mloda.user import mloda
 
 
 class InputDataTestFeatureGroup(FeatureGroup):

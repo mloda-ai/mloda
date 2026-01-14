@@ -39,8 +39,8 @@ class OrcReader(ReadFile):
     ### 2. Configuration-Based Creation
 
     ```python
-    from mloda import Feature
-    from mloda import Options
+    from mloda.user import Feature
+    from mloda.user import Options
 
     feature = Feature(
         name="log_message",
@@ -57,8 +57,8 @@ class OrcReader(ReadFile):
     ### Basic ORC Feature Access
 
     ```python
-    from mloda import Feature
-    from mloda import Options
+    from mloda.user import Feature
+    from mloda.user import Options
 
     # Simple column reference from ORC file
     feature = Feature(

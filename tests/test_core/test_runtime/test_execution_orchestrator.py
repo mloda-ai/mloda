@@ -9,7 +9,7 @@ from __future__ import annotations
 from unittest.mock import Mock
 
 
-from mloda import ComputeFramework  # noqa: F401
+from mloda.provider import ComputeFramework  # noqa: F401
 from mloda.core.prepare.execution_plan import ExecutionPlan
 
 from mloda.core.runtime.run import ExecutionOrchestrator

@@ -7,7 +7,7 @@ import pyarrow as pa
 import pytest
 import datetime
 
-from mloda import Feature
+from mloda.user import Feature
 from mloda.provider import FeatureSet
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys

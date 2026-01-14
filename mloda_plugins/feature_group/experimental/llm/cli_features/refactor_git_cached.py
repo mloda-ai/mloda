@@ -3,13 +3,13 @@ import os
 import re
 from typing import Any, List, Optional, Set, Type, Union
 
-from mloda import FeatureGroup
-from mloda import Feature
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
 from mloda.provider import FeatureSet
 from mloda.provider import BaseInputData
 from mloda.provider import DataCreator
-from mloda import ComputeFramework
-import mloda
+from mloda.provider import ComputeFramework
+from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.llm.llm_api.claude import ClaudeRequestLoop
 from mloda_plugins.feature_group.experimental.llm.llm_api.gemini import GeminiRequestLoop

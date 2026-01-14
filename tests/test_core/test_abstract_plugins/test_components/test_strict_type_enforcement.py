@@ -2,8 +2,8 @@ import inspect
 from unittest.mock import patch
 
 
-from mloda import Feature
-from mloda import API
+from mloda.user import Feature
+from mloda.user import mloda
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 
@@ -14,8 +14,8 @@ def test_default_option_key_exists() -> None:
 
 
 def test_mloda_api_accepts_strict_type_enforcement_parameter() -> None:
-    """Test that API constructor accepts strict_type_enforcement parameter."""
-    sig = inspect.signature(API.__init__)
+    """Test that mloda constructor accepts strict_type_enforcement parameter."""
+    sig = inspect.signature(mloda.__init__)
     params = sig.parameters
     assert "strict_type_enforcement" in params
     # Default should be False
@@ -26,7 +26,7 @@ def test_strict_type_enforcement_propagates_to_features() -> None:
     """Test that strict_type_enforcement=True propagates to feature options."""
     features: list[Feature | str] = [Feature.int32_of("test_feature")]
 
-    # Create API with strict mode enabled
+    # Create mloda with strict mode enabled
     # This should propagate the setting to features
     with (
         patch("mloda.core.prepare.accessible_plugins.PreFilterPlugins.get_featuregroup_subclasses") as mock_fg,
@@ -40,7 +40,7 @@ def test_strict_type_enforcement_propagates_to_features() -> None:
 
         mock_fg.return_value = {BaseTestFeatureGroup1}
 
-        api = API(
+        api = mloda(
             requested_features=features,
             strict_type_enforcement=True,
         )

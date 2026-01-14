@@ -2,8 +2,8 @@ import uuid
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.graph.properties import EdgeProperties, NodeProperties
 from mloda.core.prepare.resolve_graph import ResolveGraph
-from mloda import FeatureGroup
-from mloda import Feature
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
 from mloda.user import Index
 from mloda.user import Link, JoinSpec
 from tests.test_core.test_setup.test_graph_builder import BaseTestGraphFeatureGroup3

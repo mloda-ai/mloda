@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Optional, Tuple, Union
 from mloda.user import DataAccessCollection
 from mloda.provider import FeatureSet, HashableDict, BaseInputData
-from mloda import Options
+from mloda.user import Options
 
 
 class ReadDB(BaseInputData):

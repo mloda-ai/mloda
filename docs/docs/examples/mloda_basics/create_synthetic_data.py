@@ -5,7 +5,7 @@ from typing import Any, List, Optional
 
 import pandas as pd
 
-import mloda
+from mloda.user import mloda
 from mloda.provider import FeatureGroup, FeatureSet, BaseInputData, DataCreator
 from mloda.user import DataAccessCollection, Domain, Feature, Options
 

@@ -29,11 +29,11 @@ from typing import Any, List, Optional, Set
 
 import pytest
 
-from mloda import FeatureGroup
+from mloda.provider import FeatureGroup
 from mloda.user import FeatureName
 from mloda.user import Index
 from mloda.user import JoinSpec, JoinType, Link
-from mloda import Options
+from mloda.user import Options
 
 
 # ============================================================================

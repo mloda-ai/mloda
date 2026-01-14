@@ -1,14 +1,14 @@
 """
-Integration test for ScalingFeatureGroup with API and artifact management.
+Integration test for ScalingFeatureGroup with mloda and artifact management.
 """
 
 from mloda.user import PluginLoader
 import pytest
 from typing import Any, Dict
 
-from mloda import Feature
+from mloda.user import Feature
 from mloda.user import PluginCollector
-from mloda import API
+from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.scaling.base import ScalingFeatureGroup  # noqa: F401
@@ -53,7 +53,7 @@ class TestScalingFeatureGroupIntegration:
         scaling_feature = Feature("Sales__sum_aggr__standard_scaled")
 
         # Phase 1: Train and save artifacts
-        api1 = API(
+        api1 = mloda(
             [scaling_feature],
             {PandasDataFrame},
             plugin_collector=plugin_collector,
@@ -78,7 +78,7 @@ class TestScalingFeatureGroupIntegration:
         assert scaled_values.std() == 0.0
 
         # Phase 2: Load artifacts and apply to same data (simulating reuse)
-        from mloda import Options
+        from mloda.user import Options
 
         # Create features with artifact options for reuse
         scaling_feature_reuse = Feature(
@@ -86,7 +86,7 @@ class TestScalingFeatureGroupIntegration:
             Options(artifacts1),
         )
 
-        api2 = API(
+        api2 = mloda(
             [scaling_feature_reuse],
             {PandasDataFrame},
             plugin_collector=plugin_collector,

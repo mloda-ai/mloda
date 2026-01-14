@@ -4,7 +4,7 @@ from typing import Any, List
 
 import pytest
 
-from mloda import Feature
+from mloda.user import Feature
 from mloda.user import SingleFilter
 from mloda.user import FilterType
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_filter_engine import (

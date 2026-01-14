@@ -101,6 +101,8 @@
                   </li>
                   <li class="toctree-l1 current"><a class="reference internal current" >Feature Groups</a>
     <ul class="current">
+                <li class="toctree-l2"><a class="reference internal" href="../feature-config/">Feature Configuration</a>
+                </li>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-chain-parser/">Feature Chain Parser</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-group-matching/">Feature Group Matching</a>
@@ -235,7 +237,7 @@ assert feature_name == &quot;sales__sum_aggr&quot;
 <h3 id="5-integration-with-mloda-api">5. Integration with mloda API</h3>
 <p>Test that your feature group works correctly with the mloda API.</p>
 <p><strong>Example:</strong></p>
-<pre><code class="language-python">import mloda
+<pre><code class="language-python">from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 features = [&quot;source_feature&quot;, &quot;source_feature__my_operation&quot;]

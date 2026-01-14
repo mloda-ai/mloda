@@ -71,6 +71,8 @@
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#5-summary">5. Summary</a>
     </li>
+    <li class="toctree-l2"><a class="reference internal" href="#for-ai-agents-json-based-requests">For AI Agents: JSON-Based Requests</a>
+    </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../feature-groups/">Feature Groups</a>
@@ -113,6 +115,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
     <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/feature-config/">Feature Configuration</a>
+                </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../in_depth/feature-chain-parser/">Feature Chain Parser</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../in_depth/feature-group-matching/">Feature Group Matching</a>
@@ -181,10 +185,14 @@
             <div class="section" itemprop="articleBody">
               
                 <h3 id="api-request-example">API Request Example</h3>
-<p>This example demonstrates a simple request to the mloda API. In this case, mloda automatically determines that a <strong>CsvReader</strong> feature group will fulfill the request and respond with the resulting DataFrame.</p>
+<p>This example demonstrates a simple request to the mloda API. You describe WHAT data you need - mloda resolves HOW to get it.</p>
+<blockquote>
+<p><strong>Tip:</strong> For AI agents or quick prototyping, you can also use inline data with <code>api_data</code> - see the <a href="https://mloda-ai.github.io/mloda/#30-second-example">30-second example</a>.</p>
+</blockquote>
+<p>In this example, mloda automatically determines that a <strong>CsvReader</strong> feature group will fulfill the request and respond with the resulting DataFrame.</p>
 <h4 id="1-import-the-required-modules">1. Import the Required Modules</h4>
 <p>We first need to import the necessary components to set up our request:</p>
-<pre><code class="language-python">import mloda
+<pre><code class="language-python">from mloda.user import mloda
 from mloda.user import DataAccessCollection
 </code></pre>
 <h4 id="2-define-data-sources">2. Define Data Sources</h4>
@@ -215,7 +223,16 @@ id: [[0,1,2,...]]
 ....
 </code></pre>
 <h4 id="5-summary">5. Summary</h4>
-<p>This example shows how easy it is to interact with the mloda API for data retrieval. By defining the data source and specifying the features, mloda handles the rest, ensuring you get the required data in an efficient and seamless manner.</p>
+<p>This example shows how easy it is to interact with the mloda API for data retrieval. By defining the data source and specifying the features, mloda handles the rest.</p>
+<h4 id="for-ai-agents-json-based-requests">For AI Agents: JSON-Based Requests</h4>
+<p>LLMs can generate JSON feature requests without writing Python code:</p>
+<pre><code class="language-python">from mloda.user import load_features_from_config
+
+llm_request = '[&quot;id&quot;, &quot;V1&quot;, &quot;V2&quot;, &quot;Amount&quot;]'
+features = load_features_from_config(llm_request, format=&quot;json&quot;)
+result = mloda.run_all(features=features, compute_frameworks=[&quot;PandasDataFrame&quot;], ...)
+</code></pre>
+<p>See <a href="https://mloda-ai.github.io/mloda/in_depth/feature-config/">Feature Configuration</a> for more details on JSON-based configuration.</p>
               
             </div>
           </div><footer>

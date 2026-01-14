@@ -117,6 +117,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
     <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-config/">Feature Configuration</a>
+                </li>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-chain-parser/">Feature Chain Parser</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-group-matching/">Feature Group Matching</a>
@@ -211,7 +213,7 @@
 <li>filter_type</li>
 <li>parameter</li>
 </ul>
-<p><strong>add_time_and_time_travel_filters</strong>: Adds time and time travel filtering to the GlobalFiltering. This is a convenience API. Due to the complexity of time in data/ml/ai projects, this function should be used.</p>
+<p><strong>add_time_and_time_travel_filters</strong>: Adds time and time travel filtering to the GlobalFiltering. This is a convenience mloda. Due to the complexity of time in data/ml/ai projects, this function should be used.</p>
 <p>This method is useful for <strong>filtering data based on time ranges</strong> (event) and <strong>validity periods</strong> (valid).</p>
 <p><strong>Event Time Filter</strong>: For historical data (e.g., checking if a customer had a valid contract at the event time), only the event time filter is needed.</p>
 <p><strong>Time Travel Filter</strong>: If prior actions (e.g., payments made before the event) are relevant, the time travel filter is required.</p>
@@ -261,7 +263,7 @@ global_filter.filters
 <p>Now, we need to also use a FeatureGroup which supports it. In this example, we show where we can access the SingleFilters.
 The implementation of the concrete filters is dependent on the feature group. This example is rather complex as we filter a python dictionary. </p>
 <p>Further, the feature is a data creator, so we create the data here itself. </p>
-<pre><code class="language-python">import mloda
+<pre><code class="language-python">from mloda.user import mloda
 from mloda.provider import FeatureGroup, FeatureSet, ComputeFramework, BaseInputData, DataCreator
 from typing import Any, Union, Set, Type, Optional
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable

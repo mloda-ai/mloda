@@ -103,6 +103,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
     <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/feature-config/">Feature Configuration</a>
+                </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../in_depth/feature-chain-parser/">Feature Chain Parser</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../in_depth/feature-group-matching/">Feature Group Matching</a>
@@ -185,6 +187,22 @@ pip install .
 <pre><code class="language-python">from importlib import metadata
 print(metadata.version(&quot;mloda&quot;))
 </code></pre>
+<h2 id="4-quick-start">4. Quick Start</h2>
+<p>Try this 30-second example:</p>
+<pre><code class="language-python">import mloda
+from mloda.user import PluginLoader
+PluginLoader.all()
+
+result = mloda.run_all(
+    features=[&quot;customer_id&quot;, &quot;income&quot;, &quot;income__sum_aggr&quot;],
+    compute_frameworks=[&quot;PandasDataFrame&quot;],
+    api_data={&quot;SampleData&quot;: {
+        &quot;customer_id&quot;: [&quot;C001&quot;, &quot;C002&quot;, &quot;C003&quot;],
+        &quot;income&quot;: [50000, 75000, 90000]
+    }}
+)
+</code></pre>
+<p>Next: <a href="https://mloda-ai.github.io/mloda/chapter1/api-request/">API Request</a> | <a href="https://mloda-ai.github.io/mloda/chapter1/feature-groups/">Feature Groups</a></p>
               
             </div>
           </div><footer>

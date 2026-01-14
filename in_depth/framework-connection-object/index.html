@@ -145,6 +145,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
     <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-config/">Feature Configuration</a>
+                </li>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-chain-parser/">Feature Chain Parser</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-group-matching/">Feature Group Matching</a>
@@ -277,7 +279,7 @@ def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Option
     &quot;&quot;&quot;
 </code></pre>
 <h3 id="using-duckdb-with-mloda-api">Using DuckDB with mloda API</h3>
-<pre><code class="language-python">import mloda
+<pre><code class="language-python">from mloda.user import mloda
 from mloda.user import DataAccessCollection
 import duckdb
 
@@ -295,7 +297,7 @@ result = mloda.run_all(
 )
 </code></pre>
 <h3 id="using-spark-with-mloda-api">Using Spark with mloda API</h3>
-<pre><code class="language-python">import mloda
+<pre><code class="language-python">from mloda.user import mloda
 from mloda.user import DataAccessCollection
 from pyspark.sql import SparkSession
 
@@ -386,7 +388,7 @@ def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Option
           </div><footer>
     <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
         <a href="../compute-framework-integration/" class="btn btn-neutral float-left" title="Compute Framework Integration"><span class="icon icon-circle-arrow-left"></span> Previous</a>
-        <a href="../feature-chain-parser/" class="btn btn-neutral float-right" title="Feature Chain Parser">Next <span class="icon icon-circle-arrow-right"></span></a>
+        <a href="../feature-config/" class="btn btn-neutral float-right" title="Feature Configuration">Next <span class="icon icon-circle-arrow-right"></span></a>
     </div>
 
   <hr/>
@@ -412,7 +414,7 @@ def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Option
       <span><a href="../compute-framework-integration/" style="color: #fcfcfc">&laquo; Previous</a></span>
     
     
-      <span><a href="../feature-chain-parser/" style="color: #fcfcfc">Next &raquo;</a></span>
+      <span><a href="../feature-config/" style="color: #fcfcfc">Next &raquo;</a></span>
     
   </span>
 </div>

@@ -5,15 +5,15 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       <link rel="shortcut icon" href="../../img/favicon.ico" />
-    <title>Domain concept - mloda docs</title>
+    <title>Feature Configuration - mloda docs</title>
     <link rel="stylesheet" href="../../css/theme.css" />
     <link rel="stylesheet" href="../../css/theme_extra.css" />
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
     
       <script>
         // Current page data
-        var mkdocs_page_name = "Domain concept";
-        var mkdocs_page_input_path = "in_depth/domain.md";
+        var mkdocs_page_name = "Feature Configuration";
+        var mkdocs_page_input_path = "in_depth/feature-config.md";
         var mkdocs_page_url = null;
       </script>
     
@@ -85,9 +85,7 @@
               <ul class="current">
                   <li class="toctree-l1"><a class="reference internal" href="../data-quality/">Data quality</a>
                   </li>
-                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Domain concept</a>
-    <ul class="current">
-    </ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../domain/">Domain concept</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-access-patterns/">Data Access Patterns</a>
                   </li>
@@ -101,9 +99,41 @@
                 </li>
     </ul>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
-    <ul>
-                <li class="toctree-l2"><a class="reference internal" href="../feature-config/">Feature Configuration</a>
+                  <li class="toctree-l1 current"><a class="reference internal current" >Feature Groups</a>
+    <ul class="current">
+                <li class="toctree-l2 current"><a class="reference internal current" href="#">Feature Configuration</a>
+    <ul class="current">
+    <li class="toctree-l3"><a class="reference internal" href="#overview">Overview</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#basic-usage">Basic Usage</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#json-format">JSON Format</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#1-simple-string">1. Simple String</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#2-feature-object">2. Feature Object</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#3-mixed-configuration">3. Mixed Configuration</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#featureconfig-fields">FeatureConfig Fields</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#configuration-approaches">Configuration Approaches</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#simple-options">Simple Options</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#modern-groupcontext-options">Modern Group/Context Options</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#feature-chaining-with-in_features">Feature Chaining with in_features</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#multi-column-features">Multi-Column Features</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#complete-example">Complete Example</a>
+    </li>
+    </ul>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-chain-parser/">Feature Chain Parser</a>
                 </li>
@@ -163,7 +193,8 @@
   <ul class="wy-breadcrumbs">
     <li><a href="../.." class="icon icon-home" aria-label="Docs"></a></li>
           <li class="breadcrumb-item">In Depth - Advanced</li>
-      <li class="breadcrumb-item active">Domain concept</li>
+          <li class="breadcrumb-item">Feature Groups</li>
+      <li class="breadcrumb-item active">Feature Configuration</li>
     <li class="wy-breadcrumbs-aside">
     </li>
   </ul>
@@ -172,40 +203,194 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
             <div class="section" itemprop="articleBody">
               
-                <h2 id="domain">Domain</h2>
-<p>The domain concept represents scenarios, where similar data is originating from different domains, be it business domains, logical domains or simply testing domains.</p>
-<p>The framework itself will match the domains of features and feature groups. This means the domains are essentially <strong>filters</strong>! </p>
-<p>However, we only apply them <strong>if they are set for features</strong>. As default, this is not the case!</p>
-<p><strong>Feature parameter</strong></p>
-<pre><code class="language-python">from mloda.user import Feature
+                <h1 id="feature-configuration-from-json">Feature Configuration from JSON</h1>
+<h2 id="overview">Overview</h2>
+<p>The <code>load_features_from_config</code> function enables loading feature configurations from JSON strings. This is the primary interface for <strong>AI agents and LLMs</strong> to request data from mloda - agents generate JSON, mloda executes it.</p>
+<p>Use cases:</p>
+<ul>
+<li><strong>LLM Tool Functions</strong> - LLMs generate JSON feature requests without writing Python code</li>
+<li>Feature configurations stored externally (files, databases, APIs)</li>
+<li>Dynamic feature definitions at runtime</li>
+<li>Configuration-driven pipelines</li>
+</ul>
+<h2 id="basic-usage">Basic Usage</h2>
+<pre><code class="language-python">from mloda.user import load_features_from_config, mloda
 
-Feature(name=&quot;Revenue&quot;,
-        domain=&quot;Sales&quot;
+config = '''
+[
+    &quot;simple_feature&quot;,
+    {&quot;name&quot;: &quot;configured_feature&quot;, &quot;options&quot;: {&quot;param&quot;: &quot;value&quot;}}
+]
+'''
+
+features = load_features_from_config(config)
+result = mloda.run_all(features, compute_frameworks=[&quot;PandasDataFrame&quot;])
+</code></pre>
+<h2 id="json-format">JSON Format</h2>
+<p>The configuration must be a JSON array. Each item can be:</p>
+<h3 id="1-simple-string">1. Simple String</h3>
+<p>A plain feature name string:</p>
+<pre><code class="language-json">[&quot;feature_name&quot;]
+</code></pre>
+<h3 id="2-feature-object">2. Feature Object</h3>
+<p>An object with <code>name</code> and optional configuration:</p>
+<pre><code class="language-json">[
+    {
+        &quot;name&quot;: &quot;feature_name&quot;,
+        &quot;options&quot;: {&quot;key&quot;: &quot;value&quot;}
+    }
+]
+</code></pre>
+<h3 id="3-mixed-configuration">3. Mixed Configuration</h3>
+<p>Combine strings and objects:</p>
+<pre><code class="language-json">[
+    &quot;simple_feature&quot;,
+    {&quot;name&quot;: &quot;configured_feature&quot;, &quot;in_features&quot;: [&quot;source_feature&quot;]}
+]
+</code></pre>
+<h2 id="featureconfig-fields">FeatureConfig Fields</h2>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>Yes</td>
+<td>Feature name</td>
+</tr>
+<tr>
+<td><code>options</code></td>
+<td>object</td>
+<td>No</td>
+<td>Simple options dict (cannot be used with group_options/context_options)</td>
+</tr>
+<tr>
+<td><code>in_features</code></td>
+<td>array</td>
+<td>No</td>
+<td>Source feature names for chained features</td>
+</tr>
+<tr>
+<td><code>group_options</code></td>
+<td>object</td>
+<td>No</td>
+<td>Group parameters (affect Feature Group resolution)</td>
+</tr>
+<tr>
+<td><code>context_options</code></td>
+<td>object</td>
+<td>No</td>
+<td>Context parameters (metadata, doesn't affect resolution)</td>
+</tr>
+<tr>
+<td><code>column_index</code></td>
+<td>integer</td>
+<td>No</td>
+<td>Index for multi-output features (adds <code>~N</code> suffix)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="configuration-approaches">Configuration Approaches</h2>
+<h3 id="simple-options">Simple Options</h3>
+<p>Use <code>options</code> for simple key-value configuration:</p>
+<pre><code class="language-json">[
+    {
+        &quot;name&quot;: &quot;my_feature&quot;,
+        &quot;options&quot;: {
+            &quot;window_size&quot;: 7,
+            &quot;aggregation&quot;: &quot;sum&quot;
+        }
+    }
+]
+</code></pre>
+<h3 id="modern-groupcontext-options">Modern Group/Context Options</h3>
+<p>For explicit separation of group and context parameters:</p>
+<pre><code class="language-json">[
+    {
+        &quot;name&quot;: &quot;my_feature&quot;,
+        &quot;group_options&quot;: {
+            &quot;data_source&quot;: &quot;production&quot;
+        },
+        &quot;context_options&quot;: {
+            &quot;aggregation_type&quot;: &quot;sum&quot;
+        }
+    }
+]
+</code></pre>
+<p>Note: <code>options</code> and <code>group_options</code>/<code>context_options</code> are mutually exclusive.</p>
+<h2 id="feature-chaining-with-in_features">Feature Chaining with in_features</h2>
+<p>Define dependent features using <code>in_features</code>:</p>
+<pre><code class="language-json">[
+    {
+        &quot;name&quot;: &quot;aggregated_sales&quot;,
+        &quot;in_features&quot;: [&quot;raw_sales&quot;],
+        &quot;context_options&quot;: {
+            &quot;aggregation_type&quot;: &quot;sum&quot;
+        }
+    }
+]
+</code></pre>
+<p>Multiple source features:</p>
+<pre><code class="language-json">[
+    {
+        &quot;name&quot;: &quot;distance_feature&quot;,
+        &quot;in_features&quot;: [&quot;point_a&quot;, &quot;point_b&quot;]
+    }
+]
+</code></pre>
+<h2 id="multi-column-features">Multi-Column Features</h2>
+<p>Access specific columns from multi-output features using <code>column_index</code>:</p>
+<pre><code class="language-json">[
+    {
+        &quot;name&quot;: &quot;pca_result&quot;,
+        &quot;column_index&quot;: 0
+    }
+]
+</code></pre>
+<p>This produces a feature named <code>pca_result~0</code>.</p>
+<h2 id="complete-example">Complete Example</h2>
+<pre><code class="language-python">from mloda.user import load_features_from_config, mloda
+
+config = '''
+[
+    &quot;customer_id&quot;,
+    {
+        &quot;name&quot;: &quot;sales_aggregated&quot;,
+        &quot;in_features&quot;: [&quot;daily_sales&quot;],
+        &quot;context_options&quot;: {
+            &quot;aggregation_type&quot;: &quot;sum&quot;,
+            &quot;window_days&quot;: 7
+        }
+    },
+    {
+        &quot;name&quot;: &quot;encoded_category&quot;,
+        &quot;in_features&quot;: [&quot;category&quot;],
+        &quot;column_index&quot;: 0
+    }
+]
+'''
+
+features = load_features_from_config(config)
+
+result = mloda.run_all(
+    features,
+    compute_frameworks=[&quot;PandasDataFrame&quot;],
+    api_data={&quot;customer_data&quot;: {&quot;customer_id&quot;: [1, 2, 3]}}
 )
 </code></pre>
-<p><strong>Feature option</strong></p>
-<pre><code class="language-python">Feature(name=&quot;Revenue&quot;,
-        options={&quot;domain&quot;: &quot;Fraud&quot;}
-)
-</code></pre>
-<p>The domain can also be set in the feature group.</p>
-<p><strong>Feature group</strong></p>
-<pre><code class="language-python">from mloda.provider import FeatureGroup
-from mloda.user import Domain
-
-class ExampleFeature(FeatureGroup):
-    @classmethod
-    def get_domain(cls) -&gt; Domain:
-        &quot;&quot;&quot;This function should return the domain for the feature group&quot;&quot;&quot;
-        return &quot;example_domain&quot;
-</code></pre>
-<p>For feature groups, the default domain is default_domain.</p>
               
             </div>
           </div><footer>
     <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
-        <a href="../data-quality/" class="btn btn-neutral float-left" title="Data quality"><span class="icon icon-circle-arrow-left"></span> Previous</a>
-        <a href="../data-access-patterns/" class="btn btn-neutral float-right" title="Data Access Patterns">Next <span class="icon icon-circle-arrow-right"></span></a>
+        <a href="../framework-connection-object/" class="btn btn-neutral float-left" title="Framework Connection Object"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../feature-chain-parser/" class="btn btn-neutral float-right" title="Feature Chain Parser">Next <span class="icon icon-circle-arrow-right"></span></a>
     </div>
 
   <hr/>
@@ -228,10 +413,10 @@ class ExampleFeature(FeatureGroup):
   <span class="rst-current-version" data-toggle="rst-current-version">
     
     
-      <span><a href="../data-quality/" style="color: #fcfcfc">&laquo; Previous</a></span>
+      <span><a href="../framework-connection-object/" style="color: #fcfcfc">&laquo; Previous</a></span>
     
     
-      <span><a href="../data-access-patterns/" style="color: #fcfcfc">Next &raquo;</a></span>
+      <span><a href="../feature-chain-parser/" style="color: #fcfcfc">Next &raquo;</a></span>
     
   </span>
 </div>

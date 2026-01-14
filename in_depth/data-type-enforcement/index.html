@@ -101,6 +101,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
     <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-config/">Feature Configuration</a>
+                </li>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-chain-parser/">Feature Chain Parser</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-group-matching/">Feature Group Matching</a>
@@ -243,7 +245,7 @@ feature = Feature.int64_of(
 <h2 id="error-handling">Error Handling</h2>
 <p>Type mismatches raise <code>DataTypeMismatchError</code>:</p>
 <p>```python title="Error handling example"
-import mloda
+from mloda.user import mloda
 from mloda.user import Feature
 from mloda.provider import DataTypeMismatchError</p>
 <p>try:

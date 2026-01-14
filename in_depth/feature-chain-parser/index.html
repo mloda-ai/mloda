@@ -101,6 +101,8 @@
                   </li>
                   <li class="toctree-l1 current"><a class="reference internal current" >Feature Groups</a>
     <ul class="current">
+                <li class="toctree-l2"><a class="reference internal" href="../feature-config/">Feature Configuration</a>
+                </li>
                 <li class="toctree-l2 current"><a class="reference internal current" href="#">Feature Chain Parser</a>
     <ul class="current">
     <li class="toctree-l3"><a class="reference internal" href="#overview">Overview</a>
@@ -228,6 +230,9 @@
                 <h1 id="feature-chain-parser">Feature Chain Parser</h1>
 <h2 id="overview">Overview</h2>
 <p>The Feature Chain Parser system enables feature groups to work with both traditional string-based feature names and modern configuration-based feature creation. This unified approach provides flexibility while maintaining backward compatibility.</p>
+<blockquote>
+<p><strong>For AI Agents:</strong> Feature chaining enables LLMs to declare complex data pipelines through simple naming conventions. Instead of writing pipeline code, agents can request <code>user_query__validated__retrieved__pii_redacted</code> - mloda resolves the full chain automatically.</p>
+</blockquote>
 <h2 id="key-concepts">Key Concepts</h2>
 <h3 id="separator-system">Separator System</h3>
 <p>mloda uses three separator characters in feature names, each with a specific purpose:</p>
@@ -631,7 +636,7 @@ another_column = &quot;category__onehot_encoded~1&quot;  # Access second column
             </div>
           </div><footer>
     <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
-        <a href="../framework-connection-object/" class="btn btn-neutral float-left" title="Framework Connection Object"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../feature-config/" class="btn btn-neutral float-left" title="Feature Configuration"><span class="icon icon-circle-arrow-left"></span> Previous</a>
         <a href="../feature-group-matching/" class="btn btn-neutral float-right" title="Feature Group Matching">Next <span class="icon icon-circle-arrow-right"></span></a>
     </div>
 
@@ -655,7 +660,7 @@ another_column = &quot;category__onehot_encoded~1&quot;  # Access second column
   <span class="rst-current-version" data-toggle="rst-current-version">
     
     
-      <span><a href="../framework-connection-object/" style="color: #fcfcfc">&laquo; Previous</a></span>
+      <span><a href="../feature-config/" style="color: #fcfcfc">&laquo; Previous</a></span>
     
     
       <span><a href="../feature-group-matching/" style="color: #fcfcfc">Next &raquo;</a></span>

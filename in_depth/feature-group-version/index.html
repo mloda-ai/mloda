@@ -101,6 +101,8 @@
                   </li>
                   <li class="toctree-l1 current"><a class="reference internal current" >Feature Groups</a>
     <ul class="current">
+                <li class="toctree-l2"><a class="reference internal" href="../feature-config/">Feature Configuration</a>
+                </li>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-chain-parser/">Feature Chain Parser</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-group-matching/">Feature Group Matching</a>
@@ -117,7 +119,7 @@
         <ul>
     <li class="toctree-l4"><a class="reference internal" href="#composite-version-identifier">Composite Version Identifier</a>
     </li>
-    <li class="toctree-l4"><a class="reference internal" href="#the-featuregroupversion-class">The FeatureGroupVersion Class</a>
+    <li class="toctree-l4"><a class="reference internal" href="#the-basefeaturegroupversion-class">The BaseFeatureGroupVersion Class</a>
     </li>
         </ul>
     </li>
@@ -193,14 +195,14 @@
 - The module name where the feature group is defined
 - A SHA-256 hash of the feature group class's source code</p>
 <p>This creates a unique identifier that represents the implementation state of the feature group.</p>
-<h3 id="the-featuregroupversion-class">The FeatureGroupVersion Class</h3>
-<p>The <code>FeatureGroupVersion</code> class handles the versioning logic:</p>
+<h3 id="the-basefeaturegroupversion-class">The BaseFeatureGroupVersion Class</h3>
+<p>The <code>BaseFeatureGroupVersion</code> class handles the versioning logic:</p>
 <pre><code class="language-python">@classmethod
 def version(cls) -&gt; str:
     &quot;&quot;&quot;
     Returns a composite version identifier for this feature group.
     &quot;&quot;&quot;
-    return FeatureGroupVersion.version(cls)
+    return BaseFeatureGroupVersion.version(cls)
 </code></pre>
 <h2 id="benefits">Benefits</h2>
 <ul>

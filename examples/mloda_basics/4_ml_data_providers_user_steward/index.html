@@ -56,9 +56,9 @@
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#provider">Provider</a>
         <ul>
-    <li class="toctree-l3"><a class="reference internal" href="#featuregroup-api-plug-in-in-short">FeatureGroup API (plug-in) in short</a>
+    <li class="toctree-l3"><a class="reference internal" href="#featuregroup-mloda-plug-in-in-short">FeatureGroup mloda (plug-in) in short</a>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#simple-example-implementation-of-the-featuregroup-api">Simple example implementation of the FeatureGroup API</a>
+    <li class="toctree-l3"><a class="reference internal" href="#simple-example-implementation-of-the-featuregroup-mloda">Simple example implementation of the FeatureGroup mloda</a>
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#complex-plug-ins">Complex plug-ins</a>
     </li>
@@ -133,6 +133,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
     <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/feature-config/">Feature Configuration</a>
+                </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/feature-chain-parser/">Feature Chain Parser</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/feature-group-matching/">Feature Group Matching</a>
@@ -708,7 +710,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">mloda</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user</span><span class="w"> </span><span class="kn">import</span> <span class="n">mloda</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user</span><span class="w"> </span><span class="kn">import</span> <span class="n">Feature</span><span class="p">,</span> <span class="n">DataAccessCollection</span><span class="p">,</span> <span class="n">PluginLoader</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.feature_group.input_data.read_dbs.sqlite</span><span class="w"> </span><span class="kn">import</span> <span class="n">SQLITEReader</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.compute_framework.base_implementations.pyarrow.table</span><span class="w"> </span><span class="kn">import</span> <span class="n">PyArrowTable</span>
@@ -744,7 +746,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 
 import os
 from typing import List
-import mloda
+from mloda.user import mloda
 from mloda.user import Feature, DataAccessCollection, PluginLoader
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -842,7 +844,7 @@ mloda.run_all(all_features, data_access_collection=data_access_collection, compu
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h3 id="featuregroup-api-plug-in-in-short">FeatureGroup API (plug-in) in short<a class="anchor-link" href="#featuregroup-api-plug-in-in-short">¶</a></h3><p>In mloda, a provider defines access by creating feature groups. Here's an example implementation:</p>
+<h3 id="featuregroup-mloda-plug-in-in-short">FeatureGroup mloda (plug-in) in short<a class="anchor-link" href="#featuregroup-mloda-plug-in-in-short">¶</a></h3><p>In mloda, a provider defines access by creating feature groups. Here's an example implementation:</p>
 <div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">FeatureGroupClass</span><span class="p">(</span><span class="n">FeatureGroup</span><span class="p">):</span>
 
     <span class="c1"># Root feature definition</span>
@@ -868,7 +870,7 @@ mloda.run_all(all_features, data_access_collection=data_access_collection, compu
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h3 id="simple-example-implementation-of-the-featuregroup-api">Simple example implementation of the FeatureGroup API<a class="anchor-link" href="#simple-example-implementation-of-the-featuregroup-api">¶</a></h3><p>In the background, mloda loads the plug-ins, which were created before, like this one.</p>
+<h3 id="simple-example-implementation-of-the-featuregroup-mloda">Simple example implementation of the FeatureGroup mloda<a class="anchor-link" href="#simple-example-implementation-of-the-featuregroup-mloda">¶</a></h3><p>In the background, mloda loads the plug-ins, which were created before, like this one.</p>
 <div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">ReadFileFeature</span><span class="p">(</span><span class="n">FeatureGroup</span><span class="p">):</span>
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">input_data</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">BaseInputData</span><span class="p">]:</span>
@@ -1106,7 +1108,7 @@ result = mloda.run_all(
 <li>manage the storage and retrieval of artifacts</li>
 <li>implementing software testing</li>
 </ul>
-<p>An integration test could be done by using mlodaAPI.run_all and custom data.</p>
+<p>An integration test could be done by using mlodamloda.run_all and custom data.</p>
 <p>An example of a unit test could look like:</p>
 <div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">test_csv_reader_2</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> 
    <span class="k">def</span><span class="w"> </span><span class="nf">test_parse_options_are_customized</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mock_read_csv</span><span class="p">):</span>
@@ -1160,9 +1162,9 @@ result = mloda.run_all(
         <span class="n">plugin_collector</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">PluginCollector</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 
-<span class="n">data</span> <span class="o">=</span> <span class="n">mlodaAPI</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span><span class="n">requested_feature</span><span class="p">,</span><span class="o">...</span><span class="p">)</span>
+<span class="n">data</span> <span class="o">=</span> <span class="n">mlodamloda</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span><span class="n">requested_feature</span><span class="p">,</span><span class="o">...</span><span class="p">)</span>
 </pre></div>
-<p>Let's use the API to further explain the Data User role. As shown above, there are several configurations to consider. The key ones are:</p>
+<p>Let's use the mloda to further explain the Data User role. As shown above, there are several configurations to consider. The key ones are:</p>
 <ul>
 <li>Which features to request and if the compute_frameworks should be limited?</li>
 <li>How data is linked?</li>

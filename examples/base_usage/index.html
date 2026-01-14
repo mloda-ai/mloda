@@ -101,6 +101,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
     <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/feature-config/">Feature Configuration</a>
+                </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../in_depth/feature-chain-parser/">Feature Chain Parser</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../in_depth/feature-group-matching/">Feature Group Matching</a>
@@ -715,7 +717,7 @@ class DummyData(FeatureGroup):
 </clipboard-copy>
 </div>
 <div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># We load dependencies.</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">mloda</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user</span><span class="w"> </span><span class="kn">import</span> <span class="n">mloda</span>
 
 <span class="c1"># Load plugins into namespace</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.compute_framework.base_implementations.pandas.dataframe</span><span class="w"> </span><span class="kn">import</span> <span class="n">PandasDataFrame</span>
@@ -728,7 +730,7 @@ class DummyData(FeatureGroup):
 <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
 </pre></div>
 <div class="clipboard-copy-txt" id="cell-2"># We load dependencies.
-import mloda
+from mloda.user import mloda
 
 # Load plugins into namespace
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -1004,7 +1006,7 @@ print(result)</div>
 <span class="sd">        This function should be used to calculate the feature.</span>
 <span class="sd">        """</span>
         
-        <span class="c1"># data is the incoming data from other feature dependencies or data via API</span>
+        <span class="c1"># data is the incoming data from other feature dependencies or data via mloda</span>
 
         <span class="c1"># features is the configuration</span>
 </pre></div>

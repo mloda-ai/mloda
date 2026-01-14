@@ -119,6 +119,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
     <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-config/">Feature Configuration</a>
+                </li>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-chain-parser/">Feature Chain Parser</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-group-matching/">Feature Group Matching</a>
@@ -381,7 +383,7 @@ link = Link.inner(
 </code></pre>
 <p>The balanced inheritance rule ensures that joins only occur between "parallel" subclasses - both sides must be at the same level in the inheritance hierarchy relative to the link definition.</p>
 <h4 id="mlodaapi">mlodaAPI</h4>
-<pre><code class="language-python">import mloda
+<pre><code class="language-python">from mloda.user import mloda
 
 set_of_links = {link}
 

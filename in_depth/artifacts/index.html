@@ -125,6 +125,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
     <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-config/">Feature Configuration</a>
+                </li>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-chain-parser/">Feature Chain Parser</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-group-matching/">Feature Group Matching</a>
@@ -235,10 +237,10 @@ class BaseExampleArtifactFeature(FeatureGroup):
         return {cls.get_class_name(): [1, 2, 3]}
 </code></pre>
 <p>Now, we run the query to the feature group to save the artifact. This example is very basic, but could be a much more complex artifact.</p>
-<pre><code class="language-python">from mloda.user import API
+<pre><code class="language-python">from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
-api = API([&quot;BaseExampleArtifactFeature&quot;], {PyArrowTable})
+api = mloda([&quot;BaseExampleArtifactFeature&quot;], {PyArrowTable})
 api._batch_run()
 artifacts = api.get_artifacts()
 print(artifacts)
@@ -247,10 +249,10 @@ print(artifacts)
 <pre><code class="language-python">{'BaseExampleArtifactFeature': 'BasicArtifact'}
 </code></pre>
 <p>Now, let us use this artifact.</p>
-<pre><code class="language-python">from mloda.user import Feature, API
+<pre><code class="language-python">from mloda.user import Feature, mloda
 
 feat = Feature(name=&quot;BaseExampleArtifactFeature&quot;, options=artifacts)
-api = API([feat], {PyArrowTable})
+api = mloda([feat], {PyArrowTable})
 api._batch_run()
 </code></pre>
 <p>Result:</p>

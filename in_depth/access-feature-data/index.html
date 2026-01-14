@@ -117,6 +117,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
     <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-config/">Feature Configuration</a>
+                </li>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-chain-parser/">Feature Chain Parser</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-group-matching/">Feature Group Matching</a>
@@ -238,7 +240,7 @@ mloda.run_all(
 <p>A concrete, simplified global scope data access is shown in this example:</p>
 <pre><code class="language-python">import os
 
-import mloda
+from mloda.user import mloda
 from mloda.user import DataAccessCollection
 
 
@@ -286,7 +288,7 @@ class ReadFileFeature(FeatureGroup):
 <pre><code class="language-python">from typing import Optional, Any, List
 from pathlib import Path
 
-import mloda
+from mloda.user import mloda
 from mloda.provider import FeatureGroup, BaseInputData, FeatureSet
 from mloda.user import Feature
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
@@ -327,7 +329,7 @@ For this purpose, we have the ApiData.</p>
 <p>The following example shows a simple ApiData setup.</p>
 <pre><code class="language-python">from typing import List
 
-import mloda
+from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 # Pass api_data directly as a dict - the framework handles registration internally
@@ -355,7 +357,7 @@ for res in result:
 <li>parameter data</li>
 </ul>
 <p>One could imagine that for experimenting one wants to see data. Then one could use this feature as input feature to another feature instead of e.g. the true data.</p>
-<pre><code class="language-python">import mloda
+<pre><code class="language-python">from mloda.user import mloda
 from mloda.provider import FeatureGroup, BaseInputData, FeatureSet, DataCreator
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
@@ -391,7 +393,7 @@ for res in result:
 <p>In the following example, we will use data from another feature.</p>
 <pre><code class="language-python">from typing import Set
 
-import mloda
+from mloda.user import mloda
 from mloda.provider import FeatureGroup, FeatureSet
 from mloda.user import Options, FeatureName, Feature, PluginCollector
 
@@ -456,7 +458,7 @@ from mloda_plugins.feature_group.input_data.api_data.api_data import ApiInputDat
 class JoinedFeature(FeatureGroup):
 
     def input_features(self, options: Options, feature_name: FeatureName) -&gt; Optional[Set[Feature]]:
-        # Create a LEFT join between API data and Creator data
+        # Create a LEFT join between mloda data and Creator data
         link = Link.left(
             (ApiInputDataFeature, Index((&quot;api_id&quot;,))),
             (CreatorDataFeature, Index((&quot;creator_id&quot;,)))

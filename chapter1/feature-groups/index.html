@@ -115,6 +115,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
     <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/feature-config/">Feature Configuration</a>
+                </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../in_depth/feature-chain-parser/">Feature Chain Parser</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../in_depth/feature-group-matching/">Feature Group Matching</a>
@@ -183,7 +185,10 @@
             <div class="section" itemprop="articleBody">
               
                 <h3 id="creating-a-custom-feature-group">Creating a Custom Feature Group</h3>
-<p>In this example, we’ll create a custom feature group that multiplies the results of each feature by 2. We'll implement a new feature group and then use it within mloda.</p>
+<blockquote>
+<p><strong>AI-Friendly Design:</strong> Feature groups are small, template-like structures - easy to test, easy to debug, and easy for AI to generate. The declarative pattern makes them ideal for AI-assisted development.</p>
+</blockquote>
+<p>In this example, we'll create a custom feature group that multiplies the results of each feature by 2. We'll implement a new feature group and then use it within mloda.</p>
 <h4 id="1-import-the-required-modules-and-set-file-references">1. Import the Required Modules and Set File References</h4>
 <p>Start by importing the necessary modules to define the custom feature group and perform calculations:</p>
 <pre><code class="language-python">import pyarrow.compute as pc
@@ -215,7 +220,7 @@ example_feature_list = [f&quot;Example_{f}&quot; for f in feature_list]
 </code></pre>
 <h4 id="3-execute-the-request-using-the-new-feature-group">3. Execute the Request Using the New Feature Group</h4>
 <p>To use the newly defined feature group, simply add the <strong>"Example_"</strong> prefix to each feature name. mloda will automatically resolve the dependency between the <strong>CsvReader</strong> and the <strong>Example</strong> feature group.</p>
-<pre><code class="language-python">import mloda
+<pre><code class="language-python">from mloda.user import mloda
 
 result = mloda.run_all(
             example_feature_list, 

@@ -105,6 +105,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
     <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/feature-config/">Feature Configuration</a>
+                </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/feature-chain-parser/">Feature Chain Parser</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/feature-group-matching/">Feature Group Matching</a>
@@ -899,7 +901,7 @@ data_access_collection.add_credential_dict(
 </clipboard-copy>
 </div>
 <div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># Step 3: Request Data Using the Defined Access Collection and Desired Features</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">mloda</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user</span><span class="w"> </span><span class="kn">import</span> <span class="n">mloda</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.compute_framework.base_implementations.pyarrow.table</span><span class="w"> </span><span class="kn">import</span> <span class="n">PyArrowTable</span>
 
 
@@ -913,7 +915,7 @@ data_access_collection.add_credential_dict(
     <span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="p">[:</span><span class="mi">2</span><span class="p">],</span> <span class="nb">type</span><span class="p">(</span><span class="n">data</span><span class="p">))</span>
 </pre></div>
 <div class="clipboard-copy-txt" id="cell-5"># Step 3: Request Data Using the Defined Access Collection and Desired Features
-import mloda
+from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 

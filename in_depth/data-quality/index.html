@@ -141,6 +141,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
     <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-config/">Feature Configuration</a>
+                </li>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-chain-parser/">Feature Chain Parser</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-group-matching/">Feature Group Matching</a>
@@ -222,7 +224,7 @@
 <p>Example: Input Feature Validation Using Custom Validators</p>
 <h6 id="simple-validator">Simple validator</h6>
 <pre><code class="language-python">from typing import Any, Optional, Set
-import mloda
+from mloda.user import mloda
 from mloda.provider import FeatureGroup, FeatureSet
 from mloda.user import Options, FeatureName, Feature
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -317,7 +319,7 @@ class DocExamplePanderaValidator(BaseValidator):
 <li>We throw a warning instead of raising an error.</li>
 <li>We use the extender functionality to print out the runtime as an example.</li>
 </ul>
-<pre><code class="language-python">import mloda
+<pre><code class="language-python">from mloda.user import mloda
 from mloda.steward import Extender, ExtenderHook
 from mloda.user import Feature
 from tests.test_documentation.test_documentation import DokuValidateInputFeatureExtender
@@ -340,7 +342,7 @@ results = mloda.run_all(
 </ul>
 <p><strong>The implementation and use is very similar to validating input features.</strong></p>
 <h6 id="simple-validator_1">Simple validator</h6>
-<pre><code class="language-python">import mloda
+<pre><code class="language-python">from mloda.user import mloda
 from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Options
 from tests.test_plugins.integration_plugins.test_validate_features.example_validator import BaseValidateOutputFeaturesBase
@@ -402,7 +404,7 @@ results = mloda.run_all(
 <pre><code class="language-python">&quot;Time taken: 3.409385681152344e-05&quot;
 </code></pre>
 <h4 id="artifacts">Artifacts</h4>
-<p><code>Artifacts</code> can also be used for validation as the full API is available. A use case could be to store statistics of a feature and then validate them later on.
+<p><code>Artifacts</code> can also be used for validation as the full mloda is available. A use case could be to store statistics of a feature and then validate them later on.
 For more details on artifacts, refer to the <a href="https://mloda-ai.github.io/mloda/in_depth/artifacts/">artifact documentation</a>.</p>
 <h4 id="conclusion">Conclusion</h4>
 <p>In conclusion, feature validation is crucial for ensuring data quality in both input and output stages. By leveraging custom validators and extenders, validation can be tailored to specific needs while maintaining flexibility. This process helps detect inconsistencies early, improving the accuracy and robustness of data  and feature pipelines.</p>

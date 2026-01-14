@@ -73,7 +73,7 @@
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#4-design-options">4. Design options</a>
         <ul>
-    <li class="toctree-l3"><a class="reference internal" href="#part-of-api-request">Part of API request</a>
+    <li class="toctree-l3"><a class="reference internal" href="#part-of-mloda-request">Part of mloda request</a>
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#specific-feature-configuration">Specific feature configuration</a>
     </li>
@@ -133,6 +133,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
     <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/feature-config/">Feature Configuration</a>
+                </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../in_depth/feature-chain-parser/">Feature Chain Parser</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../in_depth/feature-group-matching/">Feature Group Matching</a>
@@ -214,7 +216,7 @@
 <h4 id="2-balancing-flexibility-and-complexity">2. Balancing Flexibility and Complexity</h4>
 <p>However, this flexibility introduces a bit of complexity. Let's look at an example where we remove the compute_frameworks=["PyArrowTable"] parameter from the mlodaAPI call.</p>
 <h4 id="3-example-without-a-specified-compute-framework">3. Example Without a Specified Compute Framework</h4>
-<pre><code class="language-python">import mloda
+<pre><code class="language-python">from mloda.user import mloda
 from mloda.user import DataAccessCollection
 
 file_path = &quot;tests/test_plugins/feature_group/src/dataset/creditcard_2023_short.csv&quot;
@@ -244,12 +246,12 @@ ValueError: Multiple feature groups
 <ul>
 <li><strong>Using specific feature configuration</strong> to define compute frameworks for individual features.</li>
 <li><strong>Within the feature group definition</strong>, by enforcing a specific compute framework rule.</li>
-<li><strong>As part of the API request</strong> (as shown in previous examples).</li>
+<li><strong>As part of the mloda request</strong> (as shown in previous examples).</li>
 </ul>
-<h5 id="part-of-api-request">Part of API request</h5>
+<h5 id="part-of-mloda-request">Part of mloda request</h5>
 <h5 id="specific-feature-configuration">Specific feature configuration</h5>
 <p>You can configure individual features to use a specific compute framework. Here’s how to specify that a feature should use the PyArrowTable framework:</p>
-<pre><code class="language-python">import mloda
+<pre><code class="language-python">from mloda.user import mloda
 from mloda.user import Feature
 
 feature = Feature(&quot;id&quot;, options={&quot;compute_framework&quot;: &quot;PyArrowTable&quot;})
@@ -317,7 +319,7 @@ result[0]
 <tr>
 <td><strong>PandasDataFrame</strong></td>
 <td>pandas DataFrame</td>
-<td>Rich data transformation, familiar API</td>
+<td>Rich data transformation, familiar mloda</td>
 <td>Development, data exploration, smaller datasets</td>
 <td>pandas, numpy</td>
 </tr>
@@ -380,7 +382,7 @@ result[0]
 - Avoid import errors when optional dependencies are missing</p>
 <p>For example, if <code>polars</code> is not installed, <code>PolarsDataFrame</code> will not be available as a compute framework option, and mloda will automatically work with the remaining available frameworks.</p>
 <p>Example using PythonDictFramework:</p>
-<pre><code class="language-python">import mloda
+<pre><code class="language-python">from mloda.user import mloda
 from mloda.user import Feature
 
 feature = Feature(&quot;id&quot;, options={&quot;compute_framework&quot;: &quot;PythonDictFramework&quot;})
@@ -392,7 +394,7 @@ result = mloda.run_all(
 result[0]  # Returns List[Dict[str, Any]]
 </code></pre>
 <p>Example using Polars frameworks:</p>
-<pre><code class="language-python">import mloda
+<pre><code class="language-python">from mloda.user import mloda
 from mloda.user import Feature
 
 # Using Polars eager evaluation
@@ -408,7 +410,7 @@ result = mloda.run_all(
 result[0]  # Returns polars.DataFrame
 </code></pre>
 <p>Example using DuckDB framework:</p>
-<pre><code class="language-python">import mloda
+<pre><code class="language-python">from mloda.user import mloda
 from mloda.user import Feature, DataAccessCollection
 import duckdb
 
@@ -430,7 +432,7 @@ result[0]  # Returns duckdb.DuckDBPyRelation
 </code></pre>
 <p><strong>Note</strong>: DuckDB framework requires a connection object and does not support mloda framework inherent multiprocessing. Multiprocessing from DuckDB still works. It's optimized for analytical workloads and provides SQL-like operations on data.</p>
 <p>Example using Iceberg framework:</p>
-<pre><code class="language-python">import mloda
+<pre><code class="language-python">from mloda.user import mloda
 from mloda.user import Feature, DataAccessCollection
 from pyiceberg.catalog import load_catalog
 
@@ -457,7 +459,7 @@ result[0]  # Returns pyiceberg.table.Table or pyarrow.Table
 </code></pre>
 <p><strong>Note</strong>: Iceberg framework requires a catalog connection object for table operations. It's optimized for data lake scenarios with schema evolution, time travel capabilities, and large-scale analytics. The framework uses PyArrow as an interchange format for compatibility with other mloda frameworks.</p>
 <p>Example using Spark framework:</p>
-<pre><code class="language-python">import mloda
+<pre><code class="language-python">from mloda.user import mloda
 from mloda.user import Feature, DataAccessCollection
 from pyspark.sql import SparkSession
 

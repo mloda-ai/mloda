@@ -111,6 +111,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
     <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/feature-config/">Feature Configuration</a>
+                </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../in_depth/feature-chain-parser/">Feature Chain Parser</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../in_depth/feature-group-matching/">Feature Group Matching</a>
@@ -923,7 +925,7 @@ Result: 8 columns total
 </clipboard-copy>
 </div>
 <div class="highlight-ipynb hl-python"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Any</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">mloda</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user</span><span class="w"> </span><span class="kn">import</span> <span class="n">mloda</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda.provider</span><span class="w"> </span><span class="kn">import</span> <span class="n">FeatureGroup</span><span class="p">,</span> <span class="n">BaseInputData</span><span class="p">,</span> <span class="n">DataCreator</span><span class="p">,</span> <span class="n">FeatureSet</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user</span><span class="w"> </span><span class="kn">import</span> <span class="n">PluginLoader</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.compute_framework.base_implementations.pandas.dataframe</span><span class="w"> </span><span class="kn">import</span> <span class="n">PandasDataFrame</span>
@@ -979,7 +981,7 @@ Result: 8 columns total
 <span class="c1">#         I have yet to find a solution for this.</span>
 </pre></div>
 <div class="clipboard-copy-txt" id="cell-3">from typing import Optional, Any
-import mloda
+from mloda.user import mloda
 from mloda.provider import FeatureGroup, BaseInputData, DataCreator, FeatureSet
 from mloda.user import PluginLoader
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame

@@ -56,9 +56,26 @@ Each phase should be a clean, validated checkpoint with all tests passing and ch
 
 This enables continuous learning and improvement of the TDD workflow based on actual usage patterns.
 
-## Important: Refer to .clinerules
+## Coding Instructions
 
-**ALWAYS read .clinerules first** - it contains critical memory bank instructions and coding guidelines. The .clinerules file maintains:
-- Complete memory bank structure in `memory-bank/` directory
-- Coding conventions and test requirements
-- Workflow instructions for planning and execution
+- Never put code into `__init__.py` files
+- Keep documentation to the necessary lines
+- Run tests after creation using `tox`
+- Avoid try/except blocks
+
+## Memory Bank
+
+The `memory-bank/` directory contains project context documentation. Read relevant files at the start of tasks to understand the project.
+
+### Core Files
+| File | Purpose |
+|------|---------|
+| `projectbrief.md` | Foundation document - core requirements and goals |
+| `productContext.md` | Why the project exists, problems solved, user experience goals |
+| `activeContext.md` | Current work focus, recent changes, next steps |
+| `systemPatterns.md` | System architecture, design patterns, component relationships |
+| `techContext.md` | Technologies, development setup, constraints, dependencies |
+| `progress.md` | What works, what's left, current status, known issues |
+
+### Hierarchy
+Files build upon each other: `projectbrief.md` → `productContext.md`/`systemPatterns.md`/`techContext.md` → `activeContext.md` → `progress.md`

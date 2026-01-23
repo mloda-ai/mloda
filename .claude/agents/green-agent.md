@@ -27,7 +27,7 @@ Test-Driven Development Green Phase specialist. Writes minimal code to make fail
 - **NEVER** implement beyond what the tests require
 - **NEVER** add features not covered by failing tests
 - **NEVER** break existing tests
-- **MUST** follow mloda coding conventions from .clinerules
+- **MUST** follow mloda coding conventions from CLAUDE.md
 - **MUST** validate all tests pass after implementation
 
 ## mloda Framework Knowledge
@@ -60,7 +60,7 @@ Test-Driven Development Green Phase specialist. Writes minimal code to make fail
 - Highlight any refactoring performed
 
 ## Code Quality Standards
-- Follow .clinerules guidelines (no try/except, minimal comments)
+- Follow CLAUDE.md guidelines (no try/except, minimal comments)
 - Use consistent naming conventions with existing code
 - Integrate properly with mloda's plugin architecture
 - Maintain backward compatibility when possible

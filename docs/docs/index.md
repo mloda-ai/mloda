@@ -1,10 +1,10 @@
 # mloda
 
-## Declarative Data Access for AI Agents
+## Open Data Access for AI Agents
 
-> **Describe what you need - mloda delivers it.**
+> **Describe what you need, mloda delivers it.**
 
-mloda provides **declarative data access** for AI agents, ML pipelines, and data teams. Instead of writing complex data retrieval code, users describe WHAT they need - mloda resolves HOW to get it through its plugin system.
+mloda provides **declarative data access** for AI agents, ML pipelines, and data teams. Instead of writing complex data retrieval code, users describe WHAT they need, mloda resolves HOW to get it through its plugin system.
 
 [Get started with mloda here.](https://mloda-ai.github.io/mloda/chapter1/installation/)
 

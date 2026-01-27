@@ -126,6 +126,28 @@ docker compose rm -f ai-agent-1
 docker volume rm .devcontainer_ai_agent_1_data
 ```
 
+## Claude Code Setup
+
+To use Claude Code inside the container, copy your local credentials into the container.
+
+### Copy Directory
+
+```sh
+docker cp ~/.claude ai-agent-1:/home/vscode/
+docker cp ~/.claude ai-agent-2:/home/vscode/
+docker cp ~/.claude ai-agent-3:/home/vscode/
+docker cp ~/.claude ai-agent-4:/home/vscode/
+docker cp ~/.claude ai-agent-5:/home/vscode/
+docker cp ~/.claude ai-agent-6:/home/vscode/
+
+docker cp ~/.claude.json ai-agent-1:/home/vscode/
+docker cp ~/.claude.json ai-agent-2:/home/vscode/
+docker cp ~/.claude.json ai-agent-3:/home/vscode/
+docker cp ~/.claude.json ai-agent-4:/home/vscode/
+docker cp ~/.claude.json ai-agent-5:/home/vscode/
+docker cp ~/.claude.json ai-agent-6:/home/vscode/
+```
+
 ## Managing Docker Volumes
 
 ### List All Project Volumes

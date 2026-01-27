@@ -26,7 +26,7 @@ RUN curl -fsSL https://claude.ai/install.sh | bash
 ENV PYTHON_PATH=/usr/local/bin/python3.10
 
 # Copy project files with correct ownership
-COPY --chown=vscode:vscode ../ /workspace
+COPY --chown=vscode:vscode ./ /workspace
 
 # Convenience: start in /workspace on shell open
 RUN echo 'cd /workspace' >> /home/vscode/.bashrc

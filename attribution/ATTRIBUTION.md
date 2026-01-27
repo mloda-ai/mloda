@@ -18,7 +18,7 @@
 | bandit                                 | 1.9.3           | Apache-2.0                                              |
 | beautifulsoup4                         | 4.14.3          | MIT License                                             |
 | bleach                                 | 6.3.0           | Apache Software License                                 |
-| cachetools                             | 6.2.4           | MIT                                                     |
+| cachetools                             | 6.2.5           | MIT                                                     |
 | certifi                                | 2026.1.4        | Mozilla Public License 2.0 (MPL 2.0)                    |
 | cffi                                   | 2.0.0           | MIT                                                     |
 | chardet                                | 5.2.0           | GNU Lesser General Public License v2 or later (LGPLv2+) |
@@ -31,7 +31,7 @@
 | decorator                              | 5.2.1           | BSD License                                             |
 | defusedxml                             | 0.7.1           | Python Software Foundation License                      |
 | distlib                                | 0.4.0           | Python Software Foundation License                      |
-| duckdb                                 | 1.4.3           | MIT License                                             |
+| duckdb                                 | 1.4.4           | MIT License                                             |
 | exceptiongroup                         | 1.3.1           | MIT License                                             |
 | execnet                                | 2.1.2           | MIT License                                             |
 | executing                              | 2.2.1           | MIT License                                             |
@@ -60,7 +60,7 @@
 | jupyter_core                           | 5.9.1           | BSD-3-Clause                                            |
 | jupyter_server                         | 2.17.0          | BSD License                                             |
 | jupyter_server_terminals               | 0.5.4           | BSD License                                             |
-| jupyterlab                             | 4.5.2           | BSD License                                             |
+| jupyterlab                             | 4.5.3           | BSD License                                             |
 | jupyterlab_pygments                    | 0.3.0           | BSD License                                             |
 | jupyterlab_server                      | 2.28.0          | BSD License                                             |
 | lark                                   | 1.3.1           | MIT License                                             |
@@ -80,7 +80,7 @@
 | nbformat                               | 5.10.4          | BSD License                                             |
 | nest-asyncio                           | 1.6.0           | BSD License                                             |
 | nltk                                   | 3.9.2           | Apache Software License                                 |
-| notebook                               | 7.5.2           | BSD License                                             |
+| notebook                               | 7.5.3           | BSD License                                             |
 | notebook_shim                          | 0.2.4           | BSD License                                             |
 | numpy                                  | 2.2.6           | BSD License                                             |
 | opentelemetry-api                      | 1.39.1          | Apache-2.0                                              |
@@ -97,7 +97,7 @@
 | pandera                                | 0.28.1          | MIT License                                             |
 | pandocfilters                          | 1.5.1           | BSD License                                             |
 | parso                                  | 0.8.5           | MIT License                                             |
-| pathspec                               | 1.0.3           | Mozilla Public License 2.0 (MPL 2.0)                    |
+| pathspec                               | 1.0.4           | Mozilla Public License 2.0 (MPL 2.0)                    |
 | pexpect                                | 4.9.0           | ISC License (ISCL)                                      |
 | pip-api                                | 0.0.34          | Apache Software License                                 |
 | pip-requirements-parser                | 32.0.1          | MIT                                                     |
@@ -134,9 +134,9 @@
 | rfc3339-validator                      | 0.1.4           | MIT License                                             |
 | rfc3986-validator                      | 0.1.1           | MIT License                                             |
 | rfc3987-syntax                         | 1.1.0           | Apache Software License                                 |
-| rich                                   | 14.2.0          | MIT License                                             |
+| rich                                   | 14.3.1          | MIT License                                             |
 | rpds-py                                | 0.30.0          | MIT                                                     |
-| ruff                                   | 0.14.13         | MIT License                                             |
+| ruff                                   | 0.14.14         | MIT License                                             |
 | scikit-learn                           | 1.7.2           | BSD-3-Clause                                            |
 | scipy                                  | 1.15.3          | BSD License                                             |
 | six                                    | 1.17.0          | MIT License                                             |

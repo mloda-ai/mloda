@@ -121,8 +121,9 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             "explanation": "Number of clusters or 'auto' for automatic determination",
             DefaultOptionKeys.context: True,  # Mark as context parameter
             DefaultOptionKeys.strict_validation: True,  # Enable strict validation
-            DefaultOptionKeys.validation_function: lambda value: value == "auto"
-            or (isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0),
+            DefaultOptionKeys.validation_function: lambda value: (
+                value == "auto" or (isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0)
+            ),
         },
         DefaultOptionKeys.in_features: {
             "explanation": "Source features to use for clustering",

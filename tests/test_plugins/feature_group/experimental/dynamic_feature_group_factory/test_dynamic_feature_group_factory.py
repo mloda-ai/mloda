@@ -27,8 +27,9 @@ class TestDynamicFeatureGroupFactory:
         # Example property dictionary
         properties: Dict[str, Any] = {
             "calculate_feature": lambda cls, data, features: f"Calculated with {cls.__name__}",
-            "match_feature_group_criteria": lambda cls, feature_name, options, data_access_collection: feature_name
-            == FeatureName("test_feature"),
+            "match_feature_group_criteria": lambda cls, feature_name, options, data_access_collection: (
+                feature_name == FeatureName("test_feature")
+            ),
             "return_data_type_rule": lambda cls, feature: DataType.STRING,
             "input_features": lambda self, options, feature_name: None,
         }
@@ -74,8 +75,9 @@ class TestDynamicFeatureGroupFactory:
         properties: Dict[str, Any] = {
             "input_data": lambda: MockReadFile(),
             "calculate_feature": lambda cls, data, features: f"Calculated with {cls.__name__} and {data}",
-            "match_feature_group_criteria": lambda cls, feature_name, options, data_access_collection: feature_name
-            == FeatureName("test_file_feature"),
+            "match_feature_group_criteria": lambda cls, feature_name, options, data_access_collection: (
+                feature_name == FeatureName("test_file_feature")
+            ),
         }
 
         # Create a dynamic feature group

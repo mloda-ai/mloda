@@ -145,9 +145,8 @@ class ForecastingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
             DefaultOptionKeys.validation_function: lambda x: (
-                isinstance(x, int) or (isinstance(x, str) and x.isdigit())
-            )
-            and int(x) > 0,
+                (isinstance(x, int) or (isinstance(x, str) and x.isdigit())) and int(x) > 0
+            ),
         },
         TIME_UNIT: {
             **TIME_UNITS,

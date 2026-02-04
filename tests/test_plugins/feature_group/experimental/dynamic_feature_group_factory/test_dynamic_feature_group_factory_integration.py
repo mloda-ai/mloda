@@ -25,8 +25,9 @@ class TestDynamicFeatureGroupFactoryIntegration:
         # 1. Define Dynamic Feature Group Properties
         properties: Dict[str, Any] = {
             "calculate_feature": lambda cls, data, features: pd.DataFrame({"input_feature": [5]}),
-            "match_feature_group_criteria": lambda cls, feature_name, options, data_access_collection: feature_name
-            == FeatureName("input_feature"),
+            "match_feature_group_criteria": lambda cls, feature_name, options, data_access_collection: (
+                feature_name == FeatureName("input_feature")
+            ),
             "input_data": lambda: DataCreator({"input_feature"}),
             "compute_framework_rule": lambda: {PandasDataFrame},
         }

@@ -130,9 +130,9 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
             "explanation": "Target dimension for the reduction (positive integer)",
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.validation_function: lambda value: isinstance(value, (int, str))
-            and str(value).isdigit()
-            and int(value) > 0,
+            DefaultOptionKeys.validation_function: lambda value: (
+                isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0
+            ),
         },
         DefaultOptionKeys.in_features: {
             "explanation": "Source features to use for dimensionality reduction",
@@ -145,18 +145,18 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: False,
             "default": 250,
-            DefaultOptionKeys.validation_function: lambda value: isinstance(value, (int, str))
-            and str(value).isdigit()
-            and int(value) > 0,
+            DefaultOptionKeys.validation_function: lambda value: (
+                isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0
+            ),
         },
         TSNE_N_ITER_WITHOUT_PROGRESS: {
             "explanation": "Maximum iterations without progress before early stopping (t-SNE)",
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: False,
             "default": 50,
-            DefaultOptionKeys.validation_function: lambda value: isinstance(value, (int, str))
-            and str(value).isdigit()
-            and int(value) > 0,
+            DefaultOptionKeys.validation_function: lambda value: (
+                isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0
+            ),
         },
         TSNE_METHOD: {
             "barnes_hut": "Barnes-Hut approximation (faster, O(n log n))",
@@ -183,9 +183,9 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: False,
             "default": 200,
-            DefaultOptionKeys.validation_function: lambda value: isinstance(value, (int, str))
-            and str(value).isdigit()
-            and int(value) > 0,
+            DefaultOptionKeys.validation_function: lambda value: (
+                isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0
+            ),
         },
         # Isomap specific parameters
         ISOMAP_N_NEIGHBORS: {
@@ -193,9 +193,9 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: False,
             "default": 5,
-            DefaultOptionKeys.validation_function: lambda value: isinstance(value, (int, str))
-            and str(value).isdigit()
-            and int(value) > 0,
+            DefaultOptionKeys.validation_function: lambda value: (
+                isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0
+            ),
         },
     }
 

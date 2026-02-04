@@ -287,6 +287,17 @@ Built-in and custom extenders give you full lineage - trace any result back to i
 
 ---
 
+## Ecosystem
+
+Most plugins currently live in `mloda_plugins/` within this repository. The goal is to gradually migrate them to standalone packages in the registry.
+
+| Repository | Description |
+|------------|-------------|
+| [mloda-registry](https://github.com/mloda-ai/mloda-registry) | Official plugin packages and 40+ development guides |
+| [mloda-plugin-template](https://github.com/mloda-ai/mloda-plugin-template) | Cookiecutter template for creating standalone plugins |
+
+---
+
 ## Contributing
 
 We welcome contributions! Build plugins, improve docs, or add features.

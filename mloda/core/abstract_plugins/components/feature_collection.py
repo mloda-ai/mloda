@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Generator, List, Optional, Set, Union
 from uuid import UUID
+from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.options import Options
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
@@ -17,9 +18,11 @@ class Features:
         features: List[Union[Feature, str]],
         child_options: Optional[Options] = None,
         child_uuid: Optional[UUID] = None,
+        parent_domain: Optional[str] = None,
     ) -> None:
         self.collection: List[Feature] = []
         self.child_uuid: Optional[UUID] = child_uuid
+        self.parent_domain: Optional[str] = parent_domain
 
         self.parent_uuids: set[UUID] = set()
 
@@ -36,7 +39,11 @@ class Features:
             if child_options.group == {} and child_options.context == {}:
                 child_options = Options({})
 
-            feature = Feature(name=feature, options=child_options) if isinstance(feature, str) else feature
+            if isinstance(feature, str):
+                feature = Feature(name=feature, options=child_options, domain=self.parent_domain)
+            else:
+                if feature.domain is None and self.parent_domain is not None:
+                    feature.domain = Domain(self.parent_domain)
             if child_uuid:
                 self.parent_uuids.add(feature.uuid)
                 self.child_uuid = child_uuid

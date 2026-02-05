@@ -36,3 +36,37 @@ class ExampleFeature(FeatureGroup):
         return "example_domain"
 ```
 For feature groups, the default domain is default_domain.
+
+## Domain Propagation
+
+When a feature depends on other features (via `input_features()`), the parent's domain propagates automatically to child features. You can override this by setting an explicit domain on each dependent feature.
+
+```
++------------------------------------------+---------------+------------------+
+| Child Definition                         | Parent Domain | Result           |
++------------------------------------------+---------------+------------------+
+| "child" (string)                         | "Sales"       | Inherits "Sales" |
+| Feature("child")                         | "Sales"       | Inherits "Sales" |
+| Feature("child", domain="Finance")       | "Sales"       | Keeps "Finance"  |
+| Any                                      | None          | No domain        |
++------------------------------------------+---------------+------------------+
+```
+
+**Example: String-based features inherit domain**
+```python
+Feature("Revenue", domain="Sales")
+
+class SalesRevenueGroup(FeatureGroup):
+    def input_features(self, options, feature_name):
+        return {"base_amount", "currency"}  # Both inherit "Sales"
+```
+
+**Example: Override domain for cross-domain dependency**
+```python
+class SalesRevenueGroup(FeatureGroup):
+    def input_features(self, options, feature_name):
+        return {
+            "base_amount",                              # Inherits "Sales"
+            Feature("exchange_rate", domain="Finance"), # Uses "Finance"
+        }
+```

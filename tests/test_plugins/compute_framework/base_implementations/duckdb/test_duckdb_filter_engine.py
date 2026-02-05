@@ -29,9 +29,6 @@ except ImportError:
 class TestDuckDBFilterEngine(FilterEngineTestMixin):
     """Unit tests for the DuckDBFilterEngine class using shared mixin."""
 
-    # DuckDB doesn't guarantee row order in results
-    preserves_order = False
-
     @pytest.fixture
     def filter_engine(self) -> Any:
         """Return the DuckDBFilterEngine class."""

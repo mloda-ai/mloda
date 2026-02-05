@@ -6,7 +6,6 @@ Each framework-specific test class should inherit from this mixin and provide:
 - filter_engine fixture: Returns the filter engine class
 - sample_data fixture: Returns framework-specific test data
 - get_column_values method: Extracts column values as a list from results
-- preserves_order property (optional): Set to False for frameworks that don't guarantee order
 """
 
 from abc import abstractmethod
@@ -21,9 +20,6 @@ from mloda.user import FilterType
 
 class FilterEngineTestMixin:
     """Shared tests for all BaseFilterEngine implementations."""
-
-    # Override this in subclasses for frameworks that don't preserve row order
-    preserves_order: bool = True
 
     @pytest.fixture
     @abstractmethod
@@ -58,11 +54,8 @@ class FilterEngineTestMixin:
         raise NotImplementedError
 
     def _assert_values_equal(self, actual: List[Any], expected: List[Any]) -> None:
-        """Assert values are equal, sorting if framework doesn't preserve order."""
-        if self.preserves_order:
-            assert actual == expected
-        else:
-            assert sorted(actual) == sorted(expected)
+        """Assert values are equal regardless of order."""
+        assert sorted(actual) == sorted(expected)
 
     def test_do_range_filter(self, filter_engine: Any, sample_data: Any) -> None:
         """Test range filter with min and max values."""

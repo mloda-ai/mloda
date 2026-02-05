@@ -3,18 +3,31 @@ from typing import Any
 
 
 class Domain:
-    """
-    Documentation domain:
+    """Represents a domain for isolating features across business contexts.
 
-    default value is default_domain. The purpose of this is to allow for a default domain to be used if no domain is given.
-    Usecase: Testing, POCS etc. This is a tool to make life easier for the user.
+    Domains enable data isolation between different contexts (Sales, Finance, Test, etc.).
+    The framework matches feature domains to feature group domains for resolution.
 
-    can be defined by:
-    feature.domain: either by options or by domain
-    feature_group.domain: returns the domain name rule for the feature group
+    Definition:
+        - Feature: via `domain` parameter or `options={"domain": "..."}`
+        - FeatureGroup: via `get_domain()` classmethod (default: "default_domain")
 
-    We validate in IdentifyFeatureGroupClass that there is atleast one feature group with the same domain as the feature.
-    If the feature does not have a domain, and we have not exactly one matching feature group to the feature, we raise an error.
+    Propagation:
+        When a parent feature has a domain, child features inherit it automatically.
+        You can override this by setting an explicit domain on each dependent feature.
+
+        +------------------------------------------+---------------+------------------+
+        | Child Definition                         | Parent Domain | Result           |
+        +------------------------------------------+---------------+------------------+
+        | "child" (string)                         | "Sales"       | Inherits "Sales" |
+        | Feature("child")                         | "Sales"       | Inherits "Sales" |
+        | Feature("child", domain="Finance")       | "Sales"       | Keeps "Finance"  |
+        | Any                                      | None          | No domain        |
+        +------------------------------------------+---------------+------------------+
+
+    Validation:
+        IdentifyFeatureGroupClass ensures at least one feature group matches the feature's domain.
+        If a feature has no domain and multiple groups match, an error is raised.
     """
 
     def __init__(self, name: str):

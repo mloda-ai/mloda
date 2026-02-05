@@ -116,7 +116,10 @@ class Engine:
         added = self.add_feature_to_collection(feature_group_class, feature, features.child_uuid)
 
         if added:
-            self._handle_input_features_recursion(feature_group_class, feature.uuid, feature.options, feature.name)
+            parent_domain = feature.domain.name if feature.domain else None
+            self._handle_input_features_recursion(
+                feature_group_class, feature.uuid, feature.options, feature.name, parent_domain=parent_domain
+            )
 
         if self.global_filter:
             self._add_filter_feature(feature_group_class, feature_group, feature, features)
@@ -265,7 +268,12 @@ class Engine:
             self.feature_link_parents[child_uuid].add(wanted_uuid)
 
     def _handle_input_features_recursion(
-        self, feature_group_class: Type[FeatureGroup], uuid: UUID, options: Options, feature_name: FeatureName
+        self,
+        feature_group_class: Type[FeatureGroup],
+        uuid: UUID,
+        options: Options,
+        feature_name: FeatureName,
+        parent_domain: Optional[str] = None,
     ) -> None:
         """Handles recursion for input features of a feature group."""
         feature_group = feature_group_class()
@@ -278,7 +286,9 @@ class Engine:
             input_features = None
 
         if input_features:
-            features = Features(list(input_features), child_options=options, child_uuid=uuid)
+            features = Features(
+                list(input_features), child_options=options, child_uuid=uuid, parent_domain=parent_domain
+            )
             if features.child_uuid is None:
                 raise ValueError(f"Features {features} has no parent uuid although it should have one.")
             self.feature_link_parents[features.child_uuid] = features.parent_uuids

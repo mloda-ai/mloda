@@ -205,16 +205,17 @@ class TestFeatureChainParserMixinMatchFeatureGroupCriteria:
         assert result is True
 
     def test_match_feature_group_criteria_config_based_invalid_operation(self) -> None:
-        """Test that config-based matching raises ValueError with invalid operation value.
+        """Test that config-based matching returns False with invalid operation value.
 
-        When strict_validation is True in PROPERTY_MAPPING, invalid values raise ValueError.
-        This matches the behavior of match_configuration_feature_chain_parser().
+        When strict_validation is True in PROPERTY_MAPPING, invalid values return False
+        instead of raising ValueError, enabling polymorphic feature group identification.
         """
         feature_name = FeatureName("any_name")
         options = Options(context={"operation": "invalid_op"})
 
-        with pytest.raises(ValueError):
-            MockFeatureGroup.match_feature_group_criteria(feature_name, options)
+        result = MockFeatureGroup.match_feature_group_criteria(feature_name, options)
+
+        assert result is False
 
     def test_match_feature_group_criteria_missing_required_property(self) -> None:
         """Test that matching fails when required property is missing."""

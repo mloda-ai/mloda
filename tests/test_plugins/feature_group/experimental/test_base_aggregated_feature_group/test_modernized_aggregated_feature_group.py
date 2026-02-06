@@ -100,10 +100,8 @@ class TestModernizedAggregatedFeatureGroup:
             ),
         )
 
-        with pytest.raises(
-            ValueError, match="Property value 'invalid_type' not found in mapping for 'aggregation_type'"
-        ):
-            AggregatedFeatureGroup.match_feature_group_criteria(feature_invalid.name, feature_invalid.options)
+        result = AggregatedFeatureGroup.match_feature_group_criteria(feature_invalid.name, feature_invalid.options)
+        assert result is False
 
     def test_mixed_parameter_placement(self) -> None:
         """Test that parameters can be placed in different categories."""

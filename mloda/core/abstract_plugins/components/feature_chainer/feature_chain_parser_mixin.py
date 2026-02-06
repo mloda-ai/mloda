@@ -131,13 +131,16 @@ class FeatureChainParserMixin:
         prefix_patterns = cls._get_prefix_patterns()
         property_mapping = cls._get_property_mapping()
 
-        # Use the unified parser for basic matching
-        result = FeatureChainParser.match_configuration_feature_chain_parser(
-            _feature_name,
-            options,
-            property_mapping=property_mapping,
-            prefix_patterns=prefix_patterns,
-        )
+        try:
+            # Use the unified parser for basic matching
+            result = FeatureChainParser.match_configuration_feature_chain_parser(
+                _feature_name,
+                options,
+                property_mapping=property_mapping,
+                prefix_patterns=prefix_patterns,
+            )
+        except ValueError:
+            return False
 
         # If basic match succeeded and it's a string-based feature, call validation hook
         if result:

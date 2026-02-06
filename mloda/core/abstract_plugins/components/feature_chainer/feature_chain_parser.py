@@ -92,11 +92,8 @@ class FeatureChainParser:
         """Internal method for matching pattern-based features - used by match_configuration_feature_chain_parser."""
         _feature_name: FeatureName = FeatureName(feature_name) if isinstance(feature_name, str) else feature_name
 
-        try:
-            has_prefix_configuration, source_feature = cls.parse_feature_name(_feature_name, prefix_patterns, pattern)
-            if has_prefix_configuration is None or source_feature is None:
-                return False
-        except ValueError:
+        has_prefix_configuration, source_feature = cls.parse_feature_name(_feature_name, prefix_patterns, pattern)
+        if has_prefix_configuration is None or source_feature is None:
             return False
         return True
 
@@ -304,7 +301,6 @@ class FeatureChainParser:
                 return True
 
         # configuration-based
-
         if property_mapping is not None:
             return cls._validate_options_against_property_mapping(options, property_mapping)
 

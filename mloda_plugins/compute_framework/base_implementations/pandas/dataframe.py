@@ -82,6 +82,9 @@ class PandasDataFrame(ComputeFramework):
                 return self.data
             raise ValueError(f"Only one feature can be added at a time: {feature_names}")
 
+        if isinstance(data, list) and all(isinstance(item, dict) for item in data):
+            return self.pd_dataframe()(data)
+
         raise ValueError(f"Data {type(data)} is not supported by {self.__class__.__name__}")
 
     @classmethod

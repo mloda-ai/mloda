@@ -17,7 +17,7 @@ from mloda_plugins.feature_group.experimental.source_input_feature import (
     SourceInputFeature,
     SourceTuple,
 )
-from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
+from mloda_plugins.feature_group.input_data.read_document_feature import ReadDocumentFeature
 from mloda_plugins.feature_group.input_data.read_files.text_file_reader import PyFileReader
 
 
@@ -97,8 +97,8 @@ class ConcatenatedFileContent(FeatureGroup):
             right_link, left_link = None, None
 
             if cnt != len(file_paths) - 1:
-                left_link = (ReadFileFeature, short_f_list[cnt])
-                right_link = (ReadFileFeature, short_f_list[cnt + 1])
+                left_link = (ReadDocumentFeature, short_f_list[cnt])
+                right_link = (ReadDocumentFeature, short_f_list[cnt + 1])
 
             source_tuple = SourceTuple(
                 feature_name=short_f,

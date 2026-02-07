@@ -23,12 +23,12 @@ from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 from mloda_plugins.feature_group.input_data.read_files.text_file_reader import PyFileReader
-from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
+from mloda_plugins.feature_group.input_data.read_document_feature import ReadDocumentFeature
 
 
 class TestReadLLMFiles:
     def test_llm_basics(self) -> None:
-        class LLMBasic(ReadFileFeature):
+        class LLMBasic(ReadDocumentFeature):
             def set_feature_name(self, config: Options, feature_name: FeatureName) -> FeatureName:
                 return FeatureName("PyFileReader")
 

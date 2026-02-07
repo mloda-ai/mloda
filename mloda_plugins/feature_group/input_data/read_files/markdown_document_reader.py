@@ -5,10 +5,10 @@ from mloda_plugins.feature_group.input_data.read_document import ReadDocument
 from mloda.provider import FeatureSet
 
 
-class TextFileReader(ReadDocument):
+class MarkdownDocumentReader(ReadDocument):
     @classmethod
     def suffix(cls) -> Tuple[str, ...]:
-        return (".text",)
+        return (".md",)
 
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
@@ -20,9 +20,3 @@ class TextFileReader(ReadDocument):
         file_type = cls.suffix()[0].lstrip(".")
 
         return [{cls.get_class_name(): content, "source": file_path, "file_type": file_type}]
-
-
-class PyFileReader(TextFileReader):
-    @classmethod
-    def suffix(cls) -> Tuple[str, ...]:
-        return (".py",)

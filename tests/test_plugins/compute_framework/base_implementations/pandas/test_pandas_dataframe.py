@@ -61,6 +61,39 @@ class TestPandasDataFrameComputeFramework:
 
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
+class TestPandasTransformList:
+    def test_transform_list_of_dicts(self) -> None:
+        """PandasDataFrame should handle list of dicts (document reader output)."""
+        pdf = PandasDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+        data = [{"content": "hello world", "source": "/path/to/file.txt", "file_type": "text"}]
+
+        result = pdf.transform(data, {"content"})
+
+        assert isinstance(result, pd.DataFrame)
+        assert len(result) == 1
+        assert "content" in result.columns
+        assert result["content"].iloc[0] == "hello world"
+        assert result["source"].iloc[0] == "/path/to/file.txt"
+
+    def test_transform_list_of_multiple_dicts(self) -> None:
+        """PandasDataFrame should handle multiple dicts in list."""
+        pdf = PandasDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+        data = [
+            {"content": "first", "source": "/path/a.json", "file_type": "json"},
+            {"content": "second", "source": "/path/b.json", "file_type": "json"},
+        ]
+
+        result = pdf.transform(data, {"content"})
+
+        assert isinstance(result, pd.DataFrame)
+        assert len(result) == 2
+        assert result["content"].iloc[0] == "first"
+        assert result["content"].iloc[1] == "second"
+
+
+@pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
 class TestPandasDataFrameMerge(DataFrameTestBase):
     """Test PandasDataFrame merge operations using the base test class."""
 

@@ -82,7 +82,7 @@ class DynamicFeatureGroupCreator:
     ### Dynamic File Reader Feature Group
 
     ```python
-    from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
+    from mloda_plugins.feature_group.input_data.read_document_feature import ReadDocumentFeature
     from mloda_plugins.feature_group.input_data.read_files.text_file_reader import PyFileReader
 
     properties = {
@@ -93,11 +93,11 @@ class DynamicFeatureGroupCreator:
         ),
     }
 
-    # Inherit from ReadFileFeature for file reading capabilities
+    # Inherit from ReadDocumentFeature for document reading capabilities
     MyFileReaderFG = DynamicFeatureGroupCreator.create(
         properties=properties,
         class_name="MyFileReaderFeatureGroup",
-        feature_group_cls=ReadFileFeature
+        feature_group_cls=ReadDocumentFeature
     )
     ```
 

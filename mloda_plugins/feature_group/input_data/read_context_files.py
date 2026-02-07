@@ -18,7 +18,6 @@ from mloda_plugins.feature_group.experimental.source_input_feature import (
     SourceTuple,
 )
 from mloda_plugins.feature_group.input_data.read_document_feature import ReadDocumentFeature
-from mloda_plugins.feature_group.input_data.read_files.text_file_reader import PyFileReader
 
 
 try:
@@ -65,8 +64,11 @@ class ConcatenatedFileContent(FeatureGroup):
             file_type = options.get("file_type") or "py"
             file_paths = find_file_paths(list(target_folder), file_type, not_allowed_files_names=disallowed_files)
 
+        document_reader_class = options.get("document_reader_class")
+        if not document_reader_class:
+            raise ValueError(f"The option 'document_reader_class' is required for {self.get_class_name()}.")
         self._create_join_class(self.join_feature_name)
-        return self._create_source_tuples(file_paths, feature_name)
+        return self._create_source_tuples(file_paths, feature_name, document_reader_class)
 
     def _create_join_class(self, class_name: str) -> None:
         """Creates a Join class on the fly using DynamicFeatureGroupCreator."""
@@ -82,7 +84,9 @@ class ConcatenatedFileContent(FeatureGroup):
             properties=properties, class_name=class_name, feature_group_cls=SourceInputFeature
         )
 
-    def _create_source_tuples(self, file_paths: List[str], feature_name: FeatureName) -> Set[Feature]:
+    def _create_source_tuples(
+        self, file_paths: List[str], feature_name: FeatureName, document_reader_class: str
+    ) -> Set[Feature]:
         """
         Creates the source tuples for reading the python files.
 
@@ -102,7 +106,7 @@ class ConcatenatedFileContent(FeatureGroup):
 
             source_tuple = SourceTuple(
                 feature_name=short_f,
-                source_class=PyFileReader.get_class_name(),  # type: ignore
+                source_class=document_reader_class,  # type: ignore
                 source_value=f,  # We use the file path, not the content.
                 left_link=left_link,
                 right_link=right_link,

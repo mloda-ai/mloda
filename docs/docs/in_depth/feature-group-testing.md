@@ -78,6 +78,32 @@ result = mloda.run_all(features, compute_frameworks={PandasDataFrame})
 assert "source_feature__my_operation" in result[0].columns
 ```
 
+### 6. Testing with Mock Input Data
+
+When testing a FeatureGroup that depends on another FeatureGroup, you can inject mock data by combining `disabled_feature_groups` with `api_data`:
+
+**Example:**
+``` python
+from mloda.user import mlodaAPI, PluginCollector
+
+# Disable the real dependency FeatureGroup
+collector = PluginCollector.disabled_feature_groups({HandGenerator})
+
+# Inject mock data and run your derived feature
+results = mlodaAPI.run_all(
+    features=["hand_score"],  # Your derived feature
+    api_data={"hand": {"hand": ["AA", "KK", "QQ"]}},  # Mock the dependency
+    plugin_collector=collector,
+)
+
+assert "hand_score" in results[0].columns
+```
+
+This pattern is useful when:
+- Testing derived features without running expensive upstream computations
+- Providing controlled test data for reproducible tests
+- Isolating the feature under test from its dependencies
+
 ## Test Organization
 
 Organize tests into three categories:

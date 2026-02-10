@@ -630,3 +630,98 @@ class TestContextPropagationIntegration:
 
         assert feature_options.context["session_id"] == "abc"
         assert "algo" not in feature_options.context
+
+
+class TestOptionsNestedStructureHashing:
+    """
+    Test suite for Options hashing with nested structures.
+
+    WHY THIS EXISTS:
+    Options.group may contain nested dicts, lists, or sets for complex configuration.
+    The _make_hashable helper recursively converts these to hashable equivalents,
+    enabling proper hashing and use in sets/dicts for feature group resolution.
+    """
+
+    def test_hash_with_simple_values_baseline(self) -> None:
+        """
+        Baseline test: Simple hashable values should work.
+
+        This test should PASS with the current implementation.
+        """
+        options = Options(group={"key": "value", "number": 42})
+        result = hash(options)
+        assert isinstance(result, int)
+
+    def test_hash_with_nested_dict_in_group(self) -> None:
+        """
+        Test hashing Options with nested dict in group.
+
+        The current implementation fails with TypeError: unhashable type: 'dict'
+        because frozenset cannot hash dict values.
+        """
+        options = Options(group={"nested": {"key": "value"}})
+        result = hash(options)
+        assert isinstance(result, int)
+
+    def test_hash_with_list_in_group(self) -> None:
+        """
+        Test hashing Options with list in group.
+
+        The current implementation fails with TypeError: unhashable type: 'list'
+        because frozenset cannot hash list values.
+        """
+        options = Options(group={"list": [1, 2, 3]})
+        result = hash(options)
+        assert isinstance(result, int)
+
+    def test_hash_with_set_in_group(self) -> None:
+        """
+        Test hashing Options with set in group.
+
+        The current implementation fails with TypeError: unhashable type: 'set'
+        because frozenset cannot hash set values.
+        """
+        options = Options(group={"set_value": {1, 2, 3}})
+        result = hash(options)
+        assert isinstance(result, int)
+
+    def test_equal_options_with_nested_dict_produce_equal_hashes(self) -> None:
+        """
+        Test that equal Options with nested structures produce equal hashes.
+
+        Two Options with identical nested dicts should have the same hash.
+        """
+        options1 = Options(group={"nested": {"key": "value", "other": 123}})
+        options2 = Options(group={"nested": {"key": "value", "other": 123}})
+
+        assert options1 == options2
+        assert hash(options1) == hash(options2)
+
+    def test_equal_options_with_nested_list_produce_equal_hashes(self) -> None:
+        """
+        Test that equal Options with nested lists produce equal hashes.
+
+        Two Options with identical lists should have the same hash.
+        """
+        options1 = Options(group={"items": [1, 2, 3]})
+        options2 = Options(group={"items": [1, 2, 3]})
+
+        assert options1 == options2
+        assert hash(options1) == hash(options2)
+
+    def test_deeply_nested_structure_hashes_successfully(self) -> None:
+        """
+        Test hashing Options with deeply nested structures.
+
+        Complex nested structures combining dicts and lists should be hashable.
+        """
+        options = Options(
+            group={
+                "config": {
+                    "nested": {"deep": {"value": 42}},
+                    "list_of_dicts": [{"a": 1}, {"b": 2}],
+                }
+            }
+        )
+        result = hash(options)
+        assert isinstance(result, int)

@@ -139,10 +139,12 @@ class TestConcatenatedFileContentFormatAgnostic:
                 with open(os.path.join(tmpdir, name), "w") as f:
                     f.write(f"# {name}")
 
-            options = Options({
-                "file_paths": [os.path.join(tmpdir, n) for n in file_names]
-                # NOTE: document_reader_class is NOT provided
-            })
+            options = Options(
+                {
+                    "file_paths": [os.path.join(tmpdir, n) for n in file_names]
+                    # NOTE: document_reader_class is NOT provided
+                }
+            )
 
             instance = ConcatenatedFileContent()
             instance._create_join_class(ConcatenatedFileContent.join_feature_name)

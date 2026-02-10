@@ -417,14 +417,14 @@ class FeatureGroup(ABC):
         Checks if this feature group is equal to another object.
         """
         if isinstance(another, FeatureGroup):
-            return self.get_class_name() == another.get_class_name()
+            return type(self) is type(another)
         raise Exception(f"Cannot compare FeatureGroup with another type. {another} ")
 
     def __hash__(self) -> int:
         """
         Returns the hash code for this feature group.
         """
-        return hash(self.get_class_name())
+        return id(type(self))
 
     @final
     def is_root(self, options: Options, feature_name: str | FeatureName) -> bool:

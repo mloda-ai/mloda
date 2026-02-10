@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 import pytest
 from mloda.user import Options
 
@@ -476,3 +478,155 @@ class TestProtectedKeys:
         # Should raise error because group/context conflicts are always invalid
         with pytest.raises(ValueError, match="Cannot update group: keys already exist in context"):
             parent_options.update_with_protected_keys(child_options)
+
+    def test_context_not_propagated_by_default(self) -> None:
+        """
+        Test that context keys are NOT propagated when propagate_context_keys is empty (default).
+
+        By default, context is scoped to the feature that defined it. Only explicitly
+        marked keys should flow downstream.
+        """
+        parent = Options(group={"g": 1}, context={"session_id": "abc", "algo": "sum"})
+        child = Options(group={"g2": 2})
+        child.update_with_protected_keys(parent)
+        assert "session_id" not in child.context
+        assert "algo" not in child.context
+
+    def test_context_propagated_for_specified_keys(self) -> None:
+        """
+        Test that only context keys listed in propagate_context_keys are merged into child.
+
+        Parent marks session_id for propagation but not algo. After merge, child should
+        have session_id in its context but NOT algo.
+        """
+        parent = Options(
+            context={"session_id": "abc", "algo": "sum"},
+            propagate_context_keys=frozenset({"session_id"}),
+        )
+        child = Options(group={"g": 1})
+        child.update_with_protected_keys(parent)
+        assert child.context["session_id"] == "abc"
+        assert "algo" not in child.context
+
+    def test_propagated_context_respects_protected_keys(self) -> None:
+        """
+        Test that a propagate key which is also in protected_keys is NOT merged.
+
+        Protected keys take precedence over propagation to prevent unintended overwrites.
+        """
+        parent = Options(
+            context={"session_id": "abc"},
+            propagate_context_keys=frozenset({"session_id"}),
+        )
+        child = Options(group={"g": 1})
+        child.update_with_protected_keys(parent, protected_keys={"session_id"})
+        assert "session_id" not in child.context
+
+    def test_propagated_context_conflicts_with_child_group_raises(self) -> None:
+        """
+        Test that propagating a context key whose name already exists in child's group raises ValueError.
+
+        If a parent tries to propagate context key 'env' but the child already has 'env'
+        in its group, this is a conflict that must be caught.
+        """
+        parent = Options(
+            context={"env": "prod"},
+            propagate_context_keys=frozenset({"env"}),
+        )
+        child = Options(group={"env": "staging"})
+        with pytest.raises(ValueError, match="keys already exist in group"):
+            child.update_with_protected_keys(parent)
+
+    def test_propagated_context_same_value_no_error(self) -> None:
+        """
+        Test that propagation succeeds when child already has the same context key with the same value.
+
+        Idempotent propagation: if both agree on the value, no conflict.
+        """
+        parent = Options(
+            context={"session_id": "abc"},
+            propagate_context_keys=frozenset({"session_id"}),
+        )
+        child = Options(group={"g": 1}, context={"session_id": "abc"})
+        child.update_with_protected_keys(parent)
+        assert child.context["session_id"] == "abc"
+
+    def test_propagated_context_different_value_raises(self) -> None:
+        """
+        Test that propagation raises ValueError when child has the same context key with a different value.
+
+        This catches genuine conflicts where parent and child disagree on a propagated value.
+        """
+        parent = Options(
+            context={"session_id": "abc"},
+            propagate_context_keys=frozenset({"session_id"}),
+        )
+        child = Options(group={"g": 1}, context={"session_id": "xyz"})
+        with pytest.raises(ValueError, match="Context key.*conflict"):
+            child.update_with_protected_keys(parent)
+
+
+class TestPropagateContextKeys:
+    """
+    Test suite for the propagate_context_keys attribute on Options.
+
+    WHY THIS EXISTS:
+    When features are chained (parent -> child), context keys are normally
+    scoped to the feature that defined them. propagate_context_keys explicitly
+    marks which context keys should flow through to downstream features in
+    the chain. Only keys listed here will be propagated; all others stay local.
+    """
+
+    def test_propagate_context_keys_default_empty(self) -> None:
+        """Default propagate_context_keys should be an empty frozenset."""
+        options = Options()
+        assert options.propagate_context_keys == frozenset()
+
+    def test_propagate_context_keys_stored(self) -> None:
+        """propagate_context_keys should store the provided frozenset."""
+        options = Options(context={"k": "v"}, propagate_context_keys=frozenset({"k"}))
+        assert options.propagate_context_keys == frozenset({"k"})
+
+    def test_propagate_context_keys_validates_subset(self) -> None:
+        """propagate_context_keys must be a subset of context keys, else ValueError."""
+        with pytest.raises(ValueError, match="propagate_context_keys"):
+            Options(context={"a": 1}, propagate_context_keys=frozenset({"b"}))
+
+    def test_propagate_context_keys_not_in_hash(self) -> None:
+        """propagate_context_keys should not affect hash (same group+context, different propagate)."""
+        o1 = Options(context={"k": "v"}, propagate_context_keys=frozenset({"k"}))
+        o2 = Options(context={"k": "v"})
+        assert hash(o1) == hash(o2)
+
+    def test_propagate_context_keys_not_in_eq(self) -> None:
+        """propagate_context_keys should not affect equality (same group+context, different propagate)."""
+        o1 = Options(context={"k": "v"}, propagate_context_keys=frozenset({"k"}))
+        o2 = Options(context={"k": "v"})
+        assert o1 == o2
+
+    def test_propagate_context_keys_deepcopy(self) -> None:
+        """deepcopy should preserve propagate_context_keys."""
+        o = Options(context={"k": "v"}, propagate_context_keys=frozenset({"k"}))
+        o2 = deepcopy(o)
+        assert o2.propagate_context_keys == frozenset({"k"})
+
+
+class TestContextPropagationIntegration:
+    """Integration tests for context propagation through merge_options."""
+
+    def test_merge_options_propagates_specified_context_keys(self) -> None:
+        """Test that merge_options propagates only specified context keys."""
+        from mloda.core.abstract_plugins.components.feature_collection import Features
+
+        dependency_options = Options(
+            context={"session_id": "abc", "algo": "sum"},
+            propagate_context_keys=frozenset({"session_id"}),
+        )
+
+        feature_options = Options()
+
+        fc = Features([])
+        fc.merge_options(feature_options, dependency_options)
+
+        assert feature_options.context["session_id"] == "abc"
+        assert "algo" not in feature_options.context

@@ -1,8 +1,13 @@
 # Plugin inspection/metadata
-from mloda.core.api.plugin_info import FeatureGroupInfo, ComputeFrameworkInfo, ExtenderInfo
+from mloda.core.api.plugin_info import FeatureGroupInfo, ComputeFrameworkInfo, ExtenderInfo, ResolvedFeature
 
 # Documentation/discovery
-from mloda.core.api.plugin_docs import get_feature_group_docs, get_compute_framework_docs, get_extender_docs
+from mloda.core.api.plugin_docs import (
+    get_feature_group_docs,
+    get_compute_framework_docs,
+    get_extender_docs,
+    resolve_feature,
+)
 
 # Function extenders (audit trails, monitoring, observability)
 from mloda.core.abstract_plugins.function_extender import (
@@ -15,10 +20,12 @@ __all__ = [
     "FeatureGroupInfo",
     "ComputeFrameworkInfo",
     "ExtenderInfo",
+    "ResolvedFeature",
     # Documentation
     "get_feature_group_docs",
     "get_compute_framework_docs",
     "get_extender_docs",
+    "resolve_feature",
     # Function extenders
     "Extender",
     "ExtenderHook",

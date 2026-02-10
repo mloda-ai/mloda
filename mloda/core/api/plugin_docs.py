@@ -22,7 +22,9 @@ from mloda.core.abstract_plugins.components.plugin_option.plugin_collector impor
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender
-from mloda.core.api.plugin_info import ComputeFrameworkInfo, ExtenderInfo, FeatureGroupInfo
+from mloda.core.abstract_plugins.components.feature_name import FeatureName
+from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.api.plugin_info import ComputeFrameworkInfo, ExtenderInfo, FeatureGroupInfo, ResolvedFeature
 
 
 def get_feature_group_docs(
@@ -218,3 +220,67 @@ def get_extender_docs(
         )
 
     return sorted(results, key=lambda x: x.name)
+
+
+def resolve_feature(feature_name: str) -> ResolvedFeature:
+    """
+    Resolve a feature name to its matching FeatureGroup class.
+
+    This function searches all loaded FeatureGroups to find those that match
+    the given feature name. It applies subclass filtering to prefer more
+    specific (child) classes over parent classes.
+
+    Args:
+        feature_name: The name of the feature to resolve.
+
+    Returns:
+        ResolvedFeature containing the resolved FeatureGroup (if found),
+        all matching candidates, and any error message.
+    """
+    all_fgs = list(get_all_subclasses(FeatureGroup))
+    candidates: List[Type[FeatureGroup]] = []
+    feature_name_obj = FeatureName(feature_name)
+
+    for fg in all_fgs:
+        if fg.match_feature_group_criteria(feature_name_obj, Options(), None):
+            candidates.append(fg)
+
+    if not candidates:
+        return ResolvedFeature(
+            feature_name=feature_name,
+            feature_group=None,
+            candidates=[],
+            error=f"No FeatureGroup found for feature name: {feature_name}",
+        )
+
+    filtered = _filter_subclasses(candidates)
+
+    if len(filtered) == 1:
+        return ResolvedFeature(
+            feature_name=feature_name,
+            feature_group=filtered[0],
+            candidates=candidates,
+            error=None,
+        )
+
+    conflicting_names = [fg.__name__ for fg in filtered]
+    return ResolvedFeature(
+        feature_name=feature_name,
+        feature_group=None,
+        candidates=candidates,
+        error=f"Multiple FeatureGroups match feature name '{feature_name}': {conflicting_names}",
+    )
+
+
+def _filter_subclasses(feature_groups: List[Type[FeatureGroup]]) -> List[Type[FeatureGroup]]:
+    """Prefer more specific (child) classes over parent classes."""
+    fgs_to_pop: set[Type[FeatureGroup]] = set()
+
+    for i_fg in feature_groups:
+        for o_fg in feature_groups:
+            if i_fg == o_fg:
+                continue
+            if issubclass(i_fg, o_fg):
+                fgs_to_pop.add(o_fg)
+
+    return [fg for fg in feature_groups if fg not in fgs_to_pop]

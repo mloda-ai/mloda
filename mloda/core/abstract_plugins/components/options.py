@@ -65,10 +65,13 @@ class Options:
         self,
         group: Optional[dict[str, Any]] = None,
         context: Optional[dict[str, Any]] = None,
+        propagate_context_keys: frozenset[str] | None = None,
     ) -> None:
         self.group = group or {}
         self.context = context or {}
+        self.propagate_context_keys: frozenset[str] = propagate_context_keys or frozenset()
         OptionsValidator.validate_no_duplicate_keys(self.group, self.context)
+        OptionsValidator.validate_propagate_keys_in_context(self.propagate_context_keys, self.context)
 
     def add(self, key: str, value: Any) -> None:
         """
@@ -206,10 +209,14 @@ class Options:
 
         copied_group = safe_deepcopy_dict(self.group)
         copied_context = safe_deepcopy_dict(self.context)
-        return Options(group=copied_group, context=copied_context)
+        return Options(group=copied_group, context=copied_context, propagate_context_keys=self.propagate_context_keys)
 
     def __str__(self) -> str:
-        return f"Options(group={self.group}, context={self.context})"
+        parts = f"Options(group={self.group}, context={self.context}"
+        if self.propagate_context_keys:
+            parts += f", propagate_context_keys={self.propagate_context_keys}"
+        parts += ")"
+        return parts
 
     def update_with_protected_keys(self, other: "Options", protected_keys: Set[str] | None = None) -> None:
         """
@@ -264,3 +271,17 @@ class Options:
         # Check for conflicts before updating
         OptionsValidator.validate_no_group_context_conflicts(set(other_group_copy.keys()), set(self.context.keys()))
         self.group.update(other_group_copy)
+
+        # Propagate specified context keys from other to self
+        if other.propagate_context_keys:
+            propagating = {
+                k: v for k, v in other.context.items() if k in other.propagate_context_keys and k not in protected_keys
+            }
+
+            OptionsValidator.validate_no_context_group_conflicts(set(propagating.keys()), set(self.group.keys()))
+
+            for key, value in propagating.items():
+                if key in self.context and self.context[key] != value:
+                    raise ValueError(f"Context key '{key}' conflict: parent='{value}', child='{self.context[key]}'")
+
+            self.context.update(propagating)

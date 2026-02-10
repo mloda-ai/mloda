@@ -105,3 +105,18 @@ Options(context={"operation_type": "custom"})  # Raises ValueError
 # Valid with flexible validation - any value allowed
 Options(context={"in_features": "any_feature_name"})
 ```
+
+## Context Propagation
+
+By default, context parameters are local — they don't flow through feature dependency chains. This is correct for feature-specific config like aggregation types.
+
+For cross-cutting metadata (session IDs, environment flags) that should flow through chains, use `propagate_context_keys` on `Options`:
+
+``` python
+Options(
+    context={"session_id": "abc", "window_function": "sum"},
+    propagate_context_keys=frozenset({"session_id"}),  # only session_id flows to dependents
+)
+```
+
+Only the specified keys propagate — everything else stays local. Group propagation is unchanged.

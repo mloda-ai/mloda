@@ -72,6 +72,7 @@ Combine strings and objects:
 | `in_features` | array | No | Source feature names for chained features |
 | `group_options` | object | No | Group parameters (affect Feature Group resolution) |
 | `context_options` | object | No | Context parameters (metadata, doesn't affect resolution) |
+| `propagate_context_keys` | array | No | Context keys that propagate to dependent features |
 | `column_index` | integer | No | Index for multi-output features (adds `~N` suffix) |
 
 ## Configuration Approaches
@@ -153,6 +154,25 @@ Access specific columns from multi-output features using `column_index`:
 ```
 
 This produces a feature named `pca_result~0`.
+
+## Context Propagation
+
+By default, context parameters are local to each feature and do not propagate through feature chains. Use `propagate_context_keys` to specify which context keys should flow to dependent features:
+
+``` json
+[
+    {
+        "name": "my_feature",
+        "context_options": {
+            "session_id": "abc123",
+            "window_function": "sum"
+        },
+        "propagate_context_keys": ["session_id"]
+    }
+]
+```
+
+In this example, `session_id` propagates to any features that depend on `my_feature`, while `window_function` stays local.
 
 ## Complete Example
 

@@ -46,6 +46,24 @@ class OptionsValidator:
             raise ValueError(f"Key {key} already exists in group options. Cannot add to context.")
 
     @staticmethod
+    def validate_propagate_keys_in_context(keys: frozenset[str], context: Dict[str, Any]) -> None:
+        """Validate that all propagate_context_keys exist in context."""
+        missing = keys - set(context.keys())
+        if missing:
+            raise ValueError(f"propagate_context_keys {missing} not found in context")
+
+    @staticmethod
+    def validate_no_context_group_conflicts(other_context_keys: Set[str], self_group_keys: Set[str]) -> None:
+        """
+        Validate no conflicts between other's context keys and self's group keys.
+
+        Raises ValueError if any key exists in both, with conflicting keys in message.
+        """
+        conflicting = other_context_keys & self_group_keys
+        if conflicting:
+            raise ValueError(f"Cannot propagate context: keys already exist in group: {conflicting}")
+
+    @staticmethod
     def validate_no_group_context_conflicts(other_group_keys: Set[str], self_context_keys: Set[str]) -> None:
         """
         Validate no conflicts between other's group keys and self's context keys.

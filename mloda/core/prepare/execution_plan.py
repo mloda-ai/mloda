@@ -804,52 +804,84 @@ class ExecutionPlan:
                     already_used_parents.update(feature_uuids)
         return feature_set_collection_per_uuid
 
+    def _split_features_by_dependency_levels(
+        self, features: Set[Feature], parent_to_children_mapping: Dict[UUID, Set[UUID]]
+    ) -> List[Set[Feature]]:
+        feature_uuids = {f.uuid for f in features}
+        uuid_to_feature = {f.uuid: f for f in features}
+
+        intra_deps: Dict[UUID, Set[UUID]] = {}
+        for feature in features:
+            ancestors = parent_to_children_mapping.get(feature.uuid, set())
+            intra_deps[feature.uuid] = ancestors & feature_uuids
+
+        if not any(deps for deps in intra_deps.values()):
+            return [features]
+
+        levels: List[Set[Feature]] = []
+        remaining = set(feature_uuids)
+        placed: Set[UUID] = set()
+
+        while remaining:
+            ready = {uuid for uuid in remaining if intra_deps[uuid].issubset(placed)}
+            if not ready:
+                ready = remaining
+
+            levels.append({uuid_to_feature[uuid] for uuid in ready})
+            placed.update(ready)
+            remaining -= ready
+
+        return levels
+
     def run_feature_group(
         self,
         feature_group_features: Tuple[Type[FeatureGroup], Set[Feature]],
         parent_to_children_mapping: Dict[UUID, Set[UUID]],
         pre_required_uuids: Set[UUID],
-    ) -> Dict[int, FeatureGroupStep]:
+    ) -> Dict[Any, FeatureGroupStep]:
         feature_group, features = feature_group_features[0], feature_group_features[1]
         features_grouped_by_framework_and_options = self.group_features_by_compute_framework_and_options(features)
 
-        fg_steps = {}
+        fg_steps: Dict[Any, FeatureGroupStep] = {}
 
         root_parent_children_mapping = self.get_parent_children_mapping(parent_to_children_mapping)
 
         for f_hash, features in features_grouped_by_framework_and_options.items():
-            pre_calculated = self.retrieve_nodes_which_must_be_calculated_before(features, parent_to_children_mapping)
-            pre_calculated.update(copy(pre_required_uuids))
+            sub_groups = self._split_features_by_dependency_levels(features, parent_to_children_mapping)
 
-            cf = next(iter(features)).get_compute_framework()
+            for level_idx, sub_features in enumerate(sub_groups):
+                pre_calculated = self.retrieve_nodes_which_must_be_calculated_before(
+                    sub_features, parent_to_children_mapping
+                )
+                pre_calculated.update(copy(pre_required_uuids))
 
-            children_if_root = set()
-            for feature in features:
-                if feature.uuid in root_parent_children_mapping:
-                    children_if_root.update(root_parent_children_mapping[feature.uuid])
+                cf = next(iter(sub_features)).get_compute_framework()
 
-            feature_set = FeatureSet()
-            for feature in features:
-                feature_set.add(feature)
-                feature.name
+                children_if_root = set()
+                for feature in sub_features:
+                    if feature.uuid in root_parent_children_mapping:
+                        children_if_root.update(root_parent_children_mapping[feature.uuid])
 
-            self.feature_set_collections.append(feature_set.get_all_feature_ids())
+                feature_set = FeatureSet()
+                for feature in sub_features:
+                    feature_set.add(feature)
+                    feature.name
 
-            self.add_artifact_to_feature_set(feature_group, feature_set)
-            self.add_single_filters_to_feature_set(feature_group, feature_set)
+                self.feature_set_collections.append(feature_set.get_all_feature_ids())
 
-            feature_group_step = FeatureGroupStep(
-                feature_group,
-                feature_set,
-                pre_calculated,
-                cf,
-                children_if_root,
-                self.prepare_api_input_data(feature_group, feature_set),
-            )
+                self.add_artifact_to_feature_set(feature_group, feature_set)
+                self.add_single_filters_to_feature_set(feature_group, feature_set)
 
-            # TODO
-            # data type step
-            fg_steps[f_hash] = feature_group_step
+                feature_group_step = FeatureGroupStep(
+                    feature_group,
+                    feature_set,
+                    pre_calculated,
+                    cf,
+                    children_if_root,
+                    self.prepare_api_input_data(feature_group, feature_set),
+                )
+
+                fg_steps[(f_hash, level_idx)] = feature_group_step
         return fg_steps
 
     def prepare_api_input_data(

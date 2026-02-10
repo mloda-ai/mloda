@@ -14,21 +14,21 @@ from mloda.core.abstract_plugins.feature_group import (
 from mloda.user import Feature, Options
 
 
-class TestFeatureGroupAlpha(FeatureGroup):
+class SampleFeatureGroupAlpha(FeatureGroup):
     """A test feature group for formatting tests."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         return None
 
 
-class TestFeatureGroupBeta(FeatureGroup):
+class SampleFeatureGroupBeta(FeatureGroup):
     """Another test feature group for formatting tests."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         return None
 
 
-class TestFeatureGroupWithDomain(FeatureGroup):
+class SampleFeatureGroupWithDomain(FeatureGroup):
     """A test feature group with a custom domain."""
 
     @classmethod
@@ -39,7 +39,7 @@ class TestFeatureGroupWithDomain(FeatureGroup):
         return None
 
 
-class TestFeatureGroupFinance(FeatureGroup):
+class SampleFeatureGroupFinance(FeatureGroup):
     """A test feature group with finance domain."""
 
     @classmethod
@@ -57,11 +57,11 @@ class TestFormatFeatureGroupClassesBasic:
         """Test that a single FeatureGroup class is formatted with name and module.
 
         Expected output format:
-          - TestFeatureGroupAlpha (tests.test_core.test_abstract_plugins.test_feature_group.test_format_feature_group_classes)
+          - SampleFeatureGroupAlpha (tests.test_core.test_abstract_plugins.test_feature_group.test_format_feature_group_classes)
         """
-        result = format_feature_group_classes([TestFeatureGroupAlpha])
+        result = format_feature_group_classes([SampleFeatureGroupAlpha])
 
-        assert "TestFeatureGroupAlpha" in result
+        assert "SampleFeatureGroupAlpha" in result
         assert "test_format_feature_group_classes" in result
         assert result.startswith("  - ")
 
@@ -69,16 +69,16 @@ class TestFormatFeatureGroupClassesBasic:
         """Test that multiple FeatureGroup classes are formatted as newline-separated list.
 
         Expected output format:
-          - TestFeatureGroupAlpha (module.path)
-          - TestFeatureGroupBeta (module.path)
+          - SampleFeatureGroupAlpha (module.path)
+          - SampleFeatureGroupBeta (module.path)
         """
-        result = format_feature_group_classes([TestFeatureGroupAlpha, TestFeatureGroupBeta])
+        result = format_feature_group_classes([SampleFeatureGroupAlpha, SampleFeatureGroupBeta])
 
         lines = result.split("\n")
         assert len(lines) == 2
 
-        assert "TestFeatureGroupAlpha" in lines[0]
-        assert "TestFeatureGroupBeta" in lines[1]
+        assert "SampleFeatureGroupAlpha" in lines[0]
+        assert "SampleFeatureGroupBeta" in lines[1]
 
         for line in lines:
             assert line.startswith("  - ")
@@ -95,7 +95,7 @@ class TestFormatFeatureGroupClassesBasic:
         The output should follow the pattern:
           - ClassName (module.path)
         """
-        result = format_feature_group_classes([TestFeatureGroupAlpha])
+        result = format_feature_group_classes([SampleFeatureGroupAlpha])
 
         assert result.count("(") == 1
         assert result.count(")") == 1
@@ -109,37 +109,37 @@ class TestFormatFeatureGroupClassesWithDomain:
         """Test that include_domain=True shows domain information.
 
         Expected output format:
-          - TestFeatureGroupWithDomain (module.path) [domain: sales]
+          - SampleFeatureGroupWithDomain (module.path) [domain: sales]
         """
-        result = format_feature_group_classes([TestFeatureGroupWithDomain], include_domain=True)
+        result = format_feature_group_classes([SampleFeatureGroupWithDomain], include_domain=True)
 
-        assert "TestFeatureGroupWithDomain" in result
+        assert "SampleFeatureGroupWithDomain" in result
         assert "[domain: sales]" in result
 
     def test_include_domain_false_hides_domain_info(self) -> None:
         """Test that include_domain=False (default) does not show domain information."""
-        result = format_feature_group_classes([TestFeatureGroupWithDomain], include_domain=False)
+        result = format_feature_group_classes([SampleFeatureGroupWithDomain], include_domain=False)
 
-        assert "TestFeatureGroupWithDomain" in result
+        assert "SampleFeatureGroupWithDomain" in result
         assert "[domain:" not in result
         assert "sales" not in result
 
     def test_default_domain_shown_when_include_domain_true(self) -> None:
         """Test that default domain is shown when include_domain=True."""
-        result = format_feature_group_classes([TestFeatureGroupAlpha], include_domain=True)
+        result = format_feature_group_classes([SampleFeatureGroupAlpha], include_domain=True)
 
-        assert "TestFeatureGroupAlpha" in result
+        assert "SampleFeatureGroupAlpha" in result
         assert "[domain: default_domain]" in result
 
     def test_multiple_classes_with_different_domains(self) -> None:
         """Test formatting multiple classes with different domains.
 
         Expected output:
-          - TestFeatureGroupWithDomain (module.path) [domain: sales]
-          - TestFeatureGroupFinance (module.path) [domain: finance]
+          - SampleFeatureGroupWithDomain (module.path) [domain: sales]
+          - SampleFeatureGroupFinance (module.path) [domain: finance]
         """
         result = format_feature_group_classes(
-            [TestFeatureGroupWithDomain, TestFeatureGroupFinance], include_domain=True
+            [SampleFeatureGroupWithDomain, SampleFeatureGroupFinance], include_domain=True
         )
 
         assert "[domain: sales]" in result
@@ -156,28 +156,28 @@ class TestFormatFeatureGroupClassesEdgeCases:
         """Test that the function accepts a generator (Iterable, not just list)."""
 
         def class_generator() -> Generator[Type[FeatureGroup], None, None]:
-            yield TestFeatureGroupAlpha
-            yield TestFeatureGroupBeta
+            yield SampleFeatureGroupAlpha
+            yield SampleFeatureGroupBeta
 
         result = format_feature_group_classes(class_generator())
 
-        assert "TestFeatureGroupAlpha" in result
-        assert "TestFeatureGroupBeta" in result
+        assert "SampleFeatureGroupAlpha" in result
+        assert "SampleFeatureGroupBeta" in result
 
     def test_accepts_set(self) -> None:
         """Test that the function accepts a set of classes."""
-        classes = {TestFeatureGroupAlpha, TestFeatureGroupBeta}
+        classes = {SampleFeatureGroupAlpha, SampleFeatureGroupBeta}
         result = format_feature_group_classes(classes)
 
-        assert "TestFeatureGroupAlpha" in result
-        assert "TestFeatureGroupBeta" in result
+        assert "SampleFeatureGroupAlpha" in result
+        assert "SampleFeatureGroupBeta" in result
 
     def test_accepts_tuple(self) -> None:
         """Test that the function accepts a tuple of classes."""
-        classes = (TestFeatureGroupAlpha,)
+        classes = (SampleFeatureGroupAlpha,)
         result = format_feature_group_classes(classes)
 
-        assert "TestFeatureGroupAlpha" in result
+        assert "SampleFeatureGroupAlpha" in result
 
 
 class TestFormatFeatureGroupClass:
@@ -185,23 +185,23 @@ class TestFormatFeatureGroupClass:
 
     def test_returns_class_name_and_module(self) -> None:
         """Test that format_feature_group_class returns ClassName (module.path) format."""
-        result = format_feature_group_class(TestFeatureGroupAlpha)
+        result = format_feature_group_class(SampleFeatureGroupAlpha)
 
-        assert "TestFeatureGroupAlpha" in result
+        assert "SampleFeatureGroupAlpha" in result
         assert "test_format_feature_group_classes" in result
 
     def test_output_format_structure(self) -> None:
         """Test the exact format structure: ClassName (module.path)."""
-        result = format_feature_group_class(TestFeatureGroupAlpha)
+        result = format_feature_group_class(SampleFeatureGroupAlpha)
 
         assert result.count("(") == 1
         assert result.count(")") == 1
-        assert result.startswith("TestFeatureGroupAlpha")
+        assert result.startswith("SampleFeatureGroupAlpha")
         assert result.endswith(")")
 
     def test_with_feature_group_with_domain(self) -> None:
         """Test formatting works with a FeatureGroup that has a custom domain."""
-        result = format_feature_group_class(TestFeatureGroupWithDomain)
+        result = format_feature_group_class(SampleFeatureGroupWithDomain)
 
-        assert "TestFeatureGroupWithDomain" in result
+        assert "SampleFeatureGroupWithDomain" in result
         assert "test_format_feature_group_classes" in result

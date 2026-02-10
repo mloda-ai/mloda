@@ -286,11 +286,11 @@ class ComputeFramework(ABC):
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ComputeFramework):
             return False
-        return self.get_class_name() == other.get_class_name() and self.children_if_root == other.children_if_root
+        return type(self) is type(other) and self.children_if_root == other.children_if_root
 
     @final
     def __hash__(self) -> int:
-        return hash((self.get_class_name(), self.children_if_root))
+        return hash((id(type(self)), self.children_if_root))
 
     def validate_expected_framework(self, location: Optional[str] = None) -> None:
         """

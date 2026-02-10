@@ -389,9 +389,9 @@ class Link:
         other_left_feature_group: Type[Any],
         other_right_feature_group: Type[Any],
     ) -> bool:
-        """Exact class name match only."""
-        left_match: bool = self.left_feature_group.get_class_name() == other_left_feature_group.get_class_name()
-        right_match: bool = self.right_feature_group.get_class_name() == other_right_feature_group.get_class_name()
+        """Exact class identity match only."""
+        left_match: bool = self.left_feature_group is other_left_feature_group
+        right_match: bool = self.right_feature_group is other_right_feature_group
         return left_match and right_match
 
     def matches_polymorphic(

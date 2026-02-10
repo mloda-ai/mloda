@@ -5,7 +5,7 @@ from mloda.core.abstract_plugins.components.input_data.api.base_api_data import 
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.abstract_step import Step
-from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.feature_group import FeatureGroup, format_feature_group_class
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 
 
@@ -104,10 +104,12 @@ class FeatureGroupStep(Step):
 
     def get_api_input_data(self, data: Any, cfw_register: CfwManager) -> Any:
         if data is not None:
-            raise ValueError(f"Data is not None, but api_input_data is not False. {self.feature_group}.")
+            raise ValueError(
+                f"Data is not None, but api_input_data is not False. {format_feature_group_class(self.feature_group)}."
+            )
 
         if not isinstance(self.api_input_data, BaseApiData):
-            raise ValueError(f"Api input data is not a tuple. {self.feature_group}.")
+            raise ValueError(f"Api input data is not a tuple. {format_feature_group_class(self.feature_group)}.")
 
         api_data = cfw_register.get_api_data_by_name(self.api_input_data.get_api_input_name())
 

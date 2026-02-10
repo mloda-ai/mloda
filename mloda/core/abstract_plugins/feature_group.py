@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Optional, Set, Type, Union, final
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Type, Union, final
 from abc import ABC
 
 from mloda.core.abstract_plugins.components.base_artifact import BaseArtifact
@@ -504,3 +504,20 @@ class FeatureGroup(ABC):
             return False
 
         return cls.matches(feature_name, options, data_access_collection)
+
+
+def format_feature_group_class(fg_class: Type[FeatureGroup]) -> str:
+    """Format a single FeatureGroup class for error messages."""
+    return f"{fg_class.__name__} ({fg_class.__module__})"
+
+
+def format_feature_group_classes(feature_groups: Iterable[Type[FeatureGroup]], include_domain: bool = False) -> str:
+    """Format FeatureGroup classes for error messages."""
+    lines = []
+    for fg_class in feature_groups:
+        line = f"  - {fg_class.__name__} ({fg_class.__module__})"
+        if include_domain:
+            domain = fg_class.get_domain()
+            line += f" [domain: {domain.name}]"
+        lines.append(line)
+    return "\n".join(lines)

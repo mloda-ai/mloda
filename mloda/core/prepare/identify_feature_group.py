@@ -3,7 +3,7 @@ from typing import Optional, Set, Tuple, Type
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.feature_group import FeatureGroup, format_feature_group_class
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.link import Link
 
@@ -100,17 +100,22 @@ class IdentifyFeatureGroupClass:
         if not feature_group:
             raise ValueError(f"No feature groups found for feature name: {feature.name}.")
         if len(feature_group) > 1:
+            from mloda.core.abstract_plugins.feature_group import format_feature_group_classes
+
             raise ValueError(
-                f"""Multiple feature groups {feature_group} found for feature name: {feature.name}. 
-                    {self._adjust_error_message__by_notebook_env()}
-                    For troubleshooting guide, see: https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/"""
+                f"Multiple feature groups found for feature '{feature.name}':\n"
+                f"{format_feature_group_classes(feature_group.keys(), include_domain=True)}\n"
+                f"{self._adjust_error_message__by_notebook_env()}\n"
+                "For troubleshooting guide, see: https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/"
             )
         elif len(feature_group) == 0:
             raise ValueError(f"No feature groups found for feature name: {feature.name}.")
 
         feature_group_class, compute_frameworks = next(iter(feature_group.items()))
         if not compute_frameworks:
-            raise ValueError(f"Feature {feature.name} {feature_group_class.get_class_name()} has no compute framework.")
+            raise ValueError(
+                f"Feature {feature.name} {format_feature_group_class(feature_group_class)} has no compute framework."
+            )
 
     def get(self) -> Tuple[Type[FeatureGroup], Set[Type[ComputeFramework]]]:
         return next(iter(self.feature_group_compute_framework_mapping.items()))

@@ -28,7 +28,7 @@
 | codecov                                | 2.1.13          | Apache Software License                                 |
 | colorama                               | 0.4.6           | BSD License                                             |
 | comm                                   | 0.2.3           | BSD License                                             |
-| coverage                               | 7.13.3          | Apache-2.0                                              |
+| coverage                               | 7.13.4          | Apache-2.0                                              |
 | cyclonedx-python-lib                   | 9.1.0           | Apache Software License                                 |
 | debugpy                                | 1.8.20          | MIT License                                             |
 | decorator                              | 5.2.1           | BSD License                                             |
@@ -41,7 +41,7 @@
 | fastjsonschema                         | 2.21.2          | BSD License                                             |
 | filelock                               | 3.20.3          | The Unlicense (Unlicense)                               |
 | fqdn                                   | 1.5.1           | Mozilla Public License 2.0 (MPL 2.0)                    |
-| fsspec                                 | 2026.1.0        | BSD-3-Clause                                            |
+| fsspec                                 | 2026.2.0        | BSD-3-Clause                                            |
 | h11                                    | 0.16.0          | MIT License                                             |
 | httpcore                               | 1.0.9           | BSD License                                             |
 | httpx                                  | 0.28.1          | BSD License                                             |
@@ -49,7 +49,7 @@
 | idna                                   | 3.11            | BSD-3-Clause                                            |
 | importlib_metadata                     | 8.7.1           | Apache-2.0                                              |
 | iniconfig                              | 2.3.0           | MIT                                                     |
-| ipykernel                              | 7.1.0           | BSD-3-Clause                                            |
+| ipykernel                              | 7.2.0           | BSD-3-Clause                                            |
 | ipython                                | 8.38.0          | BSD License                                             |
 | isoduration                            | 20.11.0         | ISC License (ISCL)                                      |
 | jedi                                   | 0.19.2          | MIT License                                             |
@@ -101,7 +101,7 @@
 | pandas                                 | 2.3.3           | BSD License                                             |
 | pandera                                | 0.29.0          | MIT License                                             |
 | pandocfilters                          | 1.5.1           | BSD License                                             |
-| parso                                  | 0.8.5           | MIT License                                             |
+| parso                                  | 0.8.6           | MIT License                                             |
 | pathspec                               | 1.0.4           | Mozilla Public License 2.0 (MPL 2.0)                    |
 | pexpect                                | 4.9.0           | ISC License (ISCL)                                      |
 | pip-api                                | 0.0.34          | Apache Software License                                 |
@@ -109,8 +109,8 @@
 | pip_audit                              | 2.9.0           | Apache Software License                                 |
 | platformdirs                           | 4.5.1           | MIT License                                             |
 | pluggy                                 | 1.6.0           | MIT License                                             |
-| polars                                 | 1.38.0          | MIT License                                             |
-| polars-runtime-32                      | 1.38.0          | MIT License                                             |
+| polars                                 | 1.38.1          | MIT License                                             |
+| polars-runtime-32                      | 1.38.1          | MIT License                                             |
 | pre_commit                             | 4.5.1           | MIT                                                     |
 | prometheus_client                      | 0.24.1          | Apache-2.0 AND BSD-2-Clause                             |
 | prompt_toolkit                         | 3.0.52          | BSD License                                             |
@@ -152,7 +152,7 @@
 | stack-data                             | 0.6.3           | MIT License                                             |
 | stevedore                              | 5.6.0           | Apache Software License                                 |
 | strictyaml                             | 1.7.3           | MIT License                                             |
-| tenacity                               | 9.1.2           | Apache Software License                                 |
+| tenacity                               | 9.1.4           | Apache Software License                                 |
 | terminado                              | 0.18.1          | BSD License                                             |
 | testbook                               | 0.4.2           | BSD License                                             |
 | threadpoolctl                          | 3.6.0           | BSD License                                             |

@@ -94,7 +94,8 @@ class TestResolveFeatureValidMatch:
         # Most FeatureGroups match their class name
         from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 
-        all_fgs = list(get_all_subclasses(FeatureGroup))
+        # Filter to non-test FeatureGroups to avoid duplicates from test fixtures
+        all_fgs = [fg for fg in get_all_subclasses(FeatureGroup) if not fg.__module__.startswith("test_")]
         assert len(all_fgs) > 0, "Need at least one FeatureGroup for this test"
 
         # Find a feature group that matches by its class name
@@ -117,7 +118,8 @@ class TestResolveFeatureValidMatch:
         """Test that the resolved feature_group is a Type[FeatureGroup]."""
         from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 
-        all_fgs = list(get_all_subclasses(FeatureGroup))
+        # Filter to non-test FeatureGroups to avoid duplicates from test fixtures
+        all_fgs = [fg for fg in get_all_subclasses(FeatureGroup) if not fg.__module__.startswith("test_")]
         assert len(all_fgs) > 0, "Need at least one FeatureGroup for this test"
 
         # Find a feature group that matches by its class name

@@ -54,6 +54,9 @@ def get_feature_group_docs(
     results = []
 
     for fg_class in all_feature_groups:
+        if fg_class.__module__ == "__main__":
+            continue
+
         fg_name = fg_class.get_class_name()
         description = fg_class.description()
         version = fg_class.version()
@@ -117,6 +120,9 @@ def get_compute_framework_docs(
     results = []
 
     for cfw_class in all_compute_frameworks:
+        if cfw_class.__module__ == "__main__":
+            continue
+
         cfw_name = cfw_class.__name__
         description = (cfw_class.__doc__ or "").strip() or cfw_class.__name__
         module = cfw_class.__module__
@@ -185,6 +191,9 @@ def get_extender_docs(
     results = []
 
     for ext_class in all_extenders:
+        if ext_class.__module__ == "__main__":
+            continue
+
         ext_name = ext_class.__name__
         description = (ext_class.__doc__ or "").strip() or ext_class.__name__
         module = ext_class.__module__

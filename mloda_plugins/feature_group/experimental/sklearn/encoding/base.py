@@ -454,14 +454,16 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         X_train = cls._extract_training_data(data, source_feature)
 
         # Reshape data based on encoder type
+        import numpy as np
+
         if encoder_type == "label":
             # LabelEncoder expects 1D array
             if hasattr(X_train, "shape") and len(X_train.shape) > 1:
-                X_train = X_train.flatten()
+                X_train = np.asarray(X_train).flatten()
         else:
             # OneHotEncoder and OrdinalEncoder expect 2D array
             if hasattr(X_train, "shape") and len(X_train.shape) == 1:
-                X_train = X_train.reshape(-1, 1)
+                X_train = np.asarray(X_train).reshape(-1, 1)
 
         # Fit the encoder
         encoder.fit(X_train)

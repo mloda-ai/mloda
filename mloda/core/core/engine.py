@@ -22,7 +22,7 @@ from mloda.core.prepare.resolve_graph import ResolveGraph
 from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
-from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.feature_group import FeatureGroup, format_feature_group_class
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.options import Options
@@ -159,7 +159,7 @@ class Engine:
     ) -> None:
         indexes = feature_group_class.index_columns()
         if indexes is None:
-            raise ValueError(f"Feature group {feature_group_class} has no indexes defined.")
+            raise ValueError(f"Feature group {format_feature_group_class(feature_group_class)} has no indexes defined.")
 
         if self.links is None:
             return

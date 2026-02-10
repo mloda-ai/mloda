@@ -19,7 +19,7 @@ from mloda.core.prepare.resolve_links import LinkFrameworkTrekker, LinkTrekker
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
-from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.feature_group import FeatureGroup, format_feature_group_class
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.link import JoinType, Link
@@ -227,7 +227,7 @@ class ExecutionPlan:
 
             elif isinstance(ep, FeatureGroupStep):
                 if ep.features.any_uuid is None:
-                    raise ValueError(f"Feature group {ep.feature_group} has no uuid.")
+                    raise ValueError(f"Feature group {format_feature_group_class(ep.feature_group)} has no uuid.")
 
                 parents = graph.parent_to_children_mapping[ep.features.any_uuid]
                 parent_parents = self.get_parent_parents(parents, graph)
@@ -864,14 +864,16 @@ class ExecutionPlan:
             )
 
         if feature_set.get_name_of_one_feature().name is None:
-            raise ValueError(f"Feature group {feature_group} has no feature set name.")
+            raise ValueError(f"Feature group {format_feature_group_class(feature_group)} has no feature set name.")
 
         api_input_name, matching_cls = self.api_input_data_collection.get_name_cls_by_matching_column_name(
             feature_set.get_name_of_one_feature().name
         )
 
         if matching_cls is None:
-            raise ValueError(f"Feature group {feature_group} has no matching api data class for feature.")
+            raise ValueError(
+                f"Feature group {format_feature_group_class(feature_group)} has no matching api data class for feature."
+            )
 
         matching_cls_initialized = matching_cls(
             api_input_name, feature_set.get_name_of_one_feature().name, feature_set.options

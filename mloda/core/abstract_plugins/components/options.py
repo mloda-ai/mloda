@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, Optional, Set, TYPE_CHECKING, cast
 from copy import deepcopy
 
+from mloda.core.abstract_plugins.components.hashable_dict import _make_hashable
 from mloda.core.abstract_plugins.components.validators.options_validator import OptionsValidator
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
@@ -97,7 +98,7 @@ class Options:
         Hash based only on group parameters.
         Context parameters don't affect Feature Group resolution/splitting.
         """
-        return hash(frozenset(self.group.items()))
+        return hash(_make_hashable(self.group))
 
     def __eq__(self, other: object) -> bool:
         """

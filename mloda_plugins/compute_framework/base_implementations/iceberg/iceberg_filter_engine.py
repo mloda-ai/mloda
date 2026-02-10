@@ -75,43 +75,41 @@ class IcebergFilterEngine(BaseFilterEngine):
         if any(expr is None for expr in [EqualTo, GreaterThan, LessThan, GreaterThanOrEqual, LessThanOrEqual]):
             return None
 
-        column_name = filter_feature.filter_feature.name
+        column_name = str(filter_feature.filter_feature.name)
         filter_type = filter_feature.filter_type
 
         if filter_type == "equal":
             value = cls._extract_parameter_value(filter_feature, "value")
-            return EqualTo(column_name, value) if value is not None else None
+            return EqualTo(column_name, value) if value is not None else None  # type: ignore[misc, call-arg, arg-type]
 
         elif filter_type == "min":
             value = cls._extract_parameter_value(filter_feature, "value")
-            return GreaterThanOrEqual(column_name, value) if value is not None else None
+            return GreaterThanOrEqual(column_name, value) if value is not None else None  # type: ignore[misc, call-arg, arg-type]
 
         elif filter_type == "max":
             # Handle both simple and complex max parameters
             if cls._has_parameter(filter_feature, "max"):
                 _, max_param, is_max_exclusive = cls.get_min_max_operator(filter_feature)
                 if max_param is not None:
-                    return (
-                        LessThan(column_name, max_param)
-                        if is_max_exclusive
-                        else LessThanOrEqual(column_name, max_param)
-                    )
+                    if is_max_exclusive:
+                        return LessThan(column_name, max_param)  # type: ignore[misc, call-arg, arg-type]
+                    return LessThanOrEqual(column_name, max_param)  # type: ignore[misc, call-arg, arg-type]
             else:
                 value = cls._extract_parameter_value(filter_feature, "value")
-                return LessThanOrEqual(column_name, value) if value is not None else None
+                return LessThanOrEqual(column_name, value) if value is not None else None  # type: ignore[misc, call-arg, arg-type]
 
         elif filter_type == "range":
             min_param, max_param, is_max_exclusive = cls.get_min_max_operator(filter_feature)
             expressions = []
 
             if min_param is not None:
-                expressions.append(GreaterThanOrEqual(column_name, min_param))
+                expressions.append(GreaterThanOrEqual(column_name, min_param))  # type: ignore[misc, call-arg, arg-type]
 
             if max_param is not None:
-                max_expr = (
-                    LessThan(column_name, max_param) if is_max_exclusive else LessThanOrEqual(column_name, max_param)
-                )
-                expressions.append(max_expr)  # type: ignore[arg-type]
+                if is_max_exclusive:
+                    expressions.append(LessThan(column_name, max_param))  # type: ignore[misc, call-arg, arg-type]
+                else:
+                    expressions.append(LessThanOrEqual(column_name, max_param))  # type: ignore[misc, call-arg, arg-type]
 
             if len(expressions) == 1:
                 return expressions[0]

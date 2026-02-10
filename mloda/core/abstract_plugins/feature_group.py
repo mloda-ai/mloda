@@ -155,7 +155,13 @@ class FeatureGroup(ABC):
         provided options and the initial feature name. The default implementation simply
         returns the original feature name, but subclasses can override this method to implement
         custom logic for feature name modification.
+
+        For sub-column requests (e.g., "base_feature~1"), the feature name is normalized
+        to the base feature name if it matches a supported feature via the base name.
         """
+        base_name = self.get_column_base_feature(str(feature_name))
+        if base_name != str(feature_name) and base_name in self.feature_names_supported():
+            return FeatureName(base_name)
         return feature_name
 
     @staticmethod
@@ -321,19 +327,21 @@ class FeatureGroup(ABC):
         if isinstance(feature_name, FeatureName):
             feature_name = feature_name.name
 
-        if cls._is_root_and_matches_input_data(feature_name, options, data_access_collection):
+        base_feature_name = cls.get_column_base_feature(feature_name)
+
+        if cls._is_root_and_matches_input_data(base_feature_name, options, data_access_collection):
             return True
 
-        if cls._matches_data(feature_name, options, data_access_collection):
+        if cls._matches_data(base_feature_name, options, data_access_collection):
             return True
 
-        if cls.feature_name_equal_to_class_name(feature_name):
+        if cls.feature_name_equal_to_class_name(base_feature_name):
             return True
 
-        if cls.feature_name_contains_class_name_as_prefix(feature_name):
+        if cls.feature_name_contains_class_name_as_prefix(base_feature_name):
             return True
 
-        if feature_name in cls.feature_names_supported():
+        if base_feature_name in cls.feature_names_supported():
             return True
 
         return False

@@ -99,7 +99,7 @@ class PandasEncodingFeatureGroup(EncodingFeatureGroup):
 
         # For categorical encoders, we need to handle the data format properly
         # LabelEncoder expects 1D array, OneHotEncoder and OrdinalEncoder expect 2D array
-        feature_values = feature_data.values
+        feature_values = feature_data.to_numpy()
 
         # Return 1D array - the base class will handle reshaping based on encoder type
         return feature_values
@@ -125,7 +125,7 @@ class PandasEncodingFeatureGroup(EncodingFeatureGroup):
         feature_data = feature_data.fillna("unknown")
 
         # Convert to appropriate format for sklearn
-        feature_values = feature_data.values
+        feature_values = feature_data.to_numpy()
 
         # Handle different encoder types
         encoder_class_name = fitted_encoder.__class__.__name__

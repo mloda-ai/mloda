@@ -36,7 +36,13 @@ class mlodaAPI:
         plugin_collector: Optional[PluginCollector] = None,
         copy_features: Optional[bool] = True,
         strict_type_enforcement: bool = False,
+        column_ordering: Optional[str] = None,
     ) -> None:
+        if column_ordering is not None and column_ordering not in ("alphabetical", "request_order"):
+            raise ValueError(
+                f"column_ordering must be None, 'alphabetical', or 'request_order', got '{column_ordering}'"
+            )
+        self.column_ordering = column_ordering
         # The features object is potentially changed during the run, so we need to deepcopy it by default, so that follow up runs with the same object are not affected.
         # Set copy_features=False to disable deep copying for use cases where features contain non-copyable objects.
         _requested_features = deepcopy(requested_features) if copy_features else requested_features
@@ -94,6 +100,7 @@ class mlodaAPI:
         plugin_collector: Optional[PluginCollector] = None,
         copy_features: Optional[bool] = True,
         strict_type_enforcement: bool = False,
+        column_ordering: Optional[str] = None,
     ) -> List[Any]:
         """
         Run feature computation in one step.
@@ -132,6 +139,7 @@ class mlodaAPI:
             plugin_collector=plugin_collector,
             copy_features=copy_features,
             strict_type_enforcement=strict_type_enforcement,
+            column_ordering=column_ordering,
         )
         return api._execute_batch_run(parallelization_modes, flight_server, function_extender)
 
@@ -213,6 +221,7 @@ class mlodaAPI:
             self.global_filter,
             self.api_input_data_collection,
             self.plugin_collector,
+            column_ordering=self.column_ordering,
         )
         if not isinstance(engine, Engine):
             raise ValueError("Engine initialization failed.")

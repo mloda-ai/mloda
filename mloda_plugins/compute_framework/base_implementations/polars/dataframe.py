@@ -1,4 +1,4 @@
-from typing import Any, Set, Type
+from typing import Any, Optional, Set, Type
 from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.polars.polars_merge_engine import PolarsMergeEngine
 from mloda.user import FeatureName
@@ -31,9 +31,13 @@ class PolarsDataFrame(ComputeFramework):
     def merge_engine(cls) -> Type[BaseMergeEngine]:
         return PolarsMergeEngine
 
-    def select_data_by_column_names(self, data: Any, selected_feature_names: Set[FeatureName]) -> Any:
+    def select_data_by_column_names(
+        self, data: Any, selected_feature_names: Set[FeatureName], column_ordering: Optional[str] = None
+    ) -> Any:
         column_names = set(data.columns)
-        _selected_feature_names = self.identify_naming_convention(selected_feature_names, column_names)
+        _selected_feature_names = self.identify_naming_convention(
+            selected_feature_names, column_names, ordering=column_ordering
+        )
         return data.select(list(_selected_feature_names))
 
     def set_column_names(self) -> None:

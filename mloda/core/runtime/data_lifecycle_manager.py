@@ -16,18 +16,22 @@ class DataLifecycleManager:
     including tracking data to drop, collecting results, and managing artifacts.
     """
 
-    def __init__(self, transformer: Optional[ComputeFrameworkTransformer] = None) -> None:
+    def __init__(
+        self, transformer: Optional[ComputeFrameworkTransformer] = None, column_ordering: Optional[str] = None
+    ) -> None:
         """
         Initializes DataLifecycleManager with empty state and transformer.
 
         Args:
             transformer: Optional transformer for CFW data conversion.
                         If None, a new ComputeFrameworkTransformer is created.
+            column_ordering: Optional ordering mode for result columns.
         """
         self.result_data_collection: Dict[UUID, Any] = {}
         self.track_data_to_drop: Dict[UUID, Set[UUID]] = {}
         self.artifacts: Dict[str, Any] = {}
         self.transformer = transformer if transformer is not None else ComputeFrameworkTransformer()
+        self.column_ordering = column_ordering
 
     def drop_data_for_finished_cfws(
         self, finished_ids: Set[UUID], cfw_collection: Dict[UUID, ComputeFramework], location: Optional[str] = None
@@ -124,7 +128,7 @@ class DataLifecycleManager:
         else:
             raise ValueError("Not implemented")
 
-        return cfw.select_data_by_column_names(data, selected_feature_names)
+        return cfw.select_data_by_column_names(data, selected_feature_names, column_ordering=self.column_ordering)
 
     def get_results(self) -> List[Any]:
         """

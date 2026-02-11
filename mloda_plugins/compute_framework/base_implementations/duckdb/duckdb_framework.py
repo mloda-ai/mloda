@@ -51,9 +51,13 @@ class DuckDBFramework(ComputeFramework):
     def merge_engine(cls) -> Type[BaseMergeEngine]:
         return DuckDBMergeEngine
 
-    def select_data_by_column_names(self, data: Any, selected_feature_names: Set[FeatureName]) -> Any:
+    def select_data_by_column_names(
+        self, data: Any, selected_feature_names: Set[FeatureName], column_ordering: Optional[str] = None
+    ) -> Any:
         column_names = set(data.columns)
-        _selected_feature_names = self.identify_naming_convention(selected_feature_names, column_names)
+        _selected_feature_names = self.identify_naming_convention(
+            selected_feature_names, column_names, ordering=column_ordering
+        )
 
         # Use DuckDB relation's select method directly
         selected_columns = list(_selected_feature_names)

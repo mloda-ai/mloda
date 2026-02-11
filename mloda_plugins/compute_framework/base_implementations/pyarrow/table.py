@@ -1,4 +1,4 @@
-from typing import Any, Set, Type
+from typing import Any, Optional, Set, Type
 from mloda.provider import BaseMergeEngine
 from mloda.provider import BaseFilterEngine
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_merge_engine import PyArrowMergeEngine
@@ -38,9 +38,13 @@ class PyArrowTable(ComputeFramework):
     def filter_engine(cls) -> Type[BaseFilterEngine]:
         return PyArrowFilterEngine
 
-    def select_data_by_column_names(self, data: Any, selected_feature_names: Set[FeatureName]) -> Any:
+    def select_data_by_column_names(
+        self, data: Any, selected_feature_names: Set[FeatureName], column_ordering: Optional[str] = None
+    ) -> Any:
         column_names = set(data.schema.names)
-        _selected_feature_names = self.identify_naming_convention(selected_feature_names, column_names)
+        _selected_feature_names = self.identify_naming_convention(
+            selected_feature_names, column_names, ordering=column_ordering
+        )
         return data.select([f for f in _selected_feature_names])
 
     def set_column_names(self) -> None:

@@ -131,6 +131,8 @@
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#multi-column-features">Multi-Column Features</a>
     </li>
+    <li class="toctree-l3"><a class="reference internal" href="#context-propagation">Context Propagation</a>
+    </li>
     <li class="toctree-l3"><a class="reference internal" href="#complete-example">Complete Example</a>
     </li>
     </ul>
@@ -151,6 +153,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Plugin System</a>
     <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../discover-plugins/">Discover Plugins</a>
+                </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
                 </li>
     </ul>
@@ -288,6 +292,12 @@ result = mloda.run_all(features, compute_frameworks=[&quot;PandasDataFrame&quot;
 <td>Context parameters (metadata, doesn't affect resolution)</td>
 </tr>
 <tr>
+<td><code>propagate_context_keys</code></td>
+<td>array</td>
+<td>No</td>
+<td>Context keys that propagate to dependent features</td>
+</tr>
+<tr>
 <td><code>column_index</code></td>
 <td>integer</td>
 <td>No</td>
@@ -353,6 +363,20 @@ result = mloda.run_all(features, compute_frameworks=[&quot;PandasDataFrame&quot;
 ]
 </code></pre>
 <p>This produces a feature named <code>pca_result~0</code>.</p>
+<h2 id="context-propagation">Context Propagation</h2>
+<p>By default, context parameters are local to each feature and do not propagate through feature chains. Use <code>propagate_context_keys</code> to specify which context keys should flow to dependent features:</p>
+<pre><code class="language-json">[
+    {
+        &quot;name&quot;: &quot;my_feature&quot;,
+        &quot;context_options&quot;: {
+            &quot;session_id&quot;: &quot;abc123&quot;,
+            &quot;window_function&quot;: &quot;sum&quot;
+        },
+        &quot;propagate_context_keys&quot;: [&quot;session_id&quot;]
+    }
+]
+</code></pre>
+<p>In this example, <code>session_id</code> propagates to any features that depend on <code>my_feature</code>, while <code>window_function</code> stays local.</p>
 <h2 id="complete-example">Complete Example</h2>
 <pre><code class="language-python">from mloda.user import load_features_from_config, mloda
 

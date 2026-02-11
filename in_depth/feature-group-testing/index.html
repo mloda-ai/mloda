@@ -123,6 +123,8 @@
     </li>
     <li class="toctree-l4"><a class="reference internal" href="#5-integration-with-mloda-api">5. Integration with mloda API</a>
     </li>
+    <li class="toctree-l4"><a class="reference internal" href="#6-testing-with-mock-input-data">6. Testing with Mock Input Data</a>
+    </li>
         </ul>
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#test-organization">Test Organization</a>
@@ -137,6 +139,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Plugin System</a>
     <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../discover-plugins/">Discover Plugins</a>
+                </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
                 </li>
     </ul>
@@ -242,6 +246,27 @@ features = [&quot;source_feature&quot;, &quot;source_feature__my_operation&quot;
 result = mloda.run_all(features, compute_frameworks={PandasDataFrame})
 assert &quot;source_feature__my_operation&quot; in result[0].columns
 </code></pre>
+<h3 id="6-testing-with-mock-input-data">6. Testing with Mock Input Data</h3>
+<p>When testing a FeatureGroup that depends on another FeatureGroup, you can inject mock data by combining <code>disabled_feature_groups</code> with <code>api_data</code>:</p>
+<p><strong>Example:</strong></p>
+<pre><code class="language-python">from mloda.user import mlodaAPI, PluginCollector
+
+# Disable the real dependency FeatureGroup
+collector = PluginCollector.disabled_feature_groups({HandGenerator})
+
+# Inject mock data and run your derived feature
+results = mlodaAPI.run_all(
+    features=[&quot;hand_score&quot;],  # Your derived feature
+    api_data={&quot;hand&quot;: {&quot;hand&quot;: [&quot;AA&quot;, &quot;KK&quot;, &quot;QQ&quot;]}},  # Mock the dependency
+    plugin_collector=collector,
+)
+
+assert &quot;hand_score&quot; in results[0].columns
+</code></pre>
+<p>This pattern is useful when:
+- Testing derived features without running expensive upstream computations
+- Providing controlled test data for reproducible tests
+- Isolating the feature under test from its dependencies</p>
 <h2 id="test-organization">Test Organization</h2>
 <p>Organize tests into three categories:</p>
 <ol>

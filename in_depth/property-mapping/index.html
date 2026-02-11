@@ -129,6 +129,8 @@
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#validation-examples">Validation Examples</a>
     </li>
+    <li class="toctree-l3"><a class="reference internal" href="#context-propagation">Context Propagation</a>
+    </li>
     </ul>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../feature-group-testing/">Feature Group Testing</a>
@@ -141,6 +143,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Plugin System</a>
     <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../discover-plugins/">Discover Plugins</a>
+                </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
                 </li>
     </ul>
@@ -277,6 +281,15 @@ Options(context={&quot;operation_type&quot;: &quot;custom&quot;})  # Raises Valu
 # Valid with flexible validation - any value allowed
 Options(context={&quot;in_features&quot;: &quot;any_feature_name&quot;})
 </code></pre>
+<h2 id="context-propagation">Context Propagation</h2>
+<p>By default, context parameters are local — they don't flow through feature dependency chains. This is correct for feature-specific config like aggregation types.</p>
+<p>For cross-cutting metadata (session IDs, environment flags) that should flow through chains, use <code>propagate_context_keys</code> on <code>Options</code>:</p>
+<pre><code class="language-python">Options(
+    context={&quot;session_id&quot;: &quot;abc&quot;, &quot;window_function&quot;: &quot;sum&quot;},
+    propagate_context_keys=frozenset({&quot;session_id&quot;}),  # only session_id flows to dependents
+)
+</code></pre>
+<p>Only the specified keys propagate — everything else stays local. Group propagation is unchanged.</p>
               
             </div>
           </div><footer>

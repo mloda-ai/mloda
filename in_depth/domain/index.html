@@ -121,6 +121,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Plugin System</a>
     <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../discover-plugins/">Discover Plugins</a>
+                </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
                 </li>
     </ul>
@@ -198,6 +200,32 @@ class ExampleFeature(FeatureGroup):
         return &quot;example_domain&quot;
 </code></pre>
 <p>For feature groups, the default domain is default_domain.</p>
+<h2 id="domain-propagation">Domain Propagation</h2>
+<p>When a feature depends on other features (via <code>input_features()</code>), the parent's domain propagates automatically to child features. You can override this by setting an explicit domain on each dependent feature.</p>
+<pre><code>+------------------------------------------+---------------+------------------+
+| Child Definition                         | Parent Domain | Result           |
++------------------------------------------+---------------+------------------+
+| &quot;child&quot; (string)                         | &quot;Sales&quot;       | Inherits &quot;Sales&quot; |
+| Feature(&quot;child&quot;)                         | &quot;Sales&quot;       | Inherits &quot;Sales&quot; |
+| Feature(&quot;child&quot;, domain=&quot;Finance&quot;)       | &quot;Sales&quot;       | Keeps &quot;Finance&quot;  |
+| Any                                      | None          | No domain        |
++------------------------------------------+---------------+------------------+
+</code></pre>
+<p><strong>Example: String-based features inherit domain</strong></p>
+<pre><code class="language-python">Feature(&quot;Revenue&quot;, domain=&quot;Sales&quot;)
+
+class SalesRevenueGroup(FeatureGroup):
+    def input_features(self, options, feature_name):
+        return {&quot;base_amount&quot;, &quot;currency&quot;}  # Both inherit &quot;Sales&quot;
+</code></pre>
+<p><strong>Example: Override domain for cross-domain dependency</strong></p>
+<pre><code class="language-python">class SalesRevenueGroup(FeatureGroup):
+    def input_features(self, options, feature_name):
+        return {
+            &quot;base_amount&quot;,                              # Inherits &quot;Sales&quot;
+            Feature(&quot;exchange_rate&quot;, domain=&quot;Finance&quot;), # Uses &quot;Finance&quot;
+        }
+</code></pre>
               
             </div>
           </div><footer>

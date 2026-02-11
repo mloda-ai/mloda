@@ -5,15 +5,15 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       <link rel="shortcut icon" href="../../img/favicon.ico" />
-    <title>Filter data - mloda docs</title>
+    <title>Discover Plugins - mloda docs</title>
     <link rel="stylesheet" href="../../css/theme.css" />
     <link rel="stylesheet" href="../../css/theme_extra.css" />
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
     
       <script>
         // Current page data
-        var mkdocs_page_name = "Filter data";
-        var mkdocs_page_input_path = "in_depth/filter_data.md";
+        var mkdocs_page_name = "Discover Plugins";
+        var mkdocs_page_input_path = "in_depth/discover-plugins.md";
         var mkdocs_page_url = null;
       </script>
     
@@ -69,36 +69,20 @@
                   </li>
               </ul>
               <p class="caption"><span class="caption-text">In Depth - Basics</span></p>
-              <ul class="current">
+              <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../mloda-api/">mloda API</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../access-feature-data/">(Feature) data</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../join_data/">Join data</a>
                   </li>
-                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Filter data</a>
-    <ul class="current">
-    <li class="toctree-l2"><a class="reference internal" href="#singlefilter">SingleFilter</a>
-    </li>
-    <li class="toctree-l2"><a class="reference internal" href="#filtertype">FilterType</a>
-    </li>
-    <li class="toctree-l2"><a class="reference internal" href="#globalfilter">GlobalFilter</a>
-    </li>
-    <li class="toctree-l2"><a class="reference internal" href="#how-to-create-a-collection-of-single-filters-globalfilter">How to create a collection of single filters (GlobalFilter)</a>
-    </li>
-    <li class="toctree-l2"><a class="reference internal" href="#how-to-deal-with-time-filters">How to deal with time filters</a>
-    </li>
-    <li class="toctree-l2"><a class="reference internal" href="#example-access-to-filters-in-the-feature-group">Example access to Filters in the Feature Group</a>
-    </li>
-    <li class="toctree-l2"><a class="reference internal" href="#summary">Summary</a>
-    </li>
-    </ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../filter_data/">Filter data</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../artifacts/">Artifacts</a>
                   </li>
               </ul>
               <p class="caption"><span class="caption-text">In Depth - Advanced</span></p>
-              <ul>
+              <ul class="current">
                   <li class="toctree-l1"><a class="reference internal" href="../data-quality/">Data quality</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../domain/">Domain concept</a>
@@ -133,9 +117,25 @@
                 </li>
     </ul>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" >Plugin System</a>
-    <ul>
-                <li class="toctree-l2"><a class="reference internal" href="../discover-plugins/">Discover Plugins</a>
+                  <li class="toctree-l1 current"><a class="reference internal current" >Plugin System</a>
+    <ul class="current">
+                <li class="toctree-l2 current"><a class="reference internal current" href="#">Discover Plugins</a>
+    <ul class="current">
+    <li class="toctree-l3"><a class="reference internal" href="#resolving-feature-names">Resolving Feature Names</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#inspecting-candidates">Inspecting Candidates</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#inspecting-feature-groups">Inspecting Feature Groups</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#inspecting-compute-frameworks">Inspecting Compute Frameworks</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#inspecting-extenders">Inspecting Extenders</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#related-documentation">Related Documentation</a>
+    </li>
+    </ul>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
                 </li>
@@ -176,8 +176,9 @@
         <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
   <ul class="wy-breadcrumbs">
     <li><a href="../.." class="icon icon-home" aria-label="Docs"></a></li>
-          <li class="breadcrumb-item">In Depth - Basics</li>
-      <li class="breadcrumb-item active">Filter data</li>
+          <li class="breadcrumb-item">In Depth - Advanced</li>
+          <li class="breadcrumb-item">Plugin System</li>
+      <li class="breadcrumb-item active">Discover Plugins</li>
     <li class="wy-breadcrumbs-aside">
     </li>
   </ul>
@@ -186,136 +187,75 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
             <div class="section" itemprop="articleBody">
               
-                <h2 id="filter">Filter</h2>
-<p>In the data and machine learning world, a filter is a technique used to narrow down or preprocess data by removing irrelevant or unwanted information based on specific conditions, improving the quality and relevance of the dataset for analysis or modeling.</p>
-<p>That however means that a data project typically contains multiple filters. For this, this project uses the <strong>GlobalFilter</strong> as a container for multiple <strong>SingleFilters</strong>. </p>
-<h4 id="singlefilter">SingleFilter</h4>
+                <h1 id="discover-plugins">Discover Plugins</h1>
+<p>mloda provides functions to discover, inspect, and debug plugins at runtime. These are available from <code>mloda.steward</code>.</p>
+<h2 id="resolving-feature-names">Resolving Feature Names</h2>
+<p>Use <code>resolve_feature()</code> to find which FeatureGroup handles a specific feature name:</p>
+<pre><code class="language-python">from mloda.steward import resolve_feature
+
+# Check which FeatureGroup handles a feature
+result = resolve_feature(&quot;timestamp_unix&quot;)
+if result.feature_group:
+    print(f&quot;Handled by: {result.feature_group.__name__}&quot;)
+else:
+    print(f&quot;Resolution failed: {result.error}&quot;)
+</code></pre>
+<p>This is useful for:
+- Debugging feature resolution issues
+- Understanding which plugin handles a feature
+- Identifying conflicts when multiple FeatureGroups match</p>
+<h3 id="inspecting-candidates">Inspecting Candidates</h3>
+<p>When resolution fails due to conflicts, check the candidates:</p>
+<pre><code class="language-python">result = resolve_feature(&quot;my_feature&quot;)
+if result.error:
+    print(f&quot;Error: {result.error}&quot;)
+    print(f&quot;Candidates: {[fg.__name__ for fg in result.candidates]}&quot;)
+</code></pre>
+<h2 id="inspecting-feature-groups">Inspecting Feature Groups</h2>
+<p>Get documentation for available feature groups:</p>
+<pre><code class="language-python">from mloda.steward import get_feature_group_docs
+
+# Get all feature groups
+all_fgs = get_feature_group_docs()
+
+# Filter by name
+fgs = get_feature_group_docs(name=&quot;timestamp&quot;)
+
+# Filter by compute framework
+fgs = get_feature_group_docs(compute_framework=&quot;PandasDataframe&quot;)
+</code></pre>
+<h2 id="inspecting-compute-frameworks">Inspecting Compute Frameworks</h2>
+<p>Get documentation for compute frameworks:</p>
+<pre><code class="language-python">from mloda.steward import get_compute_framework_docs
+
+# Get all available frameworks
+frameworks = get_compute_framework_docs()
+
+# Include unavailable frameworks
+all_frameworks = get_compute_framework_docs(available_only=False)
+</code></pre>
+<h2 id="inspecting-extenders">Inspecting Extenders</h2>
+<p>Get documentation for extenders:</p>
+<pre><code class="language-python">from mloda.steward import get_extender_docs
+
+# Get all extenders
+extenders = get_extender_docs()
+
+# Filter by wrapped function type
+extenders = get_extender_docs(wraps=&quot;formula&quot;)
+</code></pre>
+<h2 id="related-documentation">Related Documentation</h2>
 <ul>
-<li>filter_feature: It can be a Feature or a feature name as string.</li>
-<li>parameter: A dictionary of parameters to filter. Example: {"min": 2, "max": 3}</li>
-<li>filter_type: It can be a str or a FilterType.</li>
+<li><a href="../plugin-loader/">Plugin Loader</a></li>
+<li><a href="../feature-group-matching/">Feature Group Matching</a></li>
+<li><a href="../troubleshooting/feature-group-resolution-errors/">Feature Group Resolution Errors</a></li>
 </ul>
-<h4 id="filtertype">FilterType</h4>
-<p>This class is supposed to created similarity in the framework and by framework users.</p>
-<pre><code class="language-python">class FilterType(Enum):
-    min = &quot;min&quot;
-    max = &quot;max&quot;
-    equal = &quot;equal&quot;
-    range = &quot;range&quot;
-    regex = &quot;regex&quot;
-    categorical_inclusion = &quot;categorical_inclusion&quot;
-</code></pre>
-<h4 id="globalfilter">GlobalFilter</h4>
-<p>The GlobalFilter provides methods to add filters to the collection. The prefered way to use the GlobalFilter is by using the following functions.</p>
-<p><strong>add_filter</strong>: Adds a single filter to the GlobalFilter object.</p>
-<ul>
-<li>filter_feature</li>
-<li>filter_type</li>
-<li>parameter</li>
-</ul>
-<p><strong>add_time_and_time_travel_filters</strong>: Adds time and time travel filtering to the GlobalFiltering. This is a convenience mloda. Due to the complexity of time in data/ml/ai projects, this function should be used.</p>
-<p>This method is useful for <strong>filtering data based on time ranges</strong> (event) and <strong>validity periods</strong> (valid).</p>
-<p><strong>Event Time Filter</strong>: For historical data (e.g., checking if a customer had a valid contract at the event time), only the event time filter is needed.</p>
-<p><strong>Time Travel Filter</strong>: If prior actions (e.g., payments made before the event) are relevant, the time travel filter is required.</p>
-<p>Typically, <strong>valid_to matches the event timestamp</strong>, but in cases like payment plans, where payments occur after creation, some payments may be excluded based on the valid_to data.</p>
-<p>Parameters:</p>
-<ul>
-<li>event_from (datetime): Start of the time range (with timezone).</li>
-<li>event_to (datetime): End of the time range (with timezone).</li>
-<li>valid_from (Optional[datetime]): Start of the validity period (optional, with timezone).</li>
-<li>valid_to (Optional[datetime]): End of the validity period (optional, with timezone).</li>
-<li>max_exclusive (bool): If True, the upper bounds (event_to, valid_to) are treated as exclusive.</li>
-<li>event_time_column: The column name containing event timestamps. Default is "reference_time".</li>
-<li>validity_time_column: The column name containing validity timestamps. Default is "time_travel_filter".</li>
-</ul>
-<p>The <strong>single_filters</strong> created will be converted to UTC as ISO 8601 formatted strings to ensure consistency
-    across time zones and avoid ambiguity when comparing or processing time-based data.</p>
-<h4 id="how-to-create-a-collection-of-single-filters-globalfilter">How to create a collection of single filters (GlobalFilter)</h4>
-<p>In this example, we simply instantiate a GlobalFilter and add a SingleFilter.</p>
-<pre><code class="language-python">from mloda.user import GlobalFilter
-
-global_filter = GlobalFilter()
-global_filter.add_filter(&quot;example_order_id&quot;, &quot;equal&quot;, {&quot;value&quot;: 1})
-
-global_filter.filters
-</code></pre>
-<p>Result</p>
-<pre><code class="language-python">{&lt;SingleFilter(feature_name=example_order_id, type=equal, parameters=(('value', 1),))&gt;}
-</code></pre>
-<h4 id="how-to-deal-with-time-filters">How to deal with time filters</h4>
-<p>In this example, we show how one can manage datetime relations.</p>
-<pre><code class="language-python">from datetime import datetime, timezone
-
-event_from = datetime(2023, 1, 1, tzinfo=timezone.utc)
-event_to = datetime(2023, 12, 31, tzinfo=timezone.utc)
-valid_from = datetime(2022, 1, 1, tzinfo=timezone.utc)
-valid_to = datetime(2022, 12, 31, tzinfo=timezone.utc)
-
-global_filter.add_time_and_time_travel_filters(event_from, event_to, valid_from, valid_to)
-
-global_filter.filters
-</code></pre>
-<p>Result</p>
-<pre><code class="language-python">{&lt;SingleFilter(feature_name=time_travel_filter, type=range, parameters=(('max', '2022-12-31T00:00:00+00:00'), ('max_exclusive', True), ('min', '2022-01-01T00:00:00+00:00')))&gt;,
- &lt;SingleFilter(feature_name=reference_time, type=range, parameters=(('max', '2023-12-31T00:00:00+00:00'), ('max_exclusive', True), ('min', '2023-01-01T00:00:00+00:00')))&gt;}
-</code></pre>
-<h4 id="example-access-to-filters-in-the-feature-group">Example access to Filters in the Feature Group</h4>
-<p>Now, we need to also use a FeatureGroup which supports it. In this example, we show where we can access the SingleFilters.
-The implementation of the concrete filters is dependent on the feature group. This example is rather complex as we filter a python dictionary. </p>
-<p>Further, the feature is a data creator, so we create the data here itself. </p>
-<pre><code class="language-python">from mloda.user import mloda
-from mloda.provider import FeatureGroup, FeatureSet, ComputeFramework, BaseInputData, DataCreator
-from typing import Any, Union, Set, Type, Optional
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-
-class ExampleOrderFilter(FeatureGroup):
-    @classmethod
-    def input_data(cls) -&gt; Optional[BaseInputData]:
-        return DataCreator({cls.get_class_name(), &quot;example_order_id&quot;})
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:
-        _data_creator = {cls.get_class_name(): [1, 2, 3],
-                         &quot;example_order_id&quot;: [2, 1, 1]
-                         }
-        # The following algorithm is naive and rather should show an example than a normal use case.
-        # The filter implementation highly depends on the feature group!
-        # Extract the filter value and filter_name information from the filters.
-        for filter in features.filters:
-            filter_value = filter.parameter.value
-            filter_name = filter.filter_feature.name
-            break
-        # Create the order_id filter
-        order_id_filter = [i for i, order_id in enumerate(_data_creator[filter_name]) if order_id == filter_value]
-        # Apply the filter
-        filtered_data = {
-            key: [value[i] for i in order_id_filter]
-            for key, value in _data_creator.items()
-            if key != filter_name
-        }
-        return filtered_data
-    @classmethod
-    def compute_framework_rule(cls) -&gt; Union[bool, Set[Type[ComputeFramework]]]:
-        return {PyArrowTable}
-
-result = mloda.run_all(
-    [&quot;ExampleOrderFilter&quot;],
-    global_filter=global_filter
-)
-result[0]
-</code></pre>
-<p>Expected Output</p>
-<pre><code class="language-python">ExampleOrderFilter: [[2,3]]
-</code></pre>
-<p>Although this example is complex, it is noteworthy, that the framework considers filters as features and setup as that in the framework. </p>
-<h3 id="summary">Summary</h3>
-<p>This filtering system improves data preprocessing through GlobalFilter and SingleFilters, allowing flexible, condition-based refinement, including time-based filtering. It maintains consistency using FilterType and supports complex machine learning use cases. If you encounter a commonly used filter not yet included, feel free to open an issue or submit a pull request.</p>
               
             </div>
           </div><footer>
     <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
-        <a href="../join_data/" class="btn btn-neutral float-left" title="Join data"><span class="icon icon-circle-arrow-left"></span> Previous</a>
-        <a href="../artifacts/" class="btn btn-neutral float-right" title="Artifacts">Next <span class="icon icon-circle-arrow-right"></span></a>
+        <a href="../multiple_result_columns/" class="btn btn-neutral float-left" title="Multiple Result Columns"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../plugin-loader/" class="btn btn-neutral float-right" title="Plugin Loader">Next <span class="icon icon-circle-arrow-right"></span></a>
     </div>
 
   <hr/>
@@ -338,10 +278,10 @@ result[0]
   <span class="rst-current-version" data-toggle="rst-current-version">
     
     
-      <span><a href="../join_data/" style="color: #fcfcfc">&laquo; Previous</a></span>
+      <span><a href="../multiple_result_columns/" style="color: #fcfcfc">&laquo; Previous</a></span>
     
     
-      <span><a href="../artifacts/" style="color: #fcfcfc">Next &raquo;</a></span>
+      <span><a href="../plugin-loader/" style="color: #fcfcfc">Next &raquo;</a></span>
     
   </span>
 </div>

@@ -79,6 +79,16 @@
     <li class="toctree-l2"><a class="reference internal" href="#runner-execution-configuration">Runner &amp; Execution Configuration</a>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#plugin-discovery">Plugin Discovery</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#resolve_feature">resolve_feature</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#get_feature_group_docs">get_feature_group_docs</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#get_compute_framework_docs">get_compute_framework_docs</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#get_extender_docs">get_extender_docs</a>
+    </li>
+        </ul>
     </li>
     </ul>
                   </li>
@@ -129,6 +139,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Plugin System</a>
     <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../discover-plugins/">Discover Plugins</a>
+                </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
                 </li>
     </ul>
@@ -212,11 +224,113 @@
 <li><strong>function_extender</strong> (optional): Add function extenders to customize computations.</li>
 <li>parallelization_modes (optional): Choose between sync, threading, or multiprocessing modes. (Default: sync)</li>
 <li>flight_server (optional): Specify a flight server for multiprocessing only.</li>
+<li><strong>column_ordering</strong> (optional): Control the ordering of result columns.
+    Accepts <code>"alphabetical"</code> (sort columns A-Z) or <code>"request_order"</code>
+    (preserve the order features were requested). Default: <code>None</code> (no guaranteed order).</li>
 </ul>
-<h4 id="plugin-discovery">Plugin Discovery</h4>
-<p>To discover available plugins (feature groups, compute frameworks, extenders), use the functions <code>get_feature_group_docs()</code>, <code>get_compute_framework_docs()</code>, and <code>get_extender_docs()</code> from <code>mloda.steward</code>:</p>
-<pre><code class="language-python">from mloda.steward import get_feature_group_docs, get_compute_framework_docs, get_extender_docs
+<pre><code class="language-python">from mloda.user import mloda
+
+# Alphabetical ordering
+result = mloda.run_all(
+    [&quot;FeatureC&quot;, &quot;FeatureA&quot;, &quot;FeatureB&quot;],
+    column_ordering=&quot;alphabetical&quot;  # Result columns: FeatureA, FeatureB, FeatureC
+)
+
+# Preserve request order
+result = mloda.run_all(
+    [&quot;FeatureC&quot;, &quot;FeatureA&quot;, &quot;FeatureB&quot;],
+    column_ordering=&quot;request_order&quot;  # Result columns: FeatureC, FeatureA, FeatureB
+)
 </code></pre>
+<h4 id="plugin-discovery">Plugin Discovery</h4>
+<p>mloda provides functions to discover and inspect available plugins. Import them from <code>mloda.steward</code>:</p>
+<pre><code class="language-python">from mloda.steward import (
+    get_feature_group_docs,
+    get_compute_framework_docs,
+    get_extender_docs,
+    resolve_feature,
+)
+</code></pre>
+<h5 id="resolve_feature">resolve_feature</h5>
+<p>Resolve a feature name to its matching FeatureGroup class. This is useful for debugging feature resolution or understanding which FeatureGroup handles a specific feature.</p>
+<pre><code class="language-python">from mloda.steward import resolve_feature
+
+# Successful resolution
+result = resolve_feature(&quot;my_feature_name&quot;)
+if result.feature_group:
+    print(f&quot;Resolved to: {result.feature_group.__name__}&quot;)
+else:
+    print(f&quot;Error: {result.error}&quot;)
+
+# Access all matching candidates (before subclass filtering)
+print(f&quot;Candidates: {[fg.__name__ for fg in result.candidates]}&quot;)
+</code></pre>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><strong>feature_name</strong> (<code>str</code>): The name of the feature to resolve.</li>
+</ul>
+<p><strong>Returns:</strong> <code>ResolvedFeature</code> dataclass with fields:</p>
+<ul>
+<li><strong>feature_name</strong> (<code>str</code>): The input feature name.</li>
+<li><strong>feature_group</strong> (<code>Type[FeatureGroup] | None</code>): The resolved FeatureGroup class, or None if resolution failed.</li>
+<li><strong>candidates</strong> (<code>List[Type[FeatureGroup]]</code>): All FeatureGroups that matched before subclass filtering.</li>
+<li><strong>error</strong> (<code>str | None</code>): Error message if resolution failed (no match or multiple conflicts).</li>
+</ul>
+<h5 id="get_feature_group_docs">get_feature_group_docs</h5>
+<p>Get documentation for feature groups with optional filtering.</p>
+<pre><code class="language-python">from mloda.steward import get_feature_group_docs
+
+# Get all feature groups
+all_fgs = get_feature_group_docs()
+
+# Filter by name
+fgs = get_feature_group_docs(name=&quot;timestamp&quot;)
+
+# Filter by compute framework
+fgs = get_feature_group_docs(compute_framework=&quot;PandasDataframe&quot;)
+</code></pre>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><strong>name</strong> (<code>str</code>, optional): Filter by name (case-insensitive partial match).</li>
+<li><strong>search</strong> (<code>str</code>, optional): Search in description (case-insensitive partial match).</li>
+<li><strong>compute_framework</strong> (<code>str | Type[ComputeFramework]</code>, optional): Filter by compute framework.</li>
+<li><strong>version_contains</strong> (<code>str</code>, optional): Filter by version substring.</li>
+</ul>
+<p><strong>Returns:</strong> <code>List[FeatureGroupInfo]</code> sorted by name.</p>
+<h5 id="get_compute_framework_docs">get_compute_framework_docs</h5>
+<p>Get documentation for compute frameworks with optional filtering.</p>
+<pre><code class="language-python">from mloda.steward import get_compute_framework_docs
+
+# Get all available frameworks
+frameworks = get_compute_framework_docs()
+
+# Include unavailable frameworks
+all_frameworks = get_compute_framework_docs(available_only=False)
+</code></pre>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><strong>name</strong> (<code>str</code>, optional): Filter by name (case-insensitive partial match).</li>
+<li><strong>search</strong> (<code>str</code>, optional): Search in description (case-insensitive partial match).</li>
+<li><strong>available_only</strong> (<code>bool</code>, default <code>True</code>): Only return available frameworks.</li>
+</ul>
+<p><strong>Returns:</strong> <code>List[ComputeFrameworkInfo]</code> sorted by name.</p>
+<h5 id="get_extender_docs">get_extender_docs</h5>
+<p>Get documentation for extenders with optional filtering.</p>
+<pre><code class="language-python">from mloda.steward import get_extender_docs
+
+# Get all extenders
+extenders = get_extender_docs()
+
+# Filter by wrapped function type
+extenders = get_extender_docs(wraps=&quot;formula&quot;)
+</code></pre>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><strong>name</strong> (<code>str</code>, optional): Filter by name (case-insensitive partial match).</li>
+<li><strong>search</strong> (<code>str</code>, optional): Search in description (case-insensitive partial match).</li>
+<li><strong>wraps</strong> (<code>str</code>, optional): Filter by wrapped function type (case-insensitive exact match).</li>
+</ul>
+<p><strong>Returns:</strong> <code>List[ExtenderInfo]</code> sorted by name.</p>
               
             </div>
           </div><footer>

@@ -141,6 +141,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Plugin System</a>
     <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../discover-plugins/">Discover Plugins</a>
+                </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
                 </li>
     </ul>
@@ -268,6 +270,32 @@ temperature~std
         feature_name = features.get_name_of_one_feature().name
         return {feature_name: result}
 </code></pre>
+<h4 id="specific-sub-column-dependency">Specific Sub-Column Dependency</h4>
+<p>You can declare a dependency on a specific sub-column directly, without needing all columns:</p>
+<pre><code class="language-python">class SpecificSubColumnConsumer(FeatureGroup):
+    def input_features(self, options: Options, feature_name: FeatureName) -&gt; Optional[Set[Feature]]:
+        # Depend on ONLY base_feature~1, not all columns
+        return {Feature(&quot;base_feature~1&quot;)}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:
+        # Only base_feature~1 is available
+        values = data[&quot;base_feature~1&quot;]
+
+        feature_name = features.get_name_of_one_feature().name
+        return {feature_name: values * 10}
+</code></pre>
+<p><strong>Benefits</strong>:</p>
+<ul>
+<li>No need for pass-through FeatureGroups</li>
+<li>Clearer dependency declarations</li>
+<li>Only pulls the specific column needed</li>
+</ul>
+<p><strong>Behavior Summary</strong>:</p>
+<ul>
+<li><code>Feature("base_feature")</code> → Returns ALL columns: <code>base_feature~0</code>, <code>base_feature~1</code>, etc.</li>
+<li><code>Feature("base_feature~1")</code> → Returns ONLY <code>base_feature~1</code> column</li>
+</ul>
 <h2 id="how-it-works">How It Works</h2>
 <p>The mloda framework automatically handles the selection of columns that follow this naming convention:</p>
 <ol>
@@ -302,7 +330,8 @@ temperature~std
 </code></pre>
 <h2 id="best-practices">Best Practices</h2>
 <ol>
-<li><strong>Use Automatic Discovery</strong>: Prefer <code>resolve_multi_column_feature()</code> over manual column enumeration</li>
+<li><strong>Use Automatic Discovery</strong>: Prefer <code>resolve_multi_column_feature()</code> over manual column enumeration when you need all columns</li>
+<li><strong>Use Specific Sub-Column Dependencies</strong>: When you only need one sub-column, use <code>Feature("base_feature~N")</code> for clearer intent and efficiency</li>
 <li><strong>Consistent Naming</strong>: Use consistent suffixes across related feature groups</li>
 <li><strong>Use <code>apply_naming_convention()</code></strong>: When producing multi-column outputs, use the utility for consistency</li>
 <li><strong>Documentation</strong>: Document the meaning of each suffix in your feature group's docstring</li>
@@ -342,12 +371,13 @@ temperature~std
 </tr>
 </tbody>
 </table>
+<p><strong>Note</strong>: When declaring dependencies with <code>Feature("base_feature~N")</code>, the framework automatically resolves to the parent FeatureGroup that produces <code>base_feature</code> and extracts only the specified sub-column.</p>
               
             </div>
           </div><footer>
     <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
         <a href="../feature-group-version/" class="btn btn-neutral float-left" title="Feature Group Versioning"><span class="icon icon-circle-arrow-left"></span> Previous</a>
-        <a href="../plugin-loader/" class="btn btn-neutral float-right" title="Plugin Loader">Next <span class="icon icon-circle-arrow-right"></span></a>
+        <a href="../discover-plugins/" class="btn btn-neutral float-right" title="Discover Plugins">Next <span class="icon icon-circle-arrow-right"></span></a>
     </div>
 
   <hr/>
@@ -373,7 +403,7 @@ temperature~std
       <span><a href="../feature-group-version/" style="color: #fcfcfc">&laquo; Previous</a></span>
     
     
-      <span><a href="../plugin-loader/" style="color: #fcfcfc">Next &raquo;</a></span>
+      <span><a href="../discover-plugins/" style="color: #fcfcfc">Next &raquo;</a></span>
     
   </span>
 </div>

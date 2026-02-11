@@ -40,6 +40,7 @@ class Engine:
         global_filter: Optional[GlobalFilter] = None,
         api_input_data_collection: Optional[ApiInputDataCollection] = None,
         plugin_collector: Optional[PluginCollector] = None,
+        column_ordering: Optional[str] = None,
     ) -> None:
         # setup variables which track the primary sources and the compute platforms
         self.feature_group_collection: Dict[Type[FeatureGroup], Set[Feature]] = defaultdict(set)
@@ -64,10 +65,13 @@ class Engine:
         self.copy_compute_frameworks = deepcopy(compute_frameworks)
 
         self.data_access_collection = data_access_collection
+        self.column_ordering = column_ordering
         self.execution_planner = self.create_setup_execution_plan(features)
 
     def compute(self, flight_server: Optional[ParallelRunnerFlightServer] = None) -> ExecutionOrchestrator:
-        orchestrator = ExecutionOrchestrator(self.execution_planner, flight_server)
+        orchestrator = ExecutionOrchestrator(
+            self.execution_planner, flight_server, column_ordering=self.column_ordering
+        )
         if isinstance(orchestrator, ExecutionOrchestrator):
             return orchestrator
         raise ValueError("ExecutionOrchestrator setup failed.")

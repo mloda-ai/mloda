@@ -39,6 +39,7 @@ class ExecutionOrchestrator:
         self,
         execution_planner: ExecutionPlan,
         flight_server: Optional[ParallelRunnerFlightServer] = None,
+        column_ordering: Optional[str] = None,
     ) -> None:
         """
         Initializes the ExecutionOrchestrator with an execution plan and optional flight server.
@@ -56,7 +57,7 @@ class ExecutionOrchestrator:
         self.worker_manager = WorkerManager()
 
         # Data lifecycle - delegate to DataLifecycleManager
-        self.data_lifecycle_manager = DataLifecycleManager()
+        self.data_lifecycle_manager = DataLifecycleManager(column_ordering=column_ordering)
 
         self.flight_server = None
         if flight_server:

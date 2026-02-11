@@ -76,13 +76,16 @@ class IcebergFramework(ComputeFramework):
             "is handled at the catalog/table/engine level, not at the compute framework level."
         )
 
-    def select_data_by_column_names(self, data: Any, selected_feature_names: Set[FeatureName]) -> Any:
+    def select_data_by_column_names(
+        self, data: Any, selected_feature_names: Set[FeatureName], column_ordering: Optional[str] = None
+    ) -> Any:
         """
         Select specific columns from Iceberg table.
 
         Args:
             data: Iceberg table
             selected_feature_names: Set of feature names to select
+            column_ordering: Optional column ordering strategy
 
         Returns:
             Iceberg table scan with selected columns
@@ -91,7 +94,9 @@ class IcebergFramework(ComputeFramework):
             return data
 
         column_names = set(data.schema().column_names)
-        _selected_feature_names = self.identify_naming_convention(selected_feature_names, column_names)
+        _selected_feature_names = self.identify_naming_convention(
+            selected_feature_names, column_names, ordering=column_ordering
+        )
 
         # Use Iceberg's scan with column selection
         return data.scan(selected_fields=tuple(_selected_feature_names))

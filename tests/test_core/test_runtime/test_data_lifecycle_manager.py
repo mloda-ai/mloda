@@ -337,7 +337,9 @@ class TestDataLifecycleManagerGetResultData:
         result = manager.get_result_data(mock_cfw, selected_feature_names)
 
         assert result == selected_data
-        mock_cfw.select_data_by_column_names.assert_called_once_with(mock_cfw.data, selected_feature_names)
+        mock_cfw.select_data_by_column_names.assert_called_once_with(
+            mock_cfw.data, selected_feature_names, column_ordering=None
+        )
 
     def test_get_result_data_downloads_from_flight_server_when_location_provided(self) -> None:
         """Should download data from flight server when location is provided and cfw.data is None."""
@@ -365,7 +367,9 @@ class TestDataLifecycleManagerGetResultData:
 
             mock_flight_server.download_table.assert_called_once_with(location, str(mock_cfw.uuid))
             mock_cfw.convert_flyserver_data_back.assert_called_once_with(downloaded_data, manager.transformer)
-            mock_cfw.select_data_by_column_names.assert_called_once_with(converted_data, selected_feature_names)
+            mock_cfw.select_data_by_column_names.assert_called_once_with(
+                converted_data, selected_feature_names, column_ordering=None
+            )
             assert result == selected_data
 
     def test_get_result_data_raises_error_when_no_data_and_no_location(self) -> None:

@@ -34,6 +34,25 @@ This means, depending on your needs, you can run them all at once (**batch run**
 -   **function_extender** (optional): Add function extenders to customize computations.
 -   parallelization_modes (optional): Choose between sync, threading, or multiprocessing modes. (Default: sync)
 -   flight_server (optional): Specify a flight server for multiprocessing only.
+-   **column_ordering** (optional): Control the ordering of result columns.
+    Accepts `"alphabetical"` (sort columns A-Z) or `"request_order"`
+    (preserve the order features were requested). Default: `None` (no guaranteed order).
+
+``` python
+from mloda.user import mloda
+
+# Alphabetical ordering
+result = mloda.run_all(
+    ["FeatureC", "FeatureA", "FeatureB"],
+    column_ordering="alphabetical"  # Result columns: FeatureA, FeatureB, FeatureC
+)
+
+# Preserve request order
+result = mloda.run_all(
+    ["FeatureC", "FeatureA", "FeatureB"],
+    column_ordering="request_order"  # Result columns: FeatureC, FeatureA, FeatureB
+)
+```
 
 #### Plugin Discovery
 

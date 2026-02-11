@@ -117,7 +117,9 @@ class ComputeFramework(ABC):
 
         return None
 
-    def select_data_by_column_names(self, data: Any, selected_feature_names: Set[FeatureName]) -> Any:
+    def select_data_by_column_names(
+        self, data: Any, selected_feature_names: Set[FeatureName], column_ordering: Optional[str] = None
+    ) -> Any:
         """
         If you only want to store the requested features, implement this functionality depending on your framework.
 
@@ -470,7 +472,12 @@ Available join types:
         return self.uuid
 
     @final
-    def identify_naming_convention(self, selected_feature_names: Set[FeatureName], column_names: Set[str]) -> Set[str]:
+    def identify_naming_convention(
+        self,
+        selected_feature_names: Set[FeatureName],
+        column_names: Set[str],
+        ordering: Optional[str] = None,
+    ) -> Union[Set[str], List[str]]:
         """
         Identifies columns that match feature names or follow the naming convention pattern.
 
@@ -480,18 +487,21 @@ Available join types:
         Args:
             selected_feature_names: A set of FeatureName objects representing the requested features
             column_names: A set of strings representing the available column names in the data
+            ordering: Optional ordering mode - None for Set, "alphabetical" or "request_order" for List
 
         Returns:
-            A set of column names that match the requested features or follow the naming convention
+            A set of column names (default) or list if ordering is specified
 
         Raises:
-            ValueError: If no matching columns are found
+            ValueError: If no matching columns are found or invalid ordering value
 
         Example:
             If selected_feature_names contains 'Temperature' and column_names contains
             'Temperature~mean', 'Temperature~max', 'Temperature~min', this method will return
             all three columns as they follow the naming convention.
         """
+        if ordering is not None and ordering not in ("alphabetical", "request_order"):
+            raise ValueError(f"Invalid ordering value: '{ordering}'. Must be None, 'alphabetical', or 'request_order'.")
 
         feature_name_strings = {f.name for f in selected_feature_names}
         _selected_feature_names: Set[str] = set()
@@ -510,4 +520,20 @@ Available join types:
                 f"No columns found that match feature names {feature_name_strings} or follow the naming convention 'feature_name~column_name'"
             )
 
-        return _selected_feature_names
+        if ordering is None:
+            return _selected_feature_names
+
+        if ordering == "alphabetical":
+            return sorted(_selected_feature_names)
+
+        # ordering == "request_order"
+        result: List[str] = []
+        for feature in selected_feature_names:
+            feature_name = feature.name
+            matching_cols = []
+            for col in _selected_feature_names:
+                if col == feature_name or col.startswith(f"{feature_name}~"):
+                    matching_cols.append(col)
+            matching_cols.sort()
+            result.extend(matching_cols)
+        return result

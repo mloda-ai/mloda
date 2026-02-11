@@ -1,4 +1,4 @@
-from typing import Any, Set, Type, List, Dict
+from typing import Any, Dict, List, Optional, Set, Type
 from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_merge_engine import (
     PythonDictMergeEngine,
@@ -38,7 +38,10 @@ class PythonDictFramework(ComputeFramework):
         return PythonDictMergeEngine
 
     def select_data_by_column_names(
-        self, data: List[Dict[str, Any]], selected_feature_names: Set[FeatureName]
+        self,
+        data: List[Dict[str, Any]],
+        selected_feature_names: Set[FeatureName],
+        column_ordering: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         if not data:
             raise ValueError(f"Data cannot be empty: {selected_feature_names}")
@@ -48,7 +51,9 @@ class PythonDictFramework(ComputeFramework):
         for row in data:
             column_names.update(row.keys())
 
-        _selected_feature_names = self.identify_naming_convention(selected_feature_names, column_names)
+        _selected_feature_names = self.identify_naming_convention(
+            selected_feature_names, column_names, ordering=column_ordering
+        )
 
         return [{k: record.get(k) for k in _selected_feature_names if k in record} for record in data]
 

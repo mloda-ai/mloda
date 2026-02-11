@@ -64,7 +64,7 @@
 | jupyter_core                           | 5.9.1           | BSD-3-Clause                                            |
 | jupyter_server                         | 2.17.0          | BSD License                                             |
 | jupyter_server_terminals               | 0.5.4           | BSD License                                             |
-| jupyterlab                             | 4.5.3           | BSD License                                             |
+| jupyterlab                             | 4.5.4           | BSD License                                             |
 | jupyterlab_pygments                    | 0.3.0           | BSD License                                             |
 | jupyterlab_server                      | 2.28.0          | BSD License                                             |
 | lark                                   | 1.3.1           | MIT License                                             |
@@ -122,7 +122,7 @@
 | pycparser                              | 3.0             | BSD-3-Clause                                            |
 | pydantic                               | 2.12.5          | MIT                                                     |
 | pydantic_core                          | 2.41.5          | MIT                                                     |
-| pyiceberg                              | 0.10.0          | Apache Software License                                 |
+| pyiceberg                              | 0.11.0          | Apache-2.0                                              |
 | pyparsing                              | 3.3.2           | MIT                                                     |
 | pyproject-api                          | 1.10.0          | MIT License                                             |
 | pyroaring                              | 1.0.3           | MIT License                                             |
@@ -177,3 +177,4 @@
 | websocket-client                       | 1.9.0           | Apache Software License                                 |
 | wrapt                                  | 1.17.3          | BSD License                                             |
 | zipp                                   | 3.23.0          | MIT                                                     |
+| zstandard                              | 0.25.0          | BSD-3-Clause                                            |

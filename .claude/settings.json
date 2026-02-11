@@ -1,5 +1,6 @@
 {
   "permissions": {
+    "deny": ["Task(Explore)"],
     "allow": [
       "Bash(git log:*)",
       "Bash(tox)",
@@ -22,7 +23,6 @@
       "Bash(xargs cat:*)",
       "Bash(grep:*)"
     ],
-    "deny": [],
     "ask": []
   }
 }

@@ -151,6 +151,30 @@ class TestInitComputeFramework:
         assert executor.cfw_collection[test_uuid] is mock_cfw_instance
 
 
+class TestComputeFrameworkExecutorCfwLock:
+    def test_has_cfw_lock_attribute_after_construction(self) -> None:
+        """ComputeFrameworkExecutor should have a _cfw_lock attribute after __init__."""
+        cfw_register = Mock(spec=CfwManager)
+        worker_manager = Mock(spec=WorkerManager)
+
+        executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
+
+        assert hasattr(executor, "_cfw_lock"), (
+            "ComputeFrameworkExecutor.__init__ must create a self._cfw_lock attribute"
+        )
+
+    def test_cfw_lock_is_threading_lock_instance(self) -> None:
+        """_cfw_lock should be an instance of threading.Lock (not multiprocessing.Lock)."""
+        import threading
+
+        cfw_register = Mock(spec=CfwManager)
+        worker_manager = Mock(spec=WorkerManager)
+
+        executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
+
+        assert isinstance(executor._cfw_lock, type(threading.Lock())), "_cfw_lock must be a threading.Lock instance"
+
+
 class TestAddComputeFramework:
     """Tests for add_compute_framework method."""
 
@@ -202,15 +226,14 @@ class TestAddComputeFramework:
         assert result == new_uuid
         assert new_uuid in executor.cfw_collection
 
-    @patch("mloda.core.runtime.compute_framework_executor.multiprocessing.Lock")
-    def test_uses_multiprocessing_lock(self, mock_lock_class: Any) -> None:
-        """Should use multiprocessing.Lock for thread safety."""
-        mock_lock = MagicMock()
-        mock_lock_class.return_value = mock_lock
-
+    def test_uses_instance_cfw_lock_not_per_call_lock(self) -> None:
+        """Should use self._cfw_lock for thread safety."""
         cfw_register = Mock(spec=CfwManager)
         worker_manager = Mock(spec=WorkerManager)
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
+
+        mock_lock = MagicMock()
+        executor._cfw_lock = mock_lock
 
         cfw_register.get_cfw_uuid.return_value = uuid4()
 
@@ -220,7 +243,7 @@ class TestAddComputeFramework:
 
         executor.add_compute_framework(step, ParallelizationMode.SYNC, uuid4(), set())
 
-        # Verify lock was used as context manager
+        # Verify the instance lock was used as context manager
         mock_lock.__enter__.assert_called_once()
         mock_lock.__exit__.assert_called_once()
 

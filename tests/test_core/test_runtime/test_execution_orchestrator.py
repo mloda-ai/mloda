@@ -347,6 +347,30 @@ class TestSyncModeSkipsMyManager:
         orchestrator.__exit__(None, None, None)
 
 
+class TestExecutionOrchestratorStepLock:
+    def test_has_step_lock_attribute_after_construction(self) -> None:
+        """ExecutionOrchestrator should have a _step_lock attribute after __init__."""
+        mock_planner = Mock(spec=ExecutionPlan)
+
+        orchestrator = ExecutionOrchestrator(mock_planner)
+
+        assert hasattr(orchestrator, "_step_lock"), (
+            "ExecutionOrchestrator.__init__ must create a self._step_lock attribute"
+        )
+
+    def test_step_lock_is_threading_lock_instance(self) -> None:
+        """_step_lock should be an instance of threading.Lock."""
+        import threading
+
+        mock_planner = Mock(spec=ExecutionPlan)
+
+        orchestrator = ExecutionOrchestrator(mock_planner)
+
+        assert isinstance(orchestrator._step_lock, type(threading.Lock())), (
+            "_step_lock must be a threading.Lock instance, not a new lock per call"
+        )
+
+
 class TestSyncModeSkipsSleep:
     """Tests that SYNC mode does not call time.sleep in the compute loop.
 

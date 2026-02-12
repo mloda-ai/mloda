@@ -59,6 +59,8 @@ class ExecutionOrchestrator:
         # Data lifecycle - delegate to DataLifecycleManager
         self.data_lifecycle_manager = DataLifecycleManager(column_ordering=column_ordering)
 
+        self._step_lock = threading.Lock()
+
         self.flight_server = None
         if flight_server:
             self.flight_server = flight_server
@@ -359,7 +361,7 @@ class ExecutionOrchestrator:
         Checks if a step can be run. If it can, add it to the currently_running_steps set.
         """
 
-        with threading.Lock():
+        with self._step_lock:
             if required_uuids.issubset(finished_steps) and not step_uuid.intersection(currently_running_steps):
                 currently_running_steps.update(step_uuid)
                 return True
@@ -371,7 +373,7 @@ class ExecutionOrchestrator:
         """
         Marks a step as finished.
         """
-        with threading.Lock():
+        with self._step_lock:
             currently_running_steps.difference_update(step_uuid)
             finished_steps.update(step_uuid)
 

@@ -1,5 +1,5 @@
 from typing import Union
-from unittest.mock import patch
+from unittest.mock import patch, Mock, MagicMock
 import pytest
 
 from mloda.provider import ComputeFramework
@@ -7,6 +7,7 @@ from mloda.user import Features
 from mloda.user import Feature
 from mloda.user import mlodaAPI
 from mloda.core.core.engine import Engine
+from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.user import Index
 from mloda.user import Link, JoinSpec
 from tests.test_core.test_setup.test_graph_builder import BaseTestGraphFeatureGroup3
@@ -78,3 +79,42 @@ class TestmlodaAPI:
             api_feature = list(api_request.features)[0]
             assert api_feature is original_feature
             assert api_feature.name == original_feature.name
+
+
+class TestSetupEngineRunnerReturnsRunner:
+    def test_setup_engine_runner_returns_execution_orchestrator(self) -> None:
+        """_setup_engine_runner should return an ExecutionOrchestrator instance (not None)."""
+        with patch("mloda.core.core.engine.Engine.create_setup_execution_plan"):
+            api = mlodaAPI(["some_feature"])
+
+        mock_orchestrator = Mock(spec=ExecutionOrchestrator)
+        with patch.object(api.engine, "compute", return_value=mock_orchestrator):
+            result = api._setup_engine_runner()
+
+        assert isinstance(result, ExecutionOrchestrator), (
+            "_setup_engine_runner must return the ExecutionOrchestrator, not None"
+        )
+
+
+class TestBatchRunReturnsRunner:
+    def test_batch_run_returns_execution_orchestrator(self) -> None:
+        """_batch_run should return an ExecutionOrchestrator instance (not None)."""
+        with patch("mloda.core.core.engine.Engine.create_setup_execution_plan"):
+            api = mlodaAPI(["some_feature"])
+
+        mock_orchestrator = Mock(spec=ExecutionOrchestrator)
+        with (
+            patch.object(api, "_setup_engine_runner", return_value=mock_orchestrator),
+            patch.object(api, "_run_engine_computation"),
+        ):
+            result = api._batch_run()
+
+        assert isinstance(result, ExecutionOrchestrator), "_batch_run must return the ExecutionOrchestrator, not None"
+
+
+class TestShutdownRunnerManagerDeleted:
+    def test_mloda_api_has_no_shutdown_runner_manager_method(self) -> None:
+        """mlodaAPI should not have a _shutdown_runner_manager method."""
+        assert not hasattr(mlodaAPI, "_shutdown_runner_manager"), (
+            "_shutdown_runner_manager should be deleted to avoid double shutdown"
+        )

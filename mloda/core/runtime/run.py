@@ -3,7 +3,7 @@ from __future__ import annotations
 import multiprocessing
 import threading
 import time
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Any, Dict, Generator, List, Optional, Set, Tuple, Union
 from uuid import UUID
 import logging
 
@@ -124,6 +124,64 @@ class ExecutionOrchestrator:
                     ):
                         continue
                     self._execute_step(step)
+
+                time.sleep(0.01)
+
+        finally:
+            self.data_lifecycle_manager.set_artifacts(self.cfw_register.get_artifacts())
+            self.join()
+
+    def compute_stream(self) -> Generator[Tuple[UUID, Any], None, None]:
+        """Generator variant of ``compute()`` that yields results as they complete.
+
+        Each yielded tuple is ``(step_uuid, result)`` where *result* is a fully
+        materialized compute-framework object (e.g. ``pa.Table``).  Results are
+        emitted at feature-group granularity — there is no intra-group partial
+        streaming.
+        """
+        if self.cfw_register is None:
+            raise ValueError("CfwManager not initialized")
+
+        self.executor = ComputeFrameworkExecutor(self.cfw_register, self.worker_manager)
+
+        finished_ids: Set[UUID] = set()
+        to_finish_ids: Set[UUID] = set()
+        currently_running_steps: Set[UUID] = set()
+
+        try:
+            while to_finish_ids != finished_ids or len(finished_ids) == 0:
+                if self.cfw_register:
+                    error = self.cfw_register.get_error()
+                    if error:
+                        logger.error(self.cfw_register.get_error_exc_info())
+                        raise Exception(self.cfw_register.get_error_exc_info(), self.cfw_register.get_error_msg())
+                else:
+                    break
+
+                for step in self.execution_planner:
+                    to_finish_ids.update(step.get_uuids())
+
+                    if isinstance(step, FeatureGroupStep):
+                        self._drop_data_for_finished_cfws(finished_ids)
+
+                    if self._is_step_done(step.get_uuids(), finished_ids):
+                        continue
+
+                    if self.currently_running_step(step.get_uuids(), currently_running_steps):
+                        if self._process_step_result(step):
+                            self._mark_step_as_finished(step.get_uuids(), finished_ids, currently_running_steps)
+                        continue
+
+                    if not self._can_run_step(
+                        step.required_uuids, step.get_uuids(), finished_ids, currently_running_steps
+                    ):
+                        continue
+                    self._execute_step(step)
+
+                yield from self.data_lifecycle_manager.pop_result_data_collection()
+
+                if len(to_finish_ids) == 0:
+                    break
 
                 time.sleep(0.01)
 

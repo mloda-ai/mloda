@@ -30,6 +30,9 @@ from mloda.core.abstract_plugins.components.parallelization_modes import Paralle
 from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 
+# Streaming API
+from mloda.core.api.streaming_request import stream_all
+
 # Config loading
 from mloda.core.api.feature_config.loader import load_features_from_config
 
@@ -60,6 +63,8 @@ __all__ = [
     # Plugin discovery
     "PluginLoader",
     "PluginCollector",
+    # Streaming API
+    "stream_all",
     # Config loading
     "load_features_from_config",
 ]

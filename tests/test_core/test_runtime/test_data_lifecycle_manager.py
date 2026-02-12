@@ -582,3 +582,87 @@ class TestDataLifecycleManagerIntegration:
 
         results = manager.get_results()
         assert len(results) == 2
+
+
+class TestPopResultDataCollection:
+    """Test pop_result_data_collection generator method."""
+
+    def test_empty_collection_yields_nothing(self) -> None:
+        """Should immediately stop iteration when result_data_collection is empty."""
+        manager = DataLifecycleManager()
+
+        results = list(manager.pop_result_data_collection())
+
+        assert results == []
+
+    def test_single_item_yields_that_item_and_empties_collection(self) -> None:
+        """Should yield the single item and leave the collection empty."""
+        manager = DataLifecycleManager()
+        step_uuid = uuid4()
+        data = {"feature1": [1, 2, 3]}
+
+        manager.result_data_collection[step_uuid] = data
+
+        results = list(manager.pop_result_data_collection())
+
+        assert len(results) == 1
+        assert results[0] == (step_uuid, data)
+        assert manager.result_data_collection == {}
+
+    def test_multiple_items_yields_all_and_empties_collection(self) -> None:
+        """Should yield all items and leave the collection empty."""
+        manager = DataLifecycleManager()
+        step_uuid1 = uuid4()
+        step_uuid2 = uuid4()
+        step_uuid3 = uuid4()
+        data1 = {"feature1": [1, 2, 3]}
+        data2 = {"feature2": [4, 5, 6]}
+        data3 = {"feature3": [7, 8, 9]}
+
+        manager.result_data_collection[step_uuid1] = data1
+        manager.result_data_collection[step_uuid2] = data2
+        manager.result_data_collection[step_uuid3] = data3
+
+        results = list(manager.pop_result_data_collection())
+
+        assert len(results) == 3
+        result_dict = dict(results)
+        assert result_dict[step_uuid1] == data1
+        assert result_dict[step_uuid2] == data2
+        assert result_dict[step_uuid3] == data3
+        assert manager.result_data_collection == {}
+
+    def test_items_are_removed_during_iteration(self) -> None:
+        """Should remove each item from the collection as it is yielded."""
+        manager = DataLifecycleManager()
+        step_uuid1 = uuid4()
+        step_uuid2 = uuid4()
+        data1 = {"feature1": [1, 2, 3]}
+        data2 = {"feature2": [4, 5, 6]}
+
+        manager.result_data_collection[step_uuid1] = data1
+        manager.result_data_collection[step_uuid2] = data2
+
+        gen = manager.pop_result_data_collection()
+        assert len(manager.result_data_collection) == 2
+
+        next(gen)
+        assert len(manager.result_data_collection) == 1
+
+        next(gen)
+        assert len(manager.result_data_collection) == 0
+
+    def test_yielded_values_are_uuid_and_data_tuples(self) -> None:
+        """Should yield tuples of (UUID, Any)."""
+        manager = DataLifecycleManager()
+        step_uuid = uuid4()
+        data = {"feature1": [1, 2, 3]}
+
+        manager.result_data_collection[step_uuid] = data
+
+        for item in manager.pop_result_data_collection():
+            assert isinstance(item, tuple)
+            assert len(item) == 2
+            yielded_uuid, yielded_data = item
+            assert isinstance(yielded_uuid, UUID)
+            assert yielded_data == data

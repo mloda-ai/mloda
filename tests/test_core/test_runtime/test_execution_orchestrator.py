@@ -6,13 +6,16 @@ This test file defines the requirements for the ExecutionOrchestrator class.
 
 from __future__ import annotations
 
-from unittest.mock import Mock
+import uuid as uuid_mod
+from unittest.mock import Mock, patch, MagicMock
 
 
 from mloda.provider import ComputeFramework  # noqa: F401
 from mloda.core.prepare.execution_plan import ExecutionPlan
 
 from mloda.core.runtime.run import ExecutionOrchestrator
+from mloda.core.core.cfw_manager import CfwManager, MyManager
+from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 
 
 class TestExecutionOrchestratorImport:
@@ -287,3 +290,105 @@ class TestExecutionOrchestratorMethodSignatures:
         sig = inspect.signature(orchestrator._process_step_result)
         params = list(sig.parameters.keys())
         assert "step" in params
+
+
+class TestSyncModeSkipsMyManager:
+    """Tests that SYNC mode does not spawn a BaseManager server process.
+
+    In SYNC mode, multiprocessing is not used, so spawning a MyManager
+    (which starts a separate server process) is unnecessary overhead.
+    The ExecutionOrchestrator should create a direct CfwManager instance
+    instead and set self.manager to None.
+    """
+
+    def test_sync_mode_does_not_create_manager(self) -> None:
+        """In SYNC-only mode, __enter__ should not spawn a MyManager server process.
+
+        When parallelization_modes contains only SYNC, the orchestrator should:
+        - Set self.manager to None (no BaseManager server process)
+        - Still create a usable cfw_register (direct CfwManager instance)
+        - Allow __exit__ to complete without raising
+        """
+        mock_planner = Mock(spec=ExecutionPlan)
+        orchestrator = ExecutionOrchestrator(mock_planner)
+
+        orchestrator.__enter__({ParallelizationMode.SYNC})
+
+        assert orchestrator.manager is None
+        assert orchestrator.cfw_register is not None
+        assert isinstance(orchestrator.cfw_register, CfwManager)
+
+        # __exit__ should not raise when manager is None
+        orchestrator.__exit__(None, None, None)
+
+    def test_sync_mode_cfw_register_is_direct_instance(self) -> None:
+        """In SYNC mode, cfw_register should be a direct CfwManager instance.
+
+        The cfw_register should be a real CfwManager object (not a proxy),
+        and it should have the correct parallelization_modes set.
+        """
+        mock_planner = Mock(spec=ExecutionPlan)
+        orchestrator = ExecutionOrchestrator(mock_planner)
+
+        orchestrator.__enter__({ParallelizationMode.SYNC})
+
+        assert isinstance(orchestrator.cfw_register, CfwManager)
+        assert orchestrator.cfw_register.parallelization_modes == {ParallelizationMode.SYNC}
+
+        orchestrator.__exit__(None, None, None)
+
+    def test_sync_mode_exit_with_none_manager(self) -> None:
+        """__exit__ should handle manager being None without raising."""
+        mock_planner = Mock(spec=ExecutionPlan)
+        orchestrator = ExecutionOrchestrator(mock_planner)
+
+        orchestrator.manager = None
+
+        orchestrator.__exit__(None, None, None)
+
+
+class TestSyncModeSkipsSleep:
+    """Tests that SYNC mode does not call time.sleep in the compute loop.
+
+    In SYNC mode, all steps complete inline within sync_execute_step (which
+    sets step.step_is_done = True before returning). There is no need to poll
+    for results from worker threads or processes, so the time.sleep(0.01) call
+    in the compute() while-loop is pure waste. The compute loop should skip
+    the sleep when running in SYNC mode.
+    """
+
+    def test_sync_mode_does_not_call_time_sleep(self) -> None:
+        """In SYNC mode, compute() should not call time.sleep."""
+        step_uuid = uuid_mod.uuid4()
+
+        mock_step = MagicMock()
+        mock_step.get_uuids.return_value = {step_uuid}
+        mock_step.required_uuids = set()
+        mock_step.step_is_done = False
+        mock_step.uuid = step_uuid
+
+        class ReiterablePlan:
+            """A planner mock that yields the same step on each iteration."""
+
+            def __init__(self, step: object) -> None:
+                self._step = step
+
+            def __iter__(self):  # type: ignore[no-untyped-def]
+                yield self._step
+
+        planner = ReiterablePlan(mock_step)
+
+        orchestrator = ExecutionOrchestrator(planner)  # type: ignore[arg-type]
+        orchestrator.cfw_register = CfwManager({ParallelizationMode.SYNC})
+
+        def fake_execute_step(step: object) -> None:
+            step.step_is_done = True  # type: ignore[attr-defined]
+
+        orchestrator._execute_step = Mock(side_effect=fake_execute_step)  # type: ignore[method-assign]
+        orchestrator._drop_data_for_finished_cfws = Mock()  # type: ignore[method-assign]
+        orchestrator.data_lifecycle_manager.set_artifacts = Mock()  # type: ignore[method-assign]
+        orchestrator.join = Mock()  # type: ignore[method-assign]
+
+        with patch("mloda.core.runtime.run.time.sleep") as mock_sleep:
+            orchestrator.compute()
+            mock_sleep.assert_not_called()

@@ -69,9 +69,8 @@ class Engine:
         self.execution_planner = self.create_setup_execution_plan(features)
 
     def compute(self, flight_server: Optional[ParallelRunnerFlightServer] = None) -> ExecutionOrchestrator:
-        orchestrator = ExecutionOrchestrator(
-            self.execution_planner, flight_server, column_ordering=self.column_ordering
-        )
+        execution_plan_copy = deepcopy(self.execution_planner)
+        orchestrator = ExecutionOrchestrator(execution_plan_copy, flight_server, column_ordering=self.column_ordering)
         if isinstance(orchestrator, ExecutionOrchestrator):
             return orchestrator
         raise ValueError("ExecutionOrchestrator setup failed.")
@@ -101,10 +100,6 @@ class Engine:
 
     def setup_features_recursion(self, features: Features) -> None:
         for feature in features:
-            self.accessible_plugins = PreFilterPlugins(
-                self.copy_compute_frameworks, self.plugin_collector
-            ).get_accessible_plugins()
-
             self._process_feature(feature, features)
 
     def _process_feature(self, feature: Feature, features: Features) -> None:

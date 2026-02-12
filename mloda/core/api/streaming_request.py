@@ -68,12 +68,11 @@ def stream_all(
         strict_type_enforcement=strict_type_enforcement,
         column_ordering=column_ordering,
     )
-    api._setup_engine_runner(parallelization_modes, flight_server)
-    if api.runner is None:
-        raise ValueError("ExecutionOrchestrator initialization failed.")
+    runner = api._setup_engine_runner(parallelization_modes, flight_server)
     try:
-        api._enter_runner_context(parallelization_modes, function_extender, api.api_data)
-        for _step_uuid, result in api.runner.compute_stream():
+        api._enter_runner_context(runner, parallelization_modes, function_extender, api.api_data)
+        for _step_uuid, result in runner.compute_stream():
             yield result
     finally:
-        api._exit_runner_context()
+        api._exit_runner_context(runner)
+    api.runner = runner

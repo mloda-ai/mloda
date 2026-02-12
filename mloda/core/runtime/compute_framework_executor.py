@@ -38,6 +38,7 @@ class ComputeFrameworkExecutor:
         self.cfw_collection: Dict[UUID, ComputeFramework] = {}
         self.cfw_register = cfw_register
         self.worker_manager = worker_manager
+        self._cfw_lock = threading.Lock()
 
     def init_compute_framework(
         self,
@@ -84,7 +85,7 @@ class ComputeFrameworkExecutor:
         Returns:
             The UUID of the compute framework.
         """
-        with multiprocessing.Lock():
+        with self._cfw_lock:
             cfw_uuid = self.cfw_register.get_cfw_uuid(step.compute_framework.get_class_name(), feature_uuid)
             # if cfw does not exist, create a new one
             if cfw_uuid is None:
@@ -162,7 +163,7 @@ class ComputeFrameworkExecutor:
                 from_feature_uuid = step.link_id
                 childrens.add(from_feature_uuid)
 
-            with multiprocessing.Lock():
+            with self._cfw_lock:
                 cfw_uuid = self.init_compute_framework(step.to_framework, parallelization_mode, childrens, step.uuid)
 
         elif isinstance(step, JoinStep):

@@ -88,25 +88,28 @@ class TestResolveFeatureReturnType:
 class TestResolveFeatureValidMatch:
     """Tests for resolve_feature with valid feature names."""
 
-    def test_resolve_feature_finds_matching_feature_group(self) -> None:
-        """Test resolving a feature name that matches a single FeatureGroup."""
-        # Use a known feature group class name from the codebase
-        # Most FeatureGroups match their class name
+    @staticmethod
+    def _find_unambiguous_feature_name() -> str:
+        """Find a feature name that resolves to exactly one FeatureGroup.
+
+        Iterates through all loaded FeatureGroups and uses resolve_feature
+        to find one that resolves unambiguously, even when test fixtures
+        have registered additional classes in the same process.
+        """
         from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 
-        # Filter to non-test FeatureGroups to avoid duplicates from test fixtures
-        all_fgs = [fg for fg in get_all_subclasses(FeatureGroup) if not fg.__module__.startswith("test_")]
-        assert len(all_fgs) > 0, "Need at least one FeatureGroup for this test"
-
-        # Find a feature group that matches by its class name
-        target_fg = None
+        all_fgs = get_all_subclasses(FeatureGroup)
         for fg in all_fgs:
-            if fg.match_feature_group_criteria(FeatureName(fg.get_class_name()), Options(), None):
-                target_fg = fg
-                break
+            if not fg.match_feature_group_criteria(FeatureName(fg.get_class_name()), Options(), None):
+                continue
+            result = resolve_feature(fg.get_class_name())
+            if result.feature_group is not None:
+                return str(fg.get_class_name())
+        raise AssertionError("Need at least one FeatureGroup that resolves unambiguously")
 
-        assert target_fg is not None, "Need a FeatureGroup that matches its class name"
-        target_name = target_fg.get_class_name()
+    def test_resolve_feature_finds_matching_feature_group(self) -> None:
+        """Test resolving a feature name that matches a single FeatureGroup."""
+        target_name = self._find_unambiguous_feature_name()
 
         result = resolve_feature(target_name)
 
@@ -116,21 +119,7 @@ class TestResolveFeatureValidMatch:
 
     def test_resolve_feature_returns_correct_feature_group_type(self) -> None:
         """Test that the resolved feature_group is a Type[FeatureGroup]."""
-        from mloda.core.abstract_plugins.components.utils import get_all_subclasses
-
-        # Filter to non-test FeatureGroups to avoid duplicates from test fixtures
-        all_fgs = [fg for fg in get_all_subclasses(FeatureGroup) if not fg.__module__.startswith("test_")]
-        assert len(all_fgs) > 0, "Need at least one FeatureGroup for this test"
-
-        # Find a feature group that matches by its class name
-        target_fg = None
-        for fg in all_fgs:
-            if fg.match_feature_group_criteria(FeatureName(fg.get_class_name()), Options(), None):
-                target_fg = fg
-                break
-
-        assert target_fg is not None, "Need a FeatureGroup that matches its class name"
-        target_name = target_fg.get_class_name()
+        target_name = self._find_unambiguous_feature_name()
 
         result = resolve_feature(target_name)
 

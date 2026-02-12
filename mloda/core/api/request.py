@@ -197,7 +197,8 @@ class mlodaAPI:
         Can be called multiple times on the same session with different ``api_data``
         to re-run the execution plan against new inputs.
         """
-        self._batch_run(parallelization_modes, flight_server, function_extender, api_data=api_data)
+        runner = self._batch_run(parallelization_modes, flight_server, function_extender, api_data=api_data)
+        self.runner = runner
         return self.get_result()
 
     def _batch_run(
@@ -206,55 +207,45 @@ class mlodaAPI:
         flight_server: Optional[Any] = None,
         function_extender: Optional[Set[Extender]] = None,
         api_data: Optional[Dict[str, Any]] = None,
-    ) -> None:
+    ) -> ExecutionOrchestrator:
         """Sets up the engine runner and runs the engine computation."""
         # Use stored api_data if not explicitly provided
         _api_data = api_data if api_data is not None else self.api_data
-        self._setup_engine_runner(parallelization_modes, flight_server)
-        self._run_engine_computation(parallelization_modes, function_extender, _api_data)
+        runner = self._setup_engine_runner(parallelization_modes, flight_server)
+        self._run_engine_computation(runner, parallelization_modes, function_extender, _api_data)
+        self.runner = runner
+        return runner
 
     def _run_engine_computation(
         self,
+        runner: ExecutionOrchestrator,
         parallelization_modes: Set[ParallelizationMode] = {ParallelizationMode.SYNC},
         function_extender: Optional[Set[Extender]] = None,
         api_data: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Runs the engine computation within a context manager."""
-        if not isinstance(self.runner, ExecutionOrchestrator):
+        if not isinstance(runner, ExecutionOrchestrator):
             raise ValueError("You need to run setup_engine_runner beforehand.")
 
         try:
-            self._enter_runner_context(parallelization_modes, function_extender, api_data)
-            self.runner.compute()
+            self._enter_runner_context(runner, parallelization_modes, function_extender, api_data)
+            runner.compute()
         finally:
-            self._exit_runner_context()
+            self._exit_runner_context(runner)
 
     def _enter_runner_context(
         self,
+        runner: ExecutionOrchestrator,
         parallelization_modes: Set[ParallelizationMode],
         function_extender: Optional[Set[Extender]],
         api_data: Optional[Dict[str, Any]],
     ) -> None:
         """Enters the runner context."""
-        if self.runner is None:
-            raise ValueError("You need to run setup_engine_runner beforehand.")
+        runner.__enter__(parallelization_modes, function_extender, api_data)
 
-        self.runner.__enter__(parallelization_modes, function_extender, api_data)
-
-    def _exit_runner_context(self) -> None:
-        """Exits the runner context, shutting down the runner manager."""
-        if self.runner is None:
-            raise ValueError("You need to run setup_engine_runner beforehand.")
-
-        self.runner.__exit__(None, None, None)
-        self._shutdown_runner_manager()
-
-    def _shutdown_runner_manager(self) -> None:
-        """Shuts down the runner manager."""
-        if self.runner is None or self.runner.manager is None:
-            return
-
-        self.runner.manager.shutdown()
+    def _exit_runner_context(self, runner: ExecutionOrchestrator) -> None:
+        """Exits the runner context."""
+        runner.__exit__(None, None, None)
 
     def _create_engine(self) -> Engine:
         engine = Engine(
@@ -275,19 +266,21 @@ class mlodaAPI:
         self,
         parallelization_modes: Set[ParallelizationMode] = {ParallelizationMode.SYNC},
         flight_server: Optional[Any] = None,
-    ) -> None:
+    ) -> ExecutionOrchestrator:
         """Sets up the engine runner based on parallelization mode."""
         if self.engine is None:
             raise ValueError("You need to run setup_engine beforehand.")
 
-        self.runner = (
+        runner = (
             self.engine.compute(flight_server)
             if ParallelizationMode.MULTIPROCESSING in parallelization_modes
             else self.engine.compute()
         )
 
-        if not isinstance(self.runner, ExecutionOrchestrator):
+        if not isinstance(runner, ExecutionOrchestrator):
             raise ValueError("ExecutionOrchestrator initialization failed.")
+
+        return runner
 
     def get_result(self) -> List[Any]:
         if self.runner is None:

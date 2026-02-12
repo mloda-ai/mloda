@@ -17,6 +17,7 @@ nav:
     - Extender: chapter1/extender.md
   - In Depth - Basics:
     - mloda API: in_depth/mloda-api.md
+    - Streaming: in_depth/streaming.md
     - (Feature) data: in_depth/access-feature-data.md
     - Join data: in_depth/join_data.md
     - Filter data: in_depth/filter_data.md

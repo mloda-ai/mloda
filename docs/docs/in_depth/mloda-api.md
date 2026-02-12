@@ -20,7 +20,7 @@ The **mlodaAPI** class serves as the primary interface for interacting with the 
 
     Apply the runner to execute the computations based on the prepared execution plan, managing the lifecycle of the computational process.
 
-This means, depending on your needs, you can run them all at once (**batch run**) or split them up, e.g. for realtime needs (**inference**).
+This means, depending on your needs, you can run them all at once (**batch run**) or split them up, e.g. for realtime needs (**inference**).  For incremental result delivery see [Streaming](streaming.md).
 
 #### Configuration for mlodaAPI
 

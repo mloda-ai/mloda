@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, Generator, List, Optional, Set, Tuple
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
@@ -144,6 +144,17 @@ class DataLifecycleManager:
             raise ValueError("No results found")
 
         return list(self.result_data_collection.values())
+
+    def pop_result_data_collection(self) -> Generator[Tuple[UUID, Any], None, None]:
+        """Drain completed results one at a time.
+
+        Each yielded ``(step_uuid, result)`` pair contains a full result — not
+        a partial chunk.  Results are removed from the internal collection as
+        they are yielded.
+        """
+        while self.result_data_collection:
+            step_uuid, result = self.result_data_collection.popitem()
+            yield step_uuid, result
 
     def set_artifacts(self, artifacts: Dict[str, Any]) -> None:
         """

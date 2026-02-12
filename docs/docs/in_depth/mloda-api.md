@@ -54,6 +54,28 @@ result = mloda.run_all(
 )
 ```
 
+#### Two-Phase Execution: prepare() + run()
+
+For realtime or inference scenarios, split configuration from execution.
+`prepare()` builds the execution plan once; `run()` executes it with fresh data each time.
+
+``` python
+from mloda.user import mloda
+
+# 1. Prepare once
+session = mloda.prepare(
+    ["MyFeature"],
+    compute_frameworks=["PandasDataFrame"],
+    api_data=initial_api_data,
+)
+
+# 2. Run multiple times with different data
+result_1 = session.run(api_data={"MyKey": {"col": [1, 2]}})
+result_2 = session.run(api_data={"MyKey": {"col": [3, 4]}})
+```
+
+`run_all()` is equivalent to `prepare()` followed by a single `run()`.
+
 #### Plugin Discovery
 
 mloda provides functions to discover and inspect available plugins. Import them from `mloda.steward`:

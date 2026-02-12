@@ -125,7 +125,8 @@ class ExecutionOrchestrator:
                         continue
                     self._execute_step(step)
 
-                time.sleep(0.01)
+                if ParallelizationMode.MULTIPROCESSING in self.cfw_register.get_parallelization_modes():
+                    time.sleep(0.01)
 
         finally:
             self.data_lifecycle_manager.set_artifacts(self.cfw_register.get_artifacts())
@@ -306,9 +307,13 @@ class ExecutionOrchestrator:
         """
         Enters the context of the ExecutionOrchestrator.
         """
-        MyManager.register("CfwManager", CfwManager)
-        self.manager = MyManager().__enter__()
-        self.cfw_register = self.manager.CfwManager(parallelization_modes, function_extender)  # type: ignore[attr-defined]
+        if len(parallelization_modes) == 1 and ParallelizationMode.SYNC in parallelization_modes:
+            self.cfw_register = CfwManager(parallelization_modes, function_extender)
+            self.manager = None
+        else:
+            MyManager.register("CfwManager", CfwManager)
+            self.manager = MyManager().__enter__()
+            self.cfw_register = self.manager.CfwManager(parallelization_modes, function_extender)  # type: ignore[attr-defined]
 
         if self.flight_server:
             if self.flight_server.flight_server_process is None:
@@ -334,7 +339,8 @@ class ExecutionOrchestrator:
             exc_val: The exception value.
             exc_tb: The exception traceback.
         """
-        self.manager.shutdown()
+        if self.manager is not None:
+            self.manager.shutdown()
 
     def get_artifacts(self) -> Dict[str, Any]:
         """

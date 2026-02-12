@@ -22,7 +22,12 @@ from mloda_plugins.feature_group.experimental.default_options_key import Default
 class mlodaAPI:
     """Main API for executing mloda feature requests.
 
-    For JSON-based feature configuration, see `load_features_from_config()`.
+    Two usage patterns:
+        Batch: ``mlodaAPI.run_all(features, ...)`` — configure and execute in one call.
+        Two-phase: ``session = mlodaAPI.prepare(features, ...)`` then ``session.run(api_data=...)``
+        — reuse the same session with different data (e.g. realtime inference).
+
+    For JSON-based feature configuration, see ``load_features_from_config()``.
     """
 
     def __init__(
@@ -129,7 +134,7 @@ class mlodaAPI:
                 api_data={"UserQuery": {"row_index": [0], "query": ["hello"]}}
             )
         """
-        api = mlodaAPI(
+        session = mlodaAPI.prepare(
             features,
             compute_frameworks,
             links,
@@ -141,16 +146,58 @@ class mlodaAPI:
             strict_type_enforcement=strict_type_enforcement,
             column_ordering=column_ordering,
         )
-        return api._execute_batch_run(parallelization_modes, flight_server, function_extender)
+        return session.run(
+            api_data=api_data,
+            parallelization_modes=parallelization_modes,
+            flight_server=flight_server,
+            function_extender=function_extender,
+        )
 
-    def _execute_batch_run(
+    @classmethod
+    def prepare(
+        cls,
+        features: Union[Features, list[Union[Feature, str]]],
+        compute_frameworks: Union[Set[Type[ComputeFramework]], Optional[list[str]]] = None,
+        links: Optional[Set[Link]] = None,
+        data_access_collection: Optional[DataAccessCollection] = None,
+        global_filter: Optional[GlobalFilter] = None,
+        api_data: Optional[Dict[str, Dict[str, Any]]] = None,
+        plugin_collector: Optional[PluginCollector] = None,
+        copy_features: Optional[bool] = True,
+        strict_type_enforcement: bool = False,
+        column_ordering: Optional[str] = None,
+    ) -> "mlodaAPI":
+        """Build an execution plan without running it.
+
+        Returns a configured mlodaAPI session. Call ``session.run()`` to execute,
+        optionally passing fresh ``api_data`` each time.
+        """
+        return cls(
+            features,
+            compute_frameworks,
+            links,
+            data_access_collection,
+            global_filter,
+            api_data=api_data,
+            plugin_collector=plugin_collector,
+            copy_features=copy_features,
+            strict_type_enforcement=strict_type_enforcement,
+            column_ordering=column_ordering,
+        )
+
+    def run(
         self,
+        api_data: Optional[Dict[str, Dict[str, Any]]] = None,
         parallelization_modes: Set[ParallelizationMode] = {ParallelizationMode.SYNC},
         flight_server: Optional[Any] = None,
         function_extender: Optional[Set[Extender]] = None,
     ) -> List[Any]:
-        """Encapsulates the batch run execution flow."""
-        self._batch_run(parallelization_modes, flight_server, function_extender)
+        """Execute the prepared session and return results.
+
+        Can be called multiple times on the same session with different ``api_data``
+        to re-run the execution plan against new inputs.
+        """
+        self._batch_run(parallelization_modes, flight_server, function_extender, api_data=api_data)
         return self.get_result()
 
     def _batch_run(
@@ -203,14 +250,11 @@ class mlodaAPI:
         self._shutdown_runner_manager()
 
     def _shutdown_runner_manager(self) -> None:
-        """Shuts down the runner manager, handling potential exceptions."""
-        try:
-            if self.runner is None:
-                return
+        """Shuts down the runner manager."""
+        if self.runner is None or self.runner.manager is None:
+            return
 
-            self.runner.manager.shutdown()
-        except Exception:  # nosec
-            pass
+        self.runner.manager.shutdown()
 
     def _create_engine(self) -> Engine:
         engine = Engine(

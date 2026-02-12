@@ -50,6 +50,30 @@ id: [[0,1,2,...]]
 
 This example shows how easy it is to interact with the mloda API for data retrieval. By defining the data source and specifying the features, mloda handles the rest.
 
+#### For Realtime / Inference Use Cases
+
+With `run_all()`, mloda rebuilds the full execution plan on every call. That is fine for
+batch jobs, but in latency-sensitive scenarios the repeated planning overhead matters.
+
+Typical examples where this applies:
+
+- **ML model serving** — a prediction endpoint computes the same derived features for every incoming request; only the raw input row changes.
+- **Streaming / event-driven pipelines** — each incoming event needs the same feature transformations applied in real time.
+- **Interactive applications** — a dashboard or API recalculates features on every user action with fresh parameters.
+
+The two-phase API lets you pay the planning cost once at startup and then execute
+cheaply per request:
+
+``` python
+# 1. Prepare once (e.g. at server startup)
+session = mloda.prepare(feature_list, compute_frameworks=["PyArrowTable"], data_access_collection=data_access_collection)
+
+# 2. Execute per request with fresh data
+result = session.run(api_data={"MyKey": {"col": [1, 2]}})
+```
+
+See [mloda API — Two-Phase Execution](../in_depth/mloda-api.md#two-phase-execution-prepare-run) for details.
+
 #### For AI Agents: JSON-Based Requests
 
 LLMs can generate JSON feature requests without writing Python code:

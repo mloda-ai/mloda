@@ -204,10 +204,8 @@ class MlodaTestRunner:
             runner.compute()
             runner.__exit__(None, None, None)
         finally:
-            try:
+            if runner.manager is not None:
                 runner.manager.shutdown()
-            except Exception:  # nosec
-                pass
 
         return runner
 

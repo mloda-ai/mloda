@@ -1,5 +1,5 @@
 from copy import deepcopy
-from typing import Any, Dict, List, Optional, Set, Type, Union
+from typing import Any, Dict, Generator, List, Optional, Set, Type, Union
 
 from mloda.core.abstract_plugins.components.input_data.api.api_input_data_collection import (
     ApiInputDataCollection,
@@ -200,6 +200,24 @@ class mlodaAPI:
         runner = self._batch_run(parallelization_modes, flight_server, function_extender, api_data=api_data)
         self.runner = runner
         return self.get_result()
+
+    def stream_run(
+        self,
+        api_data: Optional[Dict[str, Dict[str, Any]]] = None,
+        parallelization_modes: Set[ParallelizationMode] = {ParallelizationMode.SYNC},
+        flight_server: Optional[Any] = None,
+        function_extender: Optional[Set[Extender]] = None,
+    ) -> Generator[Any, None, None]:
+        """Execute the prepared session and yield each feature group's result as it completes."""
+        _api_data = api_data if api_data is not None else self.api_data
+        runner = self._setup_engine_runner(parallelization_modes, flight_server)
+        try:
+            self._enter_runner_context(runner, parallelization_modes, function_extender, _api_data)
+            for _step_uuid, result in runner.compute_stream():
+                yield result
+        finally:
+            self._exit_runner_context(runner)
+        self.runner = runner
 
     def _batch_run(
         self,

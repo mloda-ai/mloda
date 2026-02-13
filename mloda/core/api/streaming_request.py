@@ -56,7 +56,7 @@ def stream_all(
     Yields:
         One complete result per feature group, in the order groups finish.
     """
-    api = mlodaAPI(
+    session = mlodaAPI.prepare(
         features,
         compute_frameworks,
         links,
@@ -68,11 +68,9 @@ def stream_all(
         strict_type_enforcement=strict_type_enforcement,
         column_ordering=column_ordering,
     )
-    runner = api._setup_engine_runner(parallelization_modes, flight_server)
-    try:
-        api._enter_runner_context(runner, parallelization_modes, function_extender, api.api_data)
-        for _step_uuid, result in runner.compute_stream():
-            yield result
-    finally:
-        api._exit_runner_context(runner)
-    api.runner = runner
+    yield from session.stream_run(
+        api_data=api_data,
+        parallelization_modes=parallelization_modes,
+        flight_server=flight_server,
+        function_extender=function_extender,
+    )

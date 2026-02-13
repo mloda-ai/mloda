@@ -76,6 +76,8 @@ result_2 = session.run(api_data={"MyKey": {"col": [3, 4]}})
 
 `run_all()` is equivalent to `prepare()` followed by a single `run()`.
 
+For per-group streaming with plan reuse, call `session.stream_run()` instead of `session.run()` — it yields each feature group's result as it completes. See [Streaming](streaming.md) for details.
+
 #### Plugin Discovery
 
 mloda provides functions to discover and inspect available plugins. Import them from `mloda.steward`:

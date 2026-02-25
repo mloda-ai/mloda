@@ -11,6 +11,7 @@ pyarrow
 testbook
 ipykernel
 bandit
+types-PyYAML
 types-requests
 types-toml
 scikit-learn

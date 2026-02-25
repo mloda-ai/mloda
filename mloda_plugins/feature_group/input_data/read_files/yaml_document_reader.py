@@ -1,4 +1,4 @@
-import yaml  # type: ignore[import-untyped]
+import yaml
 from pathlib import Path
 from typing import Any, Tuple
 

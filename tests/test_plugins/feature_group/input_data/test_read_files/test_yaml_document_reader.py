@@ -5,7 +5,7 @@ import tempfile
 from typing import Any
 
 import pytest
-import yaml  # type: ignore[import-untyped]
+import yaml
 
 from mloda_plugins.feature_group.input_data.read_files.yaml_document_reader import YamlDocumentReader
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument

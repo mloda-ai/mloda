@@ -17,8 +17,8 @@ Usage:
     # With multi-index selection:
     Link.inner_on(UserFG, OrderFG, left_index=1, right_index=0)
 
-    # Self-joins with aliases:
-    Link.inner_on(UserFG, UserFG, self_left_alias={"side": "manager"}, self_right_alias={"side": "employee"})
+    # Same-class joins with discriminators:
+    Link.inner_on(UserFG, UserFG, left_discriminator={"side": "manager"}, right_discriminator={"side": "employee"})
 
 See Also:
     - GitHub Issue #133: JoinSpec Convenience Function
@@ -128,23 +128,23 @@ class TestLinkInnerOn:
         assert link.left_index == Index(("user_id", "timestamp"))
         assert link.right_index == Index(("order_id",))
 
-    def test_inner_on_with_aliases(self) -> None:
-        """Test Link.inner_on supports self_left_alias and self_right_alias for self-joins."""
-        left_alias = {"side": "manager"}
-        right_alias = {"side": "employee"}
+    def test_inner_on_with_discriminators(self) -> None:
+        """Test Link.inner_on supports left_discriminator and right_discriminator for same-class joins."""
+        left_disc = {"side": "manager"}
+        right_disc = {"side": "employee"}
 
         link = Link.inner_on(
             MockFGWithSingleIndex,
             MockFGWithSingleIndex,
-            self_left_alias=left_alias,
-            self_right_alias=right_alias,
+            left_discriminator=left_disc,
+            right_discriminator=right_disc,
         )
 
         assert link.jointype == JoinType.INNER
         assert link.left_feature_group is MockFGWithSingleIndex
         assert link.right_feature_group is MockFGWithSingleIndex
-        assert link.self_left_alias == left_alias
-        assert link.self_right_alias == right_alias
+        assert link.left_discriminator == left_disc
+        assert link.right_discriminator == right_disc
 
     def test_inner_on_raises_value_error_on_none_index_columns(self) -> None:
         """Test Link.inner_on raises ValueError when feature group returns None for index_columns."""

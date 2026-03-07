@@ -118,11 +118,12 @@ class Link:
         jointype: Type of join operation (inner, left, right, outer, append, union).
         left: JoinSpec for the left side of the join.
         right: JoinSpec for the right side of the join.
-        self_left_alias: Optional dict to distinguish left instance in self-joins.
-            Must match key-value pairs in the left feature's options. Named after
-            SQL table aliases used in self-joins (e.g., SELECT * FROM t1 AS a JOIN t1 AS b).
-        self_right_alias: Optional dict to distinguish right instance in self-joins.
-            Must match key-value pairs in the right feature's options.
+        left_discriminator: Optional dict to identify the left node when two nodes of the
+            same FeatureGroup class exist with different data sources (e.g. different CSV
+            files). Must match key-value pairs in the left feature's options.
+            Example: left_discriminator={"CsvReader": "application_train.csv"}
+        right_discriminator: Optional dict to identify the right node. Must match
+            key-value pairs in the right feature's options.
 
     Factory Methods:
         There are two styles of factory methods available:
@@ -160,11 +161,15 @@ class Link:
         >>> # Multi-column join using tuple index
         >>> Link.inner(JoinSpec(UserFG, ("id", "date")), JoinSpec(OrderFG, ("user_id", "order_date")))
         >>>
-        >>> # Self-join with aliases (like SQL table aliases)
-        >>> Link.inner_on(UserFG, UserFG,
-        ...               self_left_alias={"side": "manager"},
-        ...               self_right_alias={"side": "employee"})
-
+        >>> # Same FeatureGroup class with different data sources (e.g. two CSV files):
+        >>> # Features must have the matching option key set at creation time.
+        >>> Link.inner(
+        ...     JoinSpec(ReadFileFeature, "id"),
+        ...     JoinSpec(ReadFileFeature, "id"),
+        ...     left_discriminator={"CsvReader": "application_train.csv"},
+        ...     right_discriminator={"CsvReader": "bureau.csv"},
+        ... )
+        >>>
     Polymorphic Matching:
         Links support inheritance-based matching, allowing a link defined with base
         classes to automatically apply to subclasses. The matching follows these rules:
@@ -194,16 +199,16 @@ class Link:
         jointype: Union[JoinType, str],
         left: JoinSpec,
         right: JoinSpec,
-        self_left_alias: Optional[Dict[str, Any]] = None,
-        self_right_alias: Optional[Dict[str, Any]] = None,
+        left_discriminator: Optional[Dict[str, Any]] = None,
+        right_discriminator: Optional[Dict[str, Any]] = None,
     ) -> None:
         self.jointype = JoinType(jointype) if isinstance(jointype, str) else jointype
         self.left_feature_group = left.feature_group
         self.right_feature_group = right.feature_group
         self.left_index = left.index
         self.right_index = right.index
-        self.self_left_alias = self_left_alias
-        self.self_right_alias = self_right_alias
+        self.left_discriminator = left_discriminator
+        self.right_discriminator = right_discriminator
 
         self.uuid = uuid4()
 
@@ -215,48 +220,72 @@ class Link:
         cls,
         left: JoinSpec,
         right: JoinSpec,
-    ) -> Link:
-        return cls(JoinType.INNER, left, right)
+        left_discriminator: Optional[Dict[str, Any]] = None,
+        right_discriminator: Optional[Dict[str, Any]] = None,
+    ) -> "Link":
+        return cls(
+            JoinType.INNER, left, right, left_discriminator=left_discriminator, right_discriminator=right_discriminator
+        )
 
     @classmethod
     def left(
         cls,
         left: JoinSpec,
         right: JoinSpec,
-    ) -> Link:
-        return cls(JoinType.LEFT, left, right)
+        left_discriminator: Optional[Dict[str, Any]] = None,
+        right_discriminator: Optional[Dict[str, Any]] = None,
+    ) -> "Link":
+        return cls(
+            JoinType.LEFT, left, right, left_discriminator=left_discriminator, right_discriminator=right_discriminator
+        )
 
     @classmethod
     def right(
         cls,
         left: JoinSpec,
         right: JoinSpec,
-    ) -> Link:
-        return cls(JoinType.RIGHT, left, right)
+        left_discriminator: Optional[Dict[str, Any]] = None,
+        right_discriminator: Optional[Dict[str, Any]] = None,
+    ) -> "Link":
+        return cls(
+            JoinType.RIGHT, left, right, left_discriminator=left_discriminator, right_discriminator=right_discriminator
+        )
 
     @classmethod
     def outer(
         cls,
         left: JoinSpec,
         right: JoinSpec,
-    ) -> Link:
-        return cls(JoinType.OUTER, left, right)
+        left_discriminator: Optional[Dict[str, Any]] = None,
+        right_discriminator: Optional[Dict[str, Any]] = None,
+    ) -> "Link":
+        return cls(
+            JoinType.OUTER, left, right, left_discriminator=left_discriminator, right_discriminator=right_discriminator
+        )
 
     @classmethod
     def append(
         cls,
         left: JoinSpec,
         right: JoinSpec,
-    ) -> Link:
-        return cls(JoinType.APPEND, left, right)
+        left_discriminator: Optional[Dict[str, Any]] = None,
+        right_discriminator: Optional[Dict[str, Any]] = None,
+    ) -> "Link":
+        return cls(
+            JoinType.APPEND, left, right, left_discriminator=left_discriminator, right_discriminator=right_discriminator
+        )
 
     @classmethod
     def union(
         cls,
         left: JoinSpec,
         right: JoinSpec,
-    ) -> Link:
-        return cls(JoinType.UNION, left, right)
+        left_discriminator: Optional[Dict[str, Any]] = None,
+        right_discriminator: Optional[Dict[str, Any]] = None,
+    ) -> "Link":
+        return cls(
+            JoinType.UNION, left, right, left_discriminator=left_discriminator, right_discriminator=right_discriminator
+        )
 
     @classmethod
     def inner_on(
@@ -265,8 +294,8 @@ class Link:
         right: Type[Any],
         left_index: int = 0,
         right_index: int = 0,
-        self_left_alias: Optional[Dict[str, Any]] = None,
-        self_right_alias: Optional[Dict[str, Any]] = None,
+        left_discriminator: Optional[Dict[str, Any]] = None,
+        right_discriminator: Optional[Dict[str, Any]] = None,
     ) -> "Link":
         """Create INNER join using feature groups' index_columns()."""
         left_idx = _get_index_from_feature_group(left, left_index, "left")
@@ -275,8 +304,8 @@ class Link:
             JoinType.INNER,
             JoinSpec(left, left_idx),
             JoinSpec(right, right_idx),
-            self_left_alias,
-            self_right_alias,
+            left_discriminator=left_discriminator,
+            right_discriminator=right_discriminator,
         )
 
     @classmethod
@@ -286,8 +315,8 @@ class Link:
         right: Type[Any],
         left_index: int = 0,
         right_index: int = 0,
-        self_left_alias: Optional[Dict[str, Any]] = None,
-        self_right_alias: Optional[Dict[str, Any]] = None,
+        left_discriminator: Optional[Dict[str, Any]] = None,
+        right_discriminator: Optional[Dict[str, Any]] = None,
     ) -> "Link":
         """Create LEFT join using feature groups' index_columns()."""
         left_idx = _get_index_from_feature_group(left, left_index, "left")
@@ -296,8 +325,8 @@ class Link:
             JoinType.LEFT,
             JoinSpec(left, left_idx),
             JoinSpec(right, right_idx),
-            self_left_alias,
-            self_right_alias,
+            left_discriminator=left_discriminator,
+            right_discriminator=right_discriminator,
         )
 
     @classmethod
@@ -307,8 +336,8 @@ class Link:
         right: Type[Any],
         left_index: int = 0,
         right_index: int = 0,
-        self_left_alias: Optional[Dict[str, Any]] = None,
-        self_right_alias: Optional[Dict[str, Any]] = None,
+        left_discriminator: Optional[Dict[str, Any]] = None,
+        right_discriminator: Optional[Dict[str, Any]] = None,
     ) -> "Link":
         """Create RIGHT join using feature groups' index_columns()."""
         left_idx = _get_index_from_feature_group(left, left_index, "left")
@@ -317,8 +346,8 @@ class Link:
             JoinType.RIGHT,
             JoinSpec(left, left_idx),
             JoinSpec(right, right_idx),
-            self_left_alias,
-            self_right_alias,
+            left_discriminator=left_discriminator,
+            right_discriminator=right_discriminator,
         )
 
     @classmethod
@@ -328,8 +357,8 @@ class Link:
         right: Type[Any],
         left_index: int = 0,
         right_index: int = 0,
-        self_left_alias: Optional[Dict[str, Any]] = None,
-        self_right_alias: Optional[Dict[str, Any]] = None,
+        left_discriminator: Optional[Dict[str, Any]] = None,
+        right_discriminator: Optional[Dict[str, Any]] = None,
     ) -> "Link":
         """Create OUTER join using feature groups' index_columns()."""
         left_idx = _get_index_from_feature_group(left, left_index, "left")
@@ -338,8 +367,8 @@ class Link:
             JoinType.OUTER,
             JoinSpec(left, left_idx),
             JoinSpec(right, right_idx),
-            self_left_alias,
-            self_right_alias,
+            left_discriminator=left_discriminator,
+            right_discriminator=right_discriminator,
         )
 
     @classmethod
@@ -349,8 +378,8 @@ class Link:
         right: Type[Any],
         left_index: int = 0,
         right_index: int = 0,
-        self_left_alias: Optional[Dict[str, Any]] = None,
-        self_right_alias: Optional[Dict[str, Any]] = None,
+        left_discriminator: Optional[Dict[str, Any]] = None,
+        right_discriminator: Optional[Dict[str, Any]] = None,
     ) -> "Link":
         """Create APPEND join using feature groups' index_columns()."""
         left_idx = _get_index_from_feature_group(left, left_index, "left")
@@ -359,8 +388,8 @@ class Link:
             JoinType.APPEND,
             JoinSpec(left, left_idx),
             JoinSpec(right, right_idx),
-            self_left_alias,
-            self_right_alias,
+            left_discriminator=left_discriminator,
+            right_discriminator=right_discriminator,
         )
 
     @classmethod
@@ -370,8 +399,8 @@ class Link:
         right: Type[Any],
         left_index: int = 0,
         right_index: int = 0,
-        self_left_alias: Optional[Dict[str, Any]] = None,
-        self_right_alias: Optional[Dict[str, Any]] = None,
+        left_discriminator: Optional[Dict[str, Any]] = None,
+        right_discriminator: Optional[Dict[str, Any]] = None,
     ) -> "Link":
         """Create UNION join using feature groups' index_columns()."""
         left_idx = _get_index_from_feature_group(left, left_index, "left")
@@ -380,8 +409,8 @@ class Link:
             JoinType.UNION,
             JoinSpec(left, left_idx),
             JoinSpec(right, right_idx),
-            self_left_alias,
-            self_right_alias,
+            left_discriminator=left_discriminator,
+            right_discriminator=right_discriminator,
         )
 
     def matches_exact(

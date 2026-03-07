@@ -5,6 +5,7 @@ Combining datasets from various feature groups is crucial for building comprehen
 -   **Different Compute Frameworks**: Merging data from feature groups that utilize different underlying compute technologies.
 -   **Same Compute Framework, Different Sources**: Combining datasets that use the same compute framework but originate from different data sources.
 -   **Same Feature Group, Different Feature Options**: Integrating data from the same feature group configured with different feature options.
+-   **Multiple Links on the Same Compute Framework**: Joining a single base FG to multiple right-side FGs (same class, subclasses, or distinct) all within the same compute framework.
 
 
 _**If we have a feature, which is dependent on a aforementioned setup,**_
@@ -220,6 +221,8 @@ link = Link.inner(
 ```
 
 The balanced inheritance rule ensures that joins only occur between "parallel" subclasses - both sides must be at the same level in the inheritance hierarchy relative to the link definition.
+
+When multiple batches match (e.g. three subclasses all matching a base-class link), the engine disambiguates using `right_index`: first by exact `feature.index` match, then by checking whether the feature name appears in the join key columns of `right_index`. Ensure each link's `right_index` contains the column name that uniquely identifies its right-side batch.
 
 #### mlodaAPI
 

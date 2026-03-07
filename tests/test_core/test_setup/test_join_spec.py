@@ -459,20 +459,20 @@ class TestLinkWithJoinSpec:
         left_spec = JoinSpec(feature_group=MockFeatureGroup, index=left_idx)
         right_spec = JoinSpec(feature_group=MockFeatureGroup, index=right_idx)
 
-        self_left_alias = {"side": "manager"}
-        self_right_alias = {"side": "employee"}
+        left_discriminator = {"side": "manager"}
+        right_discriminator = {"side": "employee"}
 
-        # Should accept JoinSpec objects with alias arguments
+        # Should accept JoinSpec objects with discriminator arguments
         link = Link(
             jointype=JoinType.INNER,
             left=left_spec,
             right=right_spec,
-            self_left_alias=self_left_alias,
-            self_right_alias=self_right_alias,
+            left_discriminator=left_discriminator,
+            right_discriminator=right_discriminator,
         )
 
-        assert link.self_left_alias == self_left_alias
-        assert link.self_right_alias == self_right_alias
+        assert link.left_discriminator == left_discriminator
+        assert link.right_discriminator == right_discriminator
 
     def test_link_with_multi_index_join_spec(self) -> None:
         """Test Link works with JoinSpec objects containing multi-column indexes."""

@@ -741,8 +741,8 @@ class ExecutionPlan:
             if link_fw[1] != graph.nodes[uuid].feature.get_compute_framework():
                 continue
 
-            if link_fw[0].self_left_alias is not None:
-                if not self.check_pointer(link_fw[0].self_left_alias, link_fw, graph, uuid):
+            if link_fw[0].left_discriminator is not None:
+                if not self.check_pointer(link_fw[0].left_discriminator, link_fw, graph, uuid):
                     continue
 
             # loop over all other feature set collections
@@ -754,9 +754,9 @@ class ExecutionPlan:
                 if link_fw[2] != graph.nodes[_uuid].feature.get_compute_framework():
                     continue
 
-                if link_fw[0].self_right_alias is not None:
+                if link_fw[0].right_discriminator is not None:
                     if not self.check_pointer(
-                        link_fw[0].self_right_alias,
+                        link_fw[0].right_discriminator,
                         link_fw,
                         graph,
                         _uuid,
@@ -786,16 +786,23 @@ class ExecutionPlan:
             return False
         else:
             raise ValueError(
-                "There are more than one solution for the join. This should not happen. If you have this occurence, please check your logic, but you can also contact the developers, as we skipped this algorithm part for now."
+                "Multiple same-class FeatureGroup nodes found with no discriminator set. "
+                "When linking two nodes of the same FeatureGroup class (e.g. the same ReadFileFeature "
+                "loading different files), use left_discriminator and right_discriminator on your Link "
+                "to identify which node is left and which is right. "
+                "Example: Link.inner(JoinSpec(MyFG, 'id'), JoinSpec(MyFG, 'id'), "
+                "left_discriminator={'CsvReader': 'file_a.csv'}, "
+                "right_discriminator={'CsvReader': 'file_b.csv'}). "
+                "The discriminator values must match the corresponding feature's options."
             )
 
     def check_pointer(
         self, pointer_dict: Dict[str, Any], link_fw: LinkFrameworkTrekker, graph: Graph, uuid: UUID
     ) -> bool:
-        if link_fw[0].self_right_alias is None:
+        if link_fw[0].right_discriminator is None:
             raise ValueError("This should not happen. If one alias is set, the other should be set as well.")
 
-        if link_fw[0].self_left_alias is None:
+        if link_fw[0].left_discriminator is None:
             raise ValueError("This should not happen. If one alias is set, the other should be set as well.")
 
         for k, v in graph.nodes[uuid].feature.options.items():

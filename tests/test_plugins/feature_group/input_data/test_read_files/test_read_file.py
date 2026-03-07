@@ -1,16 +1,26 @@
+import csv
 import os
-from typing import Any, Dict, List, Optional, Tuple, Union
+import tempfile
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
+
+import pytest
 
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
 from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
 from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 import pyarrow as pa
+import pyarrow.compute as pc
 
+from mloda.provider import FeatureGroup
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable  # noqa: F401
 from mloda.user import DataAccessCollection
 from mloda.user import Feature
 from mloda.user import FeatureName
+from mloda.user import Index
+from mloda.user import JoinSpec, Link
 from mloda.provider import FeatureSet
 from mloda.user import Options
+from mloda.user import PluginCollector
 from mloda.user import mloda
 
 
@@ -277,3 +287,186 @@ class TestReadFile:
         features.add(Feature("V2", options=options))
         data = TestReadFile().load(features)
         assert data.column_names == ["id", "V1", "V2"]
+
+
+class TestSameClassFGLinkWithDifferentDataSources:
+    """Integration test: same FeatureGroup class linked with different data sources.
+
+    This test verifies that left_discriminator/right_discriminator on Link correctly
+    resolves two nodes of the same ReadFileFeature subclass that load different CSV files.
+    """
+
+    file_path_a = f"{os.getcwd()}/tests/test_plugins/feature_group/src/dataset/creditcard_2023_short.csv"
+
+    def test_left_discriminator_right_discriminator_resolves_same_class_fg_nodes(self) -> None:
+        path_a = self.file_path_a
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, newline="") as f:
+            path_b = f.name
+            writer = csv.writer(f)
+            writer.writerow(["id", "score"])
+            for i, score in enumerate([100, 85, 92, 78, 95, 88, 91, 76, 83]):
+                writer.writerow([i, score])
+
+        try:
+
+            class ReadFileWithIndex(ReadFileFeature):
+                @classmethod
+                def index_columns(cls) -> Optional[List[Index]]:
+                    return [Index(("id",))]
+
+                @classmethod
+                def match_feature_group_criteria(
+                    cls,
+                    feature_name: Union[FeatureName, str],
+                    options: Options,
+                    data_access_collection: Optional[DataAccessCollection] = None,
+                ) -> bool:
+                    if options.get("discriminator_test") is None:
+                        return False
+                    if isinstance(feature_name, FeatureName):
+                        feature_name = feature_name.name
+                    if cls().is_root(options, feature_name):
+                        input_data_class = cls.input_data()
+                        return input_data_class.matches(feature_name, options, data_access_collection)  # type: ignore
+                    return False
+
+            class JoinedCsvFeature(FeatureGroup):
+                _path_a: str = path_a
+                _path_b: str = path_b
+
+                def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+                    _path_a = options.get("left_csv_path")
+                    _path_b = options.get("right_csv_path")
+                    link = Link.inner(
+                        JoinSpec(ReadFileWithIndex, Index(("id",))),
+                        JoinSpec(ReadFileWithIndex, Index(("id",))),
+                        left_discriminator={"CsvReader": _path_a},
+                        right_discriminator={"CsvReader": _path_b},
+                    )
+                    return {
+                        Feature(
+                            "id",
+                            options={CsvReader.__name__: _path_a, "discriminator_test": True},
+                        ),
+                        Feature(
+                            "V1",
+                            link=link,
+                            index=Index(("id",)),
+                            options={CsvReader.__name__: _path_a, "discriminator_test": True},
+                        ),
+                        Feature(
+                            "id",
+                            options={CsvReader.__name__: _path_b, "discriminator_test": True},
+                        ),
+                        Feature(
+                            "score",
+                            index=Index(("id",)),
+                            options={CsvReader.__name__: _path_b, "discriminator_test": True},
+                        ),
+                    }
+
+                @classmethod
+                def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                    v1 = data.column("V1")
+                    score = data.column("score").cast(pa.float64())
+                    combined = pc.add(v1, score)
+                    return pa.table({"JoinedCsvFeature": combined})
+
+                @classmethod
+                def feature_names_supported(cls) -> Set[str]:
+                    return {"JoinedCsvFeature"}
+
+            result = mloda.run_all(
+                [Feature("JoinedCsvFeature", options={"left_csv_path": path_a, "right_csv_path": path_b})],
+                compute_frameworks=["PyArrowTable"],
+                plugin_collector=PluginCollector.enabled_feature_groups({ReadFileWithIndex, JoinedCsvFeature}),
+            )
+            assert "JoinedCsvFeature" in result[0].to_pydict()
+            assert len(result[0].to_pydict()["JoinedCsvFeature"]) > 0
+        finally:
+            os.remove(path_b)
+
+    def test_missing_discriminator_raises_helpful_error(self) -> None:
+        """Same-class FG link without discriminators raises a clear error message."""
+        path_a = self.file_path_a
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, newline="") as f:
+            path_b = f.name
+            writer = csv.writer(f)
+            writer.writerow(["id", "score"])
+            for i, score in enumerate([100, 85, 92, 78, 95, 88, 91, 76, 83]):
+                writer.writerow([i, score])
+
+        try:
+
+            class ReadFileWithIndexNoDisc(ReadFileFeature):
+                @classmethod
+                def index_columns(cls) -> Optional[List[Index]]:
+                    return [Index(("id",))]
+
+                @classmethod
+                def match_feature_group_criteria(
+                    cls,
+                    feature_name: Union[FeatureName, str],
+                    options: Options,
+                    data_access_collection: Optional[DataAccessCollection] = None,
+                ) -> bool:
+                    if options.get("no_disc_test") is None:
+                        return False
+                    if isinstance(feature_name, FeatureName):
+                        feature_name = feature_name.name
+                    if cls().is_root(options, feature_name):
+                        input_data_class = cls.input_data()
+                        return input_data_class.matches(feature_name, options, data_access_collection)  # type: ignore
+                    return False
+
+            class JoinedCsvNoDisc(FeatureGroup):
+                _path_a: str = path_a
+                _path_b: str = path_b
+
+                def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+                    _path_a = options.get("left_csv_path")
+                    _path_b = options.get("right_csv_path")
+                    link = Link.inner(
+                        JoinSpec(ReadFileWithIndexNoDisc, Index(("id",))),
+                        JoinSpec(ReadFileWithIndexNoDisc, Index(("id",))),
+                    )
+                    return {
+                        Feature(
+                            "id",
+                            options={CsvReader.__name__: _path_a, "no_disc_test": True},
+                        ),
+                        Feature(
+                            "V1",
+                            link=link,
+                            index=Index(("id",)),
+                            options={CsvReader.__name__: _path_a, "no_disc_test": True},
+                        ),
+                        Feature(
+                            "id",
+                            options={CsvReader.__name__: _path_b, "no_disc_test": True},
+                        ),
+                        Feature(
+                            "score",
+                            index=Index(("id",)),
+                            options={CsvReader.__name__: _path_b, "no_disc_test": True},
+                        ),
+                    }
+
+                @classmethod
+                def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                    return data
+
+                @classmethod
+                def feature_names_supported(cls) -> Set[str]:
+                    return {"JoinedCsvNoDisc"}
+
+            with pytest.raises((ValueError, Exception), match="left_discriminator"):
+                mloda.run_all(
+                    [Feature("JoinedCsvNoDisc", options={"left_csv_path": path_a, "right_csv_path": path_b})],
+                    compute_frameworks=["PyArrowTable"],
+                    plugin_collector=PluginCollector.enabled_feature_groups({ReadFileWithIndexNoDisc, JoinedCsvNoDisc}),
+                )
+        finally:
+            os.remove(path_b)

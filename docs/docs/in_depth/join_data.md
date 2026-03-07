@@ -142,11 +142,11 @@ Available `_on` methods: `inner_on`, `left_on`, `right_on`, `outer_on`, `append_
 
 **Note:** The `_on` methods raise `ValueError` if the feature group doesn't define `index_columns()` or returns an empty list, and `IndexError` if the specified index position is out of range.
 
-#### Self-Joins with Alias Fields
+#### Same-Class Joins with Discriminators
 
-When joining a feature group with itself, you need to distinguish between the left and right instances using **alias fields** (similar to SQL table aliases in self-joins).
+When joining a feature group with itself (or two nodes of the same class loading different data sources), you need to distinguish between the left and right instances using **discriminators**.
 
-**Alias fields** are optional dictionary parameters (`self_left_alias` and `self_right_alias`) that match against feature options:
+**Discriminators** are optional dictionary parameters (`left_discriminator` and `right_discriminator`) that match against feature options:
 
 ```python
 from mloda.user import Feature, Index, Link
@@ -159,16 +159,16 @@ class UserFeatureGroup(FeatureGroup):
 
 # Option 1: Using _on method (recommended when index_columns is defined)
 link = Link.inner_on(UserFeatureGroup, UserFeatureGroup,
-                     self_left_alias={"side": "left"},
-                     self_right_alias={"side": "right"})
+                     left_discriminator={"side": "left"},
+                     right_discriminator={"side": "right"})
 
 # Option 2: Using explicit JoinSpec
 left = JoinSpec(UserFeatureGroup, "user_id")
 right = JoinSpec(UserFeatureGroup, "user_id")
 
 link = Link("inner", left, right,
-            self_left_alias={"side": "left"},
-            self_right_alias={"side": "right"})
+            left_discriminator={"side": "left"},
+            right_discriminator={"side": "right"})
 
 # 2. Tag features with matching options
 # Feature names reference the feature from the feature group
@@ -178,7 +178,7 @@ features = {
 }
 ```
 
-The execution planner validates that the alias key-value pairs exist in the corresponding feature's options to correctly identify which instance belongs to which side of the join.
+The execution planner validates that the discriminator key-value pairs exist in the corresponding feature's options to correctly identify which instance belongs to which side of the join.
 
 #### Polymorphic Link Matching
 

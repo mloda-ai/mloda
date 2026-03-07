@@ -134,7 +134,15 @@ class TestMixComputeFramework:
 
         left = JoinSpec(ReadFileFeature, idx)
         right = JoinSpec(ReadFileFeature, idx)
-        links = {Link("inner", left, right, {"self_left_alias": "dummy"}, {"self_right_alias": "dummy"})}
+        links = {
+            Link(
+                "inner",
+                left,
+                right,
+                left_discriminator={"group": "left"},
+                right_discriminator={"group": "right"},
+            )
+        }
 
         result_data = mloda.run_all(
             [feature],

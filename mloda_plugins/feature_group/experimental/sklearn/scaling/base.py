@@ -216,7 +216,7 @@ class ScalingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             return scaler_type
 
         # Fall back to configuration-based approach
-        scaler_type = feature.options.get(cls.SCALER_TYPE)
+        scaler_type = feature.options[cls.SCALER_TYPE]
 
         if scaler_type is not None and scaler_type not in cls.SUPPORTED_SCALERS:
             raise ValueError(

@@ -287,7 +287,7 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
                 return prefix_part
 
         # Fall back to configuration-based approach
-        pipeline_name = feature.options.get(cls.PIPELINE_NAME)
+        pipeline_name = feature.options[cls.PIPELINE_NAME]
         pipeline_steps = feature.options.get(cls.PIPELINE_STEPS)
 
         # Handle mutual exclusivity: either PIPELINE_NAME or PIPELINE_STEPS

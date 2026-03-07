@@ -237,7 +237,7 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             return algorithm, k_value
 
         # Fall back to configuration-based
-        algorithm = feature.options.get(cls.ALGORITHM)
+        algorithm = feature.options[cls.ALGORITHM]
         k_value_raw = feature.options.get(cls.K_VALUE)
 
         if k_value_raw is None:

@@ -180,6 +180,39 @@ class TestOptions:
 
         assert feature1 != feature3
 
+    def test_getitem_group_key(self) -> None:
+        """options["key"] returns same value as options.get("key") for group key."""
+        options = Options(group={"group_key": "group_value"}, context={"context_key": "context_value"})
+        assert options["group_key"] == options.get("group_key")
+
+    def test_getitem_context_key(self) -> None:
+        """options["key"] returns same value as options.get("key") for context key."""
+        options = Options(group={"group_key": "group_value"}, context={"context_key": "context_value"})
+        assert options["context_key"] == options.get("context_key")
+
+    def test_getitem_missing_key_returns_none(self) -> None:
+        """options["missing"] returns None, consistent with get()."""
+        options = Options(group={"key": "value"})
+        assert options["missing"] is None
+
+    def test_setitem_adds_new_key_to_group(self) -> None:
+        """options["new_key"] = value adds key to group."""
+        options = Options(group={"existing": "value"})
+        options["new_key"] = "new_value"
+        assert options.group["new_key"] == "new_value"
+
+    def test_setitem_updates_existing_group_key(self) -> None:
+        """options["existing_group_key"] = new_value updates group key."""
+        options = Options(group={"key": "old_value"})
+        options["key"] = "new_value"
+        assert options.group["key"] == "new_value"
+
+    def test_setitem_updates_existing_context_key(self) -> None:
+        """options["existing_context_key"] = new_value updates context key."""
+        options = Options(group={"g": 1}, context={"ctx_key": "old_value"})
+        options["ctx_key"] = "new_value"
+        assert options.context["ctx_key"] == "new_value"
+
     def test_migration_scenario(self) -> None:
         """Test typical migration scenario: all options start in group."""
         # Current usage pattern (all options in group during migration)

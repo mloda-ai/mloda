@@ -120,6 +120,9 @@ class Options:
             return self.group[key]
         return self.context.get(key, None)
 
+    def __getitem__(self, key: str) -> Any:
+        return self.get(key)
+
     def items(self) -> list[tuple[str, Any]]:
         """
         Get all key-value pairs from both group and context.
@@ -159,6 +162,9 @@ class Options:
         else:
             # New key, add to group by default
             self.group[key] = value
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        self.set(key, value)
 
     def get_in_features(self) -> "frozenset[Feature]":
         val = self.get(DefaultOptionKeys.in_features)

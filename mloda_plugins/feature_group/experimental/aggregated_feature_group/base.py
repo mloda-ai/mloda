@@ -145,7 +145,7 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             return aggregation_type
 
         # Fall back to configuration
-        aggregation_type = feature.options.get(cls.AGGREGATION_TYPE)
+        aggregation_type = feature.options[cls.AGGREGATION_TYPE]
         return str(aggregation_type) if aggregation_type is not None else None
 
     @classmethod

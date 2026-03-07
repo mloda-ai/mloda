@@ -23,7 +23,7 @@ class ApiInputData(BaseInputData):
         if not _data_access_name:
             raise ValueError(f"Data access name was not set for ApiInputData class {self.__class__.__name__}.")
 
-        api_input_data_column_names = options.get(_data_access_name)
+        api_input_data_column_names = options[_data_access_name]
         if api_input_data_column_names is None:
             return False
 

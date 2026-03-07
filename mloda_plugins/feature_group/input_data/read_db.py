@@ -47,7 +47,7 @@ class ReadDB(BaseInputData):
         if options is None:
             raise ValueError("Options were not set.")
 
-        reader_data_access = options.get("BaseInputData")
+        reader_data_access = options["BaseInputData"]
 
         if reader_data_access is None:
             raise ValueError("Reader data access was not set.")

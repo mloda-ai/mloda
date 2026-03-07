@@ -1,5 +1,5 @@
 from collections import OrderedDict, defaultdict
-from typing import Dict, List, Optional, Set, Tuple, Type, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Type, Union
 from uuid import UUID
 
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -262,7 +262,7 @@ class ResolveLinks:
                     right_fg = r_right.feature_group_class
 
                     # Two-pass matching: exact match first, then polymorphic
-                    matched_links = self._find_matching_links(left_fg, right_fg)
+                    matched_links = self._find_matching_links(left_fg, right_fg, r_right.feature)
 
                     for matched_link in matched_links:
                         key = self.create_link_trekker_key(
@@ -270,7 +270,7 @@ class ResolveLinks:
                         )
                         self.set_link_trekker(key, child)
 
-    def _find_matching_links(self, left_fg: type, right_fg: type) -> List[Link]:
+    def _find_matching_links(self, left_fg: type, right_fg: type, right_feature: Any = None) -> List[Link]:
         """Find all matching links using two-pass matching: exact first, then polymorphic.
 
         Returns all exact matches if any exist, otherwise returns the most specific
@@ -282,6 +282,15 @@ class ResolveLinks:
         # Pass 1: Collect all exact matches
         exact_matches = [link for link in self.links if link.matches_exact(left_fg, right_fg)]
         if exact_matches:
+            if len(exact_matches) > 1 and right_feature is not None:
+                # Multiple links share the same (left_fg, right_fg): disambiguate by right_index
+                index_filtered = [
+                    link
+                    for link in exact_matches
+                    if right_feature.index is not None and link.right_index == right_feature.index
+                ]
+                if index_filtered:
+                    return index_filtered
             return exact_matches
 
         # Pass 2: If no exact matches, find most specific polymorphic matches

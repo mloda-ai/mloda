@@ -625,9 +625,7 @@ class ExecutionPlan:
         if len(feature_set_collection_per_uuid) == 0:
             raise ValueError("Feature set collection per uuid is None. This should not happen.")
 
-        unique_solution_counter = 0
-        left_uuids = None
-        right_uuids = None
+        valid_pairs: List[Tuple[Set[UUID], Set[UUID]]] = []
 
         for uuid, uuid_complete in feature_set_collection_per_uuid.items():
             # get the feature set collection, where feature cfw = left link cfw
@@ -651,27 +649,46 @@ class ExecutionPlan:
                 if not issubclass(graph.nodes[_uuid].feature_group_class, link_fw[0].right_feature_group):
                     continue
 
-                if left_uuids is None:
-                    left_uuids = uuid_complete
-                    right_uuids = _uuid_complete
-                    unique_solution_counter += 1
-                    continue
+                # Deduplicate using set equality
+                if not any(l == uuid_complete and r == _uuid_complete for l, r in valid_pairs):
+                    valid_pairs.append((uuid_complete, _uuid_complete))
 
-                if left_uuids == uuid_complete and right_uuids == _uuid_complete:
-                    continue
-
-                unique_solution_counter += 1
-
-        if unique_solution_counter == 1:
-            if left_uuids is None or right_uuids is None:
-                raise ValueError("This should not happen.")
-            return (left_uuids, right_uuids)
-        elif unique_solution_counter == 0:
+        if len(valid_pairs) == 1:
+            return valid_pairs[0]
+        elif len(valid_pairs) == 0:
             return False
-        else:
-            raise ValueError(
-                "There are more than one solution for the join. This should not happen. If you have this occurence, please check your logic, but you can also contact the developers, as we skipped this algorithm part for now."
-            )
+
+        # Secondary disambiguation: use right_index to pick the correct right batch
+        right_index = link_fw[0].right_index
+        if right_index is not None:
+            # First pass: match by feature.index == link.right_index
+            filtered = [
+                (l, r)
+                for l, r in valid_pairs
+                if any(
+                    graph.nodes[u].feature.index is not None and graph.nodes[u].feature.index == right_index
+                    for u in r
+                    if u in graph.nodes
+                )
+            ]
+            if len(filtered) == 1:
+                return filtered[0]
+
+            # Second pass: match by feature name appearing in right_index columns
+            if not filtered:
+                filtered = [
+                    (l, r)
+                    for l, r in valid_pairs
+                    if any(graph.nodes[u].feature.name in right_index.index for u in r if u in graph.nodes)
+                ]
+                if len(filtered) == 1:
+                    return filtered[0]
+
+        raise ValueError(
+            "There are more than one solution for the join. "
+            "If you encounter this, check your links and feature group configuration, "
+            "or contact the mloda developers."
+        )
 
     def case_link_equal_feature_groups(
         self,

@@ -11,6 +11,13 @@ class ReadFile(BaseInputData):
     """
     ReadFile is responsible for loading and processing input data files.
 
+    _auto_load_group triggers lazy plugin discovery when no ReadFile subclasses
+    are found in the process (i.e. when the user has not imported CsvReader etc.).
+    Only the read_files subdirectory is loaded, not the entire feature_group tree.
+
+    To suppress auto-loading:
+        PluginLoader.disable_auto_load("feature_group/input_data/read_files")
+
     This class should be inherited by all classes that are responsible for reading files.
 
     The following methods should be implemented in the child classes:
@@ -20,6 +27,8 @@ class ReadFile(BaseInputData):
 
     If get_column_names is not implemented, the class will assume the columns are there.
     """
+
+    _auto_load_group: str = "feature_group/input_data/read_files"
 
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:

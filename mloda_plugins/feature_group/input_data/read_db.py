@@ -8,8 +8,11 @@ class ReadDB(BaseInputData):
     """
     ReadDB is responsible for loading and processing input data from databases.
 
-    This class should be inherited by all classes that are responsible for reading databases.
+    _auto_load_group triggers lazy plugin discovery when no ReadDB subclasses
+    are found in the process. Only the read_dbs subdirectory is loaded.
 
+    To suppress auto-loading:
+        PluginLoader.disable_auto_load("feature_group/input_data/read_dbs")
 
     The following methods should be implemented in the child classes:
     - load_data
@@ -18,6 +21,8 @@ class ReadDB(BaseInputData):
     - is_valid_credentials
     - check_feature_in_data_access
     """
+
+    _auto_load_group: str = "feature_group/input_data/read_dbs"
 
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:

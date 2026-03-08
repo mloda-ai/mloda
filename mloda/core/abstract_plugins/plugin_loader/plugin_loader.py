@@ -4,12 +4,18 @@ from pathlib import Path
 
 import logging
 from types import ModuleType
-from typing import Dict, List, Optional
+from typing import ClassVar, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
 
 class PluginLoader:
+    _disabled_groups: ClassVar[set[str]] = set()
+
+    @classmethod
+    def disable_auto_load(cls, group: str) -> None:
+        cls._disabled_groups.add(group)
+
     def __init__(self) -> None:
         """
         Initialize the PluginLoader with the base plugin package and dependencies.
@@ -19,6 +25,7 @@ class PluginLoader:
         You can chose from:
         - load_all_plugins
         - load_group
+        - load_matching
 
         You can show loaded modules with:
         - list_loaded_modules
@@ -45,6 +52,20 @@ class PluginLoader:
 
     def __repr__(self) -> str:
         return f"PluginLoader plugins: {self.plugins}"
+
+    def load_matching(self, group_name: str, pattern: str) -> None:
+        """Load only files within a group whose filename matches a glob pattern."""
+        group_path = self._get_group_path(group_name)
+        if not group_path.is_dir():
+            raise ValueError(f"Group '{group_name}' does not exist in the package '{self.base_package}'")
+        for item in group_path.rglob("*.py"):
+            if item.name == "__init__.py":
+                continue
+            if not item.match(pattern):
+                continue
+            relative_path = item.relative_to(group_path.parent).with_suffix("")
+            module_path = ".".join(relative_path.parts)
+            self._load_plugin(module_path)
 
     def load_group(self, group_name: str) -> None:
         """

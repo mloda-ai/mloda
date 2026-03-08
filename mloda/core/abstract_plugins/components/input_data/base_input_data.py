@@ -6,12 +6,7 @@ from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
 
 
-import logging
-
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
-
-
-logger = logging.getLogger(__name__)
 
 
 class BaseInputData(ABC):
@@ -160,14 +155,24 @@ class BaseInputData(ABC):
         return cls.__name__
 
 
-def get_all_filtereted_subclasses(cls: Any, parent_class: Any) -> List[Type[BaseInputData]]:
-    filtered_subclasses = []
+def _collect_filtered_subclasses(cls: Any, parent_class: Any) -> List[Type[BaseInputData]]:
+    result = []
     for subclass in get_all_subclasses(cls):
-        # This ensures that only the classes that are subclasses of the parent class are considered.
-        # ReadFile -> CsvReader
         if not issubclass(subclass, parent_class):
             continue
-
         if subclass.supports_scoped_data_access():
-            filtered_subclasses.append(subclass)
+            result.append(subclass)
+    return result
+
+
+def get_all_filtereted_subclasses(cls: Any, parent_class: Any) -> List[Type[BaseInputData]]:
+    filtered_subclasses = _collect_filtered_subclasses(cls, parent_class)
+    if not filtered_subclasses:
+        auto_load_group = getattr(parent_class, "_auto_load_group", None)
+        if auto_load_group is not None:
+            from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
+
+            if auto_load_group not in PluginLoader._disabled_groups:
+                PluginLoader().load_group(auto_load_group)
+                filtered_subclasses = _collect_filtered_subclasses(cls, parent_class)
     return filtered_subclasses

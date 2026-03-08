@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Any, List, Optional, Tuple
 
 from mloda.provider import BaseInputData, FeatureSet
-from mloda.user import Options
+from mloda.user import DataAccessCollection, Options
 
 
 class ReadDocument(BaseInputData):
@@ -57,6 +57,24 @@ class ReadDocument(BaseInputData):
 
     @classmethod
     def match_subclass_data_access(cls, data_access: Any, feature_names: List[str]) -> Any:
+        if isinstance(data_access, DataAccessCollection):
+            if data_access.column_to_file is not None:
+                pinned = cls._resolve_pinned_file(data_access, feature_names)
+                if pinned is not None:
+                    return pinned
+            data_accesses = list(data_access.files | data_access.folders)
+            return cls.match_document_data_access(data_accesses, feature_names)
         if isinstance(data_access, (str, Path)):
             return data_access
+        return None
+
+    @classmethod
+    def match_document_data_access(cls, data_accesses: List[str], feature_names: List[str]) -> Any:
+        try:
+            suffix = cls.suffix()
+        except NotImplementedError:
+            return None
+        for da in data_accesses:
+            if da.endswith(suffix):
+                return da
         return None

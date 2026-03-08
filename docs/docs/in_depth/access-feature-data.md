@@ -82,6 +82,43 @@ Output
 1   Value2         3]
 ```
 
+#### Disambiguating columns shared across multiple files
+
+When a `DataAccessCollection` holds multiple files that share the same column name (e.g. `id` appears in both `application_train.csv` and `bureau.csv`), global-scope resolution is non-deterministic: the engine iterates an unordered set and returns the first file that contains the requested columns. Two features intended to come from the same file can end up in different `FeatureGroup` nodes, producing a misleading "missing Links" error.
+
+Use `column_to_file` to pin each column to its canonical file:
+
+``` python
+from mloda.user import DataAccessCollection, mloda
+
+data_access = DataAccessCollection(
+    files={"application_train.csv", "bureau.csv"},
+    column_to_file={
+        "SK_ID_CURR": "application_train.csv",
+        "TARGET":     "application_train.csv",
+        "AMT_CREDIT_SUM": "bureau.csv",
+    },
+)
+
+result = mloda.run_all(
+    ["SK_ID_CURR", "TARGET", "AMT_CREDIT_SUM"],
+    compute_frameworks=["PyArrowTable"],
+    data_access_collection=data_access,
+)
+```
+
+Rules:
+- `column_to_file` only applies to global-scope resolution. Per-feature `options` always take precedence.
+- All values must be present in the `files` set -- construction raises `ValueError` otherwise.
+- If a batch of features has some columns pinned and others not, a `ValueError` is raised (use `column_to_file` for all columns or none in a batch).
+- Columns not listed in the map fall through to normal first-match-wins resolution.
+
+The existing per-feature alternative still works for one-off pinning:
+
+``` python
+Feature("SK_ID_CURR", options=Options({CsvReader: "application_train.csv"}))
+```
+
 #### Feature Scope Data Access
 
 The Feature Scope Data access is instead designed to control the access to data of any kind 

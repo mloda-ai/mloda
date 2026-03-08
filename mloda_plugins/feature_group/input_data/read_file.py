@@ -77,6 +77,10 @@ class ReadFile(BaseInputData):
     @classmethod
     def match_subclass_data_access(cls, data_access: Any, feature_names: List[str]) -> Any:
         if isinstance(data_access, DataAccessCollection):
+            if data_access.column_to_file is not None:
+                pinned = cls._resolve_pinned_file(data_access, feature_names)
+                if pinned is not None:
+                    return pinned
             data_accesses = list(data_access.files | data_access.folders)
         elif isinstance(data_access, str):
             data_accesses = [data_access]

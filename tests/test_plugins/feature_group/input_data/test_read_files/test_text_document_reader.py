@@ -139,10 +139,10 @@ class TestMatchSubclassDataAccess:
         result = TextFileReader.match_subclass_data_access("some_path.text", ["TextFileReader"])
         assert result == "some_path.text"
 
-    def test_match_subclass_data_access_returns_none_for_data_access_collection(self) -> None:
-        """TextFileReader returns None for DataAccessCollection (no auto-discovery)."""
+    def test_match_subclass_data_access_resolves_from_data_access_collection(self) -> None:
+        """TextFileReader resolves file path from DataAccessCollection by suffix."""
         from mloda.user import DataAccessCollection
 
         dac = DataAccessCollection(files={"some_path.text"})
         result = TextFileReader.match_subclass_data_access(dac, ["TextFileReader"])
-        assert result is None
+        assert result == "some_path.text"

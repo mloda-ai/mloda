@@ -134,10 +134,10 @@ class TestMarkdownDocumentReaderClassMethods:
         result = MarkdownDocumentReader.match_subclass_data_access("readme.md", ["feature1"])
         assert result == "readme.md"
 
-    def test_match_subclass_data_access_returns_none_for_data_access_collection(self) -> None:
-        """match_subclass_data_access returns None for DataAccessCollection (no auto-discovery)."""
+    def test_match_subclass_data_access_resolves_from_data_access_collection(self) -> None:
+        """match_subclass_data_access resolves file path from DataAccessCollection by suffix."""
         from mloda.user import DataAccessCollection
 
         dac = DataAccessCollection(files={"readme.md"})
         result = MarkdownDocumentReader.match_subclass_data_access(dac, ["feature1"])
-        assert result is None
+        assert result == "readme.md"

@@ -124,10 +124,10 @@ class TestJsonDocumentReaderClassMethods:
         result = JsonDocumentReader.match_subclass_data_access("some_path.json", ["feature1"])
         assert result == "some_path.json"
 
-    def test_match_subclass_data_access_returns_none_for_data_access_collection(self) -> None:
-        """match_subclass_data_access returns None for DataAccessCollection (no auto-discovery)."""
+    def test_match_subclass_data_access_resolves_from_data_access_collection(self) -> None:
+        """match_subclass_data_access resolves file path from DataAccessCollection by suffix."""
         from mloda.user import DataAccessCollection
 
         dac = DataAccessCollection(files={"some_path.json"})
         result = JsonDocumentReader.match_subclass_data_access(dac, ["feature1"])
-        assert result is None
+        assert result == "some_path.json"

@@ -1,5 +1,5 @@
 from abc import ABC
-from typing import Any, List, Optional, Tuple, Type
+from typing import Any, Dict, List, Optional, Set, Tuple, Type
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
@@ -153,6 +153,35 @@ class BaseInputData(ABC):
     @classmethod
     def get_class_name(cls) -> str:
         return cls.__name__
+
+    @classmethod
+    def validate_columns(cls, file_name: str, feature_names: List[str]) -> bool:
+        return True
+
+    @classmethod
+    def _resolve_pinned_file(cls, data_access: Any, feature_names: List[str]) -> Optional[str]:
+        column_map: Dict[str, str] = data_access.column_to_file
+        pinned_paths: Set[str] = {column_map[name] for name in feature_names if name in column_map}
+        if not pinned_paths:
+            return None
+        for name in feature_names:
+            if name not in column_map:
+                raise ValueError(f"Mixed batch: some features pinned, others not: {feature_names}")
+        if len(pinned_paths) == 1:
+            pinned_path: str = next(iter(pinned_paths))
+            if not pinned_path.endswith(cls.suffix()):  # type: ignore[attr-defined]
+                return None
+            if cls.validate_columns(pinned_path, feature_names) is False:
+                return None
+            return pinned_path
+        valid_candidates: List[str] = [
+            path
+            for path in pinned_paths
+            if path.endswith(cls.suffix()) and cls.validate_columns(path, feature_names) is not False  # type: ignore[attr-defined]
+        ]
+        if len(valid_candidates) == 1:
+            return valid_candidates[0]
+        raise ValueError(f"Features in batch are pinned to different files: {pinned_paths}")
 
 
 def _collect_filtered_subclasses(cls: Any, parent_class: Any) -> List[Type[BaseInputData]]:

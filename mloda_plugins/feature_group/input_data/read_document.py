@@ -6,6 +6,18 @@ from mloda.user import Options
 
 
 class ReadDocument(BaseInputData):
+    """
+    Base class for document file readers (text, Markdown, JSON, YAML, etc.).
+
+    _auto_load_group triggers lazy plugin discovery when no ReadDocument subclasses
+    are found in the process. Only the read_files subdirectory is loaded.
+
+    To suppress auto-loading:
+        PluginLoader.disable_auto_load("feature_group/input_data/read_files")
+    """
+
+    _auto_load_group: str = "feature_group/input_data/read_files"
+
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
         raise NotImplementedError

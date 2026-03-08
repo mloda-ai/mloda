@@ -36,8 +36,14 @@ class ComputeFrameworkTransformer:
 
 Key features:
 - Maintains a registry of available transformers
-- Automatically discovers and registers all `BaseTransformer` subclasses
+- Auto-loads transformer files from the `compute_framework` group on first use if no `BaseTransformer` subclasses are registered yet
 - Provides a lookup mechanism to find the appropriate transformer for any framework pair
+
+To suppress auto-loading:
+```python
+from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
+PluginLoader.disable_auto_load("compute_framework")
+```
 
 ### PandasPyarrowTransformer
 
@@ -98,9 +104,10 @@ Key features:
 
 ### Registration Process
 
-1. During initialization, the `ComputeFrameworkTransformer` discovers all subclasses of `BaseTransformer`
-2. Each transformer is registered in a mapping from framework pairs to transformer classes
-3. The mapping is bidirectional, allowing transformations in both directions
+1. During initialization, `ComputeFrameworkTransformer` checks for existing `BaseTransformer` subclasses
+2. If none are found, it auto-loads only `*transformer*` files from the `compute_framework` group
+3. Each transformer is registered in a mapping from framework pairs to transformer classes
+4. The mapping is bidirectional, allowing transformations in both directions
 
 ### Transformation Process
 

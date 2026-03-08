@@ -14,8 +14,14 @@ class ComputeFrameworkTransformer:
     Manages transformations between different compute frameworks.
 
     This class maintains a registry of available transformers and provides
-    methods to add new transformers. It automatically discovers and registers
-    all BaseTransformer subclasses during initialization.
+    methods to add new transformers. It auto-loads transformer files on first
+    use if no BaseTransformer subclasses are registered yet.
+
+    To suppress auto-loading of transformer files:
+        PluginLoader.disable_auto_load("compute_framework")
+
+    Note: "compute_framework" is the group key checked by initilize_transformer.
+    Disabling it prevents any transformer files from being auto-loaded.
 
     The transformer registry is a mapping from framework pairs to transformer
     classes, allowing the system to find the appropriate transformer for
@@ -72,9 +78,16 @@ class ComputeFrameworkTransformer:
         Initialize the transformer registry with all available transformers.
 
         This method discovers all BaseTransformer subclasses and adds them
-        to the registry.
+        to the registry. If none are found, auto-loads only transformer files
+        from the compute_framework group via load_matching.
         """
         transformers = get_all_subclasses(BaseTransformer)
+        if not transformers:
+            from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
+
+            if "compute_framework" not in PluginLoader._disabled_groups:
+                PluginLoader().load_matching("compute_framework", "*transformer*")
+                transformers = get_all_subclasses(BaseTransformer)
 
         for transformer in transformers:
             self.add(transformer)

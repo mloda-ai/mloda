@@ -7,7 +7,7 @@ from mloda_plugins.feature_group.input_data.read_document import ReadDocument
 
 import pytest
 
-from mloda.user import DataAccessCollection
+from mloda.user import DataAccessCollection, Options
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
 from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 
@@ -24,7 +24,7 @@ class TestColumnToFileHint:
                 return (".csv",)
 
         dac = DataAccessCollection(files={"a.csv", "b.csv"}, column_to_file={"id": "a.csv", "val": "a.csv"})
-        result = TestRF.match_subclass_data_access(dac, ["id", "val"])
+        result = TestRF.match_subclass_data_access(dac, ["id", "val"], options=Options({}))
         assert result == "a.csv"
 
     def test_unpinned_feature_falls_through(self) -> None:
@@ -39,7 +39,7 @@ class TestColumnToFileHint:
 
         dac = DataAccessCollection(files={"a.csv", "b.csv"}, column_to_file={"id": "a.csv"})
         # "other_col" not in map, so falls through to normal resolution
-        result = TestRF.match_subclass_data_access(dac, ["other_col"])
+        result = TestRF.match_subclass_data_access(dac, ["other_col"], options=Options({}))
         assert result is not None
 
     def test_no_hint_preserves_behavior(self) -> None:
@@ -53,7 +53,7 @@ class TestColumnToFileHint:
                 return (".csv",)
 
         dac = DataAccessCollection(files={"a.csv"})
-        result = TestRF.match_subclass_data_access(dac, ["id"])
+        result = TestRF.match_subclass_data_access(dac, ["id"], options=Options({}))
         assert result == "a.csv"
 
     def test_conflict_in_batch_raises(self) -> None:
@@ -71,7 +71,7 @@ class TestColumnToFileHint:
             column_to_file={"id": "a.csv", "val": "b.csv"},
         )
         with pytest.raises(ValueError):
-            TestRF.match_subclass_data_access(dac, ["id", "val"])
+            TestRF.match_subclass_data_access(dac, ["id", "val"], options=Options({}))
 
     def test_mixed_batch_raises(self) -> None:
         class TestRF(ReadFile):
@@ -88,7 +88,7 @@ class TestColumnToFileHint:
             column_to_file={"id": "a.csv"},
         )
         with pytest.raises(ValueError):
-            TestRF.match_subclass_data_access(dac, ["id", "unpinned_col"])
+            TestRF.match_subclass_data_access(dac, ["id", "unpinned_col"], options=Options({}))
 
     def test_wrong_suffix_falls_through(self) -> None:
         class TestRFCsv(ReadFile):
@@ -105,7 +105,7 @@ class TestColumnToFileHint:
             files={"a.parquet", "b.parquet"},
             column_to_file={"id": "a.parquet", "val": "a.parquet"},
         )
-        result = TestRFCsv.match_subclass_data_access(dac, ["id", "val"])
+        result = TestRFCsv.match_subclass_data_access(dac, ["id", "val"], options=Options({}))
         assert result is None
 
     def test_construction_rejects_unknown_file(self) -> None:
@@ -137,10 +137,10 @@ class TestColumnToFileHint:
                 },
             )
 
-            result_train = CsvReader.match_subclass_data_access(dac, ["id", "target"])
+            result_train = CsvReader.match_subclass_data_access(dac, ["id", "target"], options=Options({}))
             assert result_train == train_path
 
-            result_bureau = CsvReader.match_subclass_data_access(dac, ["id", "amount"])
+            result_bureau = CsvReader.match_subclass_data_access(dac, ["id", "amount"], options=Options({}))
             assert result_bureau == bureau_path
         finally:
             os.remove(train_path)
@@ -162,7 +162,7 @@ class TestColumnToFileHintReadDocument:
             files={"a.txt", "b.txt"},
             column_to_file={"feature_a": "a.txt"},
         )
-        result = TestRD.match_subclass_data_access(dac, ["feature_a"])
+        result = TestRD.match_subclass_data_access(dac, ["feature_a"], options=Options({}))
         assert result == "a.txt"
 
     def test_document_no_hint_falls_through(self) -> None:
@@ -176,7 +176,7 @@ class TestColumnToFileHintReadDocument:
                 return None
 
         dac = DataAccessCollection(files={"a.txt", "b.txt"})
-        result = TestRD.match_subclass_data_access(dac, ["any_feature"])
+        result = TestRD.match_subclass_data_access(dac, ["any_feature"], options=Options({}))
         assert result is not None
         assert result.endswith(".txt")
 
@@ -195,4 +195,53 @@ class TestColumnToFileHintReadDocument:
             column_to_file={"feature_a": "a.txt"},
         )
         with pytest.raises(ValueError):
-            TestRD.match_subclass_data_access(dac, ["feature_a", "unpinned"])
+            TestRD.match_subclass_data_access(dac, ["feature_a", "unpinned"], options=Options({}))
+
+    def test_document_folder_traversal(self) -> None:
+        class TestRD(ReadDocument):
+            @classmethod
+            def suffix(cls) -> Tuple[str, ...]:
+                return (".txt",)
+
+            @classmethod
+            def load_data(cls, data_access: Any, features: Any) -> Any:
+                return None
+
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".txt", dir=tmp_dir, delete=False) as f:
+                _ = f.name
+            dac = DataAccessCollection(folders={tmp_dir})
+            result = TestRD.match_subclass_data_access(dac, ["any_feature"], options=Options({}))
+            assert result is not None
+            assert result.endswith(".txt")
+        finally:
+            import shutil
+
+            shutil.rmtree(tmp_dir)
+
+    def test_document_str_path_suffix_check(self) -> None:
+        class TestRD(ReadDocument):
+            @classmethod
+            def suffix(cls) -> Tuple[str, ...]:
+                return (".txt",)
+
+            @classmethod
+            def load_data(cls, data_access: Any, features: Any) -> Any:
+                return None
+
+        result = TestRD.match_subclass_data_access("file.csv", ["any_feature"], options=Options({}))
+        assert result is None
+
+    def test_document_str_path_correct_suffix(self) -> None:
+        class TestRD(ReadDocument):
+            @classmethod
+            def suffix(cls) -> Tuple[str, ...]:
+                return (".txt",)
+
+            @classmethod
+            def load_data(cls, data_access: Any, features: Any) -> Any:
+                return None
+
+        result = TestRD.match_subclass_data_access("file.txt", ["any_feature"], options=Options({}))
+        assert result == "file.txt"

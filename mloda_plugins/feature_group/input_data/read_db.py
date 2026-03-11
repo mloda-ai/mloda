@@ -78,7 +78,7 @@ class ReadDB(BaseInputData):
         return data
 
     @classmethod
-    def match_subclass_data_access(cls, data_access: Any, feature_names: List[str]) -> Any:
+    def match_subclass_data_access(cls, data_access: Any, feature_names: List[str], options: Options) -> Any:
         data_accesses: List[Any] = []
 
         if isinstance(data_access, DataAccessCollection):

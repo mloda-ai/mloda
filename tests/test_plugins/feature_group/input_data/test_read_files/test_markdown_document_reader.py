@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 
+from mloda.user import Options
 from mloda_plugins.feature_group.input_data.read_files.markdown_document_reader import MarkdownDocumentReader
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
@@ -131,13 +132,13 @@ class TestMarkdownDocumentReaderClassMethods:
 
     def test_match_subclass_data_access_returns_path_for_string(self) -> None:
         """match_subclass_data_access returns path for explicit string (feature scope)."""
-        result = MarkdownDocumentReader.match_subclass_data_access("readme.md", ["feature1"])
+        result = MarkdownDocumentReader.match_subclass_data_access("readme.md", ["feature1"], options=Options({}))
         assert result == "readme.md"
 
     def test_match_subclass_data_access_resolves_from_data_access_collection(self) -> None:
         """match_subclass_data_access resolves file path from DataAccessCollection by suffix."""
-        from mloda.user import DataAccessCollection
+        from mloda.user import DataAccessCollection, Options
 
         dac = DataAccessCollection(files={"readme.md"})
-        result = MarkdownDocumentReader.match_subclass_data_access(dac, ["feature1"])
+        result = MarkdownDocumentReader.match_subclass_data_access(dac, ["feature1"], options=Options({}))
         assert result == "readme.md"

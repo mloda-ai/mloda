@@ -56,8 +56,9 @@ A concrete, simplified global scope data access is shown in this example:
 ```python
 import os
 
-from mloda.user import mloda
+from mloda.user import mloda, PluginCollector
 from mloda.user import DataAccessCollection
+from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
 
 
 file_path = os.getcwd()
@@ -69,7 +70,8 @@ result = mloda.run_all(
             ["AExample", "BExample"],
             compute_frameworks=["PandasDataFrame"],
             # Define data access on a global level
-            data_access_collection=data_access_collection
+            data_access_collection=data_access_collection,
+            plugin_collector=PluginCollector.enabled_feature_groups({ReadFileFeature}),
         )
 print(result)
 ```
@@ -81,6 +83,21 @@ Output
 0   Value1         2
 1   Value2         3]
 ```
+
+#### ReadDocument: Unstructured File Access
+
+For unstructured files (Markdown, YAML, text), mloda provides `ReadDocumentFeature`.
+It skips structured file types (CSV, JSON, Parquet, etc.) by default to avoid conflicts
+with `ReadFile`.
+
+To read a structured file type as a document, use the `document_suffixes` option:
+
+``` python
+Feature("content", options={"document_suffixes": frozenset({".json"})})
+```
+
+This tells ReadDocument to include .json files and ReadFile to auto-exclude them
+for that feature.
 
 #### Disambiguating columns shared across multiple files
 

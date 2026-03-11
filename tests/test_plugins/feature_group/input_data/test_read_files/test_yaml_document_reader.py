@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 import yaml
 
+from mloda.user import Options
 from mloda_plugins.feature_group.input_data.read_files.yaml_document_reader import YamlDocumentReader
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
@@ -160,13 +161,13 @@ class TestYamlDocumentReaderClassMethods:
 
     def test_match_subclass_data_access_returns_path_for_string(self) -> None:
         """match_subclass_data_access returns path for explicit string (feature scope)."""
-        result = YamlDocumentReader.match_subclass_data_access("some_path.yaml", ["feature1"])
+        result = YamlDocumentReader.match_subclass_data_access("some_path.yaml", ["feature1"], options=Options({}))
         assert result == "some_path.yaml"
 
     def test_match_subclass_data_access_resolves_from_data_access_collection(self) -> None:
         """match_subclass_data_access resolves file path from DataAccessCollection by suffix."""
-        from mloda.user import DataAccessCollection
+        from mloda.user import DataAccessCollection, Options
 
         dac = DataAccessCollection(files={"some_path.yaml"})
-        result = YamlDocumentReader.match_subclass_data_access(dac, ["feature1"])
+        result = YamlDocumentReader.match_subclass_data_access(dac, ["feature1"], options=Options({}))
         assert result == "some_path.yaml"

@@ -128,7 +128,7 @@ class TestReadDB:
     def test_match_subclass_data_access(self) -> None:
         data_access = DataAccessCollection(credential_dicts={SQLITEReader.db_path(): self.db_path})
         feature_names = ["name"]
-        result = ReadDB.match_subclass_data_access(data_access, feature_names)
+        result = ReadDB.match_subclass_data_access(data_access, feature_names, options=Options({}))
         assert not result
 
     def test_get_connection_no_credentials(self) -> None:

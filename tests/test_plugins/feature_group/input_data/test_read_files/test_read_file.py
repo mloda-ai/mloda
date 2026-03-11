@@ -249,7 +249,7 @@ class TestReadFile:
 
         data_access = DataAccessCollection(files={"dummy.csv"})
         feature_names = ["id", "V1"]
-        assert TestReadFile.match_subclass_data_access(data_access, feature_names) == "dummy.csv"
+        assert TestReadFile.match_subclass_data_access(data_access, feature_names, options=Options({})) == "dummy.csv"
 
     def test_init_reader(self) -> None:
         class TestReadFile(ReadFile):

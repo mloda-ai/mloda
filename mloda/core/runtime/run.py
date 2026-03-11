@@ -51,6 +51,7 @@ class ExecutionOrchestrator:
         self.execution_planner = execution_planner
 
         self.cfw_register: CfwManager
+        self.manager: Any = None
 
         # multiprocessing - delegate to WorkerManager
         self.location: Optional[str] = None
@@ -315,7 +316,7 @@ class ExecutionOrchestrator:
         else:
             MyManager.register("CfwManager", CfwManager)
             self.manager = MyManager().__enter__()
-            self.cfw_register = self.manager.CfwManager(parallelization_modes, function_extender)  # type: ignore[attr-defined]
+            self.cfw_register = self.manager.CfwManager(parallelization_modes, function_extender)
 
         if self.flight_server:
             if self.flight_server.flight_server_process is None:

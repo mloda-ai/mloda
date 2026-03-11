@@ -310,7 +310,7 @@ class ExecutionOrchestrator:
         """
         Enters the context of the ExecutionOrchestrator.
         """
-        if len(parallelization_modes) == 1 and ParallelizationMode.SYNC in parallelization_modes:
+        if ParallelizationMode.MULTIPROCESSING not in parallelization_modes:
             self.cfw_register = CfwManager(parallelization_modes, function_extender)
             self.manager = None
         else:

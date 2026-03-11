@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 
+from mloda.user import Options
 from mloda_plugins.feature_group.input_data.read_files.json_document_reader import JsonDocumentReader
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
@@ -121,7 +122,7 @@ class TestJsonDocumentReaderClassMethods:
 
     def test_match_subclass_data_access_returns_path_for_string(self) -> None:
         """match_subclass_data_access returns path for explicit string (feature scope)."""
-        result = JsonDocumentReader.match_subclass_data_access("some_path.json", ["feature1"])
+        result = JsonDocumentReader.match_subclass_data_access("some_path.json", ["feature1"], options=Options({}))
         assert result == "some_path.json"
 
     def test_match_subclass_data_access_resolves_from_data_access_collection(self) -> None:
@@ -129,5 +130,6 @@ class TestJsonDocumentReaderClassMethods:
         from mloda.user import DataAccessCollection
 
         dac = DataAccessCollection(files={"some_path.json"})
-        result = JsonDocumentReader.match_subclass_data_access(dac, ["feature1"])
+        options = Options({"document_suffixes": frozenset({".json"})})
+        result = JsonDocumentReader.match_subclass_data_access(dac, ["feature1"], options=options)
         assert result == "some_path.json"

@@ -29,23 +29,23 @@ class TestReadDocumentInheritance:
 class TestReadDocumentMatchSubclass:
     def test_match_subclass_data_access_returns_none_with_data_access_collection(self) -> None:
         data_access = DataAccessCollection(files={"doc.json"})
-        result = ReadDocument.match_subclass_data_access(data_access, ["content"])
+        result = ReadDocument.match_subclass_data_access(data_access, ["content"], options=Options({}))
         assert result is None
 
     def test_match_subclass_data_access_returns_path_with_string(self) -> None:
-        result = ReadDocument.match_subclass_data_access("/path/to/doc.json", ["content"])
+        result = ReadDocument.match_subclass_data_access("/path/to/doc.json", ["content"], options=Options({}))
         assert result == "/path/to/doc.json"
 
     def test_match_subclass_data_access_returns_path_with_path_object(self) -> None:
-        result = ReadDocument.match_subclass_data_access(Path("/path/to/doc.json"), ["content"])
+        result = ReadDocument.match_subclass_data_access(Path("/path/to/doc.json"), ["content"], options=Options({}))
         assert result == Path("/path/to/doc.json")
 
     def test_match_subclass_data_access_returns_none_with_none(self) -> None:
-        result = ReadDocument.match_subclass_data_access(None, ["content"])
+        result = ReadDocument.match_subclass_data_access(None, ["content"], options=Options({}))
         assert result is None
 
     def test_match_subclass_data_access_returns_none_with_arbitrary_object(self) -> None:
-        result = ReadDocument.match_subclass_data_access(object(), ["content"])
+        result = ReadDocument.match_subclass_data_access(object(), ["content"], options=Options({}))
         assert result is None
 
 

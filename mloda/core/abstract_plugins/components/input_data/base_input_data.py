@@ -48,7 +48,7 @@ class BaseInputData(ABC):
                 _key = cls.deal_with_base_input_data_name_as_cls_or_str(key)
 
                 if _key == subclass.data_access_name():
-                    matched_data_access = subclass.match_subclass_data_access(value, [feature_name])  # type: ignore[attr-defined]
+                    matched_data_access = subclass.match_subclass_data_access(value, [feature_name], options=options)  # type: ignore[attr-defined]
                     if matched_data_access:
                         cls.add_base_input_data_to_options(subclass, matched_data_access, options)
                         return True
@@ -79,7 +79,9 @@ class BaseInputData(ABC):
         if options.get(cls.data_access_name()):
             return False
 
-        data_access_cls, matched_data_access = cls.match_data_access([feature_name], data_access_collection)
+        data_access_cls, matched_data_access = cls.match_data_access(
+            [feature_name], data_access_collection, options=options
+        )
         if data_access_cls is None:
             return False
 
@@ -91,6 +93,7 @@ class BaseInputData(ABC):
         cls,
         feature_names: List[str],
         data_access_collection: DataAccessCollection,
+        options: Optional[Options] = None,
     ) -> Tuple[Any, Any]:
         """
         We check for data access collection if any child classes match the data access.
@@ -98,7 +101,9 @@ class BaseInputData(ABC):
         subclasses = get_all_filtereted_subclasses(BaseInputData, cls)
 
         for subclass in subclasses:
-            matched_data_access = subclass.match_subclass_data_access(data_access_collection, feature_names)  # type: ignore[attr-defined]
+            matched_data_access = subclass.match_subclass_data_access(  # type: ignore[attr-defined]
+                data_access_collection, feature_names, options=options
+            )
             if matched_data_access:
                 return (subclass, matched_data_access)
         return None, None

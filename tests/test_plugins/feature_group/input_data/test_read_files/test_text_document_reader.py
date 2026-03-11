@@ -12,6 +12,7 @@ from typing import Any
 
 import pytest
 
+from mloda.user import Options
 from mloda_plugins.feature_group.input_data.read_files.text_file_reader import PyFileReader, TextFileReader
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
@@ -136,13 +137,13 @@ class TestMatchSubclassDataAccess:
 
     def test_match_subclass_data_access_returns_path_for_string(self) -> None:
         """TextFileReader returns path for explicit string (feature scope)."""
-        result = TextFileReader.match_subclass_data_access("some_path.text", ["TextFileReader"])
+        result = TextFileReader.match_subclass_data_access("some_path.text", ["TextFileReader"], options=Options({}))
         assert result == "some_path.text"
 
     def test_match_subclass_data_access_resolves_from_data_access_collection(self) -> None:
         """TextFileReader resolves file path from DataAccessCollection by suffix."""
-        from mloda.user import DataAccessCollection
+        from mloda.user import DataAccessCollection, Options
 
         dac = DataAccessCollection(files={"some_path.text"})
-        result = TextFileReader.match_subclass_data_access(dac, ["TextFileReader"])
+        result = TextFileReader.match_subclass_data_access(dac, ["TextFileReader"], options=Options({}))
         assert result == "some_path.text"

@@ -96,7 +96,7 @@ class TestJoinSpecWithoutIndexColumns:
             links=links,
         )
 
-        all_columns: set = set()
+        all_columns: Set[str] = set()
         for df in result:
             all_columns.update(df.columns)
 

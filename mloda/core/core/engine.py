@@ -125,6 +125,8 @@ class Engine:
 
         if feature_group.index_columns():
             self._add_index_feature(feature_group_class, feature_group, feature, features)
+        else:
+            self._add_joinspec_index_feature(feature_group_class, feature_group, feature, features)
 
     def _set_feature_name(self, feature: Feature, feature_group: FeatureGroup) -> None:
         """Sets the feature name using the feature group's logic."""
@@ -165,6 +167,24 @@ class Engine:
 
         for index in indexes:
             self._process_index_feature(feature_group_class, feature_group, feature, features, index)
+
+    def _add_joinspec_index_feature(
+        self,
+        feature_group_class: Type[FeatureGroup],
+        feature_group: FeatureGroup,
+        feature: Feature,
+        features: Features,
+    ) -> None:
+        """Injects join columns from Links when the FeatureGroup does not define index_columns()."""
+        if self.links is None:
+            return
+
+        for link in self.links:
+            if link.left_feature_group == feature_group_class:
+                self._create_and_add_index_feature(feature_group_class, feature_group, feature, features, link.left_index)
+
+            if link.right_feature_group == feature_group_class:
+                self._create_and_add_index_feature(feature_group_class, feature_group, feature, features, link.right_index)
 
     def _process_index_feature(
         self,

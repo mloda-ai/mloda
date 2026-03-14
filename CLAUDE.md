@@ -62,6 +62,7 @@ This enables continuous learning and improvement of the TDD workflow based on ac
 - Keep documentation to the necessary lines
 - Run tests after creation using `tox`
 - Avoid try/except blocks
+- Never mention agents in commit messages, PR descriptions, or any user-facing text (no `Co-Authored-By` agent lines, no agent names)
 
 ## Memory Bank
 

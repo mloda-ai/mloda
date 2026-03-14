@@ -15,9 +15,58 @@ dependencies = [
     "pyarrow"
 ]
 
-requires-python = ">=3.8,<3.14"
+requires-python = ">=3.10,<3.14"
 classifiers = [
     "Programming Language :: Python :: 3"
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "pytest-xdist",
+    "pytest-order",
+    "pytest-timeout",
+    "ruff",
+    "mypy",
+    "mktestdocs",
+    "pandera",
+    "tox",
+    "pyarrow",
+    "testbook",
+    "ipykernel",
+    "bandit",
+    "types-PyYAML",
+    "types-requests",
+    "types-toml",
+    "scikit-learn",
+    "pip-audit<2.10.0",
+]
+pandas = ["pandas"]
+polars = ["polars"]
+duckdb = ["duckdb"]
+iceberg = ["pyiceberg"]
+spark = ["pyspark"]
+otel = [
+    "opentelemetry-api",
+    "opentelemetry-sdk",
+    "opentelemetry-instrumentation",
+    "opentelemetry-instrumentation-logging",
+    "opentelemetry-instrumentation-requests",
+]
+sklearn = [
+    "scikit-learn>=1.0.0",
+    "joblib>=1.0.0",
+]
+text_cleaning = ["nltk>=3.8"]
+docs = [
+    "mkdocs",
+    "mkdocs-jupyter",
+    "notebook",
+    "mermaid-py",
+]
+licence = ["pip-licenses-cli"]
+all = [
+    "mloda[test,pandas,polars,duckdb,iceberg,otel,sklearn,text_cleaning,docs,licence]",
 ]
 
 [project.urls]
@@ -35,9 +84,6 @@ namespaces = true
 
 [tool.setuptools]
 include-package-data = true
-
-[tool.setuptools.dynamic]
-dependencies = { file = ["requirements.txt"] }
 
 [tool.bandit]
 exclude_dirs = [

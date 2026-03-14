@@ -22,7 +22,12 @@
       "Bash(find:*)",
       "Bash(xargs cat:*)",
       "Bash(grep:*)",
-      "Bash(.tox/python310/bin/pytest:*)"
+      "Bash(.tox/python310/bin/pytest:*)",
+      "Bash(git push:*)",
+      "Bash(uv run tox)",
+      "Bash(uv run tox:*)",
+      "Bash(uv lock:*)",
+      "Bash(uv sync:*)"
     ],
     "ask": []
   }

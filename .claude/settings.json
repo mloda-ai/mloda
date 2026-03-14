@@ -21,7 +21,8 @@
       "Bash(tree:*)",
       "Bash(find:*)",
       "Bash(xargs cat:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(.tox/python310/bin/pytest:*)"
     ],
     "ask": []
   }

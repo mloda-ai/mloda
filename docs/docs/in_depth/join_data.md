@@ -142,6 +142,8 @@ Available `_on` methods: `inner_on`, `left_on`, `right_on`, `outer_on`, `append_
 
 **Note:** The `_on` methods raise `ValueError` if the feature group doesn't define `index_columns()` or returns an empty list, and `IndexError` if the specified index position is out of range.
 
+**Note:** Explicit `JoinSpec` (Option 1 above) works regardless of whether the feature group defines `index_columns()`. The engine automatically injects the join columns specified in the `JoinSpec` into that feature group's feature set. The `_on` shorthand requires `index_columns()`.
+
 #### Same-Class Joins with Discriminators
 
 When joining a feature group with itself (or two nodes of the same class loading different data sources), you need to distinguish between the left and right instances using **discriminators**.

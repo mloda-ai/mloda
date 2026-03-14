@@ -56,6 +56,13 @@ Each phase should be a clean, validated checkpoint with all tests passing and ch
 
 This enables continuous learning and improvement of the TDD workflow based on actual usage patterns.
 
+## Setup
+
+```bash
+uv sync --all-extras
+source .venv/bin/activate
+```
+
 ## Coding Instructions
 
 - Never put code into `__init__.py` files

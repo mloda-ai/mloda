@@ -1,2 +1,0 @@
-# No external dependencies required for PythonDict framework
-# PyArrow is used for transformations but is handled by the main project dependencies

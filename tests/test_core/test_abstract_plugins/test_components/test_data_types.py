@@ -1,5 +1,8 @@
 """Tests for DataType enum and its conversion methods."""
 
+import datetime
+import decimal
+
 import pytest
 import pyarrow as pa
 
@@ -78,3 +81,58 @@ class TestFromArrowType:
 
         with pytest.raises(ValueError, match="Unsupported.*"):
             DataType.from_arrow_type(pa.struct([("field1", pa.int32())]))
+
+
+class TestInferTypeFromPyType:
+    """Tests for DataType.infer_type_from_py_type() method."""
+
+    def test_infer_boolean(self) -> None:
+        assert DataType.infer_type_from_py_type(True) == DataType.BOOLEAN
+        assert DataType.infer_type_from_py_type(False) == DataType.BOOLEAN
+
+    def test_infer_int32(self) -> None:
+        assert DataType.infer_type_from_py_type(0) == DataType.INT32
+        assert DataType.infer_type_from_py_type(42) == DataType.INT32
+        assert DataType.infer_type_from_py_type(-1) == DataType.INT32
+        assert DataType.infer_type_from_py_type(2**31 - 1) == DataType.INT32
+
+    def test_infer_int64(self) -> None:
+        assert DataType.infer_type_from_py_type(2**31) == DataType.INT64
+        assert DataType.infer_type_from_py_type(-(2**31) - 1) == DataType.INT64
+
+    def test_infer_double(self) -> None:
+        assert DataType.infer_type_from_py_type(3.14) == DataType.DOUBLE
+        assert DataType.infer_type_from_py_type(0.0) == DataType.DOUBLE
+
+    def test_infer_string(self) -> None:
+        assert DataType.infer_type_from_py_type("hello") == DataType.STRING
+        assert DataType.infer_type_from_py_type("") == DataType.STRING
+
+    def test_infer_binary(self) -> None:
+        assert DataType.infer_type_from_py_type(b"data") == DataType.BINARY
+        assert DataType.infer_type_from_py_type(b"") == DataType.BINARY
+
+    def test_infer_date(self) -> None:
+        assert DataType.infer_type_from_py_type(datetime.date(2026, 1, 1)) == DataType.DATE
+
+    def test_infer_datetime_maps_to_timestamp(self) -> None:
+        assert DataType.infer_type_from_py_type(datetime.datetime(2026, 1, 1, 12, 0)) == DataType.TIMESTAMP_MICROS
+
+    def test_infer_decimal(self) -> None:
+        assert DataType.infer_type_from_py_type(decimal.Decimal("3.14")) == DataType.DECIMAL
+        assert DataType.infer_type_from_py_type(decimal.Decimal("0")) == DataType.DECIMAL
+
+    def test_infer_arrow_date_scalar(self) -> None:
+        assert DataType.infer_type_from_py_type(pa.scalar(1, type=pa.date32())) == DataType.DATE
+
+    def test_infer_arrow_timestamp_scalar(self) -> None:
+        assert DataType.infer_type_from_py_type(pa.scalar(1, type=pa.timestamp("us"))) == DataType.TIMESTAMP_MICROS
+
+    def test_infer_unsupported_type(self) -> None:
+        with pytest.raises(ValueError, match="Unsupported data type"):
+            DataType.infer_type_from_py_type([1, 2, 3])
+
+    def test_boolean_before_int(self) -> None:
+        """bool is a subclass of int, so must be checked first."""
+        assert DataType.infer_type_from_py_type(True) == DataType.BOOLEAN
+        assert DataType.infer_type_from_py_type(True) != DataType.INT32

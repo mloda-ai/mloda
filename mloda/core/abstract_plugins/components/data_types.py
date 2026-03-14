@@ -1,3 +1,5 @@
+import datetime
+import decimal
 from enum import Enum
 from typing import Any
 import pyarrow as pa
@@ -57,10 +59,15 @@ class DataType(Enum):
             return cls.STRING
         elif isinstance(value, bytes):
             return cls.BINARY
+        elif isinstance(value, datetime.datetime):
+            return cls.TIMESTAMP_MICROS
+        elif isinstance(value, datetime.date):
+            return cls.DATE
+        elif isinstance(value, decimal.Decimal):
+            return cls.DECIMAL
         elif isinstance(value, pa.Date32Scalar) or isinstance(value, pa.Date32Array):
             return cls.DATE
         elif isinstance(value, pa.TimestampScalar) or isinstance(value, pa.TimestampArray):
-            # Defaulting to TIMESTAMP_MICROS; adjust as needed
             return cls.TIMESTAMP_MICROS
         else:
             raise ValueError(f"Unsupported data type: {type(value)}")

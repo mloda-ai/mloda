@@ -374,28 +374,35 @@ This might be caused by missing Links when your feature has multiple dependencie
 When a feature depends on multiple input features, you must provide explicit Links to specify
 how to merge them. Without Links, the framework cannot determine how to combine the data.
 
-Example:
-    from mloda.core.abstract_plugins.components.link import Link
-    from mloda.core.abstract_plugins.components.index.index import Index
+Example using JoinSpec (for feature groups with index_columns()):
+    from mloda.user import Link, JoinSpec
 
     links = {{
         Link.inner(
-            left=(RootFeatureA, Index()),
-            right=(RootFeatureB, Index())
+            JoinSpec(RootFeatureA, "shared_column"),
+            JoinSpec(RootFeatureB, "shared_column"),
         )
     }}
 
-    mlodamloda.run_all(
+Example using Link.inner_on() (for feature groups without index_columns()):
+    from mloda.user import Link
+
+    links = {{
+        Link.inner_on(RootFeatureA, RootFeatureB, "shared_column")
+    }}
+
+    mloda.run_all(
         features=[Feature.int32_of("{feature_name}")],
         links=links,
         ...
     )
 
 Available join types:
-- Link.inner(left, right)  - Keep only matching rows from both sides
-- Link.left(left, right)   - Keep all rows from left, matching from right
-- Link.right(left, right)  - Keep all rows from right, matching from left
-- Link.outer(left, right)  - Keep all rows from both sides
+- Link.inner(left, right)    - Keep only matching rows from both sides
+- Link.left(left, right)     - Keep all rows from left, matching from right
+- Link.right(left, right)    - Keep all rows from right, matching from left
+- Link.outer(left, right)    - Keep all rows from both sides
+- Link.inner_on(left, right, column) - Inner join specifying column inline
 """
         raise ValueError(error_message.strip())
 

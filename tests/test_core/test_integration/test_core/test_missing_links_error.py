@@ -100,8 +100,8 @@ class TestMissingLinksError:
         Expected Error Content:
             - Mentions "Links" or "multiple dependencies"
             - Lists the feature name (MultiDependencyFeature)
-            - Provides example code with Link.inner()
-            - Shows how to use Index()
+            - Provides example code with Link.inner() and JoinSpec
+            - Shows Link.inner_on() for feature groups without index_columns()
             - Lists available join types
         """
         with pytest.raises(Exception) as exc_info:
@@ -126,7 +126,7 @@ class TestMissingLinksError:
 
         # Check for example code
         assert "Link.inner" in error_message, "Error should show Link.inner() example"
-        assert "Index" in error_message, "Error should show Index usage"
+        assert "JoinSpec" in error_message, "Error should show JoinSpec usage"
 
         # Check for join type documentation
         assert any(join_type in error_message for join_type in ["inner", "left", "right", "outer"]), (

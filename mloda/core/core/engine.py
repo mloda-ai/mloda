@@ -26,7 +26,7 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup, format_featu
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.options import Options
-from mloda.core.abstract_plugins.components.link import Link
+from mloda.core.abstract_plugins.components.link import JoinType, Link
 from mloda.core.abstract_plugins.components.validators.link_validator import LinkValidator
 
 
@@ -125,6 +125,8 @@ class Engine:
 
         if feature_group.index_columns():
             self._add_index_feature(feature_group_class, feature_group, feature, features)
+        elif self.links:
+            self._add_index_feature_from_links(feature_group_class, feature_group, feature, features)
 
     def _set_feature_name(self, feature: Feature, feature_group: FeatureGroup) -> None:
         """Sets the feature name using the feature group's logic."""
@@ -165,6 +167,39 @@ class Engine:
 
         for index in indexes:
             self._process_index_feature(feature_group_class, feature_group, feature, features, index)
+
+    def _add_index_feature_from_links(
+        self,
+        feature_group_class: Type[FeatureGroup],
+        feature_group: FeatureGroup,
+        feature: Feature,
+        features: Features,
+    ) -> None:
+        """Adds index features derived from JoinSpec links when the feature group has no index_columns defined."""
+        if self.links is None:
+            return
+
+        feature_name_str = feature.name.name if hasattr(feature.name, "name") else str(feature.name)
+
+        for link in self.links:
+            if link.jointype in (JoinType.APPEND, JoinType.UNION):
+                continue
+            if link.left_feature_group == feature_group_class and feature_name_str in link.left_index.index:
+                return
+            if link.right_feature_group == feature_group_class and feature_name_str in link.right_index.index:
+                return
+
+        for link in self.links:
+            if link.jointype in (JoinType.APPEND, JoinType.UNION):
+                continue
+            if link.left_feature_group == feature_group_class:
+                self._create_and_add_index_feature(
+                    feature_group_class, feature_group, feature, features, link.left_index
+                )
+            if link.right_feature_group == feature_group_class:
+                self._create_and_add_index_feature(
+                    feature_group_class, feature_group, feature, features, link.right_index
+                )
 
     def _process_index_feature(
         self,

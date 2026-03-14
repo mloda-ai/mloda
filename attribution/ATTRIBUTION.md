@@ -35,7 +35,7 @@
 | execnet                                | 2.1.2           | MIT License                          |
 | executing                              | 2.2.1           | MIT License                          |
 | fastjsonschema                         | 2.21.2          | BSD License                          |
-| filelock                               | 3.25.1          | MIT License                          |
+| filelock                               | 3.25.2          | MIT License                          |
 | fqdn                                   | 1.5.1           | Mozilla Public License 2.0 (MPL 2.0) |
 | fsspec                                 | 2024.12.0       | BSD License                          |
 | h11                                    | 0.16.0          | MIT License                          |
@@ -59,7 +59,7 @@
 | jupyter_core                           | 5.9.1           | BSD-3-Clause                         |
 | jupyter_server                         | 2.17.0          | BSD License                          |
 | jupyter_server_terminals               | 0.5.4           | BSD License                          |
-| jupyterlab                             | 4.5.5           | BSD License                          |
+| jupyterlab                             | 4.5.6           | BSD License                          |
 | jupyterlab_pygments                    | 0.3.0           | BSD License                          |
 | jupyterlab_server                      | 2.28.0          | BSD License                          |
 | lark                                   | 1.3.1           | MIT License                          |
@@ -79,7 +79,7 @@
 | nbformat                               | 5.10.4          | BSD License                          |
 | nest-asyncio                           | 1.6.0           | BSD License                          |
 | nltk                                   | 3.9.3           | Apache Software License              |
-| notebook                               | 7.5.4           | BSD License                          |
+| notebook                               | 7.5.5           | BSD License                          |
 | notebook_shim                          | 0.2.4           | BSD License                          |
 | numpy                                  | 2.2.6           | BSD License                          |
 | opentelemetry-api                      | 1.40.0          | Apache-2.0                           |
@@ -103,8 +103,8 @@
 | pip_audit                              | 2.9.0           | Apache Software License              |
 | platformdirs                           | 4.9.4           | MIT License                          |
 | pluggy                                 | 1.6.0           | MIT License                          |
-| polars                                 | 1.38.1          | MIT License                          |
-| polars-runtime-32                      | 1.38.1          | MIT License                          |
+| polars                                 | 1.39.0          | MIT License                          |
+| polars-runtime-32                      | 1.39.0          | MIT License                          |
 | prometheus_client                      | 0.24.1          | Apache-2.0 AND BSD-2-Clause          |
 | prompt_toolkit                         | 3.0.52          | BSD License                          |
 | psutil                                 | 7.2.2           | BSD-3-Clause                         |
@@ -135,7 +135,7 @@
 | rfc3987-syntax                         | 1.1.0           | Apache Software License              |
 | rich                                   | 13.9.4          | MIT License                          |
 | rpds-py                                | 0.30.0          | MIT                                  |
-| ruff                                   | 0.15.5          | MIT License                          |
+| ruff                                   | 0.15.6          | MIT License                          |
 | scikit-learn                           | 1.7.2           | BSD-3-Clause                         |
 | scipy                                  | 1.15.3          | BSD License                          |
 | six                                    | 1.17.0          | MIT License                          |

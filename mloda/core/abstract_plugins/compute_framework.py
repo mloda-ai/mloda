@@ -374,7 +374,7 @@ This might be caused by missing Links when your feature has multiple dependencie
 When a feature depends on multiple input features, you must provide explicit Links to specify
 how to merge them. Without Links, the framework cannot determine how to combine the data.
 
-Example using JoinSpec (for feature groups with index_columns()):
+Option 1: Explicit JoinSpec (works with any feature group):
     from mloda.user import Link, JoinSpec
 
     links = {{
@@ -384,11 +384,11 @@ Example using JoinSpec (for feature groups with index_columns()):
         )
     }}
 
-Example using Link.inner_on() (for feature groups without index_columns()):
+Option 2: Shorthand via index_columns() (requires feature groups to define index_columns()):
     from mloda.user import Link
 
     links = {{
-        Link.inner_on(RootFeatureA, RootFeatureB, "shared_column")
+        Link.inner_on(RootFeatureA, RootFeatureB)
     }}
 
     mloda.run_all(
@@ -402,7 +402,7 @@ Available join types:
 - Link.left(left, right)     - Keep all rows from left, matching from right
 - Link.right(left, right)    - Keep all rows from right, matching from left
 - Link.outer(left, right)    - Keep all rows from both sides
-- Link.inner_on(left, right, column) - Inner join specifying column inline
+- Link.inner_on(left, right) - Shorthand using index_columns() definitions
 """
         raise ValueError(error_message.strip())
 

@@ -72,6 +72,8 @@
               <ul class="current">
                   <li class="toctree-l1"><a class="reference internal" href="../mloda-api/">mloda API</a>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../streaming/">Streaming</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" href="../access-feature-data/">(Feature) data</a>
                   </li>
                   <li class="toctree-l1 current"><a class="reference internal current" href="#">Join data</a>
@@ -84,7 +86,7 @@
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#convenience-_on-methods">Convenience _on Methods</a>
     </li>
-    <li class="toctree-l2"><a class="reference internal" href="#self-joins-with-alias-fields">Self-Joins with Alias Fields</a>
+    <li class="toctree-l2"><a class="reference internal" href="#same-class-joins-with-discriminators">Same-Class Joins with Discriminators</a>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#polymorphic-link-matching">Polymorphic Link Matching</a>
     </li>
@@ -194,6 +196,7 @@
 <li><strong>Different Compute Frameworks</strong>: Merging data from feature groups that utilize different underlying compute technologies.</li>
 <li><strong>Same Compute Framework, Different Sources</strong>: Combining datasets that use the same compute framework but originate from different data sources.</li>
 <li><strong>Same Feature Group, Different Feature Options</strong>: Integrating data from the same feature group configured with different feature options.</li>
+<li><strong>Multiple Links on the Same Compute Framework</strong>: Joining a single base FG to multiple right-side FGs (same class, subclasses, or distinct) all within the same compute framework.</li>
 </ul>
 <p><em><strong>If we have a feature, which is dependent on a aforementioned setup,</strong></em></p>
 <ul>
@@ -310,9 +313,10 @@ link = Link.inner_on(UserFeatureGroup, OrderFeatureGroup, left_index=0, right_in
 </code></pre>
 <p>Available <code>_on</code> methods: <code>inner_on</code>, <code>left_on</code>, <code>right_on</code>, <code>outer_on</code>, <code>append_on</code>, <code>union_on</code></p>
 <p><strong>Note:</strong> The <code>_on</code> methods raise <code>ValueError</code> if the feature group doesn't define <code>index_columns()</code> or returns an empty list, and <code>IndexError</code> if the specified index position is out of range.</p>
-<h4 id="self-joins-with-alias-fields">Self-Joins with Alias Fields</h4>
-<p>When joining a feature group with itself, you need to distinguish between the left and right instances using <strong>alias fields</strong> (similar to SQL table aliases in self-joins).</p>
-<p><strong>Alias fields</strong> are optional dictionary parameters (<code>self_left_alias</code> and <code>self_right_alias</code>) that match against feature options:</p>
+<p><strong>Note:</strong> Explicit <code>JoinSpec</code> (Option 1 above) works regardless of whether the feature group defines <code>index_columns()</code>. The engine automatically injects the join columns specified in the <code>JoinSpec</code> into that feature group's feature set. The <code>_on</code> shorthand requires <code>index_columns()</code>.</p>
+<h4 id="same-class-joins-with-discriminators">Same-Class Joins with Discriminators</h4>
+<p>When joining a feature group with itself (or two nodes of the same class loading different data sources), you need to distinguish between the left and right instances using <strong>discriminators</strong>.</p>
+<p><strong>Discriminators</strong> are optional dictionary parameters (<code>left_discriminator</code> and <code>right_discriminator</code>) that match against feature options:</p>
 <pre><code class="language-python">from mloda.user import Feature, Index, Link
 
 # Define an example feature group for demonstration
@@ -323,16 +327,16 @@ class UserFeatureGroup(FeatureGroup):
 
 # Option 1: Using _on method (recommended when index_columns is defined)
 link = Link.inner_on(UserFeatureGroup, UserFeatureGroup,
-                     self_left_alias={&quot;side&quot;: &quot;left&quot;},
-                     self_right_alias={&quot;side&quot;: &quot;right&quot;})
+                     left_discriminator={&quot;side&quot;: &quot;left&quot;},
+                     right_discriminator={&quot;side&quot;: &quot;right&quot;})
 
 # Option 2: Using explicit JoinSpec
 left = JoinSpec(UserFeatureGroup, &quot;user_id&quot;)
 right = JoinSpec(UserFeatureGroup, &quot;user_id&quot;)
 
 link = Link(&quot;inner&quot;, left, right,
-            self_left_alias={&quot;side&quot;: &quot;left&quot;},
-            self_right_alias={&quot;side&quot;: &quot;right&quot;})
+            left_discriminator={&quot;side&quot;: &quot;left&quot;},
+            right_discriminator={&quot;side&quot;: &quot;right&quot;})
 
 # 2. Tag features with matching options
 # Feature names reference the feature from the feature group
@@ -341,7 +345,7 @@ features = {
     Feature(&quot;age&quot;, options={&quot;side&quot;: &quot;right&quot;}),
 }
 </code></pre>
-<p>The execution planner validates that the alias key-value pairs exist in the corresponding feature's options to correctly identify which instance belongs to which side of the join.</p>
+<p>The execution planner validates that the discriminator key-value pairs exist in the corresponding feature's options to correctly identify which instance belongs to which side of the join.</p>
 <h4 id="polymorphic-link-matching">Polymorphic Link Matching</h4>
 <p>Links support inheritance-based matching, allowing a link defined with base classes to automatically apply to subclasses. This enables defining generic join relationships that work across feature group hierarchies.</p>
 <p><strong>Matching Rules:</strong></p>
@@ -382,6 +386,7 @@ link = Link.inner(
 # - (PremiumUserFeatureGroup, StandardUserFeatureGroup) ✗
 </code></pre>
 <p>The balanced inheritance rule ensures that joins only occur between "parallel" subclasses - both sides must be at the same level in the inheritance hierarchy relative to the link definition.</p>
+<p>When multiple batches match (e.g. three subclasses all matching a base-class link), the engine disambiguates using <code>right_index</code>: first by exact <code>feature.index</code> match, then by checking whether the feature name appears in the join key columns of <code>right_index</code>. Ensure each link's <code>right_index</code> contains the column name that uniquely identifies its right-side batch.</p>
 <h4 id="mlodaapi">mlodaAPI</h4>
 <pre><code class="language-python">from mloda.user import mloda
 

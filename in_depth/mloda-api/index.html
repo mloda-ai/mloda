@@ -78,6 +78,8 @@
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#runner-execution-configuration">Runner &amp; Execution Configuration</a>
     </li>
+    <li class="toctree-l2"><a class="reference internal" href="#two-phase-execution-prepare-run">Two-Phase Execution: prepare() + run()</a>
+    </li>
     <li class="toctree-l2"><a class="reference internal" href="#plugin-discovery">Plugin Discovery</a>
         <ul>
     <li class="toctree-l3"><a class="reference internal" href="#resolve_feature">resolve_feature</a>
@@ -91,6 +93,8 @@
         </ul>
     </li>
     </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../streaming/">Streaming</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../access-feature-data/">(Feature) data</a>
                   </li>
@@ -211,7 +215,7 @@
 <p>Apply the runner to execute the computations based on the prepared execution plan, managing the lifecycle of the computational process.</p>
 </li>
 </ol>
-<p>This means, depending on your needs, you can run them all at once (<strong>batch run</strong>) or split them up, e.g. for realtime needs (<strong>inference</strong>).</p>
+<p>This means, depending on your needs, you can run them all at once (<strong>batch run</strong>) or split them up, e.g. for realtime needs (<strong>inference</strong>).  For incremental result delivery see <a href="../streaming/">Streaming</a>.</p>
 <h4 id="configuration-for-mlodaapi">Configuration for mlodaAPI</h4>
 <ul>
 <li><strong>requested_features</strong>: Specify the features to process (as names, Feature objects, or a Features container).</li>
@@ -242,6 +246,24 @@ result = mloda.run_all(
     column_ordering=&quot;request_order&quot;  # Result columns: FeatureC, FeatureA, FeatureB
 )
 </code></pre>
+<h4 id="two-phase-execution-prepare-run">Two-Phase Execution: prepare() + run()</h4>
+<p>For realtime or inference scenarios, split configuration from execution.
+<code>prepare()</code> builds the execution plan once; <code>run()</code> executes it with fresh data each time.</p>
+<pre><code class="language-python">from mloda.user import mloda
+
+# 1. Prepare once
+session = mloda.prepare(
+    [&quot;MyFeature&quot;],
+    compute_frameworks=[&quot;PandasDataFrame&quot;],
+    api_data=initial_api_data,
+)
+
+# 2. Run multiple times with different data
+result_1 = session.run(api_data={&quot;MyKey&quot;: {&quot;col&quot;: [1, 2]}})
+result_2 = session.run(api_data={&quot;MyKey&quot;: {&quot;col&quot;: [3, 4]}})
+</code></pre>
+<p><code>run_all()</code> is equivalent to <code>prepare()</code> followed by a single <code>run()</code>.</p>
+<p>For per-group streaming with plan reuse, call <code>session.stream_run()</code> instead of <code>session.run()</code> — it yields each feature group's result as it completes. See <a href="../streaming/">Streaming</a> for details.</p>
 <h4 id="plugin-discovery">Plugin Discovery</h4>
 <p>mloda provides functions to discover and inspect available plugins. Import them from <code>mloda.steward</code>:</p>
 <pre><code class="language-python">from mloda.steward import (
@@ -336,7 +358,7 @@ extenders = get_extender_docs(wraps=&quot;formula&quot;)
           </div><footer>
     <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
         <a href="../../chapter1/extender/" class="btn btn-neutral float-left" title="Extender"><span class="icon icon-circle-arrow-left"></span> Previous</a>
-        <a href="../access-feature-data/" class="btn btn-neutral float-right" title="(Feature) data">Next <span class="icon icon-circle-arrow-right"></span></a>
+        <a href="../streaming/" class="btn btn-neutral float-right" title="Streaming">Next <span class="icon icon-circle-arrow-right"></span></a>
     </div>
 
   <hr/>
@@ -362,7 +384,7 @@ extenders = get_extender_docs(wraps=&quot;formula&quot;)
       <span><a href="../../chapter1/extender/" style="color: #fcfcfc">&laquo; Previous</a></span>
     
     
-      <span><a href="../access-feature-data/" style="color: #fcfcfc">Next &raquo;</a></span>
+      <span><a href="../streaming/" style="color: #fcfcfc">Next &raquo;</a></span>
     
   </span>
 </div>

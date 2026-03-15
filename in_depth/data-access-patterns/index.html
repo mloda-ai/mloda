@@ -72,6 +72,8 @@
               <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../mloda-api/">mloda API</a>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../streaming/">Streaming</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" href="../access-feature-data/">(Feature) data</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../join_data/">Join data</a>
@@ -288,7 +290,8 @@ class ReadFileFeature(FeatureGroup):
 </code></pre>
 <h3 id="common-baseinputdata-implementations">Common BaseInputData Implementations</h3>
 <ul>
-<li><strong>ReadFile</strong>: For file-based data loading (see <a href="../access-feature-data/#global-scope-data-access">access-feature-data</a>)</li>
+<li><strong>ReadFile</strong>: For structured file-based data loading (see <a href="../access-feature-data/#global-scope-data-access">access-feature-data</a>)</li>
+<li><strong>ReadDocument</strong>: For unstructured document loading (Markdown, YAML, text). Skips file types owned by ReadFile by default.</li>
 <li><strong>DataCreator</strong>: For generating synthetic data (see <a href="../access-feature-data/#data-creator">access-feature-data</a>)</li>
 <li><strong>ApiInputData</strong>: For runtime data injection (see <a href="../access-feature-data/#apidata">access-feature-data</a>)</li>
 <li><strong>DatabaseConnector</strong>: For database connections</li>

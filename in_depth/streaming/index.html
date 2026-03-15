@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="../../img/favicon.ico" />
+    <title>Streaming - mloda docs</title>
+    <link rel="stylesheet" href="../../css/theme.css" />
+    <link rel="stylesheet" href="../../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Streaming";
+        var mkdocs_page_input_path = "in_depth/streaming.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="../.." class="icon icon-home"> mloda docs
+        </a>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption"><span class="caption-text">Home</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../..">mloda</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">mloda Concepts</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/0_table_of_content/">Table of Content</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/1_ml_mloda_intro/">Intro to the core interfaces of mloda</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/2_ml_advantage_process_focus/">What makes mloda unique?</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/3_ml_data_feature_feature_groups/">Data, Feature, FeatureSets and FeatureGroups in mloda</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/4_ml_data_providers_user_steward/">Provider, User, Steward in mloda</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Getting Started</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/installation/">Installation</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/api-request/">API Request</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/feature-groups/">Feature Groups</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/compute-frameworks/">Compute Frameworks</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/extender/">Extender</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">In Depth - Basics</span></p>
+              <ul class="current">
+                  <li class="toctree-l1"><a class="reference internal" href="../mloda-api/">mloda API</a>
+                  </li>
+                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Streaming</a>
+    <ul class="current">
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../access-feature-data/">(Feature) data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../join_data/">Join data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../filter_data/">Filter data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../artifacts/">Artifacts</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">In Depth - Advanced</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../data-quality/">Data quality</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../domain/">Domain concept</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../data-access-patterns/">Data Access Patterns</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Compute Frameworks</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../framework-transformers/">Framework Transformers</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../compute-framework-integration/">Compute Framework Integration</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../framework-connection-object/">Framework Connection Object</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-config/">Feature Configuration</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-chain-parser/">Feature Chain Parser</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-group-matching/">Feature Group Matching</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../property-mapping/">PROPERTY_MAPPING</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-group-testing/">Feature Group Testing</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-group-version/">Feature Group Versioning</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../multiple_result_columns/">Multiple Result Columns</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Plugin System</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../discover-plugins/">Discover Plugins</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../troubleshooting/feature-group-resolution-errors/">Feature Group Resolution Errors</a>
+                </li>
+    </ul>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Development</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../development/">Contributors</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../license/">License - Apache 2.0</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Need Help?</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../faq/">FAQ</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../need-help/">Need Help</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../..">mloda docs</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../.." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">In Depth - Basics</li>
+      <li class="breadcrumb-item active">Streaming</li>
+    <li class="wy-breadcrumbs-aside">
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h2 id="streaming-with-stream_all">Streaming with <code>stream_all</code></h2>
+<p><code>stream_all</code> lets you consume results incrementally instead of waiting for every feature group to finish.  Each time a feature group completes, its result is yielded immediately so you can begin processing it while the remaining groups are still computing.  It accepts the same parameters as <code>run_all</code> (see <a href="../mloda-api/">mloda API</a>).</p>
+<pre><code class="language-python3">from mloda.user import stream_all
+
+for result in stream_all([&quot;FeatureA&quot;, &quot;FeatureB&quot;, &quot;FeatureC&quot;]):
+    print(result)
+</code></pre>
+<h2 id="comparison-with-run_all">Comparison with <code>run_all</code></h2>
+<p><code>run_all</code> returns all results at once after every feature group has finished:</p>
+<pre><code class="language-python3">from mloda.user import mloda
+
+results = mloda.run_all([&quot;FeatureA&quot;, &quot;FeatureB&quot;, &quot;FeatureC&quot;])
+# results is a list — all groups are already complete
+</code></pre>
+<p><code>stream_all</code> yields each result as soon as its group is done:</p>
+<pre><code class="language-python3">from mloda.user import stream_all
+
+for result in stream_all([&quot;FeatureA&quot;, &quot;FeatureB&quot;, &quot;FeatureC&quot;]):
+    # each result arrives as its feature group finishes
+    process(result)
+</code></pre>
+<p>Both produce the same data — <code>list(stream_all(...))</code> is equivalent to <code>run_all(...)</code>.</p>
+<h2 id="what-streaming-means-here">What "streaming" means here</h2>
+<p>Streaming operates at <strong>feature-group granularity</strong>.  Each yielded value is a <strong>complete</strong> result table for one feature group (e.g. a <code>pa.Table</code>).  There is no partial or incremental data within a single group; you always receive the full result.</p>
+<h2 id="what-is-not-supported">What is not supported</h2>
+<ul>
+<li><strong>Row-by-row streaming</strong> — individual rows are not yielded as they are computed.</li>
+<li><strong>Partial results</strong> — you cannot observe a feature group's output before it has fully completed.</li>
+<li><strong>Chunked input</strong> — a single feature group's computation is not split into smaller streaming chunks.</li>
+</ul>
+<h2 id="when-to-use-stream_all">When to use <code>stream_all</code></h2>
+<p><code>stream_all</code> is most useful when you request <strong>many independent feature groups</strong> and want to start processing early results while the rest are still running.  Typical scenarios:</p>
+<ul>
+<li>Displaying partial dashboards or reports as data becomes available.</li>
+<li>Feeding completed features into a downstream pipeline without waiting for all groups.</li>
+<li>Reducing peak memory when results can be consumed and released one at a time.</li>
+</ul>
+<p>If you only request a single feature group, <code>stream_all</code> behaves like <code>run_all</code> since there is only one result to yield.</p>
+<h2 id="continuous-data-processing">Continuous data processing</h2>
+<p>mloda processes data in <strong>blocks</strong> — complete datasets that are computed and returned at once. Continuous processing means wrapping an outer loop around mloda's APIs, feeding micro-batches from an external source (Kafka consumer, WebSocket, file watcher, generator) into mloda one block at a time.</p>
+<p>All patterns below build on the <a href="../mloda-api/#two-phase-execution-prepare-run">two-phase execution API (<code>prepare()</code> / <code>run()</code>)</a>.</p>
+<h2 id="pattern-1-micro-batch-loop-with-prepare-run">Pattern 1 — Micro-batch loop with <code>prepare()</code> / <code>run()</code></h2>
+<p>The recommended pattern for continuous processing. Call <code>prepare()</code> once to build the execution plan, then loop <code>run()</code> for each micro-batch. The plan is reused across calls, so only the first call pays the planning cost.</p>
+<pre><code class="language-python3">from mloda.user import mloda
+
+def data_source():
+    &quot;&quot;&quot;Yields micro-batches from any source (Kafka, WebSocket, file watcher, generator).&quot;&quot;&quot;
+    yield {&quot;SensorData&quot;: {&quot;timestamp&quot;: [1, 2], &quot;value&quot;: [10.5, 11.2]}}
+    yield {&quot;SensorData&quot;: {&quot;timestamp&quot;: [3, 4], &quot;value&quot;: [9.8, 10.1]}}
+
+# Prepare once with a representative schema
+session = mloda.prepare(
+    [&quot;ProcessedSensor&quot;],
+    api_data={&quot;SensorData&quot;: {&quot;timestamp&quot;: [0], &quot;value&quot;: [0.0]}},
+)
+
+# Process micro-batches
+for batch in data_source():
+    results = session.run(api_data=batch)
+    for result in results:
+        consume(result)
+</code></pre>
+<p>This works with any iterable source — swap <code>data_source()</code> for a Kafka consumer, an async WebSocket buffer, or a directory watcher.</p>
+<h2 id="pattern-2-micro-batch-loop-with-prepare-stream_run">Pattern 2 — Micro-batch loop with <code>prepare()</code> / <code>stream_run()</code></h2>
+<p>Combines plan reuse with per-group streaming. Call <code>prepare()</code> once, then <code>stream_run()</code> for each micro-batch. Each feature group's result is yielded as soon as it completes, while the execution plan is reused across calls.</p>
+<pre><code class="language-python3">from mloda.user import mloda
+
+def sensor_source():
+    yield {
+        &quot;Sensors&quot;: {
+            &quot;timestamp&quot;: [1, 2, 3],
+            &quot;temperature&quot;: [22.1, 22.5, 23.0],
+            &quot;pressure&quot;: [1013, 1012, 1014],
+            &quot;vibration&quot;: [0.01, 0.02, 0.015],
+        }
+    }
+
+features = [&quot;TemperatureStats&quot;, &quot;PressureAnomaly&quot;, &quot;VibrationFFT&quot;]
+
+session = mloda.prepare(
+    features,
+    api_data={&quot;Sensors&quot;: {&quot;timestamp&quot;: [0], &quot;temperature&quot;: [0.0], &quot;pressure&quot;: [0], &quot;vibration&quot;: [0.0]}},
+)
+
+for batch in sensor_source():
+    for result in session.stream_run(api_data=batch):
+        # Each panel updates as its feature group completes
+        dashboard.update_panel(result)
+</code></pre>
+<p><code>stream_run()</code> has the same parameters as <code>run()</code>. <code>list(session.stream_run(...))</code> produces the same results as <code>session.run(...)</code>.</p>
+<h2 id="pattern-3-one-shot-streaming-with-stream_all">Pattern 3 — One-shot streaming with <code>stream_all()</code></h2>
+<p>When you don't need plan reuse and want a single-call streaming API, use <code>stream_all()</code>. It internally calls <code>prepare()</code> + <code>stream_run()</code>.</p>
+<pre><code class="language-python3">from mloda.user import stream_all
+
+for result in stream_all([&quot;FeatureA&quot;, &quot;FeatureB&quot;, &quot;FeatureC&quot;], api_data=batch):
+    process(result)
+</code></pre>
+<p><code>stream_all()</code> rebuilds the execution plan on every call. For repeated calls, prefer Pattern 2.</p>
+<h2 id="choosing-between-patterns">Choosing between patterns</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Pattern 1: <code>prepare()</code> / <code>run()</code></th>
+<th>Pattern 2: <code>prepare()</code> / <code>stream_run()</code></th>
+<th>Pattern 3: <code>stream_all()</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Plan reuse</strong></td>
+<td>Yes</td>
+<td>Yes</td>
+<td>No — rebuilt every call</td>
+</tr>
+<tr>
+<td><strong>Per-batch overhead</strong></td>
+<td>Low</td>
+<td>Low</td>
+<td>Higher (planning repeated)</td>
+</tr>
+<tr>
+<td><strong>Result delivery</strong></td>
+<td>All groups finish, then list returned</td>
+<td>Each group yielded as it completes</td>
+<td>Each group yielded as it completes</td>
+</tr>
+<tr>
+<td><strong>Best for</strong></td>
+<td>High-throughput pipelines, single feature group</td>
+<td>Multi-feature dashboards with plan reuse</td>
+<td>Quick one-shot streaming</td>
+</tr>
+<tr>
+<td><strong>Memory</strong></td>
+<td>All results in memory at once per batch</td>
+<td>Results can be released incrementally</td>
+<td>Results can be released incrementally</td>
+</tr>
+</tbody>
+</table>
+<h2 id="capabilities-and-limitations">Capabilities and limitations</h2>
+<p>The table below compares what mloda's block-based streaming achieves versus true row-by-row streaming frameworks (e.g. Flink, Kafka Streams).</p>
+<table>
+<thead>
+<tr>
+<th>Aspect</th>
+<th>mloda (block-based)</th>
+<th>True row-by-row streaming</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Granularity</strong></td>
+<td>Micro-batch (N rows per block)</td>
+<td>Single row / event</td>
+</tr>
+<tr>
+<td><strong>Latency</strong></td>
+<td>Batch interval + compute time</td>
+<td>Sub-millisecond per event</td>
+</tr>
+<tr>
+<td><strong>State management</strong></td>
+<td>Stateless between batches</td>
+<td>Built-in windowing, sessionization</td>
+</tr>
+<tr>
+<td><strong>Back-pressure</strong></td>
+<td>Manual (control batch size / loop rate)</td>
+<td>Framework-managed</td>
+</tr>
+<tr>
+<td><strong>Fault tolerance</strong></td>
+<td>Retry at batch level (re-run failed batch)</td>
+<td>Per-event acknowledgment, exactly-once semantics</td>
+</tr>
+<tr>
+<td><strong>Plan reuse</strong></td>
+<td>Yes, via <code>prepare()</code> / <code>run()</code></td>
+<td>N/A (continuous operators)</td>
+</tr>
+<tr>
+<td><strong>Feature composition</strong></td>
+<td>Full mloda feature graph per batch</td>
+<td>Limited to streaming operator algebra</td>
+</tr>
+</tbody>
+</table>
+<p>mloda is not a replacement for dedicated streaming frameworks. It is designed for scenarios where you want mloda's feature composition and dependency resolution applied to data that arrives continuously in small batches — for example, training a model on batch data and then reusing the same feature definitions for realtime inference, or powering live dashboards that update as new micro-batches arrive.</p>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../mloda-api/" class="btn btn-neutral float-left" title="mloda API"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../access-feature-data/" class="btn btn-neutral float-right" title="(Feature) data">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+    
+      <span><a href="../mloda-api/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../access-feature-data/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "../..";</script>
+    <script src="../../js/theme_extra.js"></script>
+    <script src="../../js/theme.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

@@ -71,6 +71,8 @@
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#5-summary">5. Summary</a>
     </li>
+    <li class="toctree-l2"><a class="reference internal" href="#for-realtime-inference-use-cases">For Realtime / Inference Use Cases</a>
+    </li>
     <li class="toctree-l2"><a class="reference internal" href="#for-ai-agents-json-based-requests">For AI Agents: JSON-Based Requests</a>
     </li>
     </ul>
@@ -85,6 +87,8 @@
               <p class="caption"><span class="caption-text">In Depth - Basics</span></p>
               <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../../in_depth/mloda-api/">mloda API</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../in_depth/streaming/">Streaming</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../in_depth/access-feature-data/">(Feature) data</a>
                   </li>
@@ -224,6 +228,24 @@ id: [[0,1,2,...]]
 </code></pre>
 <h4 id="5-summary">5. Summary</h4>
 <p>This example shows how easy it is to interact with the mloda API for data retrieval. By defining the data source and specifying the features, mloda handles the rest.</p>
+<h4 id="for-realtime-inference-use-cases">For Realtime / Inference Use Cases</h4>
+<p>With <code>run_all()</code>, mloda rebuilds the full execution plan on every call. That is fine for
+batch jobs, but in latency-sensitive scenarios the repeated planning overhead matters.</p>
+<p>Typical examples where this applies:</p>
+<ul>
+<li><strong>ML model serving</strong> — a prediction endpoint computes the same derived features for every incoming request; only the raw input row changes.</li>
+<li><strong>Streaming / event-driven pipelines</strong> — each incoming event needs the same feature transformations applied in real time.</li>
+<li><strong>Interactive applications</strong> — a dashboard or API recalculates features on every user action with fresh parameters.</li>
+</ul>
+<p>The two-phase API lets you pay the planning cost once at startup and then execute
+cheaply per request:</p>
+<pre><code class="language-python"># 1. Prepare once (e.g. at server startup)
+session = mloda.prepare(feature_list, compute_frameworks=[&quot;PyArrowTable&quot;], data_access_collection=data_access_collection)
+
+# 2. Execute per request with fresh data
+result = session.run(api_data={&quot;MyKey&quot;: {&quot;col&quot;: [1, 2]}})
+</code></pre>
+<p>See <a href="../../in_depth/mloda-api/#two-phase-execution-prepare-run">mloda API — Two-Phase Execution</a> for details.</p>
 <h4 id="for-ai-agents-json-based-requests">For AI Agents: JSON-Based Requests</h4>
 <p>LLMs can generate JSON feature requests without writing Python code:</p>
 <pre><code class="language-python">from mloda.user import load_features_from_config

@@ -72,6 +72,8 @@
               <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../mloda-api/">mloda API</a>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../streaming/">Streaming</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" href="../access-feature-data/">(Feature) data</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../join_data/">Join data</a>
@@ -131,7 +133,11 @@
     </li>
     <li class="toctree-l4"><a class="reference internal" href="#load_groupgroup_name-str">load_group(group_name: str)</a>
     </li>
+    <li class="toctree-l4"><a class="reference internal" href="#load_matchinggroup_name-str-pattern-str">load_matching(group_name: str, pattern: str)</a>
+    </li>
     <li class="toctree-l4"><a class="reference internal" href="#load_all_plugins">load_all_plugins()</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#disable_auto_loadgroup-str">disable_auto_load(group: str)</a>
     </li>
     <li class="toctree-l4"><a class="reference internal" href="#list_loaded_modulesplugin_category-optionalstr">list_loaded_modules(plugin_category: Optional[str])</a>
     </li>
@@ -207,9 +213,16 @@ loader.load_group(&quot;feature_group&quot;)
 <h3 id="pluginloaderall"><code>PluginLoader.all()</code></h3>
 <p>Creates a loader and loads all available plugins.</p>
 <h3 id="load_groupgroup_name-str"><code>load_group(group_name: str)</code></h3>
-<p>Loads plugins from a specific group folder.</p>
+<p>Loads all plugins from a specific group folder, including nested subdirectories. Supports slash-separated paths for subdirectories (e.g. <code>"feature_group/input_data/read_files"</code>).</p>
+<h3 id="load_matchinggroup_name-str-pattern-str"><code>load_matching(group_name: str, pattern: str)</code></h3>
+<p>Loads only files within a group whose filename matches a glob pattern (e.g. <code>"*transformer*"</code>). Useful when only a subset of files in a group is needed.</p>
 <h3 id="load_all_plugins"><code>load_all_plugins()</code></h3>
 <p>Loads all plugin groups.</p>
+<h3 id="disable_auto_loadgroup-str"><code>disable_auto_load(group: str)</code></h3>
+<p>Prevents a group from being auto-loaded lazily. Call this before any plugin discovery if you want full control over what is loaded.</p>
+<pre><code class="language-python">PluginLoader.disable_auto_load(&quot;feature_group/input_data/read_files&quot;)
+PluginLoader.disable_auto_load(&quot;compute_framework&quot;)
+</code></pre>
 <h3 id="list_loaded_modulesplugin_category-optionalstr"><code>list_loaded_modules(plugin_category: Optional[str])</code></h3>
 <p>Lists loaded plugin modules, optionally filtered by category.</p>
 <h3 id="display_plugin_graphplugin_category-optionalstr"><code>display_plugin_graph(plugin_category: Optional[str])</code></h3>

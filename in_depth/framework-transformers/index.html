@@ -72,6 +72,8 @@
               <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../mloda-api/">mloda API</a>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../streaming/">Streaming</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" href="../access-feature-data/">(Feature) data</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../join_data/">Join data</a>
@@ -232,8 +234,12 @@
 </code></pre>
 <p>Key features:
 - Maintains a registry of available transformers
-- Automatically discovers and registers all <code>BaseTransformer</code> subclasses
+- Auto-loads transformer files from the <code>compute_framework</code> group on first use if no <code>BaseTransformer</code> subclasses are registered yet
 - Provides a lookup mechanism to find the appropriate transformer for any framework pair</p>
+<p>To suppress auto-loading:</p>
+<pre><code class="language-python">from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
+PluginLoader.disable_auto_load(&quot;compute_framework&quot;)
+</code></pre>
 <h3 id="pandaspyarrowtransformer">PandasPyarrowTransformer</h3>
 <p>The <code>PandasPyarrowTransformer</code> is a concrete implementation of <code>BaseTransformer</code> that handles conversions between Pandas DataFrames and PyArrow Tables.</p>
 <pre><code class="language-python">class PandasPyarrowTransformer(BaseTransformer):
@@ -275,7 +281,8 @@
 <h2 id="how-framework-transformers-work">How Framework Transformers Work</h2>
 <h3 id="registration-process">Registration Process</h3>
 <ol>
-<li>During initialization, the <code>ComputeFrameworkTransformer</code> discovers all subclasses of <code>BaseTransformer</code></li>
+<li>During initialization, <code>ComputeFrameworkTransformer</code> checks for existing <code>BaseTransformer</code> subclasses</li>
+<li>If none are found, it auto-loads only <code>*transformer*</code> files from the <code>compute_framework</code> group</li>
 <li>Each transformer is registered in a mapping from framework pairs to transformer classes</li>
 <li>The mapping is bidirectional, allowing transformations in both directions</li>
 </ol>

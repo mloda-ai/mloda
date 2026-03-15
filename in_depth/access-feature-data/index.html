@@ -72,11 +72,17 @@
               <ul class="current">
                   <li class="toctree-l1"><a class="reference internal" href="../mloda-api/">mloda API</a>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../streaming/">Streaming</a>
+                  </li>
                   <li class="toctree-l1 current"><a class="reference internal current" href="#">(Feature) data</a>
     <ul class="current">
     <li class="toctree-l2"><a class="reference internal" href="#dataaccesscollection-global-data-access">DataAccessCollection - global data access</a>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#global-scope-data-access">Global Scope Data Access</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#readdocument-unstructured-file-access">ReadDocument: Unstructured File Access</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#disambiguating-columns-shared-across-multiple-files">Disambiguating columns shared across multiple files</a>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#feature-scope-data-access">Feature Scope Data Access</a>
     </li>
@@ -240,8 +246,9 @@ mloda.run_all(
 <p>A concrete, simplified global scope data access is shown in this example:</p>
 <pre><code class="language-python">import os
 
-from mloda.user import mloda
+from mloda.user import mloda, PluginCollector
 from mloda.user import DataAccessCollection
+from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
 
 
 file_path = os.getcwd()
@@ -253,7 +260,8 @@ result = mloda.run_all(
             [&quot;AExample&quot;, &quot;BExample&quot;],
             compute_frameworks=[&quot;PandasDataFrame&quot;],
             # Define data access on a global level
-            data_access_collection=data_access_collection
+            data_access_collection=data_access_collection,
+            plugin_collector=PluginCollector.enabled_feature_groups({ReadFileFeature}),
         )
 print(result)
 </code></pre>
@@ -261,6 +269,43 @@ print(result)
 <pre><code class="language-python">[  AExample  BExample
 0   Value1         2
 1   Value2         3]
+</code></pre>
+<h4 id="readdocument-unstructured-file-access">ReadDocument: Unstructured File Access</h4>
+<p>For unstructured files (Markdown, YAML, text), mloda provides <code>ReadDocumentFeature</code>.
+It skips structured file types (CSV, JSON, Parquet, etc.) by default to avoid conflicts
+with <code>ReadFile</code>.</p>
+<p>To read a structured file type as a document, use the <code>document_suffixes</code> option:</p>
+<pre><code class="language-python">Feature(&quot;content&quot;, options={&quot;document_suffixes&quot;: frozenset({&quot;.json&quot;})})
+</code></pre>
+<p>This tells ReadDocument to include .json files and ReadFile to auto-exclude them
+for that feature.</p>
+<h4 id="disambiguating-columns-shared-across-multiple-files">Disambiguating columns shared across multiple files</h4>
+<p>When a <code>DataAccessCollection</code> holds multiple files that share the same column name (e.g. <code>id</code> appears in both <code>application_train.csv</code> and <code>bureau.csv</code>), global-scope resolution is non-deterministic: the engine iterates an unordered set and returns the first file that contains the requested columns. Two features intended to come from the same file can end up in different <code>FeatureGroup</code> nodes, producing a misleading "missing Links" error.</p>
+<p>Use <code>column_to_file</code> to pin each column to its canonical file:</p>
+<pre><code class="language-python">from mloda.user import DataAccessCollection, mloda
+
+data_access = DataAccessCollection(
+    files={&quot;application_train.csv&quot;, &quot;bureau.csv&quot;},
+    column_to_file={
+        &quot;SK_ID_CURR&quot;: &quot;application_train.csv&quot;,
+        &quot;TARGET&quot;:     &quot;application_train.csv&quot;,
+        &quot;AMT_CREDIT_SUM&quot;: &quot;bureau.csv&quot;,
+    },
+)
+
+result = mloda.run_all(
+    [&quot;SK_ID_CURR&quot;, &quot;TARGET&quot;, &quot;AMT_CREDIT_SUM&quot;],
+    compute_frameworks=[&quot;PyArrowTable&quot;],
+    data_access_collection=data_access,
+)
+</code></pre>
+<p>Rules:
+- <code>column_to_file</code> only applies to global-scope resolution. Per-feature <code>options</code> always take precedence.
+- All values must be present in the <code>files</code> set -- construction raises <code>ValueError</code> otherwise.
+- If a batch of features has some columns pinned and others not, a <code>ValueError</code> is raised (use <code>column_to_file</code> for all columns or none in a batch).
+- Columns not listed in the map fall through to normal first-match-wins resolution.</p>
+<p>The existing per-feature alternative still works for one-off pinning:</p>
+<pre><code class="language-python">Feature(&quot;SK_ID_CURR&quot;, options=Options({CsvReader: &quot;application_train.csv&quot;}))
 </code></pre>
 <h4 id="feature-scope-data-access">Feature Scope Data Access</h4>
 <p>The Feature Scope Data access is instead designed to control the access to data of any kind 
@@ -484,7 +529,7 @@ class JoinedFeature(FeatureGroup):
             </div>
           </div><footer>
     <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
-        <a href="../mloda-api/" class="btn btn-neutral float-left" title="mloda API"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../streaming/" class="btn btn-neutral float-left" title="Streaming"><span class="icon icon-circle-arrow-left"></span> Previous</a>
         <a href="../join_data/" class="btn btn-neutral float-right" title="Join data">Next <span class="icon icon-circle-arrow-right"></span></a>
     </div>
 
@@ -508,7 +553,7 @@ class JoinedFeature(FeatureGroup):
   <span class="rst-current-version" data-toggle="rst-current-version">
     
     
-      <span><a href="../mloda-api/" style="color: #fcfcfc">&laquo; Previous</a></span>
+      <span><a href="../streaming/" style="color: #fcfcfc">&laquo; Previous</a></span>
     
     
       <span><a href="../join_data/" style="color: #fcfcfc">Next &raquo;</a></span>

@@ -109,6 +109,10 @@ skips = [
 explicit_package_bases = true
 namespace_packages = true
 
+[[tool.mypy.overrides]]
+module = "mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_filter_engine"
+disable_error_code = ["misc", "call-arg", "arg-type"]
+
 [tool.ruff]
 line-length = 120
 

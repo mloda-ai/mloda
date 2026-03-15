@@ -74,7 +74,7 @@ Users can develop custom plug-ins to extend the platform's capabilities, and con
 
 #### How do I join a feature group with itself (self-join)?
 
-When you need to use the same feature group on both sides of a join, you'll need to use pointer fields to distinguish between the left and right instances. See the [Join data guide - Self-Joins section](in_depth/join_data.md#self-joins-with-pointer-fields) for details and examples.
+When you need to use the same feature group on both sides of a join, you'll need to use pointer fields to distinguish between the left and right instances. See the [Join data guide - Same-Class Joins section](in_depth/join_data.md#same-class-joins-with-discriminators) for details and examples.
 
 ## Technical and Integration
 

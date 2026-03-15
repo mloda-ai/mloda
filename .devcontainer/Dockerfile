@@ -48,7 +48,8 @@ RUN uv tool install tox --with tox-uv
 # Pre-build the tox environment and install dev deps
 RUN tox --workdir $TOX_WORK_DIR -e python310 --notest -vv || true && \
     . $TOX_WORK_DIR/python310/bin/activate && \
-    uv sync --all-extras
+    uv sync --all-extras && \
+    uv pip install tox tox-uv
 
 # Auto-activate the shared tox env in interactive shells
 RUN echo '[ -f /home/vscode/.tox-cache/python310/bin/activate ] && source /home/vscode/.tox-cache/python310/bin/activate' \

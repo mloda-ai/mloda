@@ -10,6 +10,7 @@ nav:
     - Provider, User, Steward in mloda: examples/mloda_basics/4_ml_data_providers_user_steward.ipynb
   - Getting Started:
     - Installation: chapter1/installation.md
+    - Base Usage: examples/base_usage.ipynb
     - sklearn Integration Tutorial: examples/sklearn_integration_basic.ipynb
     - API Request: chapter1/api-request.md
     - Feature Groups: chapter1/feature-groups.md
@@ -41,6 +42,7 @@ nav:
     - Plugin System:
       - Discover Plugins: in_depth/discover-plugins.md
       - Plugin Loader: in_depth/plugin-loader.md
+    - Data Type Enforcement: in_depth/data-type-enforcement.md
     - Troubleshooting:
       - Feature Group Resolution Errors: in_depth/troubleshooting/feature-group-resolution-errors.md
     

@@ -636,6 +636,10 @@ class ExecutionPlan:
             if not issubclass(graph.nodes[uuid].feature_group_class, link_fw[0].left_feature_group):
                 continue
 
+            if link_fw[0].left_discriminator is not None:
+                if not self._matches_discriminator(link_fw[0].left_discriminator, graph, uuid):
+                    continue
+
             # loop over all other feature set collections
             for _uuid, _uuid_complete in feature_set_collection_per_uuid.items():
                 if uuid == _uuid:
@@ -648,6 +652,10 @@ class ExecutionPlan:
                 # Use polymorphic matching: concrete class should be subclass of link's base class
                 if not issubclass(graph.nodes[_uuid].feature_group_class, link_fw[0].right_feature_group):
                     continue
+
+                if link_fw[0].right_discriminator is not None:
+                    if not self._matches_discriminator(link_fw[0].right_discriminator, graph, _uuid):
+                        continue
 
                 # Deduplicate using set equality
                 if not any(l == uuid_complete and r == _uuid_complete for l, r in valid_pairs):
@@ -795,6 +803,14 @@ class ExecutionPlan:
                 "right_discriminator={'CsvReader': 'file_b.csv'}). "
                 "The discriminator values must match the corresponding feature's options."
             )
+
+    def _matches_discriminator(self, discriminator: Dict[str, Any], graph: Graph, uuid: UUID) -> bool:
+        """Check if a node's feature options match the discriminator key-value pairs."""
+        for k, v in graph.nodes[uuid].feature.options.items():
+            for dk, dv in discriminator.items():
+                if k == dk and v == dv:
+                    return True
+        return False
 
     def check_pointer(
         self, pointer_dict: Dict[str, Any], link_fw: LinkFrameworkTrekker, graph: Graph, uuid: UUID

@@ -86,6 +86,13 @@ class TestPluginLoader:
 
         mock_load.assert_called_once_with("feature_group/input_data/read_files")
 
+    def test_load_nested_group_builds_correct_module_path(self) -> None:
+        """Nested group paths like 'feature_group/input_data/read_files' produce correct module names."""
+        plugin_loader = PluginLoader()
+        plugin_loader.load_group("feature_group/input_data/read_files")
+        assert "mloda_plugins.feature_group.input_data.read_files.csv" in plugin_loader.plugins
+        assert "mloda_plugins.feature_group.input_data.read_files.parquet" in plugin_loader.plugins
+
     def test_load_matching_only_loads_transformer_files(self) -> None:
         """load_matching with '*transformer*' loads only transformer files, not dataframe/filter/merge."""
         from unittest.mock import MagicMock, call

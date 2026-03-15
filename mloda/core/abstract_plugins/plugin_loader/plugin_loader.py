@@ -86,7 +86,7 @@ class PluginLoader:
         for item in group_path.rglob("*.py"):  # Finds all .py files in the directory
             if item.name == "__init__.py":
                 continue  # Skip __init__.py
-            relative_path = item.relative_to(group_path.parent).with_suffix("")  # Relative path without .py
+            relative_path = item.relative_to(self._get_group_path("")).with_suffix("")  # Relative path without .py
             module_path = ".".join(relative_path.parts)  # Convert to module path
             self._load_plugin(module_path)
 

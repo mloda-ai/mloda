@@ -5,6 +5,9 @@ FROM mcr.microsoft.com/vscode/devcontainers/python:3.10
 USER root
 WORKDIR /workspace
 
+# Fix workspace ownership for vscode user
+RUN chown vscode:vscode /workspace
+
 # Install Docker-in-Docker feature
 RUN apt-get update && apt-get install -y \
     ca-certificates \
@@ -42,11 +45,10 @@ RUN mkdir -p $TOX_WORK_DIR && chown -R vscode:vscode $TOX_WORK_DIR
 # Install tox with uv backend
 RUN uv tool install tox --with tox-uv
 
-# Pre-build the single shared tox env
-RUN tox --workdir $TOX_WORK_DIR -e python310 --notest -vv || true
-
-# Sync all extras
-RUN uv sync --all-extras || true
+# Pre-build the tox environment and install dev deps
+RUN tox --workdir $TOX_WORK_DIR -e python310 --notest -vv || true && \
+    . $TOX_WORK_DIR/python310/bin/activate && \
+    uv sync --all-extras
 
 # Auto-activate the shared tox env in interactive shells
 RUN echo '[ -f /home/vscode/.tox-cache/python310/bin/activate ] && source /home/vscode/.tox-cache/python310/bin/activate' \

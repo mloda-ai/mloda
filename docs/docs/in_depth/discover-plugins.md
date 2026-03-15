@@ -6,7 +6,7 @@ mloda provides functions to discover, inspect, and debug plugins at runtime. The
 
 Use `resolve_feature()` to find which FeatureGroup handles a specific feature name:
 
-```python
+``` python
 from mloda.steward import resolve_feature
 
 # Check which FeatureGroup handles a feature
@@ -26,7 +26,7 @@ This is useful for:
 
 When resolution fails due to conflicts, check the candidates:
 
-```python
+``` python
 result = resolve_feature("my_feature")
 if result.error:
     print(f"Error: {result.error}")
@@ -37,7 +37,7 @@ if result.error:
 
 Get documentation for available feature groups:
 
-```python
+``` python
 from mloda.steward import get_feature_group_docs
 
 # Get all feature groups
@@ -54,7 +54,7 @@ fgs = get_feature_group_docs(compute_framework="PandasDataframe")
 
 Get documentation for compute frameworks:
 
-```python
+``` python
 from mloda.steward import get_compute_framework_docs
 
 # Get all available frameworks
@@ -68,7 +68,7 @@ all_frameworks = get_compute_framework_docs(available_only=False)
 
 Get documentation for extenders:
 
-```python
+``` python
 from mloda.steward import get_extender_docs
 
 # Get all extenders

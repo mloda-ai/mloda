@@ -5,6 +5,9 @@ FROM mcr.microsoft.com/vscode/devcontainers/python:3.10
 USER root
 WORKDIR /workspace
 
+# Fix workspace ownership for vscode user
+RUN chown vscode:vscode /workspace
+
 # Install Docker-in-Docker feature
 RUN apt-get update && apt-get install -y \
     ca-certificates \
@@ -22,8 +25,9 @@ USER vscode
 
 RUN curl -fsSL https://claude.ai/install.sh | bash
 
-# Consistent Python path for build/run
-ENV PYTHON_PATH=/usr/local/bin/python3.10
+# Install uv
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/home/vscode/.local/bin:$PATH"
 
 # Copy project files with correct ownership
 COPY --chown=vscode:vscode ./ /workspace
@@ -31,28 +35,24 @@ COPY --chown=vscode:vscode ./ /workspace
 # Convenience: start in /workspace on shell open
 RUN echo 'cd /workspace' >> /home/vscode/.bashrc
 
-# Install only build tools globally; project deps go into tox env
-RUN $PYTHON_PATH -m pip install --no-cache-dir --upgrade pip wheel virtualenv tox \
-  && $PYTHON_PATH -m pip install virtualenv==20.36.1
-
 # Set tox work directory in user's home to avoid volume mount conflicts
 ENV TOX_WORK_DIR=/home/vscode/.tox-cache
+ENV UV_PROJECT_ENVIRONMENT=/home/vscode/.tox-cache/python310
 
 # Create tox cache directory with proper ownership
 RUN mkdir -p $TOX_WORK_DIR && chown -R vscode:vscode $TOX_WORK_DIR
 
-# Pre-build the single shared tox env (creates /home/vscode/.tox-cache/python310)
-# Assumes your tox.ini defines an env named "python310" that installs all deps.
-RUN $PYTHON_PATH -m tox --workdir $TOX_WORK_DIR -e python310 --notest -vv || true
+# Install tox with uv backend
+RUN uv tool install tox --with tox-uv
 
-# Auto-activate the shared tox env in interactive shells, and ensure tox won't recreate it out from under you
+# Pre-build the tox environment and install dev deps
+RUN tox --workdir $TOX_WORK_DIR -e python310 --notest -vv
+RUN . $TOX_WORK_DIR/python310/bin/activate && \
+    uv sync --extra test --extra pandas --extra polars --extra duckdb --extra iceberg --extra otel --extra sklearn --extra text-cleaning --extra licence
+
+# Auto-activate the shared tox env in interactive shells
 RUN echo '[ -f /home/vscode/.tox-cache/python310/bin/activate ] && source /home/vscode/.tox-cache/python310/bin/activate' \
-      >> /home/vscode/.bashrc && \
-    echo 'alias tox="$PYTHON_PATH -m tox --workdir /home/vscode/.tox-cache"' >> ~/.bashrc
+      >> /home/vscode/.bashrc
 
 # Default shell
 CMD ["bash", "-c", "cd /workspace && exec bash"]
-
-# Recreate tox inside image
-# $PYTHON_PATH -m tox --workdir /home/vscode/.tox-cache -e python310 --recreate -vv
-# sudo chown -R vscode:vscode /workspace

@@ -91,11 +91,11 @@ class IcebergFilterEngine(BaseFilterEngine):
 
         if filter_type == "equal":
             value = cls._extract_parameter_value(filter_feature, "value")
-            return EqualTo(term=Reference(column_name), literal=value) if value is not None else None
+            return EqualTo(Reference(column_name), value) if value is not None else None
 
         elif filter_type == "min":
             value = cls._extract_parameter_value(filter_feature, "value")
-            return GreaterThanOrEqual(term=Reference(column_name), literal=value) if value is not None else None
+            return GreaterThanOrEqual(Reference(column_name), value) if value is not None else None
 
         elif filter_type == "max":
             # Handle both simple and complex max parameters
@@ -103,24 +103,24 @@ class IcebergFilterEngine(BaseFilterEngine):
                 _, max_param, is_max_exclusive = cls.get_min_max_operator(filter_feature)
                 if max_param is not None:
                     if is_max_exclusive:
-                        return LessThan(term=Reference(column_name), literal=max_param)
-                    return LessThanOrEqual(term=Reference(column_name), literal=max_param)
+                        return LessThan(Reference(column_name), max_param)
+                    return LessThanOrEqual(Reference(column_name), max_param)
             else:
                 value = cls._extract_parameter_value(filter_feature, "value")
-                return LessThanOrEqual(term=Reference(column_name), literal=value) if value is not None else None
+                return LessThanOrEqual(Reference(column_name), value) if value is not None else None
 
         elif filter_type == "range":
             min_param, max_param, is_max_exclusive = cls.get_min_max_operator(filter_feature)
             expressions: List[Any] = []
 
             if min_param is not None:
-                expressions.append(GreaterThanOrEqual(term=Reference(column_name), literal=min_param))
+                expressions.append(GreaterThanOrEqual(Reference(column_name), min_param))
 
             if max_param is not None:
                 if is_max_exclusive:
-                    expressions.append(LessThan(term=Reference(column_name), literal=max_param))
+                    expressions.append(LessThan(Reference(column_name), max_param))
                 else:
-                    expressions.append(LessThanOrEqual(term=Reference(column_name), literal=max_param))
+                    expressions.append(LessThanOrEqual(Reference(column_name), max_param))
 
             if len(expressions) == 1:
                 return expressions[0]

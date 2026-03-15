@@ -1,7 +1,8 @@
 """Tests for discriminator-based join disambiguation in ExecutionPlan."""
 
+from typing import Any, Dict, Tuple
 from unittest.mock import MagicMock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.user import Options
@@ -10,7 +11,7 @@ from mloda.user import Options
 class TestMatchesDiscriminator:
     """Unit tests for ExecutionPlan._matches_discriminator."""
 
-    def _make_graph_with_feature(self, options_dict: dict) -> tuple:
+    def _make_graph_with_feature(self, options_dict: Dict[str, Any]) -> Tuple[MagicMock, UUID]:
         uuid = uuid4()
         graph = MagicMock()
         feature = MagicMock()

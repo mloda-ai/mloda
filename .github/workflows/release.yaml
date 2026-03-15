@@ -60,8 +60,8 @@ jobs:
             @semantic-release/git \
             @semantic-release/github
 
-      - name: Semantic Release Dry Run 
-        id: semantic_check
+      - name: Semantic Release Dry Run
+        id: semantic
         run: |
           dry_run_output=$(semantic-release --dry-run 2>&1 || true)
           
@@ -97,13 +97,14 @@ jobs:
 
   publish:
     needs: github_release
+    if: needs.github_release.outputs.new_release_published == 'true'
     runs-on: ubuntu-24.04
     steps:
       - name: Check out the code
         uses: actions/checkout@v4
         with:
-            persist-credentials: false
-            ref: main
+          persist-credentials: false
+          ref: main
 
       - name: Fetch changes on main
         run: git pull origin main
@@ -116,10 +117,10 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install build twine
+          python -m pip install uv twine setuptools
 
       - name: Build the package
-        run: python -m build
+        run: uv build --out-dir dist --wheel
 
       - name: Publish to PyPI
         env:

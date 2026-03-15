@@ -164,6 +164,22 @@ class BaseInputData(ABC):
         return True
 
     @classmethod
+    def _has_suffix(cls) -> bool:
+        """Check if this class implements suffix() (concrete subclass vs abstract base)."""
+        try:
+            cls.suffix()  # type: ignore[attr-defined]
+            return True
+        except NotImplementedError:
+            return False
+
+    @classmethod
+    def _matches_suffix(cls, path: str) -> bool:
+        """Check if a file path matches this class's suffix, or True if no suffix defined."""
+        if not cls._has_suffix():
+            return True
+        return path.endswith(cls.suffix())  # type: ignore[attr-defined]
+
+    @classmethod
     def _resolve_pinned_file(cls, data_access: Any, feature_names: List[str]) -> Optional[str]:
         column_map: Dict[str, str] = data_access.column_to_file
         pinned_paths: Set[str] = {column_map[name] for name in feature_names if name in column_map}
@@ -174,7 +190,7 @@ class BaseInputData(ABC):
                 raise ValueError(f"Mixed batch: some features pinned, others not: {feature_names}")
         if len(pinned_paths) == 1:
             pinned_path: str = next(iter(pinned_paths))
-            if not pinned_path.endswith(cls.suffix()):  # type: ignore[attr-defined]
+            if not cls._matches_suffix(pinned_path):
                 return None
             if cls.validate_columns(pinned_path, feature_names) is False:
                 return None
@@ -182,7 +198,7 @@ class BaseInputData(ABC):
         valid_candidates: List[str] = [
             path
             for path in pinned_paths
-            if path.endswith(cls.suffix()) and cls.validate_columns(path, feature_names) is not False  # type: ignore[attr-defined]
+            if cls._matches_suffix(path) and cls.validate_columns(path, feature_names) is not False
         ]
         if len(valid_candidates) == 1:
             return valid_candidates[0]

@@ -48,7 +48,7 @@ RUN uv tool install tox --with tox-uv
 # Pre-build the tox environment and install dev deps
 RUN tox --workdir $TOX_WORK_DIR -e python310 --notest -vv || true && \
     . $TOX_WORK_DIR/python310/bin/activate && \
-    uv sync --all-extras && \
+    uv sync --extra test --extra pandas --extra polars --extra duckdb --extra iceberg --extra otel --extra sklearn --extra text-cleaning --extra licence && \
     uv pip install tox tox-uv
 
 # Auto-activate the shared tox env in interactive shells

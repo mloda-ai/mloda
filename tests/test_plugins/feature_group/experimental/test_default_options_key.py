@@ -24,7 +24,17 @@ class TestDefaultOptionKeys:
         assert isinstance(DefaultOptionKeys.reference_time.value, str)
         assert isinstance(DefaultOptionKeys.time_travel.value, str)
 
+    def test_order_by_value(self) -> None:
+        """Verify DefaultOptionKeys.order_by has the correct value."""
+        assert DefaultOptionKeys.order_by.value == "order_by"
+
+    def test_order_by_usable_as_string_key(self) -> None:
+        """Verify order_by works as a dictionary key since DefaultOptionKeys is a str enum."""
+        config: dict[str, str] = {DefaultOptionKeys.order_by: "timestamp_col"}
+        assert config["order_by"] == "timestamp_col"
+
     def test_enum_membership(self) -> None:
-        """Verify time_travel is a member of DefaultOptionKeys enum."""
+        """Verify all expected keys are members of DefaultOptionKeys enum."""
         assert hasattr(DefaultOptionKeys, "time_travel")
         assert hasattr(DefaultOptionKeys, "reference_time")
+        assert hasattr(DefaultOptionKeys, "order_by")

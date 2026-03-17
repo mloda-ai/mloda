@@ -153,5 +153,8 @@ class SqlBaseMergeEngine(BaseMergeEngine):
                 return self._join_relation(left_aliased, right_aliased, quote_ident(left_idx), join_type)
             else:
                 return self._join_relation(
-                    left_aliased, right_aliased, f"{quote_ident(left_idx)}={quote_ident(right_idx)}", join_type
+                    left_aliased,
+                    right_aliased,
+                    f"left_rel.{quote_ident(left_idx)} = right_rel.{quote_ident(right_idx)}",
+                    join_type,
                 )

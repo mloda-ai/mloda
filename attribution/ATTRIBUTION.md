@@ -9,7 +9,7 @@
 | bandit                                 | 1.9.4           | Apache-2.0                           |
 | cachetools                             | 6.2.6           | MIT                                  |
 | certifi                                | 2026.2.25       | Mozilla Public License 2.0 (MPL 2.0) |
-| charset-normalizer                     | 3.4.5           | MIT                                  |
+| charset-normalizer                     | 3.4.6           | MIT                                  |
 | click                                  | 8.3.1           | BSD-3-Clause                         |
 | comm                                   | 0.2.3           | BSD License                          |
 | cyclonedx-python-lib                   | 9.1.0           | Apache Software License              |
@@ -39,7 +39,7 @@
 | matplotlib-inline                      | 0.2.1           | UNKNOWN                              |
 | mdurl                                  | 0.1.2           | MIT License                          |
 | mktestdocs                             | 0.2.5           | MIT                                  |
-| mloda                                  | 0.5.2           | Apache-2.0                           |
+| mloda                                  | 0.5.3           | Apache-2.0                           |
 | mmh3                                   | 5.2.1           | MIT License                          |
 | msgpack                                | 1.1.2           | Apache-2.0                           |
 | mypy                                   | 1.19.1          | MIT License                          |
@@ -59,7 +59,7 @@
 | packageurl-python                      | 0.17.6          | MIT License                          |
 | packaging                              | 26.0            | Apache-2.0 OR BSD-2-Clause           |
 | pandas                                 | 2.3.3           | BSD License                          |
-| pandera                                | 0.29.0          | MIT License                          |
+| pandera                                | 0.30.0          | MIT License                          |
 | parso                                  | 0.8.6           | MIT License                          |
 | pathspec                               | 1.0.4           | Mozilla Public License 2.0 (MPL 2.0) |
 | pexpect                                | 4.9.0           | ISC License (ISCL)                   |

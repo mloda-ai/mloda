@@ -33,10 +33,17 @@ PROPERTY_MAPPING = {
     DefaultOptionKeys.context: True,
 }
 
-# Group parameter (affects Feature Group splitting)  
+# Group parameter (affects Feature Group splitting)
 "data_source": {
     "production": "Production data",
     DefaultOptionKeys.group: True,
+}
+
+# Order-by parameter (defines sort order for sequential operations)
+DefaultOptionKeys.order_by: {
+    "explanation": "Column(s) controlling row order for rank, offset, or frame_aggregate",
+    DefaultOptionKeys.context: True,
+    DefaultOptionKeys.strict_validation: False,
 }
 ```
 

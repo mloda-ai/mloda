@@ -12,6 +12,11 @@ class DefaultOptionKeys(str, Enum):
     - `reference_time`: Key for the event timestamp column. Value: "reference_time"
     - `time_travel`: Key for the validity timestamp column. Value: "time_travel_filter"
 
+    Data Shaping Keys:
+    - `group`: Key for grouping/partitioning columns. Value: "group"
+    - `order_by`: Key for sort-order columns used by sequential operations
+      (rank, offset, frame_aggregate). Value: "order_by"
+
     These values are used as default column names when not customized via Options.
     """
 
@@ -22,6 +27,7 @@ class DefaultOptionKeys(str, Enum):
     default = "default"
     context = "context"
     group = "group"
+    order_by = "order_by"
     strict_validation = "strict_validation"
     validation_function = "validation_function"
     strict_type_enforcement = "strict_type_enforcement"

@@ -237,6 +237,14 @@ class TestDuckDBPyArrowTransformer:
         df2 = relation2.df()
         assert df1.equals(df2)
 
+    def test_framework_returns_not_implemented_when_duckdb_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """framework() must return NotImplementedError when duckdb is None so check_imports() works correctly."""
+        monkeypatch.setattr(
+            "mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_pyarrow_transformer.duckdb",
+            None,
+        )
+        assert DuckDBPyArrowTransformer.framework() == NotImplementedError
+
     def test_schema_preservation(self, connection: Any) -> None:
         """Test that schema information is preserved during transformation."""
         # Create data with specific schema

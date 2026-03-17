@@ -200,7 +200,7 @@ class TestDuckDBMergeEngine:
         engine = DuckDBMergeEngine(connection)
 
         # Test inner join through join_logic
-        result = engine.join_logic("inner", left_data, right_data, index_obj, index_obj, JoinType.INNER)
+        result = engine.join_logic("inner", left_data, right_data, index_obj, index_obj)
         result_df = result.df()
         assert len(result_df) == 1
         assert result_df["idx"].tolist()[0] == 1

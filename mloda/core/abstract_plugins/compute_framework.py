@@ -217,8 +217,18 @@ class ComputeFramework(ABC):
         except NotImplementedError:
             return data
 
+        filter_engine_cls = features.filter_engine
+        has_thread_local = hasattr(filter_engine_cls, "_thread_local")
+        if has_thread_local:
+            filter_engine_cls._thread_local.connection = self.framework_connection_object
+
         filter_engine = features.filter_engine()
-        return filter_engine.apply_filters(data, features)
+        result = filter_engine.apply_filters(data, features)
+
+        if has_thread_local:
+            filter_engine_cls._thread_local.connection = None
+
+        return result
 
     @final
     def set_filter_engine(self, features: Any) -> Any:

@@ -1,8 +1,6 @@
 from typing import Any
 
-from mloda.user import Index
-from mloda.user import JoinType
-from mloda.provider import BaseMergeEngine
+from mloda_plugins.compute_framework.base_implementations.sql.sql_base_merge_engine import SqlBaseMergeEngine
 
 try:
     import duckdb
@@ -10,149 +8,21 @@ except ImportError:
     duckdb = None  # type: ignore[assignment]
 
 
-class DuckDBMergeEngine(BaseMergeEngine):
+class DuckDBMergeEngine(SqlBaseMergeEngine):
     def check_import(self) -> None:
         if duckdb is None:
             raise ImportError("DuckDB is not installed. To be able to use this framework, please install duckdb.")
 
-    def merge_inner(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        return self.join_logic("inner", left_data, right_data, left_index, right_index, JoinType.INNER)
+    def _execute_sql(self, sql: str) -> Any:
+        assert self.framework_connection is not None
+        return self.framework_connection.sql(sql)
 
-    def merge_left(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        return self.join_logic("left", left_data, right_data, left_index, right_index, JoinType.LEFT)
+    def _register_table(self, name: str, data: Any) -> None:
+        assert self.framework_connection is not None
+        self.framework_connection.register(name, data)
 
-    def merge_right(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        return self.join_logic("right", left_data, right_data, left_index, right_index, JoinType.RIGHT)
+    def _set_alias(self, data: Any, alias: str) -> Any:
+        return data.set_alias(alias)
 
-    def merge_full_outer(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        return self.join_logic("outer", left_data, right_data, left_index, right_index, JoinType.OUTER)
-
-    def merge_union(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        return self._merge_relations(left_data, right_data, union_all=False)
-
-    def merge_append(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        return self._merge_relations(left_data, right_data, union_all=True)
-
-    def _merge_relations(self, left_data: Any, right_data: Any, union_all: bool) -> Any:
-        """
-        Internal helper to merge two DuckDB relations with aligned schemas.
-        If union_all=True → UNION ALL (append), else UNION (removes duplicates).
-        """
-
-        def quote_ident(col: str) -> str:
-            escaped_col = col.replace('"', '""')  # escape double quotes
-            return f'"{escaped_col}"'
-
-        def build_projection(cols_present: Any, all_cols: list[str]) -> str:
-            return ", ".join(
-                [
-                    f"IFNULL({quote_ident(col)}, NULL) AS {quote_ident(col)}"
-                    if col in cols_present
-                    else f"NULL AS {quote_ident(col)}"
-                    for col in all_cols
-                ]
-            )
-
-        # Extract column sets
-        left_cols = set(left_data.columns)
-        right_cols = set(right_data.columns)
-        all_cols = sorted(left_cols.union(right_cols))  # consistent order
-
-        # Build projections
-        left_proj = build_projection(left_cols, all_cols)
-        right_proj = build_projection(right_cols, all_cols)
-
-        # UNION vs UNION ALL
-        union_keyword = "UNION ALL" if union_all else "UNION"
-
-        # Run query (lazy)
-        if self.framework_connection is None:
-            raise ValueError("Framework connection is not set. Please set the framework connection before merging.")
-        con = self.framework_connection
-        con.register("left_temp", left_data)
-        con.register("right_temp", right_data)
-
-        sql = f" SELECT {left_proj} FROM left_temp {union_keyword} SELECT {right_proj} FROM right_temp "  # nosec
-
-        return con.sql(sql)
-
-    def get_column_names(self, data: Any) -> list[str]:
-        """Get column names from data. Override in subclasses for different data types."""
-        if hasattr(data, "columns"):
-            return list(data.columns)
-        # For DuckDB relations, get columns from the relation
-        if hasattr(data, "columns"):
-            return list(data.columns)
-        raise ValueError("Data does not have column names or is not a DuckDB relation.")
-
-    def is_empty_data(self, data: Any) -> Any:
-        """Check if data is empty. Override in subclasses for different data types."""
-        if hasattr(data, "__len__"):
-            return len(data) == 0
-        # For DuckDB relations, check if count is 0
-        try:
-            return data.count("*").fetchone()[0] == 0
-        except Exception:
-            return False
-
-    def column_exists_in_result(self, result: Any, column_name: str) -> bool:
-        """Check if column exists in result. Override in subclasses for different data types."""
-        if hasattr(result, "columns"):
-            return column_name in result.columns
-        return False
-
-    def handle_empty_data(self, left_data: Any, right_data: Any, left_idx: Any, right_idx: Any) -> Any:
-        """Handle empty data cases. Override in subclasses for different data types."""
-        if self.is_empty_data(left_data) or self.is_empty_data(right_data):
-            if self.is_empty_data(left_data) and self.is_empty_data(right_data):
-                # Both empty - return empty DataFrame
-                return left_data.limit(0)
-            elif self.is_empty_data(left_data):
-                # Left empty - return empty DataFrame with left schema
-                return left_data.limit(0)
-            else:
-                # Right empty - return empty DataFrame with right schema
-                return right_data.limit(0)
-        return None
-
-    def join_logic(
-        self, join_type: str, left_data: Any, right_data: Any, left_index: Index, right_index: Index, jointype: JoinType
-    ) -> Any:
-        # Check if framework connection is set
-        if self.framework_connection is None:
-            raise ValueError(
-                "Framework connection not set. DuckDB merge engine requires a connection from the framework."
-            )
-
-        # Extract index columns
-        left_idx = left_index.index if left_index.is_multi_index() else left_index.index[0]
-        right_idx = right_index.index if right_index.is_multi_index() else right_index.index[0]
-
-        # Handle empty data cases
-        empty_result = self.handle_empty_data(left_data, right_data, left_idx, right_idx)
-        if empty_result is not None:
-            return empty_result
-
-        # Set unique aliases to avoid DuckDB alias conflicts
-        left_aliased = left_data.set_alias("left_rel")
-        right_aliased = right_data.set_alias("right_rel")
-
-        # Handle multi-index
-        if left_index.is_multi_index() or right_index.is_multi_index():
-            # Build compound join condition with explicit table aliases
-            conditions = []
-            for left_col, right_col in zip(left_idx, right_idx):
-                conditions.append(f"left_rel.{left_col}=right_rel.{right_col}")
-            join_condition = " AND ".join(conditions)
-            join_relation = left_aliased.join(right_aliased, join_condition, how=join_type)
-        else:
-            # Single column join
-            if left_idx == right_idx:
-                # Same column names - join on the column
-                join_relation = left_aliased.join(right_aliased, left_idx, how=join_type)
-            else:
-                # Different column names - need to specify the condition
-                join_relation = left_aliased.join(right_aliased, f"{left_idx}={right_idx}", how=join_type)
-
-        # Return as lazy DuckDB relation
-        return join_relation
+    def _join_relation(self, left: Any, right: Any, condition: str, how: str) -> Any:
+        return left.join(right, condition, how=how)

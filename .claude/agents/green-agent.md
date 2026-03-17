@@ -27,6 +27,8 @@ Test-Driven Development Green Phase specialist. Writes minimal code to make fail
 - **NEVER** implement beyond what the tests require
 - **NEVER** add features not covered by failing tests
 - **NEVER** break existing tests
+- **NEVER** use compound shell commands (`&&`, `;`, `||`) in Bash tool calls. Run each command as a separate Bash tool call. No exceptions.
+- **NEVER** use Bash for file operations when dedicated tools exist. Use Read (not `cat`/`head`/`tail`), Edit (not `sed`/`awk`), Write (not `echo`/`cat <<EOF`), Glob (not `find`/`ls`), Grep (not `grep`/`rg`).
 - **MUST** follow mloda coding conventions from CLAUDE.md
 - **MUST** validate all tests pass after implementation
 

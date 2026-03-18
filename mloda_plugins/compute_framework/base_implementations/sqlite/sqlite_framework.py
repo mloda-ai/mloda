@@ -6,7 +6,7 @@ from typing import Any, Optional, Set, Type
 from mloda.provider import BaseMergeEngine
 from mloda.provider import ComputeFramework
 from mloda.provider import BaseFilterEngine
-from mloda.user import FeatureName
+from mloda.user import FeatureName, ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_filter_engine import SqliteFilterEngine
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_merge_engine import SqliteMergeEngine
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation
@@ -92,6 +92,10 @@ class SqliteFramework(ComputeFramework):
             raise ValueError(f"Only one feature can be added at a time: {feature_names}")
 
         raise ValueError(f"Data {type(data)} is not supported by {self.__class__.__name__}")
+
+    @classmethod
+    def supported_parallelization_modes(cls) -> Set[ParallelizationMode]:
+        return {ParallelizationMode.SYNC}
 
     @classmethod
     def filter_engine(cls) -> Type[BaseFilterEngine]:

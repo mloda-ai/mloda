@@ -165,6 +165,11 @@ class ComputeFramework(ABC):
         """
         return True  # Default implementation assumes no external dependencies
 
+    @classmethod
+    def supported_parallelization_modes(cls) -> Set[ParallelizationMode]:
+        """Returns parallelization modes this framework supports. Override to restrict."""
+        return {ParallelizationMode.SYNC, ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING}
+
     @final
     def run_calculation(
         self, feature_group: Any, features: Any, location: str | None, data: Optional[Any] = None

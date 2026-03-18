@@ -2,7 +2,7 @@ import logging
 from typing import Any, Set, Type, Optional
 from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_merge_engine import DuckDBMergeEngine
-from mloda.user import FeatureName
+from mloda.user import FeatureName, ParallelizationMode
 from mloda.provider import ComputeFramework
 from mloda.provider import BaseFilterEngine
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_filter_engine import DuckDBFilterEngine
@@ -121,6 +121,10 @@ class DuckDBFramework(ComputeFramework):
             raise ValueError(f"Only one feature can be added at a time: {feature_names}")
 
         raise ValueError(f"Data {type(data)} is not supported by {self.__class__.__name__}")
+
+    @classmethod
+    def supported_parallelization_modes(cls) -> Set[ParallelizationMode]:
+        return {ParallelizationMode.SYNC, ParallelizationMode.THREADING}
 
     @classmethod
     def filter_engine(cls) -> Type[BaseFilterEngine]:

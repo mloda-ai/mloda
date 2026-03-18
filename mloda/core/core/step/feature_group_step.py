@@ -7,6 +7,7 @@ from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.abstract_step import Step
 from mloda.core.abstract_plugins.feature_group import FeatureGroup, format_feature_group_class
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 
 
 class FeatureGroupStep(Step):
@@ -121,6 +122,9 @@ class FeatureGroupStep(Step):
             )
 
         return data
+
+    def get_parallelization_mode(self) -> Set[ParallelizationMode]:
+        return self.compute_framework.supported_parallelization_modes()
 
     def add_value_to_children_if_root(self, value: UUID) -> None:
         self.children_if_root = self.children_if_root | frozenset([value])

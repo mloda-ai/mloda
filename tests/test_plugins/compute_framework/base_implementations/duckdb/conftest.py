@@ -33,4 +33,6 @@ def connection() -> Any:
     """
     if not DUCKDB_AVAILABLE:
         pytest.skip("DuckDB is not installed")
-    return duckdb.connect()
+    conn = duckdb.connect()
+    yield conn
+    conn.close()

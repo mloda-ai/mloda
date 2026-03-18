@@ -7,8 +7,6 @@ from mloda.provider import ConnectionMatcherMixin
 from mloda.provider import ComputeFramework
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
-from mloda.provider import DataCreator
-from mloda.provider import BaseInputData
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Options
@@ -105,9 +103,9 @@ class SqliteSimpleTransformFeatureGroup(ATestSqliteFeatureGroup):
             feature_name = str(feat.name)
 
             if feature_name == "doubled_value":
-                result_data = result_data.select(raw_sql="*, value * 2 AS doubled_value")
+                result_data = result_data.select(_raw_sql="*, value * 2 AS doubled_value")
             elif feature_name == "score_plus_ten":
-                result_data = result_data.select(raw_sql="*, score + 10 AS score_plus_ten")
+                result_data = result_data.select(_raw_sql="*, score + 10 AS score_plus_ten")
 
         return result_data
 
@@ -128,7 +126,7 @@ class SqliteSecondTransformFeatureGroup(ATestSqliteFeatureGroup):
             feature_name = str(feat.name)
 
             if feature_name == "quadrupled_value":
-                result_data = result_data.select(raw_sql="*, doubled_value * 2 AS quadrupled_value")
+                result_data = result_data.select(_raw_sql="*, doubled_value * 2 AS quadrupled_value")
 
         return result_data
 
@@ -155,11 +153,11 @@ class SqliteAggregationFeatureGroup(ATestSqliteFeatureGroup):
 
             if feature_name == "avg_value_by_category":
                 result_data = result_data.select(
-                    raw_sql="*, AVG(value) OVER (PARTITION BY category) AS avg_value_by_category"
+                    _raw_sql="*, AVG(value) OVER (PARTITION BY category) AS avg_value_by_category"
                 )
             elif feature_name == "count_by_category":
                 result_data = result_data.select(
-                    raw_sql="*, COUNT(*) OVER (PARTITION BY category) AS count_by_category"
+                    _raw_sql="*, COUNT(*) OVER (PARTITION BY category) AS count_by_category"
                 )
 
         return result_data
@@ -193,19 +191,7 @@ class SqliteCheckData(FeatureGroup):
 
 
 class TestSqliteIntegrationWithMlodaAPI:
-    @pytest.mark.parametrize(
-        "modes",
-        [({ParallelizationMode.SYNC})],
-        # ParallelizationMode.THREADING and ParallelizationMode.MULTIPROCESSING are not
-        # included: SQLite connections are not thread-safe by default
-        # (check_same_thread=True). Parallel modes would require a connection per thread
-        # or a connection pool, which is not implemented for SqliteFramework.
-        # There is no ParallelizationMode.ASYNC in mloda; available modes are SYNC,
-        # THREADING, and MULTIPROCESSING.
-    )
-    def test_basic_sqlite_feature_calculation(
-        self, modes: Set[ParallelizationMode], flight_server: Any, sqlite_conn: Any
-    ) -> None:
+    def test_basic_sqlite_feature_calculation(self, flight_server: Any, sqlite_conn: Any) -> None:
         plugin_collector = PluginCollector.enabled_feature_groups(
             {SqliteTestDataCreator, SqliteSimpleTransformFeatureGroup}
         )
@@ -220,7 +206,6 @@ class TestSqliteIntegrationWithMlodaAPI:
         result = mloda.run_all(
             feature_list,
             flight_server=flight_server,
-            parallelization_modes=modes,
             plugin_collector=plugin_collector,
             data_access_collection=data_access_collection,
             compute_frameworks={SqliteFramework},
@@ -232,10 +217,11 @@ class TestSqliteIntegrationWithMlodaAPI:
         assert "doubled_value" in final_data.columns
         assert "score_plus_ten" in final_data.columns
 
-        doubled_values = final_data["doubled_value"].tolist()
+        final_df = final_data.df()
+        doubled_values = final_df["doubled_value"].tolist()
         assert doubled_values == [20, 40, 60, 80, 100]
 
-        score_plus_ten = final_data["score_plus_ten"].tolist()
+        score_plus_ten = final_df["score_plus_ten"].tolist()
         assert score_plus_ten == [11.5, 12.5, 13.5, 14.5, 15.5]
 
     def test_sqlite_aggregation_features(self, flight_server: Any, sqlite_conn: Any) -> None:
@@ -260,8 +246,9 @@ class TestSqliteIntegrationWithMlodaAPI:
         assert "avg_value_by_category" in final_data.columns
         assert "count_by_category" in final_data.columns
 
-        avg_values = final_data["avg_value_by_category"].tolist()
-        count_values = final_data["count_by_category"].tolist()
+        final_df = final_data.df()
+        avg_values = final_df["avg_value_by_category"].tolist()
+        count_values = final_df["count_by_category"].tolist()
 
         assert len(set(avg_values)) <= 3
         assert len(set(count_values)) <= 3
@@ -287,7 +274,7 @@ class TestSqliteIntegrationWithMlodaAPI:
         final_data = result[0]
 
         assert "quadrupled_value" in final_data.columns
-        quadrupled_values = final_data["quadrupled_value"].tolist()
+        quadrupled_values = final_data.df()["quadrupled_value"].tolist()
         assert quadrupled_values == [40, 80, 120, 160, 200]
 
     def test_transform_to_pyarrow(self, flight_server: Any, sqlite_conn: Any) -> None:

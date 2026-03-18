@@ -1,4 +1,3 @@
-import re
 import sqlite3
 from typing import Any
 
@@ -12,17 +11,6 @@ from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_pyarrow_
     SqlitePyArrowTransformer,
 )
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation
-
-
-def _regexp(pattern: str, string: str) -> bool:
-    return bool(re.search(pattern, string))
-
-
-@pytest.fixture
-def connection() -> sqlite3.Connection:
-    conn = sqlite3.connect(":memory:")
-    conn.create_function("REGEXP", 2, _regexp)
-    return conn
 
 
 class TestSqlitePyArrowTransformer:
@@ -131,12 +119,10 @@ class TestSqlitePyArrowTransformer:
 
 
 class TestSqlBasePyArrowTransformerImportError:
-    def test_other_framework_returns_not_implemented_when_pyarrow_unavailable(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """other_framework() must return NotImplementedError when pyarrow is None so check_imports() works correctly."""
+    def test_other_framework_returns_none_when_pyarrow_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """other_framework() must return None when pyarrow is not installed."""
         monkeypatch.setattr(
             "mloda_plugins.compute_framework.base_implementations.sql.sql_base_pyarrow_transformer.pa",
             None,
         )
-        assert SqlBasePyArrowTransformer.other_framework() == NotImplementedError
+        assert SqlBasePyArrowTransformer.other_framework() is None

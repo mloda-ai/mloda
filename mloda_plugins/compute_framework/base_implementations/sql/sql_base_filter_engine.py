@@ -1,4 +1,3 @@
-import threading
 from typing import Any, Tuple
 
 from mloda.provider import BaseFilterEngine
@@ -10,12 +9,14 @@ from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import q
 class SqlBaseFilterEngine(BaseFilterEngine):
     """Shared SQL condition-building logic for SQL-based filter engines.
 
+    Column names are quoted via ``quote_ident``. Filter values use ``?``
+    placeholders, passed as params to the relation's ``filter()`` method.
+    How those params are bound depends on the backend: PEP 249 native
+    parameterization where supported, ``inline_params`` fallback otherwise.
+
     Subclasses must implement:
-    - _apply_filter(data, condition, params): Apply a SQL condition with parameterized values
     - _build_regex_condition(column_name, value): Build regex SQL for the specific dialect
     """
-
-    _thread_local: threading.local = threading.local()
 
     @classmethod
     def final_filters(cls) -> bool:
@@ -23,7 +24,7 @@ class SqlBaseFilterEngine(BaseFilterEngine):
 
     @classmethod
     def _apply_filter(cls, data: Any, condition: str, params: Tuple[Any, ...] = ()) -> Any:
-        raise NotImplementedError
+        return data.filter(condition, params)
 
     @classmethod
     def _build_regex_condition(cls, column_name: str, value: str) -> Tuple[str, Tuple[Any, ...]]:

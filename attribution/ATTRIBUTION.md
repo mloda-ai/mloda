@@ -5,7 +5,7 @@
 | Pygments                               | 2.19.2          | BSD License                          |
 | annotated-types                        | 0.7.0           | MIT License                          |
 | asttokens                              | 3.0.1           | Apache 2.0                           |
-| attrs                                  | 25.4.0          | MIT                                  |
+| attrs                                  | 26.1.0          | MIT                                  |
 | bandit                                 | 1.9.4           | Apache-2.0                           |
 | cachetools                             | 6.2.6           | MIT                                  |
 | certifi                                | 2026.2.25       | Mozilla Public License 2.0 (MPL 2.0) |
@@ -59,7 +59,7 @@
 | packageurl-python                      | 0.17.6          | MIT License                          |
 | packaging                              | 26.0            | Apache-2.0 OR BSD-2-Clause           |
 | pandas                                 | 2.3.3           | BSD License                          |
-| pandera                                | 0.30.0          | MIT License                          |
+| pandera                                | 0.30.1          | MIT License                          |
 | parso                                  | 0.8.6           | MIT License                          |
 | pathspec                               | 1.0.4           | Mozilla Public License 2.0 (MPL 2.0) |
 | pexpect                                | 4.9.0           | ISC License (ISCL)                   |
@@ -68,8 +68,8 @@
 | pip_audit                              | 2.9.0           | Apache Software License              |
 | platformdirs                           | 4.9.4           | MIT License                          |
 | pluggy                                 | 1.6.0           | MIT License                          |
-| polars                                 | 1.39.2          | MIT License                          |
-| polars-runtime-32                      | 1.39.2          | MIT License                          |
+| polars                                 | 1.39.3          | MIT License                          |
+| polars-runtime-32                      | 1.39.3          | MIT License                          |
 | prompt_toolkit                         | 3.0.52          | BSD License                          |
 | psutil                                 | 7.2.2           | BSD-3-Clause                         |
 | ptyprocess                             | 0.7.0           | ISC License (ISCL)                   |
@@ -80,7 +80,7 @@
 | pydantic_core                          | 2.41.5          | MIT                                  |
 | pyiceberg                              | 0.11.1          | Apache-2.0                           |
 | pyparsing                              | 3.3.2           | MIT                                  |
-| pyroaring                              | 1.0.3           | MIT License                          |
+| pyroaring                              | 1.0.4           | MIT License                          |
 | pytest                                 | 9.0.2           | MIT                                  |
 | pytest-order                           | 1.3.0           | MIT License                          |
 | pytest-timeout                         | 2.4.0           | DFSG approved; MIT License           |
@@ -93,7 +93,7 @@
 | requests                               | 2.32.5          | Apache Software License              |
 | rich                                   | 14.3.3          | MIT License                          |
 | rpds-py                                | 0.30.0          | MIT                                  |
-| ruff                                   | 0.15.6          | MIT License                          |
+| ruff                                   | 0.15.7          | MIT License                          |
 | scikit-learn                           | 1.7.2           | BSD-3-Clause                         |
 | scipy                                  | 1.15.3          | BSD License                          |
 | six                                    | 1.17.0          | MIT License                          |

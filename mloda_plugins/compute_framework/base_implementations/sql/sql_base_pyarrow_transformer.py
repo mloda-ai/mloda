@@ -22,7 +22,7 @@ class SqlBasePyArrowTransformer(BaseTransformer):
     @classmethod
     def other_framework(cls) -> Any:
         if pa is None:
-            return NotImplementedError
+            return None
         return pa.Table
 
     @classmethod

@@ -69,9 +69,9 @@ class TestDuckDBFrameworkSupportedParallelizationModes:
     """Tests for DuckDBFramework.supported_parallelization_modes()."""
 
     def test_duckdb_returns_sync_and_threading(self) -> None:
-        """DuckDBFramework must support SYNC and THREADING modes."""
+        """DuckDBFramework must support SYNC only (connections are not thread-safe)."""
         result = DuckDBFramework.supported_parallelization_modes()
-        assert result == {ParallelizationMode.SYNC, ParallelizationMode.THREADING}
+        assert result == {ParallelizationMode.SYNC}
 
     def test_duckdb_does_not_support_multiprocessing(self) -> None:
         """DuckDBFramework must not include MULTIPROCESSING in supported modes."""
@@ -83,10 +83,10 @@ class TestDuckDBFrameworkSupportedParallelizationModes:
         result = DuckDBFramework.supported_parallelization_modes()
         assert ParallelizationMode.SYNC in result
 
-    def test_duckdb_supports_threading(self) -> None:
-        """DuckDBFramework must include THREADING in supported modes."""
+    def test_duckdb_does_not_support_threading(self) -> None:
+        """DuckDBFramework must not include THREADING (connections are not thread-safe)."""
         result = DuckDBFramework.supported_parallelization_modes()
-        assert ParallelizationMode.THREADING in result
+        assert ParallelizationMode.THREADING not in result
 
     def test_duckdb_returns_a_set(self) -> None:
         """DuckDBFramework.supported_parallelization_modes() must return a set."""
@@ -172,7 +172,7 @@ class TestFeatureGroupStepGetParallelizationMode:
         assert result == {ParallelizationMode.SYNC}
 
     def test_get_parallelization_mode_delegates_to_duckdb_framework(self) -> None:
-        """FeatureGroupStep.get_parallelization_mode() with DuckDBFramework must return {SYNC, THREADING}."""
+        """FeatureGroupStep.get_parallelization_mode() with DuckDBFramework must return {SYNC}."""
         mock_feature_group = MagicMock()
         feature_set = self._make_minimal_feature_set()
 
@@ -184,4 +184,4 @@ class TestFeatureGroupStepGetParallelizationMode:
         )
 
         result = step.get_parallelization_mode()
-        assert result == {ParallelizationMode.SYNC, ParallelizationMode.THREADING}
+        assert result == {ParallelizationMode.SYNC}

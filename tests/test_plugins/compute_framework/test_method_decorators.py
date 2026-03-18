@@ -207,15 +207,18 @@ class TestDuckDBFrameworkClassMethods:
     def test_methods_callable_on_class(self) -> None:
         """Verify methods can be called on the class."""
         assert _DuckDBFramework is not None
-        assert _DuckDBFramework.duckdb_relation() == _duckdb.DuckDBPyRelation
+        from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
+
+        assert _DuckDBFramework.duckdb_relation() == DuckdbRelation
 
     def test_methods_callable_on_instance(self) -> None:
         """Verify methods can be called on instances."""
         from mloda.user import ParallelizationMode
+        from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
 
         assert _DuckDBFramework is not None
         instance = _DuckDBFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
-        assert instance.duckdb_relation() == _duckdb.DuckDBPyRelation
+        assert instance.duckdb_relation() == DuckdbRelation
 
 
 @pytest.mark.skipif(_SparkSession is None, reason="PySpark is not installed")

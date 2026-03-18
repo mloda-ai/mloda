@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 
 
 def _regexp(pattern: str, string: Optional[str]) -> bool:
+    """SQLite REGEXP implementation. Warning: pattern comes from filter values; malicious
+    patterns (e.g. '(a+)+$') can cause exponential backtracking on crafted input."""
     if string is None:
         return False
     return bool(re.search(pattern, string))
@@ -54,7 +56,7 @@ class SqliteFramework(ComputeFramework):
         )
 
         selected_columns = list(_selected_feature_names)
-        return data.select(*selected_columns).df()
+        return data.select(*selected_columns)
 
     def set_column_names(self) -> None:
         self.column_names = set(self.data.columns)

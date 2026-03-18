@@ -8,19 +8,11 @@ from mloda.user import Feature
 from mloda.user import SingleFilter
 from mloda.user import FilterType
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_filter_engine import SqliteFilterEngine
-from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import _regexp
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation
 
 from tests.test_plugins.compute_framework.base_implementations.filter_engine_test_mixin import (
     FilterEngineTestMixin,
 )
-
-
-@pytest.fixture
-def connection() -> sqlite3.Connection:
-    conn = sqlite3.connect(":memory:")
-    conn.create_function("REGEXP", 2, _regexp)
-    return conn
 
 
 class TestSqliteFilterEngine(FilterEngineTestMixin):

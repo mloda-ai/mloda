@@ -297,35 +297,6 @@ wheels = [
 ]
 
 [[package]]
-name = "chardet"
-version = "7.1.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/0d/84/e72ea5c06e687db591283474b8442ab95665fc6bae7b06043b2a6f0eaf6c/chardet-7.1.0.tar.gz", hash = "sha256:8f47bc4accac17bd9accbb4acc1d563acc024a783806c0a43c3a583f5285690b", size = 505743, upload-time = "2026-03-11T21:39:37.603Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/f9/36/a5c65fa79d26d84075c9b976081a7713fa1454003e08425f428e61fd7544/chardet-7.1.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:dff284d0661563e82d235f79f1d410c526b15ef8d50adc0446cba8162db68d22", size = 542487, upload-time = "2026-03-11T21:38:51.842Z" },
-    { url = "https://files.pythonhosted.org/packages/3d/68/52b839a62b18be0aeca70440fddc07003b74ba81a6ba5bd2065a90a32d60/chardet-7.1.0-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:00c3182f739ae7715641e8c08e0ee8ae21b5db6402b883264aa04511edf428b9", size = 535850, upload-time = "2026-03-11T21:38:53.839Z" },
-    { url = "https://files.pythonhosted.org/packages/4f/96/495dee7148f4809862db23892d4217bed841f0551f9bb6d1eb357b7f4046/chardet-7.1.0-cp310-cp310-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:18afc27681cd9f583fac47282179f8b73f37b1cab171a528e8af89e7e4562b32", size = 556785, upload-time = "2026-03-11T21:38:55.538Z" },
-    { url = "https://files.pythonhosted.org/packages/0d/67/efbac9a4c5dbfba0b9a87aa786054fe3fa6db4bff3802c4f1c299b6daa68/chardet-7.1.0-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:20b73403b7a21487e31b2810ea9d7182ce5e301a8ebe847b49d91ec6022e214a", size = 559651, upload-time = "2026-03-11T21:38:57.062Z" },
-    { url = "https://files.pythonhosted.org/packages/f7/ea/d41d1732d0d7bd5eb39275143e573ed993a4e43f94264c84654e18216e87/chardet-7.1.0-cp310-cp310-win_amd64.whl", hash = "sha256:97cdd7a016fbb451a4dc26b3b1173960b3c0071bbe46a46d6b70027a517170ff", size = 526582, upload-time = "2026-03-11T21:38:59.299Z" },
-    { url = "https://files.pythonhosted.org/packages/79/77/f7084d3b729389b409f1d2db5a967d4cb754f87014e4c6e2bf1eb285c865/chardet-7.1.0-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:70adef4a036d39d9b5f6c2702f773118a9985c0dff23b650e1045f20e33c9467", size = 540706, upload-time = "2026-03-11T21:39:01.303Z" },
-    { url = "https://files.pythonhosted.org/packages/f5/17/ef3d76d2c2902c66d407bad019bfd65164e40dfbbd4554ee86b8b1a5997f/chardet-7.1.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:8e067ee79709ccf9caa5732419df2dbef476bd9b9658ffc929d45cf13fc91ed7", size = 534386, upload-time = "2026-03-11T21:39:03.083Z" },
-    { url = "https://files.pythonhosted.org/packages/55/8f/c0d6f2d51c80a3103c2dc876d165478d9c90fedb3f4df1c36bea9cb6358e/chardet-7.1.0-cp311-cp311-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:eb2a9b4052be006b87a985dbdbb00ab35b4b1b66d2751b0ee12680f8f4e90406", size = 555265, upload-time = "2026-03-11T21:39:05.702Z" },
-    { url = "https://files.pythonhosted.org/packages/79/18/9fd9d90901781a2890f69acf4a616a4ea7fb40c79f902afbcf67a1d207a2/chardet-7.1.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:49b5edd762751735704d1fec38665ee219da28c66f2a4921d615b12be389735b", size = 557812, upload-time = "2026-03-11T21:39:07.515Z" },
-    { url = "https://files.pythonhosted.org/packages/59/19/c90dd953e842392cb16ca385b50e9e88c591333b301e9087c56524c9bd30/chardet-7.1.0-cp311-cp311-win_amd64.whl", hash = "sha256:a02197831a4304eed360559e0ffc58deccc9cdda9f9315c6e7ad978f7d8617d3", size = 526368, upload-time = "2026-03-11T21:39:09.036Z" },
-    { url = "https://files.pythonhosted.org/packages/f0/b8/415efba024c5d6a3d81609de51598a11a99b9f2ffb916c42b72190da1973/chardet-7.1.0-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:43c1e3cba6c41d8958ee4acdab94c151dbe256d7ef8df4ae032dc62a892f294f", size = 542358, upload-time = "2026-03-11T21:39:11.023Z" },
-    { url = "https://files.pythonhosted.org/packages/7f/d7/9517de8b58b487d5d05e957efacc8c9af180cb2cc97103b1a1c67120d8c0/chardet-7.1.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:1a3c22672c9502af99e0433b47421d0d72c8803efce2cd4a91a3ae1ab5972243", size = 534566, upload-time = "2026-03-11T21:39:12.462Z" },
-    { url = "https://files.pythonhosted.org/packages/c3/33/1286f2a05935a80eaadcc13fc70fb0eaa00805acc756363f0f4aca2ed936/chardet-7.1.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:fdfc42dfc44ccd569b84fe6a1fdea1df66dc0c48461bc3899dea5efea8d507f6", size = 556240, upload-time = "2026-03-11T21:39:14.388Z" },
-    { url = "https://files.pythonhosted.org/packages/c7/cc/556aeffb4768b258cc461bc1063d3592e411e1744223da8c7fbbf524438e/chardet-7.1.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:e096d9c211050fff40e22748e1d09d0cec8348fc13ee6e2e0a1da079345b8a86", size = 559737, upload-time = "2026-03-11T21:39:16.382Z" },
-    { url = "https://files.pythonhosted.org/packages/af/4a/147151940ad5ac8bf9f8728a1e46bc63502cd95e93c3a9796f01914188f9/chardet-7.1.0-cp312-cp312-win_amd64.whl", hash = "sha256:a6492bebaba8882afb3e14c786fb69ed767326b6f514b8e093dcdf6e2a094d33", size = 526574, upload-time = "2026-03-11T21:39:18.311Z" },
-    { url = "https://files.pythonhosted.org/packages/b9/79/2c61f33c87d3698f15ca01b0882fbd2fcb95911a783cc615d31adfae025a/chardet-7.1.0-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:cc8c7520a9736da766f5794bbabb1c6cdfe446676429a5cf691af878631a80bf", size = 542249, upload-time = "2026-03-11T21:39:20.133Z" },
-    { url = "https://files.pythonhosted.org/packages/eb/0c/2d0c4897e43f1bb1b68dad840551cda224696eda9951524db50721d3bc18/chardet-7.1.0-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:6f806f325825325e0682226269a2a4859993344cccca14f2463855d4f5a93272", size = 534544, upload-time = "2026-03-11T21:39:21.844Z" },
-    { url = "https://files.pythonhosted.org/packages/17/cb/a568eea24adc1a023da266854e9fc9e0eaffa72580d43c45b47f1b62dd2e/chardet-7.1.0-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:bacc8f862998c59e9ee7fe4960538300d1cc3fe2c293b9cc99bbbc7bf3bedf51", size = 555894, upload-time = "2026-03-11T21:39:23.649Z" },
-    { url = "https://files.pythonhosted.org/packages/f3/e7/958975ca18c7b5be9b94354c302a7f3d757c02e7c14e88e0c85af1e16c70/chardet-7.1.0-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:c35d17822fc94467b7951adebd897cb01c0e37ac694be18d2cbd2b676d61df4f", size = 559286, upload-time = "2026-03-11T21:39:25.289Z" },
-    { url = "https://files.pythonhosted.org/packages/84/0b/1eddfd650e98bb80ec9f74c0bb98fa60cc36f63d9209214cd069b2a27340/chardet-7.1.0-cp313-cp313-win_amd64.whl", hash = "sha256:b951107b254cdc766e52f4b8339dcfa97c7b45ca9f5509075308db2497e7f3af", size = 526406, upload-time = "2026-03-11T21:39:27.103Z" },
-    { url = "https://files.pythonhosted.org/packages/87/13/6aa6c9118ce153a806bb0472e27e8f8c24e6925db8a5b9fe99e03e45af15/chardet-7.1.0-py3-none-any.whl", hash = "sha256:7f677725333bf53f84b7f57458f44669a8a5eb2ac4092ac699cdfa9b1af08a5f", size = 411334, upload-time = "2026-03-11T21:39:36.198Z" },
-]
-
-[[package]]
 name = "charset-normalizer"
 version = "3.4.5"
 source = { registry = "https://pypi.org/simple" }
@@ -484,15 +455,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/0f/d5/c66da9b79e5bdb124974bfe172b4daf3c984ebd9c2a06e2b8a4dc7331c72/defusedxml-0.7.1.tar.gz", hash = "sha256:1bb3032db185915b62d7c6209c5a8792be6a32ab2fedacc84e01b52c51aa3e69", size = 75520, upload-time = "2021-03-08T10:59:26.269Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/07/6c/aa3f2f849e01cb6a001cd8554a88d4c77c5c1a31c95bdf1cf9301e6d9ef4/defusedxml-0.7.1-py2.py3-none-any.whl", hash = "sha256:a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61", size = 25604, upload-time = "2021-03-08T10:59:24.45Z" },
-]
-
-[[package]]
-name = "distlib"
-version = "0.4.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/96/8e/709914eb2b5749865801041647dc7f4e6d00b549cfe88b65ca192995f07c/distlib-0.4.0.tar.gz", hash = "sha256:feec40075be03a04501a973d81f633735b4b69f98b05450592310c0f401a4e0d", size = 614605, upload-time = "2025-07-17T16:52:00.465Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/33/6b/e0547afaf41bf2c42e52430072fa5658766e3d65bd4b03a563d1b6336f57/distlib-0.4.0-py2.py3-none-any.whl", hash = "sha256:9659f7d87e46584a30b5780e43ac7a2143098441670ff0a49d5f9034c54a6c16", size = 469047, upload-time = "2025-07-17T16:51:58.613Z" },
 ]
 
 [[package]]
@@ -1393,7 +1355,7 @@ wheels = [
 
 [[package]]
 name = "mloda"
-version = "0.5.1"
+version = "0.5.3"
 source = { editable = "." }
 dependencies = [
     { name = "pyarrow" },
@@ -1433,7 +1395,6 @@ all = [
     { name = "scikit-learn", version = "1.7.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scikit-learn", version = "1.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "testbook" },
-    { name = "tox" },
     { name = "types-pyyaml" },
     { name = "types-requests" },
     { name = "types-toml" },
@@ -1491,7 +1452,6 @@ test = [
     { name = "scikit-learn", version = "1.7.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scikit-learn", version = "1.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "testbook" },
-    { name = "tox" },
     { name = "types-pyyaml" },
     { name = "types-requests" },
     { name = "types-toml" },
@@ -1502,43 +1462,74 @@ text-cleaning = [
 
 [package.metadata]
 requires-dist = [
+    { name = "bandit", marker = "extra == 'all'" },
     { name = "bandit", marker = "extra == 'test'" },
+    { name = "duckdb", marker = "extra == 'all'" },
     { name = "duckdb", marker = "extra == 'duckdb'" },
+    { name = "ipykernel", marker = "extra == 'all'" },
     { name = "ipykernel", marker = "extra == 'test'" },
+    { name = "joblib", marker = "extra == 'all'", specifier = ">=1.0.0" },
     { name = "joblib", marker = "extra == 'sklearn'", specifier = ">=1.0.0" },
+    { name = "mermaid-py", marker = "extra == 'all'" },
     { name = "mermaid-py", marker = "extra == 'docs'" },
+    { name = "mkdocs", marker = "extra == 'all'" },
     { name = "mkdocs", marker = "extra == 'docs'" },
+    { name = "mkdocs-jupyter", marker = "extra == 'all'" },
     { name = "mkdocs-jupyter", marker = "extra == 'docs'" },
+    { name = "mktestdocs", marker = "extra == 'all'" },
     { name = "mktestdocs", marker = "extra == 'test'" },
-    { name = "mloda", extras = ["test", "pandas", "polars", "duckdb", "iceberg", "otel", "sklearn", "text-cleaning", "docs", "licence"], marker = "extra == 'all'" },
+    { name = "mypy", marker = "extra == 'all'" },
     { name = "mypy", marker = "extra == 'test'" },
+    { name = "nltk", marker = "extra == 'all'", specifier = ">=3.8" },
     { name = "nltk", marker = "extra == 'text-cleaning'", specifier = ">=3.8" },
+    { name = "notebook", marker = "extra == 'all'" },
     { name = "notebook", marker = "extra == 'docs'" },
+    { name = "opentelemetry-api", marker = "extra == 'all'" },
     { name = "opentelemetry-api", marker = "extra == 'otel'" },
+    { name = "opentelemetry-instrumentation", marker = "extra == 'all'" },
     { name = "opentelemetry-instrumentation", marker = "extra == 'otel'" },
+    { name = "opentelemetry-instrumentation-logging", marker = "extra == 'all'" },
     { name = "opentelemetry-instrumentation-logging", marker = "extra == 'otel'" },
+    { name = "opentelemetry-instrumentation-requests", marker = "extra == 'all'" },
     { name = "opentelemetry-instrumentation-requests", marker = "extra == 'otel'" },
+    { name = "opentelemetry-sdk", marker = "extra == 'all'" },
     { name = "opentelemetry-sdk", marker = "extra == 'otel'" },
+    { name = "pandas", marker = "extra == 'all'" },
     { name = "pandas", marker = "extra == 'pandas'" },
+    { name = "pandera", marker = "extra == 'all'" },
     { name = "pandera", marker = "extra == 'test'" },
+    { name = "pip-audit", marker = "extra == 'all'", specifier = "<2.10.0" },
     { name = "pip-audit", marker = "extra == 'test'", specifier = "<2.10.0" },
+    { name = "pip-licenses-cli", marker = "extra == 'all'" },
     { name = "pip-licenses-cli", marker = "extra == 'licence'" },
+    { name = "polars", marker = "extra == 'all'" },
     { name = "polars", marker = "extra == 'polars'" },
     { name = "pyarrow" },
+    { name = "pyarrow", marker = "extra == 'all'" },
     { name = "pyarrow", marker = "extra == 'test'" },
+    { name = "pyiceberg", marker = "extra == 'all'" },
     { name = "pyiceberg", marker = "extra == 'iceberg'" },
     { name = "pyspark", marker = "extra == 'spark'" },
+    { name = "pytest", marker = "extra == 'all'" },
     { name = "pytest", marker = "extra == 'test'" },
+    { name = "pytest-order", marker = "extra == 'all'" },
     { name = "pytest-order", marker = "extra == 'test'" },
+    { name = "pytest-timeout", marker = "extra == 'all'" },
     { name = "pytest-timeout", marker = "extra == 'test'" },
+    { name = "pytest-xdist", marker = "extra == 'all'" },
     { name = "pytest-xdist", marker = "extra == 'test'" },
+    { name = "ruff", marker = "extra == 'all'" },
     { name = "ruff", marker = "extra == 'test'" },
+    { name = "scikit-learn", marker = "extra == 'all'", specifier = ">=1.0.0" },
     { name = "scikit-learn", marker = "extra == 'sklearn'", specifier = ">=1.0.0" },
     { name = "scikit-learn", marker = "extra == 'test'" },
+    { name = "testbook", marker = "extra == 'all'" },
     { name = "testbook", marker = "extra == 'test'" },
-    { name = "tox", marker = "extra == 'test'" },
+    { name = "types-pyyaml", marker = "extra == 'all'" },
     { name = "types-pyyaml", marker = "extra == 'test'" },
+    { name = "types-requests", marker = "extra == 'all'" },
     { name = "types-requests", marker = "extra == 'test'" },
+    { name = "types-toml", marker = "extra == 'all'" },
     { name = "types-toml", marker = "extra == 'test'" },
 ]
 provides-extras = ["test", "pandas", "polars", "duckdb", "iceberg", "spark", "otel", "sklearn", "text-cleaning", "docs", "licence", "all"]
@@ -2692,19 +2683,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pyproject-api"
-version = "1.10.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "packaging" },
-    { name = "tomli", marker = "python_full_version < '3.11'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/45/7b/c0e1333b61d41c69e59e5366e727b18c4992688caf0de1be10b3e5265f6b/pyproject_api-1.10.0.tar.gz", hash = "sha256:40c6f2d82eebdc4afee61c773ed208c04c19db4c4a60d97f8d7be3ebc0bbb330", size = 22785, upload-time = "2025-10-09T19:12:27.21Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/54/cc/cecf97be298bee2b2a37dd360618c819a2a7fd95251d8e480c1f0eb88f3b/pyproject_api-1.10.0-py3-none-any.whl", hash = "sha256:8757c41a79c0f4ab71b99abed52b97ecf66bd20b04fa59da43b5840bac105a09", size = 13218, upload-time = "2025-10-09T19:12:24.428Z" },
-]
-
-[[package]]
 name = "pyroaring"
 version = "1.0.3"
 source = { registry = "https://pypi.org/simple" }
@@ -2842,19 +2820,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/66/c0/0c8b6ad9f17a802ee498c46e004a0eb49bc148f2fd230864601a86dcf6db/python-dateutil-2.9.0.post0.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 342432, upload-time = "2024-03-01T18:36:20.211Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl", hash = "sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427", size = 229892, upload-time = "2024-03-01T18:36:18.57Z" },
-]
-
-[[package]]
-name = "python-discovery"
-version = "1.1.3"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "filelock" },
-    { name = "platformdirs" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/d7/7e/9f3b0dd3a074a6c3e1e79f35e465b1f2ee4b262d619de00cfce523cc9b24/python_discovery-1.1.3.tar.gz", hash = "sha256:7acca36e818cd88e9b2ba03e045ad7e93e1713e29c6bbfba5d90202310b7baa5", size = 56945, upload-time = "2026-03-10T15:08:15.038Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/e7/80/73211fc5bfbfc562369b4aa61dc1e4bf07dc7b34df7b317e4539316b809c/python_discovery-1.1.3-py3-none-any.whl", hash = "sha256:90e795f0121bc84572e737c9aa9966311b9fde44ffb88a5953b3ec9b31c6945e", size = 31485, upload-time = "2026-03-10T15:08:13.06Z" },
 ]
 
 [[package]]
@@ -3701,28 +3666,6 @@ wheels = [
 ]
 
 [[package]]
-name = "tox"
-version = "4.35.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "cachetools" },
-    { name = "chardet" },
-    { name = "colorama" },
-    { name = "filelock" },
-    { name = "packaging" },
-    { name = "platformdirs" },
-    { name = "pluggy" },
-    { name = "pyproject-api" },
-    { name = "tomli", marker = "python_full_version < '3.11'" },
-    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
-    { name = "virtualenv" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/a9/7c/d2b9d58c7fe3a36224a71c86fc7072936af126425b7af40ca18103f6f691/tox-4.35.0.tar.gz", hash = "sha256:74d2fe33eb37233d506f854196bd7bd7e2fbb79e8d9b4bed214ab3da98740876", size = 205701, upload-time = "2026-02-12T22:47:29.036Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/f5/5f/8df349c4e9ea0747cfc12a44c2e952c2f7a1a12fb54f36543dae17638a57/tox-4.35.0-py3-none-any.whl", hash = "sha256:282aa2e1f96328ad197ee09878ff241610426cd8ec01e62a04eb51c987da922d", size = 176999, upload-time = "2026-02-12T22:47:27.768Z" },
-]
-
-[[package]]
 name = "tqdm"
 version = "4.67.3"
 source = { registry = "https://pypi.org/simple" }
@@ -3844,22 +3787,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/c7/24/5f1b3bdffd70275f6661c76461e25f024d5a38a46f04aaca912426a2b1d3/urllib3-2.6.3.tar.gz", hash = "sha256:1b62b6884944a57dbe321509ab94fd4d3b307075e0c2eae991ac71ee15ad38ed", size = 435556, upload-time = "2026-01-07T16:24:43.925Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/39/08/aaaad47bc4e9dc8c725e68f9d04865dbcb2052843ff09c97b08904852d84/urllib3-2.6.3-py3-none-any.whl", hash = "sha256:bf272323e553dfb2e87d9bfd225ca7b0f467b919d7bbd355436d3fd37cb0acd4", size = 131584, upload-time = "2026-01-07T16:24:42.685Z" },
-]
-
-[[package]]
-name = "virtualenv"
-version = "21.2.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "distlib" },
-    { name = "filelock" },
-    { name = "platformdirs" },
-    { name = "python-discovery" },
-    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/aa/92/58199fe10049f9703c2666e809c4f686c54ef0a68b0f6afccf518c0b1eb9/virtualenv-21.2.0.tar.gz", hash = "sha256:1720dc3a62ef5b443092e3f499228599045d7fea4c79199770499df8becf9098", size = 5840618, upload-time = "2026-03-09T17:24:38.013Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/c6/59/7d02447a55b2e55755011a647479041bc92a82e143f96a8195cb33bd0a1c/virtualenv-21.2.0-py3-none-any.whl", hash = "sha256:1bd755b504931164a5a496d217c014d098426cddc79363ad66ac78125f9d908f", size = 5825084, upload-time = "2026-03-09T17:24:35.378Z" },
 ]
 
 [[package]]

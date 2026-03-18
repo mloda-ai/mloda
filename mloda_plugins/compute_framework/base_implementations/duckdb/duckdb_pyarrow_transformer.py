@@ -1,5 +1,6 @@
 from typing import Any
 
+from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
 from mloda_plugins.compute_framework.base_implementations.sql.sql_base_pyarrow_transformer import (
     SqlBasePyArrowTransformer,
 )
@@ -15,7 +16,7 @@ class DuckDBPyArrowTransformer(SqlBasePyArrowTransformer):
     def framework(cls) -> Any:
         if duckdb is None:
             return NotImplementedError
-        return duckdb.DuckDBPyRelation
+        return DuckdbRelation
 
     @classmethod
     def import_fw(cls) -> None:
@@ -27,7 +28,7 @@ class DuckDBPyArrowTransformer(SqlBasePyArrowTransformer):
 
     @classmethod
     def _convert_to_native(cls, data: Any, connection: Any) -> Any:
-        return connection.from_arrow(data)
+        return DuckdbRelation.from_arrow(connection, data)
 
     @classmethod
     def _validate_connection(cls, connection: Any) -> None:

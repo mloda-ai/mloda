@@ -16,13 +16,6 @@ from tests.test_plugins.compute_framework.test_tooling.multi_index.multi_index_t
 
 
 @pytest.fixture
-def connection() -> sqlite3.Connection:
-    conn = sqlite3.connect(":memory:")
-    conn.create_function("REGEXP", 2, _regexp)
-    return conn
-
-
-@pytest.fixture
 def index_obj() -> Index:
     return Index(("idx",))
 

@@ -11,13 +11,6 @@ from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation
 from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
 
 
-@pytest.fixture
-def connection() -> sqlite3.Connection:
-    conn = sqlite3.connect(":memory:")
-    conn.create_function("REGEXP", 2, _regexp)
-    return conn
-
-
 class TestSqliteFrameworkBasics:
     def test_is_available(self) -> None:
         assert SqliteFramework.is_available() is True

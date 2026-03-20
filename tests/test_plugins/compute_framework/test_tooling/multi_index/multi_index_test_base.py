@@ -9,8 +9,11 @@ from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict, List, Optional, Type
 import logging
 
+import pytest
+
 from mloda.user import Index
 from mloda.provider import BaseMergeEngine
+from mloda.core.abstract_plugins.components.link import JoinType
 
 from .test_scenarios import SCENARIOS, MergeScenario
 from .test_data_converter import DataConverter
@@ -190,3 +193,21 @@ class MultiIndexMergeEngineTestBase(ABC):
             assert len(result) < len(scenario["left"]) + len(scenario["right"]), "UNION should remove duplicates"
 
         self._run_merge_test("union_with_duplicates", "merge_union", additional_checks)
+
+    def test_mismatched_index_lengths_raises(self) -> None:
+        """Test that mismatched index lengths raise ValueError in merge()."""
+        left_index = Index(("a", "b"))
+        right_index = Index(("x",))
+
+        left_data = self.convert_dict_to_framework(
+            [{"a": 1, "b": 2, "val": 10}],
+        )
+        right_data = self.convert_dict_to_framework(
+            [{"x": 1, "val": 20}],
+        )
+
+        connection = self.get_connection()
+        engine = self.merge_engine_class()(connection) if connection else self.merge_engine_class()()
+
+        with pytest.raises(ValueError):
+            engine.merge(left_data, right_data, JoinType.INNER, left_index, right_index)

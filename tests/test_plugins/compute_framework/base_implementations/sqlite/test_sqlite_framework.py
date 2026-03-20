@@ -95,11 +95,28 @@ class TestSqliteFrameworkBasics:
         with pytest.raises(ValueError, match="not set"):
             fw.transform(data={"col": [1, 2]}, feature_names=set())
 
+    def test_transform_add_column_preserves_existing(self, connection: sqlite3.Connection) -> None:
+        fw = SqliteFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+        fw.set_framework_connection_object(connection)
+        dict_data = {"col_a": [1, 2, 3], "col_b": [4, 5, 6]}
+        fw.data = fw.transform(dict_data, set())
+        result = fw.transform(data=[7, 8, 9], feature_names={"col_c"})
+        assert set(result.columns) == {"col_a", "col_b", "col_c"}
+        assert len(result) == 3
+        arrow = result.to_arrow_table()
+        assert arrow.column("col_a").to_pylist() == [1, 2, 3]
+        assert arrow.column("col_c").to_pylist() == [7, 8, 9]
+
     def test_set_framework_connection_wrong_type_raises(self) -> None:
         """set_framework_connection_object() with wrong type raises ValueError."""
         fw = SqliteFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         with pytest.raises(ValueError):
             fw.set_framework_connection_object(12345)
+
+    def test_from_dict_mismatched_column_lengths(self, connection: sqlite3.Connection) -> None:
+        """from_dict() should raise ValueError when columns have different lengths."""
+        with pytest.raises(ValueError, match="same length"):
+            SqliteRelation.from_dict(connection, {"a": [1, 2, 3], "b": [4, 5]})
 
 
 class TestSqliteFrameworkMerge(DataFrameTestBase):

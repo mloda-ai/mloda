@@ -1,8 +1,17 @@
+from __future__ import annotations
+
 import re
 from typing import Any, List, Literal, Optional, cast
 
-import duckdb
-import pyarrow as pa
+try:
+    import duckdb
+except ImportError:
+    duckdb = None  # type: ignore[assignment]
+
+try:
+    import pyarrow as pa
+except ImportError:
+    pa = None
 
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import inline_params, quote_ident
 
@@ -134,6 +143,21 @@ class DuckdbRelation:
             raise RuntimeError("count_star() returned no rows")
         result: int = row[0]
         return result
+
+    def append_column(self, name: str, values: list[Any]) -> "DuckdbRelation":
+        """Return a new relation with an additional column appended positionally."""
+        new_col_rel = DuckdbRelation.from_dict(self._connection, {name: values})
+        rn = "__mloda_rn__"
+        qrn = quote_ident(rn)
+        left = self._relation.project(f"*, ROW_NUMBER() OVER () AS {qrn}")
+        right = new_col_rel._relation.project(f"*, ROW_NUMBER() OVER () AS {qrn}")
+        left = left.set_alias("__l__")
+        right = right.set_alias("__r__")
+        joined = left.join(right, f'"__l__".{qrn} = "__r__".{qrn}')
+        keep = ", ".join(f'"__l__".{quote_ident(c)}' for c in self.columns)
+        keep += f', "__r__".{quote_ident(name)}'
+        result = joined.project(keep)
+        return DuckdbRelation(self._connection, result)
 
     @classmethod
     def from_arrow(cls, connection: duckdb.DuckDBPyConnection, arrow_table: pa.Table) -> "DuckdbRelation":

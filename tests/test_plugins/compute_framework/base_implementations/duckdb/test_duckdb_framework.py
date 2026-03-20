@@ -94,6 +94,17 @@ class TestDuckDBFrameworkComputeFramework:
         assert "column1" in duckdb_framework.column_names
         assert "column2" in duckdb_framework.column_names
 
+    def test_transform_add_column_preserves_existing(self, duckdb_framework: DuckDBFramework, connection: Any) -> None:
+        duckdb_framework.set_framework_connection_object(connection)
+        dict_data = {"col_a": [1, 2, 3], "col_b": [4, 5, 6]}
+        duckdb_framework.data = duckdb_framework.transform(dict_data, set())
+        result = duckdb_framework.transform(data=[7, 8, 9], feature_names={"col_c"})
+        assert set(result.columns) == {"col_a", "col_b", "col_c"}
+        assert len(result) == 3
+        arrow = result.to_arrow_table()
+        assert arrow.column("col_a").to_pylist() == [1, 2, 3]
+        assert arrow.column("col_c").to_pylist() == [7, 8, 9]
+
 
 @pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed. Skipping this test.")
 class TestDuckDBFrameworkMerge(DataFrameTestBase):

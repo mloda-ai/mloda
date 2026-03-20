@@ -103,29 +103,11 @@ class DuckDBFramework(ComputeFramework):
             return DuckdbRelation.from_arrow(self.framework_connection_object, arrow_table)
 
         if hasattr(data, "__iter__") and not isinstance(data, (str, bytes)):
-            """Added data: Add column to relation"""
             if len(feature_names) == 1:
                 feature_name = next(iter(feature_names))
-
                 if hasattr(self.data, "columns") and feature_name in self.data.columns:
                     raise ValueError(f"Feature {feature_name} already exists in the relation")
-
-                # Convert the new data to a temporary relation and join it
-                # This is a simplified approach - in practice, we'd need more sophisticated column addition
-                temp_data = {feature_name: list(data) if hasattr(data, "__iter__") else [data]}
-                import pyarrow as pa
-
-                temp_arrow = pa.Table.from_pydict(temp_data)
-
-                if self.framework_connection_object is None:
-                    raise ValueError(
-                        "Framework connection object is not set. Please call set_framework_connection_object() first."
-                    )
-                temp_relation = DuckdbRelation.from_arrow(self.framework_connection_object, temp_arrow)
-
-                # For now, we'll assume the data has the same number of rows and can be combined
-                # In a real implementation, we'd need proper indexing logic
-                return temp_relation
+                return self.data.append_column(feature_name, list(data))
             raise ValueError(f"Only one feature can be added at a time: {feature_names}")
 
         raise ValueError(f"Data {type(data)} is not supported by {self.__class__.__name__}")

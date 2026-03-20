@@ -60,6 +60,14 @@ class BaseMergeEngine(ABC):
     def merge(self, left_data: Any, right_data: Any, jointype: JoinType, left_index: Index, right_index: Index) -> Any:
         self.check_import()
 
+        if jointype not in (JoinType.APPEND, JoinType.UNION):
+            if len(left_index.index) != len(right_index.index):
+                raise ValueError(
+                    f"Left and right index lengths must match for join. "
+                    f"Left has {len(left_index.index)} columns {left_index.index}, "
+                    f"right has {len(right_index.index)} columns {right_index.index}."
+                )
+
         if jointype == JoinType.INNER:
             return self.merge_inner(left_data, right_data, left_index, right_index)
         elif jointype == JoinType.LEFT:

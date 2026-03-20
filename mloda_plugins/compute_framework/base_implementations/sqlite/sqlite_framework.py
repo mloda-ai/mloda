@@ -80,17 +80,9 @@ class SqliteFramework(ComputeFramework):
         if hasattr(data, "__iter__") and not isinstance(data, (str, bytes)):
             if len(feature_names) == 1:
                 feature_name = next(iter(feature_names))
-
                 if hasattr(self.data, "columns") and feature_name in self.data.columns:
                     raise ValueError(f"Feature {feature_name} already exists in the relation")
-
-                temp_data = {feature_name: list(data) if hasattr(data, "__iter__") else [data]}
-
-                if self.framework_connection_object is None:
-                    raise ValueError(
-                        "Framework connection object is not set. Please call set_framework_connection_object() first."
-                    )
-                return SqliteRelation.from_dict(self.framework_connection_object, temp_data)
+                return self.data.append_column(feature_name, list(data))
             raise ValueError(f"Only one feature can be added at a time: {feature_names}")
 
         raise ValueError(f"Data {type(data)} is not supported by {self.__class__.__name__}")

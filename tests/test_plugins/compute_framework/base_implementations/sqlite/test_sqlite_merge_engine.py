@@ -228,6 +228,69 @@ class TestSqliteMergeEngine:
         assert row_2["left_val"] == "b"
         assert row_2["right_val"] == "x"
 
+    def test_full_outer_join_left_is_view(self, connection: sqlite3.Connection) -> None:
+        """FULL OUTER JOIN where the left side is a view (from .select()) must not crash on rowid."""
+        left_table = SqliteRelation.from_arrow(
+            connection, pa.Table.from_pydict({"idx": [1, 2, 3], "col1": ["a", "b", "c"]})
+        )
+        # .select() produces a TEMP VIEW (_is_view=True), which has no rowid
+        left_view = left_table.select("idx", "col1")
+        right = SqliteRelation.from_arrow(
+            connection, pa.Table.from_pydict({"idx": [2, 3, 4], "right_val": ["x", "y", "z"]})
+        )
+        index_obj = Index(("idx",))
+        engine = SqliteMergeEngine(connection)
+        result = engine.merge_full_outer(left_view, right, index_obj, index_obj)
+        result_df = result.df().sort_values("idx").reset_index(drop=True)
+
+        assert len(result_df) == 4, f"Expected 4 rows but got {len(result_df)}"
+        assert set(result_df["idx"].tolist()) == {1, 2, 3, 4}
+
+    def test_full_outer_join_both_views(self, connection: sqlite3.Connection) -> None:
+        """FULL OUTER JOIN where both sides are views must not crash on rowid."""
+        left_table = SqliteRelation.from_arrow(
+            connection, pa.Table.from_pydict({"idx": [1, 2, 3], "col1": ["a", "b", "c"]})
+        )
+        right_table = SqliteRelation.from_arrow(
+            connection, pa.Table.from_pydict({"idx": [2, 3, 4], "right_val": ["x", "y", "z"]})
+        )
+        # Both sides become views via .select()
+        left_view = left_table.select("idx", "col1")
+        right_view = right_table.select("idx", "right_val")
+        index_obj = Index(("idx",))
+        engine = SqliteMergeEngine(connection)
+        result = engine.merge_full_outer(left_view, right_view, index_obj, index_obj)
+        result_df = result.df().sort_values("idx").reset_index(drop=True)
+
+        assert len(result_df) == 4, f"Expected 4 rows but got {len(result_df)}"
+        assert set(result_df["idx"].tolist()) == {1, 2, 3, 4}
+
+    def test_full_outer_join_left_is_prior_join_result(self, connection: sqlite3.Connection) -> None:
+        """FULL OUTER JOIN where the left side is a prior inner join result (a view) must not crash."""
+        # Create three base tables
+        table_a = SqliteRelation.from_arrow(
+            connection, pa.Table.from_pydict({"idx": [1, 2, 3], "a_val": ["a1", "a2", "a3"]})
+        )
+        table_b = SqliteRelation.from_arrow(connection, pa.Table.from_pydict({"idx": [2, 3], "b_val": ["b2", "b3"]}))
+        table_c = SqliteRelation.from_arrow(connection, pa.Table.from_pydict({"idx": [3, 4], "c_val": ["c3", "c4"]}))
+
+        index_obj = Index(("idx",))
+        engine = SqliteMergeEngine(connection)
+
+        # Inner join of A and B produces a view (idx=[2,3])
+        inner_result = engine.merge_inner(table_a, table_b, index_obj, index_obj)
+        assert inner_result._is_view is True
+
+        # Full outer join of the inner join result with C
+        # Left side is a view from the prior join; this exercises the rowid bug path
+        result = engine.merge_full_outer(inner_result, table_c, index_obj, index_obj)
+        result_df = result.df().sort_values("idx").reset_index(drop=True)
+
+        # inner_result has idx=[2,3], table_c has idx=[3,4]
+        # Full outer: idx=2 (left only), idx=3 (both), idx=4 (right only) -> 3 rows
+        assert len(result_df) == 3, f"Expected 3 rows but got {len(result_df)}"
+        assert set(result_df["idx"].tolist()) == {2, 3, 4}
+
 
 def test_execute_sql_raises_value_error_when_no_connection() -> None:
     engine = SqliteMergeEngine()

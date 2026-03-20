@@ -191,6 +191,41 @@ class RelationTestMixin:
         with pytest.raises(ValueError, match="Cannot create relation from empty dictionary"):
             relation_class.from_dict(connection, empty)
 
+    # --- Append Column ---
+
+    def test_append_column_adds_new_column(self, connection: Any, relation_class: Any) -> None:
+        rel = relation_class.from_dict(connection, {"a": [1, 2, 3], "b": [4, 5, 6]})
+        result = rel.append_column("c", [7, 8, 9])
+        assert set(result.columns) == {"a", "b", "c"}
+        assert len(result) == 3
+
+    def test_append_column_preserves_existing_data(self, connection: Any, relation_class: Any) -> None:
+        rel = relation_class.from_dict(connection, {"a": [1, 2, 3], "b": [4, 5, 6]})
+        result = rel.append_column("c", [7, 8, 9])
+        arrow = result.to_arrow_table()
+        assert arrow.column("a").to_pylist() == [1, 2, 3]
+        assert arrow.column("b").to_pylist() == [4, 5, 6]
+        assert arrow.column("c").to_pylist() == [7, 8, 9]
+
+    def test_append_column_does_not_mutate_original(self, connection: Any, relation_class: Any) -> None:
+        rel = relation_class.from_dict(connection, {"a": [1, 2, 3], "b": [4, 5, 6]})
+        rel.append_column("c", [7, 8, 9])
+        assert rel.columns == ["a", "b"]
+
+    def test_append_column_after_filter(self, connection: Any, relation_class: Any) -> None:
+        rel = relation_class.from_dict(connection, {"a": [1, 2, 3], "b": [4, 5, 6]})
+        filtered = rel.filter("a >= ?", (2,))
+        result = filtered.append_column("c", [10, 20])
+        assert set(result.columns) == {"a", "b", "c"}
+        assert len(result) == 2
+
+    def test_append_column_after_select(self, connection: Any, relation_class: Any) -> None:
+        rel = relation_class.from_dict(connection, {"a": [1, 2, 3], "b": [4, 5, 6]})
+        projected = rel.select("a")
+        result = projected.append_column("c", [7, 8, 9])
+        assert set(result.columns) == {"a", "c"}
+        assert len(result) == 3
+
     # --- Join: reserved-word column name ---
 
     def test_join_bare_column_reserved_word(self, connection: Any, relation_class: Any) -> None:

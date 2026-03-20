@@ -214,9 +214,8 @@ class SqliteRelation:
         right_proj = self._build_join_projection(
             self_alias, self_cols, other_alias, other_cols, shared, prefer_right_shared=True
         )
-        # Use rowid (always non-NULL for matched rows) to identify unmatched rows.
-        # Using a data column is unsafe: nullable columns would falsely match rows with NULL values.
-        where_clause = f"WHERE {q_self_alias}.rowid IS NULL"
+        first_shared_col = next(iter(shared))
+        where_clause = f"WHERE {q_self_alias}.{quote_ident(first_shared_col)} IS NULL"
 
         right_sql = (
             f"SELECT {right_proj} FROM {quote_ident(other._table_name)} AS {q_other_alias} "  # nosec
@@ -252,6 +251,37 @@ class SqliteRelation:
                 qc = quote_ident(c)
                 select_parts.append(f"{qr}.{qc} AS {qc}")
         return ", ".join(select_parts)
+
+    def append_column(self, name: str, values: list[Any]) -> "SqliteRelation":
+        """Return a new relation with an additional column appended positionally."""
+        new_col_rel = SqliteRelation.from_dict(self._connection, {name: values})
+        rn = "__mloda_rn__"
+        qrn = quote_ident(rn)
+        left_name = _next_table_name()
+        right_name = _next_table_name()
+        result_name = _next_table_name()
+
+        left_cols = ", ".join(quote_ident(c) for c in self.columns)
+        self._connection.execute(
+            f"CREATE TEMP VIEW {quote_ident(left_name)} AS "  # nosec
+            f"SELECT {left_cols}, ROW_NUMBER() OVER () AS {qrn} "
+            f"FROM {quote_ident(self._table_name)}"
+        )
+        self._connection.execute(
+            f"CREATE TEMP VIEW {quote_ident(right_name)} AS "  # nosec
+            f"SELECT {quote_ident(name)}, ROW_NUMBER() OVER () AS {qrn} "
+            f"FROM {quote_ident(new_col_rel._table_name)}"
+        )
+
+        keep = ", ".join(f"{quote_ident(left_name)}.{quote_ident(c)}" for c in self.columns)
+        keep += f", {quote_ident(right_name)}.{quote_ident(name)}"
+        self._connection.execute(
+            f"CREATE TEMP VIEW {quote_ident(result_name)} AS "  # nosec
+            f"SELECT {keep} FROM {quote_ident(left_name)} "
+            f"INNER JOIN {quote_ident(right_name)} "
+            f"ON {quote_ident(left_name)}.{qrn} = {quote_ident(right_name)}.{qrn}"
+        )
+        return SqliteRelation(self._connection, result_name, _is_view=True)
 
     def to_arrow_table(self) -> pa.Table:
         cursor = self._connection.execute(f"SELECT * FROM {quote_ident(self._table_name)}")  # nosec
@@ -309,6 +339,8 @@ class SqliteRelation:
         connection.execute(f"CREATE TEMP TABLE {quote_ident(table_name)} ({col_defs})")
 
         num_rows = len(data[cols[0]])
+        if not all(len(data[c]) == num_rows for c in cols):
+            raise ValueError("All columns must have the same length.")
         if num_rows > 0:
             placeholders = ", ".join("?" for _ in cols)
             insert_sql = f"INSERT INTO {quote_ident(table_name)} VALUES ({placeholders})"  # nosec

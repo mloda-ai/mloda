@@ -1,6 +1,7 @@
 import pytest
 from mloda.provider import ComputeFramework
 from mloda.user import Feature
+from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame  # noqa: F401
 
@@ -45,3 +46,13 @@ def test_feature_set_domain() -> None:
 
     # Test when neither domain nor domain_options are set
     assert feature._set_domain(None, None) is None
+
+
+def test_feature_repr_name_only() -> None:
+    feature = Feature(name="my_feature")
+    assert repr(feature) == "Feature(name='my_feature')"
+
+
+def test_feature_repr_with_data_type() -> None:
+    feature = Feature(name="my_feature", data_type=DataType.INT32)
+    assert repr(feature) == "Feature(name='my_feature', data_type=<DataType.INT32: 'INT32'>)"

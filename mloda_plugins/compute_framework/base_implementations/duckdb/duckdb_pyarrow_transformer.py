@@ -1,71 +1,38 @@
-from typing import Any, Optional
+from typing import Any
 
-from mloda.provider import BaseTransformer
+from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
+from mloda_plugins.compute_framework.base_implementations.sql.sql_base_pyarrow_transformer import (
+    SqlBasePyArrowTransformer,
+)
 
 try:
     import duckdb
 except ImportError:
     duckdb = None  # type: ignore[assignment]
 
-try:
-    import pyarrow as pa
-except ImportError:
-    pa = None
 
-
-class DuckDBPyArrowTransformer(BaseTransformer):
-    """
-    Transformer for converting between DuckDB relations and PyArrow Table.
-
-    This transformer handles bidirectional conversion between DuckDB DuckDBPyRelation
-    and PyArrow Table data structures, leveraging DuckDB's native PyArrow integration
-    for efficient zero-copy operations where possible.
-    """
-
+class DuckDBPyArrowTransformer(SqlBasePyArrowTransformer):
     @classmethod
     def framework(cls) -> Any:
         if duckdb is None:
             return NotImplementedError
-        return duckdb.DuckDBPyRelation
-
-    @classmethod
-    def other_framework(cls) -> Any:
-        if pa is None:
-            return NotImplementedError
-        return pa.Table
+        return DuckdbRelation
 
     @classmethod
     def import_fw(cls) -> None:
         import duckdb
 
     @classmethod
-    def import_other_fw(cls) -> None:
-        import pyarrow as pa
-
-    @classmethod
-    def transform_fw_to_other_fw(cls, data: Any) -> Any:
-        """
-        Transform a DuckDB relation to a PyArrow Table.
-
-        This method uses DuckDB's native to_arrow_table() method for efficient conversion.
-        """
+    def _convert_to_arrow(cls, data: Any) -> Any:
         return data.to_arrow_table()
 
     @classmethod
-    def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Optional[Any] = None) -> Any:
-        """
-        Transform a PyArrow Table to a DuckDB relation.
+    def _convert_to_native(cls, data: Any, connection: Any) -> Any:
+        return DuckdbRelation.from_arrow(connection, data)
 
-        This method uses DuckDB's native from_arrow() method for efficient conversion.
-        """
+    @classmethod
+    def _validate_connection(cls, connection: Any) -> None:
         if duckdb is None:
             raise ImportError("DuckDB is not installed. To be able to use this framework, please install duckdb.")
-
-        # Create a connection and convert PyArrow table to DuckDB relation
-        if framework_connection_object is None:
-            raise ValueError("A DuckDB connection object is required for this transformation.")
-
-        if not isinstance(framework_connection_object, duckdb.DuckDBPyConnection):
-            raise ValueError(f"Expected a DuckDB connection object, got {type(framework_connection_object)}")
-
-        return framework_connection_object.from_arrow(data)
+        if not isinstance(connection, duckdb.DuckDBPyConnection):
+            raise ValueError(f"Expected a DuckDB connection object, got {type(connection)}")

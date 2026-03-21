@@ -4,7 +4,7 @@ from mloda_plugins.compute_framework.base_implementations.sql.sql_base_filter_en
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
 
 
-class DuckDBFilterEngine(SqlBaseFilterEngine):
+class SqliteFilterEngine(SqlBaseFilterEngine):
     @classmethod
     def _build_regex_condition(cls, column_name: str, value: str) -> Tuple[str, Tuple[Any, ...]]:
-        return f"regexp_matches({quote_ident(column_name)}, ?)", (value,)
+        return f"{quote_ident(column_name)} REGEXP ?", (value,)

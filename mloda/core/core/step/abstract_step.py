@@ -30,7 +30,6 @@ class Step(ABC):
         return set()
 
     def get_parallelization_mode(self) -> Set[ParallelizationMode]:
-        # TODO: This is a placeholder. We will need to add this to feature group later.
         return {ParallelizationMode.SYNC, ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING}
 
     @final

@@ -42,6 +42,7 @@ class mlodaAPI:
         copy_features: Optional[bool] = True,
         strict_type_enforcement: bool = False,
         column_ordering: Optional[str] = None,
+        parallelization_modes: Optional[Set[ParallelizationMode]] = None,
     ) -> None:
         if column_ordering is not None and column_ordering not in ("alphabetical", "request_order"):
             raise ValueError(
@@ -61,7 +62,9 @@ class mlodaAPI:
 
         self.strict_type_enforcement = strict_type_enforcement
         self.features = self._process_features(_requested_features, api_input_data_collection)
-        self.compute_framework = SetupComputeFramework(compute_frameworks, self.features).compute_frameworks
+        self.compute_framework = SetupComputeFramework(
+            compute_frameworks, self.features, parallelization_modes=parallelization_modes
+        ).compute_frameworks
         self.links = links
         self.data_access_collection = data_access_collection
         self.global_filter = global_filter
@@ -145,6 +148,7 @@ class mlodaAPI:
             copy_features=copy_features,
             strict_type_enforcement=strict_type_enforcement,
             column_ordering=column_ordering,
+            parallelization_modes=parallelization_modes,
         )
         return session.run(
             api_data=api_data,
@@ -166,6 +170,7 @@ class mlodaAPI:
         copy_features: Optional[bool] = True,
         strict_type_enforcement: bool = False,
         column_ordering: Optional[str] = None,
+        parallelization_modes: Optional[Set[ParallelizationMode]] = None,
     ) -> "mlodaAPI":
         """Build an execution plan without running it.
 
@@ -183,6 +188,7 @@ class mlodaAPI:
             copy_features=copy_features,
             strict_type_enforcement=strict_type_enforcement,
             column_ordering=column_ordering,
+            parallelization_modes=parallelization_modes,
         )
 
     def run(

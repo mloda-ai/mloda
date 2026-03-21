@@ -9,6 +9,7 @@ from mloda.user import Feature
 from mloda.user import SingleFilter
 from mloda.user import FilterType
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_filter_engine import DuckDBFilterEngine
+from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
 
 from tests.test_plugins.compute_framework.base_implementations.filter_engine_test_mixin import (
     FilterEngineTestMixin,
@@ -45,7 +46,7 @@ class TestDuckDBFilterEngine(FilterEngineTestMixin):
                 "category": ["A", "B", "A", "C", "B"],
             }
         )
-        return connection.from_arrow(arrow_table)
+        return DuckdbRelation.from_arrow(connection, arrow_table)
 
     def get_column_values(self, result: Any, column: str) -> List[Any]:
         """Extract column values from DuckDB relation via pandas DataFrame."""
@@ -64,7 +65,7 @@ class TestDuckDBFilterEngine(FilterEngineTestMixin):
                 "category": ["A", "B", "A", "C", "B", "A"],
             }
         )
-        extended_data = conn.from_arrow(arrow_table)
+        extended_data = DuckdbRelation.from_arrow(conn, arrow_table)
 
         feature = Feature("age")
         filter_type = FilterType.min
@@ -90,7 +91,7 @@ class TestDuckDBFilterEngine(FilterEngineTestMixin):
                 "category": [],
             }
         )
-        empty_data = conn.from_arrow(arrow_table)
+        empty_data = DuckdbRelation.from_arrow(conn, arrow_table)
 
         feature = Feature("age")
         filter_type = FilterType.min
@@ -111,7 +112,7 @@ class TestDuckDBFilterEngine(FilterEngineTestMixin):
                 "priority": ["high", "low", "medium", "high"],
             }
         )
-        data = conn.from_arrow(arrow_table)
+        data = DuckdbRelation.from_arrow(conn, arrow_table)
 
         feature = Feature("status")
         filter_type = FilterType.equal
@@ -134,7 +135,7 @@ class TestDuckDBFilterEngine(FilterEngineTestMixin):
                 "is_premium": [False, True, True, False],
             }
         )
-        data = conn.from_arrow(arrow_table)
+        data = DuckdbRelation.from_arrow(conn, arrow_table)
 
         feature = Feature("is_active")
         filter_type = FilterType.equal
@@ -162,7 +163,7 @@ class TestDuckDBFilterEngine(FilterEngineTestMixin):
                 ],
             }
         )
-        data = conn.from_arrow(arrow_table)
+        data = DuckdbRelation.from_arrow(conn, arrow_table)
 
         feature = Feature("email")
         filter_type = FilterType.regex

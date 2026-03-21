@@ -5,6 +5,7 @@ from mloda.user import JoinType
 from mloda.user import Index
 from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_merge_engine import DuckDBMergeEngine
+from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
 from tests.test_plugins.compute_framework.test_tooling.multi_index.multi_index_test_base import (
     MultiIndexMergeEngineTestBase,
 )
@@ -30,13 +31,13 @@ class TestDuckDBMergeEngine:
     def left_data(self, connection: Any) -> Any:
         """Create sample left dataset."""
         arrow_table = pa.Table.from_pydict({"idx": [1, 3], "col1": ["a", "b"]})
-        return connection.from_arrow(arrow_table)
+        return DuckdbRelation.from_arrow(connection, arrow_table)
 
     @pytest.fixture
     def right_data(self, connection: Any) -> Any:
         """Create sample right dataset."""
         arrow_table = pa.Table.from_pydict({"idx": [1, 2], "col2": ["x", "z"]})
-        return connection.from_arrow(arrow_table)
+        return DuckdbRelation.from_arrow(connection, arrow_table)
 
     def test_check_import(self) -> None:
         """Test that check_import passes without errors."""
@@ -122,8 +123,8 @@ class TestDuckDBMergeEngine:
         left_arrow = pa.Table.from_pydict({"left_id": [1, 2], "col1": ["a", "b"]})
         right_arrow = pa.Table.from_pydict({"right_id": [1, 3], "col2": ["x", "z"]})
 
-        left_data = connection.from_arrow(left_arrow)
-        right_data = connection.from_arrow(right_arrow)
+        left_data = DuckdbRelation.from_arrow(connection, left_arrow)
+        right_data = DuckdbRelation.from_arrow(connection, right_arrow)
 
         left_index = Index(("left_id",))
         right_index = Index(("right_id",))
@@ -142,8 +143,8 @@ class TestDuckDBMergeEngine:
         empty_arrow = pa.Table.from_pydict({"idx": [], "col": []})
         non_empty_arrow = pa.Table.from_pydict({"idx": [1], "col": ["a"]})
 
-        empty_df = connection.from_arrow(empty_arrow)
-        non_empty_df = connection.from_arrow(non_empty_arrow)
+        empty_df = DuckdbRelation.from_arrow(connection, empty_arrow)
+        non_empty_df = DuckdbRelation.from_arrow(connection, non_empty_arrow)
 
         engine = DuckDBMergeEngine(connection)
 
@@ -166,8 +167,8 @@ class TestDuckDBMergeEngine:
             {"id": [1, 2, 4], "city": ["New York", "London", "Tokyo"], "country": ["USA", "UK", "Japan"]}
         )
 
-        left_data = connection.from_arrow(left_arrow)
-        right_data = connection.from_arrow(right_arrow)
+        left_data = DuckdbRelation.from_arrow(connection, left_arrow)
+        right_data = DuckdbRelation.from_arrow(connection, right_arrow)
 
         index_obj = Index(("id",))
         engine = DuckDBMergeEngine(connection)
@@ -184,8 +185,8 @@ class TestDuckDBMergeEngine:
         left_arrow = pa.Table.from_pydict({"id": [1, None], "col1": ["a", "b"]})
         right_arrow = pa.Table.from_pydict({"id": [1, None], "col2": ["x", "y"]})
 
-        left_data = connection.from_arrow(left_arrow)
-        right_data = connection.from_arrow(right_arrow)
+        left_data = DuckdbRelation.from_arrow(connection, left_arrow)
+        right_data = DuckdbRelation.from_arrow(connection, right_arrow)
 
         index_obj = Index(("id",))
         engine = DuckDBMergeEngine(connection)
@@ -200,7 +201,7 @@ class TestDuckDBMergeEngine:
         engine = DuckDBMergeEngine(connection)
 
         # Test inner join through join_logic
-        result = engine.join_logic("inner", left_data, right_data, index_obj, index_obj, JoinType.INNER)
+        result = engine.join_logic(JoinType.INNER, left_data, right_data, index_obj, index_obj)
         result_df = result.df()
         assert len(result_df) == 1
         assert result_df["idx"].tolist()[0] == 1
@@ -225,8 +226,8 @@ class TestDuckDBMergeEngine:
         left_arrow = pa.Table.from_pydict({"idx": [1, 1, 2], "col1": ["a", "a2", "b"]})
         right_arrow = pa.Table.from_pydict({"idx": [1, 1, 3], "col2": ["x", "x2", "z"]})
 
-        left_data = connection.from_arrow(left_arrow)
-        right_data = connection.from_arrow(right_arrow)
+        left_data = DuckdbRelation.from_arrow(connection, left_arrow)
+        right_data = DuckdbRelation.from_arrow(connection, right_arrow)
 
         index_obj = Index(("idx",))
         engine = DuckDBMergeEngine(connection)
@@ -242,8 +243,8 @@ class TestDuckDBMergeEngine:
         left_arrow = pa.Table.from_pydict({"id": [1, 2, 3], "score": [85.5, 92.0, 78.5], "active": [True, False, True]})
         right_arrow = pa.Table.from_pydict({"id": [1, 2, 4], "grade": ["A", "A+", "B"], "count": [10, 15, 8]})
 
-        left_data = connection.from_arrow(left_arrow)
-        right_data = connection.from_arrow(right_arrow)
+        left_data = DuckdbRelation.from_arrow(connection, left_arrow)
+        right_data = DuckdbRelation.from_arrow(connection, right_arrow)
 
         index_obj = Index(("id",))
         engine = DuckDBMergeEngine(connection)
@@ -260,7 +261,7 @@ class TestDuckDBMergeEngine:
         # Create dummy data
         conn = duckdb.connect()
         arrow_table = pa.Table.from_pydict({"idx": [1], "col": ["a"]})
-        data = conn.from_arrow(arrow_table)
+        data = DuckdbRelation.from_arrow(conn, arrow_table)
         index_obj = Index(("idx",))
 
         with pytest.raises(ValueError, match="Framework connection not set"):
@@ -271,7 +272,7 @@ class TestDuckDBMergeEngine:
         engine = DuckDBMergeEngine(connection)
 
         arrow_table = pa.Table.from_pydict({"col1": [1, 2], "col2": ["a", "b"], "col3": [1.1, 2.2]})
-        data = connection.from_arrow(arrow_table)
+        data = DuckdbRelation.from_arrow(connection, arrow_table)
 
         columns = engine.get_column_names(data)
         assert set(columns) == {"col1", "col2", "col3"}
@@ -282,12 +283,12 @@ class TestDuckDBMergeEngine:
 
         # Test with empty data
         empty_arrow = pa.Table.from_pydict({"col": []})
-        empty_data = connection.from_arrow(empty_arrow)
+        empty_data = DuckdbRelation.from_arrow(connection, empty_arrow)
         assert engine.is_empty_data(empty_data) is True
 
         # Test with non-empty data
         non_empty_arrow = pa.Table.from_pydict({"col": [1, 2]})
-        non_empty_data = connection.from_arrow(non_empty_arrow)
+        non_empty_data = DuckdbRelation.from_arrow(connection, non_empty_arrow)
         assert engine.is_empty_data(non_empty_data) is False
 
     def test_column_exists_in_result_method(self, connection: Any) -> None:
@@ -295,7 +296,7 @@ class TestDuckDBMergeEngine:
         engine = DuckDBMergeEngine(connection)
 
         arrow_table = pa.Table.from_pydict({"col1": [1, 2], "col2": ["a", "b"]})
-        data = connection.from_arrow(arrow_table)
+        data = DuckdbRelation.from_arrow(connection, arrow_table)
 
         assert engine.column_exists_in_result(data, "col1") is True
         assert engine.column_exists_in_result(data, "col2") is True
@@ -316,7 +317,7 @@ class TestDuckDBMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):
         """Return DuckDB relation type."""
         if duckdb is None:
             raise ImportError("DuckDB is not installed")
-        return duckdb.DuckDBPyRelation
+        return DuckdbRelation
 
     def get_connection(self) -> Optional[Any]:
         """DuckDB requires a connection object."""

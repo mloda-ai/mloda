@@ -129,11 +129,11 @@ class DuckDBSimpleTransformFeatureGroup(ATestDuckDBFeatureGroup):
 
             if feature_name == "doubled_value":
                 # Add doubled_value column using DuckDB SQL
-                result_data = result_data.select("*, value * 2 AS doubled_value")
+                result_data = result_data.select(_raw_sql="*, value * 2 AS doubled_value")
 
             elif feature_name == "score_plus_ten":
                 # Add score_plus_ten column using DuckDB SQL
-                result_data = result_data.select("*, score + 10 AS score_plus_ten")
+                result_data = result_data.select(_raw_sql="*, score + 10 AS score_plus_ten")
 
         return result_data
 
@@ -157,7 +157,7 @@ class DuckDBSecondTransformFeatureGroup(ATestDuckDBFeatureGroup):
 
             if feature_name == "quadrupled_value":
                 # Add quadrupled_value column using DuckDB SQL
-                result_data = result_data.select("*, doubled_value * 2 AS quadrupled_value")
+                result_data = result_data.select(_raw_sql="*, doubled_value * 2 AS quadrupled_value")
 
         return result_data
 
@@ -187,11 +187,15 @@ class DuckDBAggregationFeatureGroup(ATestDuckDBFeatureGroup):
 
             if feature_name == "avg_value_by_category":
                 # Calculate average value by category
-                result_data = result_data.select("*, AVG(value) OVER (PARTITION BY category) AS avg_value_by_category")
+                result_data = result_data.select(
+                    _raw_sql="*, AVG(value) OVER (PARTITION BY category) AS avg_value_by_category"
+                )
 
             elif feature_name == "count_by_category":
                 # Count records by category
-                result_data = result_data.select("*, COUNT(*) OVER (PARTITION BY category) AS count_by_category")
+                result_data = result_data.select(
+                    _raw_sql="*, COUNT(*) OVER (PARTITION BY category) AS count_by_category"
+                )
 
         return result_data
 
@@ -262,19 +266,19 @@ class TestDuckDBIntegrationWithMlodaAPI:
             compute_frameworks={DuckDBFramework},
         )
 
-        # The result should be a pandas DataFrame (converted from DuckDB relation)
+        # The result should be a PyArrow Table (materialized from DuckDB relation)
         final_data = result[0]
-        assert hasattr(final_data, "columns")
+        assert isinstance(final_data, pa.Table)
 
         # Verify the transformations worked
-        assert "doubled_value" in final_data.columns
-        assert "score_plus_ten" in final_data.columns
+        assert "doubled_value" in final_data.column_names
+        assert "score_plus_ten" in final_data.column_names
 
         # Check some values
-        doubled_values = final_data["doubled_value"].tolist()
+        doubled_values = final_data.column("doubled_value").to_pylist()
         assert doubled_values == [20, 40, 60, 80, 100]  # Original values * 2
 
-        score_plus_ten = final_data["score_plus_ten"].tolist()
+        score_plus_ten = final_data.column("score_plus_ten").to_pylist()
         assert score_plus_ten == [11.5, 12.5, 13.5, 14.5, 15.5]  # Original scores + 10
 
     def test_duckdb_aggregation_features(self, flight_server: Any, duckdb_conn: Any) -> None:
@@ -303,15 +307,16 @@ class TestDuckDBIntegrationWithMlodaAPI:
 
         # Verify results
         final_data = result[0]
-        assert "avg_value_by_category" in final_data.columns
-        assert "count_by_category" in final_data.columns
+        assert isinstance(final_data, pa.Table)
+        assert "avg_value_by_category" in final_data.column_names
+        assert "count_by_category" in final_data.column_names
 
         # Check aggregation results
         # Category A: values [10, 30], avg = 20, count = 2
         # Category B: values [20, 50], avg = 35, count = 2
         # Category C: values [40], avg = 40, count = 1
-        avg_values = final_data["avg_value_by_category"].tolist()
-        count_values = final_data["count_by_category"].tolist()
+        avg_values = final_data.column("avg_value_by_category").to_pylist()
+        count_values = final_data.column("count_by_category").to_pylist()
 
         # Verify the aggregations are correct
         assert len(set(avg_values)) <= 3  # At most 3 different averages (one per category)
@@ -338,10 +343,11 @@ class TestDuckDBIntegrationWithMlodaAPI:
         # Verify results
         assert len(result) == 1
         final_data = result[0]
+        assert isinstance(final_data, pa.Table)
 
         # Verify the multi-step transformation
-        assert "quadrupled_value" in final_data.columns
-        quadrupled_values = final_data["quadrupled_value"].tolist()
+        assert "quadrupled_value" in final_data.column_names
+        quadrupled_values = final_data.column("quadrupled_value").to_pylist()
         assert quadrupled_values == [40, 80, 120, 160, 200]  # Original values * 4
 
     def test_transform_to_pyarrow(self, flight_server: Any, duckdb_conn: Any) -> None:

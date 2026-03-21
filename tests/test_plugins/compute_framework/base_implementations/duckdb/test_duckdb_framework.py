@@ -2,6 +2,7 @@ import os
 from typing import Any, Optional, Type
 import pytest
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
+from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
 from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
@@ -62,10 +63,10 @@ class TestDuckDBFrameworkComputeFramework:
     def expected_data(self, connection: Any, dict_data: dict[str, list[int]]) -> Any:
         """Create fresh expected DuckDB relation for each test."""
         expected_arrow = pa.Table.from_pydict(dict_data)
-        return connection.from_arrow(expected_arrow)
+        return DuckdbRelation.from_arrow(connection, expected_arrow)
 
     def test_expected_data_framework(self, duckdb_framework: DuckDBFramework) -> None:
-        assert duckdb_framework.expected_data_framework() == duckdb.DuckDBPyRelation
+        assert duckdb_framework.expected_data_framework() == DuckdbRelation
 
     def test_transform_dict_to_relation(
         self, duckdb_framework: DuckDBFramework, connection: Any, dict_data: dict[str, list[int]], expected_data: Any
@@ -83,16 +84,26 @@ class TestDuckDBFrameworkComputeFramework:
             duckdb_framework.transform(data=["a"], feature_names=set())
 
     def test_select_data_by_column_names(self, duckdb_framework: DuckDBFramework, expected_data: Any) -> None:
-        # Note: This test might need adjustment based on actual DuckDB relation mloda
-        # For now, we'll test the basic functionality
         data = duckdb_framework.select_data_by_column_names(expected_data, {FeatureName("column1")})
-        assert "column1" in data.columns
+        assert isinstance(data, pa.Table)
+        assert "column1" in data.column_names
 
     def test_set_column_names(self, duckdb_framework: DuckDBFramework, expected_data: Any) -> None:
         duckdb_framework.data = expected_data
         duckdb_framework.set_column_names()
         assert "column1" in duckdb_framework.column_names
         assert "column2" in duckdb_framework.column_names
+
+    def test_transform_add_column_preserves_existing(self, duckdb_framework: DuckDBFramework, connection: Any) -> None:
+        duckdb_framework.set_framework_connection_object(connection)
+        dict_data = {"col_a": [1, 2, 3], "col_b": [4, 5, 6]}
+        duckdb_framework.data = duckdb_framework.transform(dict_data, set())
+        result = duckdb_framework.transform(data=[7, 8, 9], feature_names={"col_c"})
+        assert set(result.columns) == {"col_a", "col_b", "col_c"}
+        assert len(result) == 3
+        arrow = result.to_arrow_table()
+        assert arrow.column("col_a").to_pylist() == [1, 2, 3]
+        assert arrow.column("col_c").to_pylist() == [7, 8, 9]
 
 
 @pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed. Skipping this test.")
@@ -112,7 +123,7 @@ class TestDuckDBFrameworkMerge(DataFrameTestBase):
     def create_dataframe(self, data: dict[str, Any]) -> Any:
         """Create a DuckDB relation from a dictionary."""
         arrow_table = pa.Table.from_pydict(data)
-        return self.conn.from_arrow(arrow_table)
+        return DuckdbRelation.from_arrow(self.conn, arrow_table)
 
     def get_connection(self) -> Optional[Any]:
         """Return DuckDB connection object."""

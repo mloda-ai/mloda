@@ -303,7 +303,7 @@ class TestComputeFrameworksColumnOrdering:
         data = conn.sql("SELECT 1 as Z, 2 as A, 3 as M")
         features = {FeatureName("Z"), FeatureName("A"), FeatureName("M")}
         result = cfw.select_data_by_column_names(data, features, column_ordering="alphabetical")
-        assert list(result.columns) == ["A", "M", "Z"]
+        assert result.column_names == ["A", "M", "Z"]
 
     def test_python_dict_accepts_column_ordering(self) -> None:
         cfw = PythonDictFramework(ParallelizationMode.SYNC, frozenset(), uuid4())

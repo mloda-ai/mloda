@@ -3,6 +3,7 @@ import pytest
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_pyarrow_transformer import (
     DuckDBPyArrowTransformer,
 )
+from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
 
 import logging
 
@@ -25,7 +26,7 @@ except ImportError:
 class TestDuckDBPyArrowTransformer:
     def test_framework_types(self) -> None:
         """Test that the transformer returns the correct framework types."""
-        assert DuckDBPyArrowTransformer.framework() == duckdb.DuckDBPyRelation
+        assert DuckDBPyArrowTransformer.framework() == DuckdbRelation
         assert DuckDBPyArrowTransformer.other_framework() == pa.Table
 
     def test_check_imports(self) -> None:
@@ -39,7 +40,7 @@ class TestDuckDBPyArrowTransformer:
         arrow_table = pa.Table.from_pydict(
             {"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.1, 2.2, 3.3]}
         )
-        duckdb_relation = conn.from_arrow(arrow_table)
+        duckdb_relation = DuckdbRelation.from_arrow(conn, arrow_table)
 
         # Transform to PyArrow
         result_arrow_table = DuckDBPyArrowTransformer.transform_fw_to_other_fw(duckdb_relation)
@@ -63,7 +64,7 @@ class TestDuckDBPyArrowTransformer:
         duckdb_relation = DuckDBPyArrowTransformer.transform_other_fw_to_fw(arrow_table, connection)
 
         # Verify it's a DuckDB relation
-        assert isinstance(duckdb_relation, duckdb.DuckDBPyRelation)
+        assert isinstance(duckdb_relation, DuckdbRelation)
 
         # Verify data integrity
         result_df = duckdb_relation.df()
@@ -82,7 +83,7 @@ class TestDuckDBPyArrowTransformer:
                 "bool_col": [True, False, True, False],
             }
         )
-        original_relation = connection.from_arrow(original_arrow)
+        original_relation = DuckdbRelation.from_arrow(connection, original_arrow)
 
         # Roundtrip: DuckDB -> PyArrow -> DuckDB
         arrow_table = DuckDBPyArrowTransformer.transform_fw_to_other_fw(original_relation)
@@ -108,7 +109,7 @@ class TestDuckDBPyArrowTransformer:
         empty_arrow = pa.Table.from_pydict(
             {"int_col": pa.array([], type=pa.int64()), "str_col": pa.array([], type=pa.string())}
         )
-        empty_relation = connection.from_arrow(empty_arrow)
+        empty_relation = DuckdbRelation.from_arrow(connection, empty_arrow)
 
         # Transform to PyArrow and back
         arrow_table = DuckDBPyArrowTransformer.transform_fw_to_other_fw(empty_relation)
@@ -125,7 +126,7 @@ class TestDuckDBPyArrowTransformer:
         arrow_with_nulls = pa.Table.from_pydict(
             {"int_col": [1, None, 3], "str_col": ["a", None, "c"], "float_col": [1.1, 2.2, None]}
         )
-        relation_with_nulls = connection.from_arrow(arrow_with_nulls)
+        relation_with_nulls = DuckdbRelation.from_arrow(connection, arrow_with_nulls)
 
         # Roundtrip transformation
         arrow_table = DuckDBPyArrowTransformer.transform_fw_to_other_fw(relation_with_nulls)
@@ -145,15 +146,15 @@ class TestDuckDBPyArrowTransformer:
         """Test the generic transform method with correct framework orientation."""
         # Create test data
         arrow_table = pa.Table.from_pydict({"a": [1, 2, 3], "b": [4, 5, 6]})
-        duckdb_relation = connection.from_arrow(arrow_table)
+        duckdb_relation = DuckdbRelation.from_arrow(connection, arrow_table)
 
         # Test DuckDB -> PyArrow transformation
-        arrow_result = DuckDBPyArrowTransformer.transform(duckdb.DuckDBPyRelation, pa.Table, duckdb_relation, None)
+        arrow_result = DuckDBPyArrowTransformer.transform(DuckdbRelation, pa.Table, duckdb_relation, None)
         assert isinstance(arrow_result, pa.Table)
 
         # Test PyArrow -> DuckDB transformation
-        duckdb_result = DuckDBPyArrowTransformer.transform(pa.Table, duckdb.DuckDBPyRelation, arrow_result, connection)
-        assert isinstance(duckdb_result, duckdb.DuckDBPyRelation)
+        duckdb_result = DuckDBPyArrowTransformer.transform(pa.Table, DuckdbRelation, arrow_result, connection)
+        assert isinstance(duckdb_result, DuckdbRelation)
 
         # Verify data integrity
         original_df = duckdb_relation.df()
@@ -163,7 +164,7 @@ class TestDuckDBPyArrowTransformer:
     def test_transform_method_with_unsupported_frameworks(self, connection: Any) -> None:
         """Test that transform method raises error for unsupported frameworks."""
         arrow_table = pa.Table.from_pydict({"a": [1, 2, 3]})
-        duckdb_relation = connection.from_arrow(arrow_table)
+        duckdb_relation = DuckdbRelation.from_arrow(connection, arrow_table)
 
         with pytest.raises(ValueError):
             DuckDBPyArrowTransformer.transform(list, dict, duckdb_relation, None)
@@ -179,7 +180,7 @@ class TestDuckDBPyArrowTransformer:
                 "score": [i * 0.1 for i in range(size)],
             }
         )
-        large_relation = connection.from_arrow(large_arrow)
+        large_relation = DuckdbRelation.from_arrow(connection, large_arrow)
 
         # Transform to PyArrow and back
         arrow_result = DuckDBPyArrowTransformer.transform_fw_to_other_fw(large_relation)
@@ -205,7 +206,7 @@ class TestDuckDBPyArrowTransformer:
                 "bool_col": pa.array([True, False, True], type=pa.bool_()),
             }
         )
-        mixed_relation = connection.from_arrow(mixed_arrow)
+        mixed_relation = DuckdbRelation.from_arrow(connection, mixed_arrow)
 
         # Transform to PyArrow and back
         arrow_result = DuckDBPyArrowTransformer.transform_fw_to_other_fw(mixed_relation)
@@ -223,7 +224,7 @@ class TestDuckDBPyArrowTransformer:
         """Test that transformations work with different connections."""
         # Create data with one connection
         arrow_table = pa.Table.from_pydict({"col1": [1, 2, 3], "col2": ["a", "b", "c"]})
-        relation1 = connection.from_arrow(arrow_table)
+        relation1 = DuckdbRelation.from_arrow(connection, arrow_table)
 
         # Transform to PyArrow
         arrow_result = DuckDBPyArrowTransformer.transform_fw_to_other_fw(relation1)
@@ -236,6 +237,14 @@ class TestDuckDBPyArrowTransformer:
         df1 = relation1.df()
         df2 = relation2.df()
         assert df1.equals(df2)
+
+    def test_framework_returns_not_implemented_when_duckdb_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """framework() must return NotImplementedError when duckdb is None so check_imports() works correctly."""
+        monkeypatch.setattr(
+            "mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_pyarrow_transformer.duckdb",
+            None,
+        )
+        assert DuckDBPyArrowTransformer.framework() == NotImplementedError
 
     def test_schema_preservation(self, connection: Any) -> None:
         """Test that schema information is preserved during transformation."""
@@ -259,7 +268,7 @@ class TestDuckDBPyArrowTransformer:
             schema=schema,
         )
 
-        relation = connection.from_arrow(arrow_table)
+        relation = DuckdbRelation.from_arrow(connection, arrow_table)
 
         # Transform to PyArrow and back
         arrow_result = DuckDBPyArrowTransformer.transform_fw_to_other_fw(relation)

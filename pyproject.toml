@@ -56,6 +56,10 @@ sklearn = [
     "scikit-learn>=1.0.0",
     "joblib>=1.0.0",
 ]
+# CVE-2026-33231: unauthenticated remote shutdown in nltk.app.wordnet_app (high severity).
+# mloda only uses nltk.corpus.stopwords — wordnet_app is never imported.
+# No patched version available as of 2026-03-19 (CVE still RESERVED on NVD).
+# Update the lower bound here once a fixed version is released.
 text_cleaning = ["nltk>=3.8"]
 docs = [
     "mkdocs",

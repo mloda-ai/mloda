@@ -12,7 +12,7 @@
 | charset-normalizer                     | 3.4.6           | MIT                                  |
 | click                                  | 8.3.1           | BSD-3-Clause                         |
 | comm                                   | 0.2.3           | BSD License                          |
-| cyclonedx-python-lib                   | 9.1.0           | Apache Software License              |
+| cyclonedx-python-lib                   | 11.7.0          | Apache Software License              |
 | debugpy                                | 1.8.20          | MIT License                          |
 | decorator                              | 5.2.1           | BSD License                          |
 | defusedxml                             | 0.7.1           | Python Software Foundation License   |
@@ -65,7 +65,7 @@
 | pexpect                                | 4.9.0           | ISC License (ISCL)                   |
 | pip-api                                | 0.0.34          | Apache Software License              |
 | pip-requirements-parser                | 32.0.1          | MIT                                  |
-| pip_audit                              | 2.9.0           | Apache Software License              |
+| pip_audit                              | 2.10.0          | Apache Software License              |
 | platformdirs                           | 4.9.4           | MIT License                          |
 | pluggy                                 | 1.6.0           | MIT License                          |
 | polars                                 | 1.39.3          | MIT License                          |
@@ -105,6 +105,7 @@
 | testbook                               | 0.4.2           | BSD License                          |
 | threadpoolctl                          | 3.6.0           | BSD License                          |
 | toml                                   | 0.10.2          | MIT License                          |
+| tomli_w                                | 1.2.0           | MIT License                          |
 | tornado                                | 6.5.5           | Apache Software License              |
 | tqdm                                   | 4.67.3          | MPL-2.0 AND MIT                      |
 | traitlets                              | 5.14.3          | BSD License                          |

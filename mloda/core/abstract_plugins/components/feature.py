@@ -163,6 +163,14 @@ class Feature:
 
         return hash((self.name, self.options, self.domain, compute_frameworks_hashable, self.data_type, child_options))
 
+    def __repr__(self) -> str:
+        parts = [f"name={self.name.name!r}"]
+        if self.data_type is not None:
+            parts.append(f"data_type={self.data_type!r}")
+        if self.options and (self.options.group or self.options.context):
+            parts.append(f"options={self.options!r}")
+        return f"Feature({', '.join(parts)})"
+
     def is_different_data_type(self, other: Feature) -> bool:
         return self.name == other.name and self.data_type != other.data_type
 

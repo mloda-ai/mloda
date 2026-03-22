@@ -198,6 +198,8 @@ class FeatureChainParser:
     def _process_found_property_value(
         cls, found_property_value: Any, property_value: Any, property_name: str, original_property_config: Any
     ) -> Set[str]:
+        if isinstance(found_property_value, list):
+            found_property_value = tuple(found_property_value)
         if not isinstance(found_property_value, frozenset):
             found_property_value = frozenset([found_property_value])
 

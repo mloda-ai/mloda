@@ -230,6 +230,26 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
 The three-arg form `cls._resolve_operation(feature_name, options, config_key)` is also supported for contexts where the name and options are already separate (e.g., `match_feature_group_criteria`).
 
+#### 5. Type Validation with `type_validator`
+
+Add a `DefaultOptionKeys.type_validator` callable to a PROPERTY_MAPPING entry to validate option values automatically. The mixin calls the validator after basic matching succeeds. If it returns False, `match_feature_group_criteria` returns False:
+
+``` python
+def _is_list_of_strings(value):
+    return isinstance(value, list) and all(isinstance(item, str) for item in value)
+
+class GroupAggregation(FeatureChainParserMixin, FeatureGroup):
+    PROPERTY_MAPPING = {
+        "partition_by": {
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: False,
+            DefaultOptionKeys.type_validator: _is_list_of_strings,
+        },
+    }
+```
+
+The validator is only called when the option is present (not None). Missing options are handled by the base PROPERTY_MAPPING validation.
+
 ## Modern Implementation in Feature Groups
 
 ### 1. Define PROPERTY_MAPPING Configuration

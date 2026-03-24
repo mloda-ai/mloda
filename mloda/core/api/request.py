@@ -16,7 +16,7 @@ from mloda.core.abstract_plugins.components.parallelization_modes import Paralle
 from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.link import Link
-from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
 
 
 class mlodaAPI:

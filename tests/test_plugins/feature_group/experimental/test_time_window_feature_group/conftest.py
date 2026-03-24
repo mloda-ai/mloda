@@ -9,7 +9,7 @@ from typing import Any, Dict, List
 
 from mloda.user import Feature
 from mloda.provider import FeatureSet
-from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
 
 
 @pytest.fixture

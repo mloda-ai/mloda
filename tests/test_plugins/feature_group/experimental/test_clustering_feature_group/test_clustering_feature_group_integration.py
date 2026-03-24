@@ -14,7 +14,7 @@ from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.clustering.base import ClusteringFeatureGroup
 from mloda_plugins.feature_group.experimental.clustering.pandas import PandasClusteringFeatureGroup
-from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
 
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 

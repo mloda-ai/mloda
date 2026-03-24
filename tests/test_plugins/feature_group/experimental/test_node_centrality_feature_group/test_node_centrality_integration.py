@@ -13,7 +13,7 @@ from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.node_centrality.base import NodeCentralityFeatureGroup
 from mloda_plugins.feature_group.experimental.node_centrality.pandas import PandasNodeCentralityFeatureGroup
-from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
 
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 

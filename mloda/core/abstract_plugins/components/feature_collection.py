@@ -4,7 +4,7 @@ from uuid import UUID
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.options import Options
-from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
 
 
 class Features:

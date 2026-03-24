@@ -13,7 +13,7 @@ from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.user import Options
 from mloda.provider import FeatureChainParser
-from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
 
 
 class ChainedContextFeatureGroupTest(FeatureGroup):

@@ -14,7 +14,7 @@ from mloda.provider import FeatureChainParser
 from mloda.provider import (
     FeatureChainParserMixin,
 )
-from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
 
 
 class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):

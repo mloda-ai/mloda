@@ -14,6 +14,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     CHAIN_SEPARATOR,
     INPUT_SEPARATOR,
 )
+from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 
 class FeatureChainParserMixin:
@@ -149,6 +150,17 @@ class FeatureChainParserMixin:
             )
             if operation_config is not None and source_feature is not None:
                 if not cls._validate_string_match(_feature_name, operation_config, source_feature):
+                    return False
+
+        # Enforce MIN/MAX_IN_FEATURES when in_features is present in options
+        if result and hasattr(cls, "MIN_IN_FEATURES") and hasattr(cls, "MAX_IN_FEATURES"):
+            in_features_raw = options.get(DefaultOptionKeys.in_features)
+            if in_features_raw is not None:
+                in_features = options.get_in_features()
+                count = len(in_features)
+                if count < cls.MIN_IN_FEATURES:
+                    return False
+                if cls.MAX_IN_FEATURES is not None and count > cls.MAX_IN_FEATURES:
                     return False
 
         return result

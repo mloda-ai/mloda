@@ -1,5 +1,7 @@
 """Tests for FeatureChainParserMixin."""
 
+from typing import Optional
+
 import pytest
 
 from mloda.user import Feature
@@ -46,6 +48,31 @@ class MockFeatureGroupWithMinMax(FeatureChainParserMixin):
     PREFIX_PATTERN = r".*__([\w]+)_test$"
     MIN_IN_FEATURES = 2
     MAX_IN_FEATURES = 3
+    PROPERTY_MAPPING = {
+        "operation": {
+            "op1": "Operation 1",
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
+        }
+    }
+
+
+class _HiddenAttribute:
+    """Descriptor that makes hasattr return False by raising AttributeError."""
+
+    def __set_name__(self, owner: type, name: str) -> None:
+        self.name = name
+
+    def __get__(self, obj: object, objtype: Optional[type] = None) -> None:
+        raise AttributeError(self.name)
+
+
+class MockFeatureGroupWithoutMinMax(FeatureChainParserMixin):
+    """Mock Feature group without MIN/MAX_IN_FEATURES to test hasattr guard."""
+
+    PREFIX_PATTERN = r".*__([\w]+)_test$"
+    MIN_IN_FEATURES = _HiddenAttribute()  # type: ignore[assignment]
+    MAX_IN_FEATURES = _HiddenAttribute()
     PROPERTY_MAPPING = {
         "operation": {
             "op1": "Operation 1",
@@ -343,6 +370,90 @@ class TestFeatureChainParserMixinEdgeCases:
         # Result is a set, so we just check all features are present
         feature_names = {f.get_name() for f in result}
         assert feature_names == {"first", "second", "third"}
+
+
+class TestFeatureChainParserMixinMinMaxInFeatures:
+    """Tests for MIN_IN_FEATURES / MAX_IN_FEATURES enforcement in match_feature_group_criteria."""
+
+    def test_rejects_too_few_in_features(self) -> None:
+        """Config-based feature with fewer in_features than MIN_IN_FEATURES should not match."""
+        options = Options(
+            context={
+                "operation": "op1",
+                "in_features": "single_feature",
+            }
+        )
+        # MockFeatureGroupWithMinMax has MIN_IN_FEATURES=2
+        result = MockFeatureGroupWithMinMax.match_feature_group_criteria("any_name", options)
+        assert result is False
+
+    def test_rejects_too_many_in_features(self) -> None:
+        """Config-based feature with more in_features than MAX_IN_FEATURES should not match."""
+        options = Options(
+            context={
+                "operation": "op1",
+                "in_features": frozenset({Feature("a"), Feature("b"), Feature("c"), Feature("d")}),
+            }
+        )
+        # MockFeatureGroupWithMinMax has MAX_IN_FEATURES=3
+        result = MockFeatureGroupWithMinMax.match_feature_group_criteria("any_name", options)
+        assert result is False
+
+    def test_accepts_in_features_within_range(self) -> None:
+        """Config-based feature with in_features count within MIN/MAX should match."""
+        options = Options(
+            context={
+                "operation": "op1",
+                "in_features": frozenset({Feature("a"), Feature("b")}),
+            }
+        )
+        # MockFeatureGroupWithMinMax has MIN=2, MAX=3
+        result = MockFeatureGroupWithMinMax.match_feature_group_criteria("any_name", options)
+        assert result is True
+
+    def test_accepts_at_max_in_features(self) -> None:
+        """Config-based feature with exactly MAX_IN_FEATURES should match."""
+        options = Options(
+            context={
+                "operation": "op1",
+                "in_features": frozenset({Feature("a"), Feature("b"), Feature("c")}),
+            }
+        )
+        # MockFeatureGroupWithMinMax has MAX_IN_FEATURES=3
+        result = MockFeatureGroupWithMinMax.match_feature_group_criteria("any_name", options)
+        assert result is True
+
+    def test_no_in_features_skips_validation(self) -> None:
+        """When in_features is not in options, MIN/MAX validation is skipped."""
+        options = Options(context={"operation": "op1"})
+        # Should match based on config, no in_features to validate
+        result = MockFeatureGroupWithMinMax.match_feature_group_criteria("any_name", options)
+        assert result is True
+
+    def test_default_min_max_allows_single(self) -> None:
+        """Default MIN=1, MAX=None allows any count of in_features."""
+        options = Options(
+            context={
+                "operation": "op1",
+                "in_features": "single_feature",
+            }
+        )
+        # MockFeatureGroup has default MIN=1, MAX=None
+        result = MockFeatureGroup.match_feature_group_criteria("any_name", options)
+        assert result is True
+
+    def test_missing_min_max_attributes_skips_validation(self) -> None:
+        """When MIN/MAX_IN_FEATURES attributes are absent, validation is skipped."""
+        options = Options(
+            context={
+                "operation": "op1",
+                "in_features": "single_feature",
+            }
+        )
+        assert not hasattr(MockFeatureGroupWithoutMinMax, "MIN_IN_FEATURES")
+        assert not hasattr(MockFeatureGroupWithoutMinMax, "MAX_IN_FEATURES")
+        result = MockFeatureGroupWithoutMinMax.match_feature_group_criteria("any_name", options)
+        assert result is True
 
 
 class TestFeatureChainParserMixinExtractSourceFeatures:

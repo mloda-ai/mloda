@@ -210,3 +210,34 @@ class FeatureChainParserMixin:
         # Configuration-based fallback using get_in_features()
         in_features_set = feature.options.get_in_features()
         return [f.get_name() for f in in_features_set]
+
+    @classmethod
+    def _resolve_operation(
+        cls,
+        feature_name: Any,
+        options: Options,
+        config_key: str,
+    ) -> Optional[str]:
+        """Resolve the operation from a feature name string or a config-based options key.
+
+        Tries string-based parsing first (via PREFIX_PATTERN). If the feature name
+        matches the pattern, returns the parsed operation. Otherwise, falls back to
+        ``options.get(config_key)`` and converts the value to a string.
+
+        Args:
+            feature_name: The feature name (str or FeatureName).
+            options: Options containing configuration.
+            config_key: The options key to fall back to when string parsing fails.
+
+        Returns:
+            The resolved operation as a string, or None if neither path resolves.
+        """
+        _name = feature_name.name if isinstance(feature_name, FeatureName) else str(feature_name)
+        prefix_patterns = cls._get_prefix_patterns()
+        operation_config, _ = FeatureChainParser.parse_feature_name(_name, prefix_patterns, CHAIN_SEPARATOR)
+        if operation_config is not None:
+            return operation_config
+        value = options.get(config_key)
+        if value is not None:
+            return str(value)
+        return None

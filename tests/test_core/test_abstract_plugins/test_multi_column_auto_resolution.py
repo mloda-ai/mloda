@@ -158,7 +158,7 @@ class MultiColumnConsumer(FeatureGroup):
         summed_values = None
         for col_name in discovered_columns:
             if summed_values is None:
-                summed_values = data[col_name].values
+                summed_values = data[col_name].values.copy()
             else:
                 summed_values += data[col_name].values
 

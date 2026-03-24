@@ -147,6 +147,7 @@ class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 | `MIN_IN_FEATURES` | `int` | `1` | Minimum required in_features |
 | `MAX_IN_FEATURES` | `int \| None` | `None` | Maximum allowed in_features (None = unlimited) |
 | `IN_FEATURE_SEPARATOR` | `str` | `"&"` | Separator for multiple in_features |
+| `REQUIRED_WHEN` | `dict[str, Callable]` | `None` | Maps option keys to predicates; when a predicate returns True and the option is absent, matching fails |
 
 ### Customization Hooks
 

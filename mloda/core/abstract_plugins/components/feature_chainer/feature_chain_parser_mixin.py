@@ -27,6 +27,10 @@ class FeatureChainParserMixin:
     - IN_FEATURE_SEPARATOR: Optional custom separator (default: "&")
     - MIN_IN_FEATURES: Optional minimum in_feature count (default: 1)
     - MAX_IN_FEATURES: Optional maximum in_feature count (default: None)
+    - REQUIRED_WHEN: Optional dict mapping option keys to predicate callables.
+      Each predicate receives the Options object and returns True if the option
+      is required. When the predicate returns True and the option is absent,
+      match_feature_group_criteria returns False.
     """
 
     IN_FEATURE_SEPARATOR: str = INPUT_SEPARATOR

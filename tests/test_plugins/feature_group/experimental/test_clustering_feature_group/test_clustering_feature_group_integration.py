@@ -25,7 +25,7 @@ class ClusteringFeatureTestDataCreator(ATestDataCreator):
     compute_framework = PandasDataFrame
 
     @classmethod
-    def get_raw_data(cls) -> Dict[str, Any]:
+    def get_raw_data(cls) -> dict[str, Any]:
         """Return the raw data as a dictionary with features for clustering."""
         # Create two clusters of points
         np.random.seed(42)
@@ -49,7 +49,7 @@ class ClusteringFeatureTestDataCreator(ATestDataCreator):
         }
 
 
-def validate_clustering_results(result: List) -> None:  # type: ignore
+def validate_clustering_results(result: list) -> None:  # type: ignore
     """
     Validate the results of the clustering feature test.
 
@@ -121,7 +121,7 @@ class TestClusteringFeatureGroupIntegration:
         )
 
         # Define the features
-        features: List[Feature | str] = [
+        features: list[Feature | str] = [
             "feature1",
             "feature2",
             "feature1&feature2__cluster_kmeans_2",
@@ -184,7 +184,7 @@ class TestClusteringFeatureGroupIntegration:
         )
 
         # Define the features
-        features: List[str | Feature] = [
+        features: list[str | Feature] = [
             "feature1",
             "feature2",
             kmeans_feature,
@@ -212,7 +212,7 @@ class TestClusteringFeatureGroupIntegration:
         )
 
         # Define the features
-        features: List[str | Feature] = [
+        features: list[str | Feature] = [
             "feature1",
             "feature2",
             "feature1&feature2__cluster_kmeans_2",

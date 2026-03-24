@@ -42,7 +42,7 @@ class TestValidateAndResolveComputeFramework:
 
     def test_empty_available_frameworks_raises_value_error(self) -> None:
         """Should raise ValueError when no frameworks are available."""
-        empty_frameworks: Set[Type[ComputeFramework]] = set()
+        empty_frameworks: set[type[ComputeFramework]] = set()
 
         # Act & Assert
         with pytest.raises(ValueError):
@@ -108,7 +108,7 @@ class TestValidateComputeFrameworksResolved:
 
     def test_empty_set_does_not_raise(self) -> None:
         """Empty set is valid (different from None) and should not raise."""
-        empty_frameworks: Set[Type[ComputeFramework]] = set()
+        empty_frameworks: set[type[ComputeFramework]] = set()
 
         # Act & Assert - should not raise
         FeatureValidator.validate_compute_frameworks_resolved(

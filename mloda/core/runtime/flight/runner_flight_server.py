@@ -13,7 +13,7 @@ class ParallelRunnerFlightServer:
     def __init__(self) -> None:
         self.flight_server_process: Any = None
         self.location: Any = None
-        self.final_tasks: List[Any] = []
+        self.final_tasks: list[Any] = []
         self.queue: Any
 
     def start_flight_server(self, location: Any) -> None:

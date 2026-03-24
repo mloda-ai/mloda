@@ -17,7 +17,7 @@ class TimeWindowTestDataCreator(ATestDataCreator):
     """Base class for time window test data creators."""
 
     @classmethod
-    def get_raw_data(cls) -> Dict[str, Any]:
+    def get_raw_data(cls) -> dict[str, Any]:
         """Return the raw data as a dictionary."""
         dates = pd.date_range(start="2023-01-01", periods=10, freq="D")
         return {
@@ -37,7 +37,7 @@ class PyArrowTimeWindowTestDataCreator(TimeWindowTestDataCreator):
     compute_framework = PyArrowTable
 
 
-def validate_time_window_features(window_df: pd.DataFrame, expected_features: List[Feature | str]) -> None:
+def validate_time_window_features(window_df: pd.DataFrame, expected_features: list[Feature | str]) -> None:
     """
     Validate time window features in a Pandas DataFrame.
 

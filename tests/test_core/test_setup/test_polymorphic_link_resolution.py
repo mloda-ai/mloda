@@ -35,7 +35,7 @@ class BaseFeatureGroupA(FeatureGroup):
     ROW_INDEX = "_idx"
 
     @classmethod
-    def index_columns(cls) -> List[Index]:
+    def index_columns(cls) -> list[Index]:
         return [Index((cls.ROW_INDEX,))]
 
 
@@ -46,7 +46,7 @@ class BaseFeatureGroupB(FeatureGroup):
     ROW_INDEX = "_idx"
 
     @classmethod
-    def index_columns(cls) -> List[Index]:
+    def index_columns(cls) -> list[Index]:
         return [Index((cls.ROW_INDEX,))]
 
 
@@ -87,12 +87,12 @@ class AssemblerWithConcreteLinks(FeatureGroup):
 
     @classmethod
     def match_feature_group_criteria(
-        cls, feature_name: Union[FeatureName, str], options: Any, data_access_collection: Any = None
+        cls, feature_name: FeatureName | str, options: Any, data_access_collection: Any = None
     ) -> bool:
         name = feature_name.name if isinstance(feature_name, FeatureName) else feature_name
         return name == cls.FEATURE_NAME
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         idx = Index((BaseFeatureGroupA.ROW_INDEX,))
 
         # CONCRETE classes in link
@@ -119,12 +119,12 @@ class AssemblerWithPolymorphicLinks(FeatureGroup):
 
     @classmethod
     def match_feature_group_criteria(
-        cls, feature_name: Union[FeatureName, str], options: Any, data_access_collection: Any = None
+        cls, feature_name: FeatureName | str, options: Any, data_access_collection: Any = None
     ) -> bool:
         name = feature_name.name if isinstance(feature_name, FeatureName) else feature_name
         return name == cls.FEATURE_NAME
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         idx = Index((BaseFeatureGroupA.ROW_INDEX,))
 
         # BASE classes in link - polymorphic matching should resolve to concrete
@@ -201,12 +201,12 @@ class AssemblerWithMixedLink(FeatureGroup):
 
     @classmethod
     def match_feature_group_criteria(
-        cls, feature_name: Union[FeatureName, str], options: Any, data_access_collection: Any = None
+        cls, feature_name: FeatureName | str, options: Any, data_access_collection: Any = None
     ) -> bool:
         name = feature_name.name if isinstance(feature_name, FeatureName) else feature_name
         return name == cls.FEATURE_NAME
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         idx = Index((BaseFeatureGroupA.ROW_INDEX,))
 
         # Base class + External concrete class (ApiDataFeatureGroup has no subclass)

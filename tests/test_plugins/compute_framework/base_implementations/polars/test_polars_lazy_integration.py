@@ -44,7 +44,7 @@ class PolarsLazyTestDataCreator(ATestDataCreator):
     }
 
     @classmethod
-    def get_raw_data(cls) -> Dict[str, Any]:
+    def get_raw_data(cls) -> dict[str, Any]:
         """Return the raw test data as a dictionary."""
         return polars_test_dict
 
@@ -61,7 +61,7 @@ class PolarsEagerTestDataCreator(ATestDataCreator):
     }
 
     @classmethod
-    def get_raw_data(cls) -> Dict[str, Any]:
+    def get_raw_data(cls) -> dict[str, Any]:
         """Return the raw test data as a dictionary."""
         return polars_test_dict
 
@@ -70,11 +70,11 @@ class PolarsLazySimpleTransformFeatureGroup(FeatureGroup):
     """Simple feature group for testing lazy transformations."""
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Any]:
+    def compute_framework_rule(cls) -> set[Any]:
         """Support both lazy and eager Polars frameworks."""
         return {PolarsDataFrame, PolarsLazyDataFrame}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         """Require base features for transformation."""
         feature_name_str = feature_name.name if isinstance(feature_name, FeatureName) else str(feature_name)
 
@@ -104,7 +104,7 @@ class PolarsLazySimpleTransformFeatureGroup(FeatureGroup):
         return result_data
 
     @classmethod
-    def feature_names_supported(cls) -> Set[str]:
+    def feature_names_supported(cls) -> set[str]:
         return set(["doubled_value", "score_plus_ten"])
 
 
@@ -112,10 +112,10 @@ class SecondTransformFeatureGroup(FeatureGroup):
     """Second transformation that depends on the first."""
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Any]:
+    def compute_framework_rule(cls) -> set[Any]:
         return {PolarsLazyDataFrame}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {Feature("doubled_value")}
 
     @classmethod
@@ -131,7 +131,7 @@ class SecondTransformFeatureGroup(FeatureGroup):
         return result_data
 
     @classmethod
-    def feature_names_supported(cls) -> Set[str]:
+    def feature_names_supported(cls) -> set[str]:
         return set(["quadrupled_value"])
 
 
@@ -143,7 +143,7 @@ class TestPolarsLazyIntegrationWithMlodaAPI:
         "modes",
         [({ParallelizationMode.SYNC})],
     )
-    def test_basic_lazy_feature_calculation(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
+    def test_basic_lazy_feature_calculation(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         """Test basic feature calculation with lazy evaluation."""
         # Enable the test feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
@@ -151,7 +151,7 @@ class TestPolarsLazyIntegrationWithMlodaAPI:
         )
 
         # Define features to calculate
-        feature_list: List[Feature | str] = ["doubled_value", "score_plus_ten"]
+        feature_list: list[Feature | str] = ["doubled_value", "score_plus_ten"]
 
         # Run with lazy framework
         result = mloda.run_all(
@@ -180,7 +180,7 @@ class TestPolarsLazyIntegrationWithMlodaAPI:
     def test_lazy_vs_eager_equivalence(self) -> None:
         """Test that lazy and eager frameworks produce equivalent results."""
         # Define features to calculate
-        feature_list: List[Feature | str] = ["id", "value", "score", "doubled_value", "score_plus_ten"]
+        feature_list: list[Feature | str] = ["id", "value", "score", "doubled_value", "score_plus_ten"]
 
         # Run with eager framework
         eager_plugin_collector = PluginCollector.enabled_feature_groups(
@@ -226,7 +226,7 @@ class TestPolarsLazyIntegrationWithMlodaAPI:
         )
 
         # Define a pipeline: base data -> doubled -> quadrupled
-        feature_list: List[Feature | str] = ["quadrupled_value"]
+        feature_list: list[Feature | str] = ["quadrupled_value"]
 
         # Run the multi-step pipeline
         result = mloda.run_all(

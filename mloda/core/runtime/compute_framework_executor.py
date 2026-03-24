@@ -35,16 +35,16 @@ class ComputeFrameworkExecutor:
             cfw_register: The CFW manager for registering compute frameworks.
             worker_manager: The worker manager for handling parallel execution.
         """
-        self.cfw_collection: Dict[UUID, ComputeFramework] = {}
+        self.cfw_collection: dict[UUID, ComputeFramework] = {}
         self.cfw_register = cfw_register
         self.worker_manager = worker_manager
         self._cfw_lock = threading.Lock()
 
     def init_compute_framework(
         self,
-        cf_class: Type[ComputeFramework],
+        cf_class: type[ComputeFramework],
         parallelization_mode: ParallelizationMode,
-        children_if_root: Set[UUID],
+        children_if_root: set[UUID],
         uuid: Optional[UUID] = None,
     ) -> UUID:
         """
@@ -77,7 +77,7 @@ class ComputeFrameworkExecutor:
         step: Any,
         parallelization_mode: ParallelizationMode,
         feature_uuid: UUID,
-        children_if_root: Set[UUID],
+        children_if_root: set[UUID],
     ) -> UUID:
         """
         Adds a compute framework to the CFW register and CFW collection.
@@ -93,7 +93,7 @@ class ComputeFrameworkExecutor:
 
             return cfw_uuid
 
-    def get_cfw(self, compute_framework: Type[ComputeFramework], feature_uuid: UUID) -> ComputeFramework:
+    def get_cfw(self, compute_framework: type[ComputeFramework], feature_uuid: UUID) -> ComputeFramework:
         """
         Retrieves a compute framework based on its type and a feature UUID.
 
@@ -109,7 +109,7 @@ class ComputeFrameworkExecutor:
         return self.cfw_collection[cfw_uuid]
 
     def _get_execution_function(
-        self, mode_by_cfw_register: Set[ParallelizationMode], mode_by_step: Set[ParallelizationMode]
+        self, mode_by_cfw_register: set[ParallelizationMode], mode_by_step: set[ParallelizationMode]
     ) -> Callable[[Any], None]:
         """
         Identifies the execution mode and returns the corresponding execute step function.

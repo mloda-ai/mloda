@@ -69,7 +69,7 @@ class PythonDictMergeEngine(BaseMergeEngine):
             raise ValueError(f"Join type {join_type} is not supported")
 
     def _inner_join(
-        self, left_data: Any, right_data: Any, left_cols: Tuple[str, ...], right_cols: Tuple[str, ...]
+        self, left_data: Any, right_data: Any, left_cols: tuple[str, ...], right_cols: tuple[str, ...]
     ) -> Any:
         """Performs inner join."""
         right_index_map = {tuple(r.get(col) for col in right_cols): r for r in right_data}
@@ -84,7 +84,7 @@ class PythonDictMergeEngine(BaseMergeEngine):
         return result
 
     def _left_join(
-        self, left_data: Any, right_data: Any, left_cols: Tuple[str, ...], right_cols: Tuple[str, ...]
+        self, left_data: Any, right_data: Any, left_cols: tuple[str, ...], right_cols: tuple[str, ...]
     ) -> Any:
         """Performs left join."""
         right_index_map = {tuple(r.get(col) for col in right_cols): r for r in right_data}
@@ -115,7 +115,7 @@ class PythonDictMergeEngine(BaseMergeEngine):
         return result
 
     def _right_join(
-        self, left_data: Any, right_data: Any, left_cols: Tuple[str, ...], right_cols: Tuple[str, ...]
+        self, left_data: Any, right_data: Any, left_cols: tuple[str, ...], right_cols: tuple[str, ...]
     ) -> Any:
         """Performs right join."""
         left_index_map = {tuple(l.get(col) for col in left_cols): l for l in left_data}
@@ -146,7 +146,7 @@ class PythonDictMergeEngine(BaseMergeEngine):
         return result
 
     def _outer_join(
-        self, left_data: Any, right_data: Any, left_cols: Tuple[str, ...], right_cols: Tuple[str, ...]
+        self, left_data: Any, right_data: Any, left_cols: tuple[str, ...], right_cols: tuple[str, ...]
     ) -> Any:
         """Performs outer join."""
         left_index_map = {tuple(l.get(col) for col in left_cols): l for l in left_data}
@@ -196,10 +196,10 @@ class PythonDictMergeEngine(BaseMergeEngine):
         return result
 
     def _union_join(
-        self, left_data: Any, right_data: Any, left_cols: Tuple[str, ...], right_cols: Tuple[str, ...]
+        self, left_data: Any, right_data: Any, left_cols: tuple[str, ...], right_cols: tuple[str, ...]
     ) -> Any:
         """Performs union (removes duplicates based on join columns)."""
-        seen_keys: Set[Any] = set()
+        seen_keys: set[Any] = set()
         result = []
 
         # Add left rows

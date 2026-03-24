@@ -40,7 +40,7 @@ def python_type_to_openapi_type(python_type: str) -> str:
     return type_mapping.get(python_type, "string")  # Default to string if not found
 
 
-def parse_tool_function_for_openai(function_declaration: ToolFunctionDeclaration) -> Dict[str, Any]:
+def parse_tool_function_for_openai(function_declaration: ToolFunctionDeclaration) -> dict[str, Any]:
     """Parses a ToolFunctionDeclaration into a dict formatted for OpenAI function calling.
 
     The output will have the following structure:
@@ -102,8 +102,8 @@ class OpenAIAPI(LLMBaseApi):
     def request(
         cls,
         model: str,
-        prompt: Union[str, List[Dict[str, str]]],
-        model_parameters: Dict[str, Any],
+        prompt: str | list[dict[str, str]],
+        model_parameters: dict[str, Any],
         tools: ToolCollection | None,
     ) -> Any:
         if isinstance(prompt, str):
@@ -130,9 +130,9 @@ class OpenAIAPI(LLMBaseApi):
         return client
 
     @classmethod
-    def parse_tools(cls, tools: ToolCollection | None) -> List[Dict[str, Any]]:
+    def parse_tools(cls, tools: ToolCollection | None) -> list[dict[str, Any]]:
         """Parses all tools in the ToolCollection for OpenAI."""
-        parsed_tools: List[Dict[str, Any]] = []
+        parsed_tools: list[dict[str, Any]] = []
         if tools is None:
             return parsed_tools
         for _, tool in tools.get_all_tools().items():
@@ -142,7 +142,7 @@ class OpenAIAPI(LLMBaseApi):
     @classmethod
     def handle_response(
         cls, response: Any, features: FeatureSet, tools: ToolCollection | None
-    ) -> Tuple[List[Dict[str, str]], str]:
+    ) -> tuple[list[dict[str, str]], str]:
         responses = []
         used_tool = ""
 
@@ -176,7 +176,7 @@ class OpenAIAPI(LLMBaseApi):
     def generate_response(
         client: Any,
         model: str,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         tools: Any,
         max_retries: int = 5,
         initial_retry_delay: int = 10,
@@ -415,7 +415,7 @@ class OpenAIRequestLoop(RequestLoop):
         return OpenAIAPI
 
     @classmethod
-    def initial_prompt_message(cls, messages: Any, initial_prompt: str) -> Tuple[Any, Any]:
+    def initial_prompt_message(cls, messages: Any, initial_prompt: str) -> tuple[Any, Any]:
         if not messages:
             messages = [{"role": "user", "content": initial_prompt}]
             _messages = copy(messages)

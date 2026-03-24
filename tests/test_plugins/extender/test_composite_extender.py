@@ -27,7 +27,7 @@ class MockExtender(Extender):
         self.should_fail = should_fail
         self.call_count = 0
 
-    def wraps(self) -> Set[ExtenderHook]:
+    def wraps(self) -> set[ExtenderHook]:
         return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
@@ -62,7 +62,7 @@ class TestExtenderPriority:
             def __init__(self, priority: int = 100):
                 self.priority = priority
 
-            def wraps(self) -> Set[ExtenderHook]:
+            def wraps(self) -> set[ExtenderHook]:
                 return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
 
             def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
@@ -139,7 +139,7 @@ class TestExtenderExecutionOrder:
                 self.name = name
                 self.priority = priority
 
-            def wraps(self) -> Set[ExtenderHook]:
+            def wraps(self) -> set[ExtenderHook]:
                 return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
 
             def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:

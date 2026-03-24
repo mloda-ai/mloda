@@ -19,7 +19,7 @@ class ConcreteTestClass(DataFrameTestBase):
     """Minimal concrete implementation for testing the base class."""
 
     @classmethod
-    def framework_class(cls) -> Type[Any]:
+    def framework_class(cls) -> type[Any]:
         return Mock
 
     def create_dataframe(self, data: dict[str, Any]) -> Any:
@@ -94,7 +94,7 @@ class TestDataFrameTestBaseHelpers:
 
         class MockFrameworkTestClass(DataFrameTestBase):
             @classmethod
-            def framework_class(cls) -> Type[Any]:
+            def framework_class(cls) -> type[Any]:
                 return mock_framework_class
 
             def create_dataframe(self, data: dict[str, Any]) -> Any:

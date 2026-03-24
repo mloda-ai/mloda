@@ -27,7 +27,7 @@ def _handle_stop_command(command_queue: multiprocessing.Queue[Any]) -> None:
 def _handle_data_dropping(
     command_queue: multiprocessing.Queue[Any],
     cfw: ComputeFramework,
-    command: Set[Any],
+    command: set[Any],
     location: str,
     result_queue: multiprocessing.Queue[Any],
 ) -> bool:
@@ -44,7 +44,7 @@ def _handle_data_dropping(
 
 
 def _execute_command(
-    command: Union[JoinStep, TransformFrameworkStep, FeatureGroupStep],
+    command: JoinStep | TransformFrameworkStep | FeatureGroupStep,
     cfw_register: CfwManager,
     cfw: ComputeFramework,
     data: Any,

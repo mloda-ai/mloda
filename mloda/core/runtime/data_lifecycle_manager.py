@@ -27,14 +27,14 @@ class DataLifecycleManager:
                         If None, a new ComputeFrameworkTransformer is created.
             column_ordering: Optional ordering mode for result columns.
         """
-        self.result_data_collection: Dict[UUID, Any] = {}
-        self.track_data_to_drop: Dict[UUID, Set[UUID]] = {}
-        self.artifacts: Dict[str, Any] = {}
+        self.result_data_collection: dict[UUID, Any] = {}
+        self.track_data_to_drop: dict[UUID, set[UUID]] = {}
+        self.artifacts: dict[str, Any] = {}
         self.transformer = transformer if transformer is not None else ComputeFrameworkTransformer()
         self.column_ordering = column_ordering
 
     def drop_data_for_finished_cfws(
-        self, finished_ids: Set[UUID], cfw_collection: Dict[UUID, ComputeFramework], location: Optional[str] = None
+        self, finished_ids: set[UUID], cfw_collection: dict[UUID, ComputeFramework], location: Optional[str] = None
     ) -> None:
         """
         Drops data for CFWs when all their dependent steps are finished.
@@ -57,7 +57,7 @@ class DataLifecycleManager:
             del self.track_data_to_drop[cfw_uuid]
 
     def drop_cfw_data(
-        self, cfw_uuid: UUID, cfw_collection: Dict[UUID, ComputeFramework], location: Optional[str] = None
+        self, cfw_uuid: UUID, cfw_collection: dict[UUID, ComputeFramework], location: Optional[str] = None
     ) -> None:
         """
         Drops data associated with a specific CFW.
@@ -73,7 +73,7 @@ class DataLifecycleManager:
         else:
             cfw.drop_last_data(None)
 
-    def track_flyway_datasets(self, cfw_uuid: UUID, datasets: Set[UUID]) -> None:
+    def track_flyway_datasets(self, cfw_uuid: UUID, datasets: set[UUID]) -> None:
         """
         Stores flyway datasets for a CFW UUID for later dropping.
 
@@ -104,7 +104,7 @@ class DataLifecycleManager:
             self.result_data_collection[step_uuid] = result
 
     def get_result_data(
-        self, cfw: ComputeFramework, selected_feature_names: Set[FeatureName], location: Optional[str] = None
+        self, cfw: ComputeFramework, selected_feature_names: set[FeatureName], location: Optional[str] = None
     ) -> Any:
         """
         Gets result data from the compute framework.
@@ -130,7 +130,7 @@ class DataLifecycleManager:
 
         return cfw.select_data_by_column_names(data, selected_feature_names, column_ordering=self.column_ordering)
 
-    def get_results(self) -> List[Any]:
+    def get_results(self) -> list[Any]:
         """
         Returns list of all collected results.
 
@@ -145,7 +145,7 @@ class DataLifecycleManager:
 
         return list(self.result_data_collection.values())
 
-    def pop_result_data_collection(self) -> Generator[Tuple[UUID, Any], None, None]:
+    def pop_result_data_collection(self) -> Generator[tuple[UUID, Any], None, None]:
         """Drain completed results one at a time.
 
         Each yielded ``(step_uuid, result)`` pair contains a full result — not
@@ -156,7 +156,7 @@ class DataLifecycleManager:
             step_uuid, result = self.result_data_collection.popitem()
             yield step_uuid, result
 
-    def set_artifacts(self, artifacts: Dict[str, Any]) -> None:
+    def set_artifacts(self, artifacts: dict[str, Any]) -> None:
         """
         Stores artifacts dictionary.
 
@@ -165,7 +165,7 @@ class DataLifecycleManager:
         """
         self.artifacts = artifacts
 
-    def get_artifacts(self) -> Dict[str, Any]:
+    def get_artifacts(self) -> dict[str, Any]:
         """
         Returns stored artifacts.
 

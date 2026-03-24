@@ -30,7 +30,7 @@ class SklearnArtifact(BaseArtifact):
     """
 
     @classmethod
-    def _serialize_artifact(cls, artifact: Dict[str, Any]) -> str:
+    def _serialize_artifact(cls, artifact: dict[str, Any]) -> str:
         """
         Serialize the artifact to a JSON string.
 
@@ -71,7 +71,7 @@ class SklearnArtifact(BaseArtifact):
         return json.dumps(serializable_artifact)
 
     @classmethod
-    def _deserialize_artifact(cls, serialized_artifact: str) -> Dict[str, Any]:
+    def _deserialize_artifact(cls, serialized_artifact: str) -> dict[str, Any]:
         """
         Deserialize the artifact from a JSON string.
 
@@ -287,7 +287,7 @@ class SklearnArtifact(BaseArtifact):
             return None
 
     @classmethod
-    def load_sklearn_artifact(cls, features: FeatureSet, artifact_key: str) -> Optional[Dict[str, Any]]:
+    def load_sklearn_artifact(cls, features: FeatureSet, artifact_key: str) -> Optional[dict[str, Any]]:
         """
         Helper method to load a specific sklearn artifact by key.
 
@@ -308,7 +308,7 @@ class SklearnArtifact(BaseArtifact):
         return None
 
     @classmethod
-    def save_sklearn_artifact(cls, features: FeatureSet, artifact_key: str, artifact_data: Dict[str, Any]) -> None:
+    def save_sklearn_artifact(cls, features: FeatureSet, artifact_key: str, artifact_data: dict[str, Any]) -> None:
         """
         Helper method to save a sklearn artifact with the proper multiple artifact format.
 

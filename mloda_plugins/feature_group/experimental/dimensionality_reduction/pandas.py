@@ -83,7 +83,7 @@ class PandasDimensionalityReductionFeatureGroup(DimensionalityReductionFeatureGr
         data: Any,
         algorithm: str,
         dimension: int,
-        source_features: List[str],
+        source_features: list[str],
         options: Any,
     ) -> "NDArray[Any]":
         """

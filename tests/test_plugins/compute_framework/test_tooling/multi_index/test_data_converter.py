@@ -41,8 +41,8 @@ class DataConverter:
 
     def to_framework(
         self,
-        data: List[Dict[str, Any]],
-        target_framework_type: Type[Any],
+        data: list[dict[str, Any]],
+        target_framework_type: type[Any],
         connection: Optional[Any] = None,
     ) -> Any:
         """
@@ -90,7 +90,7 @@ class DataConverter:
                 f"Ensure the framework has a PyArrow transformer."
             )
 
-    def from_framework(self, data: Any, source_framework_type: Type[Any]) -> List[Dict[str, Any]]:
+    def from_framework(self, data: Any, source_framework_type: type[Any]) -> list[dict[str, Any]]:
         """
         Convert framework data back to test data (List[Dict]) format.
 
@@ -130,7 +130,7 @@ class DataConverter:
         # Step 2: PyArrow → List[Dict]
         try:
             transformer_arrow_to_list = self.transformer.transformer_map[(pa.Table, list)]
-            result: List[Dict[str, Any]] = transformer_arrow_to_list.transform(pa.Table, list, arrow_data, None)
+            result: list[dict[str, Any]] = transformer_arrow_to_list.transform(pa.Table, list, arrow_data, None)
             return result
         except KeyError:
             raise KeyError(

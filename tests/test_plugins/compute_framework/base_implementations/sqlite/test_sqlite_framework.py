@@ -121,7 +121,7 @@ class TestSqliteFrameworkBasics:
 
 class TestSqliteFrameworkMerge(DataFrameTestBase):
     @classmethod
-    def framework_class(cls) -> Type[Any]:
+    def framework_class(cls) -> type[Any]:
         return SqliteFramework
 
     def setup_method(self) -> None:

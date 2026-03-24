@@ -10,16 +10,16 @@ from mloda.user import Feature, Features, ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
-COMPUTE_FRAMEWORKS: Set[Any] = {PyArrowTable}
-PARALLELIZATION_MODES: Set[ParallelizationMode] = {ParallelizationMode.SYNC}
+COMPUTE_FRAMEWORKS: set[Any] = {PyArrowTable}
+PARALLELIZATION_MODES: set[ParallelizationMode] = {ParallelizationMode.SYNC}
 
 
-def _get_features(feature_list: List[str]) -> Features:
+def _get_features(feature_list: list[str]) -> Features:
     """Helper to create a Features collection from a list of feature name strings."""
     return Features([Feature(name=f_name, initial_requested_data=True) for f_name in feature_list])
 
 
-def _run_all_results(feature_list: List[str]) -> List[Any]:
+def _run_all_results(feature_list: list[str]) -> list[Any]:
     """Run features using the batch run_all API and return the result list."""
     from mloda.user import mloda
 
@@ -31,7 +31,7 @@ def _run_all_results(feature_list: List[str]) -> List[Any]:
     )
 
 
-def _stream_all_results(feature_list: List[str]) -> List[Any]:
+def _stream_all_results(feature_list: list[str]) -> list[Any]:
     """Run features using stream_all and collect all yielded results into a list."""
     from mloda.core.api.streaming_request import stream_all
 
@@ -143,7 +143,7 @@ class TestStreamAllMatchesRunAll:
 
         # Convert both to sets of frozensets for order-independent comparison,
         # since computation order is not guaranteed.
-        def to_comparable(results: List[Any]) -> Set[frozenset]:
+        def to_comparable(results: list[Any]) -> set[frozenset]:
             comparable = set()
             for table in results:
                 d = table.to_pydict()

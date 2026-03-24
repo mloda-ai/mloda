@@ -121,7 +121,7 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         },
     }
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         """Extract point features from either configuration-based options or string parsing."""
 
         # Try string-based parsing first

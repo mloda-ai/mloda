@@ -38,7 +38,7 @@ class CreatorDataFeature(FeatureGroup):
         return {"creator_id": [1, 2, 3], "creator_value": ["a", "b", "c"]}
 
     @classmethod
-    def feature_names_supported(cls) -> Set[str]:
+    def feature_names_supported(cls) -> set[str]:
         return {"creator_id", "creator_value"}
 
 
@@ -48,7 +48,7 @@ class CreatorDataFeature(FeatureGroup):
 class LeftJoinedFeature(FeatureGroup):
     """Joins mloda data with Creator data using LEFT join."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         """Define input features with a LEFT join link."""
 
         # Create the link: LEFT join on api_id = creator_id
@@ -69,14 +69,14 @@ class LeftJoinedFeature(FeatureGroup):
         return data
 
     @classmethod
-    def feature_names_supported(cls) -> Set[str]:
+    def feature_names_supported(cls) -> set[str]:
         return {cls.get_class_name()}
 
 
 class AppendedFeature(FeatureGroup):
     """Appends mloda data with Creator data (stacks vertically)."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         """Define input features with an APPEND link."""
 
         # Create the link: APPEND stacks data vertically
@@ -97,7 +97,7 @@ class AppendedFeature(FeatureGroup):
         return data
 
     @classmethod
-    def feature_names_supported(cls) -> Set[str]:
+    def feature_names_supported(cls) -> set[str]:
         return {cls.get_class_name()}
 
 
@@ -132,7 +132,7 @@ class TestApiLinkJoin:
         Result: 4 rows (LEFT keeps all mloda rows, id 4 has null for creator_value)
         """
         # Request the joined feature
-        feature_list: List[Union[Feature, str]] = [Feature(name="LeftJoinedFeature")]
+        feature_list: list[Feature | str] = [Feature(name="LeftJoinedFeature")]
 
         result = mloda.run_all(
             feature_list,
@@ -155,7 +155,7 @@ class TestApiLinkJoin:
         Result: 5 rows (stacked vertically)
         """
         # Request the appended feature
-        feature_list: List[Union[Feature, str]] = [Feature(name="AppendedFeature")]
+        feature_list: list[Feature | str] = [Feature(name="AppendedFeature")]
 
         result = mloda.run_all(
             feature_list,

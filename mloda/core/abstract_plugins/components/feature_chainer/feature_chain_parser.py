@@ -55,9 +55,9 @@ class FeatureChainParser:
     def parse_feature_name(
         cls,
         feature_name: FeatureName | str,
-        prefix_patterns: List[str],
+        prefix_patterns: list[str],
         pattern: str = CHAIN_SEPARATOR,
-    ) -> Tuple[str | None, str | None]:
+    ) -> tuple[str | None, str | None]:
         """Internal method for parsing feature names - used by match_configuration_feature_chain_parser."""
         _feature_name: str = feature_name.name if isinstance(feature_name, FeatureName) else feature_name
 
@@ -86,7 +86,7 @@ class FeatureChainParser:
     def _match_pattern_based_feature(
         cls,
         feature_name: str | FeatureName,
-        prefix_patterns: List[str],
+        prefix_patterns: list[str],
         pattern: str = CHAIN_SEPARATOR,
     ) -> bool:
         """Internal method for matching pattern-based features - used by match_configuration_feature_chain_parser."""
@@ -197,7 +197,7 @@ class FeatureChainParser:
     @classmethod
     def _process_found_property_value(
         cls, found_property_value: Any, property_value: Any, property_name: str, original_property_config: Any
-    ) -> Set[str]:
+    ) -> set[str]:
         if isinstance(found_property_value, list):
             found_property_value = tuple(found_property_value)
         if not isinstance(found_property_value, frozenset):
@@ -221,7 +221,7 @@ class FeatureChainParser:
 
     @classmethod
     def _validate_final_properties(
-        cls, property_tracker: Dict[str, None | Set[str]], property_mapping: Dict[str, Any]
+        cls, property_tracker: dict[str, None | set[str]], property_mapping: dict[str, Any]
     ) -> bool:
         """Validate that all required properties have values."""
         for key, value in property_tracker.items():
@@ -233,7 +233,7 @@ class FeatureChainParser:
         return True
 
     @classmethod
-    def _validate_options_against_property_mapping(cls, options: Options, property_mapping: Dict[str, Any]) -> bool:
+    def _validate_options_against_property_mapping(cls, options: Options, property_mapping: dict[str, Any]) -> bool:
         """
         Shared validation logic for both string-based and configuration-based approaches.
 
@@ -244,7 +244,7 @@ class FeatureChainParser:
         Returns:
             True if validation passes, False otherwise
         """
-        property_tracker: Dict[str, None | Set[str]] = {}
+        property_tracker: dict[str, None | set[str]] = {}
         for key in property_mapping:
             property_tracker[key] = None
 
@@ -279,8 +279,8 @@ class FeatureChainParser:
         cls,
         feature_name: str | FeatureName,
         options: Options,
-        property_mapping: Optional[Dict[str, Any]] = None,
-        prefix_patterns: Optional[List[str]] = None,
+        property_mapping: Optional[dict[str, Any]] = None,
+        prefix_patterns: Optional[list[str]] = None,
         pattern: str = CHAIN_SEPARATOR,
     ) -> bool:
         """

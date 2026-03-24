@@ -54,13 +54,13 @@ class TestAddIndex:
     ) -> None:
         class ReadFileFeatureWithIndex(ReadFileFeature):
             @classmethod
-            def index_columns(cls) -> Optional[List[Index]]:
+            def index_columns(cls) -> Optional[list[Index]]:
                 return [Index(("id",))]
 
             @classmethod
             def match_feature_group_criteria(
                 cls,
-                feature_name: Union[FeatureName, str],
+                feature_name: FeatureName | str,
                 options: Options,
                 data_access_collection: Optional[DataAccessCollection] = None,
             ) -> bool:
@@ -78,7 +78,7 @@ class TestAddIndex:
 
         class DBInputDataTestFeatureGroupWithIndex(DBInputDataTestFeatureGroup):
             @classmethod
-            def index_columns(cls) -> Optional[List[Index]]:
+            def index_columns(cls) -> Optional[list[Index]]:
                 return [Index(("id",))]
 
             @classmethod
@@ -102,7 +102,7 @@ class TestAddIndex:
             @classmethod
             def match_feature_group_criteria(
                 cls,
-                feature_name: Union[FeatureName, str],
+                feature_name: FeatureName | str,
                 options: Options,
                 data_access_collection: Optional[DataAccessCollection] = None,
             ) -> bool:
@@ -110,7 +110,7 @@ class TestAddIndex:
                     return True
                 return False
 
-            def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+            def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
                 return {Feature.int32_of("Amount"), Feature.int32_of("any_num")}
 
             @classmethod

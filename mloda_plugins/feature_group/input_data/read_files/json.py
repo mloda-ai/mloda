@@ -116,7 +116,7 @@ class JsonReader(ReadFile):
     """
 
     @classmethod
-    def suffix(cls) -> Tuple[str, ...]:
+    def suffix(cls) -> tuple[str, ...]:
         return (
             ".json",
             ".JSON",

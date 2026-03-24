@@ -56,8 +56,8 @@ class BaseTool(ABC):
         cls,
         name: str,
         description: str,
-        parameters: List[InputDataObject],
-        required: List[str],
+        parameters: list[InputDataObject],
+        required: list[str],
     ) -> ToolFunctionDeclaration:
         """
         Utility method to create ToolFunctionDeclaration objects.

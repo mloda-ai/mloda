@@ -88,7 +88,7 @@ class SourceInputFeature(FeatureGroup):
         - merges:  Specifies merge operations between features.
     """
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return SourceInputFeatureComposite.input_features(options, feature_name)
 
 
@@ -109,12 +109,12 @@ class SourceTuple(NamedTuple):
     """
 
     feature_name: str
-    source_class: Optional[Type[Union[FeatureGroup, str]]] = None
+    source_class: Optional[type[FeatureGroup | str]] = None
     source_value: Optional[str] = None
-    left_link: Optional[Tuple[Type[FeatureGroup], Union[str, Index]]] = None
-    right_link: Optional[Tuple[Type[FeatureGroup], Union[str, Index]]] = None
+    left_link: Optional[tuple[type[FeatureGroup], str | Index]] = None
+    right_link: Optional[tuple[type[FeatureGroup], str | Index]] = None
     join_type: Optional[JoinType] = None
-    merge_index: Optional[Union[str, Index]] = None
+    merge_index: Optional[str | Index] = None
 
 
 class SourceInputFeatureComposite:
@@ -123,7 +123,7 @@ class SourceInputFeatureComposite:
     """
 
     @classmethod
-    def input_features(cls, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(cls, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         """
         Retrieves the set of input features based on the provided options.
 
@@ -155,7 +155,7 @@ class SourceInputFeatureComposite:
         return features
 
     @classmethod
-    def _create_feature(cls, source: Union[str, SourceTuple]) -> Feature:
+    def _create_feature(cls, source: str | SourceTuple) -> Feature:
         """
         Helper method to create a Feature object from a source definition.
         """
@@ -186,7 +186,7 @@ class SourceInputFeatureComposite:
             - For append and union operations, merge_index can be added.
         """
 
-        properties: Dict[str, Any] = {}
+        properties: dict[str, Any] = {}
         if source.source_class:
             properties = {
                 source.source_class.__name__
@@ -207,8 +207,8 @@ class SourceInputFeatureComposite:
     @classmethod
     def _handle_link(
         cls,
-        left_link: Tuple[Type[FeatureGroup], Union[str, Index]],
-        right_link: Tuple[Type[FeatureGroup], Union[str, Index]],
+        left_link: tuple[type[FeatureGroup], str | Index],
+        right_link: tuple[type[FeatureGroup], str | Index],
         join_type: Any,
     ) -> Link:
         """

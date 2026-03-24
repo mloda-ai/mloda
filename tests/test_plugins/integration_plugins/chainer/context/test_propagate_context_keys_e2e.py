@@ -11,7 +11,7 @@ from tests.test_plugins.integration_plugins.chainer.context.test_chained_optiona
 )
 
 
-def find_column(results: List[Any], column_name: str) -> List[Any]:
+def find_column(results: list[Any], column_name: str) -> list[Any]:
     for df in results:
         if column_name in df.columns:
             return list(df[column_name].values)

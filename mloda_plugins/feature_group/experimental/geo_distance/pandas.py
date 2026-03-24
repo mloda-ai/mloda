@@ -16,7 +16,7 @@ from mloda_plugins.feature_group.experimental.geo_distance.base import GeoDistan
 
 class PandasGeoDistanceFeatureGroup(GeoDistanceFeatureGroup):
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> bool | set[type[ComputeFramework]]:
         """Specify that this feature group works with Pandas."""
         return {PandasDataFrame}
 

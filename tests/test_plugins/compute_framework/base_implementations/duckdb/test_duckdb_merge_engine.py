@@ -308,12 +308,12 @@ class TestDuckDBMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):
     """Test DuckDBMergeEngine multi-index support using shared test scenarios."""
 
     @classmethod
-    def merge_engine_class(cls) -> Type[BaseMergeEngine]:
+    def merge_engine_class(cls) -> type[BaseMergeEngine]:
         """Return the DuckDBMergeEngine class."""
         return DuckDBMergeEngine
 
     @classmethod
-    def framework_type(cls) -> Type[Any]:
+    def framework_type(cls) -> type[Any]:
         """Return DuckDB relation type."""
         if duckdb is None:
             raise ImportError("DuckDB is not installed")

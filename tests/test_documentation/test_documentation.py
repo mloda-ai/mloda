@@ -18,7 +18,7 @@ PluginLoader.all()
 
 # We need this to test DokuExtender
 class DokuExtender(Extender):
-    def wraps(self) -> Set[ExtenderHook]:
+    def wraps(self) -> set[ExtenderHook]:
         return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
@@ -29,7 +29,7 @@ class DokuExtender(Extender):
 
 
 class DokuValidateInputFeatureExtender(Extender):
-    def wraps(self) -> Set[ExtenderHook]:
+    def wraps(self) -> set[ExtenderHook]:
         return {ExtenderHook.VALIDATE_INPUT_FEATURE}
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:

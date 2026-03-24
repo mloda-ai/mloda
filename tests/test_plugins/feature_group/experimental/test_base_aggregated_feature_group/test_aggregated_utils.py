@@ -13,7 +13,7 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
 
-AGGREGATION_FEATURES: List[Feature | str] = [
+AGGREGATION_FEATURES: list[Feature | str] = [
     "sales__sum_aggr",  # Sum of sales
     "price__avg_aggr",  # Average price
     "discount__min_aggr",  # Minimum discount
@@ -25,7 +25,7 @@ class AggregatedTestDataCreator(ATestDataCreator):
     """Base class for aggregation test data creators."""
 
     @classmethod
-    def get_raw_data(cls) -> Dict[str, Any]:
+    def get_raw_data(cls) -> dict[str, Any]:
         """Return the raw data as a dictionary."""
         return {
             "sales": [100, 200, 300, 400, 500],
@@ -44,7 +44,7 @@ class PyArrowAggregatedTestDataCreator(AggregatedTestDataCreator):
     compute_framework = PyArrowTable
 
 
-def validate_aggregated_features(result: List[pd.DataFrame]) -> None:
+def validate_aggregated_features(result: list[pd.DataFrame]) -> None:
     # Verify the results
     assert len(result) == 2, "Expected two results: one for source data, one for aggregated features"
 

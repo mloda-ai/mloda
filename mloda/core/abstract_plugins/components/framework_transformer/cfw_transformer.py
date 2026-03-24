@@ -35,10 +35,10 @@ class ComputeFrameworkTransformer:
         Creates an empty transformer registry and populates it with all
         available BaseTransformer subclasses.
         """
-        self.transformer_map: Dict[Tuple[Type[Any], Type[Any]], Type[BaseTransformer]] = {}
+        self.transformer_map: dict[tuple[type[Any], type[Any]], type[BaseTransformer]] = {}
         self.initilize_transformer()
 
-    def add(self, transformer: Type[BaseTransformer]) -> bool:
+    def add(self, transformer: type[BaseTransformer]) -> bool:
         """
         Add a transformer to the registry.
 
@@ -93,8 +93,8 @@ class ComputeFrameworkTransformer:
             self.add(transformer)
 
     def get_transformation_chain(
-        self, from_framework: Type[Any], to_framework: Type[Any]
-    ) -> Optional[List[Type[BaseTransformer]]]:
+        self, from_framework: type[Any], to_framework: type[Any]
+    ) -> Optional[list[type[BaseTransformer]]]:
         """
         Find a transformation chain between two frameworks.
 

@@ -23,7 +23,7 @@ class TimeWindowParserTestDataCreator(ATestDataCreator):
     compute_framework = PandasDataFrame
 
     @classmethod
-    def get_raw_data(cls) -> Dict[str, Any]:
+    def get_raw_data(cls) -> dict[str, Any]:
         """Return the raw data as a dictionary."""
         dates = pd.date_range(start="2023-01-01", periods=10, freq="D")
         return {

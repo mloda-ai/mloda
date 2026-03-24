@@ -29,14 +29,14 @@ from mloda.core.prepare.resolve_links import ResolveLinks
 class BaseGroupA(FeatureGroup):
     """Base class A for testing polymorphic links."""
 
-    def input_features(self, _options: Options, _feature_name: FeatureName) -> Optional[Set[Any]]:
+    def input_features(self, _options: Options, _feature_name: FeatureName) -> Optional[set[Any]]:
         return None
 
 
 class BaseGroupB(FeatureGroup):
     """Base class B for testing polymorphic links."""
 
-    def input_features(self, _options: Options, _feature_name: FeatureName) -> Optional[Set[Any]]:
+    def input_features(self, _options: Options, _feature_name: FeatureName) -> Optional[set[Any]]:
         return None
 
 
@@ -61,7 +61,7 @@ class ConcreteGroupB(BaseGroupB):
 class UnrelatedGroup(FeatureGroup):
     """Unrelated group for negative tests."""
 
-    def input_features(self, _options: Options, _feature_name: FeatureName) -> Optional[Set[Any]]:
+    def input_features(self, _options: Options, _feature_name: FeatureName) -> Optional[set[Any]]:
         return None
 
 
@@ -71,7 +71,7 @@ class UnrelatedGroup(FeatureGroup):
 class GrandparentGroup(FeatureGroup):
     """Three-level hierarchy root."""
 
-    def input_features(self, _options: Options, _feature_name: FeatureName) -> Optional[Set[Any]]:
+    def input_features(self, _options: Options, _feature_name: FeatureName) -> Optional[set[Any]]:
         return None
 
 

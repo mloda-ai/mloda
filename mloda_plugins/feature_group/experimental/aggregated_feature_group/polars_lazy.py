@@ -26,12 +26,12 @@ class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
     """
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> bool | set[type[ComputeFramework]]:
         """Specify that this feature group works with Polars Lazy DataFrames."""
         return {PolarsLazyDataFrame}
 
     @classmethod
-    def _get_available_columns(cls, data: Any) -> Set[str]:
+    def _get_available_columns(cls, data: Any) -> set[str]:
         """Get the set of available column names from the LazyFrame schema."""
         if hasattr(data, "collect_schema"):
             return set(data.collect_schema().names())
@@ -39,7 +39,7 @@ class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
             raise ValueError("Data does not have a collect_schema method, cannot get available columns.")
 
     @classmethod
-    def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
+    def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
         """
         Check if the resolved features exist in the LazyFrame schema.
 
@@ -68,7 +68,7 @@ class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
         return data.with_columns(result.alias(feature_name))
 
     @classmethod
-    def _perform_aggregation(cls, data: Any, aggregation_type: str, in_features: List[str]) -> Any:
+    def _perform_aggregation(cls, data: Any, aggregation_type: str, in_features: list[str]) -> Any:
         """
         Perform the aggregation using Polars lazy expressions.
 

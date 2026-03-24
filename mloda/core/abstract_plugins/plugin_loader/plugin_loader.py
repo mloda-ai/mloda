@@ -41,8 +41,8 @@ class PluginLoader:
             "compute_framework": None,  # root group
             "function_extender": None,  # root group
         }
-        self.plugins: Dict[str, ModuleType] = {}
-        self.plugin_graph: Dict[str, List[str]] = {}  # Graph representation of plugins
+        self.plugins: dict[str, ModuleType] = {}
+        self.plugin_graph: dict[str, list[str]] = {}  # Graph representation of plugins
 
     @staticmethod
     def all() -> "PluginLoader":
@@ -145,10 +145,10 @@ class PluginLoader:
         package_path = Path(base_package).parent
         return package_path / group_name
 
-    def display_plugin_graph(self, plugin_category: Optional[str] = None) -> List[str]:
+    def display_plugin_graph(self, plugin_category: Optional[str] = None) -> list[str]:
         """Display the plugin graph."""
 
-        _list_plugins_dependencies: List[str] = []
+        _list_plugins_dependencies: list[str] = []
 
         for plugin, dependencies in self.plugin_graph.items():
             if plugin_category is not None:
@@ -161,10 +161,10 @@ class PluginLoader:
             raise ValueError(f"No plugins found for category {plugin_category}")
         return _list_plugins_dependencies
 
-    def list_loaded_modules(self, plugin_category: Optional[str] = None) -> List[str]:
+    def list_loaded_modules(self, plugin_category: Optional[str] = None) -> list[str]:
         """List all loaded modules (plugins)."""
 
-        _list_plugins_dependencies: List[str] = []
+        _list_plugins_dependencies: list[str] = []
 
         for plugin in self.plugins.keys():
             if plugin_category is not None:

@@ -23,7 +23,7 @@ class IntegrationDataCreator(ATestDataCreator):
     compute_framework = PandasDataFrame
 
     @classmethod
-    def get_raw_data(cls) -> Dict[str, Any]:
+    def get_raw_data(cls) -> dict[str, Any]:
         return {
             "age": [25, 30, 35, 40, 45],
             "weight": [150, 160, 170, 180, 190],

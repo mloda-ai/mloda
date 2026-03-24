@@ -13,7 +13,7 @@ class BaseTestFeatureGroup1(FeatureGroup):
     @classmethod
     def match_feature_group_criteria(
         cls,
-        feature_name: Union[FeatureName, str],
+        feature_name: FeatureName | str,
         options: Options,
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
@@ -26,7 +26,7 @@ class BaseTestFeatureGroup2(FeatureGroup):
     @classmethod
     def match_feature_group_criteria(
         cls,
-        feature_name: Union[FeatureName, str],
+        feature_name: FeatureName | str,
         options: Options,
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
@@ -34,7 +34,7 @@ class BaseTestFeatureGroup2(FeatureGroup):
             return True
         return False
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         """This function should return the input features for the feature group
         if this feature is dependent on other features.
         Else, return None"""

@@ -117,7 +117,7 @@ class FeatureGroup(ABC):
         return None
 
     @staticmethod
-    def artifact() -> Type[BaseArtifact] | None:
+    def artifact() -> type[BaseArtifact] | None:
         """
         Returns the artifact associated with this feature group.
 
@@ -167,7 +167,7 @@ class FeatureGroup(ABC):
     @staticmethod
     def apply_naming_convention(
         result: Any, feature_name: str, suffix_generator: Optional[Callable[[int], str]] = None
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Applies naming convention to multi-column results.
 
@@ -193,7 +193,7 @@ class FeatureGroup(ABC):
         return column_name.split("~")[0]
 
     @staticmethod
-    def expand_feature_columns(feature_name: str, num_columns: int) -> List[str]:
+    def expand_feature_columns(feature_name: str, num_columns: int) -> list[str]:
         """
         Generates a list of column names with ~N suffixes.
 
@@ -202,7 +202,7 @@ class FeatureGroup(ABC):
         return [f"{feature_name}~{i}" for i in range(num_columns)]
 
     @staticmethod
-    def resolve_multi_column_feature(feature_name: str, available_columns: Set[str]) -> List[str]:
+    def resolve_multi_column_feature(feature_name: str, available_columns: set[str]) -> list[str]:
         """
         Resolves a feature name to its corresponding column(s) in the available columns.
 
@@ -231,7 +231,7 @@ class FeatureGroup(ABC):
         """
         return None
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         """
         Defines the input features required by this feature group.
 
@@ -244,7 +244,7 @@ class FeatureGroup(ABC):
         raise NotImplementedError
 
     @classmethod
-    def index_columns(cls) -> Optional[List[Index]]:
+    def index_columns(cls) -> Optional[list[Index]]:
         """
         Specifies the index columns used for merging or joining data.
 
@@ -307,7 +307,7 @@ class FeatureGroup(ABC):
     @classmethod
     def match_feature_group_criteria(
         cls,
-        feature_name: Union[FeatureName, str],
+        feature_name: FeatureName | str,
         options: Options,
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
@@ -347,7 +347,7 @@ class FeatureGroup(ABC):
         return False
 
     @classmethod
-    def feature_names_supported(cls) -> Set[str]:
+    def feature_names_supported(cls) -> set[str]:
         """
         Returns a set of feature names that are explicitly supported by this feature group.
 
@@ -386,7 +386,7 @@ class FeatureGroup(ABC):
         return Domain.get_default_domain()
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> bool | set[type[ComputeFramework]]:
         """
         Defines the rule for determining the compute framework to use for this feature group.
 
@@ -397,7 +397,7 @@ class FeatureGroup(ABC):
 
     @final
     @classmethod
-    def compute_framework_definition(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_definition(cls) -> set[type[ComputeFramework]]:
         """
         Determines the set of compute frameworks supported by this feature group based on the
         `compute_framework_rule`.
@@ -506,12 +506,12 @@ class FeatureGroup(ABC):
         return cls.matches(feature_name, options, data_access_collection)
 
 
-def format_feature_group_class(fg_class: Type[FeatureGroup]) -> str:
+def format_feature_group_class(fg_class: type[FeatureGroup]) -> str:
     """Format a single FeatureGroup class for error messages."""
     return f"{fg_class.__name__} ({fg_class.__module__})"
 
 
-def format_feature_group_classes(feature_groups: Iterable[Type[FeatureGroup]], include_domain: bool = False) -> str:
+def format_feature_group_classes(feature_groups: Iterable[type[FeatureGroup]], include_domain: bool = False) -> str:
     """Format FeatureGroup classes for error messages."""
     lines = []
     for fg_class in feature_groups:

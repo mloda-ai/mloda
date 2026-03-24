@@ -41,7 +41,7 @@ class AggFGS1(FeatureGroup):
 
 
 class ConsumerFGS1(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {
             Feature(name=ReadFGS1.get_class_name()),
             Feature(name="agg_sum_s1", options={"agg_type": "sum"}),
@@ -90,7 +90,7 @@ class ReadFGS2(FeatureGroup):
 
 
 class ConsumerFGS2(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {
             Feature(name=ReadFGS2.get_class_name()),
             Feature(name=SumAggS2.get_class_name()),
@@ -147,7 +147,7 @@ class AvgFGS3(FeatureGroup):
 
 
 class ConsumerFGS3(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {
             Feature(name=ReadFGS3.get_class_name()),
             Feature(name=SumFGS3.get_class_name()),
@@ -168,7 +168,7 @@ class ConsumerFGS3(FeatureGroup):
     ],
 )
 class TestMultiLinkSameCfw:
-    def test_multi_link_same_class_same_cfw(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
+    def test_multi_link_same_class_same_cfw(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         """Scenario 1: same FG class used 3x (different feature names per batch), same compute framework."""
         feature = Feature(name=ConsumerFGS1.get_class_name())
         links = {
@@ -197,7 +197,7 @@ class TestMultiLinkSameCfw:
             assert len(res) == 1
             assert ConsumerFGS1.get_class_name() in res.columns
 
-    def test_multi_link_subclass_same_cfw(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
+    def test_multi_link_subclass_same_cfw(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         """Scenario 2: subclasses of a common base, Links defined on the base class, same compute framework."""
         feature = Feature(name=ConsumerFGS2.get_class_name())
         links = {
@@ -228,7 +228,7 @@ class TestMultiLinkSameCfw:
             assert len(res) == 1
             assert ConsumerFGS2.get_class_name() in res.columns
 
-    def test_multi_link_distinct_class_same_cfw(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
+    def test_multi_link_distinct_class_same_cfw(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         """Scenario 3: fully distinct FG classes, same compute framework (verify no regression)."""
         feature = Feature(name=ConsumerFGS3.get_class_name())
         links = {

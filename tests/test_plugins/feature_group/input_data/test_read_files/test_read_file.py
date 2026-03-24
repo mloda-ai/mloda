@@ -28,7 +28,7 @@ class OverwrittenReadCsvInputDataTestFeatureGroup(ReadFileFeature):
     @classmethod
     def match_feature_group_criteria(
         cls,
-        feature_name: Union[FeatureName, str],
+        feature_name: FeatureName | str,
         options: Options,
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
@@ -69,9 +69,9 @@ class TestInputData:
 
     @classmethod
     def get_features(
-        cls, features: List[str], path: Optional[str] = None, additional_options: Dict[str, Any] = {}
-    ) -> List[str | Feature]:
-        _feature_list: List[str | Feature] = []
+        cls, features: list[str], path: Optional[str] = None, additional_options: dict[str, Any] = {}
+    ) -> list[str | Feature]:
+        _feature_list: list[str | Feature] = []
         for feature in features:
             _f = Feature(name=feature)
             for k, v in additional_options.items():
@@ -213,11 +213,11 @@ class TestReadFile:
     def test_validate_columns(self) -> None:
         class TestReadFile(ReadFile):
             @classmethod
-            def get_column_names(cls, file_name: str) -> List[str]:
+            def get_column_names(cls, file_name: str) -> list[str]:
                 return ["id", "V1", "V2"]
 
             @classmethod
-            def suffix(cls) -> Tuple[str, ...]:
+            def suffix(cls) -> tuple[str, ...]:
                 return (".csv",)
 
         assert TestReadFile.validate_columns("dummy.csv", ["id", "V1"])
@@ -226,11 +226,11 @@ class TestReadFile:
     def test_match_read_file_data_access(self) -> None:
         class TestReadFile(ReadFile):
             @classmethod
-            def get_column_names(cls, file_name: str) -> List[str]:
+            def get_column_names(cls, file_name: str) -> list[str]:
                 return ["id", "V1", "V2"]
 
             @classmethod
-            def suffix(cls) -> Tuple[str, ...]:
+            def suffix(cls) -> tuple[str, ...]:
                 return (".csv",)
 
         data_accesses = ["dummy.csv", "dummy2.csv"]
@@ -240,11 +240,11 @@ class TestReadFile:
     def test_match_subclass_data_access(self) -> None:
         class TestReadFile(ReadFile):
             @classmethod
-            def get_column_names(cls, file_name: str) -> List[str]:
+            def get_column_names(cls, file_name: str) -> list[str]:
                 return ["id", "V1", "V2"]
 
             @classmethod
-            def suffix(cls) -> Tuple[str, ...]:
+            def suffix(cls) -> tuple[str, ...]:
                 return (".csv",)
 
         data_access = DataAccessCollection(files={"dummy.csv"})
@@ -254,11 +254,11 @@ class TestReadFile:
     def test_init_reader(self) -> None:
         class TestReadFile(ReadFile):
             @classmethod
-            def get_column_names(cls, file_name: str) -> List[str]:
+            def get_column_names(cls, file_name: str) -> list[str]:
                 return ["id", "V1", "V2"]
 
             @classmethod
-            def suffix(cls) -> Tuple[str, ...]:
+            def suffix(cls) -> tuple[str, ...]:
                 return (".csv",)
 
         options = Options(group={"BaseInputData": (TestReadFile, "dummy.csv")})
@@ -269,11 +269,11 @@ class TestReadFile:
     def test_load(self) -> None:
         class TestReadFile(ReadFile):
             @classmethod
-            def get_column_names(cls, file_name: str) -> List[str]:
+            def get_column_names(cls, file_name: str) -> list[str]:
                 return ["id", "V1", "V2"]
 
             @classmethod
-            def suffix(cls) -> Tuple[str, ...]:
+            def suffix(cls) -> tuple[str, ...]:
                 return (".csv",)
 
             @classmethod
@@ -312,13 +312,13 @@ class TestSameClassFGLinkWithDifferentDataSources:
 
             class ReadFileWithIndex(ReadFileFeature):
                 @classmethod
-                def index_columns(cls) -> Optional[List[Index]]:
+                def index_columns(cls) -> Optional[list[Index]]:
                     return [Index(("id",))]
 
                 @classmethod
                 def match_feature_group_criteria(
                     cls,
-                    feature_name: Union[FeatureName, str],
+                    feature_name: FeatureName | str,
                     options: Options,
                     data_access_collection: Optional[DataAccessCollection] = None,
                 ) -> bool:
@@ -335,7 +335,7 @@ class TestSameClassFGLinkWithDifferentDataSources:
                 _path_a: str = path_a
                 _path_b: str = path_b
 
-                def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+                def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
                     _path_a = options.get("left_csv_path")
                     _path_b = options.get("right_csv_path")
                     link = Link.inner(
@@ -374,7 +374,7 @@ class TestSameClassFGLinkWithDifferentDataSources:
                     return pa.table({"JoinedCsvFeature": combined})
 
                 @classmethod
-                def feature_names_supported(cls) -> Set[str]:
+                def feature_names_supported(cls) -> set[str]:
                     return {"JoinedCsvFeature"}
 
             result = mloda.run_all(
@@ -402,13 +402,13 @@ class TestSameClassFGLinkWithDifferentDataSources:
 
             class ReadFileWithIndexNoDisc(ReadFileFeature):
                 @classmethod
-                def index_columns(cls) -> Optional[List[Index]]:
+                def index_columns(cls) -> Optional[list[Index]]:
                     return [Index(("id",))]
 
                 @classmethod
                 def match_feature_group_criteria(
                     cls,
-                    feature_name: Union[FeatureName, str],
+                    feature_name: FeatureName | str,
                     options: Options,
                     data_access_collection: Optional[DataAccessCollection] = None,
                 ) -> bool:
@@ -425,7 +425,7 @@ class TestSameClassFGLinkWithDifferentDataSources:
                 _path_a: str = path_a
                 _path_b: str = path_b
 
-                def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+                def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
                     _path_a = options.get("left_csv_path")
                     _path_b = options.get("right_csv_path")
                     link = Link.inner(
@@ -459,7 +459,7 @@ class TestSameClassFGLinkWithDifferentDataSources:
                     return data
 
                 @classmethod
-                def feature_names_supported(cls) -> Set[str]:
+                def feature_names_supported(cls) -> set[str]:
                     return {"JoinedCsvNoDisc"}
 
             with pytest.raises((ValueError, Exception), match="left_discriminator"):

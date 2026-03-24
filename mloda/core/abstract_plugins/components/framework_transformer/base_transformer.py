@@ -55,7 +55,7 @@ class BaseTransformer:
 
     @final
     @classmethod
-    def identify_orientation(cls, framework: Type[Any], other_framework: Type[Any]) -> str | None:
+    def identify_orientation(cls, framework: type[Any], other_framework: type[Any]) -> str | None:
         """
         Determine the direction of transformation between two frameworks.
 
@@ -84,7 +84,7 @@ class BaseTransformer:
     @final
     @classmethod
     def transform(
-        cls, framework: Type[Any], other_framework: Type[Any], data: Any, framework_connection_object: Optional[Any]
+        cls, framework: type[Any], other_framework: type[Any], data: Any, framework_connection_object: Optional[Any]
     ) -> Any:
         """Transform data from one framework to another."""
 

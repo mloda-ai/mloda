@@ -42,7 +42,7 @@ class ListValuedTestDataCreator(FeatureGroup):
         )
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> bool | set[type[ComputeFramework]]:
         return {PandasDataFrame}
 
 
@@ -68,7 +68,7 @@ class ListValuedFeatureGroup(FeatureGroup):
     @classmethod
     def match_feature_group_criteria(
         cls,
-        feature_name: Union[FeatureName, str],
+        feature_name: FeatureName | str,
         options: Options,
         data_access_collection: Optional[Any] = None,
     ) -> bool:
@@ -79,7 +79,7 @@ class ListValuedFeatureGroup(FeatureGroup):
             property_mapping=cls.PROPERTY_MAPPING,
         )
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         source_features = options.get_in_features()
         return set(source_features)
 
@@ -107,9 +107,7 @@ class ListValuedFeatureGroup(FeatureGroup):
 class TestListValuedOptionsE2E:
     """End-to-end tests for list-valued options through the mloda pipeline."""
 
-    plugin_collector = PluginCollector.enabled_feature_groups(
-        {ListValuedTestDataCreator, ListValuedFeatureGroup}
-    )
+    plugin_collector = PluginCollector.enabled_feature_groups({ListValuedTestDataCreator, ListValuedFeatureGroup})
 
     def test_list_valued_option_order_preserved(self) -> None:
         """List-valued option order is preserved through the pipeline.

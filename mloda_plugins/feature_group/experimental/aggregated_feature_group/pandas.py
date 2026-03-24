@@ -14,17 +14,17 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.base impo
 
 class PandasAggregatedFeatureGroup(AggregatedFeatureGroup):
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> bool | set[type[ComputeFramework]]:
         """Specify that this feature group works with Pandas."""
         return {PandasDataFrame}
 
     @classmethod
-    def _get_available_columns(cls, data: Any) -> Set[str]:
+    def _get_available_columns(cls, data: Any) -> set[str]:
         """Get the set of available column names from the DataFrame."""
         return set(data.columns)
 
     @classmethod
-    def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
+    def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
         """
         Check if the resolved features exist in the DataFrame.
 
@@ -48,7 +48,7 @@ class PandasAggregatedFeatureGroup(AggregatedFeatureGroup):
         return data
 
     @classmethod
-    def _perform_aggregation(cls, data: Any, aggregation_type: str, in_features: List[str]) -> Any:
+    def _perform_aggregation(cls, data: Any, aggregation_type: str, in_features: list[str]) -> Any:
         """
         Perform the aggregation using Pandas.
 

@@ -44,7 +44,7 @@ class TestPolarsFilterEngine(FilterEngineTestMixin):
             }
         )
 
-    def get_column_values(self, result: Any, column: str) -> List[Any]:
+    def get_column_values(self, result: Any, column: str) -> list[Any]:
         """Extract column values from Polars DataFrame."""
         return result[column].to_list()  # type: ignore[no-any-return]
 

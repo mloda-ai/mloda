@@ -15,7 +15,7 @@ class DataCreator(BaseInputData):
         - parameter data
     """
 
-    def __init__(self, supports_features: Set[str]) -> None:
+    def __init__(self, supports_features: set[str]) -> None:
         self.feature_names = supports_features
 
     def matches(

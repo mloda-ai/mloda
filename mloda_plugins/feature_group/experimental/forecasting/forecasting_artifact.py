@@ -26,7 +26,7 @@ class ForecastingArtifact(BaseArtifact):
     """
 
     @classmethod
-    def _serialize_artifact(cls, artifact: Dict[str, Any]) -> str:
+    def _serialize_artifact(cls, artifact: dict[str, Any]) -> str:
         """
         Serialize the artifact to a JSON string.
 
@@ -59,7 +59,7 @@ class ForecastingArtifact(BaseArtifact):
         return json.dumps(serializable_artifact)
 
     @classmethod
-    def _deserialize_artifact(cls, serialized_artifact: str) -> Dict[str, Any]:
+    def _deserialize_artifact(cls, serialized_artifact: str) -> dict[str, Any]:
         """
         Deserialize the artifact from a JSON string.
 

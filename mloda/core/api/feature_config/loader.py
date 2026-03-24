@@ -13,7 +13,7 @@ from mloda.core.api.feature_config.models import FeatureConfig
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 
-def process_nested_features(options: Dict[str, Any]) -> Dict[str, Any]:
+def process_nested_features(options: dict[str, Any]) -> dict[str, Any]:
     """Recursively convert nested in_features dicts to Feature objects.
 
     Args:
@@ -22,7 +22,7 @@ def process_nested_features(options: Dict[str, Any]) -> Dict[str, Any]:
     Returns:
         Dictionary with nested dicts converted to Feature objects
     """
-    processed: Dict[str, Any] = {}
+    processed: dict[str, Any] = {}
     for key, value in options.items():
         if key == "in_features" and isinstance(value, dict):
             # This is a nested feature definition - convert it to a Feature object
@@ -58,7 +58,7 @@ def process_nested_features(options: Dict[str, Any]) -> Dict[str, Any]:
     return processed
 
 
-def load_features_from_config(config_str: str, format: str = "json") -> List[Union[Feature, str]]:
+def load_features_from_config(config_str: str, format: str = "json") -> list[Feature | str]:
     """Load features from a configuration string.
 
     Args:
@@ -73,7 +73,7 @@ def load_features_from_config(config_str: str, format: str = "json") -> List[Uni
 
     config_items = parse_json(config_str)
 
-    features: List[Union[Feature, str]] = []
+    features: list[Feature | str] = []
 
     for item in config_items:
         if isinstance(item, str):

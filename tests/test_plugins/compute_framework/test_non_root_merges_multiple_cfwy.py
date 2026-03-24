@@ -30,7 +30,7 @@ class NonCfwRootJoinTestFeature(FeatureGroup):
         return {cls.get_class_name(): ["Same Value"], "dummy": ["dummy"]}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> bool | set[type[ComputeFramework]]:
         return {PyArrowTable}
 
 
@@ -50,12 +50,12 @@ class SecondNonCfwRootJoinTestFeature(NonCfwRootJoinTestFeature):
         return {cls.get_class_name(): ["Same Value"], "dummy4": ["dummy3"]}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> bool | set[type[ComputeFramework]]:
         return {PandasDataFrame}
 
 
 class GroupedNonCfwRootJoinTestFeature(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         if options.get("test_non_root_merge_multiple_join"):
             return {Feature(name="NonCfwRootJoinTestFeature"), Feature(name="NonCfwRootJoinTestFeatureB")}
 
@@ -71,12 +71,12 @@ class GroupedNonCfwRootJoinTestFeature(FeatureGroup):
         return data
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> bool | set[type[ComputeFramework]]:
         return {PyArrowTable}
 
 
 class GroupedSecondNonCfwRootJoinTestFeature(GroupedNonCfwRootJoinTestFeature):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {Feature(name="SecondNonCfwRootJoinTestFeature")}
 
     @classmethod
@@ -85,12 +85,12 @@ class GroupedSecondNonCfwRootJoinTestFeature(GroupedNonCfwRootJoinTestFeature):
         return data
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> bool | set[type[ComputeFramework]]:
         return {PandasDataFrame}
 
 
 class Call2GroupedNonCfwRootJoinTestFeature(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {
             Feature(name=GroupedNonCfwRootJoinTestFeature.get_class_name()),
             Feature(name=GroupedSecondNonCfwRootJoinTestFeature.get_class_name()),
@@ -117,7 +117,7 @@ class Call2GroupedNonCfwRootJoinTestFeature(FeatureGroup):
     ],
 )
 class TestNonCfWRootMerge:
-    def test_non_cfw_root_merge_simple(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
+    def test_non_cfw_root_merge_simple(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         """
         This test is for testing a merge on the second level of the feature graph with mixed cfw.
         """
@@ -151,7 +151,7 @@ class TestNonCfWRootMerge:
             assert res["Call2GroupedNonCfwRootJoinTestFeature"] == ["Same Value"]
             assert len(res) == 1
 
-    def test_non_cfw_root_multiple(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
+    def test_non_cfw_root_multiple(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         feature = Feature(
             name=Call2GroupedNonCfwRootJoinTestFeature.get_class_name(),
             options={"test_non_root_merge_multiple_join": True},

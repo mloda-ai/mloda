@@ -66,13 +66,13 @@ class ExecutionOrchestrator:
         if flight_server:
             self.flight_server = flight_server
 
-    def _is_step_done(self, step_uuids: Set[UUID], finished_ids: Set[UUID]) -> bool:
+    def _is_step_done(self, step_uuids: set[UUID], finished_ids: set[UUID]) -> bool:
         """
         Checks if all steps identified by the given UUIDs have already been finished.
         """
         return all(uuid in finished_ids for uuid in step_uuids)
 
-    def _drop_data_for_finished_cfws(self, finished_ids: Set[UUID]) -> None:
+    def _drop_data_for_finished_cfws(self, finished_ids: set[UUID]) -> None:
         """
         Handles the dropping of intermediate data based on finished steps.
         """
@@ -93,9 +93,9 @@ class ExecutionOrchestrator:
 
         self.executor = ComputeFrameworkExecutor(self.cfw_register, self.worker_manager)
 
-        finished_ids: Set[UUID] = set()
-        to_finish_ids: Set[UUID] = set()
-        currently_running_steps: Set[UUID] = set()
+        finished_ids: set[UUID] = set()
+        to_finish_ids: set[UUID] = set()
+        currently_running_steps: set[UUID] = set()
 
         try:
             while to_finish_ids != finished_ids or len(finished_ids) == 0:
@@ -135,7 +135,7 @@ class ExecutionOrchestrator:
             self.data_lifecycle_manager.set_artifacts(self.cfw_register.get_artifacts())
             self.join()
 
-    def compute_stream(self) -> Generator[Tuple[UUID, Any], None, None]:
+    def compute_stream(self) -> Generator[tuple[UUID, Any], None, None]:
         """Generator variant of ``compute()`` that yields results as they complete.
 
         Each yielded tuple is ``(step_uuid, result)`` where *result* is a fully
@@ -148,9 +148,9 @@ class ExecutionOrchestrator:
 
         self.executor = ComputeFrameworkExecutor(self.cfw_register, self.worker_manager)
 
-        finished_ids: Set[UUID] = set()
-        to_finish_ids: Set[UUID] = set()
-        currently_running_steps: Set[UUID] = set()
+        finished_ids: set[UUID] = set()
+        to_finish_ids: set[UUID] = set()
+        currently_running_steps: set[UUID] = set()
 
         try:
             while to_finish_ids != finished_ids or len(finished_ids) == 0:
@@ -193,7 +193,7 @@ class ExecutionOrchestrator:
             self.data_lifecycle_manager.set_artifacts(self.cfw_register.get_artifacts())
             self.join()
 
-    def _process_step_result(self, step: Any) -> Union[Any, bool]:
+    def _process_step_result(self, step: Any) -> Any | bool:
         """
         Handles the result of a step based on its type.
 
@@ -283,14 +283,14 @@ class ExecutionOrchestrator:
         self.data_lifecycle_manager.add_to_result_data_collection(cfw, features, step_uuid, self.location)
 
     def get_result_data(
-        self, cfw: ComputeFramework, selected_feature_names: Set[FeatureName], location: Optional[str] = None
+        self, cfw: ComputeFramework, selected_feature_names: set[FeatureName], location: Optional[str] = None
     ) -> Any:
         """
         Gets result data from the compute framework.
         """
         return self.data_lifecycle_manager.get_result_data(cfw, selected_feature_names, location)
 
-    def currently_running_step(self, step_uuids: Set[UUID], currently_running_steps: Set[UUID]) -> bool:
+    def currently_running_step(self, step_uuids: set[UUID], currently_running_steps: set[UUID]) -> bool:
         """
         Checks if a step is currently running.
 
@@ -303,9 +303,9 @@ class ExecutionOrchestrator:
 
     def __enter__(
         self,
-        parallelization_modes: Set[ParallelizationMode] = {ParallelizationMode.SYNC},
-        function_extender: Optional[Set[Extender]] = None,
-        api_data: Optional[Dict[str, Any]] = None,
+        parallelization_modes: set[ParallelizationMode] = {ParallelizationMode.SYNC},
+        function_extender: Optional[set[Extender]] = None,
+        api_data: Optional[dict[str, Any]] = None,
     ) -> None:
         """
         Enters the context of the ExecutionOrchestrator.
@@ -345,7 +345,7 @@ class ExecutionOrchestrator:
         if self.manager is not None:
             self.manager.shutdown()
 
-    def get_artifacts(self) -> Dict[str, Any]:
+    def get_artifacts(self) -> dict[str, Any]:
         """
         Gets the artifacts.
         """
@@ -353,10 +353,10 @@ class ExecutionOrchestrator:
 
     def _can_run_step(
         self,
-        required_uuids: Set[UUID],
-        step_uuid: Set[UUID],
-        finished_steps: Set[UUID],
-        currently_running_steps: Set[UUID],
+        required_uuids: set[UUID],
+        step_uuid: set[UUID],
+        finished_steps: set[UUID],
+        currently_running_steps: set[UUID],
     ) -> bool:
         """
         Checks if a step can be run. If it can, add it to the currently_running_steps set.
@@ -369,7 +369,7 @@ class ExecutionOrchestrator:
             return False
 
     def _mark_step_as_finished(
-        self, step_uuid: Set[UUID], finished_steps: Set[UUID], currently_running_steps: Set[UUID]
+        self, step_uuid: set[UUID], finished_steps: set[UUID], currently_running_steps: set[UUID]
     ) -> None:
         """
         Marks a step as finished.
@@ -378,7 +378,7 @@ class ExecutionOrchestrator:
             currently_running_steps.difference_update(step_uuid)
             finished_steps.update(step_uuid)
 
-    def get_result(self) -> List[Any]:
+    def get_result(self) -> list[Any]:
         """
         Gets the results.
         """

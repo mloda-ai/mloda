@@ -93,7 +93,7 @@ class TestPolarsDataFrameMerge(DataFrameTestBase):
     """Test PolarsDataFrame merge operations using the base test class."""
 
     @classmethod
-    def framework_class(cls) -> Type[Any]:
+    def framework_class(cls) -> type[Any]:
         """Return the PolarsDataFrame class."""
         return PolarsDataFrame
 

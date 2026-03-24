@@ -28,7 +28,7 @@ class NoIndexFeatureGroup(FeatureGroup):
     @classmethod
     def match_feature_group_criteria(
         cls,
-        feature_name: Union[FeatureName, str],
+        feature_name: FeatureName | str,
         options: Options,
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
@@ -37,11 +37,11 @@ class NoIndexFeatureGroup(FeatureGroup):
         return "NoIndexTestFeature" in feature_name
 
     @classmethod
-    def index_columns(cls) -> Optional[List[Index]]:
+    def index_columns(cls) -> Optional[list[Index]]:
         """Returns None to simulate the 'no indexes defined' error condition."""
         return None
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return None
 
 
@@ -67,8 +67,8 @@ class TestEngineErrorMessages:
             # which would return None and skip calling _add_index_feature
 
             features = Features(["NoIndexTestFeature"])
-            compute_frameworks: Set[Type[ComputeFramework]] = cast(
-                Set[Type[ComputeFramework]], {BaseTestComputeFramework1}
+            compute_frameworks: set[type[ComputeFramework]] = cast(
+                set[type[ComputeFramework]], {BaseTestComputeFramework1}
             )
 
             # Create engine with mocked setup

@@ -13,11 +13,11 @@ class ConcreteMissingValueFeatureGroup(MissingValueFeatureGroup):
     """Minimal concrete implementation for testing base class methods."""
 
     @classmethod
-    def _get_available_columns(cls, data: Any) -> Set[str]:
+    def _get_available_columns(cls, data: Any) -> set[str]:
         return set()
 
     @classmethod
-    def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
+    def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
         pass
 
     @classmethod
@@ -29,9 +29,9 @@ class ConcreteMissingValueFeatureGroup(MissingValueFeatureGroup):
         cls,
         data: Any,
         imputation_method: str,
-        in_features: List[str],
+        in_features: list[str],
         constant_value: Optional[Any] = None,
-        group_by_features: Optional[List[str]] = None,
+        group_by_features: Optional[list[str]] = None,
     ) -> Any:
         return data
 

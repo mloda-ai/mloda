@@ -47,7 +47,7 @@ class TestTwoReader:
         os.remove(self.db_path)
 
     def test_load_local_feature_scope_data_double_reader_success(self) -> None:
-        feature_list: List[Feature] = []
+        feature_list: list[Feature] = []
 
         for feature in self.feature_list:
             # add sqlite reader feature
@@ -72,7 +72,7 @@ class TestTwoReader:
         assert result[0].to_pydict()["id"] != result[1].to_pydict()["id"]
 
     def test_load_multiple_local_data_for_one_feature_fail(self) -> None:
-        feature_list: List[Feature] = []
+        feature_list: list[Feature] = []
         for feature in self.feature_list:
             f = Feature(
                 name=feature,
@@ -93,7 +93,7 @@ class TestTwoReader:
         assert "BaseInputData already set with different values" in str(excinfo.value)
 
     def test_load_data_access_collection_feature_scope_data_double_reader_fail(self) -> None:
-        feature_list: List[Feature] = []
+        feature_list: list[Feature] = []
         for feature in self.feature_list:
             f = Feature(
                 name=feature,
@@ -118,13 +118,13 @@ class TestTwoReader:
 
         class ReadFileFeatureWithIndex(ReadFileFeature):
             @classmethod
-            def index_columns(cls) -> Optional[List[Index]]:
+            def index_columns(cls) -> Optional[list[Index]]:
                 return [Index(("id",))]
 
             @classmethod
             def match_feature_group_criteria(
                 cls,
-                feature_name: Union[FeatureName, str],
+                feature_name: FeatureName | str,
                 options: Options,
                 data_access_collection: Optional[DataAccessCollection] = None,
             ) -> bool:
@@ -142,7 +142,7 @@ class TestTwoReader:
 
         class DBInputDataTestFeatureGroupWithIndex(DBInputDataTestFeatureGroup):
             @classmethod
-            def index_columns(cls) -> Optional[List[Index]]:
+            def index_columns(cls) -> Optional[list[Index]]:
                 return [Index(("id",))]
 
             @classmethod

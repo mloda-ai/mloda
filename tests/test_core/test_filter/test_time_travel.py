@@ -31,7 +31,7 @@ class TimeTravelNegativeFilterTest(FeatureGroup):
         return {cls.get_class_name(): [1, 2, 3]}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> bool | set[type[ComputeFramework]]:
         return {PyArrowTable}
 
 
@@ -55,7 +55,7 @@ class TimeTravelPositiveFilterTest(FeatureGroup):
     @classmethod
     def match_feature_group_criteria(  # type: ignore
         cls,
-        feature_name: Union[FeatureName, str],
+        feature_name: FeatureName | str,
         _: Options,
         _2=None,
     ) -> bool:
@@ -66,10 +66,10 @@ class TimeTravelPositiveFilterTest(FeatureGroup):
 
 @PARALLELIZATION_MODES_ALL
 class TestTimeTravel:
-    def get_features(self, feature_list: List[str], options: Dict[str, Any] = {}) -> Features:
+    def get_features(self, feature_list: list[str], options: dict[str, Any] = {}) -> Features:
         return Features([Feature(name=f_name, options=options, initial_requested_data=True) for f_name in feature_list])
 
-    def test_time_travel_neg(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
+    def test_time_travel_neg(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         filter_test = "TimeTravelNegativeFilterTest"
 
         features = self.get_features([filter_test])
@@ -90,7 +90,7 @@ class TestTimeTravel:
             res = result.to_pydict()
             assert res == {filter_test: [1, 2, 3]}
 
-    def test_time_travel_pos(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
+    def test_time_travel_pos(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         filter_test = "TimeTravelPositiveFilterTest"
 
         features = self.get_features([filter_test])

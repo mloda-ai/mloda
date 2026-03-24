@@ -69,7 +69,7 @@ class MultiDependencyFeature(FeatureGroup):
     This will trigger the validation error when Links are not provided.
     """
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {
             Feature.int32_of("RootFeatureA"),
             Feature.int32_of("RootFeatureB"),

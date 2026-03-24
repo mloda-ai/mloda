@@ -114,11 +114,11 @@ class TestTimeWindowFeatureGroup:
                 pass
 
             @classmethod
-            def _get_available_columns(cls, data: Any) -> Set[str]:
+            def _get_available_columns(cls, data: Any) -> set[str]:
                 return set()
 
             @classmethod
-            def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
+            def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
                 pass
 
             @classmethod
@@ -132,7 +132,7 @@ class TestTimeWindowFeatureGroup:
                 window_function: str,
                 window_size: int,
                 time_unit: str,
-                in_features: List[str],
+                in_features: list[str],
                 time_filter_feature: str | None = None,
             ) -> Any:
                 return None
@@ -199,11 +199,11 @@ class TestTimeWindowFeatureGroup:
                 pass
 
             @classmethod
-            def _get_available_columns(cls, data: Any) -> Set[str]:
+            def _get_available_columns(cls, data: Any) -> set[str]:
                 return set()
 
             @classmethod
-            def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
+            def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
                 pass
 
             @classmethod
@@ -217,7 +217,7 @@ class TestTimeWindowFeatureGroup:
                 window_function: str,
                 window_size: int,
                 time_unit: str,
-                in_features: List[str],
+                in_features: list[str],
                 time_filter_feature: str | None = None,
             ) -> Any:
                 return None
@@ -241,11 +241,11 @@ class TestTimeWindowFeatureGroup:
                 pass
 
             @classmethod
-            def _get_available_columns(cls, data: Any) -> Set[str]:
+            def _get_available_columns(cls, data: Any) -> set[str]:
                 return set()
 
             @classmethod
-            def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
+            def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
                 pass
 
             @classmethod
@@ -259,7 +259,7 @@ class TestTimeWindowFeatureGroup:
                 window_function: str,
                 window_size: int,
                 time_unit: str,
-                in_features: List[str],
+                in_features: list[str],
                 time_filter_feature: str | None = None,
             ) -> Any:
                 return None

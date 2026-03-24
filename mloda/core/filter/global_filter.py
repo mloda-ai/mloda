@@ -32,11 +32,11 @@ class GlobalFilter:
         These attributes provide the foundation for adding, managing, and applying filters across various feature groups
         and features in the context of a data processing pipeline.
         """
-        self.filters: Set[SingleFilter] = set()
-        self.collection: Dict[Tuple[Type[FeatureGroup], FeatureName], Set[SingleFilter]] = {}
+        self.filters: set[SingleFilter] = set()
+        self.collection: dict[tuple[type[FeatureGroup], FeatureName], set[SingleFilter]] = {}
 
     def add_filter(
-        self, filter_feature: Union[Feature, str], filter_type: Union[str, FilterType], parameter: Dict[str, Any]
+        self, filter_feature: Feature | str, filter_type: str | FilterType, parameter: dict[str, Any]
     ) -> None:
         """
         Adds a `SingleFilter` to the `filters` set based on the provided feature, filter type, and parameters.
@@ -55,7 +55,7 @@ class GlobalFilter:
 
     def add_filter_to_collection(
         self,
-        feature_group: Type[FeatureGroup],
+        feature_group: type[FeatureGroup],
         filtered_feature_name: FeatureName,
         single_filter: SingleFilter,
     ) -> None:
@@ -69,10 +69,10 @@ class GlobalFilter:
 
     def identity_matched_filters(
         self,
-        feature_group: Type[FeatureGroup],
+        feature_group: type[FeatureGroup],
         feat: Feature,
         data_access_collection: Optional[DataAccessCollection] = None,
-    ) -> Set[SingleFilter]:
+    ) -> set[SingleFilter]:
         """
         We need to figure out if the filter feature is a part of the feature class and thus can be used as filter.
 
@@ -83,7 +83,7 @@ class GlobalFilter:
             -   we do not check links, as this is done earlier already and not needed anymore.
         """
 
-        matched_filters: Set[SingleFilter] = set()
+        matched_filters: set[SingleFilter] = set()
         for filter in self.filters:
             # We are making a deepcopy so that, we do not change the original filter.
             _filter = deepcopy(filter)
@@ -113,7 +113,7 @@ class GlobalFilter:
 
     def criteria(
         self,
-        feature_group: Type[FeatureGroup],
+        feature_group: type[FeatureGroup],
         filter: SingleFilter,
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
@@ -121,9 +121,7 @@ class GlobalFilter:
             filter.filter_feature.name, filter.filter_feature.options, data_access_collection
         )
 
-    def domain(
-        self, filter: SingleFilter, feature_domain: Union[None, Domain], feature_group: Type[FeatureGroup]
-    ) -> bool:
+    def domain(self, filter: SingleFilter, feature_domain: None | Domain, feature_group: type[FeatureGroup]) -> bool:
         # We have matched already the feature group and the feature.
         # Thus, we take the feature group domain if the feature domain is not set.
         feature_or_group_domain = None
@@ -174,8 +172,8 @@ class GlobalFilter:
         valid_from: Optional[datetime] = None,
         valid_to: Optional[datetime] = None,
         max_exclusive: bool = True,
-        event_time_column: Union[str, Feature] = DefaultOptionKeys.reference_time,
-        validity_time_column: Union[str, Feature] = DefaultOptionKeys.time_travel,
+        event_time_column: str | Feature = DefaultOptionKeys.reference_time,
+        validity_time_column: str | Feature = DefaultOptionKeys.time_travel,
     ) -> None:
         """
         Adds time-based filters (`event_from`, `event_to`) and optionally time-travel filters (`valid_from`, `valid_to`).
@@ -212,7 +210,7 @@ class GlobalFilter:
             self._add_range_filter(validity_time_column, valid_from, valid_to, max_exclusive)
 
     def _add_range_filter(
-        self, filter_feature: Union[str, Feature], time_from: datetime, time_to: datetime, max_exclusive: bool
+        self, filter_feature: str | Feature, time_from: datetime, time_to: datetime, max_exclusive: bool
     ) -> None:
         _time_from = self._check_and_convert_time_info(time_from)
         _time_to = self._check_and_convert_time_info(time_to)

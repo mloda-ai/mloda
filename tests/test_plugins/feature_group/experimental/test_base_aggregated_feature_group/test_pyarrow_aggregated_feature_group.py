@@ -199,7 +199,7 @@ class TestAggPyArrowIntegration:
             plugin_collector=plugin_collector,
         )
 
-        new_res: List[pd.DataFrame] = []
+        new_res: list[pd.DataFrame] = []
         for res in result:
             new_res.append(res.to_pandas())
 

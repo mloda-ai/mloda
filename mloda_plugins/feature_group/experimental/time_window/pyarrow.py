@@ -18,7 +18,7 @@ from mloda_plugins.feature_group.experimental.time_window.base import TimeWindow
 
 class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> bool | set[type[ComputeFramework]]:
         return {PyArrowTable}
 
     @classmethod
@@ -41,12 +41,12 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
             )
 
     @classmethod
-    def _get_available_columns(cls, data: pa.Table) -> Set[str]:
+    def _get_available_columns(cls, data: pa.Table) -> set[str]:
         """Get the set of available column names from the Table schema."""
         return set(data.schema.names)
 
     @classmethod
-    def _check_source_features_exist(cls, data: pa.Table, feature_names: List[str]) -> None:
+    def _check_source_features_exist(cls, data: pa.Table, feature_names: list[str]) -> None:
         """
         Check if the resolved features exist in the Table.
 
@@ -86,7 +86,7 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         window_function: str,
         window_size: int,
         time_unit: str,
-        in_features: List[str],
+        in_features: list[str],
         time_filter_feature: Optional[str] = None,
     ) -> pa.Array:
         """

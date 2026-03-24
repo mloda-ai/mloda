@@ -8,7 +8,7 @@ class FilterParameter(Protocol):
     def value(self) -> Optional[Any]: ...
 
     @property
-    def values(self) -> Optional[List[Any]]: ...
+    def values(self) -> Optional[list[Any]]: ...
 
     @property
     def min_value(self) -> Optional[Any]: ...
@@ -22,10 +22,10 @@ class FilterParameter(Protocol):
 
 @dataclass(frozen=True)
 class FilterParameterImpl:
-    _raw: Tuple[Tuple[str, Any], ...]
+    _raw: tuple[tuple[str, Any], ...]
 
     @classmethod
-    def from_dict(cls, params: Dict[str, Any]) -> "FilterParameterImpl":
+    def from_dict(cls, params: dict[str, Any]) -> "FilterParameterImpl":
         return cls(_raw=tuple(sorted(params.items())))
 
     @property
@@ -33,8 +33,8 @@ class FilterParameterImpl:
         return self._get("value")
 
     @property
-    def values(self) -> Optional[List[Any]]:
-        return cast(Optional[List[Any]], self._get("values"))
+    def values(self) -> Optional[list[Any]]:
+        return cast(Optional[list[Any]], self._get("values"))
 
     @property
     def min_value(self) -> Optional[Any]:

@@ -39,7 +39,7 @@ class ReadDB(BaseInputData):
         raise NotImplementedError
 
     @classmethod
-    def is_valid_credentials(cls, credentials: Dict[str, Any]) -> bool:
+    def is_valid_credentials(cls, credentials: dict[str, Any]) -> bool:
         """Checks if the given dictionary is a valid credentials object."""
         raise NotImplementedError
 
@@ -48,7 +48,7 @@ class ReadDB(BaseInputData):
         """Obligatory function to check if the feature is in the data access."""
         raise NotImplementedError
 
-    def init_reader(self, options: Optional[Options]) -> Tuple["ReadDB", Any]:
+    def init_reader(self, options: Optional[Options]) -> tuple["ReadDB", Any]:
         if options is None:
             raise ValueError("Options were not set.")
 
@@ -78,8 +78,8 @@ class ReadDB(BaseInputData):
         return data
 
     @classmethod
-    def match_subclass_data_access(cls, data_access: Any, feature_names: List[str], options: Options) -> Any:
-        data_accesses: List[Any] = []
+    def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
+        data_accesses: list[Any] = []
 
         if isinstance(data_access, DataAccessCollection):
             if data_access.credential_dicts:
@@ -96,7 +96,7 @@ class ReadDB(BaseInputData):
         return matched_data_access
 
     @classmethod
-    def match_read_db_data_access(cls, data_accesses: List[Any], feature_names: List[str]) -> Any:
+    def match_read_db_data_access(cls, data_accesses: list[Any], feature_names: list[str]) -> Any:
         if len(feature_names) > 1:
             raise ValueError("This should not happen.")
 
@@ -125,7 +125,7 @@ class ReadDB(BaseInputData):
         return connection
 
     @classmethod
-    def read_db(cls, credentials: Union[Dict[str, Any], str], query: str) -> Tuple[Any, Any]:
+    def read_db(cls, credentials: dict[str, Any] | str, query: str) -> tuple[Any, Any]:
         with cls.get_connection(credentials) as conn:
             cursor = None
             cursor = conn.cursor()

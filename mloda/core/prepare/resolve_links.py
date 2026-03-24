@@ -8,23 +8,23 @@ from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.prepare.validators.resolve_link_validator import ResolveLinkValidator
 
 
-LinkFrameworkTrekker = Tuple[Link, Type[ComputeFramework], Type[ComputeFramework]]
+LinkFrameworkTrekker = tuple[Link, type[ComputeFramework], type[ComputeFramework]]
 
 
 class LinkTrekker:
     """This class is used to keep track of Links and which children depend on this link."""
 
     def __init__(self) -> None:
-        self.data: Dict[LinkFrameworkTrekker, Set[UUID]] = defaultdict(set)
-        self.data_ordered: OrderedDict[LinkFrameworkTrekker, Set[UUID]] = OrderedDict()
+        self.data: dict[LinkFrameworkTrekker, set[UUID]] = defaultdict(set)
+        self.data_ordered: OrderedDict[LinkFrameworkTrekker, set[UUID]] = OrderedDict()
 
-        self.order: OrderedDict[UUID, Set[UUID]] = OrderedDict()
+        self.order: OrderedDict[UUID, set[UUID]] = OrderedDict()
 
     def update(self, key: LinkFrameworkTrekker, value: UUID) -> None:
         self.data[key].add(value)
 
     def invert_link(
-        self, link: Link, left_cfw: Type[ComputeFramework], right_cfw: Type[ComputeFramework], uuid: UUID
+        self, link: Link, left_cfw: type[ComputeFramework], right_cfw: type[ComputeFramework], uuid: UUID
     ) -> None:
         """
         The purpose of this function is to invert left and right of an index during a run.
@@ -46,19 +46,19 @@ class LinkTrekker:
             del self.data[(link, left_cfw, right_cfw)]
             del self.data_ordered[(link, left_cfw, right_cfw)]
 
-    def get_position(self, link: Link, left_cfw: Type[ComputeFramework], right_cfw: Type[ComputeFramework]) -> int:
+    def get_position(self, link: Link, left_cfw: type[ComputeFramework], right_cfw: type[ComputeFramework]) -> int:
         for i, (k, _) in enumerate(self.data_ordered.items()):
             if k == (link, left_cfw, right_cfw):
                 return i
 
         raise ValueError("Link not found in data ordered!")
 
-    def insert_at_position(self, key: LinkFrameworkTrekker, value: Set[UUID], position: int) -> None:
+    def insert_at_position(self, key: LinkFrameworkTrekker, value: set[UUID], position: int) -> None:
         items = list(self.data_ordered.items())
         items.insert(position, (key, value))
         self.data_ordered = OrderedDict(items)
 
-    def get_ordered_data(self) -> OrderedDict[LinkFrameworkTrekker, Set[UUID]]:
+    def get_ordered_data(self) -> OrderedDict[LinkFrameworkTrekker, set[UUID]]:
         """
         We ensure that the data is ordered by the order of the links.
         If we would have:
@@ -76,7 +76,7 @@ class LinkTrekker:
         return self.data_ordered
 
     def drop_dependency_in_case_of_circular_dependencies(self) -> None:
-        def adjust_order(data: Dict[LinkFrameworkTrekker, Set[UUID]], k_out: UUID, k_int: UUID) -> None:
+        def adjust_order(data: dict[LinkFrameworkTrekker, set[UUID]], k_out: UUID, k_int: UUID) -> None:
             found_out = None
             found_in = None
 
@@ -129,8 +129,8 @@ class LinkTrekker:
         Therefore, we reorder this in here.
         """
 
-        new_order: OrderedDict[UUID, Set[UUID]] = OrderedDict()
-        pos_marker: Dict[int, Tuple[UUID, Set[UUID]]] = {}
+        new_order: OrderedDict[UUID, set[UUID]] = OrderedDict()
+        pos_marker: dict[int, tuple[UUID, set[UUID]]] = {}
 
         for o_pos, (o_uuid, o_set) in enumerate(self.order.items()):
             latest_position = None
@@ -208,16 +208,16 @@ class LinkTrekker:
 
 
 class ResolveLinks:
-    def __init__(self, graph: Graph, links: Optional[Set[Link]] = None) -> None:
+    def __init__(self, graph: Graph, links: Optional[set[Link]] = None) -> None:
         self.graph = graph
         self.links = links
         self.link_trekker = LinkTrekker()
 
-    def add_links_to_queue(self) -> List[Union[UUID, LinkFrameworkTrekker]]:
+    def add_links_to_queue(self) -> list[UUID | LinkFrameworkTrekker]:
         queue = self.graph.queue
 
-        queue_with_link: List[Union[UUID, LinkFrameworkTrekker]] = []
-        already_joined: Set[LinkFrameworkTrekker] = set()
+        queue_with_link: list[UUID | LinkFrameworkTrekker] = []
+        already_joined: set[LinkFrameworkTrekker] = set()
 
         ordered = self.link_trekker.get_ordered_data()
 
@@ -270,7 +270,7 @@ class ResolveLinks:
                         )
                         self.set_link_trekker(key, child)
 
-    def _find_matching_links(self, left_fg: type, right_fg: type, right_feature: Any = None) -> List[Link]:
+    def _find_matching_links(self, left_fg: type, right_fg: type, right_feature: Any = None) -> list[Link]:
         """Find all matching links using two-pass matching: exact first, then polymorphic.
 
         Returns all exact matches if any exist, otherwise returns the most specific
@@ -313,7 +313,7 @@ class ResolveLinks:
         except (ValueError, AttributeError):
             return 9999  # Not in hierarchy
 
-    def _select_most_specific_links(self, links: List[Link], left_fg: type, right_fg: type) -> List[Link]:
+    def _select_most_specific_links(self, links: list[Link], left_fg: type, right_fg: type) -> list[Link]:
         """Select links that are most specific (closest in inheritance hierarchy).
 
         For self-joins, requires balanced inheritance distance to prevent sibling mismatches.
@@ -322,7 +322,7 @@ class ResolveLinks:
         if not links:
             return []
 
-        link_distances: List[Tuple[Link, int]] = []
+        link_distances: list[tuple[Link, int]] = []
         for link in links:
             left_dist = self._inheritance_distance(left_fg, link.left_feature_group)
             right_dist = self._inheritance_distance(right_fg, link.right_feature_group)
@@ -363,8 +363,8 @@ class ResolveLinks:
     def create_link_trekker_key(
         self,
         link: Link,
-        left_frameworks: Optional[Set[Type[ComputeFramework]]] = None,
-        right_frameworks: Optional[Set[Type[ComputeFramework]]] = None,
+        left_frameworks: Optional[set[type[ComputeFramework]]] = None,
+        right_frameworks: Optional[set[type[ComputeFramework]]] = None,
     ) -> LinkFrameworkTrekker:
         if left_frameworks is None or right_frameworks is None:
             raise ValueError("Left or right frameworks are not set!")

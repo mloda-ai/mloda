@@ -20,7 +20,7 @@ class BaseFeatureGroupVersion(ABC):
             return "0.0.0"
 
     @classmethod
-    def class_source_hash(cls, target_class: Type[Any]) -> str:
+    def class_source_hash(cls, target_class: type[Any]) -> str:
         """
         Returns a SHA-256 hash of the target class's source code.
         """
@@ -35,14 +35,14 @@ class BaseFeatureGroupVersion(ABC):
         return hashlib.sha256(source.encode("utf-8")).hexdigest()
 
     @classmethod
-    def module_name(cls, target_class: Type[Any]) -> str:
+    def module_name(cls, target_class: type[Any]) -> str:
         """
         Returns the module name of the target class.
         """
         return target_class.__module__
 
     @classmethod
-    def version(cls, target_class: Type[Any]) -> str:
+    def version(cls, target_class: type[Any]) -> str:
         """
         Returns a composite version string.
 

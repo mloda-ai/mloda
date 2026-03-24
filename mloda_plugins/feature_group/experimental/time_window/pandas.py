@@ -19,7 +19,7 @@ except ImportError:
 
 class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> bool | set[type[ComputeFramework]]:
         return {PandasDataFrame}
 
     @classmethod
@@ -41,12 +41,12 @@ class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
             )
 
     @classmethod
-    def _get_available_columns(cls, data: pd.DataFrame) -> Set[str]:
+    def _get_available_columns(cls, data: pd.DataFrame) -> set[str]:
         """Get the set of available column names from the DataFrame."""
         return set(data.columns)
 
     @classmethod
-    def _check_source_features_exist(cls, data: pd.DataFrame, feature_names: List[str]) -> None:
+    def _check_source_features_exist(cls, data: pd.DataFrame, feature_names: list[str]) -> None:
         """
         Check if the resolved features exist in the DataFrame.
 
@@ -76,7 +76,7 @@ class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         window_function: str,
         window_size: int,
         time_unit: str,
-        in_features: List[str],
+        in_features: list[str],
         time_filter_feature: Optional[str] = None,
     ) -> Any:
         """

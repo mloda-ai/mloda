@@ -46,14 +46,14 @@ class FilterEngineTestMixin:
         raise NotImplementedError
 
     @abstractmethod
-    def get_column_values(self, result: Any, column: str) -> List[Any]:
+    def get_column_values(self, result: Any, column: str) -> list[Any]:
         """Extract column values as a list from the result.
 
         Override in framework-specific test class.
         """
         raise NotImplementedError
 
-    def _assert_values_equal(self, actual: List[Any], expected: List[Any]) -> None:
+    def _assert_values_equal(self, actual: list[Any], expected: list[Any]) -> None:
         """Assert values are equal regardless of order."""
         assert sorted(actual) == sorted(expected)
 

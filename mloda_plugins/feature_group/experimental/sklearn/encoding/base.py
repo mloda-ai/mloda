@@ -192,11 +192,11 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     }
 
     @staticmethod
-    def artifact() -> Type[BaseArtifact] | None:
+    def artifact() -> type[BaseArtifact] | None:
         """Return the artifact class for sklearn encoder persistence."""
         return SklearnArtifact
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         """Extract source feature from either configuration-based options or string parsing."""
 
         # Try string-based parsing first
@@ -336,7 +336,7 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return str(encoder_type) if encoder_type is not None else None
 
     @classmethod
-    def _import_sklearn_components(cls) -> Dict[str, Any]:
+    def _import_sklearn_components(cls) -> dict[str, Any]:
         """
         Import sklearn components with fallback logic for different versions.
 

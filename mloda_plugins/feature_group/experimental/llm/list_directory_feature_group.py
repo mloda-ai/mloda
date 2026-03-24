@@ -41,7 +41,7 @@ class ListDirectoryFeatureGroup(FeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         project_root = os.getcwd()  # Get project root (assumed to be CWD)
-        file_structure: Dict[str, Any] = {}
+        file_structure: dict[str, Any] = {}
 
         # Load ignore patterns from .gitignore
         ignore_patterns = cls._load_gitignore_patterns(project_root)
@@ -84,10 +84,10 @@ class ListDirectoryFeatureGroup(FeatureGroup):
         return {cls.get_class_name(): [tree_string]}  # Ensuring the entire tree is a single string inside a list
 
     @staticmethod
-    def _load_gitignore_patterns(project_root: str) -> Set[str]:
+    def _load_gitignore_patterns(project_root: str) -> set[str]:
         """Reads and processes the .gitignore file (basic pattern matching)."""
         gitignore_path = os.path.join(project_root, ".gitignore")
-        ignore_patterns: Set[str] = set()
+        ignore_patterns: set[str] = set()
 
         if os.path.exists(gitignore_path):
             with open(gitignore_path, "r") as f:
@@ -99,7 +99,7 @@ class ListDirectoryFeatureGroup(FeatureGroup):
         return ignore_patterns
 
     @staticmethod
-    def _is_ignored(file_path: str, ignore_patterns: Set[str]) -> bool:
+    def _is_ignored(file_path: str, ignore_patterns: set[str]) -> bool:
         """Checks if a file/directory should be ignored based on .gitignore patterns."""
         for pattern in ignore_patterns:
             if pattern.endswith("/"):  # Directory exclusion
@@ -114,10 +114,10 @@ class ListDirectoryFeatureGroup(FeatureGroup):
 
     @classmethod
     def _generate_full_path_tree_string(
-        cls, file_structure: Dict[str, Any], project_root: str, prefix: str = "", current_path: str = "", depth: int = 0
+        cls, file_structure: dict[str, Any], project_root: str, prefix: str = "", current_path: str = "", depth: int = 0
     ) -> str:
         """Recursively generates a full path tree string with file type indicators and depth."""
-        lines: List[str] = []
+        lines: list[str] = []
         items = sorted(file_structure.items())  # Sort items alphabetically
 
         for index, (name, content) in enumerate(items):
@@ -139,5 +139,5 @@ class ListDirectoryFeatureGroup(FeatureGroup):
         return "\n".join(lines)
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> bool | set[type[ComputeFramework]]:
         return {PandasDataFrame}

@@ -21,7 +21,7 @@ from mloda.user import Feature, Options
 class MockFeatureGroup(FeatureGroup):
     """A mock feature group for testing error messages."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return None
 
 

@@ -183,7 +183,7 @@ class TestDataLifecycleManagerDropCfwData:
         """Should handle missing CFW UUID in collection."""
         manager = DataLifecycleManager()
         cfw_uuid = uuid4()
-        cfw_collection: Dict[UUID, ComputeFramework] = {}
+        cfw_collection: dict[UUID, ComputeFramework] = {}
 
         # Should raise KeyError when CFW not in collection
         with pytest.raises(KeyError):

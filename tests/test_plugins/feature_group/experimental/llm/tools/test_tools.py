@@ -43,8 +43,8 @@ def request_loop(request: Any) -> Any:
 @pytest.mark.skipif(os.environ.get("GEMINI_API_KEY") is None, reason="GEMINI KEY NOT SET")
 class TestSingleTools:
     def get_features(
-        self, prompt: str, tool_collection: ToolCollection, request_loop: str, target_folder: List[str] = []
-    ) -> List[Feature | str]:
+        self, prompt: str, tool_collection: ToolCollection, request_loop: str, target_folder: list[str] = []
+    ) -> list[Feature | str]:
         if target_folder == []:
             target_folder = [
                 os.getcwd() + "/mloda_plugins",
@@ -75,9 +75,9 @@ class TestSingleTools:
     def run_test(
         self,
         prompt: str,
-        tool_classes: str | List[str],
+        tool_classes: str | list[str],
         request_loop: str,
-        target_folder: List[str],
+        target_folder: list[str],
         expected_output: str,
     ) -> None:
         tool_collection = ToolCollection()

@@ -17,7 +17,7 @@ class IdentifyFeatureGroupClass:
         self,
         feature: Feature,
         accessible_plugins: FeatureGroupEnvironmentMapping,
-        links: Optional[Set[Link]],
+        links: Optional[set[Link]],
         data_access_collection: Optional[DataAccessCollection] = None,
     ):
         feature_group = self._filter_loop(feature, accessible_plugins, links, data_access_collection)
@@ -29,7 +29,7 @@ class IdentifyFeatureGroupClass:
         self,
         feature: Feature,
         accessible_plugins: FeatureGroupEnvironmentMapping,
-        links: Optional[Set[Link]],
+        links: Optional[set[Link]],
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> FeatureGroupEnvironmentMapping:
         _identified_feature_groups: FeatureGroupEnvironmentMapping = {}
@@ -53,7 +53,7 @@ class IdentifyFeatureGroupClass:
         _identified_feature_groups = self.filter_subclasses(_identified_feature_groups)
         return _identified_feature_groups
 
-    def _filter_feature_group_by_links(self, feature_group: Type[FeatureGroup], links: Optional[Set[Link]]) -> bool:
+    def _filter_feature_group_by_links(self, feature_group: type[FeatureGroup], links: Optional[set[Link]]) -> bool:
         # Case index columns not given, so no validation possible
         if feature_group.index_columns() is None:
             return True
@@ -74,18 +74,18 @@ class IdentifyFeatureGroupClass:
 
     def _filter_feature_group_by_criteria(
         self,
-        feature_group: Type[FeatureGroup],
+        feature_group: type[FeatureGroup],
         feature: Feature,
         data_access_collection: Optional[DataAccessCollection],
     ) -> bool:
         return feature_group.match_feature_group_criteria(feature.name, feature.options, data_access_collection)
 
-    def _filter_feature_group_by_domain(self, feature_group: Type[FeatureGroup], feature: Feature) -> bool:
+    def _filter_feature_group_by_domain(self, feature_group: type[FeatureGroup], feature: Feature) -> bool:
         return not feature.domain or feature_group.get_domain() == feature.domain
 
     def _filter_feature_group_by_framework(
         self,
-        compute_frameworks: Set[Type[ComputeFramework]],
+        compute_frameworks: set[type[ComputeFramework]],
         feature: Feature,
     ) -> bool:
         if feature.compute_frameworks is None:
@@ -117,7 +117,7 @@ class IdentifyFeatureGroupClass:
                 f"Feature {feature.name} {format_feature_group_class(feature_group_class)} has no compute framework."
             )
 
-    def get(self) -> Tuple[Type[FeatureGroup], Set[Type[ComputeFramework]]]:
+    def get(self) -> tuple[type[FeatureGroup], set[type[ComputeFramework]]]:
         return next(iter(self.feature_group_compute_framework_mapping.items()))
 
     def filter_subclasses(
@@ -126,7 +126,7 @@ class IdentifyFeatureGroupClass:
         """
         This functionality ensures that only subclass feature groups are kept.
         """
-        fgs_to_pop: Set[Type[FeatureGroup]] = set()
+        fgs_to_pop: set[type[FeatureGroup]] = set()
 
         for i_feature_group, i_compute_frameworks in _identified_feature_groups.items():
             for o_feature_group, o_compute_frameworks in _identified_feature_groups.items():

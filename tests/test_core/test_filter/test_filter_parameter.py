@@ -46,7 +46,7 @@ def test_from_dict_with_max_exclusive() -> None:
 
 def test_from_dict_with_empty_dict() -> None:
     """Test creating FilterParameterImpl with empty dict."""
-    params: Dict[str, Any] = {}
+    params: dict[str, Any] = {}
     filter_param = FilterParameterImpl.from_dict(params)
 
     assert isinstance(filter_param, FilterParameterImpl)
@@ -91,7 +91,7 @@ def test_values_property_returns_none_when_not_present() -> None:
 
 def test_values_property_with_empty_list() -> None:
     """Test values property handles empty list."""
-    params: Dict[str, Any] = {"values": []}
+    params: dict[str, Any] = {"values": []}
     filter_param = FilterParameterImpl.from_dict(params)
     assert filter_param.values == []
 

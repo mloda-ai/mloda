@@ -308,7 +308,7 @@ class TestEndToEndIntegration:
     """Test complete datatype enforcement pipeline through mloda."""
 
     def test_same_feature_different_types_separate_execution(
-        self, modes: Set[ParallelizationMode], flight_server: Any
+        self, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
         """Same feature requested with different types should execute separately."""
         features = Features(
@@ -330,7 +330,7 @@ class TestEndToEndIntegration:
 
         assert all_columns.count("TypedFeatureSource") == 2, "Should have feature computed twice"
 
-    def test_typed_feature_validates_correctly(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
+    def test_typed_feature_validates_correctly(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         """Typed features should validate data types correctly during execution."""
         features = Features(
             [
@@ -345,7 +345,7 @@ class TestEndToEndIntegration:
         assert "TypedFeatureSource" in result.column_names
         assert result.to_pydict()["TypedFeatureSource"] == [25, 30, 35]
 
-    def test_type_mismatch_fails_at_validation(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
+    def test_type_mismatch_fails_at_validation(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         """Type mismatches should be caught during validation."""
         features = Features(
             [
@@ -357,7 +357,7 @@ class TestEndToEndIntegration:
         with pytest.raises(Exception):
             MlodaTestRunner.run_api(features, parallelization_modes=modes, flight_server=flight_server)
 
-    def test_widening_allowed_in_pipeline(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
+    def test_widening_allowed_in_pipeline(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         """Type widening should be allowed throughout the pipeline."""
         features = Features(
             [
@@ -371,7 +371,7 @@ class TestEndToEndIntegration:
         result = run_result.results[0]
         assert "Int64DataSource" in result.column_names
 
-    def test_untyped_feature_bypasses_validation(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
+    def test_untyped_feature_bypasses_validation(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         """Untyped features should bypass all type validation."""
         features = Features(
             [
@@ -451,7 +451,7 @@ class TestStrictTypeEnforcementPropagation:
     """Test that mloda strict_type_enforcement propagates and works end-to-end."""
 
     def test_strict_enforcement_raises_on_mismatch_but_lenient_passes(
-        self, modes: Set[ParallelizationMode], flight_server: Any
+        self, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
         """
         Test both strict and lenient mode behavior:
@@ -496,7 +496,7 @@ class TestStrictTypeEnforcementPropagation:
         assert len(result.results) == 1
 
     def test_strict_enforcement_propagates_to_dependencies(
-        self, modes: Set[ParallelizationMode], flight_server: Any
+        self, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
         """
         Test that strict_type_enforcement propagates to dependency features.
@@ -522,7 +522,7 @@ class TestStrictTypeEnforcementPropagation:
             def input_data(cls) -> Optional[BaseInputData]:
                 return DataCreator(supports_features={"DerivedFG"})
 
-            def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+            def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
                 return {Feature.int32_of("BaseFG")}
 
             @classmethod

@@ -176,7 +176,7 @@ class LLMFileSelector(FeatureGroup):
     - `ListDirectoryFeatureGroup`: Provides directory structure context
     """
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         prompt = options.get("prompt")
         if not prompt:
             raise ValueError("Prompt is required for LLMFileSelector")

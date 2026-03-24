@@ -7,13 +7,13 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 
 
-FeatureGroupEnvironmentMapping = dict[Type[FeatureGroup], Set[Type[ComputeFramework]]]
+FeatureGroupEnvironmentMapping = dict[type[FeatureGroup], set[type[ComputeFramework]]]
 
 
 class PreFilterPlugins:
     def __init__(
         self,
-        compute_frameworks: Set[Type[ComputeFramework]],
+        compute_frameworks: set[type[ComputeFramework]],
         plugin_collector: Optional[PluginCollector] = None,
     ) -> None:
         feature_groups = self._set_feature_groups(plugin_collector)
@@ -26,7 +26,7 @@ class PreFilterPlugins:
     def get_accessible_plugins(self) -> FeatureGroupEnvironmentMapping:
         return self.accessible_plugins
 
-    def _set_feature_groups(self, plugin_collector: Optional[PluginCollector] = None) -> Set[Type[FeatureGroup]]:
+    def _set_feature_groups(self, plugin_collector: Optional[PluginCollector] = None) -> set[type[FeatureGroup]]:
         accessible_feature_groups = self.get_featuregroup_subclasses()
 
         if plugin_collector:
@@ -40,12 +40,12 @@ class PreFilterPlugins:
 
     def _set_compute_frameworks(
         self,
-        compute_frameworks: Set[Type[ComputeFramework]],
-    ) -> Set[Type[ComputeFramework]]:
+        compute_frameworks: set[type[ComputeFramework]],
+    ) -> set[type[ComputeFramework]]:
         return compute_frameworks.intersection(self.get_cfw_subclasses())
 
     def resolve_feature_group_compute_framework_limitations(
-        self, feature_groups: Set[Type[FeatureGroup]], compute_frameworks: Set[Type[ComputeFramework]]
+        self, feature_groups: set[type[FeatureGroup]], compute_frameworks: set[type[ComputeFramework]]
     ) -> FeatureGroupEnvironmentMapping:
         accessible_plugins: FeatureGroupEnvironmentMapping = {}
         for feature_group in feature_groups:
@@ -59,11 +59,11 @@ class PreFilterPlugins:
         return accessible_plugins
 
     @staticmethod
-    def get_cfw_subclasses() -> Set[Type[ComputeFramework]]:
+    def get_cfw_subclasses() -> set[type[ComputeFramework]]:
         all_subclasses = get_all_subclasses(ComputeFramework)
         available_subclasses = {cls for cls in all_subclasses if cls.is_available()}
         return available_subclasses
 
     @staticmethod
-    def get_featuregroup_subclasses() -> Set[Type[FeatureGroup]]:
+    def get_featuregroup_subclasses() -> set[type[FeatureGroup]]:
         return get_all_subclasses(FeatureGroup)

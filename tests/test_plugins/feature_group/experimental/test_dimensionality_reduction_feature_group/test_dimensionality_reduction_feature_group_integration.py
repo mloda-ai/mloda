@@ -27,7 +27,7 @@ class DimensionalityReductionFeatureTestDataCreator(ATestDataCreator):
     compute_framework = PandasDataFrame
 
     @classmethod
-    def get_raw_data(cls) -> Dict[str, Any]:
+    def get_raw_data(cls) -> dict[str, Any]:
         """Return the raw data as a dictionary with features for dimensionality reduction."""
         # Create data with some structure for dimensionality reduction
         np.random.seed(42)
@@ -56,7 +56,7 @@ class DimensionalityReductionFeatureTestDataCreator(ATestDataCreator):
         return result
 
 
-def validate_dimensionality_reduction_results(result: List) -> None:  # type: ignore
+def validate_dimensionality_reduction_results(result: list) -> None:  # type: ignore
     """
     Validate the results of the dimensionality reduction feature test.
 
@@ -112,7 +112,7 @@ class TestDimensionalityReductionFeatureGroupIntegration:
         )
 
         # Define the features
-        features: List[Feature | str] = [
+        features: list[Feature | str] = [
             "feature0",
             "feature1",
             "feature2",
@@ -157,7 +157,7 @@ class TestDimensionalityReductionFeatureGroupIntegration:
         )
 
         # Define the features
-        features: List[str | Feature] = ["feature0", "feature1", "feature2", pca_feature, tsne_feature]
+        features: list[str | Feature] = ["feature0", "feature1", "feature2", pca_feature, tsne_feature]
 
         # Run the mloda
         result = mloda.run_all(features, compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
@@ -173,7 +173,7 @@ class TestDimensionalityReductionFeatureGroupIntegration:
         )
 
         # Define the features
-        features: List[str | Feature] = [
+        features: list[str | Feature] = [
             "feature0",
             "feature1",
             "feature2",

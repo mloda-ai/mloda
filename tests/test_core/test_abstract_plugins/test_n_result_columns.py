@@ -16,7 +16,7 @@ class NFeatureNameBase(FeatureGroup):
 
 
 class NFeatureConsumer(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {Feature.not_typed("NFeatureNameBase")}
 
     @classmethod

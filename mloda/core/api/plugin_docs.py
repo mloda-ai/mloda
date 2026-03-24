@@ -30,10 +30,10 @@ from mloda.core.api.plugin_info import ComputeFrameworkInfo, ExtenderInfo, Featu
 def get_feature_group_docs(
     name: Optional[str] = None,
     search: Optional[str] = None,
-    compute_framework: Optional[Union[str, Type[ComputeFramework]]] = None,
+    compute_framework: Optional[str | type[ComputeFramework]] = None,
     version_contains: Optional[str] = None,
     plugin_collector: Optional[PluginCollector] = None,
-) -> List[FeatureGroupInfo]:
+) -> list[FeatureGroupInfo]:
     """
     Get documentation for feature groups with optional filtering.
 
@@ -101,7 +101,7 @@ def get_compute_framework_docs(
     name: Optional[str] = None,
     search: Optional[str] = None,
     available_only: bool = True,
-) -> List[ComputeFrameworkInfo]:
+) -> list[ComputeFrameworkInfo]:
     """
     Get documentation for compute frameworks with optional filtering.
 
@@ -172,7 +172,7 @@ def get_extender_docs(
     name: Optional[str] = None,
     search: Optional[str] = None,
     wraps: Optional[str] = None,
-) -> List[ExtenderInfo]:
+) -> list[ExtenderInfo]:
     """
     Get documentation for extenders with optional filtering.
 
@@ -201,7 +201,7 @@ def get_extender_docs(
         if ext_name in ("Extender", "_CompositeExtender"):
             continue
 
-        wraps_list: List[str] = []
+        wraps_list: list[str] = []
         try:
             instance = ext_class()
             wraps_list = [w.value for w in instance.wraps()]
@@ -247,7 +247,7 @@ def resolve_feature(feature_name: str) -> ResolvedFeature:
         all matching candidates, and any error message.
     """
     all_fgs = list(get_all_subclasses(FeatureGroup))
-    candidates: List[Type[FeatureGroup]] = []
+    candidates: list[type[FeatureGroup]] = []
     feature_name_obj = FeatureName(feature_name)
 
     for fg in all_fgs:
@@ -281,9 +281,9 @@ def resolve_feature(feature_name: str) -> ResolvedFeature:
     )
 
 
-def _filter_subclasses(feature_groups: List[Type[FeatureGroup]]) -> List[Type[FeatureGroup]]:
+def _filter_subclasses(feature_groups: list[type[FeatureGroup]]) -> list[type[FeatureGroup]]:
     """Prefer more specific (child) classes over parent classes."""
-    fgs_to_pop: set[Type[FeatureGroup]] = set()
+    fgs_to_pop: set[type[FeatureGroup]] = set()
 
     for i_fg in feature_groups:
         for o_fg in feature_groups:

@@ -161,7 +161,7 @@ class TimeWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     MAX_IN_FEATURES = 1
 
     # Custom input_features needed to add time_filter_feature
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         """Extract source feature from either configuration-based options or string parsing."""
 
         source_feature: str | None = None
@@ -393,7 +393,7 @@ class TimeWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     @classmethod
     @abstractmethod
-    def _get_available_columns(cls, data: Any) -> Set[str]:
+    def _get_available_columns(cls, data: Any) -> set[str]:
         """
         Get the set of available column names from the data.
 
@@ -407,7 +407,7 @@ class TimeWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     @classmethod
     @abstractmethod
-    def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
+    def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
         """
         Check if the resolved source features exist in the data.
 
@@ -444,7 +444,7 @@ class TimeWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         window_function: str,
         window_size: int,
         time_unit: str,
-        in_features: List[str],
+        in_features: list[str],
         time_filter_feature: Optional[str] = None,
     ) -> Any:
         """

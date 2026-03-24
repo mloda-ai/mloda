@@ -23,11 +23,11 @@ class PolarsLazyDataFrame(PolarsDataFrame):
         return cls.pl_lazy_frame()
 
     @classmethod
-    def merge_engine(cls) -> Type[BaseMergeEngine]:
+    def merge_engine(cls) -> type[BaseMergeEngine]:
         return PolarsLazyMergeEngine
 
     def select_data_by_column_names(
-        self, data: Any, selected_feature_names: Set[FeatureName], column_ordering: Optional[str] = None
+        self, data: Any, selected_feature_names: set[FeatureName], column_ordering: Optional[str] = None
     ) -> Any:
         column_names = set(data.collect_schema().names())
         _selected_feature_names = self.identify_naming_convention(
@@ -65,7 +65,7 @@ class PolarsLazyDataFrame(PolarsDataFrame):
     def transform(
         self,
         data: Any,
-        feature_names: Set[str],
+        feature_names: set[str],
     ) -> Any:
         transformed_data = self.apply_compute_framework_transformer(data)
         if transformed_data is not None:

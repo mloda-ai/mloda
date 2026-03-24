@@ -32,8 +32,8 @@ class TestSqliteFilterEngine(FilterEngineTestMixin):
         )
         return SqliteRelation.from_arrow(connection, arrow_table)
 
-    def get_column_values(self, result: Any, column: str) -> List[Any]:
-        values: List[Any] = result.df()[column].tolist()
+    def get_column_values(self, result: Any, column: str) -> list[Any]:
+        values: list[Any] = result.df()[column].tolist()
         return values
 
     def test_filter_with_null_values(self, connection: sqlite3.Connection) -> None:

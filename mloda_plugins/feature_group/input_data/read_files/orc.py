@@ -98,7 +98,7 @@ class OrcReader(ReadFile):
     """
 
     @classmethod
-    def suffix(cls) -> Tuple[str, ...]:
+    def suffix(cls) -> tuple[str, ...]:
         return (
             ".orc",
             ".ORC",

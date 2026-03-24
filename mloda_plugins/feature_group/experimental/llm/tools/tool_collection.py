@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 class ToolCollection:
     def __init__(self) -> None:
-        self.data: Dict[str, ToolFunctionDeclaration] = {}
+        self.data: dict[str, ToolFunctionDeclaration] = {}
         subclasses = get_all_subclasses(BaseTool)
 
         self.tool_mappings = {}
@@ -30,7 +30,7 @@ class ToolCollection:
     def get_tool(self, tool_name: str) -> ToolFunctionDeclaration:
         return self.data[tool_name]
 
-    def get_all_tools(self) -> Dict[str, ToolFunctionDeclaration]:
+    def get_all_tools(self) -> dict[str, ToolFunctionDeclaration]:
         return self.data
 
     def __str__(self) -> str:

@@ -20,7 +20,7 @@ class TestmlodaAPI:
     def features(self) -> list[str]:
         return ["some_feature"]
 
-    def init_with_no_params(self, features: list[Union[str, Feature]]) -> mlodaAPI:
+    def init_with_no_params(self, features: list[str | Feature]) -> mlodaAPI:
         api_request = mlodaAPI(features)
 
         assert isinstance(api_request.features, Features)
@@ -45,7 +45,7 @@ class TestmlodaAPI:
         assert api_request.links is not None
         assert len(api_request.links) == 1
 
-    def test_setup_engine(self, features: list[Union[str, Feature]]) -> None:
+    def test_setup_engine(self, features: list[str | Feature]) -> None:
         with patch("mloda.core.core.engine.Engine.create_setup_execution_plan"):
             mloda_api = self.init_with_no_params(features)
             assert isinstance(mloda_api.engine, Engine)
@@ -53,7 +53,7 @@ class TestmlodaAPI:
     def test_copy_features_default_behavior(self) -> None:
         """Test that by default, features are deep copied and mutations don't affect original."""
         with patch("mloda.core.core.engine.Engine.create_setup_execution_plan"):
-            original_features: list[Union[Feature, str]] = [Feature("test_feature")]
+            original_features: list[Feature | str] = [Feature("test_feature")]
             original_feature = original_features[0]
             assert isinstance(original_feature, Feature)
 
@@ -68,7 +68,7 @@ class TestmlodaAPI:
     def test_copy_features_false_no_copy(self) -> None:
         """Test that copy_features=False does not create a copy."""
         with patch("mloda.core.core.engine.Engine.create_setup_execution_plan"):
-            original_features: list[Union[Feature, str]] = [Feature("test_feature")]
+            original_features: list[Feature | str] = [Feature("test_feature")]
             original_feature = original_features[0]
             assert isinstance(original_feature, Feature)
 

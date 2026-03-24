@@ -38,7 +38,7 @@ class Extender(ABC):
         self._priority = value
 
     @abstractmethod
-    def wraps(self) -> Set[ExtenderHook]:
+    def wraps(self) -> set[ExtenderHook]:
         pass
 
     @abstractmethod
@@ -49,11 +49,11 @@ class Extender(ABC):
 class _CompositeExtender(Extender):
     """Internal class that chains multiple Extenders in priority order."""
 
-    def __init__(self, extenders: List[Extender], function_type: Optional[ExtenderHook] = None):
+    def __init__(self, extenders: list[Extender], function_type: Optional[ExtenderHook] = None):
         self.extenders = sorted(extenders, key=lambda e: e.priority)
         self.function_type = function_type
 
-    def wraps(self) -> Set[ExtenderHook]:
+    def wraps(self) -> set[ExtenderHook]:
         if self.function_type:
             return {self.function_type}
         result = set()

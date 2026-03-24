@@ -68,7 +68,7 @@ class SqliteRelation:
         self._table_name = table_name
         self._alias: Optional[str] = None
         self._is_view = _is_view
-        self._cached_columns: Optional[List[str]] = None
+        self._cached_columns: Optional[list[str]] = None
 
     @property
     def connection(self) -> sqlite3.Connection:
@@ -79,7 +79,7 @@ class SqliteRelation:
         return self._table_name
 
     @property
-    def columns(self) -> List[str]:
+    def columns(self) -> list[str]:
         if self._cached_columns is None:
             cursor = self._connection.execute(f"SELECT * FROM {quote_ident(self._table_name)} LIMIT 0")  # nosec
             self._cached_columns = [desc[0] for desc in cursor.description]

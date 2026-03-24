@@ -13,15 +13,15 @@ from mloda.core.filter.global_filter import GlobalFilter
 
 
 def stream_all(
-    features: Union[Features, list[Union[Feature, str]]],
-    compute_frameworks: Union[Set[Type[ComputeFramework]], Optional[list[str]]] = None,
-    links: Optional[Set[Link]] = None,
+    features: Features | list[Feature | str],
+    compute_frameworks: set[type[ComputeFramework]] | Optional[list[str]] = None,
+    links: Optional[set[Link]] = None,
     data_access_collection: Optional[DataAccessCollection] = None,
-    parallelization_modes: Set[ParallelizationMode] = {ParallelizationMode.SYNC},
+    parallelization_modes: set[ParallelizationMode] = {ParallelizationMode.SYNC},
     flight_server: Optional[Any] = None,
-    function_extender: Optional[Set[Extender]] = None,
+    function_extender: Optional[set[Extender]] = None,
     global_filter: Optional[GlobalFilter] = None,
-    api_data: Optional[Dict[str, Dict[str, Any]]] = None,
+    api_data: Optional[dict[str, dict[str, Any]]] = None,
     plugin_collector: Optional[PluginCollector] = None,
     copy_features: Optional[bool] = True,
     strict_type_enforcement: bool = False,

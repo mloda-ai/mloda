@@ -34,7 +34,7 @@ from mloda.provider import ApiDataFeatureGroup
 class SimpleApiFeature(FeatureGroup):
     """A simple feature that consumes mloda data."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         """Define input features from mloda data."""
         return {
             Feature(name="api_id", index=Index(("api_id",))),
@@ -48,7 +48,7 @@ class SimpleApiFeature(FeatureGroup):
         return data
 
     @classmethod
-    def feature_names_supported(cls) -> Set[str]:
+    def feature_names_supported(cls) -> set[str]:
         return {cls.get_class_name()}
 
 
@@ -58,7 +58,7 @@ class SimpleApiFeature(FeatureGroup):
 class MultiKeyApiFeature(FeatureGroup):
     """A feature that consumes data from multiple mloda keys."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         """Define input features from multiple mloda data sources."""
         # This will require data from both FirstKey and SecondKey
         return {
@@ -73,7 +73,7 @@ class MultiKeyApiFeature(FeatureGroup):
         return data
 
     @classmethod
-    def feature_names_supported(cls) -> Set[str]:
+    def feature_names_supported(cls) -> set[str]:
         return {cls.get_class_name()}
 
 
@@ -92,14 +92,14 @@ class CreatorDataFeature(FeatureGroup):
         return {"creator_id": [1, 2, 3], "creator_value": ["a", "b", "c"]}
 
     @classmethod
-    def feature_names_supported(cls) -> Set[str]:
+    def feature_names_supported(cls) -> set[str]:
         return {"creator_id", "creator_value"}
 
 
 class SimplifiedApiJoinFeature(FeatureGroup):
     """Joins simplified mloda data with Creator data using LEFT join."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         """Define input features with a LEFT join link."""
         # Create the link: LEFT join on api_id = creator_id
         link = Link.left(
@@ -118,7 +118,7 @@ class SimplifiedApiJoinFeature(FeatureGroup):
         return data
 
     @classmethod
-    def feature_names_supported(cls) -> Set[str]:
+    def feature_names_supported(cls) -> set[str]:
         return {cls.get_class_name()}
 
 
@@ -175,7 +175,7 @@ class TestSimplifiedApiData:
             }
         }
 
-        feature_list: List[Union[Feature, str]] = [Feature(name="SimpleApiFeature")]
+        feature_list: list[Feature | str] = [Feature(name="SimpleApiFeature")]
 
         result = mloda.run_all(
             feature_list,
@@ -210,7 +210,7 @@ class TestSimplifiedApiData:
         }
 
         # Use SimpleApiFeature which only needs api_id and api_value (from FirstKey)
-        feature_list: List[Union[Feature, str]] = [Feature(name="SimpleApiFeature")]
+        feature_list: list[Feature | str] = [Feature(name="SimpleApiFeature")]
 
         result = mloda.run_all(
             feature_list,
@@ -247,7 +247,7 @@ class TestSimplifiedApiData:
         }
 
         # Request feature from first key
-        feature_list: List[Union[Feature, str]] = ["first_value"]
+        feature_list: list[Feature | str] = ["first_value"]
 
         result = mloda.run_all(
             feature_list,
@@ -282,7 +282,7 @@ class TestSimplifiedApiData:
         }
 
         # Request feature from second key
-        feature_list: List[Union[Feature, str]] = ["second_value"]
+        feature_list: list[Feature | str] = ["second_value"]
 
         result = mloda.run_all(
             feature_list,
@@ -310,7 +310,7 @@ class TestSimplifiedApiData:
             }
         }
 
-        feature_list: List[Union[Feature, str]] = [Feature(name="SimplifiedApiJoinFeature")]
+        feature_list: list[Feature | str] = [Feature(name="SimplifiedApiJoinFeature")]
 
         result = mloda.run_all(
             feature_list,
@@ -331,7 +331,7 @@ class TestSimplifiedApiData:
 
         This ensures backward compatibility for features that don't use mloda data.
         """
-        feature_list: List[Union[Feature, str]] = [Feature(name="creator_id")]
+        feature_list: list[Feature | str] = [Feature(name="creator_id")]
 
         _enabled_creator_only = PluginCollector.enabled_feature_groups({CreatorDataFeature})
 
@@ -354,7 +354,7 @@ class TestSimplifiedApiData:
 
         Should either work (no mloda data) or raise a clear error.
         """
-        feature_list: List[Union[Feature, str]] = [Feature(name="creator_id")]
+        feature_list: list[Feature | str] = [Feature(name="creator_id")]
 
         _enabled_creator_only = PluginCollector.enabled_feature_groups({CreatorDataFeature})
 

@@ -68,7 +68,7 @@ class IcebergFramework(ComputeFramework):
         return IcebergTable
 
     @classmethod
-    def merge_engine(cls) -> Type[BaseMergeEngine]:
+    def merge_engine(cls) -> type[BaseMergeEngine]:
         """Iceberg tables don't support direct merging in this framework context."""
         raise NotImplementedError(
             f"Merge functionality is not implemented for {cls.__name__}. "
@@ -77,7 +77,7 @@ class IcebergFramework(ComputeFramework):
         )
 
     def select_data_by_column_names(
-        self, data: Any, selected_feature_names: Set[FeatureName], column_ordering: Optional[str] = None
+        self, data: Any, selected_feature_names: set[FeatureName], column_ordering: Optional[str] = None
     ) -> Any:
         """
         Select specific columns from Iceberg table.
@@ -106,7 +106,7 @@ class IcebergFramework(ComputeFramework):
         if self.data is not None and isinstance(self.data, IcebergTable):
             self.column_names = set(self.data.schema().column_names)
 
-    def transform(self, data: Any, feature_names: Set[str]) -> Any:
+    def transform(self, data: Any, feature_names: set[str]) -> Any:
         """
         Transform data to Iceberg table format.
 
@@ -170,6 +170,6 @@ class IcebergFramework(ComputeFramework):
         raise ValueError(f"Data type {type(self.data)} is not supported by {self.__class__.__name__}")
 
     @classmethod
-    def filter_engine(cls) -> Type[BaseFilterEngine]:
+    def filter_engine(cls) -> type[BaseFilterEngine]:
         """Return the Iceberg filter engine."""
         return IcebergFilterEngine

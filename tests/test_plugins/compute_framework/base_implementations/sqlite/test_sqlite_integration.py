@@ -28,7 +28,7 @@ def sqlite_conn() -> Any:
     conn.close()
 
 
-sqlite_test_dict: Dict[str, Any] = {
+sqlite_test_dict: dict[str, Any] = {
     "id": [1, 2, 3, 4, 5],
     "value": [10, 20, 30, 40, 50],
     "category": ["A", "B", "A", "C", "B"],
@@ -45,7 +45,7 @@ class SqliteTestDataCreator(ATestDataCreator):
     }
 
     @classmethod
-    def get_raw_data(cls) -> Dict[str, Any]:
+    def get_raw_data(cls) -> dict[str, Any]:
         return sqlite_test_dict
 
 
@@ -80,12 +80,12 @@ class ATestSqliteFeatureGroup(FeatureGroup, ConnectionMatcherMixin):
         return None
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> bool | set[type[ComputeFramework]]:
         return {SqliteFramework}
 
 
 class SqliteSimpleTransformFeatureGroup(ATestSqliteFeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         feature_name_str = feature_name.name if isinstance(feature_name, FeatureName) else str(feature_name)
 
         if feature_name_str == "doubled_value":
@@ -110,12 +110,12 @@ class SqliteSimpleTransformFeatureGroup(ATestSqliteFeatureGroup):
         return result_data
 
     @classmethod
-    def feature_names_supported(cls) -> Set[str]:
+    def feature_names_supported(cls) -> set[str]:
         return {"doubled_value", "score_plus_ten"}
 
 
 class SqliteSecondTransformFeatureGroup(ATestSqliteFeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {Feature("doubled_value")}
 
     @classmethod
@@ -131,12 +131,12 @@ class SqliteSecondTransformFeatureGroup(ATestSqliteFeatureGroup):
         return result_data
 
     @classmethod
-    def feature_names_supported(cls) -> Set[str]:
+    def feature_names_supported(cls) -> set[str]:
         return {"quadrupled_value"}
 
 
 class SqliteAggregationFeatureGroup(ATestSqliteFeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         feature_name_str = feature_name.name if isinstance(feature_name, FeatureName) else str(feature_name)
 
         if feature_name_str in ["avg_value_by_category", "count_by_category"]:
@@ -163,12 +163,12 @@ class SqliteAggregationFeatureGroup(ATestSqliteFeatureGroup):
         return result_data
 
     @classmethod
-    def feature_names_supported(cls) -> Set[str]:
+    def feature_names_supported(cls) -> set[str]:
         return {"avg_value_by_category", "count_by_category"}
 
 
 class SqliteCheckData(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         feature_name_str = feature_name.name if isinstance(feature_name, FeatureName) else str(feature_name)
 
         if feature_name_str in ["pyarrow_avg_value_by_category_sqlite"]:
@@ -182,11 +182,11 @@ class SqliteCheckData(FeatureGroup):
         return data
 
     @classmethod
-    def feature_names_supported(cls) -> Set[str]:
+    def feature_names_supported(cls) -> set[str]:
         return {"pyarrow_avg_value_by_category_sqlite"}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> bool | set[type[ComputeFramework]]:
         return {PyArrowTable}
 
 
@@ -196,7 +196,7 @@ class TestSqliteIntegrationWithMlodaAPI:
             {SqliteTestDataCreator, SqliteSimpleTransformFeatureGroup}
         )
 
-        feature_list: List[Feature | str] = [
+        feature_list: list[Feature | str] = [
             Feature(name="doubled_value", options={"SqliteTestDataCreator": sqlite_conn}),
             Feature(name="score_plus_ten", options={"SqliteTestDataCreator": sqlite_conn}),
         ]
@@ -229,7 +229,7 @@ class TestSqliteIntegrationWithMlodaAPI:
             {SqliteTestDataCreator, SqliteAggregationFeatureGroup}
         )
 
-        feature_list: List[Feature | str] = [
+        feature_list: list[Feature | str] = [
             Feature(name="avg_value_by_category", options={"SqliteTestDataCreator": sqlite_conn}),
             Feature(name="count_by_category", options={"SqliteTestDataCreator": sqlite_conn}),
         ]
@@ -258,7 +258,7 @@ class TestSqliteIntegrationWithMlodaAPI:
             {SqliteTestDataCreator, SqliteSimpleTransformFeatureGroup, SqliteSecondTransformFeatureGroup}
         )
 
-        feature_list: List[Feature | str] = [
+        feature_list: list[Feature | str] = [
             Feature(name="quadrupled_value", options={"SqliteTestDataCreator": sqlite_conn})
         ]
 
@@ -288,7 +288,7 @@ class TestSqliteIntegrationWithMlodaAPI:
             }
         )
 
-        feature_list: List[Feature | str] = [
+        feature_list: list[Feature | str] = [
             Feature(name="pyarrow_avg_value_by_category_sqlite", options={"SqliteTestDataCreator": sqlite_conn})
         ]
 

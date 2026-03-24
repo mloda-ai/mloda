@@ -13,12 +13,12 @@ from mloda.core.abstract_plugins.components.parallelization_modes import Paralle
 class FeatureGroupStep(Step):
     def __init__(
         self,
-        feature_group: Type[FeatureGroup],
+        feature_group: type[FeatureGroup],
         features: FeatureSet,
-        required_uuids: Set[UUID],
-        compute_framework: Type[ComputeFramework],
+        required_uuids: set[UUID],
+        compute_framework: type[ComputeFramework],
         children_if_root: set[UUID] = set(),
-        api_input_data: Union[BaseApiData, bool] = False,
+        api_input_data: BaseApiData | bool = False,
     ) -> None:
         self.feature_group = feature_group
         self.features = features
@@ -34,16 +34,16 @@ class FeatureGroupStep(Step):
         self.need_to_upload = False
 
         # Currently, also used for joinsteps without tfs. This might be a bug.
-        self.tfs_ids: Set[UUID] = set()
+        self.tfs_ids: set[UUID] = set()
 
-    def get_uuids(self) -> Set[UUID]:
+    def get_uuids(self) -> set[UUID]:
         return {feature.uuid for feature in self.features.features}
 
     def execute(
         self,
         cfw_register: CfwManager,
         cfw: ComputeFramework,
-        from_cfw: Optional[Union[ComputeFramework, UUID]] = None,  # Not used in this implementation
+        from_cfw: Optional[ComputeFramework | UUID] = None,  # Not used in this implementation
         data: Optional[Any] = None,
     ) -> Optional[Any]:
         self.location = cfw_register.get_location()
@@ -87,7 +87,7 @@ class FeatureGroupStep(Step):
             assert features.artifact_to_save is not None  # validated in validate_set_artifact_to_save
             cfw_register.set_artifact_to_save(features.artifact_to_save, artifact_or_meta_information)
 
-    def validate_set_artifact_to_save(self, features: FeatureSet) -> None | Type[BaseArtifact]:
+    def validate_set_artifact_to_save(self, features: FeatureSet) -> None | type[BaseArtifact]:
         if features.artifact_to_save is None:
             return None
 
@@ -123,7 +123,7 @@ class FeatureGroupStep(Step):
 
         return data
 
-    def get_parallelization_mode(self) -> Set[ParallelizationMode]:
+    def get_parallelization_mode(self) -> set[ParallelizationMode]:
         return self.compute_framework.supported_parallelization_modes()
 
     def add_value_to_children_if_root(self, value: UUID) -> None:

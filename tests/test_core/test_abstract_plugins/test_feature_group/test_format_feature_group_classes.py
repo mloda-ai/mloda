@@ -17,14 +17,14 @@ from mloda.user import Feature, Options
 class SampleFeatureGroupAlpha(FeatureGroup):
     """A test feature group for formatting tests."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return None
 
 
 class SampleFeatureGroupBeta(FeatureGroup):
     """Another test feature group for formatting tests."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return None
 
 
@@ -35,7 +35,7 @@ class SampleFeatureGroupWithDomain(FeatureGroup):
     def get_domain(cls) -> Domain:
         return Domain("sales")
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return None
 
 
@@ -46,7 +46,7 @@ class SampleFeatureGroupFinance(FeatureGroup):
     def get_domain(cls) -> Domain:
         return Domain("finance")
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return None
 
 
@@ -155,7 +155,7 @@ class TestFormatFeatureGroupClassesEdgeCases:
     def test_accepts_generator(self) -> None:
         """Test that the function accepts a generator (Iterable, not just list)."""
 
-        def class_generator() -> Generator[Type[FeatureGroup], None, None]:
+        def class_generator() -> Generator[type[FeatureGroup], None, None]:
             yield SampleFeatureGroupAlpha
             yield SampleFeatureGroupBeta
 

@@ -19,7 +19,7 @@ class OtelExtender(Extender):
 
         self.wrapped = {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
 
-    def wraps(self) -> Set[ExtenderHook]:
+    def wraps(self) -> set[ExtenderHook]:
         return self.wrapped
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:

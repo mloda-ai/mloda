@@ -42,22 +42,22 @@ from mloda.user import Options
 class MockFGWithSingleIndex(FeatureGroup):
     """Mock feature group with a single index column."""
 
-    def input_features(self, _options: Options, _feature_name: FeatureName) -> Optional[Set[Any]]:
+    def input_features(self, _options: Options, _feature_name: FeatureName) -> Optional[set[Any]]:
         return None
 
     @classmethod
-    def index_columns(cls) -> Optional[List[Index]]:
+    def index_columns(cls) -> Optional[list[Index]]:
         return [Index(("id",))]
 
 
 class MockFGWithMultipleIndexes(FeatureGroup):
     """Mock feature group with multiple index options."""
 
-    def input_features(self, _options: Options, _feature_name: FeatureName) -> Optional[Set[Any]]:
+    def input_features(self, _options: Options, _feature_name: FeatureName) -> Optional[set[Any]]:
         return None
 
     @classmethod
-    def index_columns(cls) -> Optional[List[Index]]:
+    def index_columns(cls) -> Optional[list[Index]]:
         return [
             Index(("id",)),
             Index(("user_id", "timestamp")),
@@ -68,7 +68,7 @@ class MockFGWithMultipleIndexes(FeatureGroup):
 class MockFGWithNoIndex(FeatureGroup):
     """Mock feature group that returns None for index_columns (default behavior)."""
 
-    def input_features(self, _options: Options, _feature_name: FeatureName) -> Optional[Set[Any]]:
+    def input_features(self, _options: Options, _feature_name: FeatureName) -> Optional[set[Any]]:
         return None
 
     # Uses default implementation which returns None
@@ -77,22 +77,22 @@ class MockFGWithNoIndex(FeatureGroup):
 class MockFGWithEmptyIndex(FeatureGroup):
     """Mock feature group that returns empty list for index_columns."""
 
-    def input_features(self, _options: Options, _feature_name: FeatureName) -> Optional[Set[Any]]:
+    def input_features(self, _options: Options, _feature_name: FeatureName) -> Optional[set[Any]]:
         return None
 
     @classmethod
-    def index_columns(cls) -> Optional[List[Index]]:
+    def index_columns(cls) -> Optional[list[Index]]:
         return []
 
 
 class AnotherMockFGWithSingleIndex(FeatureGroup):
     """Another mock feature group with a single index - for distinct feature group testing."""
 
-    def input_features(self, _options: Options, _feature_name: FeatureName) -> Optional[Set[Any]]:
+    def input_features(self, _options: Options, _feature_name: FeatureName) -> Optional[set[Any]]:
         return None
 
     @classmethod
-    def index_columns(cls) -> Optional[List[Index]]:
+    def index_columns(cls) -> Optional[list[Index]]:
         return [Index(("user_id",))]
 
 

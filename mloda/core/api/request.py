@@ -32,17 +32,17 @@ class mlodaAPI:
 
     def __init__(
         self,
-        requested_features: Union[Features, list[Union[Feature, str]]],
-        compute_frameworks: Union[Set[Type[ComputeFramework]], Optional[list[str]]] = None,
-        links: Optional[Set[Link]] = None,
+        requested_features: Features | list[Feature | str],
+        compute_frameworks: set[type[ComputeFramework]] | Optional[list[str]] = None,
+        links: Optional[set[Link]] = None,
         data_access_collection: Optional[DataAccessCollection] = None,
         global_filter: Optional[GlobalFilter] = None,
-        api_data: Optional[Dict[str, Dict[str, Any]]] = None,
+        api_data: Optional[dict[str, dict[str, Any]]] = None,
         plugin_collector: Optional[PluginCollector] = None,
         copy_features: Optional[bool] = True,
         strict_type_enforcement: bool = False,
         column_ordering: Optional[str] = None,
-        parallelization_modes: Optional[Set[ParallelizationMode]] = None,
+        parallelization_modes: Optional[set[ParallelizationMode]] = None,
     ) -> None:
         if column_ordering is not None and column_ordering not in ("alphabetical", "request_order"):
             raise ValueError(
@@ -79,7 +79,7 @@ class mlodaAPI:
 
     def _process_features(
         self,
-        requested_features: Union[Features, list[Union[Feature, str]]],
+        requested_features: Features | list[Feature | str],
         api_input_data_collection: Optional[ApiInputDataCollection],
     ) -> Features:
         """Processes the requested features, ensuring they are in the correct format and adding API input data."""
@@ -96,20 +96,20 @@ class mlodaAPI:
 
     @staticmethod
     def run_all(
-        features: Union[Features, list[Union[Feature, str]]],
-        compute_frameworks: Union[Set[Type[ComputeFramework]], Optional[list[str]]] = None,
-        links: Optional[Set[Link]] = None,
+        features: Features | list[Feature | str],
+        compute_frameworks: set[type[ComputeFramework]] | Optional[list[str]] = None,
+        links: Optional[set[Link]] = None,
         data_access_collection: Optional[DataAccessCollection] = None,
-        parallelization_modes: Set[ParallelizationMode] = {ParallelizationMode.SYNC},
+        parallelization_modes: set[ParallelizationMode] = {ParallelizationMode.SYNC},
         flight_server: Optional[Any] = None,
-        function_extender: Optional[Set[Extender]] = None,
+        function_extender: Optional[set[Extender]] = None,
         global_filter: Optional[GlobalFilter] = None,
-        api_data: Optional[Dict[str, Dict[str, Any]]] = None,
+        api_data: Optional[dict[str, dict[str, Any]]] = None,
         plugin_collector: Optional[PluginCollector] = None,
         copy_features: Optional[bool] = True,
         strict_type_enforcement: bool = False,
         column_ordering: Optional[str] = None,
-    ) -> List[Any]:
+    ) -> list[Any]:
         """
         Run feature computation in one step.
 
@@ -160,17 +160,17 @@ class mlodaAPI:
     @classmethod
     def prepare(
         cls,
-        features: Union[Features, list[Union[Feature, str]]],
-        compute_frameworks: Union[Set[Type[ComputeFramework]], Optional[list[str]]] = None,
-        links: Optional[Set[Link]] = None,
+        features: Features | list[Feature | str],
+        compute_frameworks: set[type[ComputeFramework]] | Optional[list[str]] = None,
+        links: Optional[set[Link]] = None,
         data_access_collection: Optional[DataAccessCollection] = None,
         global_filter: Optional[GlobalFilter] = None,
-        api_data: Optional[Dict[str, Dict[str, Any]]] = None,
+        api_data: Optional[dict[str, dict[str, Any]]] = None,
         plugin_collector: Optional[PluginCollector] = None,
         copy_features: Optional[bool] = True,
         strict_type_enforcement: bool = False,
         column_ordering: Optional[str] = None,
-        parallelization_modes: Optional[Set[ParallelizationMode]] = None,
+        parallelization_modes: Optional[set[ParallelizationMode]] = None,
     ) -> "mlodaAPI":
         """Build an execution plan without running it.
 
@@ -193,11 +193,11 @@ class mlodaAPI:
 
     def run(
         self,
-        api_data: Optional[Dict[str, Dict[str, Any]]] = None,
-        parallelization_modes: Set[ParallelizationMode] = {ParallelizationMode.SYNC},
+        api_data: Optional[dict[str, dict[str, Any]]] = None,
+        parallelization_modes: set[ParallelizationMode] = {ParallelizationMode.SYNC},
         flight_server: Optional[Any] = None,
-        function_extender: Optional[Set[Extender]] = None,
-    ) -> List[Any]:
+        function_extender: Optional[set[Extender]] = None,
+    ) -> list[Any]:
         """Execute the prepared session and return results.
 
         Can be called multiple times on the same session with different ``api_data``
@@ -209,10 +209,10 @@ class mlodaAPI:
 
     def stream_run(
         self,
-        api_data: Optional[Dict[str, Dict[str, Any]]] = None,
-        parallelization_modes: Set[ParallelizationMode] = {ParallelizationMode.SYNC},
+        api_data: Optional[dict[str, dict[str, Any]]] = None,
+        parallelization_modes: set[ParallelizationMode] = {ParallelizationMode.SYNC},
         flight_server: Optional[Any] = None,
-        function_extender: Optional[Set[Extender]] = None,
+        function_extender: Optional[set[Extender]] = None,
     ) -> Generator[Any, None, None]:
         """Execute the prepared session and yield each feature group's result as it completes."""
         _api_data = api_data if api_data is not None else self.api_data
@@ -227,10 +227,10 @@ class mlodaAPI:
 
     def _batch_run(
         self,
-        parallelization_modes: Set[ParallelizationMode] = {ParallelizationMode.SYNC},
+        parallelization_modes: set[ParallelizationMode] = {ParallelizationMode.SYNC},
         flight_server: Optional[Any] = None,
-        function_extender: Optional[Set[Extender]] = None,
-        api_data: Optional[Dict[str, Any]] = None,
+        function_extender: Optional[set[Extender]] = None,
+        api_data: Optional[dict[str, Any]] = None,
     ) -> ExecutionOrchestrator:
         """Sets up the engine runner and runs the engine computation."""
         # Use stored api_data if not explicitly provided
@@ -243,9 +243,9 @@ class mlodaAPI:
     def _run_engine_computation(
         self,
         runner: ExecutionOrchestrator,
-        parallelization_modes: Set[ParallelizationMode] = {ParallelizationMode.SYNC},
-        function_extender: Optional[Set[Extender]] = None,
-        api_data: Optional[Dict[str, Any]] = None,
+        parallelization_modes: set[ParallelizationMode] = {ParallelizationMode.SYNC},
+        function_extender: Optional[set[Extender]] = None,
+        api_data: Optional[dict[str, Any]] = None,
     ) -> None:
         """Runs the engine computation within a context manager."""
         if not isinstance(runner, ExecutionOrchestrator):
@@ -260,9 +260,9 @@ class mlodaAPI:
     def _enter_runner_context(
         self,
         runner: ExecutionOrchestrator,
-        parallelization_modes: Set[ParallelizationMode],
-        function_extender: Optional[Set[Extender]],
-        api_data: Optional[Dict[str, Any]],
+        parallelization_modes: set[ParallelizationMode],
+        function_extender: Optional[set[Extender]],
+        api_data: Optional[dict[str, Any]],
     ) -> None:
         """Enters the runner context."""
         runner.__enter__(parallelization_modes, function_extender, api_data)
@@ -288,7 +288,7 @@ class mlodaAPI:
 
     def _setup_engine_runner(
         self,
-        parallelization_modes: Set[ParallelizationMode] = {ParallelizationMode.SYNC},
+        parallelization_modes: set[ParallelizationMode] = {ParallelizationMode.SYNC},
         flight_server: Optional[Any] = None,
     ) -> ExecutionOrchestrator:
         """Sets up the engine runner based on parallelization mode."""
@@ -306,12 +306,12 @@ class mlodaAPI:
 
         return runner
 
-    def get_result(self) -> List[Any]:
+    def get_result(self) -> list[Any]:
         if self.runner is None:
             raise ValueError("You need to run any run function beforehand.")
         return self.runner.get_result()
 
-    def get_artifacts(self) -> Dict[str, Any]:
+    def get_artifacts(self) -> dict[str, Any]:
         if self.runner is None:
             raise ValueError("You need to run any run function beforehand.")
         return self.runner.get_artifacts()

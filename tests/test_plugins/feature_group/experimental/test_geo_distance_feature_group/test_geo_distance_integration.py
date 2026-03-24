@@ -18,7 +18,7 @@ from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCr
 
 
 # List of geo distance features to test
-GEO_DISTANCE_FEATURES: List[Feature | str] = [
+GEO_DISTANCE_FEATURES: list[Feature | str] = [
     "sf&nyc__haversine_distance",  # Haversine distance between San Francisco and New York
     "point1&point2__euclidean_distance",  # Euclidean distance between point1 and point2
     "point1&point2__manhattan_distance",  # Manhattan distance between point1 and point2
@@ -29,7 +29,7 @@ class GeoDistanceTestDataCreator(ATestDataCreator):
     """Base class for geo distance test data creators."""
 
     @classmethod
-    def get_raw_data(cls) -> Dict[str, Any]:
+    def get_raw_data(cls) -> dict[str, Any]:
         """Return the raw data as a dictionary."""
         return {
             # San Francisco coordinates
@@ -50,7 +50,7 @@ class PandasGeoDistanceTestDataCreator(GeoDistanceTestDataCreator):
     compute_framework = PandasDataFrame
 
 
-def validate_geo_distance_features(df: pd.DataFrame, expected_features: List[Feature | str]) -> None:
+def validate_geo_distance_features(df: pd.DataFrame, expected_features: list[Feature | str]) -> None:
     """
     Validate geo distance features in a Pandas DataFrame.
 

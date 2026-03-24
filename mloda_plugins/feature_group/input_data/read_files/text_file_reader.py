@@ -7,7 +7,7 @@ from mloda.provider import FeatureSet
 
 class TextFileReader(ReadDocument):
     @classmethod
-    def suffix(cls) -> Tuple[str, ...]:
+    def suffix(cls) -> tuple[str, ...]:
         return (".text",)
 
     @classmethod
@@ -24,5 +24,5 @@ class TextFileReader(ReadDocument):
 
 class PyFileReader(TextFileReader):
     @classmethod
-    def suffix(cls) -> Tuple[str, ...]:
+    def suffix(cls) -> tuple[str, ...]:
         return (".py",)

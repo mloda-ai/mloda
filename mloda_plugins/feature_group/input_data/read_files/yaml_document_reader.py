@@ -11,7 +11,7 @@ class YamlDocumentReader(ReadDocument):
     """Load entire YAML file as a single document value for RAG pipelines."""
 
     @classmethod
-    def suffix(cls) -> Tuple[str, ...]:
+    def suffix(cls) -> tuple[str, ...]:
         return (".yaml", ".yml")
 
     @classmethod

@@ -46,11 +46,11 @@ class Feature:
 
     def __init__(
         self,
-        name: Union[str, FeatureName],
-        options: Union[Dict[str, Any], Options] = {},
+        name: str | FeatureName,
+        options: dict[str, Any] | Options = {},
         domain: Optional[str] = None,
         compute_framework: Optional[str] = None,
-        data_type: Optional[Union[DataType, str]] = None,
+        data_type: Optional[DataType | str] = None,
         initial_requested_data: bool = False,
         link: Optional[Link] = None,
         index: Optional[Index] = None,
@@ -77,56 +77,56 @@ class Feature:
         self.index = index  # Index is a feature currently only used for append/union features.
 
     @classmethod
-    def not_typed(cls, name: Union[str, FeatureName], options: dict[str, Any] = {}) -> Feature:
+    def not_typed(cls, name: str | FeatureName, options: dict[str, Any] = {}) -> Feature:
         name = FeatureName(name) if isinstance(name, str) else name
         return cls(name=name, options=options)
 
     @classmethod
-    def str_of(cls, name: Union[str, FeatureName], options: dict[str, Any] = {}) -> Feature:
+    def str_of(cls, name: str | FeatureName, options: dict[str, Any] = {}) -> Feature:
         return cls._typed_of(name, DataType.STRING, options)
 
     @classmethod
-    def int32_of(cls, name: Union[str, FeatureName], options: dict[str, Any] = {}) -> Feature:
+    def int32_of(cls, name: str | FeatureName, options: dict[str, Any] = {}) -> Feature:
         return cls._typed_of(name, DataType.INT32, options)
 
     @classmethod
-    def int64_of(cls, name: Union[str, FeatureName], options: dict[str, Any] = {}) -> "Feature":
+    def int64_of(cls, name: str | FeatureName, options: dict[str, Any] = {}) -> "Feature":
         return cls._typed_of(name, DataType.INT64, options)
 
     @classmethod
-    def float_of(cls, name: Union[str, FeatureName], options: dict[str, Any] = {}) -> "Feature":
+    def float_of(cls, name: str | FeatureName, options: dict[str, Any] = {}) -> "Feature":
         return cls._typed_of(name, DataType.FLOAT, options)
 
     @classmethod
-    def double_of(cls, name: Union[str, FeatureName], options: dict[str, Any] = {}) -> "Feature":
+    def double_of(cls, name: str | FeatureName, options: dict[str, Any] = {}) -> "Feature":
         return cls._typed_of(name, DataType.DOUBLE, options)
 
     @classmethod
-    def boolean_of(cls, name: Union[str, FeatureName], options: dict[str, Any] = {}) -> "Feature":
+    def boolean_of(cls, name: str | FeatureName, options: dict[str, Any] = {}) -> "Feature":
         return cls._typed_of(name, DataType.BOOLEAN, options)
 
     @classmethod
-    def binary_of(cls, name: Union[str, FeatureName], options: dict[str, Any] = {}) -> "Feature":
+    def binary_of(cls, name: str | FeatureName, options: dict[str, Any] = {}) -> "Feature":
         return cls._typed_of(name, DataType.BINARY, options)
 
     @classmethod
-    def date_of(cls, name: Union[str, FeatureName], options: dict[str, Any] = {}) -> "Feature":
+    def date_of(cls, name: str | FeatureName, options: dict[str, Any] = {}) -> "Feature":
         return cls._typed_of(name, DataType.DATE, options)
 
     @classmethod
-    def timestamp_millis_of(cls, name: Union[str, FeatureName], options: dict[str, Any] = {}) -> "Feature":
+    def timestamp_millis_of(cls, name: str | FeatureName, options: dict[str, Any] = {}) -> "Feature":
         return cls._typed_of(name, DataType.TIMESTAMP_MILLIS, options)
 
     @classmethod
-    def timestamp_micros_of(cls, name: Union[str, FeatureName], options: dict[str, Any] = {}) -> "Feature":
+    def timestamp_micros_of(cls, name: str | FeatureName, options: dict[str, Any] = {}) -> "Feature":
         return cls._typed_of(name, DataType.TIMESTAMP_MICROS, options)
 
     @classmethod
-    def decimal_of(cls, name: Union[str, FeatureName], options: dict[str, Any] = {}) -> "Feature":
+    def decimal_of(cls, name: str | FeatureName, options: dict[str, Any] = {}) -> "Feature":
         return cls._typed_of(name, DataType.DECIMAL, options)
 
     @classmethod
-    def _typed_of(cls, name: Union[str, FeatureName], data_type: DataType, options: dict[str, Any] = {}) -> Feature:
+    def _typed_of(cls, name: str | FeatureName, data_type: DataType, options: dict[str, Any] = {}) -> Feature:
         name = FeatureName(name) if isinstance(name, str) else name
         return cls(name=name, data_type=data_type, options=options)
 
@@ -186,7 +186,7 @@ class Feature:
         )
         return hash((self.options, compute_frameworks_hashable))
 
-    def _set_domain(self, domain: Optional[str], domain_options: Optional[str]) -> Union[None, Domain]:
+    def _set_domain(self, domain: Optional[str], domain_options: Optional[str]) -> None | Domain:
         if domain:
             return Domain(domain)
         elif domain_options:
@@ -195,7 +195,7 @@ class Feature:
 
     def _set_compute_framework(
         self, compute_framework: Optional[str], compute_framework_options: Optional[str]
-    ) -> Optional[Type[ComputeFramework]]:
+    ) -> Optional[type[ComputeFramework]]:
         if compute_framework:
             return FeatureValidator.validate_and_resolve_compute_framework(
                 compute_framework, get_all_subclasses(ComputeFramework), "parameter"
@@ -211,12 +211,12 @@ class Feature:
         self.uuid = uuid
         return self
 
-    def _set_compute_frameworks(self, compute_frameworks: Set[Type[ComputeFramework]]) -> Feature:
+    def _set_compute_frameworks(self, compute_frameworks: set[type[ComputeFramework]]) -> Feature:
         # use only for testing
         self.compute_frameworks = compute_frameworks
         return self
 
-    def get_compute_framework(self) -> Type[ComputeFramework]:
+    def get_compute_framework(self) -> type[ComputeFramework]:
         FeatureValidator.validate_compute_frameworks_resolved(self.compute_frameworks, str(self.name))
         assert self.compute_frameworks is not None
         return next(iter(self.compute_frameworks))

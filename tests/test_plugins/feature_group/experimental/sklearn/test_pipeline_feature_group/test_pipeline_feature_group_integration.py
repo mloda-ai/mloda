@@ -23,7 +23,7 @@ class SklearnPipelineTestDataCreator(ATestDataCreator):
     compute_framework = PandasDataFrame
 
     @classmethod
-    def get_raw_data(cls) -> Dict[str, Any]:
+    def get_raw_data(cls) -> dict[str, Any]:
         """Return the raw data as a dictionary."""
         return {
             "income": [50000.0, 60000.0, 75000.0, 45000.0, 80000.0],
@@ -353,7 +353,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         os.makedirs(storage_path, exist_ok=True)
 
         # Always use explicit storage path to avoid parallel test interference
-        feature_options: Dict[str, Any] = {"artifact_storage_path": storage_path}
+        feature_options: dict[str, Any] = {"artifact_storage_path": storage_path}
 
         # First run - create feature WITHOUT artifact options (mloda will set artifact_to_save)
         feature1 = Feature("income__sklearn_pipeline_scaling", Options(feature_options))

@@ -27,8 +27,8 @@ class CfwManager:
 
     def __init__(
         self,
-        parallelization_modes: Set[ParallelizationMode],
-        function_extender: Optional[Set[Extender]] = None,
+        parallelization_modes: set[ParallelizationMode],
+        function_extender: Optional[set[Extender]] = None,
     ) -> None:
         """
         Initializes the CfwManager.
@@ -40,36 +40,36 @@ class CfwManager:
         self.parallelization_modes = parallelization_modes
         self.function_extender = function_extender
 
-        self.compute_frameworks: Dict[
-            UUID, Tuple[str, Set[UUID]]
+        self.compute_frameworks: dict[
+            UUID, tuple[str, set[UUID]]
         ] = {}  # cfw uuid -> (cfw class name, children_if_root)
-        self.cfw_merge_relation: Dict[UUID, Tuple[UUID, str]] = {}  # merge relation
+        self.cfw_merge_relation: dict[UUID, tuple[UUID, str]] = {}  # merge relation
 
         self.location: Optional[str] = None  # multiprocessing location
         self.error = False  # multiprocessing error flag
         self.msg: Any = None
         self.exc_info: Any = None
 
-        self.uuid_column_names: Dict[UUID, Set[str]] = {}  # We only set this in case of TransformFrameworkStep
-        self.uuid_flyway_datasets: Dict[UUID, Set[UUID]] = {}
+        self.uuid_column_names: dict[UUID, set[str]] = {}  # We only set this in case of TransformFrameworkStep
+        self.uuid_flyway_datasets: dict[UUID, set[UUID]] = {}
 
-        self.artifact_to_save: Dict[str, Any] = {}
+        self.artifact_to_save: dict[str, Any] = {}
 
-        self.api_data: Optional[Dict[str, Any]] = None
+        self.api_data: Optional[dict[str, Any]] = None
 
-    def add_uuid_flyway_datasets(self, cf_uuid: UUID, object_ids: Set[UUID]) -> None:
+    def add_uuid_flyway_datasets(self, cf_uuid: UUID, object_ids: set[UUID]) -> None:
         """Associates a set of Flyway dataset UUIDs with a Compute Framework UUID."""
         self.uuid_flyway_datasets[cf_uuid] = object_ids
 
-    def get_uuid_flyway_datasets(self, cf_uuid: UUID) -> Optional[Set[UUID]]:
+    def get_uuid_flyway_datasets(self, cf_uuid: UUID) -> Optional[set[UUID]]:
         """Retrieves the set of Flyway dataset UUIDs associated with a Compute Framework UUID."""
         return self.uuid_flyway_datasets.get(cf_uuid, None)
 
-    def add_column_names_to_cf_uuid(self, cf_uuid: UUID, column_names: Set[str]) -> None:
+    def add_column_names_to_cf_uuid(self, cf_uuid: UUID, column_names: set[str]) -> None:
         """Associates a set of column names with a Compute Framework UUID."""
         self.uuid_column_names[cf_uuid] = column_names
 
-    def get_column_names(self, cf_uuid: UUID) -> Set[str]:
+    def get_column_names(self, cf_uuid: UUID) -> set[str]:
         """Retrieves the set of column names associated with a Compute Framework UUID."""
         return self.uuid_column_names[cf_uuid]
 
@@ -134,7 +134,7 @@ class CfwManager:
                 leftmost_uuid = uuid
         return leftmost_uuid
 
-    def add_cfw_to_compute_frameworks(self, uuid: UUID, cls_name: str, children_if_root: Set[UUID]) -> None:
+    def add_cfw_to_compute_frameworks(self, uuid: UUID, cls_name: str, children_if_root: set[UUID]) -> None:
         """
         Adds a Compute Framework to the registered frameworks.
 
@@ -147,7 +147,7 @@ class CfwManager:
             raise ValueError(f"UUID {uuid} already exists in compute_frameworks")
         self.compute_frameworks[uuid] = (cls_name, children_if_root)
 
-    def get_initialized_compute_framework_uuid(self, cf_class: Type[ComputeFramework], feature_uuid: UUID) -> UUID:
+    def get_initialized_compute_framework_uuid(self, cf_class: type[ComputeFramework], feature_uuid: UUID) -> UUID:
         """
         Retrieves the UUID of an initialized Compute Framework.
 
@@ -173,7 +173,7 @@ class CfwManager:
         """Retrieves the location for multiprocessing."""
         return self.location
 
-    def get_parallelization_modes(self) -> Set[ParallelizationMode]:
+    def get_parallelization_modes(self) -> set[ParallelizationMode]:
         """Retrieves the set of parallelization modes."""
         return self.parallelization_modes
 
@@ -195,11 +195,11 @@ class CfwManager:
         """Retrieves the exception information."""
         return self.exc_info
 
-    def get_compute_frameworks(self) -> Dict[UUID, Tuple[str, Set[UUID]]]:
+    def get_compute_frameworks(self) -> dict[UUID, tuple[str, set[UUID]]]:
         """Retrieves the dictionary of compute frameworks."""
         return self.compute_frameworks
 
-    def get_function_extender(self) -> Optional[Set[Extender]]:
+    def get_function_extender(self) -> Optional[set[Extender]]:
         """Retrieves the optional set of function extenders."""
         return self.function_extender
 
@@ -216,11 +216,11 @@ class CfwManager:
 
         self.artifact_to_save[artifact_name] = artifact
 
-    def get_artifacts(self) -> Dict[str, Any]:
+    def get_artifacts(self) -> dict[str, Any]:
         """Retrieves the dictionary of saved artifacts."""
         return self.artifact_to_save
 
-    def set_api_data(self, api_data: Dict[str, Any]) -> None:
+    def set_api_data(self, api_data: dict[str, Any]) -> None:
         """Sets the API data."""
         self.api_data = api_data
 

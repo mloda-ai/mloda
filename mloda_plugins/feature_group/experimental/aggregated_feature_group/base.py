@@ -224,7 +224,7 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     @classmethod
     @abstractmethod
-    def _get_available_columns(cls, data: Any) -> Set[str]:
+    def _get_available_columns(cls, data: Any) -> set[str]:
         """
         Get the set of available column names from the data.
 
@@ -238,7 +238,7 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     @classmethod
     @abstractmethod
-    def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
+    def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
         """
         Check if the resolved source features exist in the data.
 
@@ -269,7 +269,7 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     @classmethod
     @abstractmethod
-    def _perform_aggregation(cls, data: Any, aggregation_type: str, in_features: List[str]) -> Any:
+    def _perform_aggregation(cls, data: Any, aggregation_type: str, in_features: list[str]) -> Any:
         """
         Method to perform the aggregation. Should be implemented by subclasses.
 

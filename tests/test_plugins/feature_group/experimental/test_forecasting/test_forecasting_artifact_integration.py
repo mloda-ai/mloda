@@ -25,7 +25,7 @@ class ForecastingArtifactTestDataCreator(ATestDataCreator):
     compute_framework = PandasDataFrame
 
     @classmethod
-    def get_raw_data(cls) -> Dict[str, Any]:
+    def get_raw_data(cls) -> dict[str, Any]:
         """Return the raw data as a dictionary."""
         # Create time series data for 30 days
         dates = [datetime(2025, 1, 1) + timedelta(days=i) for i in range(30)]

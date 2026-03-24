@@ -6,5 +6,5 @@ from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import q
 
 class DuckDBFilterEngine(SqlBaseFilterEngine):
     @classmethod
-    def _build_regex_condition(cls, column_name: str, value: str) -> Tuple[str, Tuple[Any, ...]]:
+    def _build_regex_condition(cls, column_name: str, value: str) -> tuple[str, tuple[Any, ...]]:
         return f"regexp_matches({quote_ident(column_name)}, ?)", (value,)

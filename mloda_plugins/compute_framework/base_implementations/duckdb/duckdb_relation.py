@@ -41,7 +41,7 @@ class DuckdbRelation:
         return self._connection
 
     @property
-    def columns(self) -> List[str]:
+    def columns(self) -> list[str]:
         return self._relation.columns
 
     def filter(self, condition: str, params: tuple[Any, ...] = ()) -> "DuckdbRelation":

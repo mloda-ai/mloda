@@ -105,7 +105,7 @@ class IcebergTestDataCreator(FeatureGroup):
         return mock_table
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> bool | set[type[ComputeFramework]]:
         """Return the Iceberg compute framework."""
         return {IcebergFramework}
 
@@ -146,14 +146,14 @@ class ATestIcebergFeatureGroup(FeatureGroup, ConnectionMatcherMixin):
         return None
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> bool | set[type[ComputeFramework]]:
         return {IcebergFramework}
 
 
 class IcebergSimpleTransformFeatureGroup(FeatureGroup):
     """Simple feature group for testing Iceberg transformations."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         """Require base features for transformation."""
         feature_name_str = feature_name.name if isinstance(feature_name, FeatureName) else str(feature_name)
 
@@ -195,18 +195,18 @@ class IcebergSimpleTransformFeatureGroup(FeatureGroup):
         return result_data
 
     @classmethod
-    def feature_names_supported(cls) -> Set[str]:
+    def feature_names_supported(cls) -> set[str]:
         return {"doubled_value", "score_plus_ten"}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> bool | set[type[ComputeFramework]]:
         return {IcebergFramework}
 
 
 class IcebergToArrowFeatureGroup(FeatureGroup):
     """Feature group that converts Iceberg data to PyArrow format."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {Feature("doubled_value")}
 
     @classmethod
@@ -231,11 +231,11 @@ class IcebergToArrowFeatureGroup(FeatureGroup):
         return result_data
 
     @classmethod
-    def feature_names_supported(cls) -> Set[str]:
+    def feature_names_supported(cls) -> set[str]:
         return {"arrow_doubled_value"}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> bool | set[type[ComputeFramework]]:
         return {PyArrowTable}
 
 
@@ -250,7 +250,7 @@ class TestIcebergIntegrationWithMlodaAPI:
         [({ParallelizationMode.SYNC})],
     )
     def test_basic_iceberg_feature_calculation(
-        self, modes: Set[ParallelizationMode], flight_server: Any, mock_iceberg_catalog: Mock
+        self, modes: set[ParallelizationMode], flight_server: Any, mock_iceberg_catalog: Mock
     ) -> None:
         """Test basic feature calculation with Iceberg framework."""
         # Enable the test feature groups
@@ -259,7 +259,7 @@ class TestIcebergIntegrationWithMlodaAPI:
         )
 
         # Define features to calculate with catalog connection
-        feature_list: Features | List[Feature | str] = [
+        feature_list: Features | list[Feature | str] = [
             Feature(name="doubled_value", options={"IcebergTestDataCreator": mock_iceberg_catalog}),
             Feature(name="score_plus_ten", options={"IcebergTestDataCreator": mock_iceberg_catalog}),
         ]
@@ -300,7 +300,7 @@ class TestIcebergIntegrationWithMlodaAPI:
         )
 
         # Define feature that requires transformation between frameworks
-        feature_list: Features | List[Feature | str] = [
+        feature_list: Features | list[Feature | str] = [
             Feature(name="arrow_doubled_value", options={"IcebergTestDataCreator": mock_iceberg_catalog})
         ]
 
@@ -336,7 +336,7 @@ class TestIcebergIntegrationWithMlodaAPI:
         plugin_collector = PluginCollector.enabled_feature_groups({IcebergTestDataCreator})
 
         # Request basic features from the data creator
-        feature_list: Features | List[Feature | str] = [
+        feature_list: Features | list[Feature | str] = [
             Feature(name="id", options={"IcebergTestDataCreator": mock_iceberg_catalog}),
             Feature(name="value", options={"IcebergTestDataCreator": mock_iceberg_catalog}),
             Feature(name="category", options={"IcebergTestDataCreator": mock_iceberg_catalog}),

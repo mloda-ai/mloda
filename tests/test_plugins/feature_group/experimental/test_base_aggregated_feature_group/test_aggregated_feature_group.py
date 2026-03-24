@@ -23,11 +23,11 @@ class ConcreteAggregatedFeatureGroupForTest(AggregatedFeatureGroup):
     """Concrete subclass for testing base class methods."""
 
     @classmethod
-    def _get_available_columns(cls, data: Any) -> Set[str]:
+    def _get_available_columns(cls, data: Any) -> set[str]:
         return set()
 
     @classmethod
-    def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
+    def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
         pass
 
     @classmethod
@@ -35,7 +35,7 @@ class ConcreteAggregatedFeatureGroupForTest(AggregatedFeatureGroup):
         return data
 
     @classmethod
-    def _perform_aggregation(cls, data: Any, aggregation_type: str, in_features: List[str]) -> Any:
+    def _perform_aggregation(cls, data: Any, aggregation_type: str, in_features: list[str]) -> Any:
         return None
 
 

@@ -31,7 +31,7 @@ class BaseApiData(ABC):
 
     @classmethod
     @abstractmethod
-    def column_names(cls) -> List[str]:
+    def column_names(cls) -> list[str]:
         """Abstract method to retrieve the list of column names associated with the API data."""
         raise NotImplementedError
 

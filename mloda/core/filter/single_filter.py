@@ -13,9 +13,9 @@ class SingleFilter:
 
     def __init__(
         self,
-        filter_feature: Union[str, Any],  # Union[str, Feature]
-        filter_type: Union[str, FilterType],
-        parameter: Dict[str, Any],
+        filter_feature: str | Any,  # Union[str, Feature]
+        filter_type: str | FilterType,
+        parameter: dict[str, Any],
     ) -> None:
         """
         Initialize a SingleFilter instance.
@@ -31,7 +31,7 @@ class SingleFilter:
 
         self.uuid = uuid.uuid4()
 
-    def handle_filter_type(self, filter_type: Union[str, FilterType]) -> str:
+    def handle_filter_type(self, filter_type: str | FilterType) -> str:
         if not filter_type:
             raise ValueError(f"Filter type evaluates to false {filter_type}.")
 
@@ -42,7 +42,7 @@ class SingleFilter:
 
         raise ValueError(f"Wrong type of Filter. {filter_type}")
 
-    def handle_filter_feature(self, filter_feature: Union[str, Any]) -> Any:  # Union[str, Feature]
+    def handle_filter_feature(self, filter_feature: str | Any) -> Any:  # Union[str, Feature]
         from mloda.core.abstract_plugins.components.feature import Feature
 
         if isinstance(filter_feature, Feature):
@@ -52,7 +52,7 @@ class SingleFilter:
         else:
             raise ValueError(f"filter_feature is of wrong type {filter_feature}")
 
-    def handle_parameter(self, parameter: Dict[str, Any]) -> FilterParameterImpl:
+    def handle_parameter(self, parameter: dict[str, Any]) -> FilterParameterImpl:
         if not isinstance(parameter, dict):
             raise ValueError(f"Filter parameter is no dictionary: {parameter}.")
 

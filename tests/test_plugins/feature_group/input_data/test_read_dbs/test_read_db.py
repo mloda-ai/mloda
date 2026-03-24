@@ -142,7 +142,7 @@ class TestReadDB:
                 return sqlite3.connect(credentials[SQLITEReader.db_path()])
 
             @classmethod
-            def is_valid_credentials(cls, credentials: Dict[str, Any]) -> bool:
+            def is_valid_credentials(cls, credentials: dict[str, Any]) -> bool:
                 return SQLITEReader.db_path() in credentials
 
             @classmethod

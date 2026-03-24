@@ -31,15 +31,15 @@ class PyArrowTable(ComputeFramework):
         return pa.Table
 
     @classmethod
-    def merge_engine(cls) -> Type[BaseMergeEngine]:
+    def merge_engine(cls) -> type[BaseMergeEngine]:
         return PyArrowMergeEngine
 
     @classmethod
-    def filter_engine(cls) -> Type[BaseFilterEngine]:
+    def filter_engine(cls) -> type[BaseFilterEngine]:
         return PyArrowFilterEngine
 
     def select_data_by_column_names(
-        self, data: Any, selected_feature_names: Set[FeatureName], column_ordering: Optional[str] = None
+        self, data: Any, selected_feature_names: set[FeatureName], column_ordering: Optional[str] = None
     ) -> Any:
         column_names = set(data.schema.names)
         _selected_feature_names = self.identify_naming_convention(
@@ -53,7 +53,7 @@ class PyArrowTable(ComputeFramework):
     def transform(
         self,
         data: Any,
-        feature_names: Set[str],
+        feature_names: set[str],
     ) -> Any:
         transformed_data = self.apply_compute_framework_transformer(data)
         if transformed_data is not None:

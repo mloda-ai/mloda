@@ -91,10 +91,10 @@ class BaseInputData(ABC):
     @classmethod
     def match_data_access(
         cls,
-        feature_names: List[str],
+        feature_names: list[str],
         data_access_collection: DataAccessCollection,
         options: Optional[Options] = None,
-    ) -> Tuple[Any, Any]:
+    ) -> tuple[Any, Any]:
         """
         We check for data access collection if any child classes match the data access.
         """
@@ -110,7 +110,7 @@ class BaseInputData(ABC):
 
     @classmethod
     def add_base_input_data_to_options(
-        cls, cls_to_be_added: Type["BaseInputData"], matched_data_access: Any, options: Options
+        cls, cls_to_be_added: type["BaseInputData"], matched_data_access: Any, options: Options
     ) -> None:
         """
         Adding the found data access class to the options.
@@ -160,7 +160,7 @@ class BaseInputData(ABC):
         return cls.__name__
 
     @classmethod
-    def validate_columns(cls, file_name: str, feature_names: List[str]) -> bool:
+    def validate_columns(cls, file_name: str, feature_names: list[str]) -> bool:
         return True
 
     @classmethod
@@ -180,9 +180,9 @@ class BaseInputData(ABC):
         return path.endswith(cls.suffix())  # type: ignore[attr-defined]
 
     @classmethod
-    def _resolve_pinned_file(cls, data_access: Any, feature_names: List[str]) -> Optional[str]:
-        column_map: Dict[str, str] = data_access.column_to_file
-        pinned_paths: Set[str] = {column_map[name] for name in feature_names if name in column_map}
+    def _resolve_pinned_file(cls, data_access: Any, feature_names: list[str]) -> Optional[str]:
+        column_map: dict[str, str] = data_access.column_to_file
+        pinned_paths: set[str] = {column_map[name] for name in feature_names if name in column_map}
         if not pinned_paths:
             return None
         for name in feature_names:
@@ -195,7 +195,7 @@ class BaseInputData(ABC):
             if cls.validate_columns(pinned_path, feature_names) is False:
                 return None
             return pinned_path
-        valid_candidates: List[str] = [
+        valid_candidates: list[str] = [
             path
             for path in pinned_paths
             if cls._matches_suffix(path) and cls.validate_columns(path, feature_names) is not False
@@ -205,7 +205,7 @@ class BaseInputData(ABC):
         raise ValueError(f"Features in batch are pinned to different files: {pinned_paths}")
 
 
-def _collect_filtered_subclasses(cls: Any, parent_class: Any) -> List[Type[BaseInputData]]:
+def _collect_filtered_subclasses(cls: Any, parent_class: Any) -> list[type[BaseInputData]]:
     result = []
     for subclass in get_all_subclasses(cls):
         if not issubclass(subclass, parent_class):
@@ -215,7 +215,7 @@ def _collect_filtered_subclasses(cls: Any, parent_class: Any) -> List[Type[BaseI
     return result
 
 
-def get_all_filtereted_subclasses(cls: Any, parent_class: Any) -> List[Type[BaseInputData]]:
+def get_all_filtereted_subclasses(cls: Any, parent_class: Any) -> list[type[BaseInputData]]:
     filtered_subclasses = _collect_filtered_subclasses(cls, parent_class)
     if not filtered_subclasses:
         auto_load_group = getattr(parent_class, "_auto_load_group", None)

@@ -22,7 +22,7 @@ except ImportError:
 class MixedCfwFeature(FeatureGroup):
     file_path = f"{os.getcwd()}/tests/test_plugins/feature_group/src/dataset/creditcard_2023_short.csv"
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         feature_set = set()
 
         py_arrow_features = ["id", "V1", "V2"]
@@ -62,7 +62,7 @@ class MixedCfwFeature(FeatureGroup):
 class DuplicateFeatureSetup(MixedCfwFeature):
     file_path = f"{os.getcwd()}/tests/test_plugins/feature_group/src/dataset/creditcard_2023_short.csv"
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         feature_set = set()
 
         py_arrow_features = ["id", "V1", "V2"]

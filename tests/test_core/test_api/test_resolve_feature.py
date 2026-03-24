@@ -205,7 +205,7 @@ class TestResolveFeatureSubclassFiltering:
             @classmethod
             def match_feature_group_criteria(
                 cls,
-                feature_name: Union[FeatureName, str],
+                feature_name: FeatureName | str,
                 options: Options,
                 data_access_collection: Optional[DataAccessCollection] = None,
             ) -> bool:
@@ -239,7 +239,7 @@ class TestResolveFeatureSubclassFiltering:
             @classmethod
             def match_feature_group_criteria(
                 cls,
-                feature_name: Union[FeatureName, str],
+                feature_name: FeatureName | str,
                 options: Options,
                 data_access_collection: Optional[DataAccessCollection] = None,
             ) -> bool:

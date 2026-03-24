@@ -20,10 +20,10 @@ from mloda_plugins.feature_group.input_data.read_files.parquet import ParquetRea
 
 
 class FeatureSet:
-    def __init__(self, columns: List[str]) -> None:
+    def __init__(self, columns: list[str]) -> None:
         self.columns = columns
 
-    def get_all_names(self) -> List[str]:
+    def get_all_names(self) -> list[str]:
         return self.columns
 
 

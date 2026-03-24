@@ -201,7 +201,7 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return algorithm, k_value
 
     @classmethod
-    def get_k_value(cls, feature_name: str) -> Union[int, str]:
+    def get_k_value(cls, feature_name: str) -> int | str:
         """
         Extract the k_value from the feature name.
 
@@ -214,7 +214,7 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     # Custom validation done via _validate_string_match() hook
 
     @classmethod
-    def _extract_clustering_params(cls, feature: Feature) -> tuple[Optional[str], Optional[Union[int, str]]]:
+    def _extract_clustering_params(cls, feature: Feature) -> tuple[Optional[str], Optional[int | str]]:
         """
         Extract algorithm and k_value from a feature.
 
@@ -233,7 +233,7 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         algorithm_str, source_features_str = FeatureChainParser.parse_feature_name(feature.name, [cls.PREFIX_PATTERN])
         if algorithm_str is not None and source_features_str is not None:
             algorithm, k_value_str = cls.parse_clustering_prefix(feature.get_name())
-            k_value: Union[int, str] = "auto" if k_value_str == "auto" else int(k_value_str)
+            k_value: int | str = "auto" if k_value_str == "auto" else int(k_value_str)
             return algorithm, k_value
 
         # Fall back to configuration-based
@@ -247,7 +247,7 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return algorithm, k_value
 
     @classmethod
-    def _extract_algorithm_k_value_and_source_features(cls, feature: Feature) -> tuple[str, Union[int, str], list[str]]:
+    def _extract_algorithm_k_value_and_source_features(cls, feature: Feature) -> tuple[str, int | str, list[str]]:
         """
         Extract algorithm, k_value, and source features from a feature.
 
@@ -332,7 +332,7 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     @classmethod
     @abstractmethod
-    def _get_available_columns(cls, data: Any) -> Set[str]:
+    def _get_available_columns(cls, data: Any) -> set[str]:
         """
         Get the set of available column names from the data.
 
@@ -346,7 +346,7 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     @classmethod
     @abstractmethod
-    def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
+    def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
         """
         Check if the resolved source features exist in the data.
 
@@ -381,7 +381,7 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         cls,
         data: Any,
         algorithm: str,
-        k_value: Union[int, str],
+        k_value: int | str,
         source_features: list[str],
     ) -> Any:
         """
@@ -404,7 +404,7 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         cls,
         data: Any,
         algorithm: str,
-        k_value: Union[int, str],
+        k_value: int | str,
         source_features: list[str],
     ) -> tuple[Any, Any]:
         """

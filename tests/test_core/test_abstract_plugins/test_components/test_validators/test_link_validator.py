@@ -227,7 +227,7 @@ class TestValidateLinks:
 
     def test_empty_set_passes(self) -> None:
         """Empty set of links should pass validation."""
-        empty_links: Set[Link] = set()
+        empty_links: set[Link] = set()
 
         # Act & Assert - should not raise
         LinkValidator.validate_links(links=empty_links)

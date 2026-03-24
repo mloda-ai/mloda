@@ -6,7 +6,7 @@ import toml
 import os
 
 
-def download_files(base_url: str, files: List[str], output_dir: str = ".") -> None:
+def download_files(base_url: str, files: list[str], output_dir: str = ".") -> None:
     """Downloads files from a given base URL."""
     for f in files:
         url = f"{base_url}{f}"
@@ -58,7 +58,7 @@ def run_tox() -> bool:
         return False
 
 
-def add_file_to_git(files: List[str], out: str) -> None:
+def add_file_to_git(files: list[str], out: str) -> None:
     """Stages the given file for commit using git add"""
     for file in files:
         file_path = os.path.join(out, file)

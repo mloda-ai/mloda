@@ -10,17 +10,17 @@ class SetupComputeFramework:
 
     def __init__(
         self,
-        user_compute_frameworks: Union[Set[Type[ComputeFramework]], Optional[list[str]]],
+        user_compute_frameworks: set[type[ComputeFramework]] | Optional[list[str]],
         features: Features,
-        parallelization_modes: Optional[Set[ParallelizationMode]] = None,
+        parallelization_modes: Optional[set[ParallelizationMode]] = None,
     ) -> None:
         available_compute_frameworks = get_all_subclasses(ComputeFramework)
 
         if user_compute_frameworks:
             if isinstance(user_compute_frameworks, list):
-                user_set_compute_frameworks: set[str | Type[ComputeFramework]] = set(user_compute_frameworks)
+                user_set_compute_frameworks: set[str | type[ComputeFramework]] = set(user_compute_frameworks)
             else:
-                user_set_compute_frameworks = cast(set[str | Type[ComputeFramework]], user_compute_frameworks)
+                user_set_compute_frameworks = cast(set[str | type[ComputeFramework]], user_compute_frameworks)
 
             available_compute_frameworks = self.filter_user_set_in_available_sub_classes(
                 user_set_compute_frameworks, available_compute_frameworks
@@ -54,9 +54,9 @@ class SetupComputeFramework:
 
     def _filter_by_parallelization_modes(
         self,
-        compute_frameworks: Set[Type[ComputeFramework]],
-        parallelization_modes: Set[ParallelizationMode],
-    ) -> Set[Type[ComputeFramework]]:
+        compute_frameworks: set[type[ComputeFramework]],
+        parallelization_modes: set[ParallelizationMode],
+    ) -> set[type[ComputeFramework]]:
         return {
             cfw
             for cfw in compute_frameworks
@@ -65,7 +65,7 @@ class SetupComputeFramework:
 
     def filter_user_set_in_available_sub_classes(
         self,
-        api_request_compute_frameworks: set[str | Type[ComputeFramework]],
+        api_request_compute_frameworks: set[str | type[ComputeFramework]],
         sub_classes: set[type[ComputeFramework]],
     ) -> set[type[ComputeFramework]]:
         compute_frameworks = set()

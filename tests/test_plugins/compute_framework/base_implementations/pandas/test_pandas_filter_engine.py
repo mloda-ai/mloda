@@ -32,6 +32,6 @@ class TestPandasFilterEngine(FilterEngineTestMixin):
             }
         )
 
-    def get_column_values(self, result: Any, column: str) -> List[Any]:
+    def get_column_values(self, result: Any, column: str) -> list[Any]:
         """Extract column values from pandas DataFrame."""
         return result[column].tolist()  # type: ignore[no-any-return]

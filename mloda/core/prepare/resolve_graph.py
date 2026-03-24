@@ -9,15 +9,15 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.link import Link
 
 
-LinkFeatureQueue = List[Union[LinkFrameworkTrekker, Tuple[Feature, Type[FeatureGroup]]]]
+LinkFeatureQueue = list[LinkFrameworkTrekker | tuple[Feature, type[FeatureGroup]]]
 
-PlannedQueue = List[Union[LinkFrameworkTrekker, Tuple[Type[FeatureGroup], Set[Feature]]]]
+PlannedQueue = list[LinkFrameworkTrekker | tuple[type[FeatureGroup], set[Feature]]]
 
 
 class ResolveGraph:
-    def __init__(self, graph: Graph, links: Optional[Set[Link]] = None):
+    def __init__(self, graph: Graph, links: Optional[set[Link]] = None):
         self.graph = graph
-        self.nodes_per_feature_group: Dict[Type[FeatureGroup], Set[Feature]] = {}
+        self.nodes_per_feature_group: dict[type[FeatureGroup], set[Feature]] = {}
         self.resolver_compute_framework = ResolveComputeFrameworks(self.graph)
         self.resolver_links = ResolveLinks(self.graph, links)
 
@@ -39,7 +39,7 @@ class ResolveGraph:
         return self.combine_features_of_feature_group(queue_feature_links)
 
     def combine_features_of_feature_group(self, queue: LinkFeatureQueue) -> PlannedQueue:
-        visited_features: Set[UUID] = set()
+        visited_features: set[UUID] = set()
         planned_queue: PlannedQueue = []
 
         for item in queue:
@@ -60,7 +60,7 @@ class ResolveGraph:
         return planned_queue
 
     def convert_links_with_queue_to_features(
-        self, links_with_queue: List[Union[UUID, LinkFrameworkTrekker]]
+        self, links_with_queue: list[UUID | LinkFrameworkTrekker]
     ) -> LinkFeatureQueue:
         feature_link_queue: LinkFeatureQueue = []
 
@@ -73,8 +73,8 @@ class ResolveGraph:
 
         return feature_link_queue
 
-    def get_nodes_with_same_feature_group_class(self) -> Dict[Type[FeatureGroup], Set[Feature]]:
-        collection: Dict[Type[FeatureGroup], Set[Feature]] = defaultdict(set)
+    def get_nodes_with_same_feature_group_class(self) -> dict[type[FeatureGroup], set[Feature]]:
+        collection: dict[type[FeatureGroup], set[Feature]] = defaultdict(set)
 
         for node in self.graph.queue:
             node_properties = self.graph.get_nodes()[node]

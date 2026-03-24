@@ -52,7 +52,7 @@ class ChainedContextFeatureGroupTest(FeatureGroup):
     @classmethod
     def match_feature_group_criteria(
         cls,
-        feature_name: Union[FeatureName, str],
+        feature_name: FeatureName | str,
         options: Options,
         data_access_collection: Optional[Any] = None,
     ) -> bool:
@@ -68,7 +68,7 @@ class ChainedContextFeatureGroupTest(FeatureGroup):
 
         return True
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         features = set()
 
         # String-based feature extraction

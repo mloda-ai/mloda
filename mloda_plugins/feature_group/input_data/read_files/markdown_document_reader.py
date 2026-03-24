@@ -7,7 +7,7 @@ from mloda.provider import FeatureSet
 
 class MarkdownDocumentReader(ReadDocument):
     @classmethod
-    def suffix(cls) -> Tuple[str, ...]:
+    def suffix(cls) -> tuple[str, ...]:
         return (".md",)
 
     @classmethod

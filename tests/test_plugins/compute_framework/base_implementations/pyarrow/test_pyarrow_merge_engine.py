@@ -17,17 +17,17 @@ class TestPyArrowMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):
     """Test PyArrowMergeEngine using shared multi-index test scenarios."""
 
     @classmethod
-    def merge_engine_class(cls) -> Type[BaseMergeEngine]:
+    def merge_engine_class(cls) -> type[BaseMergeEngine]:
         """Return the PyArrowMergeEngine class."""
         return PyArrowMergeEngine
 
     @classmethod
-    def framework_type(cls) -> Type[Any]:
+    def framework_type(cls) -> type[Any]:
         """Return pyarrow Table type."""
         if pa is None:
             raise ImportError("PyArrow is not installed")
         # mypy can't infer pa.Table type correctly
-        table_type: Type[Any] = pa.Table
+        table_type: type[Any] = pa.Table
         return table_type
 
     def get_connection(self) -> Optional[Any]:

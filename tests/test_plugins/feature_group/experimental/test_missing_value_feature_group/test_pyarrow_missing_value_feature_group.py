@@ -307,7 +307,7 @@ class TestMissingValuePyArrowIntegration:
             "temperature__ffill_imputed",  # Forward fill imputation
         ]
 
-        feature_list: List[str | Feature] = [Feature(name=feature, options=options) for feature in feature_str]
+        feature_list: list[str | Feature] = [Feature(name=feature, options=options) for feature in feature_str]
 
         # Run the mloda with multiple imputation features
         result = mloda.run_all(

@@ -182,12 +182,12 @@ class TestPythonDictMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):
     """Test PythonDictMergeEngine multi-index support using shared test scenarios."""
 
     @classmethod
-    def merge_engine_class(cls) -> Type[BaseMergeEngine]:
+    def merge_engine_class(cls) -> type[BaseMergeEngine]:
         """Return the PythonDictMergeEngine class."""
         return PythonDictMergeEngine
 
     @classmethod
-    def framework_type(cls) -> Type[Any]:
+    def framework_type(cls) -> type[Any]:
         """Return list type (PythonDict uses List[Dict])."""
         return list
 

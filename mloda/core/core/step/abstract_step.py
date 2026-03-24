@@ -8,7 +8,7 @@ from mloda.core.abstract_plugins.components.parallelization_modes import Paralle
 
 
 class Step(ABC):
-    def __init__(self, required_uuids: Set[UUID]) -> None:
+    def __init__(self, required_uuids: set[UUID]) -> None:
         self.required_uuids = required_uuids
         self.uuid = uuid4()
         self.step_is_done = False
@@ -18,18 +18,18 @@ class Step(ABC):
         self,
         cfw_register: CfwManager,
         cfw: ComputeFramework,
-        from_cfw: Optional[Union[ComputeFramework, UUID]] = None,
+        from_cfw: Optional[ComputeFramework | UUID] = None,
         data: Optional[Any] = None,
     ) -> Optional[Any]:
         """Define what executing this step involves."""
         pass
 
     @abstractmethod
-    def get_uuids(self) -> Set[UUID]:
+    def get_uuids(self) -> set[UUID]:
         """Return result uuids of this step"""
         return set()
 
-    def get_parallelization_mode(self) -> Set[ParallelizationMode]:
+    def get_parallelization_mode(self) -> set[ParallelizationMode]:
         return {ParallelizationMode.SYNC, ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING}
 
     @final

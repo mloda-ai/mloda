@@ -98,7 +98,7 @@ class FeatherReader(ReadFile):
     """
 
     @classmethod
-    def suffix(cls) -> Tuple[str, ...]:
+    def suffix(cls) -> tuple[str, ...]:
         return (
             ".feather",
             ".feather",

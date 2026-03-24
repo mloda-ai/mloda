@@ -48,7 +48,7 @@ class TestDuckDBFilterEngine(FilterEngineTestMixin):
         )
         return DuckdbRelation.from_arrow(connection, arrow_table)
 
-    def get_column_values(self, result: Any, column: str) -> List[Any]:
+    def get_column_values(self, result: Any, column: str) -> list[Any]:
         """Extract column values from DuckDB relation via pandas DataFrame."""
         return result.df()[column].tolist()  # type: ignore[no-any-return]
 

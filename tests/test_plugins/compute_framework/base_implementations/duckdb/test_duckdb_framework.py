@@ -111,7 +111,7 @@ class TestDuckDBFrameworkMerge(DataFrameTestBase):
     """Test DuckDBFramework merge operations using the base test class."""
 
     @classmethod
-    def framework_class(cls) -> Type[Any]:
+    def framework_class(cls) -> type[Any]:
         """Return the DuckDBFramework class."""
         return DuckDBFramework
 

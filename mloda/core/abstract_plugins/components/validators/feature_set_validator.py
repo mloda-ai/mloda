@@ -11,7 +11,7 @@ class FeatureSetValidator:
             raise ValueError(f"Options not initialized in {context}")
 
     @staticmethod
-    def validate_equal_options(features: Set["Feature"]) -> None:
+    def validate_equal_options(features: set["Feature"]) -> None:
         if len(features) <= 1:
             return
 

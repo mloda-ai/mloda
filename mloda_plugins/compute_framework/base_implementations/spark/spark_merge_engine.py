@@ -59,7 +59,7 @@ class SparkMergeEngine(BaseMergeEngine):
 
     def _handle_column_conflicts(
         self, left_data: Any, right_data: Any, left_index: Index, right_index: Index
-    ) -> Tuple[Any, Any]:
+    ) -> tuple[Any, Any]:
         """Handle column name conflicts by renaming columns in right DataFrame."""
         left_columns = set(left_data.columns)
         right_columns = set(right_data.columns)

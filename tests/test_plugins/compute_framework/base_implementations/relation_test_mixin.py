@@ -45,7 +45,7 @@ class RelationTestMixin:
         raise NotImplementedError
 
     @abstractmethod
-    def get_column_values(self, result: Any, column: str) -> List[Any]:
+    def get_column_values(self, result: Any, column: str) -> list[Any]:
         """Extract column values as a list from the result.
 
         Override in framework-specific test class.

@@ -59,11 +59,11 @@ class ReadFile(BaseInputData):
         raise NotImplementedError
 
     @classmethod
-    def suffix(cls) -> Tuple[str, ...]:
+    def suffix(cls) -> tuple[str, ...]:
         raise NotImplementedError
 
     @classmethod
-    def get_column_names(cls, file_name: str) -> List[str]:
+    def get_column_names(cls, file_name: str) -> list[str]:
         raise NotImplementedError
 
     def load(self, features: FeatureSet) -> Any:
@@ -83,7 +83,7 @@ class ReadFile(BaseInputData):
 
         return data
 
-    def init_reader(self, options: Optional[Options]) -> Tuple["ReadFile", Any]:
+    def init_reader(self, options: Optional[Options]) -> tuple["ReadFile", Any]:
         if options is None:
             raise ValueError("Options were not set.")
 
@@ -96,7 +96,7 @@ class ReadFile(BaseInputData):
         return reader(), data_access
 
     @classmethod
-    def match_subclass_data_access(cls, data_access: Any, feature_names: List[str], options: Options) -> Any:
+    def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
         if isinstance(data_access, DataAccessCollection):
             if data_access.column_to_file is not None:
                 pinned = cls._resolve_pinned_file(data_access, feature_names)
@@ -119,7 +119,7 @@ class ReadFile(BaseInputData):
 
     @classmethod
     def match_read_file_data_access(
-        cls, data_accesses: List[str], feature_names: List[str], document_suffixes: "frozenset[str]" = frozenset()
+        cls, data_accesses: list[str], feature_names: list[str], document_suffixes: "frozenset[str]" = frozenset()
     ) -> Any:
         for data_access in data_accesses:
             if data_access.endswith(cls.suffix()):
@@ -144,7 +144,7 @@ class ReadFile(BaseInputData):
         return None
 
     @classmethod
-    def validate_columns(cls, file_name: str, feature_names: List[str]) -> bool:
+    def validate_columns(cls, file_name: str, feature_names: list[str]) -> bool:
         try:
             columns = cls.get_column_names(file_name)
         except NotImplementedError:

@@ -14,23 +14,23 @@ class DataAccessCollection:
 
     def __init__(
         self,
-        files: Set[str] = set(),
-        folders: Set[str] = set(),
-        credential_dicts: Dict[str, Any] = {},
-        initialized_connection_objects: Set[Any] = set(),
-        uninitialized_connection_objects: List[Any] = [],
-        column_to_file: Optional[Dict[str, str]] = None,
+        files: set[str] = set(),
+        folders: set[str] = set(),
+        credential_dicts: dict[str, Any] = {},
+        initialized_connection_objects: set[Any] = set(),
+        uninitialized_connection_objects: list[Any] = [],
+        column_to_file: Optional[dict[str, str]] = None,
     ) -> None:
-        self.files: Set[str] = files
-        self.folders: Set[str] = folders
+        self.files: set[str] = files
+        self.folders: set[str] = folders
         self.add_credential_dict(credential_dicts)
-        self.initialized_connection_objects: Set[Any] = initialized_connection_objects
-        self.uninitialized_connection_objects: List[Any] = uninitialized_connection_objects
+        self.initialized_connection_objects: set[Any] = initialized_connection_objects
+        self.uninitialized_connection_objects: list[Any] = uninitialized_connection_objects
         if column_to_file is not None:
             for value in column_to_file.values():
                 if value not in self.files:
                     raise ValueError(f"column_to_file value '{value}' is not in files.")
-        self.column_to_file: Optional[Dict[str, str]] = column_to_file
+        self.column_to_file: Optional[dict[str, str]] = column_to_file
 
     def add_file(self, file: str) -> None:
         self.files.add(file)
@@ -38,7 +38,7 @@ class DataAccessCollection:
     def add_folder(self, folder: str) -> None:
         self.folders.add(folder)
 
-    def add_credential_dict(self, credential_dict: Dict[str, Any]) -> None:
+    def add_credential_dict(self, credential_dict: dict[str, Any]) -> None:
         self.credential_dicts = HashableDict(credential_dict)
 
     def add_initialized_connection_object(self, connection_object: Any) -> None:

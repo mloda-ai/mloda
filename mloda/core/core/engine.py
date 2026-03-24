@@ -34,8 +34,8 @@ class Engine:
     def __init__(
         self,
         features: Features,
-        compute_frameworks: Set[Type[ComputeFramework]],
-        links: Optional[Set[Link]],
+        compute_frameworks: set[type[ComputeFramework]],
+        links: Optional[set[Link]],
         data_access_collection: Optional[DataAccessCollection] = None,
         global_filter: Optional[GlobalFilter] = None,
         api_input_data_collection: Optional[ApiInputDataCollection] = None,
@@ -43,13 +43,13 @@ class Engine:
         column_ordering: Optional[str] = None,
     ) -> None:
         # setup variables which track the primary sources and the compute platforms
-        self.feature_group_collection: Dict[Type[FeatureGroup], Set[Feature]] = defaultdict(set)
+        self.feature_group_collection: dict[type[FeatureGroup], set[Feature]] = defaultdict(set)
 
         # use global filters
         self.global_filter = global_filter
 
         # Tracks feature relation to its parents
-        self.feature_link_parents: Dict[UUID, Set[UUID]] = defaultdict(set)
+        self.feature_link_parents: dict[UUID, set[UUID]] = defaultdict(set)
 
         # get accessible feature groups and their compute platforms
         self.accessible_plugins = PreFilterPlugins(compute_frameworks, plugin_collector).get_accessible_plugins()
@@ -135,8 +135,8 @@ class Engine:
     def _set_compute_framework_and_data_type(
         self,
         feature: Feature,
-        compute_frameworks: Set[Type[ComputeFramework]],
-        feature_group_class: Type[FeatureGroup],
+        compute_frameworks: set[type[ComputeFramework]],
+        feature_group_class: type[FeatureGroup],
     ) -> None:
         """Sets the compute framework and data type for the feature."""
         feature = self.set_compute_framework(feature, compute_frameworks)
@@ -144,7 +144,7 @@ class Engine:
 
     def _identify_feature_group_and_frameworks(
         self, feature: Feature
-    ) -> tuple[Type[FeatureGroup], Set[Type[ComputeFramework]]]:
+    ) -> tuple[type[FeatureGroup], set[type[ComputeFramework]]]:
         """Identifies the feature group class and compute frameworks for a given feature."""
         identifier = IdentifyFeatureGroupClass(
             feature, self.accessible_plugins, self.links, self.data_access_collection
@@ -153,7 +153,7 @@ class Engine:
 
     def _add_index_feature(
         self,
-        feature_group_class: Type[FeatureGroup],
+        feature_group_class: type[FeatureGroup],
         feature_group: FeatureGroup,
         feature: Feature,
         features: Features,
@@ -170,7 +170,7 @@ class Engine:
 
     def _add_index_feature_from_links(
         self,
-        feature_group_class: Type[FeatureGroup],
+        feature_group_class: type[FeatureGroup],
         feature_group: FeatureGroup,
         feature: Feature,
         features: Features,
@@ -203,7 +203,7 @@ class Engine:
 
     def _process_index_feature(
         self,
-        feature_group_class: Type[FeatureGroup],
+        feature_group_class: type[FeatureGroup],
         feature_group: FeatureGroup,
         feature: Feature,
         features: Features,
@@ -222,7 +222,7 @@ class Engine:
 
     def _create_and_add_index_feature(
         self,
-        feature_group_class: Type[FeatureGroup],
+        feature_group_class: type[FeatureGroup],
         feature_group: FeatureGroup,
         feature: Feature,
         features: Features,
@@ -234,7 +234,7 @@ class Engine:
 
     def _add_filter_feature(
         self,
-        feature_group_class: Type[FeatureGroup],
+        feature_group_class: type[FeatureGroup],
         feature_group: FeatureGroup,
         feature: Feature,
         features: Features,
@@ -267,7 +267,7 @@ class Engine:
 
     def add_feature_to_collection(
         self,
-        feature_group_class: Type[FeatureGroup],
+        feature_group_class: type[FeatureGroup],
         feature: Feature,
         child_uuid: Optional[UUID],
         if_index_feature: bool = False,
@@ -303,7 +303,7 @@ class Engine:
 
     def _handle_input_features_recursion(
         self,
-        feature_group_class: Type[FeatureGroup],
+        feature_group_class: type[FeatureGroup],
         uuid: UUID,
         options: Options,
         feature_name: FeatureName,
@@ -328,7 +328,7 @@ class Engine:
             self.feature_link_parents[features.child_uuid] = features.parent_uuids
             self.setup_features_recursion(features)
 
-    def set_compute_framework(self, feature: Feature, compute_frameworks: Set[Type[ComputeFramework]]) -> Feature:
+    def set_compute_framework(self, feature: Feature, compute_frameworks: set[type[ComputeFramework]]) -> Feature:
         """
         This function leads to that the feature has always a compute framework set!
         """
@@ -341,7 +341,7 @@ class Engine:
             feature.compute_frameworks = compute_frameworks
         return feature
 
-    def set_data_type(self, feature: Feature, feature_group_class: Type[FeatureGroup]) -> Optional[DataType]:
+    def set_data_type(self, feature: Feature, feature_group_class: type[FeatureGroup]) -> Optional[DataType]:
         fg_data_type = feature_group_class.return_data_type_rule(feature)
         if feature.data_type and fg_data_type:
             if feature.data_type != fg_data_type:

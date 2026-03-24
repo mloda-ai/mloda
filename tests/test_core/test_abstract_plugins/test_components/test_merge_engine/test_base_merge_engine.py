@@ -39,8 +39,8 @@ class SecondAppendMergeTestFeature(AppendMergeTestFeature):
 
 
 class GroupedAppendMergeTestFeature(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
-        def add_run_id(some_uuid: UUID, right: int = 0) -> Tuple[str]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        def add_run_id(some_uuid: UUID, right: int = 0) -> tuple[str]:
             return (f"{some_uuid}{str(cnt + right)}",)
 
         run_uuid = uuid.uuid4()
@@ -76,7 +76,7 @@ class GroupedAppendMergeTestFeature(FeatureGroup):
 
 
 class Call2GroupedAppendMergeTestFeature(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         iteration = options.get("iteration")
 
         features = frozenset({f"AppendMergeTestFeature{i}" for i in range(iteration)})
@@ -111,7 +111,7 @@ class Call2GroupedAppendMergeTestFeature(FeatureGroup):
 
 class TestBaseMergeEngine:
     def test_prep_append(self) -> None:
-        feature_list: List[str | Feature] = ["AppendMergeTestFeature1"]
+        feature_list: list[str | Feature] = ["AppendMergeTestFeature1"]
 
         result = mloda.run_all(
             feature_list,

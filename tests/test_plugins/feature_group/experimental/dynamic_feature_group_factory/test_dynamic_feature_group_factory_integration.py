@@ -23,7 +23,7 @@ from mloda.provider import DataCreator
 class TestDynamicFeatureGroupFactoryIntegration:
     def test_dynamic_feature_group_integration_simple_calculation(self) -> None:
         # 1. Define Dynamic Feature Group Properties
-        properties: Dict[str, Any] = {
+        properties: dict[str, Any] = {
             "calculate_feature": lambda cls, data, features: pd.DataFrame({"input_feature": [5]}),
             "match_feature_group_criteria": lambda cls, feature_name, options, data_access_collection: (
                 feature_name == FeatureName("input_feature")
@@ -36,7 +36,7 @@ class TestDynamicFeatureGroupFactoryIntegration:
         DynamicFeatureGroupCreator.create(properties, class_name="DynamicTestFeatureGroupSimpleCalc")
 
         # 3. Define the Features
-        features: List[Feature | str] = [
+        features: list[Feature | str] = [
             Feature(name="input_feature"),
         ]
 
@@ -75,7 +75,7 @@ class TestDynamicFeatureGroupFactoryIntegration:
                 return pd.DataFrame({"idx": [1], "source_feature_2": [5]})
 
         # 2. Define Dynamic Feature Group Properties
-        properties: Dict[str, Any] = {
+        properties: dict[str, Any] = {
             "calculate_feature": lambda cls, data, features: pd.DataFrame(
                 {"AggregatedFeature": [data["source_feature_1"].iloc[0] + data["source_feature_2"].iloc[0]]}
             ),
@@ -88,7 +88,7 @@ class TestDynamicFeatureGroupFactoryIntegration:
         )
 
         # 4. Define the Features with Source Definitions
-        features: List[Feature] = [
+        features: list[Feature] = [
             Feature(
                 name="AggregatedFeature",
                 options={

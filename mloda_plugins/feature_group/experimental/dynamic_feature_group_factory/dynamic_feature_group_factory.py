@@ -180,14 +180,14 @@ class DynamicFeatureGroupCreator:
     groups on-the-fly for joining multiple files.
     """
 
-    _created_classes: Dict[str, Type[FeatureGroup]] = {}  # Store created classes
+    _created_classes: dict[str, type[FeatureGroup]] = {}  # Store created classes
 
     @staticmethod
     def create(
-        properties: Dict[str, Any],
+        properties: dict[str, Any],
         class_name: str = "DynamicFeatureGroup",
-        feature_group_cls: Type[FeatureGroup] = FeatureGroup,
-    ) -> Type[FeatureGroup]:
+        feature_group_cls: type[FeatureGroup] = FeatureGroup,
+    ) -> type[FeatureGroup]:
         """
         Creates a new FeatureGroup subclass with the given properties.
 
@@ -209,7 +209,7 @@ class DynamicFeatureGroupCreator:
 
         def match_feature_group_criteria(  # type: ignore[no-untyped-def]
             cls,
-            feature_name: Union[FeatureName, str],
+            feature_name: FeatureName | str,
             options: Options,
             data_access_collection: Optional[DataAccessCollection] = None,
         ) -> bool:
@@ -237,12 +237,12 @@ class DynamicFeatureGroupCreator:
                 return properties["validate_output_features"](cls, data, features)  # type: ignore[no-any-return]
             return super(new_class, cls).validate_output_features(data, features)  # type: ignore[misc, arg-type, no-any-return]
 
-        def artifact(cls) -> Optional[Type[Any]]:  # type: ignore[no-untyped-def]
+        def artifact(cls) -> Optional[type[Any]]:  # type: ignore[no-untyped-def]
             if "artifact" in properties:
                 return properties["artifact"]()  # type: ignore[no-any-return]
             return super(new_class, cls).artifact()  # type: ignore[misc, arg-type, no-any-return]
 
-        def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:  # type: ignore[no-untyped-def]
+        def compute_framework_rule(cls) -> bool | set[type[ComputeFramework]]:  # type: ignore[no-untyped-def]
             if "compute_framework_rule" in properties:
                 return properties["compute_framework_rule"]()  # type: ignore[no-any-return]
             return super(new_class, cls).compute_framework_rule()  # type: ignore[misc, arg-type, no-any-return]
@@ -252,12 +252,12 @@ class DynamicFeatureGroupCreator:
                 return properties["return_data_type_rule"](cls, feature)  # type: ignore[no-any-return]
             return super(new_class, cls).return_data_type_rule(feature)  # type: ignore[misc, arg-type, no-any-return]
 
-        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Any]]:  # type: ignore[no-untyped-def]
+        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Any]]:  # type: ignore[no-untyped-def]
             if "input_features" in properties:
                 return properties["input_features"](self, options, feature_name)  # type: ignore[no-any-return]
             return super(new_class, self).input_features(options, feature_name)  # type: ignore[misc, arg-type, no-any-return]
 
-        def index_columns(cls) -> Optional[List[Index]]:  # type: ignore[no-untyped-def]
+        def index_columns(cls) -> Optional[list[Index]]:  # type: ignore[no-untyped-def]
             if "index_columns" in properties:
                 return properties["index_columns"]()  # type: ignore[no-any-return]
             return super(new_class, cls).index_columns()  # type: ignore[misc, arg-type, no-any-return]

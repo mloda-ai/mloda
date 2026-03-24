@@ -18,7 +18,7 @@ class BaseTestGraphFeatureGroup3(BaseTestFeatureGroup1):
     @classmethod
     def match_feature_group_criteria(
         cls,
-        feature_name: Union[FeatureName, str],
+        feature_name: FeatureName | str,
         options: Options,
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
@@ -27,7 +27,7 @@ class BaseTestGraphFeatureGroup3(BaseTestFeatureGroup1):
         return False
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> bool | set[type[ComputeFramework]]:
         return {GraphComputeFramework2, GraphComputeFramework3}
 
 
@@ -35,7 +35,7 @@ class BaseTestGraphFeatureGroup4(BaseTestGraphFeatureGroup3):
     @classmethod
     def match_feature_group_criteria(
         cls,
-        feature_name: Union[FeatureName, str],
+        feature_name: FeatureName | str,
         options: Options,
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
@@ -44,7 +44,7 @@ class BaseTestGraphFeatureGroup4(BaseTestGraphFeatureGroup3):
         return False
 
     @classmethod
-    def index_columns(cls) -> Optional[List[Index]]:
+    def index_columns(cls) -> Optional[list[Index]]:
         index_1 = Index(tuple(["Index1"]))
         return [index_1]
 
@@ -62,7 +62,7 @@ class GraphComputeFramework3(ComputeFramework):
 
 
 class TestGraphBuildGraph:
-    def get_empty_feature_link_parents(self) -> Dict[UUID, Set[UUID]]:
+    def get_empty_feature_link_parents(self) -> dict[UUID, set[UUID]]:
         return defaultdict(set)
 
     def test_init_graph(self) -> None:
@@ -72,7 +72,7 @@ class TestGraphBuildGraph:
         feature_link_parents[uuid.UUID(int=3)] = {uuid.UUID(int=2), uuid.UUID(int=3)}
         feature_link_parents[uuid.UUID(int=4)] = {uuid.UUID(int=3)}
 
-        feature_group_collection: Dict[Type[FeatureGroup], Set[Feature]] = defaultdict(set)
+        feature_group_collection: dict[type[FeatureGroup], set[Feature]] = defaultdict(set)
         f0, f1, f2, f3, f4 = (
             Feature("GraphFeature2")._set_uuid(uuid.UUID(int=0)),
             Feature("GraphFeature3")._set_uuid(uuid.UUID(int=1)),
@@ -90,7 +90,7 @@ class TestGraphBuildGraph:
         assert len(graph.get_edges()) == 4
 
     def test_add_fg_to_graph(self) -> None:
-        feature_group_collection: Dict[Type[FeatureGroup], Set[Feature]] = defaultdict(set)
+        feature_group_collection: dict[type[FeatureGroup], set[Feature]] = defaultdict(set)
 
         f1 = Feature("BaseTestFeature1", compute_framework="GraphComputeFramework1")
         g2, g3 = Feature("GraphFeature2"), Feature("GraphFeature3")
@@ -130,7 +130,7 @@ class TestGraphBuildGraph:
         """
         This test expects that the compute frameworks for the features were set before correctly.
         """
-        feature_group_collection: Dict[Type[FeatureGroup], Set[Feature]] = defaultdict(set)
+        feature_group_collection: dict[type[FeatureGroup], set[Feature]] = defaultdict(set)
 
         f1 = Feature("BaseTestFeature1", compute_framework="GraphComputeFramework1")
         g2, g3 = Feature("GraphFeature2"), Feature("GraphFeature3")

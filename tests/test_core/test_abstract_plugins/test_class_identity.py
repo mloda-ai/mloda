@@ -31,7 +31,7 @@ def create_feature_group_class(name: str, domain: Domain) -> type:
         def get_domain(cls) -> Domain:
             return domain
 
-        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Any]]:
+        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Any]]:
             return None
 
     DynamicFeatureGroup.__name__ = name
@@ -152,7 +152,7 @@ class TestFeatureGroupClassIdentity:
         assert feature_dict[finance_instance] == "finance_data"
 
 
-def create_domain_feature_group(domain_name: str, feature_value: int) -> Type[FeatureGroup]:
+def create_domain_feature_group(domain_name: str, feature_value: int) -> type[FeatureGroup]:
     """Create a FeatureGroup class with a specific domain and feature value.
 
     All created classes have __name__ = "DomainHandler" to test class identity.
@@ -173,7 +173,7 @@ def create_domain_feature_group(domain_name: str, feature_value: int) -> Type[Fe
             return pd.DataFrame({"domain_feature": [feature_value]})
 
         @classmethod
-        def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+        def compute_framework_rule(cls) -> bool | set[type[ComputeFramework]]:
             return {PandasDataFrame}
 
     return DomainHandler

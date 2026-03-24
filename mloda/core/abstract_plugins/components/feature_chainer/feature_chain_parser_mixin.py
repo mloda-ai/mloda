@@ -152,6 +152,13 @@ class FeatureChainParserMixin:
                 if not cls._validate_string_match(_feature_name, operation_config, source_feature):
                     return False
 
+        # Enforce REQUIRED_WHEN conditional option constraints
+        if result and hasattr(cls, "REQUIRED_WHEN"):
+            required_when = cast(Dict[str, Any], cls.REQUIRED_WHEN)
+            for key, predicate in required_when.items():
+                if predicate(options) and options.get(key) is None:
+                    return False
+
         # Enforce MIN/MAX_IN_FEATURES when in_features is present in options
         if result and hasattr(cls, "MIN_IN_FEATURES") and hasattr(cls, "MAX_IN_FEATURES"):
             in_features_raw = options.get(DefaultOptionKeys.in_features)

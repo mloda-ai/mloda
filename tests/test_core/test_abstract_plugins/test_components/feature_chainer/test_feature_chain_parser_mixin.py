@@ -456,6 +456,62 @@ class TestFeatureChainParserMixinMinMaxInFeatures:
         assert result is True
 
 
+class TestFeatureChainParserMixinListValuedOptions:
+    """Tests for list-valued options in PROPERTY_MAPPING (issue #228)."""
+
+    def test_match_feature_group_criteria_list_valued_option(self) -> None:
+        """Test that match_feature_group_criteria works with list-valued options."""
+
+        class ListValuedFeatureGroup(FeatureChainParserMixin):
+            PROPERTY_MAPPING = {
+                "partition_by": {
+                    "explanation": "List of columns to partition by",
+                    DefaultOptionKeys.context: True,
+                    DefaultOptionKeys.strict_validation: False,
+                },
+            }
+
+        options = Options(context={"partition_by": ["region", "category"]})
+        result = ListValuedFeatureGroup.match_feature_group_criteria("my_feature", options)
+        assert result is True
+
+    def test_match_feature_group_criteria_tuple_valued_option(self) -> None:
+        """Test that match_feature_group_criteria works with tuple-valued options."""
+
+        class TupleValuedFeatureGroup(FeatureChainParserMixin):
+            PROPERTY_MAPPING = {
+                "partition_by": {
+                    "explanation": "Columns to partition by",
+                    DefaultOptionKeys.context: True,
+                    DefaultOptionKeys.strict_validation: False,
+                },
+            }
+
+        options = Options(context={"partition_by": ("region", "category")})
+        result = TupleValuedFeatureGroup.match_feature_group_criteria("my_feature", options)
+        assert result is True
+
+    def test_list_valued_option_preserves_order(self) -> None:
+        """Test that list-valued options preserve element order through tuple conversion."""
+        from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
+
+        property_mapping = {
+            "partition_by": {
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: False,
+            },
+        }
+        options = Options(context={"partition_by": ["col1", "col2", "col3"]})
+        result = FeatureChainParser._validate_options_against_property_mapping(options, property_mapping)
+        assert result is True
+
+    def test_scalar_option_still_works(self) -> None:
+        """Test that scalar (non-list) options still work after the fix."""
+        options = Options(context={"operation": "op1"})
+        result = MockFeatureGroup.match_feature_group_criteria("my_feature", options)
+        assert result is True
+
+
 class TestFeatureChainParserMixinExtractSourceFeatures:
     """Tests for _extract_source_features() classmethod."""
 

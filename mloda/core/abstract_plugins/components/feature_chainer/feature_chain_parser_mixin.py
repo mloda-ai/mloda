@@ -204,6 +204,20 @@ class FeatureChainParserMixin:
                     )
                     return False
 
+        # Enforce type_validator constraints from PROPERTY_MAPPING
+        if result and property_mapping is not None:
+            for key, mapping_entry in property_mapping.items():
+                if not isinstance(mapping_entry, dict):
+                    continue
+                validator = mapping_entry.get(DefaultOptionKeys.type_validator)
+                if validator is None:
+                    continue
+                value = options.get(key)
+                if value is None:
+                    continue
+                if not validator(value):
+                    return False
+
         # Enforce MIN/MAX_IN_FEATURES when in_features is present in options
         if result and hasattr(cls, "MIN_IN_FEATURES") and hasattr(cls, "MAX_IN_FEATURES"):
             in_features_raw = options.get(DefaultOptionKeys.in_features)

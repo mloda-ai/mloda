@@ -32,3 +32,4 @@ class DefaultOptionKeys(str, Enum):
     validation_function = "validation_function"
     strict_type_enforcement = "strict_type_enforcement"
     required_when = "required_when"
+    type_validator = "type_validator"

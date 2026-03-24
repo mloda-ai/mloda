@@ -212,6 +212,28 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return base_match
 ```
 
+#### 4. Operation Resolution with `_resolve_operation()`
+
+Use this helper to extract the operation type from either the feature name pattern or a config key, without calling `FeatureChainParser` directly:
+
+``` python
+class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+    AGGREGATION_TYPE = "aggregation_type"
+
+    @classmethod
+    def _extract_aggregation_type(cls, feature: Feature) -> Optional[str]:
+        # Two-arg form: pass a Feature and the config key
+        return cls._resolve_operation(feature, cls.AGGREGATION_TYPE)
+
+    @classmethod
+    def calculate_feature(cls, data, features):
+        for feature in features.features:
+            agg_type = cls._resolve_operation(feature, cls.AGGREGATION_TYPE)
+            # ... use agg_type
+```
+
+The three-arg form `cls._resolve_operation(feature_name, options, config_key)` is also supported for contexts where the name and options are already separate (e.g., `match_feature_group_criteria`).
+
 ## Modern Implementation in Feature Groups
 
 ### 1. Define PROPERTY_MAPPING Configuration

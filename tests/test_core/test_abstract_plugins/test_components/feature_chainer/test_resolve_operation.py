@@ -86,3 +86,40 @@ class TestResolveOperationIntegration:
         result = MockResolverFG._resolve_operation("my_result", options, "aggregation_type")
         assert isinstance(result, str)
         assert result == "avg"
+
+
+class TestResolveOperationFeatureShorthand:
+    """Tests for the Feature-based calling convention."""
+
+    def test_feature_shorthand_string_match(self) -> None:
+        """Feature shorthand resolves from the feature name pattern."""
+        from mloda.user import Feature
+
+        feature = Feature("source__sum_op", options=Options(context={"aggregation_type": "sum"}))
+        result = MockResolverFG._resolve_operation(feature, "aggregation_type")
+        assert result == "sum"
+
+    def test_feature_shorthand_config_fallback(self) -> None:
+        """Feature shorthand falls back to options when pattern does not match."""
+        from mloda.user import Feature
+
+        feature = Feature("my_result", options=Options(context={"aggregation_type": "avg"}))
+        result = MockResolverFG._resolve_operation(feature, "aggregation_type")
+        assert result == "avg"
+
+    def test_feature_shorthand_returns_none(self) -> None:
+        """Feature shorthand returns None when neither path resolves."""
+        from mloda.user import Feature
+
+        feature = Feature("my_result", options=Options(context={}))
+        result = MockResolverFG._resolve_operation(feature, "aggregation_type")
+        assert result is None
+
+    def test_feature_shorthand_matches_three_arg_form(self) -> None:
+        """Both calling conventions return the same result."""
+        from mloda.user import Feature
+
+        feature = Feature("source__sum_op", options=Options(context={"aggregation_type": "sum"}))
+        shorthand = MockResolverFG._resolve_operation(feature, "aggregation_type")
+        explicit = MockResolverFG._resolve_operation("source__sum_op", feature.options, "aggregation_type")
+        assert shorthand == explicit == "sum"

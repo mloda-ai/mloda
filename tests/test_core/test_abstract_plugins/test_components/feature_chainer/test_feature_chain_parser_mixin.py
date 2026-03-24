@@ -1,5 +1,7 @@
 """Tests for FeatureChainParserMixin."""
 
+from typing import Optional
+
 import pytest
 
 from mloda.user import Feature
@@ -46,6 +48,31 @@ class MockFeatureGroupWithMinMax(FeatureChainParserMixin):
     PREFIX_PATTERN = r".*__([\w]+)_test$"
     MIN_IN_FEATURES = 2
     MAX_IN_FEATURES = 3
+    PROPERTY_MAPPING = {
+        "operation": {
+            "op1": "Operation 1",
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
+        }
+    }
+
+
+class _HiddenAttribute:
+    """Descriptor that makes hasattr return False by raising AttributeError."""
+
+    def __set_name__(self, owner: type, name: str) -> None:
+        self.name = name
+
+    def __get__(self, obj: object, objtype: Optional[type] = None) -> None:
+        raise AttributeError(self.name)
+
+
+class MockFeatureGroupWithoutMinMax(FeatureChainParserMixin):
+    """Mock Feature group without MIN/MAX_IN_FEATURES to test hasattr guard."""
+
+    PREFIX_PATTERN = r".*__([\w]+)_test$"
+    MIN_IN_FEATURES = _HiddenAttribute()  # type: ignore[assignment]
+    MAX_IN_FEATURES = _HiddenAttribute()
     PROPERTY_MAPPING = {
         "operation": {
             "op1": "Operation 1",
@@ -413,6 +440,19 @@ class TestFeatureChainParserMixinMinMaxInFeatures:
         )
         # MockFeatureGroup has default MIN=1, MAX=None
         result = MockFeatureGroup.match_feature_group_criteria("any_name", options)
+        assert result is True
+
+    def test_missing_min_max_attributes_skips_validation(self) -> None:
+        """When MIN/MAX_IN_FEATURES attributes are absent, validation is skipped."""
+        options = Options(
+            context={
+                "operation": "op1",
+                "in_features": "single_feature",
+            }
+        )
+        assert not hasattr(MockFeatureGroupWithoutMinMax, "MIN_IN_FEATURES")
+        assert not hasattr(MockFeatureGroupWithoutMinMax, "MAX_IN_FEATURES")
+        result = MockFeatureGroupWithoutMinMax.match_feature_group_criteria("any_name", options)
         assert result is True
 
 

@@ -153,7 +153,7 @@ class FeatureChainParserMixin:
                     return False
 
         # Enforce MIN/MAX_IN_FEATURES when in_features is present in options
-        if result:
+        if result and hasattr(cls, "MIN_IN_FEATURES") and hasattr(cls, "MAX_IN_FEATURES"):
             in_features_raw = options.get(DefaultOptionKeys.in_features)
             if in_features_raw is not None:
                 in_features = options.get_in_features()

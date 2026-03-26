@@ -210,3 +210,57 @@ class FeatureChainParserMixin:
         # Configuration-based fallback using get_in_features()
         in_features_set = feature.options.get_in_features()
         return [f.get_name() for f in in_features_set]
+
+    @classmethod
+    def _resolve_operation(
+        cls,
+        feature_or_name: Any,
+        options_or_key: Any,
+        config_key: Optional[str] = None,
+    ) -> Optional[str]:
+        """Resolve the operation type from either a chained feature name or options.
+
+        Many feature groups need to extract an operation type (e.g. aggregation type,
+        scaler type, algorithm) from a feature. The value can come from the feature
+        name string (parsed via PREFIX_PATTERN) or from a configuration key in options.
+        This helper encapsulates that dual-path lookup.
+
+        Supports two calling conventions:
+
+        1. ``cls._resolve_operation(feature, config_key)``
+           Extracts the name and options from the Feature object.
+
+        2. ``cls._resolve_operation(feature_name, options, config_key)``
+           Uses the provided name (str or FeatureName) and Options separately.
+
+        The string-based path always takes precedence. If the feature name matches
+        PREFIX_PATTERN, the captured group is returned. Otherwise, falls back to
+        ``options.get(config_key)`` and converts to string.
+
+        Args:
+            feature_or_name: A Feature object (convention 1) or a feature name
+                as str/FeatureName (convention 2).
+            options_or_key: The config_key str (convention 1) or an Options
+                object (convention 2).
+            config_key: The options key to fall back on (convention 2 only).
+
+        Returns:
+            The resolved operation as a string, or None if neither path matches.
+        """
+        if isinstance(feature_or_name, Feature) and isinstance(options_or_key, str):
+            _name = feature_or_name.get_name()
+            _options = feature_or_name.options
+            _key = options_or_key
+        else:
+            _name = feature_or_name.name if isinstance(feature_or_name, FeatureName) else str(feature_or_name)
+            _options = options_or_key
+            _key = config_key if config_key is not None else ""
+
+        prefix_patterns = cls._get_prefix_patterns()
+        operation_config, _ = FeatureChainParser.parse_feature_name(_name, prefix_patterns, CHAIN_SEPARATOR)
+        if operation_config is not None:
+            return operation_config
+        value = _options.get(_key)
+        if value is not None:
+            return str(value)
+        return None

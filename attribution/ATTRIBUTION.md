@@ -12,11 +12,11 @@
 | charset-normalizer                     | 3.4.6           | MIT                                  |
 | click                                  | 8.3.1           | BSD-3-Clause                         |
 | comm                                   | 0.2.3           | BSD License                          |
-| cyclonedx-python-lib                   | 9.1.0           | Apache Software License              |
+| cyclonedx-python-lib                   | 11.7.0          | Apache Software License              |
 | debugpy                                | 1.8.20          | MIT License                          |
 | decorator                              | 5.2.1           | BSD License                          |
 | defusedxml                             | 0.7.1           | Python Software Foundation License   |
-| duckdb                                 | 1.5.0           | MIT License                          |
+| duckdb                                 | 1.5.1           | MIT License                          |
 | exceptiongroup                         | 1.3.1           | MIT License                          |
 | execnet                                | 2.1.2           | MIT License                          |
 | executing                              | 2.2.1           | MIT License                          |
@@ -39,7 +39,7 @@
 | matplotlib-inline                      | 0.2.1           | UNKNOWN                              |
 | mdurl                                  | 0.1.2           | MIT License                          |
 | mktestdocs                             | 0.2.5           | MIT                                  |
-| mloda                                  | 0.5.3           | Apache-2.0                           |
+| mloda                                  | 0.5.5           | Apache-2.0                           |
 | mmh3                                   | 5.2.1           | MIT License                          |
 | msgpack                                | 1.1.2           | Apache-2.0                           |
 | mypy                                   | 1.19.1          | MIT License                          |
@@ -47,7 +47,7 @@
 | nbclient                               | 0.10.4          | BSD License                          |
 | nbformat                               | 5.10.4          | BSD License                          |
 | nest-asyncio                           | 1.6.0           | BSD License                          |
-| nltk                                   | 3.9.3           | Apache Software License              |
+| nltk                                   | 3.9.4           | Apache Software License              |
 | numpy                                  | 2.2.6           | BSD License                          |
 | opentelemetry-api                      | 1.40.0          | Apache-2.0                           |
 | opentelemetry-instrumentation          | 0.61b0          | Apache Software License              |
@@ -65,7 +65,7 @@
 | pexpect                                | 4.9.0           | ISC License (ISCL)                   |
 | pip-api                                | 0.0.34          | Apache Software License              |
 | pip-requirements-parser                | 32.0.1          | MIT                                  |
-| pip_audit                              | 2.9.0           | Apache Software License              |
+| pip_audit                              | 2.10.0          | Apache Software License              |
 | platformdirs                           | 4.9.4           | MIT License                          |
 | pluggy                                 | 1.6.0           | MIT License                          |
 | polars                                 | 1.39.3          | MIT License                          |
@@ -90,7 +90,7 @@
 | pyzmq                                  | 27.1.0          | BSD License                          |
 | referencing                            | 0.37.0          | MIT                                  |
 | regex                                  | 2026.2.28       | Apache-2.0 AND CNRI-Python           |
-| requests                               | 2.32.5          | Apache Software License              |
+| requests                               | 2.33.0          | Apache Software License              |
 | rich                                   | 14.3.3          | MIT License                          |
 | rpds-py                                | 0.30.0          | MIT                                  |
 | ruff                                   | 0.15.7          | MIT License                          |
@@ -105,12 +105,13 @@
 | testbook                               | 0.4.2           | BSD License                          |
 | threadpoolctl                          | 3.6.0           | BSD License                          |
 | toml                                   | 0.10.2          | MIT License                          |
+| tomli_w                                | 1.2.0           | MIT License                          |
 | tornado                                | 6.5.5           | Apache Software License              |
 | tqdm                                   | 4.67.3          | MPL-2.0 AND MIT                      |
 | traitlets                              | 5.14.3          | BSD License                          |
 | typeguard                              | 4.5.1           | MIT                                  |
 | types-PyYAML                           | 6.0.12.20250915 | Apache-2.0                           |
-| types-requests                         | 2.32.4.20260107 | Apache-2.0                           |
+| types-requests                         | 2.32.4.20260324 | Apache-2.0                           |
 | types-toml                             | 0.10.8.20240310 | Apache Software License              |
 | typing-inspect                         | 0.9.0           | MIT License                          |
 | typing-inspection                      | 0.4.2           | MIT                                  |

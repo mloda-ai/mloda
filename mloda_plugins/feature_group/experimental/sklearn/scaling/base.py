@@ -208,22 +208,14 @@ class ScalingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Raises:
             ValueError: If scaler type is unsupported
         """
-        feature_name_str = feature.name.name if hasattr(feature.name, "name") else str(feature.name)
-
-        # Try string-based parsing first
-        if FeatureChainParser.is_chained_feature(feature_name_str):
-            scaler_type = cls.get_scaler_type(feature_name_str)
-            return scaler_type
-
-        # Fall back to configuration-based approach
-        scaler_type = feature.options[cls.SCALER_TYPE]
+        scaler_type = cls._resolve_operation(feature, cls.SCALER_TYPE)
 
         if scaler_type is not None and scaler_type not in cls.SUPPORTED_SCALERS:
             raise ValueError(
                 f"Unsupported scaler type: {scaler_type}. Supported types: {', '.join(cls.SUPPORTED_SCALERS.keys())}"
             )
 
-        return str(scaler_type) if scaler_type is not None else None
+        return scaler_type
 
     @classmethod
     def _import_sklearn_components(cls) -> Dict[str, Any]:

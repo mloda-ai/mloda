@@ -139,14 +139,7 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Returns:
             The aggregation type, or None if not found
         """
-        # Try string-based parsing first
-        aggregation_type, _ = FeatureChainParser.parse_feature_name(feature.name, [cls.PREFIX_PATTERN])
-        if aggregation_type is not None:
-            return aggregation_type
-
-        # Fall back to configuration
-        aggregation_type = feature.options[cls.AGGREGATION_TYPE]
-        return str(aggregation_type) if aggregation_type is not None else None
+        return cls._resolve_operation(feature, cls.AGGREGATION_TYPE)
 
     @classmethod
     def _extract_aggr_and_source_feature(cls, feature: Feature) -> tuple[str, str]:

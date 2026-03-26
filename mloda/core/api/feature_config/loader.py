@@ -10,7 +10,7 @@ from mloda.user import Feature
 from mloda.user import Options
 from mloda.core.api.feature_config.parser import parse_json
 from mloda.core.api.feature_config.models import FeatureConfig
-from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
+from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 
 
 def process_nested_features(options: Dict[str, Any]) -> Dict[str, Any]:

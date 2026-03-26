@@ -5,7 +5,7 @@ from copy import deepcopy
 
 from mloda.core.abstract_plugins.components.hashable_dict import _make_hashable
 from mloda.core.abstract_plugins.components.validators.options_validator import OptionsValidator
-from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
+from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.components.feature import Feature

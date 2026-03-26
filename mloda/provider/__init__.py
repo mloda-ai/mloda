@@ -40,7 +40,7 @@ from mloda.core.abstract_plugins.components.validators.datatype_validator import
 )
 
 # Option keys
-from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
+from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 
 # Feature chaining
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser

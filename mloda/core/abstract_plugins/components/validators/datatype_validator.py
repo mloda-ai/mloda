@@ -66,7 +66,7 @@ class DataTypeValidator:
             strict_only: If True, only validate when strict_type_enforcement is enabled.
                         This maintains backward compatibility with existing code.
         """
-        from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
+        from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 
         for feature in features.features:
             if feature.data_type is None:

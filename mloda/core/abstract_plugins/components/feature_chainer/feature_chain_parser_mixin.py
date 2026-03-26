@@ -23,15 +23,16 @@ class FeatureChainParserMixin:
 
     Subclasses should define:
     - PREFIX_PATTERN or SUFFIX_PATTERN: Regex patterns for matching
-    - PROPERTY_MAPPING: Property validation mapping
+    - PROPERTY_MAPPING: Property validation mapping (see docs/in_depth/property-mapping.md)
     - IN_FEATURE_SEPARATOR: Optional custom separator (default: "&")
     - MIN_IN_FEATURES: Optional minimum in_feature count (default: 1)
     - MAX_IN_FEATURES: Optional maximum in_feature count (default: None)
-    PROPERTY_MAPPING entries may include:
-    - ``DefaultOptionKeys.required_when``: A predicate callable that receives the
-      Options object and returns True if the option is required. When the predicate
-      returns True and the option is absent, match_feature_group_criteria returns False.
-      Entries with ``required_when`` are treated as optional by the base parser.
+
+    PROPERTY_MAPPING supports conditional requirements via ``DefaultOptionKeys.required_when``.
+    Attach a predicate ``(Options) -> bool`` to any mapping entry. When the predicate returns
+    True and the option value is absent, ``match_feature_group_criteria`` rejects the match.
+    When the predicate returns False, the option is treated as optional.
+    See docs/in_depth/property-mapping.md for full details and examples.
     """
 
     IN_FEATURE_SEPARATOR: str = INPUT_SEPARATOR

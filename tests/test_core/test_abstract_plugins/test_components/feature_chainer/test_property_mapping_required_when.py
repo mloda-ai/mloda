@@ -2,10 +2,22 @@
 
 from __future__ import annotations
 
+from typing import Any, Optional, Set, Type, Union
+
+import pandas as pd
+import pytest
+
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
 )
+from mloda.core.abstract_plugins.components.feature_name import FeatureName
+from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.provider import DataCreator
+from mloda.user import Feature, PluginCollector, mloda
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
 
 
@@ -111,3 +123,98 @@ class TestRequiredWhenIntegration:
             "source__first_windowed", options
         )
         assert result is True
+
+
+_RUN_ALL_ORDER_DEPENDENT = {"first", "last"}
+
+
+def _run_all_needs_order_by(options: Options) -> bool:
+    """Predicate for the mloda.run_all integration test FeatureGroup."""
+    agg_type = options.get("aggregation_type")
+    return agg_type in _RUN_ALL_ORDER_DEPENDENT
+
+
+class ConditionalRequiredFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+    """Full FeatureGroup with required_when for mloda.run_all integration testing."""
+
+    PREFIX_PATTERN = r".*__([\w]+)_windowed$"
+
+    PROPERTY_MAPPING = {
+        "aggregation_type": {
+            "sum": "Sum of values",
+            "first": "First value (requires order_by)",
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
+        },
+        "order_by": {
+            "explanation": "Column to order by within each partition",
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: False,
+            DefaultOptionKeys.required_when: _run_all_needs_order_by,
+        },
+    }
+
+    @classmethod
+    def input_data(cls) -> Optional[DataCreator]:
+        return DataCreator({"result_feature"})
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Any]]:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        feature_name = features.get_name_of_one_feature().name
+        agg_type = features.get_options_key("aggregation_type")
+        return pd.DataFrame({feature_name: [f"computed_{agg_type}"]})
+
+    @classmethod
+    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+        return {PandasDataFrame}
+
+
+class TestRequiredWhenRunAll:
+    """Integration test: mloda.run_all enforces required_when end-to-end."""
+
+    def test_run_all_accepts_sum_without_order_by(self) -> None:
+        """mloda.run_all succeeds for sum (predicate False, order_by not required)."""
+        plugin_collector = PluginCollector.enabled_feature_groups({ConditionalRequiredFeatureGroup})
+        feature = Feature(
+            "result_feature",
+            Options(context={"aggregation_type": "sum"}),
+        )
+        results = mloda.run_all(
+            features=[feature],
+            compute_frameworks={PandasDataFrame},
+            plugin_collector=plugin_collector,
+        )
+        assert len(results) == 1
+        assert results[0]["result_feature"].iloc[0] == "computed_sum"
+
+    def test_run_all_accepts_first_with_order_by(self) -> None:
+        """mloda.run_all succeeds for first when order_by is provided."""
+        plugin_collector = PluginCollector.enabled_feature_groups({ConditionalRequiredFeatureGroup})
+        feature = Feature(
+            "result_feature",
+            Options(context={"aggregation_type": "first", "order_by": "timestamp"}),
+        )
+        results = mloda.run_all(
+            features=[feature],
+            compute_frameworks={PandasDataFrame},
+            plugin_collector=plugin_collector,
+        )
+        assert len(results) == 1
+        assert results[0]["result_feature"].iloc[0] == "computed_first"
+
+    def test_run_all_rejects_first_without_order_by(self) -> None:
+        """mloda.run_all raises when first is used without order_by (predicate True, option absent)."""
+        plugin_collector = PluginCollector.enabled_feature_groups({ConditionalRequiredFeatureGroup})
+        feature = Feature(
+            "result_feature",
+            Options(context={"aggregation_type": "first"}),
+        )
+        with pytest.raises(Exception):
+            mloda.run_all(
+                features=[feature],
+                compute_frameworks={PandasDataFrame},
+                plugin_collector=plugin_collector,
+            )

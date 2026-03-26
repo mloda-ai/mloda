@@ -107,9 +107,7 @@ class ListValuedFeatureGroup(FeatureGroup):
 class TestListValuedOptionsE2E:
     """End-to-end tests for list-valued options through the mloda pipeline."""
 
-    plugin_collector = PluginCollector.enabled_feature_groups(
-        {ListValuedTestDataCreator, ListValuedFeatureGroup}
-    )
+    plugin_collector = PluginCollector.enabled_feature_groups({ListValuedTestDataCreator, ListValuedFeatureGroup})
 
     def test_list_valued_option_order_preserved(self) -> None:
         """List-valued option order is preserved through the pipeline.

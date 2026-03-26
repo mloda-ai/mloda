@@ -218,7 +218,12 @@ class FeatureChainParserMixin:
         options_or_key: Any,
         config_key: Optional[str] = None,
     ) -> Optional[str]:
-        """Resolve the operation from a feature name or config-based options key.
+        """Resolve the operation type from either a chained feature name or options.
+
+        Many feature groups need to extract an operation type (e.g. aggregation type,
+        scaler type, algorithm) from a feature. The value can come from the feature
+        name string (parsed via PREFIX_PATTERN) or from a configuration key in options.
+        This helper encapsulates that dual-path lookup.
 
         Supports two calling conventions:
 
@@ -228,9 +233,16 @@ class FeatureChainParserMixin:
         2. ``cls._resolve_operation(feature_name, options, config_key)``
            Uses the provided name (str or FeatureName) and Options separately.
 
-        In both cases, tries string-based parsing via PREFIX_PATTERN first.
-        If the feature name matches, returns the parsed operation. Otherwise,
-        falls back to ``options.get(config_key)`` and converts to string.
+        The string-based path always takes precedence. If the feature name matches
+        PREFIX_PATTERN, the captured group is returned. Otherwise, falls back to
+        ``options.get(config_key)`` and converts to string.
+
+        Args:
+            feature_or_name: A Feature object (convention 1) or a feature name
+                as str/FeatureName (convention 2).
+            options_or_key: The config_key str (convention 1) or an Options
+                object (convention 2).
+            config_key: The options key to fall back on (convention 2 only).
 
         Returns:
             The resolved operation as a string, or None if neither path matches.

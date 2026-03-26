@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+import pytest
+
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
 )
@@ -202,3 +204,27 @@ class TestTypeConstraintIntegrationRunAll:
 
         assert len(results) == 1
         assert "sales_sum" in results[0].columns
+
+    def test_invalid_type_raises_value_error(self) -> None:
+        """Feature with invalid partition_by type is rejected and raises ValueError."""
+        plugin_collector = PluginCollector.enabled_feature_groups(
+            {TypeValidatorTestDataCreator, TypeValidatedAggregation}
+        )
+
+        feature = Feature(
+            "sales_sum",
+            Options(
+                context={
+                    "aggregation_type": "sum",
+                    "in_features": "Sales",
+                    "partition_by": "region",
+                }
+            ),
+        )
+
+        with pytest.raises(ValueError, match="No feature groups found"):
+            mloda.run_all(
+                [feature],
+                compute_frameworks={PandasDataFrame},
+                plugin_collector=plugin_collector,
+            )

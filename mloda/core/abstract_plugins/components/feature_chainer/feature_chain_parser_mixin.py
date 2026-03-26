@@ -141,10 +141,19 @@ class FeatureChainParserMixin:
         Delegates to FeatureChainParser.match_configuration_feature_chain_parser() and
         optionally calls _validate_string_match() hook for custom validation.
 
+        After basic matching succeeds, enforces ``type_validator`` constraints from
+        PROPERTY_MAPPING entries. If a mapping entry defines a
+        ``DefaultOptionKeys.type_validator`` callable and the corresponding option
+        value is present, the validator is called with the value. Returning False
+        from the validator causes this method to return False.
+
+        Also enforces MIN_IN_FEATURES / MAX_IN_FEATURES constraints when
+        in_features is present in options.
+
         Args:
             feature_name: Feature name to match
             options: Options containing configuration
-            data_access_collection: Optional data access collection (unused)
+            _data_access_collection: Optional data access collection (unused)
 
         Returns:
             True if feature matches criteria, False otherwise

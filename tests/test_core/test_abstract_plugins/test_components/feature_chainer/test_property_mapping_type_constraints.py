@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Dict
 
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
 )
+from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.provider import ComputeFramework, FeatureGroup
+from mloda.user import Feature, PluginCollector, mloda
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+
+from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
 
 def _is_list_of_strings(value: Any) -> bool:
@@ -109,3 +115,90 @@ class TestTypeConstraintValidation:
             "source__sum_typed", options
         )
         assert result is False
+
+
+def _is_list_of_strings_strict(value: Any) -> bool:
+    return isinstance(value, list) and all(isinstance(item, str) for item in value)
+
+
+class TypeValidatorTestDataCreator(ATestDataCreator):
+    compute_framework = PandasDataFrame
+
+    @classmethod
+    def get_raw_data(cls) -> Dict[str, Any]:
+        return {
+            "Sales": [100, 200, 300, 400, 500],
+            "region": ["A", "A", "B", "B", "A"],
+        }
+
+
+class TypeValidatedAggregation(FeatureChainParserMixin, FeatureGroup):
+    """Feature group that uses type_validator to enforce partition_by is list[str]."""
+
+    PREFIX_PATTERN = r".*__([\w]+)_tvaggr$"
+    AGGREGATION_TYPE = "aggregation_type"
+    PARTITION_BY = "partition_by"
+    MIN_IN_FEATURES = 1
+    MAX_IN_FEATURES = 1
+
+    PROPERTY_MAPPING = {
+        "aggregation_type": {
+            "sum": "Sum of values",
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
+        },
+        "partition_by": {
+            "explanation": "List of columns to partition by",
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: False,
+            DefaultOptionKeys.type_validator: _is_list_of_strings_strict,
+        },
+    }
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        table = data
+        for feature in features.features:
+            agg_type = str(feature.options.get(cls.AGGREGATION_TYPE))
+            source_features = cls._extract_source_features(feature)
+            source_col = source_features[0]
+            partition_by = feature.options.get(cls.PARTITION_BY)
+
+            if agg_type == "sum":
+                result = table.groupby(partition_by, dropna=False)[source_col].transform("sum")
+                table[feature.get_name()] = result
+        return table
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+class TestTypeConstraintIntegrationRunAll:
+    """End-to-end test: type_validator works through mloda.run_all()."""
+
+    def test_valid_type_runs_successfully(self) -> None:
+        """Feature with valid partition_by type runs through the full pipeline."""
+        plugin_collector = PluginCollector.enabled_feature_groups(
+            {TypeValidatorTestDataCreator, TypeValidatedAggregation}
+        )
+
+        feature = Feature(
+            "sales_sum",
+            Options(
+                context={
+                    "aggregation_type": "sum",
+                    "in_features": "Sales",
+                    "partition_by": ["region"],
+                }
+            ),
+        )
+
+        results = mloda.run_all(
+            [feature],
+            compute_frameworks={PandasDataFrame},
+            plugin_collector=plugin_collector,
+        )
+
+        assert len(results) == 1
+        assert "sales_sum" in results[0].columns

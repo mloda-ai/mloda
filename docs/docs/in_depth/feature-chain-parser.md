@@ -221,13 +221,9 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     AGGREGATION_TYPE = "aggregation_type"
 
     @classmethod
-    def _extract_aggregation_type(cls, feature: Feature) -> Optional[str]:
-        # Two-arg form: pass a Feature and the config key
-        return cls._resolve_operation(feature, cls.AGGREGATION_TYPE)
-
-    @classmethod
     def calculate_feature(cls, data, features):
         for feature in features.features:
+            # Two-arg form: pass a Feature and the config key
             agg_type = cls._resolve_operation(feature, cls.AGGREGATION_TYPE)
             # ... use agg_type
 ```

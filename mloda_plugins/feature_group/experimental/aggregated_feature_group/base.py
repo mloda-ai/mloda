@@ -5,7 +5,7 @@ Base implementation for aggregated feature groups.
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Any, List, Optional, Set
+from typing import Any, List, Set
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
@@ -127,21 +127,6 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return prefix_part
 
     @classmethod
-    def _extract_aggregation_type(cls, feature: Feature) -> Optional[str]:
-        """
-        Extract aggregation type from a feature.
-
-        Tries string-based parsing first, falls back to configuration.
-
-        Args:
-            feature: The feature to extract aggregation type from
-
-        Returns:
-            The aggregation type, or None if not found
-        """
-        return cls._resolve_operation(feature, cls.AGGREGATION_TYPE)
-
-    @classmethod
     def _extract_aggr_and_source_feature(cls, feature: Feature) -> tuple[str, str]:
         """
         Extract aggregation type and source feature name from a feature.
@@ -161,7 +146,7 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         source_features = cls._extract_source_features(feature)
 
         # Extract aggregation type
-        aggregation_type = cls._extract_aggregation_type(feature)
+        aggregation_type = cls._resolve_operation(feature, cls.AGGREGATION_TYPE)
 
         if aggregation_type is None:
             raise ValueError(f"Could not extract aggregation type from: {feature.name}")

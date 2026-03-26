@@ -27,10 +27,11 @@ class FeatureChainParserMixin:
     - IN_FEATURE_SEPARATOR: Optional custom separator (default: "&")
     - MIN_IN_FEATURES: Optional minimum in_feature count (default: 1)
     - MAX_IN_FEATURES: Optional maximum in_feature count (default: None)
-    - REQUIRED_WHEN: Optional dict mapping option keys to predicate callables.
-      Each predicate receives the Options object and returns True if the option
-      is required. When the predicate returns True and the option is absent,
-      match_feature_group_criteria returns False.
+    PROPERTY_MAPPING entries may include:
+    - ``DefaultOptionKeys.required_when``: A predicate callable that receives the
+      Options object and returns True if the option is required. When the predicate
+      returns True and the option is absent, match_feature_group_criteria returns False.
+      Entries with ``required_when`` are treated as optional by the base parser.
     """
 
     IN_FEATURE_SEPARATOR: str = INPUT_SEPARATOR
@@ -156,10 +157,14 @@ class FeatureChainParserMixin:
                 if not cls._validate_string_match(_feature_name, operation_config, source_feature):
                     return False
 
-        # Enforce REQUIRED_WHEN conditional option constraints
-        if result and hasattr(cls, "REQUIRED_WHEN"):
-            required_when = cast(Dict[str, Any], cls.REQUIRED_WHEN)
-            for key, predicate in required_when.items():
+        # Enforce required_when constraints from PROPERTY_MAPPING
+        if result and property_mapping is not None:
+            for key, mapping_entry in property_mapping.items():
+                if not isinstance(mapping_entry, dict):
+                    continue
+                predicate = mapping_entry.get(DefaultOptionKeys.required_when)
+                if predicate is None:
+                    continue
                 if predicate(options) and options.get(key) is None:
                     return False
 

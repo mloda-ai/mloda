@@ -99,8 +99,10 @@ class FeatureChainParser:
 
     @classmethod
     def _has_default_value(cls, property_value: Any) -> bool:
-        """Check if property has a default value defined."""
-        return isinstance(property_value, dict) and DefaultOptionKeys.default in property_value
+        """Check if property has a default value or is conditionally required."""
+        if not isinstance(property_value, dict):
+            return False
+        return DefaultOptionKeys.default in property_value or DefaultOptionKeys.required_when in property_value
 
     @classmethod
     def _is_context_parameter(cls, property_value: Any) -> bool:

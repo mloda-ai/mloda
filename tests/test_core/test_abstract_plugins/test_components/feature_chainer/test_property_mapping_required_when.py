@@ -1,8 +1,6 @@
-"""Tests for REQUIRED_WHEN conditional option support."""
+"""Tests for required_when conditional option support in PROPERTY_MAPPING."""
 
 from __future__ import annotations
-
-from typing import Any
 
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
@@ -21,7 +19,7 @@ def _needs_order_by(options: Options) -> bool:
 
 
 class MockWithConditionalRequired(FeatureChainParserMixin):
-    """Feature group with a conditionally required order_by option."""
+    """Feature group with a conditionally required order_by in PROPERTY_MAPPING."""
 
     PREFIX_PATTERN = r".*__([\w]+)_windowed$"
 
@@ -34,15 +32,17 @@ class MockWithConditionalRequired(FeatureChainParserMixin):
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
         },
-    }
-
-    REQUIRED_WHEN: dict[str, Any] = {
-        "order_by": _needs_order_by,
+        "order_by": {
+            "explanation": "Column to order by within each partition",
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: False,
+            DefaultOptionKeys.required_when: _needs_order_by,
+        },
     }
 
 
 class TestRequiredWhenUnit:
-    """Unit tests for REQUIRED_WHEN predicate."""
+    """Unit tests for required_when predicate in PROPERTY_MAPPING."""
 
     def test_rejects_when_predicate_true_and_option_absent(self) -> None:
         """When predicate returns True and the option is absent, matching fails."""
@@ -97,7 +97,7 @@ class TestRequiredWhenIntegration:
         assert MockWithConditionalRequired.match_feature_group_criteria("my_feat", options) is True
 
     def test_string_match_first_without_order_by_rejected(self) -> None:
-        """String-based matching also enforces REQUIRED_WHEN."""
+        """String-based matching also enforces required_when."""
         options = Options(context={"aggregation_type": "first"})
         result = MockWithConditionalRequired.match_feature_group_criteria(
             "source__first_windowed", options
@@ -105,7 +105,7 @@ class TestRequiredWhenIntegration:
         assert result is False
 
     def test_string_match_first_with_order_by_accepted(self) -> None:
-        """String-based matching passes when REQUIRED_WHEN is satisfied."""
+        """String-based matching passes when required_when is satisfied."""
         options = Options(context={"aggregation_type": "first", "order_by": "ts"})
         result = MockWithConditionalRequired.match_feature_group_criteria(
             "source__first_windowed", options

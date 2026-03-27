@@ -32,6 +32,12 @@ class FeatureChainParserMixin:
     Attach a predicate ``(Options) -> bool`` to any mapping entry. When the predicate returns
     True and the option value is absent, ``match_feature_group_criteria`` rejects the match.
     When the predicate returns False, the option is treated as optional.
+
+    This works for both string-based and configuration-based feature creation. For
+    string-based features, the operation value parsed from the feature name is merged
+    into effective options before predicate evaluation, so predicates see values from
+    both the feature name and explicit options.
+
     See docs/in_depth/property-mapping.md for full details and examples.
     """
 
@@ -158,15 +164,20 @@ class FeatureChainParserMixin:
                 if not cls._validate_string_match(_feature_name, operation_config, source_feature):
                     return False
 
-        # Enforce required_when constraints from PROPERTY_MAPPING
+        # Enforce required_when constraints from PROPERTY_MAPPING.
+        # Build effective options by merging string-parsed operation_config into
+        # the Options object so predicates see values from both sources.
         if result and property_mapping is not None:
+            effective_options = cls._build_effective_options(
+                _feature_name, prefix_patterns, property_mapping, options
+            )
             for key, mapping_entry in property_mapping.items():
                 if not isinstance(mapping_entry, dict):
                     continue
                 predicate = mapping_entry.get(DefaultOptionKeys.required_when)
                 if predicate is None:
                     continue
-                if predicate(options) and options.get(key) is None:
+                if predicate(effective_options) and effective_options.get(key) is None:
                     return False
 
         # Enforce MIN/MAX_IN_FEATURES when in_features is present in options
@@ -198,6 +209,45 @@ class FeatureChainParserMixin:
         if hasattr(cls, "PROPERTY_MAPPING"):
             return cast(Dict[str, Any], cls.PROPERTY_MAPPING)
         return None
+
+    @classmethod
+    def _build_effective_options(
+        cls,
+        feature_name: str,
+        prefix_patterns: List[str],
+        property_mapping: Dict[str, Any],
+        options: Options,
+    ) -> Options:
+        """Build effective options by merging string-parsed values with explicit options.
+
+        When a feature is matched by string pattern, the operation_config value extracted
+        from the feature name is mapped to the corresponding PROPERTY_MAPPING key. This
+        ensures that required_when predicates see values from both sources.
+
+        If the feature is not string-based or no mapping key matches, returns the
+        original options unchanged.
+        """
+        operation_config, _source_feature = FeatureChainParser.parse_feature_name(
+            feature_name, prefix_patterns, CHAIN_SEPARATOR
+        )
+        if operation_config is None:
+            return options
+
+        # Find which property mapping key the operation_config value belongs to
+        for prop_key, prop_value in property_mapping.items():
+            if not isinstance(prop_value, dict):
+                continue
+            # Already present in options: no merge needed
+            if options.get(prop_key) is not None:
+                continue
+            # Check if operation_config is a valid value for this property
+            extracted = FeatureChainParser._extract_property_values(prop_value)
+            if operation_config in extracted:
+                merged_context = dict(options.context)
+                merged_context[prop_key] = operation_config
+                return Options(group=dict(options.group), context=merged_context)
+
+        return options
 
     @classmethod
     def _extract_source_features(cls, feature: Feature) -> List[str]:

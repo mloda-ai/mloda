@@ -80,6 +80,22 @@ class TestRequiredWhenUnit:
         result = MockWithConditionalRequired.match_feature_group_criteria("my_feature", options)
         assert result is True
 
+    def test_extract_property_values_strips_required_when(self) -> None:
+        """required_when callable must be stripped from extracted property values."""
+        from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
+            FeatureChainParser,
+        )
+
+        mapping_entry = {
+            "explanation": "Column to order by within each partition",
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: False,
+            DefaultOptionKeys.required_when: _needs_order_by,
+        }
+        extracted = FeatureChainParser._extract_property_values(mapping_entry)
+        assert DefaultOptionKeys.required_when not in extracted
+        assert "explanation" in extracted
+
 
 class TestRequiredWhenIntegration:
     """Integration tests: order_by required for first/last but not sum/avg."""
@@ -121,6 +137,30 @@ class TestRequiredWhenIntegration:
         options = Options(context={"aggregation_type": "first", "order_by": "ts"})
         result = MockWithConditionalRequired.match_feature_group_criteria(
             "source__first_windowed", options
+        )
+        assert result is True
+
+    def test_string_only_first_without_order_by_rejected(self) -> None:
+        """Regression: aggregation_type parsed from name only (not in options) still triggers required_when."""
+        options = Options(context={})
+        result = MockWithConditionalRequired.match_feature_group_criteria(
+            "source__first_windowed", options
+        )
+        assert result is False
+
+    def test_string_only_first_with_order_by_accepted(self) -> None:
+        """Regression: aggregation_type from name + order_by in options satisfies required_when."""
+        options = Options(context={"order_by": "ts"})
+        result = MockWithConditionalRequired.match_feature_group_criteria(
+            "source__first_windowed", options
+        )
+        assert result is True
+
+    def test_string_only_sum_without_order_by_accepted(self) -> None:
+        """Regression: aggregation_type=sum from name only, no order_by needed."""
+        options = Options(context={})
+        result = MockWithConditionalRequired.match_feature_group_criteria(
+            "source__sum_windowed", options
         )
         assert result is True
 

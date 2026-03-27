@@ -192,6 +192,7 @@ class FeatureChainParser:
                 DefaultOptionKeys.group,
                 DefaultOptionKeys.strict_validation,
                 DefaultOptionKeys.validation_function,
+                DefaultOptionKeys.required_when,
             }
             return {k: v for k, v in property_value.items() if k not in metadata_keys}
         return property_value

@@ -115,7 +115,9 @@ Options(context={"in_features": "any_feature_name"})
 
 ## Conditional Requirements with `required_when`
 
-Use `DefaultOptionKeys.required_when` to declare options that are only required under certain conditions. Attach a predicate callable to a PROPERTY_MAPPING entry. The predicate receives the `Options` object and returns `True` when the option is required.
+Use `DefaultOptionKeys.required_when` to declare options that are only required under certain conditions. Attach a predicate callable to a PROPERTY_MAPPING entry. The predicate receives an effective `Options` object and returns `True` when the option is required.
+
+This works for both configuration-based and string-based feature creation. For string-based features, the operation value parsed from the feature name is merged into the effective options before predicate evaluation, so predicates see values from both sources.
 
 ``` python
 from mloda.core.abstract_plugins.components.options import Options
@@ -145,7 +147,7 @@ When the predicate returns `True` and the option is absent, `match_feature_group
 
 ## Context Propagation
 
-By default, context parameters are local — they don't flow through feature dependency chains. This is correct for feature-specific config like aggregation types.
+By default, context parameters are local: they do not flow through feature dependency chains. This is correct for feature-specific config like aggregation types.
 
 For cross-cutting metadata (session IDs, environment flags) that should flow through chains, use `propagate_context_keys` on `Options`:
 
@@ -156,4 +158,4 @@ Options(
 )
 ```
 
-Only the specified keys propagate — everything else stays local. Group propagation is unchanged.
+Only the specified keys propagate. Everything else stays local. Group propagation is unchanged.

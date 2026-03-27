@@ -113,7 +113,7 @@ The `FeatureChainParserMixin` provides default implementations for common featur
 
 ``` python
 from mloda.provider import FeatureGroup, FeatureChainParserMixin
-from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys
 
 class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     PREFIX_PATTERN = r".*__my_operation$"
@@ -239,7 +239,7 @@ The modern approach uses `PROPERTY_MAPPING` to define parameter validation and c
 ``` python
 from mloda.provider import FeatureGroup
 from mloda.user import FeatureName
-from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys
 
 class MyFeatureGroup(FeatureGroup):
     PREFIX_PATTERN = r"__([a-zA-Z_]+)_operation$"

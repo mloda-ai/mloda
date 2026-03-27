@@ -9,7 +9,7 @@ from mloda.user import Feature
 from mloda.core.api.feature_config.loader import load_features_from_config
 from mloda.core.api.feature_config.models import FeatureConfig
 from mloda.core.api.feature_config.parser import parse_json
-from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
 
 
 def test_parse_feature_with_multiple_sources() -> None:

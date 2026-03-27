@@ -13,7 +13,7 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.components.validators.feature_validator import FeatureValidator
-from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 
 
 class Feature:

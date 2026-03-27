@@ -16,7 +16,7 @@ from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import (
     PandasDataFrame,
 )
-from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.source_input_feature import SourceInputFeature
 
 from mloda.provider import ApiDataFeatureGroup

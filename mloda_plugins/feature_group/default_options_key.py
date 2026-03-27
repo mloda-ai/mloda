@@ -2,7 +2,7 @@ import warnings
 
 warnings.warn(
     "Importing DefaultOptionKeys from "
-    "'mloda_plugins.feature_group.experimental.default_options_key' is deprecated. "
+    "'mloda_plugins.feature_group.default_options_key' is deprecated. "
     "Use 'from mloda.provider import DefaultOptionKeys' instead.",
     DeprecationWarning,
     stacklevel=2,

@@ -143,7 +143,7 @@ def test_feature_3_step1_onehot_encoding() -> None:
     """
     from mloda.user import Feature
     from mloda.user import Options
-    from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+    from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
 
     # Step 1: Create the intermediate feature "state__onehot_encoded" from "state"
     # This will create multiple columns: state__onehot_encoded~0, ~1, ~2

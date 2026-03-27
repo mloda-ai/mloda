@@ -11,7 +11,7 @@ from mloda.provider import BaseInputData
 from mloda.user import PluginCollector
 from mloda.user import GlobalFilter
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindowFeatureGroup
 
 

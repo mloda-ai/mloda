@@ -15,7 +15,7 @@ The recommended approach uses `FeatureChainParser.match_configuration_feature_ch
 ### 1. Dual Approach Support
 
 ```python
-from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys
 from mloda.user import Options
 
 @classmethod

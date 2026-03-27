@@ -17,7 +17,7 @@ from mloda.provider import (
     FeatureChainParserMixin,
 )
 from mloda.provider import BaseArtifact
-from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import SklearnArtifact
 
 

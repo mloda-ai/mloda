@@ -13,7 +13,7 @@ from mloda.provider import (
     FeatureChainParserMixin,
 )
 from mloda.provider import FeatureSet
-from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
 
 
 class TextCleaningFeatureGroup(FeatureChainParserMixin, FeatureGroup):

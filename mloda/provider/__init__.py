@@ -39,6 +39,9 @@ from mloda.core.abstract_plugins.components.validators.datatype_validator import
     DataTypeMismatchError,
 )
 
+# Option keys
+from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
+
 # Feature chaining
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
@@ -86,6 +89,8 @@ __all__ = [
     "LinkValidator",
     "DataTypeValidator",
     "DataTypeMismatchError",
+    # Option keys
+    "DefaultOptionKeys",
     # Feature chaining
     "FeatureChainParser",
     "CHAIN_SEPARATOR",

@@ -10,7 +10,7 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.filter.filter_type_enum import FilterType
 from mloda.core.filter.single_filter import SingleFilter
-from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 
 
 import logging

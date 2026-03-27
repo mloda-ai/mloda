@@ -9,7 +9,7 @@ from mloda.user import DataType
 from mloda.provider import ComputeFramework
 from mloda.user import Index
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.dynamic_feature_group_factory.dynamic_feature_group_factory import (
     DynamicFeatureGroupCreator,
 )

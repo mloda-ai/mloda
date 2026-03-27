@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from mloda.user import Feature
 from mloda.user import mloda
-from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
 
 
 def test_default_option_key_exists() -> None:

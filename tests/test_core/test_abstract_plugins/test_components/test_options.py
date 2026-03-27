@@ -139,7 +139,7 @@ class TestOptions:
 
     def test_update_with_protected_keys_default(self) -> None:
         """Test update method with default protected keys (in_features)."""
-        from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+        from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
 
         options1 = Options(group={"key1": "value1"})
         options2 = Options(group={"key2": "value2", DefaultOptionKeys.in_features: "source1"})
@@ -278,7 +278,7 @@ class TestProtectedKeys:
         This is the most common use case - allowing parent and child features
         to have different data sources without conflict.
         """
-        from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+        from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
 
         # Parent feature options
         parent_options = Options(
@@ -355,7 +355,7 @@ class TestProtectedKeys:
 
         This is the KEY FEATURE - without protection, this would raise an error.
         """
-        from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+        from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
 
         parent_options = Options(group={DefaultOptionKeys.in_features: "source_A", "shared": "value"})
 
@@ -409,7 +409,7 @@ class TestProtectedKeys:
 
         The protected key in child should NOT be merged to parent.
         """
-        from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+        from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
 
         # Parent has no source feature
         parent_options = Options(group={"key1": "value1"})
@@ -437,7 +437,7 @@ class TestProtectedKeys:
 
         Parent's protected key should be preserved.
         """
-        from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+        from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
 
         # Parent has source feature
         parent_options = Options(

@@ -7,7 +7,7 @@ PROPERTY_MAPPING defines parameter validation and classification for modern feat
 ## Basic Structure
 
 ``` python
-from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys
 
 PROPERTY_MAPPING = {
     "parameter_name": {

@@ -248,7 +248,7 @@ class GroupAggregation(FeatureChainParserMixin, FeatureGroup):
     }
 ```
 
-The validator is only called when the option is present (not None). Missing options are handled by the base PROPERTY_MAPPING validation.
+The validator is only called when the option is present (not None). Missing options are handled by the base PROPERTY_MAPPING validation. If the validator raises an exception instead of returning a boolean, the exception is caught and the value is treated as invalid (match returns False).
 
 ## Modern Implementation in Feature Groups
 

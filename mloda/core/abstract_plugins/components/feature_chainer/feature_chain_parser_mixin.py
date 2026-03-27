@@ -145,7 +145,9 @@ class FeatureChainParserMixin:
         PROPERTY_MAPPING entries. If a mapping entry defines a
         ``DefaultOptionKeys.type_validator`` callable and the corresponding option
         value is present, the validator is called with the value. Returning False
-        from the validator causes this method to return False.
+        from the validator causes this method to return False. If the validator
+        raises an exception, the exception is caught and the method returns False
+        (treating the value as invalid).
 
         Also enforces MIN_IN_FEATURES / MAX_IN_FEATURES constraints when
         in_features is present in options.
@@ -224,7 +226,10 @@ class FeatureChainParserMixin:
                 value = options.get(key)
                 if value is None:
                     continue
-                if not validator(value):
+                try:
+                    if not validator(value):
+                        return False
+                except Exception:
                     return False
 
         # Enforce MIN/MAX_IN_FEATURES when in_features is present in options

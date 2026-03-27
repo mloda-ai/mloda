@@ -26,6 +26,13 @@ def _is_list_of_strings(value: Any) -> bool:
     return all(isinstance(item, str) for item in value)
 
 
+def _raising_validator(value: Any) -> bool:
+    """Validator that raises instead of returning False for invalid input."""
+    if not isinstance(value, list):
+        raise TypeError(f"Expected list, got {type(value).__name__}")
+    return True
+
+
 class MockWithTypeConstraint(FeatureChainParserMixin):
     """Feature group with a type-constrained PROPERTY_MAPPING entry."""
 
@@ -45,6 +52,37 @@ class MockWithTypeConstraint(FeatureChainParserMixin):
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: False,
             DefaultOptionKeys.type_validator: _is_list_of_strings,
+        },
+    }
+
+
+class MockStrictWithTypeValidator(FeatureChainParserMixin):
+    """Feature group combining strict_validation=True with type_validator on the same entry."""
+
+    PREFIX_PATTERN = r".*__([\w]+)_strict$"
+
+    PROPERTY_MAPPING = {
+        "mode": {
+            "fast": "Fast mode",
+            "slow": "Slow mode",
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
+            DefaultOptionKeys.type_validator: lambda v: isinstance(v, str),
+        },
+    }
+
+
+class MockWithRaisingValidator(FeatureChainParserMixin):
+    """Feature group whose type_validator raises on invalid input."""
+
+    PREFIX_PATTERN = r".*__([\w]+)_raise$"
+
+    PROPERTY_MAPPING = {
+        "items": {
+            "explanation": "A list of items",
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: False,
+            DefaultOptionKeys.type_validator: _raising_validator,
         },
     }
 
@@ -117,6 +155,36 @@ class TestTypeConstraintValidation:
             "source__sum_typed", options
         )
         assert result is False
+
+    def test_strict_validation_with_type_validator_accepts_valid(self) -> None:
+        """strict_validation=True combined with type_validator accepts a valid value in the mapping."""
+        options = Options(context={"mode": "fast"})
+        result = MockStrictWithTypeValidator.match_feature_group_criteria("my_feature", options)
+        assert result is True
+
+    def test_strict_validation_with_type_validator_rejects_invalid_type(self) -> None:
+        """strict_validation=True combined with type_validator rejects when type_validator fails."""
+        options = Options(context={"mode": 123})
+        result = MockStrictWithTypeValidator.match_feature_group_criteria("my_feature", options)
+        assert result is False
+
+    def test_strict_validation_with_type_validator_rejects_unknown_value(self) -> None:
+        """strict_validation=True rejects a value not in the mapping, even if type_validator passes."""
+        options = Options(context={"mode": "turbo"})
+        result = MockStrictWithTypeValidator.match_feature_group_criteria("my_feature", options)
+        assert result is False
+
+    def test_raising_validator_treated_as_non_match(self) -> None:
+        """A validator that raises an exception is treated as a non-match (returns False)."""
+        options = Options(context={"items": "not_a_list"})
+        result = MockWithRaisingValidator.match_feature_group_criteria("my_feature", options)
+        assert result is False
+
+    def test_raising_validator_accepts_valid_input(self) -> None:
+        """A raising validator that returns True for valid input works normally."""
+        options = Options(context={"items": ["a", "b"]})
+        result = MockWithRaisingValidator.match_feature_group_criteria("my_feature", options)
+        assert result is True
 
 
 def _is_list_of_strings_strict(value: Any) -> bool:

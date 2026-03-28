@@ -232,7 +232,9 @@ The three-arg form `cls._resolve_operation(feature_name, options, config_key)` i
 
 #### 5. Type Validation with `type_validator`
 
-Add a `DefaultOptionKeys.type_validator` callable to a PROPERTY_MAPPING entry to validate option values automatically. The mixin calls the validator after basic matching succeeds. If it returns False, `match_feature_group_criteria` returns False:
+Add a `DefaultOptionKeys.type_validator` callable to a PROPERTY_MAPPING entry to validate the shape or composite type of the raw option value. The mixin calls the validator after basic matching succeeds. If it returns a falsy value, `match_feature_group_criteria` returns False.
+
+Use `type_validator` when you need to validate the whole value (e.g., must be a list of strings). Use `validation_function` with `strict_validation=True` when you need to validate individual parsed elements (after list unpacking).
 
 ``` python
 def _is_list_of_strings(value):
@@ -248,7 +250,7 @@ class GroupAggregation(FeatureChainParserMixin, FeatureGroup):
     }
 ```
 
-The validator is only called when the option is present (not None). Missing options are handled by the base PROPERTY_MAPPING validation. If the validator raises an exception instead of returning a boolean, the exception is caught and the value is treated as invalid (match returns False).
+The validator is only called when the option is present (not None). Missing options are handled by the base PROPERTY_MAPPING validation. Validators must be pure functions with no side effects, since they may be called multiple times during feature group resolution. Return values use truthy/falsy semantics. If the validator raises a TypeError, ValueError, or AttributeError, the exception is caught and the value is treated as invalid (match returns False).
 
 ## Modern Implementation in Feature Groups
 

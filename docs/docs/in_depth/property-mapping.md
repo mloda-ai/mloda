@@ -59,6 +59,10 @@ DefaultOptionKeys.order_by: {
 ```
 
 ### Custom Validation Functions
+
+Use `validation_function` with `strict_validation=True` to validate individual
+parsed elements. The parser unpacks lists and calls the function on each element:
+
 ``` python
 "window_size": {
     "explanation": "Size of time window",
@@ -66,6 +70,30 @@ DefaultOptionKeys.order_by: {
     DefaultOptionKeys.strict_validation: True,
 }
 ```
+
+### Type Validators
+
+Use `type_validator` to validate the shape or composite type of the raw option
+value before any list unpacking. Unlike `validation_function`, it does not
+require `strict_validation`. The validator receives the value exactly as stored
+in Options and must return a truthy value for the match to succeed:
+
+``` python
+def _is_list_of_strings(value):
+    return isinstance(value, list) and all(isinstance(item, str) for item in value)
+
+"partition_by": {
+    "explanation": "List of columns to partition by",
+    DefaultOptionKeys.context: True,
+    DefaultOptionKeys.strict_validation: False,
+    DefaultOptionKeys.type_validator: _is_list_of_strings,
+}
+```
+
+When both `validation_function` and `type_validator` are present on the same
+entry, `validation_function` runs first (during property mapping validation on
+each parsed element), then `type_validator` runs on the raw value. Validators
+must be pure functions with no side effects.
 
 ### Default Values
 ``` python

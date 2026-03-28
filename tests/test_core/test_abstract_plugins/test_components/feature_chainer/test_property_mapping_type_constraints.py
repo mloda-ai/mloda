@@ -33,6 +33,11 @@ def _raising_validator(value: Any) -> bool:
     return True
 
 
+def _max_length_3(value: Any) -> bool:
+    """Validator that rejects strings longer than 3 characters."""
+    return isinstance(value, str) and len(value) <= 3
+
+
 class MockWithTypeConstraint(FeatureChainParserMixin):
     """Feature group with a type-constrained PROPERTY_MAPPING entry."""
 
@@ -68,6 +73,28 @@ class MockStrictWithTypeValidator(FeatureChainParserMixin):
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
             DefaultOptionKeys.type_validator: lambda v: isinstance(v, str),
+        },
+    }
+
+
+class MockStrictWithOrthogonalTypeValidator(FeatureChainParserMixin):
+    """Feature group where type_validator rejects values that pass strict membership.
+
+    The mapping allows "fast" and "slow", but the type_validator requires
+    strings of at most 3 characters. "fast" (4 chars) and "slow" (4 chars) both
+    pass strict membership but fail the type_validator length check.
+    """
+
+    PREFIX_PATTERN = r".*__([\w]+)_ortho$"
+
+    PROPERTY_MAPPING = {
+        "mode": {
+            "fast": "Fast mode",
+            "slow": "Slow mode",
+            "ok": "OK mode",
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
+            DefaultOptionKeys.type_validator: _max_length_3,
         },
     }
 
@@ -157,22 +184,42 @@ class TestTypeConstraintValidation:
         assert result is False
 
     def test_strict_validation_with_type_validator_accepts_valid(self) -> None:
-        """strict_validation=True combined with type_validator accepts a valid value in the mapping."""
+        """Both strict membership and type_validator pass for a valid mapping value."""
         options = Options(context={"mode": "fast"})
         result = MockStrictWithTypeValidator.match_feature_group_criteria("my_feature", options)
         assert result is True
 
-    def test_strict_validation_with_type_validator_rejects_invalid_type(self) -> None:
-        """strict_validation=True combined with type_validator rejects when type_validator fails."""
+    def test_strict_validation_with_type_validator_rejects_non_string(self) -> None:
+        """strict_validation rejects a non-string before type_validator runs."""
         options = Options(context={"mode": 123})
         result = MockStrictWithTypeValidator.match_feature_group_criteria("my_feature", options)
         assert result is False
 
     def test_strict_validation_with_type_validator_rejects_unknown_value(self) -> None:
-        """strict_validation=True rejects a value not in the mapping, even if type_validator passes."""
+        """strict_validation rejects a value not in the mapping, even if type_validator passes."""
         options = Options(context={"mode": "turbo"})
         result = MockStrictWithTypeValidator.match_feature_group_criteria("my_feature", options)
         assert result is False
+
+    def test_type_validator_rejects_value_that_passes_strict_membership(self) -> None:
+        """type_validator can reject a value that passes strict membership.
+
+        "fast" is in the mapping (passes membership) but has 4 characters
+        (fails the max-length-3 type_validator). This proves type_validator
+        runs independently of strict validation.
+        """
+        options = Options(context={"mode": "fast"})
+        result = MockStrictWithOrthogonalTypeValidator.match_feature_group_criteria("my_feature", options)
+        assert result is False
+
+    def test_type_validator_accepts_value_that_passes_both(self) -> None:
+        """A value that passes both strict membership and type_validator is accepted.
+
+        "ok" is in the mapping (2 chars <= 3), so both checks pass.
+        """
+        options = Options(context={"mode": "ok"})
+        result = MockStrictWithOrthogonalTypeValidator.match_feature_group_criteria("my_feature", options)
+        assert result is True
 
     def test_raising_validator_treated_as_non_match(self) -> None:
         """A validator that raises an exception is treated as a non-match (returns False)."""
@@ -185,10 +232,6 @@ class TestTypeConstraintValidation:
         options = Options(context={"items": ["a", "b"]})
         result = MockWithRaisingValidator.match_feature_group_criteria("my_feature", options)
         assert result is True
-
-
-def _is_list_of_strings_strict(value: Any) -> bool:
-    return isinstance(value, list) and all(isinstance(item, str) for item in value)
 
 
 class TypeValidatorTestDataCreator(ATestDataCreator):
@@ -221,7 +264,7 @@ class TypeValidatedAggregation(FeatureChainParserMixin, FeatureGroup):
             "explanation": "List of columns to partition by",
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.type_validator: _is_list_of_strings_strict,
+            DefaultOptionKeys.type_validator: _is_list_of_strings,
         },
     }
 

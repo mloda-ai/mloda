@@ -145,6 +145,16 @@ PROPERTY_MAPPING = {
 
 When the predicate returns `True` and the option is absent, `match_feature_group_criteria` returns `False`. When the predicate returns `False`, the option is not required. Entries with `required_when` are treated as optional by the base parser.
 
+### Predicate Contract
+
+The predicate must satisfy:
+
+- **Signature:** `(Options) -> bool`
+- **Must be callable.** Non-callable values are skipped with a warning log.
+- **Must not raise exceptions.** Exceptions from predicates propagate uncaught.
+- **Must be a pure function** (no side effects).
+- Non-bool truthy return values are treated as `True`.
+
 ## Context Propagation
 
 By default, context parameters are local: they do not flow through feature dependency chains. This is correct for feature-specific config like aggregation types.

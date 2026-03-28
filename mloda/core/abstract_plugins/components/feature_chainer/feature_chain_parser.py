@@ -98,8 +98,15 @@ class FeatureChainParser:
         return True
 
     @classmethod
-    def _has_default_value(cls, property_value: Any) -> bool:
-        """Check if property has a default value or is conditionally required."""
+    def _can_skip_required_check(cls, property_value: Any) -> bool:
+        """Check if the base parser should treat this property as optional.
+
+        Returns True when the property has a default value or uses conditional
+        requirements (required_when).  In both cases the base validation loop
+        should not reject the match just because the option is absent; either
+        the default will be applied later, or the required_when predicate in
+        FeatureChainParserMixin will decide.
+        """
         if not isinstance(property_value, dict):
             return False
         return DefaultOptionKeys.default in property_value or DefaultOptionKeys.required_when in property_value
@@ -229,9 +236,9 @@ class FeatureChainParser:
         """Validate that all required properties have values."""
         for key, value in property_tracker.items():
             property_config = property_mapping[key]
-            has_default = cls._has_default_value(property_config)
+            can_skip = cls._can_skip_required_check(property_config)
 
-            if not value and not has_default:
+            if not value and not can_skip:
                 return False
         return True
 
@@ -254,13 +261,13 @@ class FeatureChainParser:
         # Process each property in the mapping
         for property_name, property_value in property_mapping.items():
             found_property_value = options.get(property_name)
-            has_default = cls._has_default_value(property_value)
+            can_skip = cls._can_skip_required_check(property_value)
             property_value = cls._extract_property_values(property_value)
 
             # Handle missing properties
             if found_property_value is None:
-                if has_default:
-                    # Property with default not present - mark as processed but empty
+                if can_skip:
+                    # Property with default or conditional requirement - mark as processed but empty
                     property_tracker[property_name] = set()
                     continue
                 else:

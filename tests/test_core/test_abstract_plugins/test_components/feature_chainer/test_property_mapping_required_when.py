@@ -7,6 +7,9 @@ from typing import Any, Optional, Set, Type, Union
 import pandas as pd
 import pytest
 
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
+    FeatureChainParser,
+)
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
 )
@@ -82,10 +85,6 @@ class TestRequiredWhenUnit:
 
     def test_extract_property_values_strips_required_when(self) -> None:
         """required_when callable must be stripped from extracted property values."""
-        from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
-            FeatureChainParser,
-        )
-
         mapping_entry = {
             "explanation": "Column to order by within each partition",
             DefaultOptionKeys.context: True,
@@ -96,33 +95,97 @@ class TestRequiredWhenUnit:
         assert DefaultOptionKeys.required_when not in extracted
         assert "explanation" in extracted
 
+    def test_can_skip_required_check_with_required_when(self) -> None:
+        """Properties with required_when should be skippable in the base required check."""
+        prop_with_required_when = {
+            "explanation": "test",
+            DefaultOptionKeys.required_when: _needs_order_by,
+        }
+        assert FeatureChainParser._can_skip_required_check(prop_with_required_when) is True
+
+    def test_can_skip_required_check_with_default(self) -> None:
+        """Properties with default should be skippable in the base required check."""
+        prop_with_default = {
+            "val1": "desc",
+            DefaultOptionKeys.default: "val1",
+        }
+        assert FeatureChainParser._can_skip_required_check(prop_with_default) is True
+
+    def test_can_skip_required_check_without_either(self) -> None:
+        """Properties without default or required_when are required."""
+        prop_required = {
+            "val1": "desc",
+            DefaultOptionKeys.strict_validation: True,
+        }
+        assert FeatureChainParser._can_skip_required_check(prop_required) is False
+
+    def test_non_callable_required_when_is_skipped(self) -> None:
+        """A non-callable required_when value should not crash; the option is treated as optional."""
+
+        class MockWithBadPredicate(FeatureChainParserMixin):
+            PREFIX_PATTERN = r".*__([\w]+)_windowed$"
+            PROPERTY_MAPPING = {
+                "aggregation_type": {
+                    "sum": "Sum",
+                    DefaultOptionKeys.context: True,
+                    DefaultOptionKeys.strict_validation: True,
+                },
+                "order_by": {
+                    "explanation": "sort column",
+                    DefaultOptionKeys.context: True,
+                    DefaultOptionKeys.strict_validation: False,
+                    DefaultOptionKeys.required_when: "not_a_callable",
+                },
+            }
+
+        options = Options(context={"aggregation_type": "sum"})
+        result = MockWithBadPredicate.match_feature_group_criteria("my_feature", options)
+        assert result is True
+
+    def test_required_when_with_default_value_interaction(self) -> None:
+        """When a property has both required_when and default, default takes effect in base parser.
+
+        The base parser treats the property as optional (can_skip_required_check is True).
+        The required_when predicate still fires in the mixin layer.
+        """
+
+        def _always_required(options: Options) -> bool:
+            return True
+
+        class MockWithBothDefaultAndRequiredWhen(FeatureChainParserMixin):
+            PREFIX_PATTERN = r".*__([\w]+)_windowed$"
+            PROPERTY_MAPPING = {
+                "aggregation_type": {
+                    "sum": "Sum",
+                    "first": "First",
+                    DefaultOptionKeys.context: True,
+                    DefaultOptionKeys.strict_validation: True,
+                },
+                "order_by": {
+                    "explanation": "sort column",
+                    DefaultOptionKeys.context: True,
+                    DefaultOptionKeys.strict_validation: False,
+                    DefaultOptionKeys.default: "id",
+                    DefaultOptionKeys.required_when: _always_required,
+                },
+            }
+
+        # The property has a default, but required_when predicate always returns True.
+        # Since order_by is absent, the required_when check rejects the match.
+        options_absent = Options(context={"aggregation_type": "sum"})
+        assert MockWithBothDefaultAndRequiredWhen.match_feature_group_criteria(
+            "my_feature", options_absent
+        ) is False
+
+        # When order_by is provided, predicate is satisfied.
+        options_present = Options(context={"aggregation_type": "sum", "order_by": "ts"})
+        assert MockWithBothDefaultAndRequiredWhen.match_feature_group_criteria(
+            "my_feature", options_present
+        ) is True
+
 
 class TestRequiredWhenIntegration:
-    """Integration tests: order_by required for first/last but not sum/avg."""
-
-    def test_first_without_order_by_rejected(self) -> None:
-        options = Options(context={"aggregation_type": "first"})
-        assert MockWithConditionalRequired.match_feature_group_criteria("my_feat", options) is False
-
-    def test_last_without_order_by_rejected(self) -> None:
-        options = Options(context={"aggregation_type": "last"})
-        assert MockWithConditionalRequired.match_feature_group_criteria("my_feat", options) is False
-
-    def test_first_with_order_by_accepted(self) -> None:
-        options = Options(context={"aggregation_type": "first", "order_by": "ts"})
-        assert MockWithConditionalRequired.match_feature_group_criteria("my_feat", options) is True
-
-    def test_last_with_order_by_accepted(self) -> None:
-        options = Options(context={"aggregation_type": "last", "order_by": "ts"})
-        assert MockWithConditionalRequired.match_feature_group_criteria("my_feat", options) is True
-
-    def test_sum_without_order_by_accepted(self) -> None:
-        options = Options(context={"aggregation_type": "sum"})
-        assert MockWithConditionalRequired.match_feature_group_criteria("my_feat", options) is True
-
-    def test_avg_without_order_by_accepted(self) -> None:
-        options = Options(context={"aggregation_type": "avg"})
-        assert MockWithConditionalRequired.match_feature_group_criteria("my_feat", options) is True
+    """Integration tests for string-based and string-only matching with required_when."""
 
     def test_string_match_first_without_order_by_rejected(self) -> None:
         """String-based matching also enforces required_when."""
@@ -163,6 +226,21 @@ class TestRequiredWhenIntegration:
             "source__sum_windowed", options
         )
         assert result is True
+
+    def test_effective_options_preserve_propagate_context_keys(self) -> None:
+        """Effective options built during required_when evaluation must preserve propagate_context_keys."""
+        options = Options(
+            context={"order_by": "ts"},
+            propagate_context_keys=frozenset({"order_by"}),
+        )
+        effective = MockWithConditionalRequired._build_effective_options(
+            "source__first_windowed",
+            [MockWithConditionalRequired.PREFIX_PATTERN],
+            MockWithConditionalRequired.PROPERTY_MAPPING,
+            options,
+        )
+        assert effective.propagate_context_keys == frozenset({"order_by"})
+        assert effective.get("aggregation_type") == "first"
 
 
 _RUN_ALL_ORDER_DEPENDENT = {"first", "last"}
@@ -246,13 +324,13 @@ class TestRequiredWhenRunAll:
         assert results[0]["result_feature"].iloc[0] == "computed_first"
 
     def test_run_all_rejects_first_without_order_by(self) -> None:
-        """mloda.run_all raises when first is used without order_by (predicate True, option absent)."""
+        """mloda.run_all raises ValueError when first is used without order_by."""
         plugin_collector = PluginCollector.enabled_feature_groups({ConditionalRequiredFeatureGroup})
         feature = Feature(
             "result_feature",
             Options(context={"aggregation_type": "first"}),
         )
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError, match="No feature groups found"):
             mloda.run_all(
                 features=[feature],
                 compute_frameworks={PandasDataFrame},

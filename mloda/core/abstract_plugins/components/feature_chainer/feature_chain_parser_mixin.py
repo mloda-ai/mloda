@@ -4,6 +4,7 @@ Mixin class providing default implementations for feature chain parsing.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List, Optional, Set, cast
 
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -15,6 +16,8 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     INPUT_SEPARATOR,
 )
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
+
+logger = logging.getLogger(__name__)
 
 
 class FeatureChainParserMixin:
@@ -37,6 +40,13 @@ class FeatureChainParserMixin:
     string-based features, the operation value parsed from the feature name is merged
     into effective options before predicate evaluation, so predicates see values from
     both the feature name and explicit options.
+
+    Predicate contract:
+    - Signature: ``(Options) -> bool``
+    - Must be callable (non-callable values are skipped with a warning)
+    - Must not raise exceptions
+    - Must be a pure function (no side effects)
+    - Non-bool truthy return values are treated as True
 
     See docs/in_depth/property-mapping.md for full details and examples.
     """
@@ -167,7 +177,7 @@ class FeatureChainParserMixin:
         # Enforce required_when constraints from PROPERTY_MAPPING.
         # Build effective options by merging string-parsed operation_config into
         # the Options object so predicates see values from both sources.
-        if result and property_mapping is not None:
+        if result and property_mapping is not None and cls._has_required_when_predicates(property_mapping):
             effective_options = cls._build_effective_options(
                 _feature_name, prefix_patterns, property_mapping, options
             )
@@ -177,7 +187,21 @@ class FeatureChainParserMixin:
                 predicate = mapping_entry.get(DefaultOptionKeys.required_when)
                 if predicate is None:
                     continue
+                if not callable(predicate):
+                    logger.warning(
+                        "required_when for '%s' in %s is not callable, skipping.",
+                        key,
+                        cls.__name__,
+                    )
+                    continue
                 if predicate(effective_options) and effective_options.get(key) is None:
+                    logger.debug(
+                        "Feature group %s requires option '%s' (predicate %s is satisfied) "
+                        "but it was not provided.",
+                        cls.__name__,
+                        key,
+                        getattr(predicate, "__name__", repr(predicate)),
+                    )
                     return False
 
         # Enforce MIN/MAX_IN_FEATURES when in_features is present in options
@@ -209,6 +233,14 @@ class FeatureChainParserMixin:
         if hasattr(cls, "PROPERTY_MAPPING"):
             return cast(Dict[str, Any], cls.PROPERTY_MAPPING)
         return None
+
+    @staticmethod
+    def _has_required_when_predicates(property_mapping: Dict[str, Any]) -> bool:
+        """Return True if any entry in property_mapping uses required_when."""
+        for value in property_mapping.values():
+            if isinstance(value, dict) and DefaultOptionKeys.required_when in value:
+                return True
+        return False
 
     @classmethod
     def _build_effective_options(
@@ -243,9 +275,18 @@ class FeatureChainParserMixin:
             # Check if operation_config is a valid value for this property
             extracted = FeatureChainParser._extract_property_values(prop_value)
             if operation_config in extracted:
+                category = FeatureChainParser._determine_parameter_category(prop_key, prop_value, options)
+                merged_group = dict(options.group)
                 merged_context = dict(options.context)
-                merged_context[prop_key] = operation_config
-                return Options(group=dict(options.group), context=merged_context)
+                if category == DefaultOptionKeys.context.value:
+                    merged_context[prop_key] = operation_config
+                else:
+                    merged_group[prop_key] = operation_config
+                return Options(
+                    group=merged_group,
+                    context=merged_context,
+                    propagate_context_keys=options.propagate_context_keys,
+                )
 
         return options
 

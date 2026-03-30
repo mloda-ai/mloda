@@ -4,6 +4,7 @@ Mixin class providing default implementations for feature chain parsing.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List, Optional, Set, cast
 
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -16,6 +17,8 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 )
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 
+logger = logging.getLogger(__name__)
+
 
 class FeatureChainParserMixin:
     """
@@ -23,10 +26,29 @@ class FeatureChainParserMixin:
 
     Subclasses should define:
     - PREFIX_PATTERN or SUFFIX_PATTERN: Regex patterns for matching
-    - PROPERTY_MAPPING: Property validation mapping
+    - PROPERTY_MAPPING: Property validation mapping (see docs/in_depth/property-mapping.md)
     - IN_FEATURE_SEPARATOR: Optional custom separator (default: "&")
     - MIN_IN_FEATURES: Optional minimum in_feature count (default: 1)
     - MAX_IN_FEATURES: Optional maximum in_feature count (default: None)
+
+    PROPERTY_MAPPING supports conditional requirements via ``DefaultOptionKeys.required_when``.
+    Attach a predicate ``(Options) -> bool`` to any mapping entry. When the predicate returns
+    True and the option value is absent, ``match_feature_group_criteria`` rejects the match.
+    When the predicate returns False, the option is treated as optional.
+
+    This works for both string-based and configuration-based feature creation. For
+    string-based features, the operation value parsed from the feature name is merged
+    into effective options before predicate evaluation, so predicates see values from
+    both the feature name and explicit options.
+
+    Predicate contract:
+    - Signature: ``(Options) -> bool``
+    - Must be callable (non-callable values are skipped with a warning)
+    - Must not raise exceptions
+    - Must be a pure function (no side effects)
+    - Non-bool truthy return values are treated as True
+
+    See docs/in_depth/property-mapping.md for full details and examples.
     """
 
     IN_FEATURE_SEPARATOR: str = INPUT_SEPARATOR
@@ -152,6 +174,36 @@ class FeatureChainParserMixin:
                 if not cls._validate_string_match(_feature_name, operation_config, source_feature):
                     return False
 
+        # Enforce required_when constraints from PROPERTY_MAPPING.
+        # Build effective options by merging string-parsed operation_config into
+        # the Options object so predicates see values from both sources.
+        if result and property_mapping is not None and cls._has_required_when_predicates(property_mapping):
+            effective_options = cls._build_effective_options(
+                _feature_name, prefix_patterns, property_mapping, options
+            )
+            for key, mapping_entry in property_mapping.items():
+                if not isinstance(mapping_entry, dict):
+                    continue
+                predicate = mapping_entry.get(DefaultOptionKeys.required_when)
+                if predicate is None:
+                    continue
+                if not callable(predicate):
+                    logger.warning(
+                        "required_when for '%s' in %s is not callable, skipping.",
+                        key,
+                        cls.__name__,
+                    )
+                    continue
+                if predicate(effective_options) and effective_options.get(key) is None:
+                    logger.debug(
+                        "Feature group %s requires option '%s' (predicate %s is satisfied) "
+                        "but it was not provided.",
+                        cls.__name__,
+                        key,
+                        getattr(predicate, "__name__", repr(predicate)),
+                    )
+                    return False
+
         # Enforce MIN/MAX_IN_FEATURES when in_features is present in options
         if result and hasattr(cls, "MIN_IN_FEATURES") and hasattr(cls, "MAX_IN_FEATURES"):
             in_features_raw = options.get(DefaultOptionKeys.in_features)
@@ -181,6 +233,62 @@ class FeatureChainParserMixin:
         if hasattr(cls, "PROPERTY_MAPPING"):
             return cast(Dict[str, Any], cls.PROPERTY_MAPPING)
         return None
+
+    @staticmethod
+    def _has_required_when_predicates(property_mapping: Dict[str, Any]) -> bool:
+        """Return True if any entry in property_mapping uses required_when."""
+        for value in property_mapping.values():
+            if isinstance(value, dict) and DefaultOptionKeys.required_when in value:
+                return True
+        return False
+
+    @classmethod
+    def _build_effective_options(
+        cls,
+        feature_name: str,
+        prefix_patterns: List[str],
+        property_mapping: Dict[str, Any],
+        options: Options,
+    ) -> Options:
+        """Build effective options by merging string-parsed values with explicit options.
+
+        When a feature is matched by string pattern, the operation_config value extracted
+        from the feature name is mapped to the corresponding PROPERTY_MAPPING key. This
+        ensures that required_when predicates see values from both sources.
+
+        If the feature is not string-based or no mapping key matches, returns the
+        original options unchanged.
+        """
+        operation_config, _source_feature = FeatureChainParser.parse_feature_name(
+            feature_name, prefix_patterns, CHAIN_SEPARATOR
+        )
+        if operation_config is None:
+            return options
+
+        # Find which property mapping key the operation_config value belongs to
+        for prop_key, prop_value in property_mapping.items():
+            if not isinstance(prop_value, dict):
+                continue
+            # Already present in options: no merge needed
+            if options.get(prop_key) is not None:
+                continue
+            # Check if operation_config is a valid value for this property
+            extracted = FeatureChainParser._extract_property_values(prop_value)
+            if operation_config in extracted:
+                category = FeatureChainParser._determine_parameter_category(prop_key, prop_value, options)
+                merged_group = dict(options.group)
+                merged_context = dict(options.context)
+                if category == DefaultOptionKeys.context.value:
+                    merged_context[prop_key] = operation_config
+                else:
+                    merged_group[prop_key] = operation_config
+                return Options(
+                    group=merged_group,
+                    context=merged_context,
+                    propagate_context_keys=options.propagate_context_keys,
+                )
+
+        return options
 
     @classmethod
     def _extract_source_features(cls, feature: Feature) -> List[str]:

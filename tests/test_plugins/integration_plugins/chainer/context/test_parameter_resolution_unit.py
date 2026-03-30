@@ -209,11 +209,11 @@ class TestParameterResolutionUnit:
         assert result is True, "Should pass validation when optional parameter is absent"
 
         # Test: Check if parameter is correctly identified as optional
-        is_default = FeatureChainParser._has_default_value(property_mapping["property3"])
-        assert is_default is True, "property3 should be identified as optional"
+        can_skip = FeatureChainParser._can_skip_required_check(property_mapping["property3"])
+        assert can_skip is True, "property3 should be identified as optional (has default)"
 
-        is_not_default = FeatureChainParser._has_default_value(property_mapping["ident"])
-        assert is_not_default is False, "ident should not be identified as optional"
+        cannot_skip = FeatureChainParser._can_skip_required_check(property_mapping["ident"])
+        assert cannot_skip is False, "ident should not be identified as optional"
 
     def test_context_parameter_identification(self) -> None:
         """Test the _is_context_parameter logic."""

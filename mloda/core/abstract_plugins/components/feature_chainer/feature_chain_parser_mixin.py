@@ -1,5 +1,46 @@
 """
 Mixin class providing default implementations for feature chain parsing.
+
+Validation Design: ``type_validator`` vs ``validation_function``
+================================================================
+
+PROPERTY_MAPPING supports two callable-valued keys that validate option values.
+They serve different purposes and run at different points in the pipeline.
+
+``validation_function`` (``DefaultOptionKeys.validation_function``)
+  - Requires ``strict_validation: True`` on the same mapping entry.
+  - Runs inside ``FeatureChainParser._validate_property_value`` during
+    ``_validate_options_against_property_mapping``.
+  - Receives **individual parsed elements** after list unpacking
+    (``_process_found_property_value`` converts lists to frozensets and
+    iterates over each element).
+  - On failure: raises ``ValueError`` with an actionable message identifying
+    the property name and the rejected element value.
+  - Use case: validating that each individual element satisfies a constraint
+    (e.g., ``lambda x: isinstance(x, int) and x > 0``).
+
+``type_validator`` (``DefaultOptionKeys.type_validator``)
+  - Does **not** require ``strict_validation``.
+  - Runs inside ``FeatureChainParserMixin.match_feature_group_criteria``
+    **after** basic matching succeeds (pattern + property mapping validation).
+  - Receives the **raw option value** exactly as stored in Options, before any
+    list unpacking or element iteration.
+  - On failure: logs a debug message and returns ``False`` (non-match). If the
+    validator raises an exception, the exception is caught, logged, and the
+    value is treated as invalid.
+  - Use case: validating the shape or composite type of the whole value
+    (e.g., ``lambda v: isinstance(v, list) and all(isinstance(i, str) for i in v)``).
+
+When both are present on the same mapping entry, ``validation_function`` runs
+first (during property mapping validation) on each parsed element, then
+``type_validator`` runs on the raw value. If ``validation_function`` rejects an
+element, the match fails with a ``ValueError`` before ``type_validator`` is
+reached.
+
+Validators must be pure functions with no side effects. They may be called
+multiple times during feature group resolution (once per candidate feature
+group). Return values use truthy/falsy semantics: any falsy return (``False``,
+``0``, ``""``, ``[]``) is treated as rejection.
 """
 
 from __future__ import annotations
@@ -133,13 +174,23 @@ class FeatureChainParserMixin:
         cls,
         feature_name: str | FeatureName,
         options: Options,
-        _data_access_collection: Any = None,
+        data_access_collection: Any = None,
     ) -> bool:
         """
         Match feature against criteria using pattern-based or config-based parsing.
 
         Delegates to FeatureChainParser.match_configuration_feature_chain_parser() and
         optionally calls _validate_string_match() hook for custom validation.
+
+        After basic matching succeeds, enforces ``type_validator`` constraints from
+        PROPERTY_MAPPING entries. For each entry that defines a
+        ``DefaultOptionKeys.type_validator`` callable, the validator is called with
+        the raw option value. Returning a falsy value causes this method to return
+        False. If the validator raises an exception, it is caught and the value is
+        treated as invalid. See the module docstring for the full validation design.
+
+        Also enforces MIN_IN_FEATURES / MAX_IN_FEATURES constraints when
+        in_features is present in options.
 
         Args:
             feature_name: Feature name to match
@@ -202,6 +253,25 @@ class FeatureChainParserMixin:
                         key,
                         getattr(predicate, "__name__", repr(predicate)),
                     )
+                    return False
+
+        # Enforce type_validator constraints from PROPERTY_MAPPING
+        if result and property_mapping is not None:
+            for key, mapping_entry in property_mapping.items():
+                if not isinstance(mapping_entry, dict):
+                    continue
+                validator = mapping_entry.get(DefaultOptionKeys.type_validator)
+                if validator is None:
+                    continue
+                value = options.get(key)
+                if value is None:
+                    continue
+                try:
+                    if not validator(value):
+                        logger.debug("type_validator for '%s' rejected value %r", key, value)
+                        return False
+                except (TypeError, ValueError, AttributeError) as exc:
+                    logger.debug("type_validator for '%s' raised %s for value %r", key, exc, value)
                     return False
 
         # Enforce MIN/MAX_IN_FEATURES when in_features is present in options

@@ -82,8 +82,8 @@ class TestDefaultOptionKeysDeprecatedPaths:
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
-            from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys as Plugins
-            from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys as Experimental
+            from mloda.provider import DefaultOptionKeys as Plugins
+            from mloda.provider import DefaultOptionKeys as Experimental
 
         assert Provider is Plugins
         assert Provider is Experimental

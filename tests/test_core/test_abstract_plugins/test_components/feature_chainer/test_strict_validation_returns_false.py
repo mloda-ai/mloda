@@ -6,7 +6,7 @@ from mloda.user import FeatureName, Options
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
 )
-from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys
 
 
 class BaseMode(FeatureChainParserMixin):

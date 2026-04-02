@@ -9,7 +9,7 @@ import pytest
 from mloda.user import Feature
 from mloda.provider import FeatureSet
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindowFeatureGroup
 from tests.test_plugins.feature_group.experimental.test_time_window_feature_group.conftest import EXPECTED_VALUES
 

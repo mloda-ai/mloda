@@ -9,7 +9,7 @@ from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.user import Options
-from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
 from mloda_plugins.feature_group.experimental.text_cleaning.pandas import PandasTextCleaningFeatureGroup
 
@@ -223,7 +223,7 @@ class TestPandasTextCleaningFeatureGroup:
         assert TextCleaningFeatureGroup.match_feature_group_criteria(feature.name, feature.options)
 
         # Test input features extraction
-        feature_group = TextCleaningFeatureGroup()
+        feature_group = PandasTextCleaningFeatureGroup()
         input_features = feature_group.input_features(feature.options, feature.name)
         assert input_features is not None
         assert len(input_features) == 1

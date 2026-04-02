@@ -8,6 +8,7 @@ from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Options
 from mloda_plugins.feature_group.experimental.sklearn.scaling.base import ScalingFeatureGroup
+from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
 
 
 class TestScalingFeatureGroup:
@@ -50,7 +51,7 @@ class TestScalingFeatureGroup:
 
     def test_input_features(self) -> None:
         """Test the input_features method."""
-        feature_group = ScalingFeatureGroup()
+        feature_group = PandasScalingFeatureGroup()
 
         # Single source feature
         input_features = feature_group.input_features(Options(), FeatureName("income__standard_scaled"))
@@ -157,15 +158,6 @@ class TestScalingFeatureGroup:
             pass
 
     def test_abstract_methods_not_implemented(self) -> None:
-        """Test that abstract methods raise NotImplementedError."""
-        with pytest.raises(NotImplementedError):
-            ScalingFeatureGroup._extract_training_data(None, "test")
-
-        with pytest.raises(NotImplementedError):
-            ScalingFeatureGroup._apply_scaler(None, "test", None)
-
-        with pytest.raises(NotImplementedError):
-            ScalingFeatureGroup._check_source_feature_exists(None, "test")
-
-        with pytest.raises(NotImplementedError):
-            ScalingFeatureGroup._add_result_to_data(None, "test", None)
+        """Test that abstract base class cannot be instantiated directly."""
+        with pytest.raises(TypeError, match="abstract method"):
+            ScalingFeatureGroup()  # type: ignore[abstract]

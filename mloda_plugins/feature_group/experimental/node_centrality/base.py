@@ -4,6 +4,7 @@ Base implementation for node centrality feature groups.
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from typing import Any, Optional
 
 from mloda.provider import FeatureGroup
@@ -13,7 +14,7 @@ from mloda.provider import (
     FeatureChainParserMixin,
 )
 from mloda.provider import FeatureSet
-from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys
 
 
 class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
@@ -293,6 +294,7 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return str(centrality_type) if centrality_type is not None else None
 
     @classmethod
+    @abstractmethod
     def _check_source_feature_exists(cls, data: Any, feature_name: str) -> None:
         """
         Check if the source feature exists in the data.
@@ -304,9 +306,10 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Raises:
             ValueError: If the feature does not exist in the data
         """
-        raise NotImplementedError(f"_check_source_feature_exists not implemented in {cls.__name__}")
+        ...
 
     @classmethod
+    @abstractmethod
     def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
         """
         Add the result to the data.
@@ -319,9 +322,10 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Returns:
             The updated data
         """
-        raise NotImplementedError(f"_add_result_to_data not implemented in {cls.__name__}")
+        ...
 
     @classmethod
+    @abstractmethod
     def _calculate_centrality(
         cls,
         data: Any,
@@ -343,4 +347,4 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Returns:
             The result of the centrality calculation
         """
-        raise NotImplementedError(f"_calculate_centrality not implemented in {cls.__name__}")
+        ...

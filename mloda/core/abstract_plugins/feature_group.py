@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Type, Union, final
+from typing import Any, ClassVar, Callable, Dict, Iterable, List, Optional, Set, Type, Union, final
 from abc import ABC
 
 from mloda.core.abstract_plugins.components.base_artifact import BaseArtifact
@@ -23,16 +23,54 @@ from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 
 
 class FeatureGroup(ABC):
-    """
-    Mostly implement:
-    input_features, except it is a primary source
+    """Base class for all feature groups.
 
-    Implement if necessary:
-    - match_feature_group_criteria - default is the class name
-    - domain - default is the default domain
-    - compute_framework_rule - default is true, which sets the compute framework to all available compute frameworks
-    - index_columns - default is None
-    - return_data_type_rule - default is None
+    Feature groups that derive new features from existing ones (chained
+    features) should also inherit from ``FeatureChainParserMixin``. The mixin
+    handles feature name parsing via ``PREFIX_PATTERN``/``SUFFIX_PATTERN``,
+    ``PROPERTY_MAPPING`` validation, and provides a default ``input_features``
+    implementation::
+
+        from mloda.provider import FeatureChainParserMixin, FeatureGroup, DefaultOptionKeys
+
+        class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+            PREFIX_PATTERN = r".*__([\\w]+)_my_op$"
+            PROPERTY_MAPPING = {
+                "operation_type": {
+                    "add": "Addition",
+                    "sub": "Subtraction",
+                    DefaultOptionKeys.context: True,
+                    DefaultOptionKeys.strict_validation: True,
+                },
+            }
+
+            @classmethod
+            def calculate_feature(cls, data, features):
+                ...
+
+    Subclass ``FeatureGroup`` directly (without the mixin) for primary-source
+    feature groups that load raw data and have no input features. In that case,
+    implement ``input_features`` (return ``None`` to mark as root) and
+    ``match_feature_group_criteria``.
+
+    Optional overrides (with defaults):
+        - ``match_feature_group_criteria``: default matches the class name
+        - ``domain``: default is the default domain
+        - ``compute_framework_rule``: default allows all compute frameworks
+        - ``index_columns``: default is None
+        - ``return_data_type_rule``: default is None
+
+    See ``FeatureChainParserMixin`` and ``docs/in_depth/property-mapping.md``
+    for the full PROPERTY_MAPPING reference.
+    """
+
+    PROPERTY_MAPPING: ClassVar[Optional[Dict[str, Any]]] = None
+    """Override in subclasses to declare configurable parameters.
+
+    Each key is a parameter name. Each value is a dict containing valid
+    values, metadata flags (``DefaultOptionKeys.context``,
+    ``DefaultOptionKeys.strict_validation``, etc.), and optional validators.
+    See ``docs/in_depth/property-mapping.md`` for the full specification.
     """
 
     def __init__(self) -> None:

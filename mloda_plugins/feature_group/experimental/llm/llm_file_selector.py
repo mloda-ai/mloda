@@ -9,7 +9,7 @@ from mloda.provider import FeatureSet
 from mloda.user import Options
 from mloda_plugins.feature_group.experimental.llm.llm_api.gemini import GeminiRequestLoop
 from mloda_plugins.feature_group.input_data.read_context_files import ConcatenatedFileContent
-from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys
 
 logger = logging.getLogger(__name__)
 

@@ -25,7 +25,7 @@ from mloda_plugins.feature_group.experimental.llm.tools.base_tool import BaseToo
 from mloda_plugins.feature_group.experimental.llm.tools.tool_collection import ToolCollection
 from mloda_plugins.feature_group.experimental.llm.tools.tool_data_classes import PytestResult
 from mloda_plugins.feature_group.input_data.read_context_files import ConcatenatedFileContent
-from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys
 
 logger = logging.getLogger(__name__)
 

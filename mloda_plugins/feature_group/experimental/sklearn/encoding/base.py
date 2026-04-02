@@ -5,6 +5,7 @@ Base implementation for scikit-learn encoding feature groups.
 from __future__ import annotations
 
 import datetime
+from abc import abstractmethod
 from typing import Any, Dict, Optional, Set, Type
 
 from mloda.provider import FeatureGroup
@@ -17,7 +18,7 @@ from mloda.provider import (
     FeatureChainParserMixin,
 )
 from mloda.provider import BaseArtifact
-from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import SklearnArtifact
 
 
@@ -60,7 +61,7 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     ```python
     from mloda.user import Feature
     from mloda.user import Options
-    from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
+    from mloda.provider import DefaultOptionKeys
 
     feature = Feature(
         name="placeholder",
@@ -471,6 +472,7 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return encoder
 
     @classmethod
+    @abstractmethod
     def _extract_training_data(cls, data: Any, source_feature: str) -> Any:
         """
         Extract training data for the specified feature.
@@ -482,9 +484,10 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Returns:
             Training data for the feature
         """
-        raise NotImplementedError(f"_extract_training_data not implemented in {cls.__name__}")
+        ...
 
     @classmethod
+    @abstractmethod
     def _apply_encoder(cls, data: Any, source_feature: str, fitted_encoder: Any) -> Any:
         """
         Apply the fitted encoder to the data.
@@ -497,9 +500,10 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Returns:
             Encoded data
         """
-        raise NotImplementedError(f"_apply_encoder not implemented in {cls.__name__}")
+        ...
 
     @classmethod
+    @abstractmethod
     def _check_source_feature_exists(cls, data: Any, feature_name: str) -> None:
         """
         Check if the source feature exists in the data.
@@ -511,9 +515,10 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Raises:
             ValueError: If the feature does not exist in the data
         """
-        raise NotImplementedError(f"_check_source_feature_exists not implemented in {cls.__name__}")
+        ...
 
     @classmethod
+    @abstractmethod
     def _add_result_to_data(cls, data: Any, feature_name: str, result: Any, encoder_type: str) -> Any:
         """
         Add the result to the data.
@@ -527,4 +532,4 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Returns:
             The updated data
         """
-        raise NotImplementedError(f"_add_result_to_data not implemented in {cls.__name__}")
+        ...

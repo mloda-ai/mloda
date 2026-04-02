@@ -13,7 +13,7 @@ from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
-from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
 

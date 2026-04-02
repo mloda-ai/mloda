@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 from typing import Any, Dict
-from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys
 import pytest
 from mloda.user import mloda
 from mloda.user import Feature

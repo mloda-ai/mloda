@@ -237,7 +237,7 @@ class GeminiRequestLoop(RequestLoop):
     ### File Analysis with LLM
 
     ```python
-    from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
+    from mloda.provider import DefaultOptionKeys
     from mloda_plugins.feature_group.input_data.read_context_files import (
         ConcatenatedFileContent
     )

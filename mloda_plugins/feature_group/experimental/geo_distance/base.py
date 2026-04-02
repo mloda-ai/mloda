@@ -4,6 +4,7 @@ Base implementation for geo distance feature groups.
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from typing import Any, Optional, Set
 
 from mloda.provider import FeatureGroup
@@ -15,7 +16,7 @@ from mloda.provider import FeatureChainParser
 from mloda.provider import (
     FeatureChainParserMixin,
 )
-from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys
 
 
 class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
@@ -276,6 +277,7 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return str(distance_type)
 
     @classmethod
+    @abstractmethod
     def _check_point_features_exist(cls, data: Any, point1_feature: str, point2_feature: str) -> None:
         """
         Check if the point features exist in the data.
@@ -288,9 +290,10 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Raises:
             ValueError: If either feature does not exist in the data
         """
-        raise NotImplementedError(f"_check_point_features_exist not implemented in {cls.__name__}")
+        ...
 
     @classmethod
+    @abstractmethod
     def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
         """
         Add the result to the data.
@@ -303,9 +306,10 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Returns:
             The updated data
         """
-        raise NotImplementedError(f"_add_result_to_data not implemented in {cls.__name__}")
+        ...
 
     @classmethod
+    @abstractmethod
     def _calculate_distance(cls, data: Any, distance_type: str, point1_feature: str, point2_feature: str) -> Any:
         """
         Method to calculate the distance. Should be implemented by subclasses.
@@ -319,4 +323,4 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Returns:
             The calculated distance
         """
-        raise NotImplementedError(f"_calculate_distance not implemented in {cls.__name__}")
+        ...

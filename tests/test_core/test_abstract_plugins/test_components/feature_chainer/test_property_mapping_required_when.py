@@ -21,7 +21,7 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.provider import DataCreator
 from mloda.user import Feature, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys
 
 
 _ORDER_DEPENDENT = {"first", "last"}

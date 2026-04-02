@@ -4,8 +4,9 @@ Tests for the TextCleaningFeatureGroup base class.
 
 from mloda.user import FeatureName
 from mloda.user import Options
-from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
+from mloda_plugins.feature_group.experimental.text_cleaning.pandas import PandasTextCleaningFeatureGroup
 
 
 class TestTextCleaningFeatureGroupBase:
@@ -43,7 +44,7 @@ class TestTextCleaningFeatureGroupBase:
         feature_name = FeatureName("review__cleaned_text")
         options = Options()
 
-        feature_group = TextCleaningFeatureGroup()
+        feature_group = PandasTextCleaningFeatureGroup()
         input_features = feature_group.input_features(options, feature_name)
 
         assert input_features is not None
@@ -56,7 +57,7 @@ class TestTextCleaningFeatureGroupBase:
         feature_name = FeatureName("sum_aggr__sales__cleaned_text")
         options = Options()
 
-        feature_group = TextCleaningFeatureGroup()
+        feature_group = PandasTextCleaningFeatureGroup()
         input_features = feature_group.input_features(options, feature_name)
 
         assert input_features is not None
@@ -100,7 +101,7 @@ class TestTextCleaningFeatureChainParser:
             }
         )
 
-        feature_group = TextCleaningFeatureGroup()
+        feature_group = PandasTextCleaningFeatureGroup()
         feature_name = FeatureName("placeholder")
 
         input_features = feature_group.input_features(options, feature_name)

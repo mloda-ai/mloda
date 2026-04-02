@@ -16,7 +16,7 @@ from mloda.core.abstract_plugins.components.validators.datatype_validator import
     DataTypeValidator,
     DataTypeMismatchError,
 )
-from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys
 from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_SYNC_THREADING
 
 

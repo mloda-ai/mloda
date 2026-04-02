@@ -5,6 +5,7 @@ Tests for base SklearnPipelineFeatureGroup.
 import pytest
 from unittest.mock import Mock, patch
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import SklearnPipelineFeatureGroup
+from mloda_plugins.feature_group.experimental.sklearn.pipeline.pandas import PandasSklearnPipelineFeatureGroup
 from mloda.user import FeatureName
 from mloda.user import Options
 
@@ -72,7 +73,7 @@ class TestSklearnPipelineFeatureGroup:
         feature_name = FeatureName("raw_features__sklearn_pipeline_preprocessing")
         options = Options({})
 
-        result = SklearnPipelineFeatureGroup().input_features(options, feature_name)
+        result = PandasSklearnPipelineFeatureGroup().input_features(options, feature_name)
 
         assert result is not None
         assert len(result) == 1
@@ -84,7 +85,7 @@ class TestSklearnPipelineFeatureGroup:
         feature_name = FeatureName("income,age,salary__sklearn_pipeline_scaling")
         options = Options({})
 
-        result = SklearnPipelineFeatureGroup().input_features(options, feature_name)
+        result = PandasSklearnPipelineFeatureGroup().input_features(options, feature_name)
 
         assert result is not None
         assert len(result) == 3
@@ -208,15 +209,6 @@ class TestSklearnPipelineFeatureGroup:
         assert not SklearnPipelineFeatureGroup._pipeline_matches_config(mock_pipeline, config)
 
     def test_abstract_methods_not_implemented(self) -> None:
-        """Test that abstract methods raise NotImplementedError."""
-        with pytest.raises(NotImplementedError):
-            SklearnPipelineFeatureGroup._extract_training_data(None, [])
-
-        with pytest.raises(NotImplementedError):
-            SklearnPipelineFeatureGroup._apply_pipeline(None, [], None)
-
-        with pytest.raises(NotImplementedError):
-            SklearnPipelineFeatureGroup._check_source_feature_exists(None, "test")
-
-        with pytest.raises(NotImplementedError):
-            SklearnPipelineFeatureGroup._add_result_to_data(None, "test", None)
+        """Test that abstract base class cannot be instantiated directly."""
+        with pytest.raises(TypeError, match="abstract method"):
+            SklearnPipelineFeatureGroup()

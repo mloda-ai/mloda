@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 from mloda.user import FeatureName
 from mloda.user import Options
 from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
+from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
 
 
 class TestEncodingFeatureGroup:
@@ -141,7 +142,7 @@ class TestEncodingFeatureGroup:
 
     def test_input_features(self) -> None:
         """Test input_features method extracts correct source features."""
-        feature_group = EncodingFeatureGroup()
+        feature_group = PandasEncodingFeatureGroup()
         feature_name = FeatureName("category__onehot_encoded")
         options = Options({})
 
@@ -233,15 +234,6 @@ class TestEncodingFeatureGroup:
             EncodingFeatureGroup._encoder_matches_type(mock_encoder, "invalid_encoder")
 
     def test_abstract_methods_not_implemented(self) -> None:
-        """Test that abstract methods raise NotImplementedError."""
-        with pytest.raises(NotImplementedError):
-            EncodingFeatureGroup._extract_training_data(None, "test")
-
-        with pytest.raises(NotImplementedError):
-            EncodingFeatureGroup._apply_encoder(None, "test", None)
-
-        with pytest.raises(NotImplementedError):
-            EncodingFeatureGroup._check_source_feature_exists(None, "test")
-
-        with pytest.raises(NotImplementedError):
-            EncodingFeatureGroup._add_result_to_data(None, "test", None, "onehot")
+        """Test that abstract base class cannot be instantiated directly."""
+        with pytest.raises(TypeError, match="abstract method"):
+            EncodingFeatureGroup()

@@ -424,7 +424,7 @@ class TestGeoDistanceModernization:
 
     def test_input_features_dual_approach(self) -> None:
         """Test that input_features method works correctly for both approaches."""
-        feature_group = GeoDistanceFeatureGroup()
+        feature_group = PandasGeoDistanceFeatureGroup()
 
         # Test string-based approach
         from mloda.user import FeatureName

@@ -8,6 +8,7 @@ from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Options
 from mloda_plugins.feature_group.experimental.node_centrality.base import NodeCentralityFeatureGroup
+from mloda_plugins.feature_group.experimental.node_centrality.pandas import PandasNodeCentralityFeatureGroup
 
 
 class TestNodeCentralityFeatureGroup:
@@ -57,7 +58,7 @@ class TestNodeCentralityFeatureGroup:
 
     def test_input_features(self) -> None:
         """Test the input_features method."""
-        feature_group = NodeCentralityFeatureGroup()
+        feature_group = PandasNodeCentralityFeatureGroup()
 
         # Test with different centrality types
         input_features = feature_group.input_features(Options(), FeatureName("user__degree_centrality"))

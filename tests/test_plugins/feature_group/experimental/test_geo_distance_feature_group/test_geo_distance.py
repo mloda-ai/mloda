@@ -44,7 +44,7 @@ class TestGeoDistanceFeatureGroup:
 
     def test_input_features(self) -> None:
         """Test extraction of input features."""
-        feature_group = GeoDistanceFeatureGroup()
+        feature_group = PandasGeoDistanceFeatureGroup()
         feature_name = FeatureName("point1&point2__haversine_distance")
 
         input_features = feature_group.input_features(Options(), feature_name)

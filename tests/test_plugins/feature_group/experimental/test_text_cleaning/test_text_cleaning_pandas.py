@@ -223,7 +223,7 @@ class TestPandasTextCleaningFeatureGroup:
         assert TextCleaningFeatureGroup.match_feature_group_criteria(feature.name, feature.options)
 
         # Test input features extraction
-        feature_group = TextCleaningFeatureGroup()
+        feature_group = PandasTextCleaningFeatureGroup()
         input_features = feature_group.input_features(feature.options, feature.name)
         assert input_features is not None
         assert len(input_features) == 1

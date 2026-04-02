@@ -36,6 +36,14 @@ from mloda.core.api.streaming_request import stream_all
 # Config loading
 from mloda.core.api.feature_config.loader import load_features_from_config
 
+# Plugin documentation / discovery
+from mloda.core.api.plugin_docs import (
+    get_feature_group_docs,
+    get_compute_framework_docs,
+    get_extender_docs,
+    resolve_feature,
+)
+
 __all__ = [
     # API
     "mlodaAPI",
@@ -67,4 +75,9 @@ __all__ = [
     "stream_all",
     # Config loading
     "load_features_from_config",
+    # Plugin documentation / discovery
+    "get_feature_group_docs",
+    "get_compute_framework_docs",
+    "get_extender_docs",
+    "resolve_feature",
 ]

@@ -7,6 +7,12 @@ from mloda_plugins.feature_group.input_data.read_db import ReadDB
 
 
 class ReadDBFeature(FeatureGroup):
+    """Load features from database sources.
+
+    Delegates to ``ReadDB``, which executes queries against a configured
+    database connection and returns the result as a compute-framework object.
+    """
+
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         return ReadDB()

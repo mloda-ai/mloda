@@ -7,6 +7,13 @@ from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
 
 class ReadFileFeature(FeatureGroup):
+    """Load features from file-based data sources (CSV, Parquet, JSON, etc.).
+
+    This is the default input FeatureGroup for file reads. It delegates to
+    ``ReadFile``, which selects a reader based on the file extension provided
+    in the feature options.
+    """
+
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         return ReadFile()

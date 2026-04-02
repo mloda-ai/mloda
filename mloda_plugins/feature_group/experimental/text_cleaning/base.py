@@ -17,57 +17,6 @@ from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
 
 
 class TextCleaningFeatureGroup(FeatureChainParserMixin, FeatureGroup):
-    # Option key for the list of operations
-    CLEANING_OPERATIONS = "cleaning_operations"
-
-    # Define supported cleaning operations with their descriptions
-    SUPPORTED_OPERATIONS = {
-        "normalize": "Convert text to lowercase and remove accents",
-        "remove_stopwords": "Remove common stopwords",
-        "remove_punctuation": "Remove punctuation marks",
-        "remove_special_chars": "Remove special characters",
-        "normalize_whitespace": "Normalize whitespace",
-        "remove_urls": "Remove URLs and email addresses",
-    }
-
-    # Define prefix pattern and pattern
-    PATTERN = "__"
-    PREFIX_PATTERN = r".*__cleaned_text$"
-
-    # In-feature configuration for FeatureChainParserMixin
-    MIN_IN_FEATURES = 1
-    MAX_IN_FEATURES = 1
-
-    # Property mapping for configuration-based features
-    PROPERTY_MAPPING = {
-        CLEANING_OPERATIONS: {
-            **SUPPORTED_OPERATIONS,  # All supported operations as valid options
-            DefaultOptionKeys.context: True,  # Mark as context parameter
-            DefaultOptionKeys.strict_validation: True,  # Enable strict validation
-            DefaultOptionKeys.validation_function: lambda operations: (
-                # Handle both actual tuples/lists and string representations
-                (
-                    isinstance(operations, (tuple, list))
-                    and all(op in TextCleaningFeatureGroup.SUPPORTED_OPERATIONS for op in operations)
-                )
-                or (
-                    isinstance(operations, str)
-                    and operations.startswith("(")
-                    and operations.endswith(")")
-                    and all(
-                        op.strip("'\" ,") in TextCleaningFeatureGroup.SUPPORTED_OPERATIONS
-                        for op in operations.strip("()").split(",")
-                        if op.strip("'\" ,")
-                    )
-                )
-            ),
-        },
-        DefaultOptionKeys.in_features: {
-            "explanation": "Source feature to apply text cleaning operations to",
-            DefaultOptionKeys.context: True,
-        },
-    }
-
     """
     Base class for all text cleaning feature groups.
 
@@ -119,6 +68,57 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     - The input data must contain the source feature to be used for text cleaning
     - The source feature must contain text data
     """
+
+    # Option key for the list of operations
+    CLEANING_OPERATIONS = "cleaning_operations"
+
+    # Define supported cleaning operations with their descriptions
+    SUPPORTED_OPERATIONS = {
+        "normalize": "Convert text to lowercase and remove accents",
+        "remove_stopwords": "Remove common stopwords",
+        "remove_punctuation": "Remove punctuation marks",
+        "remove_special_chars": "Remove special characters",
+        "normalize_whitespace": "Normalize whitespace",
+        "remove_urls": "Remove URLs and email addresses",
+    }
+
+    # Define prefix pattern and pattern
+    PATTERN = "__"
+    PREFIX_PATTERN = r".*__cleaned_text$"
+
+    # In-feature configuration for FeatureChainParserMixin
+    MIN_IN_FEATURES = 1
+    MAX_IN_FEATURES = 1
+
+    # Property mapping for configuration-based features
+    PROPERTY_MAPPING = {
+        CLEANING_OPERATIONS: {
+            **SUPPORTED_OPERATIONS,  # All supported operations as valid options
+            DefaultOptionKeys.context: True,  # Mark as context parameter
+            DefaultOptionKeys.strict_validation: True,  # Enable strict validation
+            DefaultOptionKeys.validation_function: lambda operations: (
+                # Handle both actual tuples/lists and string representations
+                (
+                    isinstance(operations, (tuple, list))
+                    and all(op in TextCleaningFeatureGroup.SUPPORTED_OPERATIONS for op in operations)
+                )
+                or (
+                    isinstance(operations, str)
+                    and operations.startswith("(")
+                    and operations.endswith(")")
+                    and all(
+                        op.strip("'\" ,") in TextCleaningFeatureGroup.SUPPORTED_OPERATIONS
+                        for op in operations.strip("()").split(",")
+                        if op.strip("'\" ,")
+                    )
+                )
+            ),
+        },
+        DefaultOptionKeys.in_features: {
+            "explanation": "Source feature to apply text cleaning operations to",
+            DefaultOptionKeys.context: True,
+        },
+    }
 
     @classmethod
     def _extract_operations_and_source_feature(cls, feature: Feature) -> tuple[tuple[Any, Any], str]:

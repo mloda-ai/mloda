@@ -20,10 +20,6 @@ from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
 
 
 class TimeWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
-    # Option keys for time window configuration
-    WINDOW_FUNCTION = "window_function"
-    WINDOW_SIZE = "window_size"
-    TIME_UNIT = "time_unit"
     """
     Base class for all time window feature groups.
 
@@ -73,6 +69,11 @@ class TimeWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     - You can specify a custom time column by setting the reference_time option in the feature group options
 
     """
+
+    # Option keys for time window configuration
+    WINDOW_FUNCTION = "window_function"
+    WINDOW_SIZE = "window_size"
+    TIME_UNIT = "time_unit"
 
     @classmethod
     def get_reference_time_column(cls, options: Optional[Options] = None) -> str:

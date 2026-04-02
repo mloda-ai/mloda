@@ -7,6 +7,12 @@ from mloda_plugins.feature_group.input_data.read_document import ReadDocument
 
 
 class ReadDocumentFeature(FeatureGroup):
+    """Load features from document sources (PDFs, text files, etc.).
+
+    Delegates to ``ReadDocument``, which extracts structured data from
+    document formats and returns the result as a compute-framework object.
+    """
+
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         return ReadDocument()

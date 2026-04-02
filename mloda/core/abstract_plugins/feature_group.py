@@ -25,10 +25,11 @@ from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 class FeatureGroup(ABC):
     """Base class for all feature groups.
 
-    Most plugins should inherit from both ``FeatureChainParserMixin`` and
-    ``FeatureGroup``. The mixin provides pattern-based feature name matching,
-    ``PROPERTY_MAPPING`` validation, and a default ``input_features``
-    implementation so you do not need to override these methods yourself::
+    Feature groups that derive new features from existing ones (chained
+    features) should also inherit from ``FeatureChainParserMixin``. The mixin
+    handles feature name parsing via ``PREFIX_PATTERN``/``SUFFIX_PATTERN``,
+    ``PROPERTY_MAPPING`` validation, and provides a default ``input_features``
+    implementation::
 
         from mloda.provider import FeatureChainParserMixin, FeatureGroup, DefaultOptionKeys
 
@@ -47,9 +48,10 @@ class FeatureGroup(ABC):
             def calculate_feature(cls, data, features):
                 ...
 
-    Subclassing ``FeatureGroup`` directly (without the mixin) is only
-    necessary for primary-source feature groups that load raw data and
-    have no input features.
+    Subclass ``FeatureGroup`` directly (without the mixin) for primary-source
+    feature groups that load raw data and have no input features. In that case,
+    implement ``input_features`` (return ``None`` to mark as root) and
+    ``match_feature_group_criteria``.
 
     Optional overrides (with defaults):
         - ``match_feature_group_criteria``: default matches the class name

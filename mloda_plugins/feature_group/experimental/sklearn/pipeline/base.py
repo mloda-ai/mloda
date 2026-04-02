@@ -5,6 +5,7 @@ Base implementation for scikit-learn pipeline feature groups.
 from __future__ import annotations
 
 import datetime
+from abc import abstractmethod
 from typing import Any, Dict, FrozenSet, List, Optional, Set, Type, Union
 
 from mloda.provider import FeatureGroup
@@ -551,6 +552,7 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return pipeline
 
     @classmethod
+    @abstractmethod
     def _extract_training_data(cls, data: Any, source_features: List[Any]) -> Any:
         """
         Extract training data for the specified features.
@@ -562,9 +564,10 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Returns:
             Training data for the features
         """
-        raise NotImplementedError(f"_extract_training_data not implemented in {cls.__name__}")
+        ...
 
     @classmethod
+    @abstractmethod
     def _apply_pipeline(cls, data: Any, source_features: List[Any], fitted_pipeline: Any) -> Any:
         """
         Apply the fitted pipeline to the data.
@@ -577,9 +580,10 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Returns:
             Transformed data
         """
-        raise NotImplementedError(f"_apply_pipeline not implemented in {cls.__name__}")
+        ...
 
     @classmethod
+    @abstractmethod
     def _check_source_feature_exists(cls, data: Any, feature_name: str) -> None:
         """
         Check if the source feature exists in the data.
@@ -591,9 +595,10 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Raises:
             ValueError: If the feature does not exist in the data
         """
-        raise NotImplementedError(f"_check_source_feature_exists not implemented in {cls.__name__}")
+        ...
 
     @classmethod
+    @abstractmethod
     def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
         """
         Add the result to the data.
@@ -606,4 +611,4 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Returns:
             The updated data
         """
-        raise NotImplementedError(f"_add_result_to_data not implemented in {cls.__name__}")
+        ...

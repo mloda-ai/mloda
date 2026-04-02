@@ -4,6 +4,7 @@ Base implementation for text cleaning feature groups.
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from typing import Any, Optional
 
 from mloda.provider import FeatureGroup
@@ -210,6 +211,7 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return data
 
     @classmethod
+    @abstractmethod
     def _check_source_feature_exists(cls, data: Any, feature_name: str) -> None:
         """
         Check if the source feature exists in the data.
@@ -221,9 +223,10 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Raises:
             ValueError: If the feature does not exist in the data
         """
-        raise NotImplementedError(f"_check_source_feature_exists not implemented in {cls.__name__}")
+        ...
 
     @classmethod
+    @abstractmethod
     def _get_source_text(cls, data: Any, feature_name: str) -> Any:
         """
         Get the source text from the data.
@@ -235,9 +238,10 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Returns:
             The source text
         """
-        raise NotImplementedError(f"_get_source_text not implemented in {cls.__name__}")
+        ...
 
     @classmethod
+    @abstractmethod
     def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
         """
         Add the result to the data.
@@ -250,9 +254,10 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Returns:
             The updated data
         """
-        raise NotImplementedError(f"_add_result_to_data not implemented in {cls.__name__}")
+        ...
 
     @classmethod
+    @abstractmethod
     def _apply_operation(cls, data: Any, text: Any, operation: str) -> Any:
         """
         Apply a cleaning operation to the text.
@@ -265,4 +270,4 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Returns:
             The cleaned text
         """
-        raise NotImplementedError(f"_apply_operation not implemented in {cls.__name__}")
+        ...

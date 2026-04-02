@@ -38,6 +38,11 @@ class Options:
 
     Constraint: A key cannot exist in both group and context simultaneously.
 
+    Note: Option keys are NOT validated at construction time. Valid keys depend
+    on which feature groups resolve the feature at runtime. Typos in key names
+    will not raise errors; the key will simply be ignored by all feature groups.
+    Use ``DefaultOptionKeys`` constants where available to prevent typos.
+
     Examples:
         >>> # Basic usage with positional dict (goes to group)
         >>> opts = Options({"data_source": "prod"})

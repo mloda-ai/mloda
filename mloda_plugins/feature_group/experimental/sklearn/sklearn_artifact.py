@@ -5,9 +5,12 @@ Artifact for storing fitted scikit-learn transformers and estimators.
 import json
 import base64
 import hashlib
+import logging
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, Optional
+
+logger = logging.getLogger(__name__)
 
 from mloda.provider import BaseArtifact
 from mloda.provider import FeatureSet
@@ -278,7 +281,7 @@ class SklearnArtifact(BaseArtifact):
                     loaded_artifacts[artifact_key] = artifact_data
 
             except Exception as e:
-                print(f"Warning: Failed to load artifact from {file_path}: {e}")
+                logger.warning("Failed to load artifact from %s: %s", file_path, e)
                 continue
 
         if loaded_artifacts:

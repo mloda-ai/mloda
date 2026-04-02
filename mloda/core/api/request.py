@@ -122,17 +122,25 @@ class mlodaAPI:
             flight_server: Flight server for distributed processing.
             function_extender: Function extenders.
             global_filter: Global filter configuration.
-            api_data: Runtime API data as {"KeyName": {"column": [values]}}.
-                Auto-creates ApiInputDataCollection internally.
+            api_data: Runtime API data as ``{"KeyName": {"column": [values]}}``.
+                KeyName is an arbitrary label grouping related columns into
+                one input source (e.g. ``"CustomerData"``). During feature
+                resolution, columns listed under a KeyName are matched to
+                requested features by name. Multiple KeyNames allow passing
+                independent datasets in a single call.
             plugin_collector: Plugin collector.
             copy_features: Whether to deep copy features (default True).
             strict_type_enforcement: If True, enforce strict type matching for typed features.
 
         Returns:
-            List of computed results.
+            List of computed results, one per feature group in execution plan
+            order. Each element is a compute-framework object (e.g.
+            ``pd.DataFrame``, ``pa.Table``) containing only the columns for
+            the requested features resolved by that group. When all requested
+            features resolve to a single group, the list has one element.
 
         Example:
-            result = mlodamloda.run_all(
+            result = mloda.run_all(
                 features,
                 api_data={"UserQuery": {"row_index": [0], "query": ["hello"]}}
             )

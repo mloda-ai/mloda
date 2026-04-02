@@ -69,7 +69,7 @@ def load_features_from_config(config_str: str, format: str = "json") -> List[Uni
         List of Feature objects and/or feature name strings
     """
     if format != "json":
-        raise ValueError(f"Unsupported format: {format}")
+        raise ValueError(f"Unsupported format: '{format}'. Only 'json' is currently supported.")
 
     config_items = parse_json(config_str)
 

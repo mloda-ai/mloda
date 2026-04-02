@@ -119,8 +119,7 @@ class TestStrictTypeEnforcement:
 
         # Feature declared as INT32
         feature = Feature.int32_of("age")
-        feature_set = FeatureSet()
-        feature_set.add(feature)
+        feature_set = FeatureSet([feature])
 
         with pytest.raises(DataTypeMismatchError) as exc_info:
             DataTypeValidator.validate(table, feature_set)
@@ -136,8 +135,7 @@ class TestStrictTypeEnforcement:
 
         # Feature declared as INT32
         feature = Feature.int32_of("age")
-        feature_set = FeatureSet()
-        feature_set.add(feature)
+        feature_set = FeatureSet([feature])
 
         # Should NOT raise
         DataTypeValidator.validate(table, feature_set)
@@ -149,8 +147,7 @@ class TestStrictTypeEnforcement:
 
         # Feature declared as INT64 (accepts INT32)
         feature = Feature.int64_of("age")
-        feature_set = FeatureSet()
-        feature_set.add(feature)
+        feature_set = FeatureSet([feature])
 
         # Should NOT raise - INT32 can widen to INT64
         DataTypeValidator.validate(table, feature_set)

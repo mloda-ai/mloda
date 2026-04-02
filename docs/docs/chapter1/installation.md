@@ -24,8 +24,7 @@ print(metadata.version("mloda"))
 Try this 30-second example:
 
 ``` python
-import mloda
-from mloda.user import PluginLoader
+from mloda.user import mloda, PluginLoader
 PluginLoader.all()
 
 result = mloda.run_all(
@@ -37,5 +36,8 @@ result = mloda.run_all(
     }}
 )
 ```
+
+`api_data` passes inline data to mloda. Each top-level key (e.g. `"SampleData"`)
+is a label grouping related columns. Features are matched to columns by name.
 
 Next: [API Request](https://mloda-ai.github.io/mloda/chapter1/api-request/) | [Feature Groups](https://mloda-ai.github.io/mloda/chapter1/feature-groups/)

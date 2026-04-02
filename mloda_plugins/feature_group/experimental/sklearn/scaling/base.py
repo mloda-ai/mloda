@@ -64,7 +64,7 @@ class ScalingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     )
 
     # The Engine will automatically parse this into a feature with name
-    # "standard_scaled__income"
+    # "income__standard_scaled"
     ```
     """
 

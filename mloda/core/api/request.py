@@ -129,10 +129,14 @@ class mlodaAPI:
             strict_type_enforcement: If True, enforce strict type matching for typed features.
 
         Returns:
-            List of computed results.
+            List of computed results, one per feature group in execution plan
+            order. Each element is a compute-framework object (e.g.
+            ``pd.DataFrame``, ``pa.Table``) containing only the columns for
+            the requested features resolved by that group. When all requested
+            features resolve to a single group, the list has one element.
 
         Example:
-            result = mlodamloda.run_all(
+            result = mloda.run_all(
                 features,
                 api_data={"UserQuery": {"row_index": [0], "query": ["hello"]}}
             )

@@ -223,10 +223,6 @@ class KnownFeatureGroup(FeatureGroup):
     """Feature group that matches 'known_feature' for testing fuzzy match suggestions."""
 
     @classmethod
-    def get_class_name(cls) -> str:
-        return "KnownFeatureGroup"
-
-    @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"known_feature", "another_feature"}
 

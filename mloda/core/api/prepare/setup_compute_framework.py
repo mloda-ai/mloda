@@ -76,7 +76,9 @@ class SetupComputeFramework:
         }
 
         if not compute_frameworks:
+            available_names = sorted(cls.get_class_name() for cls in sub_classes)
             raise ValueError(
-                f"No given compute frameworks {api_request_compute_frameworks} found in available compute frameworks: {sub_classes}."
+                f"No given compute frameworks {api_request_compute_frameworks} found in "
+                f"available compute frameworks: {available_names}."
             )
         return compute_frameworks

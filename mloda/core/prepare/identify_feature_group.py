@@ -1,3 +1,4 @@
+from difflib import get_close_matches
 from typing import Optional, Set, Tuple, Type
 
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
@@ -22,7 +23,7 @@ class IdentifyFeatureGroupClass:
     ):
         feature_group = self._filter_loop(feature, accessible_plugins, links, data_access_collection)
 
-        self.validate(feature_group, feature)
+        self.validate(feature_group, feature, accessible_plugins)
         self.feature_group_compute_framework_mapping = feature_group
 
     def _filter_loop(
@@ -96,9 +97,14 @@ class IdentifyFeatureGroupClass:
 
         return feature.get_compute_framework() in compute_frameworks
 
-    def validate(self, feature_group: FeatureGroupEnvironmentMapping, feature: Feature) -> None:
-        if not feature_group:
-            raise ValueError(f"No feature groups found for feature name: {feature.name}.")
+    def validate(
+        self,
+        feature_group: FeatureGroupEnvironmentMapping,
+        feature: Feature,
+        accessible_plugins: FeatureGroupEnvironmentMapping,
+    ) -> None:
+        if not feature_group or len(feature_group) == 0:
+            raise ValueError(self._build_no_feature_group_error(feature, accessible_plugins))
         if len(feature_group) > 1:
             from mloda.core.abstract_plugins.feature_group import format_feature_group_classes
 
@@ -108,14 +114,40 @@ class IdentifyFeatureGroupClass:
                 f"{self._adjust_error_message__by_notebook_env()}\n"
                 "For troubleshooting guide, see: https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/"
             )
-        elif len(feature_group) == 0:
-            raise ValueError(f"No feature groups found for feature name: {feature.name}.")
 
         feature_group_class, compute_frameworks = next(iter(feature_group.items()))
         if not compute_frameworks:
             raise ValueError(
                 f"Feature {feature.name} {format_feature_group_class(feature_group_class)} has no compute framework."
             )
+
+    def _build_no_feature_group_error(
+        self, feature: Feature, accessible_plugins: FeatureGroupEnvironmentMapping
+    ) -> str:
+        feature_name = str(feature.name)
+        msg = f"No feature groups found for feature name: '{feature_name}'."
+
+        if not accessible_plugins:
+            msg += "\nNo plugins are loaded. Did you call PluginLoader.all()?"
+            return msg
+
+        known_names: list[str] = []
+        for fg_class in accessible_plugins:
+            known_names.append(fg_class.get_class_name())
+            known_names.extend(fg_class.feature_names_supported())
+            if fg_class.prefix():
+                known_names.append(fg_class.prefix())
+
+        similar = get_close_matches(feature_name, known_names, n=5, cutoff=0.5)
+        if similar:
+            msg += f"\nDid you mean one of: {similar}?"
+
+        msg += (
+            "\nUse resolve_feature(name) to debug feature resolution."
+            "\nFor troubleshooting guide, see: "
+            "https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/"
+        )
+        return msg
 
     def get(self) -> Tuple[Type[FeatureGroup], Set[Type[ComputeFramework]]]:
         return next(iter(self.feature_group_compute_framework_mapping.items()))

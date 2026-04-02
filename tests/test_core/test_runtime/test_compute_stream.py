@@ -276,7 +276,7 @@ class TestComputeStreamErrorHandling:
 
         import pytest
 
-        with pytest.raises(ValueError, match="CfwManager not initialized"):
+        with pytest.raises(ValueError, match="compute framework manager not initialized"):
             # For a generator, the ValueError may be raised on first next() call
             gen = orchestrator.compute_stream()
             next(gen)

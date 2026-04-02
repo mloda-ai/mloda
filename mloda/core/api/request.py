@@ -249,7 +249,7 @@ class mlodaAPI:
     ) -> None:
         """Runs the engine computation within a context manager."""
         if not isinstance(runner, ExecutionOrchestrator):
-            raise ValueError("You need to run setup_engine_runner beforehand.")
+            raise ValueError("Internal error: execution orchestrator not initialized. This is likely a bug in mloda.")
 
         try:
             self._enter_runner_context(runner, parallelization_modes, function_extender, api_data)
@@ -293,7 +293,7 @@ class mlodaAPI:
     ) -> ExecutionOrchestrator:
         """Sets up the engine runner based on parallelization mode."""
         if self.engine is None:
-            raise ValueError("You need to run setup_engine beforehand.")
+            raise ValueError("Internal error: engine not initialized. This is likely a bug in mloda.")
 
         runner = (
             self.engine.compute(flight_server)

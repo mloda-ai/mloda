@@ -1,4 +1,4 @@
-from typing import Any, Optional, Set, Type
+from typing import Any, Iterable, Optional, Set, Type
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -10,7 +10,7 @@ from mloda.core.filter.single_filter import SingleFilter
 
 
 class FeatureSet:
-    def __init__(self) -> None:
+    def __init__(self, features: Optional[Iterable[Feature]] = None) -> None:
         self.features: Set[Feature] = set()
         self.options: Optional[Options] = None
         # This is just one uuid for easier access
@@ -21,6 +21,10 @@ class FeatureSet:
         self.artifact_to_load: Optional[str] = None
         self.save_artifact: Optional[Any] = None
         self.filter_engine: Type[BaseFilterEngine] = BaseFilterEngine
+
+        if features is not None:
+            for feature in features:
+                self.add(feature)
 
     def add_artifact_name(self) -> None:
         FeatureSetValidator.validate_options_initialized(self.options, "add_artifact_name")

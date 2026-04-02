@@ -63,8 +63,7 @@ class TestValidate:
         table = pa.table({"age": pa.array([25, 30], type=pa.int32())})
 
         feature = Feature.int32_of("age")
-        feature_set = FeatureSet()
-        feature_set.add(feature)
+        feature_set = FeatureSet([feature])
 
         # Should not raise
         DataTypeValidator.validate(table, feature_set)
@@ -75,8 +74,7 @@ class TestValidate:
         table = pa.table({"age": pa.array(["25", "30"], type=pa.string())})
 
         feature = Feature.int32_of("age")  # Declared as INT32
-        feature_set = FeatureSet()
-        feature_set.add(feature)
+        feature_set = FeatureSet([feature])
 
         with pytest.raises(DataTypeMismatchError):
             DataTypeValidator.validate(table, feature_set)
@@ -114,10 +112,11 @@ class TestValidate:
             }
         )
 
-        feature_set = FeatureSet()
-        feature_set.add(Feature.int32_of("age"))
-        feature_set.add(Feature.str_of("name"))
-        feature_set.add(Feature.double_of("score"))
+        feature_set = FeatureSet([
+            Feature.int32_of("age"),
+            Feature.str_of("name"),
+            Feature.double_of("score"),
+        ])
 
         # Should not raise - all types match
         DataTypeValidator.validate(table, feature_set)

@@ -29,6 +29,27 @@ class Feature:
         link (Optional[Link]): The link associated with the feature.
         index (Optional[Index]): The index associated with the feature.
 
+    Quick start (recommended progression)::
+
+        # 1. Bare strings -- simplest, no options or types
+        mloda.run_all(["income", "age"])
+
+        # 2. Feature() -- when you need options
+        mloda.run_all([Feature("income", {"data_source": "prod"})])
+
+        # 3. Typed helpers -- when you need type enforcement
+        mloda.run_all([Feature.int32_of("age"), Feature.double_of("income")])
+
+        # 4. Explicit Options with group/context -- advanced
+        mloda.run_all([Feature("income", Options(
+            group={"data_source": "prod"},
+            context={"debug": True},
+        ))])
+
+    Options passed as a plain dict go into ``Options.group`` (affects
+    feature group resolution). Use ``Options(context={...})`` for metadata
+    that should not affect grouping.
+
     Class Methods (Convenience):
         not_typed(name, options): Creates a Feature instance without specifying a data type.
         str_of(name, options): Creates a Feature instance with STRING data type.

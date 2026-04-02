@@ -236,4 +236,4 @@ class TestEncodingFeatureGroup:
     def test_abstract_methods_not_implemented(self) -> None:
         """Test that abstract base class cannot be instantiated directly."""
         with pytest.raises(TypeError, match="abstract method"):
-            EncodingFeatureGroup()
+            EncodingFeatureGroup()  # type: ignore[abstract]

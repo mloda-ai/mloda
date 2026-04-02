@@ -219,6 +219,106 @@ class TestIdentifyFeatureGroupErrorMessageFormat:
         )
 
 
+class KnownFeatureGroup(FeatureGroup):
+    """Feature group that matches 'known_feature' for testing fuzzy match suggestions."""
+
+    @classmethod
+    def get_class_name(cls) -> str:
+        return "KnownFeatureGroup"
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"known_feature", "another_feature"}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: Union[FeatureName, str],
+        options: Options,
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> bool:
+        if isinstance(feature_name, FeatureName):
+            feature_name = feature_name.name
+        return feature_name == "known_feature"
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+        return None
+
+
+class TestNoFeatureGroupFoundErrorMessage:
+    """Tests for the improved 'no feature groups found' error message."""
+
+    def test_no_plugins_loaded_suggests_plugin_loader(self) -> None:
+        feature = Feature("some_feature")
+        accessible_plugins: FeatureGroupEnvironmentMapping = {}
+
+        with pytest.raises(ValueError, match="PluginLoader.all"):
+            IdentifyFeatureGroupClass(
+                feature=feature,
+                accessible_plugins=accessible_plugins,
+                links=None,
+            )
+
+    def test_suggests_similar_feature_names(self) -> None:
+        feature = Feature("knwon_feature")  # typo of "known_feature"
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            KnownFeatureGroup: {MockComputeFramework},
+        }
+
+        with pytest.raises(ValueError, match="Did you mean") as exc_info:
+            IdentifyFeatureGroupClass(
+                feature=feature,
+                accessible_plugins=accessible_plugins,
+                links=None,
+            )
+
+        error_message = str(exc_info.value)
+        assert "known_feature" in error_message
+
+    def test_includes_troubleshooting_link(self) -> None:
+        feature = Feature("nonexistent_xyz")
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            KnownFeatureGroup: {MockComputeFramework},
+        }
+
+        with pytest.raises(ValueError, match="troubleshooting"):
+            IdentifyFeatureGroupClass(
+                feature=feature,
+                accessible_plugins=accessible_plugins,
+                links=None,
+            )
+
+    def test_suggests_resolve_feature(self) -> None:
+        feature = Feature("nonexistent_xyz")
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            KnownFeatureGroup: {MockComputeFramework},
+        }
+
+        with pytest.raises(ValueError, match="resolve_feature"):
+            IdentifyFeatureGroupClass(
+                feature=feature,
+                accessible_plugins=accessible_plugins,
+                links=None,
+            )
+
+    def test_no_similar_names_still_shows_help(self) -> None:
+        feature = Feature("zzz_completely_different")
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            KnownFeatureGroup: {MockComputeFramework},
+        }
+
+        with pytest.raises(ValueError) as exc_info:
+            IdentifyFeatureGroupClass(
+                feature=feature,
+                accessible_plugins=accessible_plugins,
+                links=None,
+            )
+
+        error_message = str(exc_info.value)
+        assert "resolve_feature" in error_message
+        assert "Did you mean" not in error_message
+
+
 class NoComputeFrameworkFeatureGroup(FeatureGroup):
     """Feature group for testing 'no compute framework' error message."""
 

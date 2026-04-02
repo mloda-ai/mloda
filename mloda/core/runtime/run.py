@@ -89,7 +89,7 @@ class ExecutionOrchestrator:
         It also handles errors, result collection, and data dropping.
         """
         if self.cfw_register is None:
-            raise ValueError("CfwManager not initialized")
+            raise ValueError("Internal error: compute framework manager not initialized. This is likely a bug in mloda.")
 
         self.executor = ComputeFrameworkExecutor(self.cfw_register, self.worker_manager)
 
@@ -144,7 +144,7 @@ class ExecutionOrchestrator:
         streaming.
         """
         if self.cfw_register is None:
-            raise ValueError("CfwManager not initialized")
+            raise ValueError("Internal error: compute framework manager not initialized. This is likely a bug in mloda.")
 
         self.executor = ComputeFrameworkExecutor(self.cfw_register, self.worker_manager)
 

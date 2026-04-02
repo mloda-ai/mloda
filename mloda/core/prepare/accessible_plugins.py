@@ -35,7 +35,9 @@ class PreFilterPlugins:
                     accessible_feature_groups.remove(accessible_fg)
 
         if len(accessible_feature_groups) == 0:
-            raise ValueError("No accessible feature groups found.")
+            raise ValueError(
+                "No feature groups are loaded. Did you call PluginLoader.all()?"
+            )
         return accessible_feature_groups
 
     def _set_compute_frameworks(

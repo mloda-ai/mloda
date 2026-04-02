@@ -66,7 +66,7 @@ def test_load_features_unsupported_format() -> None:
     """Test that ValueError is raised for unsupported format."""
     config_str = '["feature1"]'
 
-    with pytest.raises(ValueError, match="Unsupported format: yaml"):
+    with pytest.raises(ValueError, match="Only 'json' is currently supported"):
         load_features_from_config(config_str, format="yaml")
 
 

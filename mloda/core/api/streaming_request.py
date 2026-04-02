@@ -23,7 +23,7 @@ def stream_all(
     global_filter: Optional[GlobalFilter] = None,
     api_data: Optional[Dict[str, Dict[str, Any]]] = None,
     plugin_collector: Optional[PluginCollector] = None,
-    copy_features: Optional[bool] = True,
+    copy_features: bool = True,
     strict_type_enforcement: bool = False,
     column_ordering: Optional[str] = None,
 ) -> Generator[Any, None, None]:

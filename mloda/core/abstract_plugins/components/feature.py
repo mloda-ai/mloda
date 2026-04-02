@@ -65,8 +65,16 @@ class Feature:
         self.uuid = uuid4()
 
         self.data_type = None
-        if data_type:
-            self.data_type = data_type if isinstance(data_type, DataType) else None
+        if data_type is not None:
+            if isinstance(data_type, DataType):
+                self.data_type = data_type
+            elif isinstance(data_type, str):
+                self.data_type = DataType(data_type)
+            else:
+                raise TypeError(
+                    f"data_type must be a DataType enum or a string matching a DataType member value, "
+                    f"got {type(data_type).__name__}"
+                )
 
         self.child_options: Optional[Options] = None
 

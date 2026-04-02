@@ -1,4 +1,19 @@
 # Data Provider: Base classes for building features
+#
+# Building a feature group plugin
+# --------------------------------
+# Most plugins inherit from both FeatureChainParserMixin and FeatureGroup.
+# The mixin provides pattern matching, PROPERTY_MAPPING validation, and a
+# default input_features implementation. See FeatureGroup's docstring and
+# docs/in_depth/property-mapping.md for details.
+#
+#     from mloda.provider import FeatureChainParserMixin, FeatureGroup, DefaultOptionKeys
+#
+#     class MyPlugin(FeatureChainParserMixin, FeatureGroup):
+#         PREFIX_PATTERN = r".*__([\w]+)_my_op$"
+#         PROPERTY_MAPPING = { ... }
+#         def calculate_feature(cls, data, features): ...
+#
 from mloda.core.abstract_plugins.feature_group import FeatureGroup as FeatureGroup
 
 # Versioning

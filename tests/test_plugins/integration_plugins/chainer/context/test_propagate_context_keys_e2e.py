@@ -3,7 +3,7 @@
 from typing import Any, List
 
 from mloda.user import Feature, Options, PluginCollector, mloda
-from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from tests.test_plugins.integration_plugins.chainer.propagate_context_feature import PropagateContextFeatureGroupTest
 from tests.test_plugins.integration_plugins.chainer.context.test_chained_optional_features import (

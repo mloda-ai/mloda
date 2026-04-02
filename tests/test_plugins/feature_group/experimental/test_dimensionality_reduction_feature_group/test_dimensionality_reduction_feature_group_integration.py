@@ -16,7 +16,7 @@ from mloda_plugins.feature_group.experimental.dimensionality_reduction.base impo
 from mloda_plugins.feature_group.experimental.dimensionality_reduction.pandas import (
     PandasDimensionalityReductionFeatureGroup,
 )
-from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys
 
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 

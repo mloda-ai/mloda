@@ -21,7 +21,7 @@ from mloda.user import JoinSpec, Link
 from mloda.user import Options
 from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys
 from mloda_plugins.feature_group.input_data.read_files.text_file_reader import PyFileReader
 from mloda_plugins.feature_group.input_data.read_document_feature import ReadDocumentFeature
 

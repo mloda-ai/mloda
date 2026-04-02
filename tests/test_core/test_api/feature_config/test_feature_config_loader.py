@@ -8,7 +8,7 @@ import pytest
 
 from mloda.user import Feature
 from mloda.core.api.feature_config.loader import load_features_from_config
-from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys
 
 
 def test_load_features_string_only() -> None:
@@ -95,7 +95,7 @@ def test_load_features_with_mloda_source() -> None:
     2. Place in_features in options.context[DefaultOptionKeys.in_features]
     3. Place regular options in options.group
     """
-    from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
+    from mloda.provider import DefaultOptionKeys
 
     config_str = """[
         {
@@ -133,7 +133,7 @@ def test_load_features_mixed_chained_and_simple() -> None:
     - Regular features have options in group, no in_features in context
     - Chained features have in_features in context and options in group
     """
-    from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
+    from mloda.provider import DefaultOptionKeys
 
     config_str = """[
         "age",

@@ -5,7 +5,7 @@ This module tests the DefaultOptionKeys enum which holds option keys and their
 default values for mloda feature groups.
 """
 
-from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys
 
 
 class TestDefaultOptionKeys:

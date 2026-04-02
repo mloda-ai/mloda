@@ -14,7 +14,7 @@ from mloda.provider import (
     FeatureChainParserMixin,
 )
 from mloda.provider import FeatureSet
-from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys
 
 
 class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):

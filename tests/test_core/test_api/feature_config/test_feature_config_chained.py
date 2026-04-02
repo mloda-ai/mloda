@@ -68,7 +68,7 @@ def test_load_chained_feature_as_string() -> None:
     """
     from mloda.user import Feature
     from mloda.core.api.feature_config.loader import load_features_from_config
-    from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
+    from mloda.provider import DefaultOptionKeys
 
     config_str = """[
         {
@@ -113,7 +113,7 @@ def test_load_chained_feature_from_config() -> None:
     """
     from mloda.user import Feature
     from mloda.core.api.feature_config.loader import load_features_from_config
-    from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
+    from mloda.provider import DefaultOptionKeys
 
     config_str = """[
         "age",

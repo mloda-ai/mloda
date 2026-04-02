@@ -14,7 +14,7 @@ from mloda.provider import (
     FeatureChainParserMixin,
 )
 from mloda.provider import FeatureSet
-from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys
 
 
 class MissingValueFeatureGroup(FeatureChainParserMixin, FeatureGroup):
@@ -103,7 +103,7 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     ```python
     from mloda.user import Feature
     from mloda.user import Options
-    from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
+    from mloda.provider import DefaultOptionKeys
 
     # Mean imputation using configuration
     feature = Feature(

@@ -7,7 +7,7 @@ from mloda_plugins.feature_group.experimental.llm.llm_api.openai import OpenAIRe
 import pytest
 
 from mloda.user import Feature
-from mloda_plugins.feature_group.default_options_key import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.llm.llm_file_selector import LLMFileSelector
 from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame

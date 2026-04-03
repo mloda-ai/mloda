@@ -31,7 +31,7 @@ class TimeTravelNegativeFilterTest(FeatureGroup):
         return {cls.get_class_name(): [1, 2, 3]}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         return {PyArrowTable}
 
 

@@ -111,5 +111,5 @@ class InstalledPackagesFeatureGroup(FeatureGroup):
             return {"error": error_message}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         return {PandasDataFrame}

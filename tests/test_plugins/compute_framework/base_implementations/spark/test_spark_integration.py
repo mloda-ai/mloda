@@ -126,7 +126,7 @@ class ATestSparkFeatureGroup(FeatureGroup, ConnectionMatcherMixin):
         return None
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         return {SparkFramework}
 
 
@@ -252,7 +252,7 @@ class CheckData(FeatureGroup):
         return {"pyarrow_avg_value_by_category"}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         return {PyArrowTable}
 
 

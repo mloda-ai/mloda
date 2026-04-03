@@ -27,7 +27,7 @@ class BaseTestGraphFeatureGroup3(BaseTestFeatureGroup1):
         return False
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         return {GraphComputeFramework2, GraphComputeFramework3}
 
 

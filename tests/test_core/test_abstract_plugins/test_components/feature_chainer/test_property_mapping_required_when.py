@@ -286,7 +286,7 @@ class ConditionalRequiredFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return pd.DataFrame({feature_name: [f"computed_{agg_type}"]})
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         return {PandasDataFrame}
 
 

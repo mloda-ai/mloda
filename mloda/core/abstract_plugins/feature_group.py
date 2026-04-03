@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, ClassVar, Callable, Dict, Iterable, List, Optional, Set, Type, Union, final
 from abc import ABC
+
+logger = logging.getLogger(__name__)
 
 from mloda.core.abstract_plugins.components.base_artifact import BaseArtifact
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
@@ -424,14 +427,14 @@ class FeatureGroup(ABC):
         return Domain.get_default_domain()
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Optional[Set[Type[ComputeFramework]]]:
         """
-        Defines the rule for determining the compute framework to use for this feature group.
+        Defines which compute frameworks this feature group supports.
 
-        True indicates that the feature group creator does not care about the compute framework.
-        If the feature group creator wants to define the compute framework, return a set of compute frameworks.
+        Return ``None`` (the default) to support all available frameworks.
+        Return a set of specific ``ComputeFramework`` subclasses to restrict support.
         """
-        return True
+        return None
 
     @final
     @classmethod
@@ -440,14 +443,16 @@ class FeatureGroup(ABC):
         Determines the set of compute frameworks supported by this feature group based on the
         `compute_framework_rule`.
         """
-
         rule = cls.compute_framework_rule()
 
-        """If FG creator does not care, we allow every framework."""
-        if rule is True:
+        if rule is None:
             return get_all_subclasses(ComputeFramework)
-        if isinstance(rule, bool):
-            raise Exception("Compute framework rule for is not a set of compute frameworks.")
+
+        if not isinstance(rule, set):
+            raise ValueError(
+                f"compute_framework_rule() of {cls.__name__} must return None or a set of "
+                f"ComputeFramework subclasses, got {type(rule).__name__}."
+            )
         return rule
 
     @final
@@ -483,22 +488,20 @@ class FeatureGroup(ABC):
                 feature_name = FeatureName(feature_name)
 
             if self.input_features(options, feature_name) is None:
-                """
-                A feature could be a root feature, if it does not have any input features. 
-                But a feature could be flexible depending on the options.                
-                """
+                # No input features declared, so this is a root feature.
                 return True
         except NotImplementedError:
-            """
-            If this is not implemented, then this is a root feature.
-            """
+            # input_features not implemented means this is a root feature.
             return True
         except Exception:
-            """
-            If this is not None, then this might create errors due to input feature definition.
-            Thus, an error just means that this is not a root feature.
-            """
-            pass
+            # Errors in input_features (e.g. validation failures for this feature name)
+            # mean the feature group does not match, so it is not a root.
+            logger.debug(
+                "%s.input_features raised an exception for feature '%s'",
+                type(self).__name__,
+                feature_name,
+                exc_info=True,
+            )
         return False
 
     @classmethod

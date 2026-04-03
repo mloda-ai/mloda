@@ -20,7 +20,7 @@ except ImportError:
 
 class PandasMissingValueFeatureGroup(MissingValueFeatureGroup):
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         return {PandasDataFrame}
 
     @classmethod

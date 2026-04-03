@@ -80,7 +80,7 @@ class ATestSqliteFeatureGroup(FeatureGroup, ConnectionMatcherMixin):
         return None
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         return {SqliteFramework}
 
 
@@ -186,7 +186,7 @@ class SqliteCheckData(FeatureGroup):
         return {"pyarrow_avg_value_by_category_sqlite"}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         return {PyArrowTable}
 
 

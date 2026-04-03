@@ -127,5 +127,5 @@ class LLMBaseRequest(FeatureGroup):
         return f"{option_prompt}\nContext:\n{data_prompt} End Context\n "
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         return {PandasDataFrame}

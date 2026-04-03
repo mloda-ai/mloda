@@ -11,7 +11,7 @@ from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda.provider import DataCreator
 from mloda.provider import BaseInputData
-from mloda.provider import ConnectionMatcherMixin
+from mloda.provider import MatchData
 from mloda.provider import ComputeFramework
 from mloda.user import mloda
 from mloda.user import ParallelizationMode
@@ -110,7 +110,7 @@ class IcebergTestDataCreator(FeatureGroup):
         return {IcebergFramework}
 
 
-class ATestIcebergFeatureGroup(FeatureGroup, ConnectionMatcherMixin):
+class ATestIcebergFeatureGroup(FeatureGroup, MatchData):
     """Base class for Iceberg feature groups."""
 
     @classmethod

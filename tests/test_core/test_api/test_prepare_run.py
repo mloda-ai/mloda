@@ -9,7 +9,7 @@ These tests define the contract for a two-phase execution model:
 from typing import Any, List, Optional, Set, Union
 
 from mloda.user import mloda, mlodaAPI, Feature, PluginCollector
-from mloda.provider import FeatureGroup, FeatureSet, ApiDataFeatureGroup
+from mloda.provider import FeatureGroup, FeatureSet, ApiInputDataFeature
 from mloda.user import Options, FeatureName, Index
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
@@ -35,7 +35,7 @@ class PrepareRunApiFeature(FeatureGroup):
 
 _enabled = PluginCollector.enabled_feature_groups(
     {
-        ApiDataFeatureGroup,
+        ApiInputDataFeature,
         PrepareRunApiFeature,
     }
 )

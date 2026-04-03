@@ -1,6 +1,6 @@
 from typing import Any, Optional
 from mloda.provider import FeatureGroup
-from mloda.provider import FeatureSet, ApiData as ApiInputData, BaseInputData
+from mloda.provider import FeatureSet, ApiInputData, BaseInputData
 
 
 class ApiInputDataFeature(FeatureGroup):

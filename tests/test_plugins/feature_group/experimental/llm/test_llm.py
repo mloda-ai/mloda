@@ -8,7 +8,7 @@ from mloda_plugins.feature_group.experimental.llm.installed_packages_feature_gro
 from mloda_plugins.feature_group.experimental.llm.llm_api.claude import ClaudeRequestLoop
 from mloda_plugins.feature_group.experimental.llm.llm_api.openai import OpenAIRequestLoop
 from mloda_plugins.feature_group.experimental.llm.tools.available.multiply import MultiplyTool
-from mloda.provider import ApiDataFeatureGroup
+from mloda.provider import ApiInputDataFeature
 import pytest
 
 from mloda_plugins.feature_group.experimental.llm.llm_api.gemini import GeminiRequestLoop
@@ -101,7 +101,7 @@ class TestPlugInLLM:
         api_data_index = Index(("InputData1",))
 
         link = Link.outer(
-            JoinSpec(InstalledPackagesFeatureGroup, installed), JoinSpec(ApiDataFeatureGroup, api_data_index)
+            JoinSpec(InstalledPackagesFeatureGroup, installed), JoinSpec(ApiInputDataFeature, api_data_index)
         )
 
         _test_classes = [OpenAIRequestLoop, GeminiRequestLoop]

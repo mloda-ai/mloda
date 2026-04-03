@@ -32,16 +32,14 @@ from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 
 # Input data classes
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda.core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData as ApiData
-from mloda_plugins.feature_group.input_data.api_data.api_data import ApiInputDataFeature as ApiDataFeatureGroup
-from mloda.core.abstract_plugins.components.input_data.api.base_api_data import BaseApiData as BaseApiDataSchema
-from mloda.core.abstract_plugins.components.input_data.api.api_input_data_collection import (
-    ApiInputDataCollection as ApiDataCollection,
-)
+from mloda.core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
+from mloda_plugins.feature_group.input_data.api_data.api_data import ApiInputDataFeature
+from mloda.core.abstract_plugins.components.input_data.api.base_api_data import BaseApiData
+from mloda.core.abstract_plugins.components.input_data.api.api_input_data_collection import ApiInputDataCollection
 from mloda.core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
 
 # Match data
-from mloda.core.abstract_plugins.components.match_data.match_data import MatchData as ConnectionMatcherMixin
+from mloda.core.abstract_plugins.components.match_data.match_data import MatchData
 
 # Artifact
 from mloda.core.abstract_plugins.components.base_artifact import BaseArtifact
@@ -90,13 +88,13 @@ __all__ = [
     "FeatureSet",
     # Input data
     "BaseInputData",
-    "ApiData",
-    "ApiDataFeatureGroup",
-    "BaseApiDataSchema",
-    "ApiDataCollection",
+    "ApiInputData",
+    "ApiInputDataFeature",
+    "BaseApiData",
+    "ApiInputDataCollection",
     "DataCreator",
     # Match data
-    "ConnectionMatcherMixin",
+    "MatchData",
     # Artifact
     "BaseArtifact",
     # Validators

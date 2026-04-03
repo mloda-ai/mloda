@@ -19,8 +19,7 @@ class PyArrowFilterEngine(BaseFilterEngine):
         if min_parameter is None or max_parameter is None:
             raise ValueError(f"Filter parameter {filter_feature.parameter} not supported")
 
-        # Get the string name from the FeatureName object
-        column_name = str(filter_feature.name)
+        column_name = filter_feature.name
 
         # Create boolean masks using PyArrow compute
         min_mask = pc.greater_equal(data[column_name], min_parameter)
@@ -36,8 +35,7 @@ class PyArrowFilterEngine(BaseFilterEngine):
 
     @classmethod
     def do_min_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        # Get the string name from the FeatureName object
-        column_name = str(filter_feature.name)
+        column_name = filter_feature.name
 
         # Extract the value from the parameter
         value = filter_feature.parameter.value
@@ -51,8 +49,7 @@ class PyArrowFilterEngine(BaseFilterEngine):
 
     @classmethod
     def do_max_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        # Get the string name from the FeatureName object
-        column_name = str(filter_feature.name)
+        column_name = filter_feature.name
 
         # Check if this is a complex parameter with max/max_exclusive or a simple one with value
         has_max = filter_feature.parameter.max_value is not None
@@ -93,8 +90,7 @@ class PyArrowFilterEngine(BaseFilterEngine):
 
     @classmethod
     def do_equal_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        # Get the string name from the FeatureName object
-        column_name = str(filter_feature.name)
+        column_name = filter_feature.name
 
         # Extract the value from the parameter
         value = filter_feature.parameter.value
@@ -108,8 +104,7 @@ class PyArrowFilterEngine(BaseFilterEngine):
 
     @classmethod
     def do_regex_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        # Get the string name from the FeatureName object
-        column_name = str(filter_feature.name)
+        column_name = filter_feature.name
 
         # Extract the value from the parameter
         value = filter_feature.parameter.value
@@ -125,8 +120,7 @@ class PyArrowFilterEngine(BaseFilterEngine):
 
     @classmethod
     def do_categorical_inclusion_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        # Get the string name from the FeatureName object
-        column_name = str(filter_feature.name)
+        column_name = filter_feature.name
 
         # Extract the values from the parameter
         values = filter_feature.parameter.values

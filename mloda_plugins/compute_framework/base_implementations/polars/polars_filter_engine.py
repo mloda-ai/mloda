@@ -21,7 +21,7 @@ class PolarsFilterEngine(BaseFilterEngine):
         if min_parameter is None or max_parameter is None:
             raise ValueError(f"Filter parameter {filter_feature.parameter} not supported")
 
-        filter_feature_name = filter_feature.name.name
+        filter_feature_name = filter_feature.name
 
         if max_operator is True:
             return data.filter(
@@ -34,7 +34,7 @@ class PolarsFilterEngine(BaseFilterEngine):
 
     @classmethod
     def do_min_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        column_name = filter_feature.name.name
+        column_name = filter_feature.name
 
         # Extract the value from the parameter
         value = filter_feature.parameter.value
@@ -46,7 +46,7 @@ class PolarsFilterEngine(BaseFilterEngine):
 
     @classmethod
     def do_max_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        column_name = filter_feature.name.name
+        column_name = filter_feature.name
 
         # Check if this is a complex parameter with max/max_exclusive or a simple one with value
         has_max = filter_feature.parameter.max_value is not None
@@ -83,7 +83,7 @@ class PolarsFilterEngine(BaseFilterEngine):
 
     @classmethod
     def do_equal_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        column_name = filter_feature.name.name
+        column_name = filter_feature.name
 
         # Extract the value from the parameter
         value = filter_feature.parameter.value
@@ -95,7 +95,7 @@ class PolarsFilterEngine(BaseFilterEngine):
 
     @classmethod
     def do_regex_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        column_name = filter_feature.name.name
+        column_name = filter_feature.name
 
         # Extract the value from the parameter
         value = filter_feature.parameter.value
@@ -107,7 +107,7 @@ class PolarsFilterEngine(BaseFilterEngine):
 
     @classmethod
     def do_categorical_inclusion_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        column_name = filter_feature.name.name
+        column_name = filter_feature.name
 
         # Extract the values from the parameter
         values = filter_feature.parameter.values

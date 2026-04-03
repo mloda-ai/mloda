@@ -194,6 +194,8 @@ class FeatureChainParser:
         if isinstance(property_value, dict):
             # Remove metadata keys, keep only the actual valid values
             metadata_keys = {
+                # Plain string metadata key used for human-readable documentation
+                "explanation",
                 DefaultOptionKeys.default,
                 DefaultOptionKeys.context,
                 DefaultOptionKeys.group,

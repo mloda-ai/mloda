@@ -93,7 +93,17 @@ class TestRequiredWhenUnit:
         }
         extracted = FeatureChainParser._extract_property_values(mapping_entry)
         assert DefaultOptionKeys.required_when not in extracted
-        assert "explanation" in extracted
+        assert "explanation" not in extracted
+
+    def test_extract_property_values_strips_explanation(self) -> None:
+        """'explanation' is documentation metadata and must be stripped from extracted property values."""
+        mapping_entry = {
+            "explanation": "Column to order by within each partition",
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: False,
+        }
+        extracted = FeatureChainParser._extract_property_values(mapping_entry)
+        assert "explanation" not in extracted
 
     def test_can_skip_required_check_with_required_when(self) -> None:
         """Properties with required_when should be skippable in the base required check."""

@@ -1,4 +1,4 @@
-from mloda.provider import ConnectionMatcherMixin
+from mloda.provider import MatchData
 from mloda.provider import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 import pytest
@@ -67,7 +67,7 @@ class DuckDBTestDataCreator(ATestDataCreator):
         return duckdb_test_dict
 
 
-class ATestDuckDBFeatureGroup(FeatureGroup, ConnectionMatcherMixin):
+class ATestDuckDBFeatureGroup(FeatureGroup, MatchData):
     @classmethod
     def match_data_access(
         cls,

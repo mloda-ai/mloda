@@ -25,7 +25,7 @@ from mloda.user import Link, JoinSpec
 from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda.provider import ApiDataFeatureGroup
+from mloda.provider import ApiInputDataFeature
 
 
 # ============================================================================
@@ -103,7 +103,7 @@ class SimplifiedApiJoinFeature(FeatureGroup):
         """Define input features with a LEFT join link."""
         # Create the link: LEFT join on api_id = creator_id
         link = Link.left(
-            JoinSpec(ApiDataFeatureGroup, Index(("api_id",))), JoinSpec(CreatorDataFeature, Index(("creator_id",)))
+            JoinSpec(ApiInputDataFeature, Index(("api_id",))), JoinSpec(CreatorDataFeature, Index(("creator_id",)))
         )
 
         return {
@@ -130,21 +130,21 @@ class TestSimplifiedApiData:
 
     _enabled_simple = PluginCollector.enabled_feature_groups(
         {
-            ApiDataFeatureGroup,
+            ApiInputDataFeature,
             SimpleApiFeature,
         }
     )
 
     _enabled_multikey = PluginCollector.enabled_feature_groups(
         {
-            ApiDataFeatureGroup,
+            ApiInputDataFeature,
             MultiKeyApiFeature,
         }
     )
 
     _enabled_join = PluginCollector.enabled_feature_groups(
         {
-            ApiDataFeatureGroup,
+            ApiInputDataFeature,
             CreatorDataFeature,
             SimplifiedApiJoinFeature,
         }

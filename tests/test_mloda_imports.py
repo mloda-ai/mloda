@@ -122,13 +122,13 @@ def test_import_provider_base_classes() -> None:
         FeatureSet,
         # Input data
         BaseInputData,
-        ApiData,
-        ApiDataFeatureGroup,
-        BaseApiDataSchema,
-        ApiDataCollection,
+        ApiInputData,
+        ApiInputDataFeature,
+        BaseApiData,
+        ApiInputDataCollection,
         DataCreator,
         # Match data
-        ConnectionMatcherMixin,
+        MatchData,
         # Artifact
         BaseArtifact,
         # Validators
@@ -159,13 +159,13 @@ def test_import_provider_base_classes() -> None:
     assert FeatureSet is not None
     # Input data
     assert BaseInputData is not None
-    assert ApiData is not None
-    assert ApiDataFeatureGroup is not None
-    assert BaseApiDataSchema is not None
-    assert ApiDataCollection is not None
+    assert ApiInputData is not None
+    assert ApiInputDataFeature is not None
+    assert BaseApiData is not None
+    assert ApiInputDataCollection is not None
     assert DataCreator is not None
     # Match data
-    assert ConnectionMatcherMixin is not None
+    assert MatchData is not None
     # Artifact
     assert BaseArtifact is not None
     # Validators

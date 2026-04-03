@@ -2,7 +2,7 @@
 Integration test: ApiInputDataCollection with Links and Joins.
 
 Three features:
-1. ApiDataFeatureGroup (existing) - receives mloda data
+1. ApiInputDataFeature (existing) - receives mloda data
 2. CreatorDataFeature (custom) - creates own data via DataCreator
 3. JoinedFeature (custom) - depends on both with a join
 """
@@ -20,7 +20,7 @@ from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda.provider import ApiDataFeatureGroup
+from mloda.provider import ApiInputDataFeature
 
 
 # ============================================================================
@@ -53,7 +53,7 @@ class LeftJoinedFeature(FeatureGroup):
 
         # Create the link: LEFT join on api_id = creator_id
         link = Link.left(
-            JoinSpec(ApiDataFeatureGroup, Index(("api_id",))), JoinSpec(CreatorDataFeature, Index(("creator_id",)))
+            JoinSpec(ApiInputDataFeature, Index(("api_id",))), JoinSpec(CreatorDataFeature, Index(("creator_id",)))
         )
 
         # Return features - attach link to one of them
@@ -81,7 +81,7 @@ class AppendedFeature(FeatureGroup):
 
         # Create the link: APPEND stacks data vertically
         link = Link.append(
-            JoinSpec(ApiDataFeatureGroup, Index(("api_id",))), JoinSpec(CreatorDataFeature, Index(("creator_id",)))
+            JoinSpec(ApiInputDataFeature, Index(("api_id",))), JoinSpec(CreatorDataFeature, Index(("creator_id",)))
         )
 
         # Return features - attach link to one of them
@@ -109,7 +109,7 @@ class TestApiLinkJoin:
 
     _enabled_left = PluginCollector.enabled_feature_groups(
         {
-            ApiDataFeatureGroup,
+            ApiInputDataFeature,
             CreatorDataFeature,
             LeftJoinedFeature,
         }
@@ -117,7 +117,7 @@ class TestApiLinkJoin:
 
     _enabled_append = PluginCollector.enabled_feature_groups(
         {
-            ApiDataFeatureGroup,
+            ApiInputDataFeature,
             CreatorDataFeature,
             AppendedFeature,
         }

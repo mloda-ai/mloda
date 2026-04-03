@@ -19,7 +19,7 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda.provider import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.source_input_feature import SourceInputFeature
 
-from mloda.provider import ApiDataFeatureGroup
+from mloda.provider import ApiInputDataFeature
 from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
 from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 
@@ -61,7 +61,7 @@ class TestInputFeatures:
     _requested_name = "InputFeatureGroupTest"
     _enabled = PluginCollector.enabled_feature_groups(
         {
-            ApiDataFeatureGroup,
+            ApiInputDataFeature,
             InputFeatureGroupTest,
             FeatureInputFeatureTest,
             FeatureInputCreatorTest,

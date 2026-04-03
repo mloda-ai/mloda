@@ -77,9 +77,9 @@ MatchData is **only** used in these specific scenarios:
 
 ### Example Implementation
 ``` python
-from mloda.provider import ConnectionMatcherMixin, FeatureGroup
+from mloda.provider import MatchData, FeatureGroup
 
-class DuckDBFeatureGroup(FeatureGroup, ConnectionMatcherMixin):
+class DuckDBFeatureGroup(FeatureGroup, MatchData):
     @classmethod
     def match_data_access(
         cls,
@@ -103,7 +103,7 @@ class DuckDBFeatureGroup(FeatureGroup, ConnectionMatcherMixin):
 | **Primary Purpose** | Data loading and access | Connection object matching for stateful frameworks |
 | **When Used** | All feature groups that load data | Only feature groups requiring framework connection objects |
 | **Scope** | Universal data access pattern | Specialized for stateful compute frameworks |
-| **Usage Pattern** | `input_data()` method in feature groups | Multiple inheritance: `FeatureGroup, ConnectionMatcherMixin` |
+| **Usage Pattern** | `input_data()` method in feature groups | Multiple inheritance: `FeatureGroup, MatchData` |
 | **Connection Dependency** | Works with or without connections | Specifically designed for connection objects |
 | **Framework Support** | All compute frameworks | Only stateful frameworks (DuckDB, database connections) |
 
@@ -123,7 +123,7 @@ BaseInputData and MatchData serve **different purposes** and are used in **diffe
 
 ### Combined Usage Example
 ``` python
-class DuckDBAnalyticsFeature(FeatureGroup, ConnectionMatcherMixin):
+class DuckDBAnalyticsFeature(FeatureGroup, MatchData):
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         # BaseInputData for general data loading
@@ -133,7 +133,7 @@ class DuckDBAnalyticsFeature(FeatureGroup, ConnectionMatcherMixin):
     def match_data_access(cls, feature_name: str, options: Options,
                          data_access_collection: Optional[DataAccessCollection] = None,
                          framework_connection_object: Optional[Any] = None) -> Any:
-        # ConnectionMatcherMixin for connection object matching
+        # MatchData for connection object matching
         if framework_connection_object and isinstance(framework_connection_object, duckdb.DuckDBPyConnection):
             return framework_connection_object
         return None
@@ -159,14 +159,14 @@ class CsvProcessingFeature(FeatureGroup):
 **Pattern**: Both BaseInputData and MatchData are needed
 
 ``` python
-class DuckDBAnalyticsFeature(FeatureGroup, ConnectionMatcherMixin):
+class DuckDBAnalyticsFeature(FeatureGroup, MatchData):
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         return ReadFile()  # BaseInputData for data loading
 
     @classmethod
     def match_data_access(cls, ...):
-        # ConnectionMatcherMixin for connection matching
+        # MatchData for connection matching
         return appropriate_duckdb_connection
 ```
 

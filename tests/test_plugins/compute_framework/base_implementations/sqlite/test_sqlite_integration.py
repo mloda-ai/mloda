@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional, Set, Type, Union
 
 import pytest
 
-from mloda.provider import ConnectionMatcherMixin
+from mloda.provider import MatchData
 from mloda.provider import ComputeFramework
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
@@ -49,7 +49,7 @@ class SqliteTestDataCreator(ATestDataCreator):
         return sqlite_test_dict
 
 
-class ATestSqliteFeatureGroup(FeatureGroup, ConnectionMatcherMixin):
+class ATestSqliteFeatureGroup(FeatureGroup, MatchData):
     @classmethod
     def match_data_access(
         cls,

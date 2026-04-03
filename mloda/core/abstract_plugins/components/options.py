@@ -28,13 +28,10 @@ class Options:
 
     Common Methods:
     - .get(key) - Read value (searches group, then context)
-    - .set(key, value) - Write value (auto-placement)
+    - .add_to_group(key, value) - Add to group (affects splitting)
+    - .add_to_context(key, value) - Add to context (metadata only)
     - .items() / .keys() - Iterate over all options
     - key in options - Check existence
-
-    Direct Access (when category matters):
-    - .group dict or .add_to_group(key, value)
-    - .context dict or .add_to_context(key, value)
 
     Constraint: A key cannot exist in both group and context simultaneously.
 
@@ -78,15 +75,6 @@ class Options:
         self.propagate_context_keys: frozenset[str] = propagate_context_keys or frozenset()
         OptionsValidator.validate_no_duplicate_keys(self.group, self.context)
         OptionsValidator.validate_propagate_keys_in_context(self.propagate_context_keys, self.context)
-
-    def add(self, key: str, value: Any) -> None:
-        """
-        Legacy method for backward compatibility.
-        Adds to group to maintain existing behavior during migration.
-
-        Possibility that we keep this as default method for adding options in the future.
-        """
-        self.add_to_group(key, value)
 
     def add_to_group(self, key: str, value: Any) -> None:
         """Add parameter to group (affects Feature Group resolution/splitting)."""
@@ -152,24 +140,6 @@ class Options:
         Supports the 'in' operator: 'key' in options
         """
         return key in self.group or key in self.context
-
-    def set(self, key: str, value: Any) -> None:
-        """
-        Set a value, automatically placing it in group or context.
-
-        If the key already exists, update it in its current location.
-        If the key is new, add it to group by default.
-        """
-        if key in self.group:
-            self.group[key] = value
-        elif key in self.context:
-            self.context[key] = value
-        else:
-            # New key, add to group by default
-            self.group[key] = value
-
-    def __setitem__(self, key: str, value: Any) -> None:
-        self.set(key, value)
 
     def get_in_features(self) -> "frozenset[Feature]":
         val = self.get(DefaultOptionKeys.in_features)

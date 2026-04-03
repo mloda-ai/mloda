@@ -125,7 +125,7 @@ class BaseInputData(ABC):
             raise ValueError(
                 f"BaseInputData already set with different values. {cls_to_be_added} != {already_cls_to_be_added}"
             )
-        options.add("BaseInputData", (cls_to_be_added, matched_data_access))
+        options.add_to_group("BaseInputData", (cls_to_be_added, matched_data_access))
 
     def load(self, features: FeatureSet) -> Any:
         """

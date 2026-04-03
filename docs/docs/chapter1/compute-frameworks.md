@@ -188,7 +188,7 @@ connection = duckdb.connect()
 
 # Set up data access with connection
 data_access_collection = DataAccessCollection(
-    initialized_connection_object={connection}
+    initialized_connection_objects={connection}
 )
 
 feature = Feature("id", options={"compute_framework": "DuckDBFramework"})

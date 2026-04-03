@@ -88,7 +88,7 @@ import duckdb
 connection = duckdb.connect()
 
 # Set up data access
-data_access_collection = DataAccessCollection(initialized_connection_object={connection})
+data_access_collection = DataAccessCollection(initialized_connection_objects={connection})
 
 # Run with DuckDB framework
 result = mloda.run_all(

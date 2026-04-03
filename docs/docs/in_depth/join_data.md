@@ -304,7 +304,7 @@ class PandasMergeEngine(BaseMergeEngine):
 
         else:
             raise ValueError(
-                f"JoinType {join_type} {left_index} {right_index} are not yet implemented {self.__class__.__name__}"
+                f"JoinType {join_type} {left_index} {right_index} is not yet implemented in {self.__class__.__name__}"
             )
 ```
 

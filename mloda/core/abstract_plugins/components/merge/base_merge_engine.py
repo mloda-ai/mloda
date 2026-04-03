@@ -39,22 +39,22 @@ class BaseMergeEngine(ABC):
         pass
 
     def merge_inner(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        raise ValueError(f"JoinType inner are not yet implemented {self.__class__.__name__}")
+        raise ValueError(f"JoinType inner is not yet implemented in {self.__class__.__name__}")
 
     def merge_left(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        raise ValueError(f"JoinType left are not yet implemented {self.__class__.__name__}")
+        raise ValueError(f"JoinType left is not yet implemented in {self.__class__.__name__}")
 
     def merge_right(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        raise ValueError(f"JoinType right are not yet implemented {self.__class__.__name__}")
+        raise ValueError(f"JoinType right is not yet implemented in {self.__class__.__name__}")
 
     def merge_full_outer(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        raise ValueError(f"JoinType full outer are not yet implemented {self.__class__.__name__}")
+        raise ValueError(f"JoinType full outer is not yet implemented in {self.__class__.__name__}")
 
     def merge_append(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        raise ValueError(f"JoinType append are not yet implemented {self.__class__.__name__}")
+        raise ValueError(f"JoinType append is not yet implemented in {self.__class__.__name__}")
 
     def merge_union(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        raise ValueError(f"JoinType union are not yet implemented {self.__class__.__name__}")
+        raise ValueError(f"JoinType union is not yet implemented in {self.__class__.__name__}")
 
     @final
     def merge(self, left_data: Any, right_data: Any, jointype: JoinType, left_index: Index, right_index: Index) -> Any:

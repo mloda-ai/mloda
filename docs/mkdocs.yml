@@ -51,10 +51,9 @@ nav:
     - License - Apache 2.0: license.md
   - Need Help?:
     - FAQ: faq.md
-    - Need Help: need-help.md
 
   # todo
-  #- Extender in Depth: need-help.md
+  #- Extender in Depth: TBD
 
 theme:
   name: readthedocs

@@ -457,7 +457,7 @@ Available join types:
             return transformer_cls.transform(_from_fw, _to_fw, data, None)
 
         raise ValueError(
-            f"Conversion from {type(data)} to {cls.expected_data_framework()} is not supported. This can be created, when a flyserver was used."
+            f"Conversion from {type(data)} to {cls.expected_data_framework()} is not supported. This can happen when a FlightServer was used."
         )
 
     @final

@@ -54,7 +54,7 @@ class SingleFilter:
 
     def handle_parameter(self, parameter: Dict[str, Any]) -> FilterParameterImpl:
         if not isinstance(parameter, dict):
-            raise ValueError(f"Filter parameter is no dictionary: {parameter}.")
+            raise ValueError(f"Filter parameter is not a dictionary: {parameter}.")
 
         elif not parameter:
             raise ValueError(f"Dictionary is empty: {parameter}.")

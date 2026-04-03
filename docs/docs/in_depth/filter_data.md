@@ -160,16 +160,28 @@ Although this example is complex, it is noteworthy, that the framework considers
 
 ### Inline Filters and Conditional Masking
 
-mloda supports two filter application modes controlled by the filter engine's `final_filters()` method:
+#### The problem: two ways to use a filter
 
-1. **Final filters** (`final_filters() = True`): The framework applies filters **after** `calculate_feature()`, eliminating rows that do not match. This is the default behavior for Pandas, PyArrow, Polars, and SQL engines.
-2. **Inline filters** (`final_filters() = False`): The framework **skips** post-calculation filtering. The FeatureGroup reads `features.filters` during `calculate_feature()` and applies them itself. This enables patterns like predicate pushdown (Iceberg) or conditional masking.
+Normally, filters **remove rows**. You say "only keep rows where status is active," and every inactive row is deleted from the result. This happens automatically after `calculate_feature()` returns, and it is what most filter engines do (`final_filters() = True`).
 
-**Conditional masking** replaces non-matching values with NULL while preserving all rows. This is useful for conditional aggregation (the SQL equivalent of `SUM(CASE WHEN ... THEN ... END) OVER (PARTITION BY ...)`).
+But sometimes you do not want to remove rows. Instead, you want to **blank out** certain values while keeping every row in place. Think of it like using a highlighter on a spreadsheet: the unmarked cells become empty (NULL), but the rows stay.
 
-#### Setting up inline filtering
+This is called **conditional masking**, and it is useful when you need to aggregate only some values while still returning a result for every row. In SQL, this is the pattern `SUM(CASE WHEN status = 'active' THEN value END) OVER (PARTITION BY region)`.
 
-First, create a filter engine with `final_filters()` returning `False` and a compute framework that uses it:
+To make this work, the FeatureGroup needs to handle the filter itself inside `calculate_feature()`, and the framework must **not** apply its own row-removal step afterward. That is what **inline filtering** (`final_filters() = False`) enables.
+
+#### How the two modes compare
+
+| | Final filtering (default) | Inline filtering |
+|---|---|---|
+| `final_filters()` returns | `True` | `False` |
+| Who applies the filter? | The framework, after `calculate_feature()` | Your FeatureGroup, inside `calculate_feature()` |
+| What happens to non-matching rows? | They are removed | Up to you (mask to NULL, transform, ignore, etc.) |
+| Used by | Pandas, PyArrow, Polars, SQL engines | Iceberg (predicate pushdown), conditional masking |
+
+#### Step 1: tell the framework "I will handle filtering myself"
+
+You need two small subclasses. The filter engine overrides `final_filters()` to return `False`, and the compute framework points to that engine.
 
 ```python
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_filter_engine import PyArrowFilterEngine
@@ -179,7 +191,7 @@ from mloda.provider import BaseFilterEngine
 class InlineMaskFilterEngine(PyArrowFilterEngine):
     @classmethod
     def final_filters(cls) -> bool:
-        return False
+        return False  # "do NOT remove rows after calculate_feature"
 
 class PyArrowTableInlineFilter(PyArrowTable):
     @classmethod
@@ -187,9 +199,26 @@ class PyArrowTableInlineFilter(PyArrowTable):
         return InlineMaskFilterEngine
 ```
 
-#### Example: conditional masking with aggregation
+That is all the setup. Everything else happens inside your FeatureGroup.
 
-This FeatureGroup reads filters inline, masks non-matching values to NULL, aggregates by group, and broadcasts results back to all rows:
+#### Step 2: read the filter and mask the data
+
+Inside `calculate_feature()`, the filters are available on `features.filters`. Each filter tells you which column to look at, what comparison to make, and what value to compare against.
+
+Here is a concrete example. Given this data:
+
+| region | status   | value |
+|--------|----------|-------|
+| A      | active   | 10    |
+| A      | inactive | 20    |
+| B      | active   | 30    |
+| B      | inactive | 40    |
+
+With the filter `status == "active"`, we want to:
+
+1. **Mask**: blank out values where status is not active: `[10, NULL, 30, NULL]`
+2. **Aggregate**: sum by region (A=10, B=30)
+3. **Broadcast**: put the sum back on every row: `[10, 10, 30, 30]`
 
 ```python
 import pyarrow as pa
@@ -207,37 +236,40 @@ class ConditionalMaskExample(FeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data, features):
-        # Source data
+        # The raw data
         region = pa.array(["A", "A", "B", "B"])
         status = pa.array(["active", "inactive", "active", "inactive"])
-        value = pa.array([10, 20, 30, 40])
+        value  = pa.array([10, 20, 30, 40])
 
-        # 1. Read filters from features.filters
-        mask = pa.array([True] * 4)
+        # Step 1 -- Read the filter the user passed in
+        mask = pa.array([True, True, True, True])
         for f in features.filters:
             if f.filter_feature.name == "status" and f.filter_type == "equal":
                 mask = pc.and_(mask, pc.equal(status, pa.scalar(f.parameter.value)))
+        # mask is now [True, False, True, False]
 
-        # 2. Mask: replace non-matching values with NULL
+        # Step 2 -- Mask: keep matching values, set the rest to NULL
         masked_value = pc.if_else(mask, value, pa.scalar(None, type=pa.int64()))
-        # Result: [10, None, 30, None]
+        # masked_value is now [10, NULL, 30, NULL]
 
-        # 3. Aggregate: group by region, sum masked values
-        table = pa.table({"region": region, "masked_value": masked_value})
+        # Step 3 -- Aggregate: group by region, sum (NULLs are skipped)
+        table   = pa.table({"region": region, "masked_value": masked_value})
         grouped = table.group_by("region").aggregate([("masked_value", "sum")])
+        # grouped: region=A sum=10, region=B sum=30
 
-        # 4. Broadcast: map grouped sums back to all rows
+        # Step 4 -- Broadcast: map each region's sum back to every row
         region_to_sum = {}
         for i in range(grouped.num_rows):
             region_to_sum[grouped.column("region")[i].as_py()] = (
                 grouped.column("masked_value_sum")[i].as_py()
             )
-
         result = pa.array([region_to_sum[r.as_py()] for r in region])
+        # result is [10, 10, 30, 30]
+
         return pa.table({cls.get_class_name(): result})
 ```
 
-Running this with a `status == "active"` filter:
+#### Step 3: run it
 
 ```python
 from mloda.user import mloda, GlobalFilter
@@ -258,9 +290,7 @@ Expected output (all 4 rows preserved, masked aggregation broadcast):
 ConditionalMaskExample: [10, 10, 30, 30]
 ```
 
-Region A: only value=10 where status is active, sum=10.
-Region B: only value=30 where status is active, sum=30.
-Both sums are broadcast back to all rows in their respective region.
+Region A: only value=10 where status is active, sum=10. Region B: only value=30 where status is active, sum=30. Both sums are broadcast back to all rows in their respective region.
 
 For a complete working example with tests, see `tests/test_core/test_filter/test_conditional_mask.py`.
 

@@ -114,28 +114,36 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     PROPERTY_MAPPING = {
         ALGORITHM: {
             **CLUSTERING_ALGORITHMS,  # All supported algorithms as valid values
-            DefaultOptionKeys.context: True,  # Mark as context parameter
-            DefaultOptionKeys.strict_validation: True,  # Enable strict validation
+            "_meta": {
+                DefaultOptionKeys.context: True,  # Mark as context parameter
+                DefaultOptionKeys.strict_validation: True,  # Enable strict validation
+            },
         },
         K_VALUE: {
-            "explanation": "Number of clusters or 'auto' for automatic determination",
-            DefaultOptionKeys.context: True,  # Mark as context parameter
-            DefaultOptionKeys.strict_validation: True,  # Enable strict validation
-            DefaultOptionKeys.validation_function: lambda value: (
-                value == "auto" or (isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0)
-            ),
+            "_meta": {
+                "explanation": "Number of clusters or 'auto' for automatic determination",
+                DefaultOptionKeys.context: True,  # Mark as context parameter
+                DefaultOptionKeys.strict_validation: True,  # Enable strict validation
+                DefaultOptionKeys.validation_function: lambda value: (
+                    value == "auto" or (isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0)
+                ),
+            },
         },
         DefaultOptionKeys.in_features: {
-            "explanation": "Source features to use for clustering",
-            DefaultOptionKeys.context: True,  # Mark as context parameter
-            DefaultOptionKeys.strict_validation: False,  # Flexible validation
+            "_meta": {
+                "explanation": "Source features to use for clustering",
+                DefaultOptionKeys.context: True,  # Mark as context parameter
+                DefaultOptionKeys.strict_validation: False,  # Flexible validation
+            },
         },
         OUTPUT_PROBABILITIES: {
-            "explanation": "Whether to output cluster probabilities/distances as separate columns using ~N suffix pattern",
-            DefaultOptionKeys.context: True,  # Mark as context parameter
-            DefaultOptionKeys.strict_validation: False,  # Flexible validation
-            DefaultOptionKeys.default: False,  # Default is False (don't output probabilities)
-            DefaultOptionKeys.validation_function: lambda value: isinstance(value, bool),
+            "_meta": {
+                "explanation": "Whether to output cluster probabilities/distances as separate columns using ~N suffix pattern",
+                DefaultOptionKeys.context: True,  # Mark as context parameter
+                DefaultOptionKeys.strict_validation: False,  # Flexible validation
+                DefaultOptionKeys.default: False,  # Default is False (don't output probabilities)
+                DefaultOptionKeys.validation_function: lambda value: isinstance(value, bool),
+            },
         },
     }
 

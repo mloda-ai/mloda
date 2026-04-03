@@ -49,14 +49,18 @@ class MockWithTypeConstraint(FeatureChainParserMixin):
         "operation": {
             "sum": "Sum of values",
             "avg": "Average of values",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
+            "_meta": {
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: True,
+            },
         },
         "partition_by": {
-            "explanation": "List of columns to partition by",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.type_validator: _is_list_of_strings,
+            "_meta": {
+                "explanation": "List of columns to partition by",
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: False,
+                DefaultOptionKeys.type_validator: _is_list_of_strings,
+            },
         },
     }
 
@@ -70,9 +74,11 @@ class MockStrictWithTypeValidator(FeatureChainParserMixin):
         "mode": {
             "fast": "Fast mode",
             "slow": "Slow mode",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.type_validator: lambda v: isinstance(v, str),
+            "_meta": {
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: True,
+                DefaultOptionKeys.type_validator: lambda v: isinstance(v, str),
+            },
         },
     }
 
@@ -92,9 +98,11 @@ class MockStrictWithOrthogonalTypeValidator(FeatureChainParserMixin):
             "fast": "Fast mode",
             "slow": "Slow mode",
             "ok": "OK mode",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.type_validator: _max_length_3,
+            "_meta": {
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: True,
+                DefaultOptionKeys.type_validator: _max_length_3,
+            },
         },
     }
 
@@ -106,10 +114,12 @@ class MockWithRaisingValidator(FeatureChainParserMixin):
 
     PROPERTY_MAPPING = {
         "items": {
-            "explanation": "A list of items",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.type_validator: _raising_validator,
+            "_meta": {
+                "explanation": "A list of items",
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: False,
+                DefaultOptionKeys.type_validator: _raising_validator,
+            },
         },
     }
 
@@ -122,8 +132,10 @@ class MockWithoutTypeConstraint(FeatureChainParserMixin):
     PROPERTY_MAPPING = {
         "operation": {
             "sum": "Sum of values",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
+            "_meta": {
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: True,
+            },
         },
     }
 
@@ -257,14 +269,18 @@ class TypeValidatedAggregation(FeatureChainParserMixin, FeatureGroup):
     PROPERTY_MAPPING = {
         "aggregation_type": {
             "sum": "Sum of values",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
+            "_meta": {
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: True,
+            },
         },
         "partition_by": {
-            "explanation": "List of columns to partition by",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.type_validator: _is_list_of_strings,
+            "_meta": {
+                "explanation": "List of columns to partition by",
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: False,
+                DefaultOptionKeys.type_validator: _is_list_of_strings,
+            },
         },
     }
 

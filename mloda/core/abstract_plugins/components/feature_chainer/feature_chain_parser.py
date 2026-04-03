@@ -17,6 +17,24 @@ CHAIN_SEPARATOR = "__"  # Separates chained transformations (source→suffix)
 COLUMN_SEPARATOR = "~"  # Separates multi-column output index
 INPUT_SEPARATOR = "&"  # Separates multiple input features
 
+# Key used to nest metadata within PROPERTY_MAPPING entries.
+# Metadata (context, strict_validation, validation_function, etc.) lives under
+# this key, keeping it separate from valid option values. This prevents silent
+# collisions when a valid value name matches a metadata key string.
+METADATA_KEY = "_meta"
+
+# Metadata keys recognised in the legacy flat PROPERTY_MAPPING format (before
+# the _meta sub-dict was introduced). Used only for backward compatibility.
+_LEGACY_METADATA_KEYS = frozenset({
+    DefaultOptionKeys.default,
+    DefaultOptionKeys.context,
+    DefaultOptionKeys.group,
+    DefaultOptionKeys.strict_validation,
+    DefaultOptionKeys.validation_function,
+    DefaultOptionKeys.required_when,
+    DefaultOptionKeys.type_validator,
+})
+
 
 class FeatureChainParser:
     """
@@ -98,6 +116,23 @@ class FeatureChainParser:
         return True
 
     @classmethod
+    def _get_metadata(cls, property_value: Any) -> Dict[str, Any]:
+        """Extract the metadata dict from a PROPERTY_MAPPING entry.
+
+        Supports both the new nested format (metadata under ``_meta`` key)
+        and the legacy flat format (metadata keys mixed with valid values).
+        The new format is preferred; the legacy path exists for backward
+        compatibility with external plugins that have not migrated yet.
+        """
+        if not isinstance(property_value, dict):
+            return {}
+        if METADATA_KEY in property_value:
+            meta = property_value[METADATA_KEY]
+            return meta if isinstance(meta, dict) else {}
+        # Legacy flat format: collect known metadata keys
+        return {k: v for k, v in property_value.items() if k in _LEGACY_METADATA_KEYS}
+
+    @classmethod
     def _can_skip_required_check(cls, property_value: Any) -> bool:
         """Check if the base parser should treat this property as optional.
 
@@ -109,24 +144,23 @@ class FeatureChainParser:
         """
         if not isinstance(property_value, dict):
             return False
-        return DefaultOptionKeys.default in property_value or DefaultOptionKeys.required_when in property_value
+        meta = cls._get_metadata(property_value)
+        return DefaultOptionKeys.default in meta or DefaultOptionKeys.required_when in meta
 
     @classmethod
     def _is_context_parameter(cls, property_value: Any) -> bool:
         """Check if property is marked as context parameter in mapping."""
-        return isinstance(property_value, dict) and property_value.get(DefaultOptionKeys.context, False)
+        return bool(cls._get_metadata(property_value).get(DefaultOptionKeys.context, False))
 
     @classmethod
     def _is_strict_validation(cls, property_value: Any) -> bool:
         """Check if property requires strict validation (values must be in mapping)."""
-        return isinstance(property_value, dict) and property_value.get(DefaultOptionKeys.strict_validation, False)
+        return bool(cls._get_metadata(property_value).get(DefaultOptionKeys.strict_validation, False))
 
     @classmethod
     def _get_validation_function(cls, property_value: Any) -> Any:
         """Get validation function from property mapping if present."""
-        if isinstance(property_value, dict):
-            return property_value.get(DefaultOptionKeys.validation_function, None)
-        return None
+        return cls._get_metadata(property_value).get(DefaultOptionKeys.validation_function, None)
 
     @classmethod
     def _validate_property_value(
@@ -190,19 +224,16 @@ class FeatureChainParser:
 
     @classmethod
     def _extract_property_values(cls, property_value: Any) -> Any:
-        """Extract property values, removing metadata keys."""
+        """Extract valid option values from a PROPERTY_MAPPING entry, removing metadata.
+
+        With the new ``_meta`` format only the ``_meta`` key is stripped.
+        For the legacy flat format the known metadata keys are stripped instead.
+        """
         if isinstance(property_value, dict):
-            # Remove metadata keys, keep only the actual valid values
-            metadata_keys = {
-                DefaultOptionKeys.default,
-                DefaultOptionKeys.context,
-                DefaultOptionKeys.group,
-                DefaultOptionKeys.strict_validation,
-                DefaultOptionKeys.validation_function,
-                DefaultOptionKeys.required_when,
-                DefaultOptionKeys.type_validator,
-            }
-            return {k: v for k, v in property_value.items() if k not in metadata_keys}
+            if METADATA_KEY in property_value:
+                return {k: v for k, v in property_value.items() if k != METADATA_KEY}
+            # Legacy flat format
+            return {k: v for k, v in property_value.items() if k not in _LEGACY_METADATA_KEYS}
         return property_value
 
     @classmethod

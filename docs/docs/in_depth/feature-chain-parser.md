@@ -126,11 +126,15 @@ class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         "operation_type": {
             "sum": "Sum operation",
             "avg": "Average operation",
-            DefaultOptionKeys.mloda_context: True,
+            "_meta": {
+                DefaultOptionKeys.mloda_context: True,
+            },
         },
         DefaultOptionKeys.in_features: {
-            "explanation": "Source feature",
-            DefaultOptionKeys.mloda_context: True,
+            "_meta": {
+                "explanation": "Source feature",
+                DefaultOptionKeys.mloda_context: True,
+            },
         },
     }
 
@@ -243,9 +247,11 @@ def _is_list_of_strings(value):
 class GroupAggregation(FeatureChainParserMixin, FeatureGroup):
     PROPERTY_MAPPING = {
         "partition_by": {
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.type_validator: _is_list_of_strings,
+            "_meta": {
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: False,
+                DefaultOptionKeys.type_validator: _is_list_of_strings,
+            },
         },
     }
 ```
@@ -272,14 +278,18 @@ class MyFeatureGroup(FeatureGroup):
             "sum": "Sum aggregation",
             "avg": "Average aggregation", 
             "max": "Maximum aggregation",
-            DefaultOptionKeys.context: True,  # Context parameter
-            DefaultOptionKeys.strict_validation: True,  # Strict validation
+            "_meta": {
+                DefaultOptionKeys.context: True,  # Context parameter
+                DefaultOptionKeys.strict_validation: True,  # Strict validation
+            },
         },
         # Source feature parameter
         DefaultOptionKeys.in_features: {
-            "explanation": "Source feature for the operation",
-            DefaultOptionKeys.context: True,  # Context parameter
-            DefaultOptionKeys.strict_validation: False,  # Flexible validation
+            "_meta": {
+                "explanation": "Source feature for the operation",
+                DefaultOptionKeys.context: True,  # Context parameter
+                DefaultOptionKeys.strict_validation: False,  # Flexible validation
+            },
         },
     }
 ```
@@ -358,10 +368,12 @@ For complex validation beyond simple value lists:
 ``` python
 PROPERTY_MAPPING = {
     "dimension": {
-        "explanation": "Number of dimensions for reduction",
-        DefaultOptionKeys.context: True,
-        DefaultOptionKeys.strict_validation: True,
-        DefaultOptionKeys.validation_function: lambda x: isinstance(x, int) and x > 0,
+        "_meta": {
+            "explanation": "Number of dimensions for reduction",
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
+            DefaultOptionKeys.validation_function: lambda x: isinstance(x, int) and x > 0,
+        },
     },
 }
 ```
@@ -375,8 +387,10 @@ PROPERTY_MAPPING = {
     "window_size": {
         "7": "7-day window",
         "30": "30-day window",
-        DefaultOptionKeys.default: "7",  # Default value
-        DefaultOptionKeys.context: True,
+        "_meta": {
+            DefaultOptionKeys.default: "7",  # Default value
+            DefaultOptionKeys.context: True,
+        },
     },
 }
 ```
@@ -389,15 +403,19 @@ PROPERTY_MAPPING = {
     "data_source": {
         "production": "Production data",
         "staging": "Staging data", 
-        DefaultOptionKeys.group: True,  # Explicit group parameter
-        DefaultOptionKeys.strict_validation: True,
+        "_meta": {
+            DefaultOptionKeys.group: True,  # Explicit group parameter
+            DefaultOptionKeys.strict_validation: True,
+        },
     },
     # Context parameter - doesn't affect resolution
     "algorithm_type": {
         "kmeans": "K-means clustering",
         "dbscan": "DBSCAN clustering",
-        DefaultOptionKeys.context: True,  # Context parameter
-        DefaultOptionKeys.strict_validation: False,  # Flexible validation
+        "_meta": {
+            DefaultOptionKeys.context: True,  # Context parameter
+            DefaultOptionKeys.strict_validation: False,  # Flexible validation
+        },
     },
 }
 ```

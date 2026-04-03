@@ -235,7 +235,8 @@ class FeatureChainParserMixin:
             for key, mapping_entry in property_mapping.items():
                 if not isinstance(mapping_entry, dict):
                     continue
-                predicate = mapping_entry.get(DefaultOptionKeys.required_when)
+                meta = FeatureChainParser._get_metadata(mapping_entry)
+                predicate = meta.get(DefaultOptionKeys.required_when)
                 if predicate is None:
                     continue
                 if not callable(predicate):
@@ -260,7 +261,8 @@ class FeatureChainParserMixin:
             for key, mapping_entry in property_mapping.items():
                 if not isinstance(mapping_entry, dict):
                     continue
-                validator = mapping_entry.get(DefaultOptionKeys.type_validator)
+                meta = FeatureChainParser._get_metadata(mapping_entry)
+                validator = meta.get(DefaultOptionKeys.type_validator)
                 if validator is None:
                     continue
                 value = options.get(key)
@@ -308,7 +310,10 @@ class FeatureChainParserMixin:
     def _has_required_when_predicates(property_mapping: Dict[str, Any]) -> bool:
         """Return True if any entry in property_mapping uses required_when."""
         for value in property_mapping.values():
-            if isinstance(value, dict) and DefaultOptionKeys.required_when in value:
+            if not isinstance(value, dict):
+                continue
+            meta = FeatureChainParser._get_metadata(value)
+            if DefaultOptionKeys.required_when in meta:
                 return True
         return False
 

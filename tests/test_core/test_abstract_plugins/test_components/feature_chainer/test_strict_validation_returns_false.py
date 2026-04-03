@@ -16,7 +16,9 @@ class BaseMode(FeatureChainParserMixin):
         "mode": {
             "mode_a": "Mode A",
             "mode_b": "Mode B",
-            DefaultOptionKeys.strict_validation: True,
+            "_meta": {
+                DefaultOptionKeys.strict_validation: True,
+            },
         }
     }
 
@@ -27,7 +29,9 @@ class SubGroupA(BaseMode):
     PROPERTY_MAPPING = {
         "mode": {
             "mode_a": "Mode A",
-            DefaultOptionKeys.strict_validation: True,
+            "_meta": {
+                DefaultOptionKeys.strict_validation: True,
+            },
         }
     }
 
@@ -38,7 +42,9 @@ class SubGroupB(BaseMode):
     PROPERTY_MAPPING = {
         "mode": {
             "mode_b": "Mode B",
-            DefaultOptionKeys.strict_validation: True,
+            "_meta": {
+                DefaultOptionKeys.strict_validation: True,
+            },
         }
     }
 
@@ -48,8 +54,10 @@ class SubGroupWithValidationFunction(BaseMode):
 
     PROPERTY_MAPPING = {
         "mode": {
-            DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.validation_function: lambda v: v.startswith("valid_"),
+            "_meta": {
+                DefaultOptionKeys.strict_validation: True,
+                DefaultOptionKeys.validation_function: lambda v: v.startswith("valid_"),
+            },
         }
     }
 

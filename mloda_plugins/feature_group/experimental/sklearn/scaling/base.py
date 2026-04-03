@@ -92,13 +92,17 @@ class ScalingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     PROPERTY_MAPPING = {
         SCALER_TYPE: {
             **SUPPORTED_SCALERS,  # All supported scaler types as valid options
-            DefaultOptionKeys.context: True,  # Context parameter
-            DefaultOptionKeys.strict_validation: True,  # Enable strict validation
+            "_meta": {
+                DefaultOptionKeys.context: True,  # Context parameter
+                DefaultOptionKeys.strict_validation: True,  # Enable strict validation
+            },
         },
         DefaultOptionKeys.in_features: {
-            "explanation": "Source feature to scale",
-            DefaultOptionKeys.context: True,  # Context parameter
-            DefaultOptionKeys.strict_validation: False,  # Flexible validation
+            "_meta": {
+                "explanation": "Source feature to scale",
+                DefaultOptionKeys.context: True,  # Context parameter
+                DefaultOptionKeys.strict_validation: False,  # Flexible validation
+            },
         },
     }
 

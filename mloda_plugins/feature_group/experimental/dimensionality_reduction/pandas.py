@@ -27,7 +27,7 @@ except ImportError:
     SKLEARN_AVAILABLE = False
 
 
-from mloda.provider import ComputeFramework
+from mloda.provider import ComputeFramework, DefaultOptionKeys
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.dimensionality_reduction.base import DimensionalityReductionFeatureGroup
 
@@ -141,35 +141,35 @@ class PandasDimensionalityReductionFeatureGroup(DimensionalityReductionFeatureGr
             if svd_solver is None:
                 svd_solver = DimensionalityReductionFeatureGroup.PROPERTY_MAPPING[
                     DimensionalityReductionFeatureGroup.PCA_SVD_SOLVER
-                ]["default"]
+                ]["_meta"][DefaultOptionKeys.default]
             return cls._perform_pca_reduction(X_scaled, dimension, svd_solver)
         elif algorithm == "tsne":
             max_iter_val = options.get(DimensionalityReductionFeatureGroup.TSNE_MAX_ITER)
             if max_iter_val is None:
                 max_iter_val = DimensionalityReductionFeatureGroup.PROPERTY_MAPPING[
                     DimensionalityReductionFeatureGroup.TSNE_MAX_ITER
-                ]["default"]
+                ]["_meta"][DefaultOptionKeys.default]
             max_iter = int(max_iter_val)
 
             n_iter_without_progress_val = options.get(DimensionalityReductionFeatureGroup.TSNE_N_ITER_WITHOUT_PROGRESS)
             if n_iter_without_progress_val is None:
                 n_iter_without_progress_val = DimensionalityReductionFeatureGroup.PROPERTY_MAPPING[
                     DimensionalityReductionFeatureGroup.TSNE_N_ITER_WITHOUT_PROGRESS
-                ]["default"]
+                ]["_meta"][DefaultOptionKeys.default]
             n_iter_without_progress = int(n_iter_without_progress_val)
 
             method = options.get(DimensionalityReductionFeatureGroup.TSNE_METHOD)
             if method is None:
                 method = DimensionalityReductionFeatureGroup.PROPERTY_MAPPING[
                     DimensionalityReductionFeatureGroup.TSNE_METHOD
-                ]["default"]
+                ]["_meta"][DefaultOptionKeys.default]
             return cls._perform_tsne_reduction(X_scaled, dimension, max_iter, n_iter_without_progress, method)
         elif algorithm == "ica":
             max_iter_val = options.get(DimensionalityReductionFeatureGroup.ICA_MAX_ITER)
             if max_iter_val is None:
                 max_iter_val = DimensionalityReductionFeatureGroup.PROPERTY_MAPPING[
                     DimensionalityReductionFeatureGroup.ICA_MAX_ITER
-                ]["default"]
+                ]["_meta"][DefaultOptionKeys.default]
             max_iter = int(max_iter_val)
             return cls._perform_ica_reduction(X_scaled, dimension, max_iter)
         elif algorithm == "lda":
@@ -179,7 +179,7 @@ class PandasDimensionalityReductionFeatureGroup(DimensionalityReductionFeatureGr
             if n_neighbors_val is None:
                 n_neighbors_val = DimensionalityReductionFeatureGroup.PROPERTY_MAPPING[
                     DimensionalityReductionFeatureGroup.ISOMAP_N_NEIGHBORS
-                ]["default"]
+                ]["_meta"][DefaultOptionKeys.default]
             n_neighbors = int(n_neighbors_val)
             return cls._perform_isomap_reduction(X_scaled, dimension, n_neighbors)
         else:

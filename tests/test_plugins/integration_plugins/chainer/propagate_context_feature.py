@@ -22,19 +22,25 @@ class PropagateContextFeatureGroupTest(FeatureGroup):
         "ident": {
             "identifier1": "multiplier 2",
             "identifier2": "multiplier 3",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
+            "_meta": {
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: True,
+            },
         },
         "env": {
             "prod": "production offset 1000",
             "staging": "staging offset 500",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.default: None,
+            "_meta": {
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: False,
+                DefaultOptionKeys.default: None,
+            },
         },
         DefaultOptionKeys.in_features: {
-            "explanation": "explanation",
-            DefaultOptionKeys.context: True,
+            "_meta": {
+                "explanation": "explanation",
+                DefaultOptionKeys.context: True,
+            },
         },
     }
 

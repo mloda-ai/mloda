@@ -21,8 +21,10 @@ class MockFeatureGroup(FeatureChainParserMixin):
         "operation": {
             "op1": "Operation 1",
             "op2": "Operation 2",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
+            "_meta": {
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: True,
+            },
         }
     }
 
@@ -36,8 +38,10 @@ class MockFeatureGroupCustomSeparator(FeatureChainParserMixin):
         "operation": {
             "op1": "Operation 1",
             "op2": "Operation 2",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
+            "_meta": {
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: True,
+            },
         }
     }
 
@@ -51,8 +55,10 @@ class MockFeatureGroupWithMinMax(FeatureChainParserMixin):
     PROPERTY_MAPPING = {
         "operation": {
             "op1": "Operation 1",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
+            "_meta": {
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: True,
+            },
         }
     }
 
@@ -76,8 +82,10 @@ class MockFeatureGroupWithoutMinMax(FeatureChainParserMixin):
     PROPERTY_MAPPING = {
         "operation": {
             "op1": "Operation 1",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
+            "_meta": {
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: True,
+            },
         }
     }
 
@@ -89,8 +97,10 @@ class MockFeatureGroupWithValidationHook(FeatureChainParserMixin):
     PROPERTY_MAPPING = {
         "operation": {
             "op1": "Operation 1",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
+            "_meta": {
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: True,
+            },
         }
     }
 
@@ -465,9 +475,11 @@ class TestFeatureChainParserMixinListValuedOptions:
         class ListValuedFeatureGroup(FeatureChainParserMixin):
             PROPERTY_MAPPING = {
                 "partition_by": {
-                    "explanation": "List of columns to partition by",
-                    DefaultOptionKeys.context: True,
-                    DefaultOptionKeys.strict_validation: False,
+                    "_meta": {
+                        "explanation": "List of columns to partition by",
+                        DefaultOptionKeys.context: True,
+                        DefaultOptionKeys.strict_validation: False,
+                    },
                 },
             }
 
@@ -481,9 +493,11 @@ class TestFeatureChainParserMixinListValuedOptions:
         class TupleValuedFeatureGroup(FeatureChainParserMixin):
             PROPERTY_MAPPING = {
                 "partition_by": {
-                    "explanation": "Columns to partition by",
-                    DefaultOptionKeys.context: True,
-                    DefaultOptionKeys.strict_validation: False,
+                    "_meta": {
+                        "explanation": "Columns to partition by",
+                        DefaultOptionKeys.context: True,
+                        DefaultOptionKeys.strict_validation: False,
+                    },
                 },
             }
 
@@ -497,8 +511,10 @@ class TestFeatureChainParserMixinListValuedOptions:
 
         property_mapping = {
             "partition_by": {
-                DefaultOptionKeys.context: True,
-                DefaultOptionKeys.strict_validation: False,
+                "_meta": {
+                    DefaultOptionKeys.context: True,
+                    DefaultOptionKeys.strict_validation: False,
+                },
             },
         }
         options = Options(context={"partition_by": ["col1", "col2", "col3"]})

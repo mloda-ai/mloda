@@ -66,6 +66,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     CHAIN_SEPARATOR,
     COLUMN_SEPARATOR,
     INPUT_SEPARATOR,
+    METADATA_KEY,
 )
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 
@@ -114,6 +115,7 @@ __all__ = [
     "CHAIN_SEPARATOR",
     "COLUMN_SEPARATOR",
     "INPUT_SEPARATOR",
+    "METADATA_KEY",
     "FeatureChainParserMixin",
     # Transformers
     "BaseTransformer",

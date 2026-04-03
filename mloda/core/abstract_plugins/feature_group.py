@@ -42,8 +42,10 @@ class FeatureGroup(ABC):
                 "operation_type": {
                     "add": "Addition",
                     "sub": "Subtraction",
-                    DefaultOptionKeys.context: True,
-                    DefaultOptionKeys.strict_validation: True,
+                    "_meta": {
+                        DefaultOptionKeys.context: True,
+                        DefaultOptionKeys.strict_validation: True,
+                    },
                 },
             }
 
@@ -70,9 +72,12 @@ class FeatureGroup(ABC):
     PROPERTY_MAPPING: ClassVar[Optional[Dict[str, Any]]] = None
     """Override in subclasses to declare configurable parameters.
 
-    Each key is a parameter name. Each value is a dict containing valid
-    values, metadata flags (``DefaultOptionKeys.context``,
-    ``DefaultOptionKeys.strict_validation``, etc.), and optional validators.
+    Each key is a parameter name. Each value is a dict whose top-level
+    entries are valid option values and whose ``"_meta"`` sub-dict holds
+    metadata flags (``DefaultOptionKeys.context``,
+    ``DefaultOptionKeys.strict_validation``, etc.) and optional validators.
+    Separating metadata into ``"_meta"`` prevents collisions between
+    valid values and metadata key names.
     See ``docs/in_depth/property-mapping.md`` for the full specification.
     """
 

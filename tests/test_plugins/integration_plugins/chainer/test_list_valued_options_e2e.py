@@ -55,13 +55,17 @@ class ListValuedFeatureGroup(FeatureGroup):
 
     PROPERTY_MAPPING = {
         "columns": {
-            "explanation": "List of columns to combine in order",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
+            "_meta": {
+                "explanation": "List of columns to combine in order",
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: False,
+            },
         },
         DefaultOptionKeys.in_features: {
-            "explanation": "Source features",
-            DefaultOptionKeys.context: True,
+            "_meta": {
+                "explanation": "Source features",
+                DefaultOptionKeys.context: True,
+            },
         },
     }
 

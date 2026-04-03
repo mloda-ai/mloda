@@ -44,14 +44,18 @@ class MockWithConditionalRequired(FeatureChainParserMixin):
             "avg": "Average of values",
             "first": "First value (requires order_by)",
             "last": "Last value (requires order_by)",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
+            "_meta": {
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: True,
+            },
         },
         "order_by": {
-            "explanation": "Column to order by within each partition",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.required_when: _needs_order_by,
+            "_meta": {
+                "explanation": "Column to order by within each partition",
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: False,
+                DefaultOptionKeys.required_when: _needs_order_by,
+            },
         },
     }
 
@@ -86,20 +90,24 @@ class TestRequiredWhenUnit:
     def test_extract_property_values_strips_required_when(self) -> None:
         """required_when callable must be stripped from extracted property values."""
         mapping_entry = {
-            "explanation": "Column to order by within each partition",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.required_when: _needs_order_by,
+            "_meta": {
+                "explanation": "Column to order by within each partition",
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: False,
+                DefaultOptionKeys.required_when: _needs_order_by,
+            },
         }
         extracted = FeatureChainParser._extract_property_values(mapping_entry)
         assert DefaultOptionKeys.required_when not in extracted
-        assert "explanation" in extracted
+        assert "explanation" not in extracted
 
     def test_can_skip_required_check_with_required_when(self) -> None:
         """Properties with required_when should be skippable in the base required check."""
         prop_with_required_when = {
-            "explanation": "test",
-            DefaultOptionKeys.required_when: _needs_order_by,
+            "_meta": {
+                "explanation": "test",
+                DefaultOptionKeys.required_when: _needs_order_by,
+            },
         }
         assert FeatureChainParser._can_skip_required_check(prop_with_required_when) is True
 
@@ -107,7 +115,9 @@ class TestRequiredWhenUnit:
         """Properties with default should be skippable in the base required check."""
         prop_with_default = {
             "val1": "desc",
-            DefaultOptionKeys.default: "val1",
+            "_meta": {
+                DefaultOptionKeys.default: "val1",
+            },
         }
         assert FeatureChainParser._can_skip_required_check(prop_with_default) is True
 
@@ -115,7 +125,9 @@ class TestRequiredWhenUnit:
         """Properties without default or required_when are required."""
         prop_required = {
             "val1": "desc",
-            DefaultOptionKeys.strict_validation: True,
+            "_meta": {
+                DefaultOptionKeys.strict_validation: True,
+            },
         }
         assert FeatureChainParser._can_skip_required_check(prop_required) is False
 
@@ -127,14 +139,18 @@ class TestRequiredWhenUnit:
             PROPERTY_MAPPING = {
                 "aggregation_type": {
                     "sum": "Sum",
-                    DefaultOptionKeys.context: True,
-                    DefaultOptionKeys.strict_validation: True,
+                    "_meta": {
+                        DefaultOptionKeys.context: True,
+                        DefaultOptionKeys.strict_validation: True,
+                    },
                 },
                 "order_by": {
-                    "explanation": "sort column",
-                    DefaultOptionKeys.context: True,
-                    DefaultOptionKeys.strict_validation: False,
-                    DefaultOptionKeys.required_when: "not_a_callable",
+                    "_meta": {
+                        "explanation": "sort column",
+                        DefaultOptionKeys.context: True,
+                        DefaultOptionKeys.strict_validation: False,
+                        DefaultOptionKeys.required_when: "not_a_callable",
+                    },
                 },
             }
 
@@ -158,15 +174,19 @@ class TestRequiredWhenUnit:
                 "aggregation_type": {
                     "sum": "Sum",
                     "first": "First",
-                    DefaultOptionKeys.context: True,
-                    DefaultOptionKeys.strict_validation: True,
+                    "_meta": {
+                        DefaultOptionKeys.context: True,
+                        DefaultOptionKeys.strict_validation: True,
+                    },
                 },
                 "order_by": {
-                    "explanation": "sort column",
-                    DefaultOptionKeys.context: True,
-                    DefaultOptionKeys.strict_validation: False,
-                    DefaultOptionKeys.default: "id",
-                    DefaultOptionKeys.required_when: _always_required,
+                    "_meta": {
+                        "explanation": "sort column",
+                        DefaultOptionKeys.context: True,
+                        DefaultOptionKeys.strict_validation: False,
+                        DefaultOptionKeys.default: "id",
+                        DefaultOptionKeys.required_when: _always_required,
+                    },
                 },
             }
 
@@ -261,14 +281,18 @@ class ConditionalRequiredFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         "aggregation_type": {
             "sum": "Sum of values",
             "first": "First value (requires order_by)",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
+            "_meta": {
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: True,
+            },
         },
         "order_by": {
-            "explanation": "Column to order by within each partition",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.required_when: _run_all_needs_order_by,
+            "_meta": {
+                "explanation": "Column to order by within each partition",
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: False,
+                DefaultOptionKeys.required_when: _run_all_needs_order_by,
+            },
         },
     }
 
@@ -336,3 +360,142 @@ class TestRequiredWhenRunAll:
                 compute_frameworks={PandasDataFrame},
                 plugin_collector=plugin_collector,
             )
+
+
+class TestMetadataKeyCollision:
+    """Tests proving that valid values named after metadata keys work with _meta format.
+
+    This is the core scenario described in GitHub issue #254: if a user creates a
+    feature group whose valid values include a string that collides with a metadata
+    key name (e.g. "context", "default", "group"), the value must not be silently
+    removed by the metadata filter.
+    """
+
+    def test_value_named_context_is_accepted(self) -> None:
+        """A valid option value literally named "context" must not be silently dropped."""
+
+        class FGWithContextValue(FeatureChainParserMixin):
+            PROPERTY_MAPPING = {
+                "scope": {
+                    "context": "Context-level scope",
+                    "global": "Global scope",
+                    "_meta": {
+                        DefaultOptionKeys.context: True,
+                        DefaultOptionKeys.strict_validation: True,
+                    },
+                },
+            }
+
+        options = Options(context={"scope": "context"})
+        assert FGWithContextValue.match_feature_group_criteria("feat", options) is True
+
+    def test_value_named_default_is_accepted(self) -> None:
+        """A valid option value literally named "default" must not be silently dropped."""
+
+        class FGWithDefaultValue(FeatureChainParserMixin):
+            PROPERTY_MAPPING = {
+                "mode": {
+                    "default": "Use default mode",
+                    "custom": "Use custom mode",
+                    "_meta": {
+                        DefaultOptionKeys.context: True,
+                        DefaultOptionKeys.strict_validation: True,
+                    },
+                },
+            }
+
+        options = Options(context={"mode": "default"})
+        assert FGWithDefaultValue.match_feature_group_criteria("feat", options) is True
+
+    def test_value_named_group_is_accepted(self) -> None:
+        """A valid option value literally named "group" must not be silently dropped."""
+
+        class FGWithGroupValue(FeatureChainParserMixin):
+            PROPERTY_MAPPING = {
+                "agg_type": {
+                    "group": "Group aggregation",
+                    "individual": "Individual aggregation",
+                    "_meta": {
+                        DefaultOptionKeys.context: True,
+                        DefaultOptionKeys.strict_validation: True,
+                    },
+                },
+            }
+
+        options = Options(context={"agg_type": "group"})
+        assert FGWithGroupValue.match_feature_group_criteria("feat", options) is True
+
+    def test_collision_values_rejected_when_invalid(self) -> None:
+        """Strict validation still rejects values not in the mapping."""
+
+        class FGWithCollisionValues(FeatureChainParserMixin):
+            PROPERTY_MAPPING = {
+                "scope": {
+                    "context": "Context scope",
+                    "default": "Default scope",
+                    "_meta": {
+                        DefaultOptionKeys.context: True,
+                        DefaultOptionKeys.strict_validation: True,
+                    },
+                },
+            }
+
+        options = Options(context={"scope": "nonexistent"})
+        assert FGWithCollisionValues.match_feature_group_criteria("feat", options) is False
+
+    def test_extract_preserves_collision_values(self) -> None:
+        """_extract_property_values must keep values named after metadata keys."""
+        mapping_entry = {
+            "context": "Context scope",
+            "default": "Default scope",
+            "group": "Group scope",
+            "_meta": {
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: True,
+            },
+        }
+        extracted = FeatureChainParser._extract_property_values(mapping_entry)
+        assert "context" in extracted
+        assert "default" in extracted
+        assert "group" in extracted
+        assert "_meta" not in extracted
+
+    def test_legacy_flat_format_still_works(self) -> None:
+        """Backward compatibility: legacy flat format (without _meta) still works."""
+
+        class FGLegacyFormat(FeatureChainParserMixin):
+            PROPERTY_MAPPING = {
+                "operation": {
+                    "sum": "Sum",
+                    "avg": "Average",
+                    DefaultOptionKeys.context: True,
+                    DefaultOptionKeys.strict_validation: True,
+                },
+            }
+
+        options = Options(context={"operation": "sum"})
+        assert FGLegacyFormat.match_feature_group_criteria("feat", options) is True
+
+    def test_get_metadata_new_format(self) -> None:
+        """_get_metadata extracts metadata from the _meta sub-dict."""
+        entry = {
+            "val1": "desc",
+            "_meta": {
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: True,
+            },
+        }
+        meta = FeatureChainParser._get_metadata(entry)
+        assert meta[DefaultOptionKeys.context] is True
+        assert meta[DefaultOptionKeys.strict_validation] is True
+
+    def test_get_metadata_legacy_format(self) -> None:
+        """_get_metadata falls back to collecting known keys from flat dict."""
+        entry = {
+            "val1": "desc",
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
+        }
+        meta = FeatureChainParser._get_metadata(entry)
+        assert meta[DefaultOptionKeys.context] is True
+        assert meta[DefaultOptionKeys.strict_validation] is True

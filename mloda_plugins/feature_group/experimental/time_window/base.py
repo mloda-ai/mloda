@@ -127,29 +127,37 @@ class TimeWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         # Window function parameter (context parameter)
         WINDOW_FUNCTION: {
             **WINDOW_FUNCTIONS,  # Reference existing WINDOW_FUNCTIONS dict
-            DefaultOptionKeys.context: True,  # Mark as context parameter
-            DefaultOptionKeys.strict_validation: True,  # Enable strict validation
+            "_meta": {
+                DefaultOptionKeys.context: True,  # Mark as context parameter
+                DefaultOptionKeys.strict_validation: True,  # Enable strict validation
+            },
         },
         # Window size parameter (context parameter)
         WINDOW_SIZE: {
-            "explanation": "Size of the time window (must be positive integer)",
-            DefaultOptionKeys.context: True,  # Mark as context parameter
-            DefaultOptionKeys.strict_validation: True,  # Enable strict validation
-            DefaultOptionKeys.validation_function: lambda x: (
-                (isinstance(x, int) and x > 0) or (isinstance(x, str) and x.isdigit() and int(x) > 0)
-            ),
+            "_meta": {
+                "explanation": "Size of the time window (must be positive integer)",
+                DefaultOptionKeys.context: True,  # Mark as context parameter
+                DefaultOptionKeys.strict_validation: True,  # Enable strict validation
+                DefaultOptionKeys.validation_function: lambda x: (
+                    (isinstance(x, int) and x > 0) or (isinstance(x, str) and x.isdigit() and int(x) > 0)
+                ),
+            },
         },
         # Time unit parameter (context parameter)
         TIME_UNIT: {
             **TIME_UNITS,  # Reference existing TIME_UNITS dict
-            DefaultOptionKeys.context: True,  # Mark as context parameter
-            DefaultOptionKeys.strict_validation: True,  # Enable strict validation
+            "_meta": {
+                DefaultOptionKeys.context: True,  # Mark as context parameter
+                DefaultOptionKeys.strict_validation: True,  # Enable strict validation
+            },
         },
         # Source feature parameter (context parameter)
         DefaultOptionKeys.in_features: {
-            "explanation": "Source feature to apply time window operation to",
-            DefaultOptionKeys.context: True,  # Mark as context parameter
-            DefaultOptionKeys.strict_validation: False,  # Flexible validation
+            "_meta": {
+                "explanation": "Source feature to apply time window operation to",
+                DefaultOptionKeys.context: True,  # Mark as context parameter
+                DefaultOptionKeys.strict_validation: False,  # Flexible validation
+            },
         },
     }
 

@@ -105,20 +105,24 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     PROPERTY_MAPPING = {
         DISTANCE_TYPE: {
             **DISTANCE_TYPES,
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
+            "_meta": {
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: True,
+            },
         },
         DefaultOptionKeys.in_features: {
-            "explanation": "Source features (exactly 2 point features required)",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.validation_function: lambda x: (
-                # Accept individual strings (when parser iterates over list elements)
-                isinstance(x, str)
-                or
-                # Accept collections with exactly 2 elements (when validating the whole list)
-                (isinstance(x, (list, tuple, frozenset, set)) and len(x) == 2)
-            ),
+            "_meta": {
+                "explanation": "Source features (exactly 2 point features required)",
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: True,
+                DefaultOptionKeys.validation_function: lambda x: (
+                    # Accept individual strings (when parser iterates over list elements)
+                    isinstance(x, str)
+                    or
+                    # Accept collections with exactly 2 elements (when validating the whole list)
+                    (isinstance(x, (list, tuple, frozenset, set)) and len(x) == 2)
+                ),
+            },
         },
     }
 

@@ -4,6 +4,8 @@
 
 PROPERTY_MAPPING defines parameter validation and classification for modern feature groups using the unified parser approach.
 
+Each entry maps a parameter name to a dict. The dict's top-level keys are valid option values; all metadata (classification flags, validators, defaults, explanation strings) lives inside a nested `"_meta"` sub-dict. This separation prevents collisions between valid values and metadata key names.
+
 ## Basic Structure
 
 ``` python
@@ -13,13 +15,17 @@ PROPERTY_MAPPING = {
     "parameter_name": {
         "value1": "Description of value1",
         "value2": "Description of value2",
-        DefaultOptionKeys.context: True,  # Parameter classification
-        DefaultOptionKeys.strict_validation: True,  # Validation mode
+        "_meta": {
+            DefaultOptionKeys.context: True,  # Parameter classification
+            DefaultOptionKeys.strict_validation: True,  # Validation mode
+        },
     },
     DefaultOptionKeys.in_features: {
-        "explanation": "Source feature description",
-        DefaultOptionKeys.context: True,
-        DefaultOptionKeys.strict_validation: False,  # Flexible validation
+        "_meta": {
+            "explanation": "Source feature description",
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: False,  # Flexible validation
+        },
     },
 }
 ```
@@ -30,20 +36,22 @@ PROPERTY_MAPPING = {
 # Context parameter (doesn't affect Feature Group splitting)
 "aggregation_type": {
     "sum": "Sum aggregation",
-    DefaultOptionKeys.context: True,
+    "_meta": {DefaultOptionKeys.context: True},
 }
 
 # Group parameter (affects Feature Group splitting)
 "data_source": {
     "production": "Production data",
-    DefaultOptionKeys.group: True,
+    "_meta": {DefaultOptionKeys.group: True},
 }
 
 # Order-by parameter (defines sort order for sequential operations)
 DefaultOptionKeys.order_by: {
-    "explanation": "Column(s) controlling row order for rank, offset, or frame_aggregate",
-    DefaultOptionKeys.context: True,
-    DefaultOptionKeys.strict_validation: False,
+    "_meta": {
+        "explanation": "Column(s) controlling row order for rank, offset, or frame_aggregate",
+        DefaultOptionKeys.context: True,
+        DefaultOptionKeys.strict_validation: False,
+    },
 }
 ```
 
@@ -54,7 +62,7 @@ DefaultOptionKeys.order_by: {
 "algorithm_type": {
     "kmeans": "K-means clustering",
     "dbscan": "DBSCAN clustering", 
-    DefaultOptionKeys.strict_validation: True,  # Only listed values allowed
+    "_meta": {DefaultOptionKeys.strict_validation: True},  # Only listed values allowed
 }
 ```
 
@@ -65,9 +73,11 @@ parsed elements. The parser unpacks lists and calls the function on each element
 
 ``` python
 "window_size": {
-    "explanation": "Size of time window",
-    DefaultOptionKeys.validation_function: lambda x: isinstance(x, int) and x > 0,
-    DefaultOptionKeys.strict_validation: True,
+    "_meta": {
+        "explanation": "Size of time window",
+        DefaultOptionKeys.validation_function: lambda x: isinstance(x, int) and x > 0,
+        DefaultOptionKeys.strict_validation: True,
+    },
 }
 ```
 
@@ -83,10 +93,12 @@ def _is_list_of_strings(value):
     return isinstance(value, list) and all(isinstance(item, str) for item in value)
 
 "partition_by": {
-    "explanation": "List of columns to partition by",
-    DefaultOptionKeys.context: True,
-    DefaultOptionKeys.strict_validation: False,
-    DefaultOptionKeys.type_validator: _is_list_of_strings,
+    "_meta": {
+        "explanation": "List of columns to partition by",
+        DefaultOptionKeys.context: True,
+        DefaultOptionKeys.strict_validation: False,
+        DefaultOptionKeys.type_validator: _is_list_of_strings,
+    },
 }
 ```
 
@@ -100,7 +112,7 @@ must be pure functions with no side effects.
 "method": {
     "linear": "Linear interpolation",
     "cubic": "Cubic interpolation",
-    DefaultOptionKeys.default: "linear",  # Default if not specified
+    "_meta": {DefaultOptionKeys.default: "linear"},  # Default if not specified
 }
 ```
 
@@ -112,12 +124,16 @@ class MyFeatureGroup(FeatureGroup):
         "operation_type": {
             "sum": "Sum operation",
             "avg": "Average operation",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
+            "_meta": {
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: True,
+            },
         },
         DefaultOptionKeys.in_features: {
-            "explanation": "Source feature",
-            DefaultOptionKeys.context: True,
+            "_meta": {
+                "explanation": "Source feature",
+                DefaultOptionKeys.context: True,
+            },
         },
     }
     
@@ -159,14 +175,18 @@ def _needs_order_by(options: Options) -> bool:
 PROPERTY_MAPPING = {
     "aggregation_type": {
         "sum": "Sum", "avg": "Average", "first": "First", "last": "Last",
-        DefaultOptionKeys.context: True,
-        DefaultOptionKeys.strict_validation: True,
+        "_meta": {
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
+        },
     },
     "order_by": {
-        "explanation": "Column to order by within each partition",
-        DefaultOptionKeys.context: True,
-        DefaultOptionKeys.strict_validation: False,
-        DefaultOptionKeys.required_when: _needs_order_by,
+        "_meta": {
+            "explanation": "Column to order by within each partition",
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: False,
+            DefaultOptionKeys.required_when: _needs_order_by,
+        },
     },
 }
 ```

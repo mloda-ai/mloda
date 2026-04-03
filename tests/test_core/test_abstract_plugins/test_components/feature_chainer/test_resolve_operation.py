@@ -30,8 +30,10 @@ class MockResolverFG(FeatureChainParserMixin):
         "aggregation_type": {
             "sum": "Sum",
             "avg": "Average",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
+            "_meta": {
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: True,
+            },
         },
     }
 

@@ -26,7 +26,9 @@ class TestParameterResolutionUnit:
             "ident": {
                 "identifier1": "explanation",
                 "identifier2": "explanation",
-                DefaultOptionKeys.context: True,  # Mark as context parameter
+                "_meta": {
+                    DefaultOptionKeys.context: True,  # Mark as context parameter
+                },
             },
             "property2": {
                 "value1": "explanation",
@@ -37,12 +39,16 @@ class TestParameterResolutionUnit:
             "property3": {
                 "opt_val1": "explanation",
                 "opt_val2": "explanation",
-                DefaultOptionKeys.default: "opt_val1",  # Default value
-                DefaultOptionKeys.context: True,  # Mark as context parameter
+                "_meta": {
+                    DefaultOptionKeys.default: "opt_val1",  # Default value
+                    DefaultOptionKeys.context: True,  # Mark as context parameter
+                },
             },
             DefaultOptionKeys.in_features: {
-                "explanation": "explanation",
-                DefaultOptionKeys.context: True,  # Mark as context parameter
+                "_meta": {
+                    "explanation": "explanation",
+                    DefaultOptionKeys.context: True,  # Mark as context parameter
+                },
             },
         }
 
@@ -266,8 +272,10 @@ class TestParameterResolutionUnit:
         property_value_with_default = {
             "opt_val1": "explanation",
             "opt_val2": "explanation",
-            DefaultOptionKeys.default: "opt_val1",
-            DefaultOptionKeys.context: True,
+            "_meta": {
+                DefaultOptionKeys.default: "opt_val1",
+                DefaultOptionKeys.context: True,
+            },
         }
 
         extracted = FeatureChainParser._extract_property_values(property_value_with_default)
@@ -330,18 +338,26 @@ class TestParameterResolutionUnit:
             "strict_param": {
                 "allowed_value1": "explanation",
                 "allowed_value2": "explanation",
-                DefaultOptionKeys.strict_validation: True,  # Explicit strict validation
-                DefaultOptionKeys.context: True,
+                "_meta": {
+                    DefaultOptionKeys.strict_validation: True,  # Explicit strict validation
+                    DefaultOptionKeys.context: True,
+                },
             },
             "flexible_param": {
-                DefaultOptionKeys.strict_validation: False,  # Explicit flexible validation
-                DefaultOptionKeys.context: True,
+                "_meta": {
+                    DefaultOptionKeys.strict_validation: False,  # Explicit flexible validation
+                    DefaultOptionKeys.context: True,
+                },
             },
             "default_flexible_param": {
-                DefaultOptionKeys.context: True,
+                "_meta": {
+                    DefaultOptionKeys.context: True,
+                },
             },
             DefaultOptionKeys.in_features: {
-                DefaultOptionKeys.context: True,
+                "_meta": {
+                    DefaultOptionKeys.context: True,
+                },
             },
         }
 
@@ -426,7 +442,9 @@ class TestParameterResolutionUnit:
         # Test: Property with explicit strict validation = True
         strict_property = {
             "value1": "explanation",
-            DefaultOptionKeys.strict_validation: True,
+            "_meta": {
+                DefaultOptionKeys.strict_validation: True,
+            },
         }
         assert FeatureChainParser._is_strict_validation(strict_property) is True, (
             "Should identify strict validation = True"
@@ -435,7 +453,9 @@ class TestParameterResolutionUnit:
         # Test: Property with explicit strict validation = False
         flexible_property = {
             "value1": "explanation",
-            DefaultOptionKeys.strict_validation: False,
+            "_meta": {
+                DefaultOptionKeys.strict_validation: False,
+            },
         }
         assert FeatureChainParser._is_strict_validation(flexible_property) is False, (
             "Should identify strict validation = False"
@@ -444,7 +464,9 @@ class TestParameterResolutionUnit:
         # Test: Property without strict validation flag (defaults to False)
         default_property = {
             "value1": "explanation",
-            DefaultOptionKeys.context: True,
+            "_meta": {
+                DefaultOptionKeys.context: True,
+            },
         }
         assert FeatureChainParser._is_strict_validation(default_property) is False, (
             "Should default to strict validation = False"
@@ -469,25 +491,33 @@ class TestParameterResolutionUnit:
             "algorithm_type": {
                 "sum": "explanation",
                 "avg": "explanation",
-                # No strict_validation flag -> defaults to False (flexible)
-                DefaultOptionKeys.context: True,
+                "_meta": {
+                    # No strict_validation flag -> defaults to False (flexible)
+                    DefaultOptionKeys.context: True,
+                },
             },
             "data_source": {
                 "production": "explanation",
                 "staging": "explanation",
-                DefaultOptionKeys.strict_validation: True,  # Restrict data sources
-                DefaultOptionKeys.group: True,  # This affects grouping
+                "_meta": {
+                    DefaultOptionKeys.strict_validation: True,  # Restrict data sources
+                    DefaultOptionKeys.group: True,  # This affects grouping
+                },
             },
             "debug_mode": {
                 "true": "explanation",
                 "false": "explanation",
-                DefaultOptionKeys.strict_validation: False,  # Explicit flexible validation
-                DefaultOptionKeys.context: True,
+                "_meta": {
+                    DefaultOptionKeys.strict_validation: False,  # Explicit flexible validation
+                    DefaultOptionKeys.context: True,
+                },
             },
             DefaultOptionKeys.in_features: {
-                "explanation": "explanation",
-                # No strict_validation flag -> defaults to False (flexible)
-                DefaultOptionKeys.context: True,
+                "_meta": {
+                    "explanation": "explanation",
+                    # No strict_validation flag -> defaults to False (flexible)
+                    DefaultOptionKeys.context: True,
+                },
             },
         }
 

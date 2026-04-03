@@ -182,13 +182,17 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     PROPERTY_MAPPING = {
         ENCODER_TYPE: {
             **SUPPORTED_ENCODERS,  # All supported encoder types as valid options
-            DefaultOptionKeys.context: True,  # Context parameter
-            DefaultOptionKeys.strict_validation: True,  # Enable strict validation
+            "_meta": {
+                DefaultOptionKeys.context: True,  # Context parameter
+                DefaultOptionKeys.strict_validation: True,  # Enable strict validation
+            },
         },
         DefaultOptionKeys.in_features: {
-            "explanation": "Source feature to encode",
-            DefaultOptionKeys.context: True,  # Context parameter
-            DefaultOptionKeys.strict_validation: False,  # Flexible validation
+            "_meta": {
+                "explanation": "Source feature to encode",
+                DefaultOptionKeys.context: True,  # Context parameter
+                DefaultOptionKeys.strict_validation: False,  # Flexible validation
+            },
         },
     }
 

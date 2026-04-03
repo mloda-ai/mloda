@@ -38,13 +38,17 @@ PROPERTY_MAPPING = {
         "sum": "Sum aggregation",
         "avg": "Average aggregation",
         "max": "Maximum aggregation",
-        DefaultOptionKeys.context: True,
-        DefaultOptionKeys.strict_validation: True,
+        "_meta": {
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
+        },
     },
     DefaultOptionKeys.in_features: {
-        "explanation": "Source feature for aggregation",
-        DefaultOptionKeys.context: True,
-        DefaultOptionKeys.strict_validation: False,
+        "_meta": {
+            "explanation": "Source feature for aggregation",
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: False,
+        },
     },
 }
 ```
@@ -77,10 +81,12 @@ For complex validation beyond simple value lists:
 ```python
 PROPERTY_MAPPING = {
     "window_size": {
-        "explanation": "Size of the time window",
-        DefaultOptionKeys.context: True,
-        DefaultOptionKeys.strict_validation: True,
-        DefaultOptionKeys.validation_function: lambda x: isinstance(x, int) and x > 0,
+        "_meta": {
+            "explanation": "Size of the time window",
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
+            DefaultOptionKeys.validation_function: lambda x: isinstance(x, int) and x > 0,
+        },
     },
 }
 ```

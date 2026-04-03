@@ -187,10 +187,14 @@ graph LR
 PROPERTY_MAPPING = {
     AGGREGATION_TYPE: {
         **AGGREGATION_TYPES_DICT,
-        DefaultOptionKeys.context: True,  # Context parameter
+        "_meta": {
+            DefaultOptionKeys.context: True,  # Context parameter
+        },
     },
     DefaultOptionKeys.in_features: {
-        DefaultOptionKeys.context: True,
+        "_meta": {
+            DefaultOptionKeys.context: True,
+        },
     },
 }
 ```

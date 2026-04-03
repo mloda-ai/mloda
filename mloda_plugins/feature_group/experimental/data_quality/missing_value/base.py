@@ -167,21 +167,29 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     PROPERTY_MAPPING = {
         IMPUTATION_METHOD: {
             **IMPUTATION_METHODS,
-            DefaultOptionKeys.context: True,
+            "_meta": {
+                DefaultOptionKeys.context: True,
+            },
         },
         DefaultOptionKeys.in_features: {
-            "explanation": "Source feature to impute missing values",
-            DefaultOptionKeys.context: True,
+            "_meta": {
+                "explanation": "Source feature to impute missing values",
+                DefaultOptionKeys.context: True,
+            },
         },
         "constant_value": {
-            "explanation": "Constant value to use for constant imputation method",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.default: None,  # Default is None, required only for constant method
+            "_meta": {
+                "explanation": "Constant value to use for constant imputation method",
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.default: None,  # Default is None, required only for constant method
+            },
         },
         "group_by_features": {
-            "explanation": "Optional list of features to group by before imputation",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.default: None,  # Default is None (no grouping)
+            "_meta": {
+                "explanation": "Optional list of features to group by before imputation",
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.default: None,  # Default is None (no grouping)
+            },
         },
     }
 

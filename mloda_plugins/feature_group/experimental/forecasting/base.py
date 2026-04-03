@@ -137,33 +137,43 @@ class ForecastingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     PROPERTY_MAPPING = {
         ALGORITHM: {
             **FORECASTING_ALGORITHMS,
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
+            "_meta": {
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: True,
+            },
         },
         HORIZON: {
-            "explanation": "Forecast horizon (number of time units to predict)",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.validation_function: lambda x: (
-                (isinstance(x, int) or (isinstance(x, str) and x.isdigit())) and int(x) > 0
-            ),
+            "_meta": {
+                "explanation": "Forecast horizon (number of time units to predict)",
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: True,
+                DefaultOptionKeys.validation_function: lambda x: (
+                    (isinstance(x, int) or (isinstance(x, str) and x.isdigit())) and int(x) > 0
+                ),
+            },
         },
         TIME_UNIT: {
             **TIME_UNITS,
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
+            "_meta": {
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: True,
+            },
         },
         DefaultOptionKeys.in_features: {
-            "explanation": "Source feature to generate forecasts for",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
+            "_meta": {
+                "explanation": "Source feature to generate forecasts for",
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: False,
+            },
         },
         OUTPUT_CONFIDENCE_INTERVALS: {
-            "explanation": "Whether to output confidence intervals as separate columns using ~lower and ~upper suffix pattern",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.default: False,  # Default is False (don't output confidence intervals)
-            DefaultOptionKeys.validation_function: lambda value: isinstance(value, bool),
+            "_meta": {
+                "explanation": "Whether to output confidence intervals as separate columns using ~lower and ~upper suffix pattern",
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: False,
+                DefaultOptionKeys.default: False,  # Default is False (don't output confidence intervals)
+                DefaultOptionKeys.validation_function: lambda value: isinstance(value, bool),
+            },
         },
     }
 

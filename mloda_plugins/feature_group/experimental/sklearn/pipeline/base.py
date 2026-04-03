@@ -92,22 +92,30 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     PROPERTY_MAPPING = {
         PIPELINE_NAME: {
             **PIPELINE_TYPES,  # All supported pipeline types as valid options
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.default: None,  # Default is None as steps + params also work
+            "_meta": {
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.default: None,  # Default is None as steps + params also work
+            },
         },
         PIPELINE_STEPS: {
-            "explanation": "List of pipeline steps as (name, transformer) tuples",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.default: None,  # Default is None as pipeline_types also work
+            "_meta": {
+                "explanation": "List of pipeline steps as (name, transformer) tuples",
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.default: None,  # Default is None as pipeline_types also work
+            },
         },
         PIPELINE_PARAMS: {
-            "explanation": "Pipeline parameters dictionary",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.default: None,  # Default is None as pipeline_types also work
+            "_meta": {
+                "explanation": "Pipeline parameters dictionary",
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.default: None,  # Default is None as pipeline_types also work
+            },
         },
         DefaultOptionKeys.in_features: {
-            "explanation": "Source features for sklearn pipeline (comma-separated)",
-            DefaultOptionKeys.context: True,
+            "_meta": {
+                "explanation": "Source features for sklearn pipeline (comma-separated)",
+                DefaultOptionKeys.context: True,
+            },
         },
     }
 

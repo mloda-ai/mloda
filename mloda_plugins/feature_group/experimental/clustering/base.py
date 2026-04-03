@@ -18,7 +18,6 @@ from mloda.provider import DefaultOptionKeys
 
 
 class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
-    # Option keys for clustering configuration
     """
     Base class for all clustering feature groups.
 
@@ -89,6 +88,7 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     - For algorithms that don't require a specific number of clusters (like DBSCAN), use 'auto' as the k_value
     """
 
+    # Option keys for clustering configuration
     ALGORITHM = "algorithm"
     K_VALUE = "k_value"
     OUTPUT_PROBABILITIES = "output_probabilities"

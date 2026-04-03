@@ -39,8 +39,8 @@ class RootFeatureA(FeatureGroup):
         return DataCreator(supports_features={cls.get_class_name()})
 
     @classmethod
-    def compute_framework_rule(cls) -> bool:
-        return True
+    def compute_framework_rule(cls) -> None:
+        return None
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -55,8 +55,8 @@ class RootFeatureB(FeatureGroup):
         return DataCreator(supports_features={cls.get_class_name()})
 
     @classmethod
-    def compute_framework_rule(cls) -> bool:
-        return True
+    def compute_framework_rule(cls) -> None:
+        return None
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -76,8 +76,8 @@ class MultiDependencyFeature(FeatureGroup):
         }
 
     @classmethod
-    def compute_framework_rule(cls) -> bool:
-        return True
+    def compute_framework_rule(cls) -> None:
+        return None
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

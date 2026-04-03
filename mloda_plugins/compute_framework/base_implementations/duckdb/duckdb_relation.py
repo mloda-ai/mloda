@@ -127,6 +127,10 @@ class DuckdbRelation:
         new_rel = self._relation.limit(n)
         return DuckdbRelation(self._connection, new_rel)
 
+    def order(self, *columns: str) -> "DuckdbRelation":
+        """Return a new relation sorted by the given columns."""
+        return DuckdbRelation(self._connection, self._relation.order(", ".join(columns)))
+
     def drop(self) -> None:
         """No-op: native relations have no persistent state to clean up."""
         pass

@@ -87,3 +87,39 @@ class TestDuckdbRelation(RelationTestMixin):
         assert len(result) == 2
         assert "val" in result.columns
         assert "score" in result.columns
+
+    # --- Order ---
+
+    def test_order_single_column(self, sample_relation: "DuckdbRelation") -> None:
+        ordered = sample_relation.order("age")
+        ids = self.get_column_values(ordered, "id")
+        assert ids == [1, 2, 3, 4, 5]
+
+    def test_order_single_column_desc(self, sample_relation: "DuckdbRelation") -> None:
+        ordered = sample_relation.order("age DESC")
+        ids = self.get_column_values(ordered, "id")
+        assert ids == [5, 4, 3, 2, 1]
+
+    def test_order_multiple_columns(self, sample_relation: "DuckdbRelation") -> None:
+        ordered = sample_relation.order("category", "age")
+        categories = self.get_column_values(ordered, "category")
+        ages = self.get_column_values(ordered, "age")
+        assert categories == ["A", "A", "B", "B", "C"]
+        assert ages == [25, 35, 30, 45, 40]
+
+    def test_order_preserves_all_columns(self, sample_relation: "DuckdbRelation") -> None:
+        ordered = sample_relation.order("age")
+        assert ordered.columns == ["id", "age", "name", "category"]
+
+    def test_order_preserves_row_count(self, sample_relation: "DuckdbRelation") -> None:
+        ordered = sample_relation.order("age")
+        assert len(ordered) == 5
+
+    def test_order_does_not_mutate_original(self, sample_relation: "DuckdbRelation") -> None:
+        sample_relation.order("age DESC")
+        ids = self.get_column_values(sample_relation, "id")
+        assert ids == [1, 2, 3, 4, 5]
+
+    def test_order_returns_duckdb_relation(self, sample_relation: "DuckdbRelation") -> None:
+        ordered = sample_relation.order("age")
+        assert isinstance(ordered, DuckdbRelation)

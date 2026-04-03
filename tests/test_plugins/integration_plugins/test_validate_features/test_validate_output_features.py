@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Set
 
 import pytest
 
@@ -23,11 +23,10 @@ class BaseValidateOutputFeaturesBaseNegative(BaseValidateOutputFeaturesBase):
     """Negative test case for output features validation."""
 
     @classmethod
-    def validate_output_features(cls, data: Any, features: FeatureSet) -> Optional[bool]:
+    def validate_output_features(cls, data: Any, features: FeatureSet) -> None:
         """This function should be used to validate the output data."""
         if len(data[cls.get_class_name()]) == 3:
             raise ValueError("Data should not have 3 elements.")
-        return True
 
 
 class ValidateOutputFeatureExtender(DokuExtender):

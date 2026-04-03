@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Optional, Dict
+from typing import Any, Dict
 
 
 import logging
@@ -25,7 +25,7 @@ class BaseValidator(ABC):
         log_level (str): The logging level to be used. Defaults to "error".
 
     Methods:
-        validate(data: Any) -> Optional[bool]:
+        validate(data: Any) -> None:
             Abstract method to be implemented by subclasses to validate the given data.
 
         handle_log_level(_error: str, _exception: Exception) -> None:
@@ -37,19 +37,16 @@ class BaseValidator(ABC):
         self.log_level = log_level or "error"
 
     @abstractmethod
-    def validate(self, data: Any) -> Optional[bool]:
+    def validate(self, data: Any) -> None:
         """
         Validate the given data against the validation rules.
 
         Subclasses must implement this method with their specific validation logic.
+        Raise a ValueError with a descriptive message if validation fails.
+        If the method returns without raising, validation is considered passed.
 
         Args:
             data: The data to validate.
-
-        Returns:
-            None: No validation needed/not applicable (neutral - passes by default)
-            True: Validation explicitly passed
-            False: Validation failed
         """
         pass
 

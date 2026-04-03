@@ -249,22 +249,18 @@ class ComputeFramework(ABC):
         return features
 
     @final
-    def run_validate_input_features(self, feature_group: Any, features: Any) -> Any:
+    def run_validate_input_features(self, feature_group: Any, features: Any) -> None:
         if self.data is None:
             return
 
         extender = self.get_function_extender(ExtenderHook.VALIDATE_INPUT_FEATURE)
         if extender is None:
-            result = feature_group.validate_input_features(self.data, features)
+            feature_group.validate_input_features(self.data, features)
         else:
-            result = extender(feature_group.validate_input_features, self.data, features)
-
-        if result is None or result is True:
-            return
-        raise ValueError(result)
+            extender(feature_group.validate_input_features, self.data, features)
 
     @final
-    def run_validate_output_features(self, feature_group: Any, features: Any) -> Any:
+    def run_validate_output_features(self, feature_group: Any, features: Any) -> None:
         if self.data is None:
             return
 
@@ -274,13 +270,9 @@ class ComputeFramework(ABC):
 
         extender = self.get_function_extender(ExtenderHook.VALIDATE_OUTPUT_FEATURE)
         if extender is None:
-            result = feature_group.validate_output_features(self.data, features)
+            feature_group.validate_output_features(self.data, features)
         else:
-            result = extender(feature_group.validate_output_features, self.data, features)
-
-        if result is None or result is True:
-            return
-        raise ValueError(result)
+            extender(feature_group.validate_output_features, self.data, features)
 
     @final
     def get_column_names(self) -> Set[str]:

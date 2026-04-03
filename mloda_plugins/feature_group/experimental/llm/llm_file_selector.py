@@ -203,7 +203,7 @@ class LLMFileSelector(FeatureGroup):
         return {llm_feature}
 
     @classmethod
-    def validate_input_features(cls, data: Any, features: FeatureSet) -> Optional[bool]:
+    def validate_input_features(cls, data: Any, features: FeatureSet) -> None:
         if GeminiRequestLoop.get_class_name() not in data.columns:
             raise ValueError(f"Feature {GeminiRequestLoop.get_class_name()} not found in input data.")
 
@@ -216,8 +216,6 @@ class LLMFileSelector(FeatureGroup):
                 if not os.path.exists(path):
                     raise ValueError(f"File <{path}> does not exist.")
 
-        return True
-
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         data = data.rename(
@@ -226,7 +224,7 @@ class LLMFileSelector(FeatureGroup):
         return data
 
     @classmethod
-    def validate_output_features(cls, data: Any, features: FeatureSet) -> Optional[bool]:
+    def validate_output_features(cls, data: Any, features: FeatureSet) -> None:
         for str_paths in data[cls.get_class_name()].values:
             paths = str_paths.split(",")
             for path in paths:
@@ -235,4 +233,3 @@ class LLMFileSelector(FeatureGroup):
 
                 if not os.path.exists(path):
                     raise ValueError(f"File <{path}> does not exist.")
-        return True

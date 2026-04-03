@@ -121,32 +121,24 @@ class FeatureGroup(ABC):
         return None
 
     @classmethod
-    def validate_input_features(cls, data: Any, features: FeatureSet) -> Optional[bool]:
+    def validate_input_features(cls, data: Any, features: FeatureSet) -> None:
         """
         Validate the input data before feature calculation.
 
         Override this method to implement custom input validation logic.
-        The base implementation returns None (no validation).
-
-        Returns:
-            None: No validation needed/not implemented (neutral - validation passes by default)
-            True: Validation explicitly passed
-            False: Validation failed
+        Raise a ValueError with a descriptive message if validation fails.
+        If the method returns without raising, validation is considered passed.
         """
         return None
 
     @classmethod
-    def validate_output_features(cls, data: Any, features: FeatureSet) -> Optional[bool]:
+    def validate_output_features(cls, data: Any, features: FeatureSet) -> None:
         """
         Validate the output data after feature calculation.
 
         Override this method to implement custom output validation logic.
-        The base implementation returns None (no validation).
-
-        Returns:
-            None: No validation needed/not implemented (neutral - validation passes by default)
-            True: Validation explicitly passed
-            False: Validation failed
+        Raise a ValueError with a descriptive message if validation fails.
+        If the method returns without raising, validation is considered passed.
         """
         return None
 

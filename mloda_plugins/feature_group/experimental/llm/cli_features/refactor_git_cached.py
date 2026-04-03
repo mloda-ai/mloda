@@ -360,10 +360,9 @@ class DiffCachedFeatureGroup(RunToolFeatureGroup):
     _tool = GitDiffCachedTool
 
     @classmethod
-    def validate_output_features(cls, data: Any, features: FeatureSet) -> Optional[bool]:
+    def validate_output_features(cls, data: Any, features: FeatureSet) -> None:
         if data[cls.get_class_name()].values[0] == cls.get_tool().create_result_string(""):
             raise ValueError("No staged changes found in the repository.")
-        return True
 
 
 class DiffFeatureGroup(RunToolFeatureGroup):

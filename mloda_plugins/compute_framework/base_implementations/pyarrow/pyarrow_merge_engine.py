@@ -67,7 +67,7 @@ class PyArrowMergeEngine(BaseMergeEngine):
         https://github.com/apache/arrow/issues/30950 Currently, not existing in base pyarrow.
         If needed, one could add it.
         """
-        raise ValueError(f"JoinType union are not yet implemented {self.__class__.__name__}")
+        raise ValueError(f"JoinType union is not yet implemented in {self.__class__.__name__}")
 
     def join_logic(
         self, join_type: str, left_data: Any, right_data: Any, left_index: Index, right_index: Index, jointype: JoinType

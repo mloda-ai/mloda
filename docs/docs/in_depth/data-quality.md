@@ -39,7 +39,7 @@ class DocSimpleValidateInputFeatures(FeatureGroup):
     def validate_input_features(cls, data: Any, features: FeatureSet) -> None:
         """This function is a naive implementation of a validator."""
 
-        if len(data["BaseValidateInputFeaturesBase"]) == 3:
+        if len(data["BaseValidateInputFeaturesBase"]) != 3:
             raise ValueError("Data should have 3 elements")
 ```
 

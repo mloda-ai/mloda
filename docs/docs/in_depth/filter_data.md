@@ -158,6 +158,112 @@ ExampleOrderFilter: [[2,3]]
 
 Although this example is complex, it is noteworthy, that the framework considers filters as features and setup as that in the framework. 
 
+### Inline Filters and Conditional Masking
+
+mloda supports two filter application modes controlled by the filter engine's `final_filters()` method:
+
+1. **Final filters** (`final_filters() = True`): The framework applies filters **after** `calculate_feature()`, eliminating rows that do not match. This is the default behavior for Pandas, PyArrow, Polars, and SQL engines.
+2. **Inline filters** (`final_filters() = False`): The framework **skips** post-calculation filtering. The FeatureGroup reads `features.filters` during `calculate_feature()` and applies them itself. This enables patterns like predicate pushdown (Iceberg) or conditional masking.
+
+**Conditional masking** replaces non-matching values with NULL while preserving all rows. This is useful for conditional aggregation (the SQL equivalent of `SUM(CASE WHEN ... THEN ... END) OVER (PARTITION BY ...)`).
+
+#### Setting up inline filtering
+
+First, create a filter engine with `final_filters()` returning `False` and a compute framework that uses it:
+
+```python
+from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_filter_engine import PyArrowFilterEngine
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda.provider import BaseFilterEngine
+
+class InlineMaskFilterEngine(PyArrowFilterEngine):
+    @classmethod
+    def final_filters(cls) -> bool:
+        return False
+
+class PyArrowTableInlineFilter(PyArrowTable):
+    @classmethod
+    def filter_engine(cls):
+        return InlineMaskFilterEngine
+```
+
+#### Example: conditional masking with aggregation
+
+This FeatureGroup reads filters inline, masks non-matching values to NULL, aggregates by group, and broadcasts results back to all rows:
+
+```python
+import pyarrow as pa
+import pyarrow.compute as pc
+from mloda.provider import FeatureGroup, FeatureSet, DataCreator
+
+class ConditionalMaskExample(FeatureGroup):
+    @classmethod
+    def input_data(cls):
+        return DataCreator({cls.get_class_name(), "status"})
+
+    @classmethod
+    def compute_framework_rule(cls):
+        return {PyArrowTableInlineFilter}
+
+    @classmethod
+    def calculate_feature(cls, data, features):
+        # Source data
+        region = pa.array(["A", "A", "B", "B"])
+        status = pa.array(["active", "inactive", "active", "inactive"])
+        value = pa.array([10, 20, 30, 40])
+
+        # 1. Read filters from features.filters
+        mask = pa.array([True] * 4)
+        for f in features.filters:
+            if f.filter_feature.name == "status" and f.filter_type == "equal":
+                mask = pc.and_(mask, pc.equal(status, pa.scalar(f.parameter.value)))
+
+        # 2. Mask: replace non-matching values with NULL
+        masked_value = pc.if_else(mask, value, pa.scalar(None, type=pa.int64()))
+        # Result: [10, None, 30, None]
+
+        # 3. Aggregate: group by region, sum masked values
+        table = pa.table({"region": region, "masked_value": masked_value})
+        grouped = table.group_by("region").aggregate([("masked_value", "sum")])
+
+        # 4. Broadcast: map grouped sums back to all rows
+        region_to_sum = {}
+        for i in range(grouped.num_rows):
+            region_to_sum[grouped.column("region")[i].as_py()] = (
+                grouped.column("masked_value_sum")[i].as_py()
+            )
+
+        result = pa.array([region_to_sum[r.as_py()] for r in region])
+        return pa.table({cls.get_class_name(): result})
+```
+
+Running this with a `status == "active"` filter:
+
+```python
+from mloda.user import mloda, GlobalFilter
+
+global_filter = GlobalFilter()
+global_filter.add_filter("status", "equal", {"value": "active"})
+
+result = mloda.run_all(
+    ["ConditionalMaskExample"],
+    compute_frameworks={PyArrowTableInlineFilter},
+    global_filter=global_filter,
+)
+```
+
+Expected output (all 4 rows preserved, masked aggregation broadcast):
+
+```python
+ConditionalMaskExample: [10, 10, 30, 30]
+```
+
+Region A: only value=10 where status is active, sum=10.
+Region B: only value=30 where status is active, sum=30.
+Both sums are broadcast back to all rows in their respective region.
+
+For a complete working example with tests, see `tests/test_core/test_filter/test_conditional_mask.py`.
+
 ### Summary
 
-This filtering system improves data preprocessing through GlobalFilter and SingleFilters, allowing flexible, condition-based refinement, including time-based filtering. It maintains consistency using FilterType and supports complex machine learning use cases. If you encounter a commonly used filter not yet included, feel free to open an issue or submit a pull request.
+This filtering system improves data preprocessing through GlobalFilter and SingleFilters, allowing flexible, condition-based refinement, including time-based filtering. It maintains consistency using FilterType and supports complex machine learning use cases. Inline filtering extends this to support conditional masking and predicate pushdown patterns. If you encounter a commonly used filter not yet included, feel free to open an issue or submit a pull request.

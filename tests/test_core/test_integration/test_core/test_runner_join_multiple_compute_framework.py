@@ -19,7 +19,7 @@ from mloda.user import Link, JoinSpec
 
 # Import transformers to ensure they're registered
 import mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_pyarrow_transformer  # noqa: F401
-import mloda_plugins.compute_framework.base_implementations.pandas.pandaspyarrowtransformer  # noqa: F401
+import mloda_plugins.compute_framework.base_implementations.pandas.pandas_pyarrow_transformer  # noqa: F401
 import mloda_plugins.compute_framework.base_implementations.polars.polars_pyarrow_transformer  # noqa: F401
 import mloda_plugins.compute_framework.base_implementations.polars.polars_lazy_pyarrow_transformer  # noqa: F401
 

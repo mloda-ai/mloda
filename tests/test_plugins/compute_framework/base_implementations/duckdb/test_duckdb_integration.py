@@ -100,7 +100,7 @@ class ATestDuckDBFeatureGroup(FeatureGroup, ConnectionMatcherMixin):
         return None
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         return {DuckDBFramework}
 
 
@@ -225,7 +225,7 @@ class CheckData(FeatureGroup):
         return {"pyarrow_avg_value_by_category"}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         return {PyArrowTable}
 
 

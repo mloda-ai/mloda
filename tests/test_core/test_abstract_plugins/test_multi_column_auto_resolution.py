@@ -44,7 +44,7 @@ class MultiColumnTestDataCreator(FeatureGroup):
         )
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         """Return the compute framework for this data creator."""
         return {PandasDataFrame}
 
@@ -99,7 +99,7 @@ class MultiColumnProducer(FeatureGroup):
         return data
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         """Support Pandas framework."""
         return {PandasDataFrame}
 
@@ -168,7 +168,7 @@ class MultiColumnConsumer(FeatureGroup):
         return data
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         """Support Pandas framework."""
         return {PandasDataFrame}
 
@@ -208,7 +208,7 @@ class ChainedProcessor(FeatureGroup):
         return data
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         """Support Pandas framework."""
         return {PandasDataFrame}
 

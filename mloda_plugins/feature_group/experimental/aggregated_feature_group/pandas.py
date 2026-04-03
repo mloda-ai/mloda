@@ -14,7 +14,7 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.base impo
 
 class PandasAggregatedFeatureGroup(AggregatedFeatureGroup):
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         """Specify that this feature group works with Pandas."""
         return {PandasDataFrame}
 

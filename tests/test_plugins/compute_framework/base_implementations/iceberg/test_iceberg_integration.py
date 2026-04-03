@@ -105,7 +105,7 @@ class IcebergTestDataCreator(FeatureGroup):
         return mock_table
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         """Return the Iceberg compute framework."""
         return {IcebergFramework}
 
@@ -146,7 +146,7 @@ class ATestIcebergFeatureGroup(FeatureGroup, ConnectionMatcherMixin):
         return None
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         return {IcebergFramework}
 
 
@@ -199,7 +199,7 @@ class IcebergSimpleTransformFeatureGroup(FeatureGroup):
         return {"doubled_value", "score_plus_ten"}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         return {IcebergFramework}
 
 
@@ -235,7 +235,7 @@ class IcebergToArrowFeatureGroup(FeatureGroup):
         return {"arrow_doubled_value"}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         return {PyArrowTable}
 
 

@@ -21,7 +21,7 @@ class PandasSklearnPipelineFeatureGroup(SklearnPipelineFeatureGroup):
     """
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         """Specify that this feature group works with Pandas."""
         return {PandasDataFrame}
 

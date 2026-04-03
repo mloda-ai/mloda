@@ -121,7 +121,7 @@ class TestDynamicFeatureGroupFactory:
         def custom_input_features(self: Any, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
             return {Feature(name="custom_input_feature")}
 
-        def custom_compute_framework_rule() -> Union[bool, Set[Type[ComputeFramework]]]:
+        def custom_compute_framework_rule() -> Set[Type[ComputeFramework]]:
             return {PandasDataFrame}
 
         def custom_index_columns() -> Optional[List[Index]]:

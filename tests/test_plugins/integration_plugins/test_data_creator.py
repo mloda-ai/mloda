@@ -61,7 +61,7 @@ class ATestDataCreator(FeatureGroup):
         raise ValueError(f"Unsupported compute framework: {cls.compute_framework} for conversion in {cls.conversion}.")
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         """Return the compute framework for this data creator."""
 
         if issubclass(cls.compute_framework, ComputeFramework):

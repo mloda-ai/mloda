@@ -23,7 +23,7 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
     """
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         """Specify that this feature group works with PyArrow."""
         return {PyArrowTable}
 

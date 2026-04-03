@@ -31,7 +31,7 @@ class MultipleCfwTest1(FeatureGroup):
         return {cls.get_class_name(): [1, 2, 3]}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         return {PyArrowTable}
 
 
@@ -45,7 +45,7 @@ class MultipleCfwTest2(FeatureGroup):
         return {cls.get_class_name(): [4, 5, 6]}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         return {SecondCfw}
 
 
@@ -54,7 +54,7 @@ class ChangeCfw(FeatureGroup):
         return {Feature.int32_of("MultipleCfwTest1")}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         return {SecondCfw}
 
     @classmethod
@@ -68,7 +68,7 @@ class ChangeCfwThird(FeatureGroup):
         return {Feature.int32_of("ChangeCfw")}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         return {ThirdCfw}
 
     @classmethod

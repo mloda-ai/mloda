@@ -52,7 +52,7 @@ class JoinCfwTest1(FeatureGroup):
         return {cls.get_class_name(): [1, 2, 3], "idx": ["a", "b", "c"]}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         return {PyArrowTable}
 
 
@@ -66,7 +66,7 @@ class JoinCfwTest2(FeatureGroup):
         return {cls.get_class_name(): [4, 5, 6], "idx": ["a", "b", "c"]}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         return {SecondCfw}
 
 
@@ -80,7 +80,7 @@ class JoinCfwTest3(FeatureGroup):
         return {cls.get_class_name(): [7, 8, 9], "idx": ["a", "b", "c"]}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         return {ThirdCfw}
 
 
@@ -94,7 +94,7 @@ class JoinCfwTest4(FeatureGroup):
         return {cls.get_class_name(): [12, 13, 14], "idx": ["a", "b", "c"]}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         return {FourthCfw}
 
 
@@ -124,7 +124,7 @@ class Join3CfwTest(FeatureGroup):
         return {cls.get_class_name(): [33, 2, 3]}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         return {PyArrowTable}
 
 
@@ -146,7 +146,7 @@ class Join4CfwTest(Join3CfwTest):
         return {cls.get_class_name(): [33, 2, 3]}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         return {PyArrowTable}
 
 
@@ -166,7 +166,7 @@ class MultiIndexJoinTest1(FeatureGroup):
         }
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         return {PandasDataFrame}
 
 
@@ -186,7 +186,7 @@ class MultiIndexJoinTest2(FeatureGroup):
         }
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         return {PolarsLazyDataFrame}
 
 
@@ -206,7 +206,7 @@ class MultiIndexJoinTest3(FeatureGroup):
         }
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         return {PyArrowTable}
 
 
@@ -226,7 +226,7 @@ class MultiIndexJoinTest4(FeatureGroup):
         }
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         return {PythonDictFramework}
 
 
@@ -251,7 +251,7 @@ class JoinMultiIndexTest(FeatureGroup):
         return {cls.get_class_name(): [999, 888, 777]}
 
     @classmethod
-    def compute_framework_rule(cls) -> Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         return {PyArrowTable}
 
 

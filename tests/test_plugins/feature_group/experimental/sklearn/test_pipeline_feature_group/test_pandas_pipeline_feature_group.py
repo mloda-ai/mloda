@@ -19,7 +19,7 @@ class TestPandasSklearnPipelineFeatureGroup:
     def test_compute_framework_rule(self) -> None:
         """Test that the feature group specifies pandas framework."""
         rule = PandasSklearnPipelineFeatureGroup.compute_framework_rule()
-        assert PandasDataFrame in rule  # type: ignore
+        assert PandasDataFrame in rule
 
     def test_check_source_feature_exists_valid(self) -> None:
         """Test checking for existing source features."""

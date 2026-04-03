@@ -222,20 +222,22 @@ class DynamicFeatureGroupCreator:
                 return properties["input_data"]()  # type: ignore[no-any-return]
             return super(new_class, cls).input_data()  # type: ignore[misc, arg-type, no-any-return]
 
-        def validate_input_features(cls, data: Any, features: FeatureSet) -> Optional[bool]:  # type: ignore[no-untyped-def]
+        def validate_input_features(cls, data: Any, features: FeatureSet) -> None:  # type: ignore[no-untyped-def]
             if "validate_input_features" in properties:
-                return properties["validate_input_features"](cls, data, features)  # type: ignore[no-any-return]
-            return super(new_class, cls).validate_input_features(data, features)  # type: ignore[misc, arg-type, no-any-return]
+                properties["validate_input_features"](cls, data, features)
+                return
+            super(new_class, cls).validate_input_features(data, features)  # type: ignore[misc, arg-type]
 
         def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:  # type: ignore[no-untyped-def]
             if "calculate_feature" in properties:
                 return properties["calculate_feature"](cls, data, features)
             return super(new_class, cls).calculate_feature(data, features)  # type: ignore[misc, arg-type]
 
-        def validate_output_features(cls, data: Any, features: FeatureSet) -> Optional[bool]:  # type: ignore[no-untyped-def]
+        def validate_output_features(cls, data: Any, features: FeatureSet) -> None:  # type: ignore[no-untyped-def]
             if "validate_output_features" in properties:
-                return properties["validate_output_features"](cls, data, features)  # type: ignore[no-any-return]
-            return super(new_class, cls).validate_output_features(data, features)  # type: ignore[misc, arg-type, no-any-return]
+                properties["validate_output_features"](cls, data, features)
+                return
+            super(new_class, cls).validate_output_features(data, features)  # type: ignore[misc, arg-type]
 
         def artifact(cls) -> Optional[Type[Any]]:  # type: ignore[no-untyped-def]
             if "artifact" in properties:

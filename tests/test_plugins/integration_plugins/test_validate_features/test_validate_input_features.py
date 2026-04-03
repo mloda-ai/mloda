@@ -40,12 +40,11 @@ class SimpleValidateInputFeatures(FeatureGroup):
         return {Feature(name="BaseValidateInputFeaturesBase", options=options)}
 
     @classmethod
-    def validate_input_features(cls, data: Any, features: FeatureSet) -> Optional[bool]:
+    def validate_input_features(cls, data: Any, features: FeatureSet) -> None:
         """This function should be used to validate the input data."""
 
         if len(data["BaseValidateInputFeaturesBase"]) == 3:
             raise ValueError("Data should have 3 elements")
-        return True
 
 
 class CustomValidateInputFeatures(FeatureGroup):
@@ -57,7 +56,7 @@ class CustomValidateInputFeatures(FeatureGroup):
         return {Feature(name="BaseValidateInputFeaturesBase", options=options)}
 
     @classmethod
-    def validate_input_features(cls, data: Any, features: FeatureSet) -> Optional[bool]:
+    def validate_input_features(cls, data: Any, features: FeatureSet) -> None:
         """This function should be used to validate the input data."""
 
         validation_rules = {
@@ -72,7 +71,7 @@ class CustomValidateInputFeatures(FeatureGroup):
             validation_log_level = features.get_options_key("ValidationLevel")
             validator = ExamplePanderaValidator(validation_rules, validation_log_level)
 
-        return validator.validate(data)
+        validator.validate(data)
 
 
 class ValidateInputFeatureExtender(Extender):

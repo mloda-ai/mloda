@@ -36,12 +36,11 @@ class DocSimpleValidateInputFeatures(FeatureGroup):
         return {Feature(name="BaseValidateInputFeaturesBase", options=options)}
 
     @classmethod
-    def validate_input_features(cls, data: Any, features: FeatureSet) -> Optional[bool]:
+    def validate_input_features(cls, data: Any, features: FeatureSet) -> None:
         """This function is a naive implementation of a validator."""
 
         if len(data["BaseValidateInputFeaturesBase"]) == 3:
             raise ValueError("Data should have 3 elements")
-        return True
 ```
 
 As we run it, it will return an error.
@@ -65,7 +64,7 @@ This function shows 2 examples:
 class DocCustomValidateInputFeatures(DocSimpleValidateInputFeatures):
 
     @classmethod
-    def validate_input_features(cls, data: Any, features: FeatureSet) -> Optional[bool]:
+    def validate_input_features(cls, data: Any, features: FeatureSet) -> None:
         """This function should be used to validate the input data."""
 
         validation_rules = {
@@ -82,7 +81,7 @@ class DocCustomValidateInputFeatures(DocSimpleValidateInputFeatures):
         # Instantiating a validator inplace
             validator = DocExamplePanderaValidator(validation_rules, validation_log_level)
 
-        return validator.validate(data)  # type: ignore
+        validator.validate(data)
 ```
 
 The DocExamplePanderaValidator is based on the BaseValidator, which provides basic functionalities around logging. 
@@ -100,7 +99,7 @@ from pandera.errors import SchemaError
 class DocExamplePanderaValidator(BaseValidator):
     """Custom validator to validate input features based on a specific rule."""
 
-    def validate(self, data: pa.Table) -> Optional[bool]:
+    def validate(self, data: pa.Table) -> None:
         """This function should be used to validate the input data."""
 
         # Convert PyArrow Table to Pandas DataFrame if necessary
@@ -113,7 +112,6 @@ class DocExamplePanderaValidator(BaseValidator):
             schema.validate(data)
         except SchemaError as e:
             self.handle_log_level("SchemaError:", e)
-        return True
 ```
 
 The validator should raise an error again.
@@ -176,12 +174,11 @@ class DocBaseValidateOutputFeaturesBase(FeatureGroup):
         return {cls.get_class_name(): [1, 2, 3]}
 
     @classmethod
-    def validate_output_features(cls, data: Any, config: Options) -> Optional[bool]:
+    def validate_output_features(cls, data: Any, config: Options) -> None:
         """This function should be used to validate the output data."""
 
         if len(data[cls.get_class_name()]) != 3:
             raise ValueError("Data should have 3 elements")
-        return True
 
 results = mloda.run_all(
             ["DocBaseValidateOutputFeaturesBase"], {PyArrowTable}
@@ -199,14 +196,14 @@ class DocBaseValidateOutputFeaturesBaseNegativePandera(DocBaseValidateOutputFeat
     """Pandera example test case. This one is related to the pandera testcase for validate_input_features."""
 
     @classmethod
-    def validate_output_features(cls, data: Any, features: FeatureSet) -> Optional[bool]:
+    def validate_output_features(cls, data: Any, features: FeatureSet) -> None:
         """This function should be used to validate the output data."""
 
         validation_rules = {
             cls.get_class_name(): Column(int, Check.in_range(1, 2)),
         }
         validator = DocExamplePanderaValidator(validation_rules, features.get_options_key("ValidationLevel"))
-        return validator.validate(data)
+        validator.validate(data)
 ```
 
 This one should fail:

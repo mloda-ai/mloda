@@ -16,7 +16,7 @@ from mloda.provider import BaseValidator
 class ExamplePanderaValidator(BaseValidator):
     """Custom validator to validate input features based on a specific rule."""
 
-    def validate(self, data: pa.Table) -> Optional[bool]:
+    def validate(self, data: pa.Table) -> None:
         """This function should be used to validate the input data."""
 
         # Convert PyArrow Table to Pandas DataFrame if necessary
@@ -29,7 +29,6 @@ class ExamplePanderaValidator(BaseValidator):
             schema.validate(data)
         except SchemaError as e:
             self.handle_log_level("SchemaError:", e)
-        return True
 
 
 class BaseValidateOutputFeaturesBase(FeatureGroup):
@@ -42,19 +41,18 @@ class BaseValidateOutputFeaturesBase(FeatureGroup):
         return {cls.get_class_name(): [1, 2, 3]}
 
     @classmethod
-    def validate_output_features(cls, data: Any, features: FeatureSet) -> Optional[bool]:
+    def validate_output_features(cls, data: Any, features: FeatureSet) -> None:
         """This function should be used to validate the output data."""
 
         if len(data[cls.get_class_name()]) != 3:
             raise ValueError("Data should have 3 elements")
-        return True
 
 
 class BaseValidateOutputFeaturesBaseNegativePandera(BaseValidateOutputFeaturesBase):
     """Pandera example test case. This one is related to the pandera testcase for validate_input_features."""
 
     @classmethod
-    def validate_output_features(cls, data: Any, features: FeatureSet) -> Optional[bool]:
+    def validate_output_features(cls, data: Any, features: FeatureSet) -> None:
         """This function should be used to validate the output data."""
 
         validation_rules = {
@@ -62,4 +60,4 @@ class BaseValidateOutputFeaturesBaseNegativePandera(BaseValidateOutputFeaturesBa
         }
 
         validator = ExamplePanderaValidator(validation_rules, features.get_options_key("ValidationLevel"))
-        return validator.validate(data)
+        validator.validate(data)

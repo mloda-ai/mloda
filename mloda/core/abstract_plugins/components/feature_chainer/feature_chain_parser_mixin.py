@@ -96,6 +96,62 @@ class FeatureChainParserMixin:
     MIN_IN_FEATURES: int = 1
     MAX_IN_FEATURES: Optional[int] = None
 
+    # Expected value types for metadata keys in PROPERTY_MAPPING entries.
+    # DefaultOptionKeys inherits from str, so e.g. DefaultOptionKeys.context
+    # == "context".  If a plugin author accidentally uses one of these strings
+    # as a valid option value name, Python's dict silently merges the two keys
+    # and the intended value is lost.  __init_subclass__ uses this table to
+    # catch such collisions at class definition time.
+    _METADATA_EXPECTED_TYPES: Dict[str, type] = {
+        DefaultOptionKeys.context: bool,
+        DefaultOptionKeys.group: bool,
+        DefaultOptionKeys.strict_validation: bool,
+    }
+    _METADATA_CALLABLE_KEYS: Set[str] = {
+        DefaultOptionKeys.validation_function,
+        DefaultOptionKeys.required_when,
+        DefaultOptionKeys.type_validator,
+    }
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        mapping = getattr(cls, "PROPERTY_MAPPING", None)
+        if mapping is None:
+            return
+        for param_name, entry in mapping.items():
+            if not isinstance(entry, dict):
+                continue
+            cls._validate_property_mapping_entry(param_name, entry)
+
+    @classmethod
+    def _validate_property_mapping_entry(cls, param_name: str, entry: Dict[str, Any]) -> None:
+        """Raise ValueError if a PROPERTY_MAPPING entry has a likely key collision."""
+        for key, expected_type in cls._METADATA_EXPECTED_TYPES.items():
+            if key not in entry:
+                continue
+            value = entry[key]
+            if not isinstance(value, expected_type):
+                raise ValueError(
+                    f"PROPERTY_MAPPING['{param_name}']: key '{key.value}' holds a "
+                    f"{type(value).__name__} (expected {expected_type.__name__}). "
+                    f"Because DefaultOptionKeys inherits from str, the plain string "
+                    f"'{key.value}' and DefaultOptionKeys.{key.name} are the same "
+                    f"dict key. If you intended '{key.value}' as a valid option "
+                    f"value, rename it to avoid collision (e.g. '{key.value}_mode')."
+                )
+        for key in cls._METADATA_CALLABLE_KEYS:
+            if key not in entry:
+                continue
+            if not callable(entry[key]):
+                raise ValueError(
+                    f"PROPERTY_MAPPING['{param_name}']: key '{key.value}' holds a "
+                    f"non-callable {type(entry[key]).__name__}. "
+                    f"Because DefaultOptionKeys inherits from str, the plain string "
+                    f"'{key.value}' and DefaultOptionKeys.{key.name} are the same "
+                    f"dict key. If you intended '{key.value}' as a valid option "
+                    f"value, rename it to avoid collision."
+                )
+
     @classmethod
     def _validate_string_match(cls, _feature_name: str, _operation_config: str, _in_feature: str) -> bool:
         """

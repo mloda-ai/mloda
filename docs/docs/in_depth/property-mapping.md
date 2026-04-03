@@ -183,6 +183,35 @@ The predicate must satisfy:
 - **Must be a pure function** (no side effects).
 - Non-bool truthy return values are treated as `True`.
 
+## Reserved Keys
+
+The following string keys are reserved for metadata inside PROPERTY_MAPPING
+entries and must **not** be used as valid option value names:
+
+| Reserved key             | Used for                              | Expected type |
+|--------------------------|---------------------------------------|---------------|
+| `"default"`              | `DefaultOptionKeys.default`           | any           |
+| `"context"`              | `DefaultOptionKeys.context`           | `bool`        |
+| `"group"`                | `DefaultOptionKeys.group`             | `bool`        |
+| `"strict_validation"`    | `DefaultOptionKeys.strict_validation` | `bool`        |
+| `"validation_function"`  | `DefaultOptionKeys.validation_function` | callable    |
+| `"required_when"`        | `DefaultOptionKeys.required_when`     | callable      |
+| `"type_validator"`       | `DefaultOptionKeys.type_validator`    | callable      |
+
+`DefaultOptionKeys` inherits from `str`, so `DefaultOptionKeys.context` and
+the plain string `"context"` are identical as dict keys. If you write a
+PROPERTY_MAPPING entry where a valid option value has the same name as a
+reserved key, Python's dict silently merges them and the value is lost.
+
+mloda validates this at class definition time: if a subclass of
+`FeatureChainParserMixin` defines a PROPERTY_MAPPING where a reserved key
+holds a value whose type does not match the expected metadata type (e.g. a
+`str` where a `bool` is expected), a `ValueError` is raised immediately.
+
+If you need an option value that reads like a reserved key, use a synonym or
+prefix (e.g. `"default_mode"` instead of `"default"`, `"by_group"` instead
+of `"group"`).
+
 ## Context Propagation
 
 By default, context parameters are local: they do not flow through feature dependency chains. This is correct for feature-specific config like aggregation types.

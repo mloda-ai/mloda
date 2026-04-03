@@ -119,28 +119,24 @@ class TestRequiredWhenUnit:
         }
         assert FeatureChainParser._can_skip_required_check(prop_required) is False
 
-    def test_non_callable_required_when_is_skipped(self) -> None:
-        """A non-callable required_when value should not crash; the option is treated as optional."""
-
-        class MockWithBadPredicate(FeatureChainParserMixin):
-            PREFIX_PATTERN = r".*__([\w]+)_windowed$"
-            PROPERTY_MAPPING = {
-                "aggregation_type": {
-                    "sum": "Sum",
-                    DefaultOptionKeys.context: True,
-                    DefaultOptionKeys.strict_validation: True,
-                },
-                "order_by": {
-                    "explanation": "sort column",
-                    DefaultOptionKeys.context: True,
-                    DefaultOptionKeys.strict_validation: False,
-                    DefaultOptionKeys.required_when: "not_a_callable",
-                },
-            }
-
-        options = Options(context={"aggregation_type": "sum"})
-        result = MockWithBadPredicate.match_feature_group_criteria("my_feature", options)
-        assert result is True
+    def test_non_callable_required_when_is_rejected_at_class_definition(self) -> None:
+        """A non-callable required_when value is caught at class definition time."""
+        with pytest.raises(ValueError, match="required_when"):
+            class MockWithBadPredicate(FeatureChainParserMixin):
+                PREFIX_PATTERN = r".*__([\w]+)_windowed$"
+                PROPERTY_MAPPING = {
+                    "aggregation_type": {
+                        "sum": "Sum",
+                        DefaultOptionKeys.context: True,
+                        DefaultOptionKeys.strict_validation: True,
+                    },
+                    "order_by": {
+                        "explanation": "sort column",
+                        DefaultOptionKeys.context: True,
+                        DefaultOptionKeys.strict_validation: False,
+                        DefaultOptionKeys.required_when: "not_a_callable",
+                    },
+                }
 
     def test_required_when_with_default_value_interaction(self) -> None:
         """When a property has both required_when and default, default takes effect in base parser.
@@ -336,3 +332,89 @@ class TestRequiredWhenRunAll:
                 compute_frameworks={PandasDataFrame},
                 plugin_collector=plugin_collector,
             )
+
+
+class TestMetadataKeyCollisionDetection:
+    """Tests for __init_subclass__ validation that detects key-name collisions
+    between valid option values and reserved DefaultOptionKeys metadata keys.
+
+    DefaultOptionKeys inherits from str, so DefaultOptionKeys.context ==
+    "context".  If a plugin author uses "context" as a valid option value,
+    Python's dict silently merges the keys and the value is lost.  The
+    validation catches this at class definition time.
+    """
+
+    def test_rejects_string_value_for_context_key(self) -> None:
+        """A string where DefaultOptionKeys.context expects bool is caught."""
+        with pytest.raises(ValueError, match="context"):
+            class Bad(FeatureChainParserMixin):
+                PROPERTY_MAPPING = {
+                    "scope": {
+                        DefaultOptionKeys.context: "Context-level scope",
+                    },
+                }
+
+    def test_rejects_string_value_for_group_key(self) -> None:
+        """A string where DefaultOptionKeys.group expects bool is caught."""
+        with pytest.raises(ValueError, match="group"):
+            class Bad(FeatureChainParserMixin):
+                PROPERTY_MAPPING = {
+                    "partition_strategy": {
+                        DefaultOptionKeys.group: "Group by partition key",
+                    },
+                }
+
+    def test_rejects_string_value_for_strict_validation_key(self) -> None:
+        """A string where DefaultOptionKeys.strict_validation expects bool is caught."""
+        with pytest.raises(ValueError, match="strict_validation"):
+            class Bad(FeatureChainParserMixin):
+                PROPERTY_MAPPING = {
+                    "mode": {
+                        DefaultOptionKeys.strict_validation: "Strict mode",
+                    },
+                }
+
+    def test_rejects_non_callable_validation_function(self) -> None:
+        """A non-callable for DefaultOptionKeys.validation_function is caught."""
+        with pytest.raises(ValueError, match="validation_function"):
+            class Bad(FeatureChainParserMixin):
+                PROPERTY_MAPPING = {
+                    "mode": {
+                        DefaultOptionKeys.validation_function: "Custom validation",
+                    },
+                }
+
+    def test_accepts_correct_metadata_types(self) -> None:
+        """Normal PROPERTY_MAPPING entries must not trigger validation errors."""
+        class Good(FeatureChainParserMixin):
+            PROPERTY_MAPPING = {
+                "operation": {
+                    "sum": "Sum of values",
+                    "avg": "Average of values",
+                    DefaultOptionKeys.context: True,
+                    DefaultOptionKeys.strict_validation: True,
+                },
+            }
+
+        assert Good.PROPERTY_MAPPING is not None
+
+    def test_accepts_callable_metadata(self) -> None:
+        """Callable values for validation_function / required_when are fine."""
+        class Good(FeatureChainParserMixin):
+            PROPERTY_MAPPING = {
+                "order_by": {
+                    "explanation": "Column to order by",
+                    DefaultOptionKeys.context: True,
+                    DefaultOptionKeys.required_when: _needs_order_by,
+                    DefaultOptionKeys.validation_function: lambda x: isinstance(x, str),
+                },
+            }
+
+        assert Good.PROPERTY_MAPPING is not None
+
+    def test_accepts_no_property_mapping(self) -> None:
+        """Classes without PROPERTY_MAPPING are fine."""
+        class Good(FeatureChainParserMixin):
+            PREFIX_PATTERN = r".*__([\w]+)_test$"
+
+        assert not hasattr(Good, "PROPERTY_MAPPING") or Good.PROPERTY_MAPPING is None

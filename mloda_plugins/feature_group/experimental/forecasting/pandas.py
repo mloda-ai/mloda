@@ -678,10 +678,10 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
     def _compute_ensemble_confidence_intervals(
         cls,
         model: Any,
-        X: np.ndarray,  # type: ignore
-        predictions: np.ndarray,  # type: ignore
+        X: np.ndarray[Any, Any],
+        predictions: np.ndarray[Any, Any],
         algorithm: str,
-    ) -> Tuple[np.ndarray, np.ndarray]:  # type: ignore
+    ) -> Tuple[np.ndarray[Any, Any], np.ndarray[Any, Any]]:
         """
         Compute confidence intervals for ensemble models (RandomForest, GBR).
 

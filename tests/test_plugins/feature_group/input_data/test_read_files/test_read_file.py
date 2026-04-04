@@ -75,9 +75,9 @@ class TestInputData:
         for feature in features:
             _f = Feature(name=feature)
             for k, v in additional_options.items():
-                _f.options.add(k, v)
+                _f.options.add_to_group(k, v)
             if path is not None:
-                _f.options.add(CsvReader.__name__, path)
+                _f.options.add_to_group(CsvReader.__name__, path)
             _feature_list.append(_f)
         return _feature_list
 

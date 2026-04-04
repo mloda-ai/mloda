@@ -96,7 +96,7 @@ class MatchData:
                 return
 
             raise ValueError(f"{cls_name} already set with different values. {existing_data} != {matched_data_access}")
-        options.add(cls_name, matched_data_access)
+        options.add_to_group(cls_name, matched_data_access)
 
     @classmethod
     def get_class_name(cls) -> str:

@@ -237,15 +237,20 @@ class ComputeFramework(ABC):
         return result
 
     def _validate_filter_columns(self, data: Any, features: Any, feature_group: Any) -> None:
-        """Validate that filter columns exist in the output when a FeatureGroup requests row elimination."""
-        if features.filters is None:
+        """Validate that filter columns exist in the output when a FeatureGroup requests row elimination.
+
+        Uses filter_engine.applicable_filters() to determine which columns will
+        be processed, so this check and apply_filters() share the same gate.
+        """
+        filter_engine_cls = features.filter_engine()
+        applicable = filter_engine_cls.applicable_filters(features)
+        if not applicable:
             return
 
         data_columns = self._extract_column_names(data)
-        feature_names = features.get_all_names()
-        for single_filter in features.filters:
+        for single_filter in applicable:
             col = single_filter.filter_feature.name
-            if col in feature_names and col not in data_columns:
+            if col not in data_columns:
                 raise ValueError(
                     f"{feature_group.get_class_name()} returns final_filters()=True "
                     f"but its output is missing filter column '{col}'. "

@@ -53,15 +53,9 @@ class IcebergFilterEngine(BaseFilterEngine):
             # If it's not an Iceberg table, fall back to default filtering
             return super().apply_filters(data, features)
 
-        if features.filters is None or len(features.filters) == 0:
-            return data
-
         # Build Iceberg filter expressions
         filter_expressions = []
-        for single_filter in features.filters:
-            if single_filter.filter_feature.name not in features.get_all_names():
-                continue
-
+        for single_filter in cls.applicable_filters(features):
             iceberg_expr = cls._build_iceberg_expression(single_filter)
             if iceberg_expr is not None:
                 filter_expressions.append(iceberg_expr)

@@ -512,13 +512,11 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Returns:
             True if the pipeline matches the configuration
         """
-        try:
-            # Basic check: compare number of steps
-            if hasattr(fitted_pipeline, "steps"):
-                return len(fitted_pipeline.steps) == len(config["steps"])
+        if not hasattr(fitted_pipeline, "steps"):
             return False
-        except Exception:
+        if "steps" not in config:
             return False
+        return len(fitted_pipeline.steps) == len(config["steps"])
 
     @classmethod
     def _create_and_fit_pipeline(cls, data: Any, source_features: List[Any], config: Dict[str, Any]) -> Any:

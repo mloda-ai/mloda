@@ -417,23 +417,17 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Raises:
             ValueError: If encoder type mismatch is detected
         """
-        try:
-            expected_class_name = cls.SUPPORTED_ENCODERS.get(encoder_type)
-            if expected_class_name is None:
-                raise ValueError(f"Unsupported encoder type: {encoder_type}")
+        expected_class_name = cls.SUPPORTED_ENCODERS.get(encoder_type)
+        if expected_class_name is None:
+            raise ValueError(f"Unsupported encoder type: {encoder_type}")
 
-            actual_class_name: str = fitted_encoder.__class__.__name__
-            if actual_class_name != expected_class_name:
-                raise ValueError(
-                    f"Artifact encoder type mismatch: expected {encoder_type} "
-                    f"({expected_class_name}), but loaded artifact contains {actual_class_name}"
-                )
-            return True
-        except Exception as e:
-            if isinstance(e, ValueError):
-                raise  # Re-raise ValueError as-is
-            # For other exceptions, wrap in ValueError
-            raise ValueError(f"Error validating encoder type: {str(e)}")
+        actual_class_name: str = fitted_encoder.__class__.__name__
+        if actual_class_name != expected_class_name:
+            raise ValueError(
+                f"Artifact encoder type mismatch: expected {encoder_type} "
+                f"({expected_class_name}), but loaded artifact contains {actual_class_name}"
+            )
+        return True
 
     @classmethod
     def _create_and_fit_encoder(cls, data: Any, source_feature: str, encoder_type: str) -> Any:

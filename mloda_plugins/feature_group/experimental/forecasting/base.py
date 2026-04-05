@@ -276,12 +276,9 @@ class ForecastingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             raise ValueError(f"Unsupported time unit: {time_unit}. Supported units: {', '.join(cls.TIME_UNITS.keys())}")
 
         # Convert horizon to integer
-        try:
-            horizon = int(horizon_str)
-            if horizon <= 0:
-                raise ValueError("Horizon must be positive")
-        except ValueError:
+        if not horizon_str.isdigit() or int(horizon_str) <= 0:
             raise ValueError(f"Invalid horizon: {horizon_str}. Must be a positive integer.")
+        horizon = int(horizon_str)
 
         return algorithm, horizon, time_unit
 
@@ -301,11 +298,7 @@ class ForecastingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             True if valid, False otherwise
         """
         if FeatureChainParser.is_chained_feature(feature_name):
-            try:
-                # Use existing validation logic that validates algorithm, horizon, and time_unit
-                cls.parse_forecast_suffix(feature_name)
-            except ValueError:
-                # If validation fails, this feature doesn't match
+            if not cls._has_valid_forecast_suffix(feature_name):
                 return False
         return True
 
@@ -438,6 +431,37 @@ class ForecastingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return algorithm, horizon, time_unit, source_features[0]
 
     @classmethod
+    def _has_valid_forecast_suffix(cls, feature_name: str) -> bool:
+        """Check if feature_name has a suffix matching the forecast pattern."""
+        suffix_start = feature_name.find("__")
+        if suffix_start == -1:
+            return False
+        suffix = feature_name[suffix_start + 2 :]
+        parts = suffix.split("_")
+        if len(parts) < 3 or parts[1] != "forecast":
+            return False
+        if parts[0] not in cls.FORECASTING_ALGORITHMS:
+            return False
+        horizon_time = parts[2]
+        # Find where digits end and time unit begins
+        digit_end = 0
+        for i, char in enumerate(horizon_time):
+            if not char.isdigit():
+                digit_end = i
+                break
+        else:
+            return False
+        if digit_end == 0:
+            return False
+        time_unit = horizon_time[digit_end:]
+        if time_unit not in cls.TIME_UNITS:
+            return False
+        horizon_str = horizon_time[:digit_end]
+        if int(horizon_str) <= 0:
+            return False
+        return True
+
+    @classmethod
     def _extract_forecast_params(cls, feature: Feature) -> tuple[Optional[str], Optional[int], Optional[str]]:
         """
         Extract forecast-specific parameters (algorithm, horizon, time_unit) from a feature.
@@ -449,18 +473,12 @@ class ForecastingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
         Returns:
             Tuple of (algorithm, horizon, time_unit), where any value may be None if not found
-
-        Raises:
-            ValueError: If string-based parsing fails validation
         """
         # Try string-based first using parse_forecast_suffix
         feature_name_str = feature.name.name if hasattr(feature.name, "name") else str(feature.name)
-        if FeatureChainParser.is_chained_feature(feature_name_str):
-            try:
-                algorithm, horizon, time_unit = cls.parse_forecast_suffix(feature_name_str)
-                return algorithm, horizon, time_unit
-            except ValueError:
-                pass
+        if cls._has_valid_forecast_suffix(feature_name_str):
+            algorithm, horizon, time_unit = cls.parse_forecast_suffix(feature_name_str)
+            return algorithm, horizon, time_unit
         # Fall back to config
         algorithm = feature.options.get(cls.ALGORITHM)
         horizon = feature.options.get(cls.HORIZON)

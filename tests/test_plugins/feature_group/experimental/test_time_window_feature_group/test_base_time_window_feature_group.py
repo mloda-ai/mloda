@@ -267,3 +267,43 @@ class TestTimeWindowFeatureGroup:
         # Verify that the method can be called without error
         concrete_fg = ConcreteTimeWindowFeatureGroup()
         concrete_fg._check_reference_time_column_is_datetime(None, "test_column")
+
+    def test_has_valid_time_window_suffix_valid(self) -> None:
+        """Test that _has_valid_time_window_suffix returns True for valid feature names."""
+        assert TimeWindowFeatureGroup._has_valid_time_window_suffix("temperature__avg_3_day_window") is True
+        assert TimeWindowFeatureGroup._has_valid_time_window_suffix("humidity__max_7_hour_window") is True
+        assert TimeWindowFeatureGroup._has_valid_time_window_suffix("pressure__min_2_minute_window") is True
+        assert TimeWindowFeatureGroup._has_valid_time_window_suffix("cpu__sum_10_second_window") is True
+        # Chained feature: the last __ segment should still be valid
+        assert TimeWindowFeatureGroup._has_valid_time_window_suffix("price__mean_imputed__sum_7_day_window") is True
+
+    def test_has_valid_time_window_suffix_invalid(self) -> None:
+        """Test that _has_valid_time_window_suffix returns False for invalid feature names."""
+        # No double underscore separator
+        assert TimeWindowFeatureGroup._has_valid_time_window_suffix("invalid_feature_name") is False
+        # Missing "window" suffix
+        assert TimeWindowFeatureGroup._has_valid_time_window_suffix("temp__avg_3_day") is False
+        # Unsupported window function
+        assert TimeWindowFeatureGroup._has_valid_time_window_suffix("temp__invalid_3_day_window") is False
+        # Unsupported time unit
+        assert TimeWindowFeatureGroup._has_valid_time_window_suffix("temp__avg_3_invalid_window") is False
+        # Non-numeric window size
+        assert TimeWindowFeatureGroup._has_valid_time_window_suffix("temp__avg_zero_day_window") is False
+        # Zero window size
+        assert TimeWindowFeatureGroup._has_valid_time_window_suffix("temp__avg_0_day_window") is False
+
+    def test_extract_time_window_params_string_based(self) -> None:
+        """Test _extract_time_window_params with a string-parseable feature name."""
+        feature = Feature("temperature__avg_3_day_window")
+        result = TimeWindowFeatureGroup._extract_time_window_params(feature)
+        assert result == ("avg", 3, "day")
+
+    def test_extract_time_window_params_config_fallback(self) -> None:
+        """Test _extract_time_window_params falls back to configuration-based options."""
+        options = Options()
+        options.add_to_group(TimeWindowFeatureGroup.WINDOW_FUNCTION, "sum")
+        options.add_to_group(TimeWindowFeatureGroup.WINDOW_SIZE, "5")
+        options.add_to_group(TimeWindowFeatureGroup.TIME_UNIT, "hour")
+        feature = Feature("some_feature", options)
+        result = TimeWindowFeatureGroup._extract_time_window_params(feature)
+        assert result == ("sum", 5, "hour")

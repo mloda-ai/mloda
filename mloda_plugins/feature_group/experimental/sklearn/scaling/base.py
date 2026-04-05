@@ -291,23 +291,17 @@ class ScalingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Raises:
             ValueError: If scaler type mismatch is detected
         """
-        try:
-            expected_class_name = cls.SUPPORTED_SCALERS.get(scaler_type)
-            if expected_class_name is None:
-                raise ValueError(f"Unsupported scaler type: {scaler_type}")
+        expected_class_name = cls.SUPPORTED_SCALERS.get(scaler_type)
+        if expected_class_name is None:
+            raise ValueError(f"Unsupported scaler type: {scaler_type}")
 
-            actual_class_name: str = fitted_scaler.__class__.__name__
-            if actual_class_name != expected_class_name:
-                raise ValueError(
-                    f"Artifact scaler type mismatch: expected {scaler_type} "
-                    f"({expected_class_name}), but loaded artifact contains {actual_class_name}"
-                )
-            return True
-        except Exception as e:
-            if isinstance(e, ValueError):
-                raise  # Re-raise ValueError as-is
-            # For other exceptions, wrap in ValueError
-            raise ValueError(f"Error validating scaler type: {str(e)}")
+        actual_class_name: str = fitted_scaler.__class__.__name__
+        if actual_class_name != expected_class_name:
+            raise ValueError(
+                f"Artifact scaler type mismatch: expected {scaler_type} "
+                f"({expected_class_name}), but loaded artifact contains {actual_class_name}"
+            )
+        return True
 
     @classmethod
     def _create_and_fit_scaler(cls, data: Any, source_feature: str, scaler_type: str) -> Any:

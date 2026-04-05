@@ -126,18 +126,15 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         """Extract point features from either configuration-based options or string parsing."""
 
         # Try string-based parsing first
-        try:
-            # For L->R: "point1&point2__distance_type_distance"
-            # We need to extract everything before the last "__"
-            feature_name_str = feature_name.name if hasattr(feature_name, "name") else str(feature_name)
-            parts = feature_name_str.rsplit("__", 1)
-            if len(parts) == 2:
-                # parts[0] contains "point1&point2", parts[1] contains "distance_type_distance"
-                point_parts = parts[0].split("&", 1)
-                if len(point_parts) == 2:
-                    return {Feature(point_parts[0]), Feature(point_parts[1])}
-        except (ValueError, AttributeError):
-            pass
+        # For L->R: "point1&point2__distance_type_distance"
+        # We need to extract everything before the last "__"
+        feature_name_str = feature_name.name if hasattr(feature_name, "name") else str(feature_name)
+        parts = feature_name_str.rsplit("__", 1)
+        if len(parts) == 2:
+            # parts[0] contains "point1&point2", parts[1] contains "distance_type_distance"
+            point_parts = parts[0].split("&", 1)
+            if len(point_parts) == 2:
+                return {Feature(point_parts[0]), Feature(point_parts[1])}
 
         # Fall back to configuration-based approach
         source_features = options.get_in_features()

@@ -3,9 +3,6 @@
 Validates that artifact save/load mode can be resolved at run-time,
 enabling train-then-predict and cross-validation workflows in a
 single prepare() session.
-
-Covers issue #338: artifacts should behave like api_data and resolve
-per run() call, not be frozen at prepare-time.
 """
 
 from typing import Any, Optional, Set, Type

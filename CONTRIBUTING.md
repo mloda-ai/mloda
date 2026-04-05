@@ -55,13 +55,13 @@ All code must pass the automated checks enforced by tox. The toolchain includes:
 
 ### Running Checks Locally
 
-Run the full suite (linting, formatting, type checking, security, and tests):
+Run the full suite (linting, formatting, type checking, security, and tests). Always run tox before submitting a pull request:
 
 ```bash
 tox
 ```
 
-Run only the tests:
+For quick iteration during development, you can run only the tests. Note that this skips linting, type checking, and security checks, so it is not a substitute for tox:
 
 ```bash
 pytest -n auto --timeout=10
@@ -92,16 +92,23 @@ Found a bug or have a feature request? [Open an issue](https://github.com/mloda-
 
 ## Pull Request Workflow
 
-1. Create a feature branch from `main`:
+1. Fork the repository and clone your fork:
+
+```bash
+git clone https://github.com/<your-username>/mloda.git
+cd mloda
+```
+
+2. Create a feature branch from `main`:
 
 ```bash
 git checkout -b fix/short-description
 ```
 
-2. Make your changes and ensure `tox` passes locally.
-3. Commit using [Conventional Commits](https://www.conventionalcommits.org/) format.
-4. Push your branch and open a pull request targeting `main`.
-5. CI runs the full tox suite on Python 3.10, 3.11, 3.12, and 3.13. All checks must pass before merge.
+3. Make your changes and ensure `tox` passes locally.
+4. Commit using [Conventional Commits](https://www.conventionalcommits.org/) format.
+5. Push your branch to your fork and open a pull request targeting `main`.
+6. CI runs the full tox suite on Python 3.10, 3.11, 3.12, and 3.13. All checks must pass before merge.
 
 ## License
 

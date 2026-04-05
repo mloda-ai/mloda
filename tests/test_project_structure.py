@@ -78,6 +78,18 @@ class TestContributingFile:
         content = (PROJECT_ROOT / "CONTRIBUTING.md").read_text()
         assert "mloda-plugin-template" in content, "CONTRIBUTING.md must reference the mloda-plugin-template"
 
+    def test_contributing_describes_fork_workflow(self) -> None:
+        content = (PROJECT_ROOT / "CONTRIBUTING.md").read_text()
+        content_lower = content.lower()
+        assert "fork" in content_lower, "CONTRIBUTING.md must describe the fork workflow for external contributors"
+
+    def test_contributing_clarifies_pytest_is_not_sufficient(self) -> None:
+        content = (PROJECT_ROOT / "CONTRIBUTING.md").read_text()
+        content_lower = content.lower()
+        assert "not a substitute" in content_lower or "not sufficient" in content_lower, (
+            "CONTRIBUTING.md must clarify that running pytest alone is not a substitute for tox"
+        )
+
 
 class TestLicenseFile:
     def test_license_file_exists(self) -> None:

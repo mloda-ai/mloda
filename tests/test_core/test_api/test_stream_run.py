@@ -10,7 +10,6 @@ All tests are expected to FAIL because:
 
 import types
 
-import pytest
 
 from mloda.user import Feature, Features, ParallelizationMode, mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable

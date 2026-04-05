@@ -5,7 +5,6 @@ import os
 import tempfile
 from typing import Any
 
-import pytest
 
 from mloda.user import Options
 from mloda_plugins.feature_group.input_data.read_files.json_document_reader import JsonDocumentReader

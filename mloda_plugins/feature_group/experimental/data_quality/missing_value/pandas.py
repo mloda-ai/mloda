@@ -4,7 +4,7 @@ Pandas implementation for missing value imputation feature groups.
 
 from __future__ import annotations
 
-from typing import Any, List, Optional, Set, Type, Union
+from typing import Any, List, Optional, Set, Type
 
 
 from mloda.provider import ComputeFramework

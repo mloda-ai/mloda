@@ -1,8 +1,6 @@
 # API
 from mloda.core.api.request import mlodaAPI
 
-mloda = mlodaAPI
-
 # Features
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_collection import Features
@@ -43,6 +41,8 @@ from mloda.core.api.plugin_docs import (
     get_extender_docs,
     resolve_feature,
 )
+
+mloda = mlodaAPI
 
 __all__ = [
     # API

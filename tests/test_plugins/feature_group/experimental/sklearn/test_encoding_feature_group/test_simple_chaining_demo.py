@@ -37,7 +37,7 @@ class TestSimpleChaining:
         """Test chaining step by step to understand the issue."""
         # Skip test if sklearn not available
         try:
-            import sklearn
+            import sklearn  # noqa: F401
         except ImportError:
             pytest.skip("scikit-learn not available")
 

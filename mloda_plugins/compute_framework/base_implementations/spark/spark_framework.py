@@ -56,7 +56,7 @@ class SparkFramework(ComputeFramework):
     def is_available() -> bool:
         """Check if PySpark is installed and available."""
         try:
-            from pyspark.sql import SparkSession
+            from pyspark.sql import SparkSession  # noqa: F401
 
             return True
         except ImportError:

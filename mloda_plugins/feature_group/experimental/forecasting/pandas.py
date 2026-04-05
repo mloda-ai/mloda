@@ -8,6 +8,10 @@ from typing import Any, Dict, List, Optional, Set, Tuple, cast
 
 from datetime import datetime, timedelta
 
+from mloda.provider import ComputeFramework
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.feature_group.experimental.forecasting.base import ForecastingFeatureGroup
+
 # Check if required packages are available
 SKLEARN_AVAILABLE = True
 try:
@@ -25,11 +29,6 @@ try:
 except ImportError:
     pd = None
     np = None  # type: ignore
-
-
-from mloda.provider import ComputeFramework
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda_plugins.feature_group.experimental.forecasting.base import ForecastingFeatureGroup
 
 
 class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
@@ -195,7 +194,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
             # Load the model from the artifact
             model = model_artifact["model"]
             scaler = model_artifact["scaler"]
-            feature_names = model_artifact["feature_names"]
+            _feature_names = model_artifact["feature_names"]
             lag_features = model_artifact["lag_features"]
 
             # Update the artifact with the new last timestamp
@@ -589,7 +588,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
             # Load the model from the artifact
             model = model_artifact["model"]
             scaler = model_artifact["scaler"]
-            feature_names = model_artifact["feature_names"]
+            _feature_names = model_artifact["feature_names"]
             lag_features = model_artifact["lag_features"]
             std_error = model_artifact.get("std_error", 0.0)  # Use stored error or default to 0
 

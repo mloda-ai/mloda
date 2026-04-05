@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Set, Type, Union
+from typing import Any, Dict, List, Optional, Set, Type
 import pytest
 from mloda.provider import BaseInputData
 from mloda.provider import DataCreator

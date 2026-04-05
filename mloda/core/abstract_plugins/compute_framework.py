@@ -429,7 +429,7 @@ Available join types:
         _object_id = str(object_id)
 
         # transform to pa.Table for better parquet support
-        if not type(self.data) == pa.Table:
+        if not isinstance(self.data, pa.Table):
             _from_fw = type(self.data)
             _to_fw = pa.Table
 

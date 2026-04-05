@@ -20,7 +20,7 @@ class DuckDBPyArrowTransformer(SqlBasePyArrowTransformer):
 
     @classmethod
     def import_fw(cls) -> None:
-        import duckdb
+        import duckdb  # noqa: F401
 
     @classmethod
     def _convert_to_arrow(cls, data: Any) -> Any:

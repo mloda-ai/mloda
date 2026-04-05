@@ -133,7 +133,8 @@ def test_apply_naming_convention_with_custom_suffix_generator() -> None:
     feature_name = "feature"
 
     # Custom suffix generator: produces "dim1", "dim2", "dim3" instead of "0", "1", "2"
-    custom_suffix_generator = lambda i: f"dim{i + 1}"
+    def custom_suffix_generator(i: int) -> str:
+        return f"dim{i + 1}"
 
     # Act: Apply naming convention with custom suffix generator
     output = FeatureGroup.apply_naming_convention(result, feature_name, suffix_generator=custom_suffix_generator)

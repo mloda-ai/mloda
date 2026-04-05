@@ -4,7 +4,6 @@
 from typing import Any, List, Set
 
 import pyarrow as pa
-import pytest
 
 from mloda.user import Feature, Features, ParallelizationMode, mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -187,7 +186,7 @@ class TestStreamRunRunnerAssignment:
             compute_frameworks=COMPUTE_FRAMEWORKS,
         )
 
-        results = list(
+        _results = list(
             session.stream_run(
                 parallelization_modes=PARALLELIZATION_MODES,
             )

@@ -1,10 +1,9 @@
 # mypy: disable-error-code="type-arg"
 """Integration tests for the stream_all standalone function."""
 
-from typing import Any, Dict, FrozenSet, List, Set, Tuple
+from typing import Any, List, Set
 
 import pyarrow as pa
-import pytest
 
 from mloda.user import Feature, Features, ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -118,7 +117,6 @@ class TestStreamAllMatchesRunAll:
 
     def test_stream_all_matches_run_all_single_feature(self) -> None:
         """list(stream_all(...)) must produce the same data as run_all(...) for a single feature."""
-        from mloda.core.api.streaming_request import stream_all
 
         feature_list = ["EngineRunnerTest1"]
 
@@ -132,7 +130,6 @@ class TestStreamAllMatchesRunAll:
 
     def test_stream_all_matches_run_all_multiple_features(self) -> None:
         """list(stream_all(...)) must produce the same data as run_all(...) for multiple features."""
-        from mloda.core.api.streaming_request import stream_all
 
         feature_list = ["EngineRunnerTest2", "EngineRunnerTest1"]
 

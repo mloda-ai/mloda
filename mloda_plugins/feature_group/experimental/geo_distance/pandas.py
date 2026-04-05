@@ -4,7 +4,7 @@ Pandas implementation for geo distance feature groups.
 
 from __future__ import annotations
 
-from typing import Any, Set, Type, Union
+from typing import Any, Set, Type
 
 import numpy as np
 

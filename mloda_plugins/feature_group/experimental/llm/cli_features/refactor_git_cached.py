@@ -1,7 +1,7 @@
 import logging
 import os
 import re
-from typing import Any, List, Optional, Set, Type, Union
+from typing import Any, List, Optional, Set, Type
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature

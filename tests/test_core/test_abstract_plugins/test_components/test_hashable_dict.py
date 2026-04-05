@@ -4,8 +4,6 @@ These tests verify that HashableDict can properly hash dictionaries
 containing nested structures like dicts, lists, and sets.
 """
 
-import pytest
-
 from mloda.core.abstract_plugins.components.hashable_dict import HashableDict
 
 

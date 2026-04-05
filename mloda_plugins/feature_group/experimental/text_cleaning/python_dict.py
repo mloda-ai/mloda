@@ -7,7 +7,7 @@ from __future__ import annotations
 import re
 import string
 import unicodedata
-from typing import Any, Dict, List, Set, Type, Union
+from typing import Any, Dict, List, Set, Type
 
 from mloda.provider import ComputeFramework
 

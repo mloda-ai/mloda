@@ -1,6 +1,6 @@
 from mloda.user import Features
 import pytest
-from typing import Any, List, Optional, Set, Type, Union
+from typing import Any, List, Optional, Set, Type
 from unittest.mock import Mock
 
 from mloda.provider import FeatureGroup

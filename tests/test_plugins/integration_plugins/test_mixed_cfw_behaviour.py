@@ -6,7 +6,6 @@ from mloda.user import PluginLoader
 import pytest
 
 
-from mloda.provider import FeatureGroup
 from mloda.user import DataAccessCollection
 from mloda.user import Feature
 from mloda.user import Index

@@ -146,7 +146,7 @@ class TestSqliteMergeEngine:
     ) -> None:
         """Two sequential merge_union calls must not silently use stale data."""
         engine = SqliteMergeEngine(connection)
-        result1 = engine.merge_union(left_data, right_data, index_obj, index_obj)
+        _result1 = engine.merge_union(left_data, right_data, index_obj, index_obj)
         # Second merge with different data
         left2 = SqliteRelation.from_arrow(connection, pa.Table.from_pydict({"idx": [10, 20], "col1": ["x", "y"]}))
         right2 = SqliteRelation.from_arrow(connection, pa.Table.from_pydict({"idx": [30], "col2": ["z"]}))

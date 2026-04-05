@@ -1,7 +1,6 @@
 """Tests for _resolve_pinned_file suffix handling on base vs concrete classes."""
 
-from typing import Any, List, Optional, Tuple
-from unittest.mock import MagicMock
+from typing import List, Tuple
 
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda.user import DataAccessCollection

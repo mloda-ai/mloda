@@ -39,7 +39,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         """Test integration with mloda using scaling pipeline."""
         # Skip test if sklearn not available
         try:
-            import sklearn
+            import sklearn  # noqa: F401
         except ImportError:
             pytest.skip("scikit-learn not available")
 
@@ -78,7 +78,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         """Test integration with mloda using preprocessing pipeline."""
         # Skip test if sklearn not available
         try:
-            import sklearn
+            import sklearn  # noqa: F401
         except ImportError:
             pytest.skip("scikit-learn not available")
 
@@ -117,7 +117,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         """Test integration with mloda using multiple source features."""
         # Skip test if sklearn not available
         try:
-            import sklearn
+            import sklearn  # noqa: F401
         except ImportError:
             pytest.skip("scikit-learn not available")
 
@@ -164,7 +164,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         """Test integration with mloda using the feature parser."""
         # Skip test if sklearn not available
         try:
-            import sklearn
+            import sklearn  # noqa: F401
         except ImportError:
             pytest.skip("scikit-learn not available")
 
@@ -223,8 +223,8 @@ class TestSklearnPipelineFeatureGroupIntegration:
         """Test integration with mloda using custom pipeline steps."""
         # Skip test if sklearn not available
         try:
-            from sklearn.preprocessing import StandardScaler, MinMaxScaler
-            from sklearn.pipeline import Pipeline
+            from sklearn.preprocessing import StandardScaler, MinMaxScaler  # noqa: F401
+            from sklearn.pipeline import Pipeline  # noqa: F401
         except ImportError:
             pytest.skip("scikit-learn not available")
 
@@ -290,7 +290,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         """Test that artifacts are properly persisted and reused."""
         # Skip test if sklearn not available
         try:
-            import sklearn
+            import sklearn  # noqa: F401
         except ImportError:
             pytest.skip("scikit-learn not available")
 
@@ -338,7 +338,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         """Test artifact persistence with both fallback and custom storage paths following proper mloda lifecycle."""
         # Skip test if sklearn not available
         try:
-            import sklearn  # noqa: F401
+            import sklearn  # noqa: F401  # noqa: F401
             import os
         except ImportError:
             pytest.skip("scikit-learn not available")

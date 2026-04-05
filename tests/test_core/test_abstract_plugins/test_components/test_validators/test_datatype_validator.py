@@ -112,11 +112,13 @@ class TestValidate:
             }
         )
 
-        feature_set = FeatureSet([
-            Feature.int32_of("age"),
-            Feature.str_of("name"),
-            Feature.double_of("score"),
-        ])
+        feature_set = FeatureSet(
+            [
+                Feature.int32_of("age"),
+                Feature.str_of("name"),
+                Feature.double_of("score"),
+            ]
+        )
 
         # Should not raise - all types match
         DataTypeValidator.validate(table, feature_set)

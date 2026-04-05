@@ -48,7 +48,6 @@ DOK_VALUES: List[str] = [dok.value for dok in DefaultOptionKeys]
 
 @pytest.mark.parametrize("plugin_cls", ALL_PLUGINS, ids=lambda c: c.__name__)
 class TestPropertyMappingConsistency:
-
     def test_every_entry_has_explicit_strict_validation(self, plugin_cls: Type[Any]) -> None:
         mapping: Dict[str, Any] = plugin_cls.PROPERTY_MAPPING
         violations: List[str] = []
@@ -58,8 +57,7 @@ class TestPropertyMappingConsistency:
             if DefaultOptionKeys.strict_validation not in entry:
                 violations.append(str(prop_key))
         assert violations == [], (
-            f"{plugin_cls.__name__} PROPERTY_MAPPING entries missing "
-            f"DefaultOptionKeys.strict_validation: {violations}"
+            f"{plugin_cls.__name__} PROPERTY_MAPPING entries missing DefaultOptionKeys.strict_validation: {violations}"
         )
 
     def test_no_raw_string_metadata_keys(self, plugin_cls: Type[Any]) -> None:
@@ -87,8 +85,7 @@ class TestPropertyMappingConsistency:
             non_metadata_keys = [
                 k
                 for k in entry
-                if k not in METADATA_KEYS
-                and not (k in DOK_VALUES and not isinstance(k, DefaultOptionKeys))
+                if k not in METADATA_KEYS and not (k in DOK_VALUES and not isinstance(k, DefaultOptionKeys))
             ]
             if len(non_metadata_keys) < 2:
                 continue

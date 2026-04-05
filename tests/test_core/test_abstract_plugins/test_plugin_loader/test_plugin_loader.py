@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
 from mloda.core.abstract_plugins.components.input_data.base_input_data import (
-    _collect_filtered_subclasses,
+    _collect_filtered_subclasses,  # noqa: F401
     get_all_filtered_subclasses,
 )
 from mloda.user import PluginLoader
@@ -95,7 +95,7 @@ class TestPluginLoader:
 
     def test_load_matching_only_loads_transformer_files(self) -> None:
         """load_matching with '*transformer*' loads only transformer files, not dataframe/filter/merge."""
-        from unittest.mock import MagicMock, call
+        from unittest.mock import MagicMock
 
         plugin_loader = PluginLoader()
         mock_load_plugin = MagicMock()

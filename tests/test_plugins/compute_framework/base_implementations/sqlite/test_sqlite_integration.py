@@ -1,5 +1,5 @@
 import sqlite3
-from typing import Any, Dict, List, Optional, Set, Type, Union
+from typing import Any, Dict, List, Optional, Set, Type
 
 import pytest
 
@@ -15,7 +15,6 @@ from mloda.user import mloda
 from mloda.user import ParallelizationMode
 from mloda.user import DataAccessCollection
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework, _regexp
-from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 

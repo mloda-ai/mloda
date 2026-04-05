@@ -28,7 +28,7 @@ class BaseTransformer:
         Check if both frameworks are properly implemented and their modules can be imported.
         """
         # check implementation
-        if cls.framework() == NotImplementedError or cls.other_framework() == NotImplementedError:
+        if cls.framework() is NotImplementedError or cls.other_framework() is NotImplementedError:
             return False
         # check if module is installed/imported
         if cls.check_fw_import() is False or cls.check_other_fw_import() is False:

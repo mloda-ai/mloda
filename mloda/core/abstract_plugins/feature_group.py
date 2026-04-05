@@ -4,8 +4,6 @@ import logging
 from typing import Any, ClassVar, Callable, Dict, Iterable, List, Optional, Set, Type, Union, final
 from abc import ABC
 
-logger = logging.getLogger(__name__)
-
 from mloda.core.abstract_plugins.components.base_artifact import BaseArtifact
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.data_types import DataType
@@ -23,6 +21,8 @@ from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
+
+logger = logging.getLogger(__name__)
 
 
 class FeatureGroup(ABC):

@@ -4,7 +4,7 @@ Pandas implementation for aggregated feature groups.
 
 from __future__ import annotations
 
-from typing import Any, List, Set, Type, Union
+from typing import Any, List, Set, Type
 
 from mloda.provider import ComputeFramework
 

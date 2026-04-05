@@ -10,7 +10,6 @@ import os
 import tempfile
 from typing import Any
 
-import pytest
 
 from mloda.user import Options
 from mloda_plugins.feature_group.input_data.read_files.text_file_reader import PyFileReader, TextFileReader

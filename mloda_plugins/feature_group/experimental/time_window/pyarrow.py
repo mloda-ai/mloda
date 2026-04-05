@@ -4,7 +4,7 @@ PyArrow implementation for time window feature groups.
 
 from __future__ import annotations
 
-from typing import Any, List, Optional, Set, Type, Union
+from typing import Any, List, Optional, Set, Type
 import datetime
 
 import pyarrow as pa

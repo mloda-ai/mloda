@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict, List, Set, Type
+from typing import Any, Dict, List, Set
 import logging
 
 from mloda.provider import FeatureGroup
@@ -139,5 +139,5 @@ class ListDirectoryFeatureGroup(FeatureGroup):
         return "\n".join(lines)
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PandasDataFrame}

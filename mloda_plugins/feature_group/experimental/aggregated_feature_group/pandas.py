@@ -4,7 +4,7 @@ Pandas implementation for aggregated feature groups.
 
 from __future__ import annotations
 
-from typing import Any, List, Set, Type
+from typing import Any, List, Set
 
 from mloda.provider import ComputeFramework
 
@@ -14,7 +14,7 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.base impo
 
 class PandasAggregatedFeatureGroup(AggregatedFeatureGroup):
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         """Specify that this feature group works with Pandas."""
         return {PandasDataFrame}
 

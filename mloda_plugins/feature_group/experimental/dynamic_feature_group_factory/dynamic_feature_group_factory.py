@@ -244,7 +244,7 @@ class DynamicFeatureGroupCreator:
                 return properties["artifact"]()  # type: ignore[no-any-return]
             return super(new_class, cls).artifact()  # type: ignore[misc, arg-type, no-any-return]
 
-        def compute_framework_rule(cls) -> Optional[Set[Type[ComputeFramework]]]:  # type: ignore[no-untyped-def]
+        def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:  # type: ignore[no-untyped-def]
             if "compute_framework_rule" in properties:
                 return properties["compute_framework_rule"]()  # type: ignore[no-any-return]
             return super(new_class, cls).compute_framework_rule()  # type: ignore[misc, arg-type, no-any-return]

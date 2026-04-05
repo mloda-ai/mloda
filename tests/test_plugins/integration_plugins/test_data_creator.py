@@ -2,7 +2,7 @@
 TestDataCreator classes for creating test data in different compute frameworks.
 """
 
-from typing import Any, Dict, Optional, Set, Type
+from typing import Any, Dict, Optional, Type
 import pandas as pd
 
 from mloda.provider import FeatureGroup
@@ -61,7 +61,7 @@ class ATestDataCreator(FeatureGroup):
         raise ValueError(f"Unsupported compute framework: {cls.compute_framework} for conversion in {cls.conversion}.")
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         """Return the compute framework for this data creator."""
 
         if issubclass(cls.compute_framework, ComputeFramework):

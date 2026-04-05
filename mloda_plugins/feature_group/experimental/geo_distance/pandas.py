@@ -4,7 +4,7 @@ Pandas implementation for geo distance feature groups.
 
 from __future__ import annotations
 
-from typing import Any, List, Set, Type
+from typing import Any, List
 
 import numpy as np
 
@@ -16,7 +16,7 @@ from mloda_plugins.feature_group.experimental.geo_distance.base import GeoDistan
 
 class PandasGeoDistanceFeatureGroup(GeoDistanceFeatureGroup):
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         """Specify that this feature group works with Pandas."""
         return {PandasDataFrame}
 

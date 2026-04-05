@@ -1,6 +1,6 @@
 import subprocess  # nosec
 import sys
-from typing import Any, Set, Type
+from typing import Any
 
 from mloda.provider import FeatureGroup
 
@@ -111,5 +111,5 @@ class InstalledPackagesFeatureGroup(FeatureGroup):
             return {"error": error_message}
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PandasDataFrame}

@@ -21,7 +21,7 @@ The tests use a shared SparkSession fixture to avoid Java gateway conflicts and
 ensure proper resource management across all test methods.
 """
 
-from typing import Any, Dict, Optional, Set, Type
+from typing import Any, Dict, Optional, Set
 import pytest
 
 from mloda.provider import MatchData
@@ -126,7 +126,7 @@ class ATestSparkFeatureGroup(FeatureGroup, MatchData):
         return None
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {SparkFramework}
 
 
@@ -252,7 +252,7 @@ class CheckData(FeatureGroup):
         return {"pyarrow_avg_value_by_category"}
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PyArrowTable}
 
 

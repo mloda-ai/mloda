@@ -18,6 +18,7 @@ from typing import Any, Optional, Set
 import pyarrow.compute as pc
 import pytest
 
+from mloda.provider import ComputeFramework
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
 from mloda.user import FeatureName
@@ -39,7 +40,7 @@ class RootFeatureA(FeatureGroup):
         return DataCreator(supports_features={cls.get_class_name()})
 
     @classmethod
-    def compute_framework_rule(cls) -> None:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
         return None
 
     @classmethod
@@ -55,7 +56,7 @@ class RootFeatureB(FeatureGroup):
         return DataCreator(supports_features={cls.get_class_name()})
 
     @classmethod
-    def compute_framework_rule(cls) -> None:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
         return None
 
     @classmethod
@@ -76,7 +77,7 @@ class MultiDependencyFeature(FeatureGroup):
         }
 
     @classmethod
-    def compute_framework_rule(cls) -> None:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
         return None
 
     @classmethod

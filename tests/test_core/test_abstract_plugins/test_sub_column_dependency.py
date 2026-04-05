@@ -13,7 +13,7 @@ Expected Behavior:
 - Feature("base~0") returns ONLY base~0 column (new capability)
 """
 
-from typing import Any, List, Optional, Set, Type, Union
+from typing import Any, List, Optional, Set, Union
 
 import numpy as np
 import pandas as pd
@@ -49,7 +49,7 @@ class SubColumnTestDataCreator(FeatureGroup):
         )
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PandasDataFrame}
 
 
@@ -81,7 +81,7 @@ class MultiColumnProducerForSubColumnTest(FeatureGroup):
         return data
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PandasDataFrame}
 
 
@@ -107,7 +107,7 @@ class SubColumnConsumer(FeatureGroup):
         return data
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PandasDataFrame}
 
 
@@ -400,7 +400,7 @@ class TestSubColumnIntegration:
                 return data
 
             @classmethod
-            def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+            def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
                 return {PandasDataFrame}
 
         PluginLoader().all()
@@ -460,7 +460,7 @@ class TestSubColumnIntegration:
                 return data
 
             @classmethod
-            def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+            def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
                 return {PandasDataFrame}
 
         PluginLoader().all()
@@ -526,7 +526,7 @@ class TestSubColumnIntegration:
                 return data
 
             @classmethod
-            def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+            def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
                 return {PandasDataFrame}
 
         PluginLoader().all()
@@ -649,7 +649,7 @@ class TestSubColumnIntegration:
                 return data
 
             @classmethod
-            def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+            def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
                 return {PandasDataFrame}
 
         class SecondConsumer(FeatureGroup):
@@ -669,7 +669,7 @@ class TestSubColumnIntegration:
                 return data
 
             @classmethod
-            def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+            def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
                 return {PandasDataFrame}
 
         PluginLoader().all()

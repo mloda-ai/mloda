@@ -7,7 +7,7 @@ dependency chain.
 Uses pytest.mark.parametrize for matrix testing of various scenarios.
 """
 
-from typing import Any, Optional, Set, Type, Union
+from typing import Any, Optional, Set, Union
 
 import pytest
 
@@ -42,7 +42,7 @@ class DomainTestDataCreator(FeatureGroup):
         return pd.DataFrame({"base_value": [10, 20, 30, 40, 50]})
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PandasDataFrame}
 
 
@@ -73,7 +73,7 @@ class ChildFeatureGroup(FeatureGroup):
         return data
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PandasDataFrame}
 
 
@@ -104,7 +104,7 @@ class ParentFeatureGroup(FeatureGroup):
         return data
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PandasDataFrame}
 
 
@@ -135,7 +135,7 @@ class GrandchildFeatureGroup(FeatureGroup):
         return data
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PandasDataFrame}
 
 
@@ -166,7 +166,7 @@ class IntermediateFeatureGroup(FeatureGroup):
         return data
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PandasDataFrame}
 
 
@@ -197,7 +197,7 @@ class GrandparentFeatureGroup(FeatureGroup):
         return data
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PandasDataFrame}
 
 

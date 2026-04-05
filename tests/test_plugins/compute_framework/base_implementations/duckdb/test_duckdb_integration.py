@@ -3,7 +3,7 @@ from mloda.provider import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 import pytest
 
-from typing import Any, Dict, List, Optional, Set, Type
+from typing import Any, Dict, List, Optional, Set
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
@@ -100,7 +100,7 @@ class ATestDuckDBFeatureGroup(FeatureGroup, MatchData):
         return None
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {DuckDBFramework}
 
 
@@ -225,7 +225,7 @@ class CheckData(FeatureGroup):
         return {"pyarrow_avg_value_by_category"}
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PyArrowTable}
 
 

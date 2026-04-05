@@ -4,7 +4,7 @@ PyArrow implementation for aggregated feature groups.
 
 from __future__ import annotations
 
-from typing import Any, List, Set, Type
+from typing import Any, List, Set
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -23,7 +23,7 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
     """
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         """Specify that this feature group works with PyArrow."""
         return {PyArrowTable}
 

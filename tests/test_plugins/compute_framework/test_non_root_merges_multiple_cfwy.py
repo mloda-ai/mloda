@@ -1,4 +1,4 @@
-from typing import Any, Optional, Set, Type
+from typing import Any, Optional, Set
 
 from mloda.provider import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -30,7 +30,7 @@ class NonCfwRootJoinTestFeature(FeatureGroup):
         return {cls.get_class_name(): ["Same Value"], "dummy": ["dummy"]}
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PyArrowTable}
 
 
@@ -50,7 +50,7 @@ class SecondNonCfwRootJoinTestFeature(NonCfwRootJoinTestFeature):
         return {cls.get_class_name(): ["Same Value"], "dummy4": ["dummy3"]}
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PandasDataFrame}
 
 
@@ -71,7 +71,7 @@ class GroupedNonCfwRootJoinTestFeature(FeatureGroup):
         return data
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PyArrowTable}
 
 
@@ -85,7 +85,7 @@ class GroupedSecondNonCfwRootJoinTestFeature(GroupedNonCfwRootJoinTestFeature):
         return data
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PandasDataFrame}
 
 

@@ -172,7 +172,7 @@ def create_domain_feature_group(domain_name: str, feature_value: int) -> Type[Fe
             return pd.DataFrame({"domain_feature": [feature_value]})
 
         @classmethod
-        def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+        def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
             return {PandasDataFrame}
 
     return DomainHandler

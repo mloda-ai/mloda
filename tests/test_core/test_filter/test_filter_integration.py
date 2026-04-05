@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Set, Type, Union
+from typing import Any, Dict, List, Optional, Set, Union
 
 import pyarrow as pa
 
@@ -33,7 +33,7 @@ class GlobalFilterBasicTest(FeatureGroup):
         return pa.table({cls.get_class_name(): [1, 2, 3]})
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PyArrowTable}
 
 

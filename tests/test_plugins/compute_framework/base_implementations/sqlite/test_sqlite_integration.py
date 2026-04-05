@@ -1,5 +1,5 @@
 import sqlite3
-from typing import Any, Dict, List, Optional, Set, Type
+from typing import Any, Dict, List, Optional, Set
 
 import pytest
 
@@ -79,7 +79,7 @@ class ATestSqliteFeatureGroup(FeatureGroup, MatchData):
         return None
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {SqliteFramework}
 
 
@@ -185,7 +185,7 @@ class SqliteCheckData(FeatureGroup):
         return {"pyarrow_avg_value_by_category_sqlite"}
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PyArrowTable}
 
 

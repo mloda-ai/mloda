@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional, Set, Type
+from typing import Any, Optional, Set
 
 import pandas as pd
 import pytest
@@ -282,7 +282,7 @@ class ConditionalRequiredFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return pd.DataFrame({feature_name: [f"computed_{agg_type}"]})
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PandasDataFrame}
 
 

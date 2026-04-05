@@ -1,5 +1,5 @@
 from abc import ABC
-from typing import Any, Dict, Set, Type, Union, List
+from typing import Any, Dict, Type, Union, List
 
 
 from mloda.provider import FeatureGroup
@@ -127,5 +127,5 @@ class LLMBaseRequest(FeatureGroup):
         return f"{option_prompt}\nContext:\n{data_prompt} End Context\n "
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PandasDataFrame}

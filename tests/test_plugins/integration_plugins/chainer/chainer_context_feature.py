@@ -80,7 +80,7 @@ class ChainedContextFeatureGroupTest(FeatureGroup):
                     group={
                         "property2": "value1",  # default group parameter
                         DefaultOptionKeys.feature_chainer_parser_key: frozenset(
-                            ["ident", DefaultOptionKeys.in_features.value, "property2", "property3"]
+                            ["ident", DefaultOptionKeys.in_features, "property2", "property3"]
                         ),
                     },
                     context={

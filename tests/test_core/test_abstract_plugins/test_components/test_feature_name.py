@@ -63,7 +63,7 @@ class TestFeatureNameWithEnum:
     def test_enum_value_extracted(self) -> None:
         fn = FeatureName(DefaultOptionKeys.reference_time)
         assert fn == "reference_time"
-        assert fn == DefaultOptionKeys.reference_time.value
+        assert fn == str(DefaultOptionKeys.reference_time)
 
     def test_enum_repr(self) -> None:
         fn = FeatureName(DefaultOptionKeys.reference_time)
@@ -72,7 +72,7 @@ class TestFeatureNameWithEnum:
     def test_enum_value_extracted_for_time_travel(self) -> None:
         fn = FeatureName(DefaultOptionKeys.time_travel)
         assert fn == "time_travel"
-        assert fn == DefaultOptionKeys.time_travel.value
+        assert fn == str(DefaultOptionKeys.time_travel)
 
 
 class TestFeatureNameAccess:

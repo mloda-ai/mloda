@@ -180,13 +180,13 @@ class FeatureChainParser:
             )
 
         if property_name in options.group:
-            return DefaultOptionKeys.group.value
+            return DefaultOptionKeys.group
         elif property_name in options.context:
-            return DefaultOptionKeys.context.value
+            return DefaultOptionKeys.context
         elif cls._is_context_parameter(property_value):
-            return DefaultOptionKeys.context.value
+            return DefaultOptionKeys.context
         else:
-            return DefaultOptionKeys.group.value
+            return DefaultOptionKeys.group
 
     @classmethod
     def _extract_property_values(cls, property_value: Any) -> Any:

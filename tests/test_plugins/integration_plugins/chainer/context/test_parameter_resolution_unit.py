@@ -152,7 +152,7 @@ class TestParameterResolutionUnit:
         category = FeatureChainParser._determine_parameter_category(
             "ident", property_mapping["ident"], options_context_default
         )
-        assert category == DefaultOptionKeys.context.value, "Context-marked parameter should go to context"
+        assert category == DefaultOptionKeys.context, "Context-marked parameter should go to context"
 
         # Test: Group parameter (not marked as context) goes to group by default
         options_group_default = Options(
@@ -162,7 +162,7 @@ class TestParameterResolutionUnit:
         category = FeatureChainParser._determine_parameter_category(
             "property2", property_mapping["property2"], options_group_default
         )
-        assert category == DefaultOptionKeys.group.value, "Non-context parameter should go to group"
+        assert category == DefaultOptionKeys.group, "Non-context parameter should go to group"
 
         # Test: User override - context parameter forced to group
         options_user_override = Options(
@@ -172,7 +172,7 @@ class TestParameterResolutionUnit:
         category = FeatureChainParser._determine_parameter_category(
             "ident", property_mapping["ident"], options_user_override
         )
-        assert category == DefaultOptionKeys.group.value, "User override should take precedence"
+        assert category == DefaultOptionKeys.group, "User override should take precedence"
 
     def test_optional_parameter_handling(self) -> None:
         """Test comprehensive optional parameter behavior."""

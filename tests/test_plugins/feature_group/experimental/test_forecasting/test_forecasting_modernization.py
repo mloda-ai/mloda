@@ -55,7 +55,7 @@ class TestForecastingModernization:
         feature = Feature(feature_name)
 
         # Set reference time option
-        options = Options({DefaultOptionKeys.reference_time.value: "time_filter"})
+        options = Options({DefaultOptionKeys.reference_time: "time_filter"})
         feature.options = options
 
         # Run the mloda
@@ -84,7 +84,7 @@ class TestForecastingModernization:
         feature = Feature(
             name="forecast_feature",
             options=Options(
-                group={DefaultOptionKeys.reference_time.value: "time_filter"},
+                group={DefaultOptionKeys.reference_time: "time_filter"},
                 context={
                     ForecastingFeatureGroup.ALGORITHM: "linear",
                     ForecastingFeatureGroup.HORIZON: 7,
@@ -119,13 +119,13 @@ class TestForecastingModernization:
 
         # Create string-based feature
         string_feature = Feature("sales__linear_forecast_7day")
-        string_feature.options = Options({DefaultOptionKeys.reference_time.value: "time_filter"})
+        string_feature.options = Options({DefaultOptionKeys.reference_time: "time_filter"})
 
         # Create configuration-based feature
         config_feature = Feature(
             name="config_forecast",
             options=Options(
-                group={DefaultOptionKeys.reference_time.value: "time_filter"},
+                group={DefaultOptionKeys.reference_time: "time_filter"},
                 context={
                     ForecastingFeatureGroup.ALGORITHM: "linear",
                     ForecastingFeatureGroup.HORIZON: 7,
@@ -222,7 +222,7 @@ class TestForecastingModernization:
             feature = Feature(
                 name=f"forecast_{algorithm}",
                 options=Options(
-                    group={DefaultOptionKeys.reference_time.value: "time_filter"},
+                    group={DefaultOptionKeys.reference_time: "time_filter"},
                     context={
                         ForecastingFeatureGroup.ALGORITHM: algorithm,
                         ForecastingFeatureGroup.HORIZON: 5,
@@ -255,7 +255,7 @@ class TestForecastingModernization:
         feature1 = Feature(
             name="forecast_linear",
             options=Options(
-                group={DefaultOptionKeys.reference_time.value: "time_filter"},
+                group={DefaultOptionKeys.reference_time: "time_filter"},
                 context={
                     ForecastingFeatureGroup.ALGORITHM: "linear",
                     ForecastingFeatureGroup.HORIZON: 7,
@@ -268,7 +268,7 @@ class TestForecastingModernization:
         feature2 = Feature(
             name="forecast_ridge",
             options=Options(
-                group={DefaultOptionKeys.reference_time.value: "time_filter"},
+                group={DefaultOptionKeys.reference_time: "time_filter"},
                 context={
                     ForecastingFeatureGroup.ALGORITHM: "ridge",  # Different algorithm (context parameter)
                     ForecastingFeatureGroup.HORIZON: 14,  # Different horizon (context parameter)
@@ -292,7 +292,7 @@ class TestForecastingModernization:
         """Test that match_feature_group_criteria works with the new PROPERTY_MAPPING approach."""
         # Test string-based feature matching
         string_feature_name = "sales__linear_forecast_7day"
-        string_options = Options({DefaultOptionKeys.reference_time.value: "time_filter"})
+        string_options = Options({DefaultOptionKeys.reference_time: "time_filter"})
 
         assert ForecastingFeatureGroup.match_feature_group_criteria(string_feature_name, string_options) is True
 

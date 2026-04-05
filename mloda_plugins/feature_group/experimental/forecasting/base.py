@@ -188,7 +188,7 @@ class ForecastingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Returns:
             The reference time column name to use
         """
-        reference_time_key = DefaultOptionKeys.reference_time.value
+        reference_time_key = DefaultOptionKeys.reference_time
         if options and options.get(reference_time_key):
             reference_time = options.get(reference_time_key)
             if not isinstance(reference_time, str):
@@ -196,7 +196,7 @@ class ForecastingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
                     f"Invalid reference_time option: {reference_time}. Must be string. Is: {type(reference_time)}."
                 )
             return reference_time
-        return DefaultOptionKeys.reference_time.value
+        return DefaultOptionKeys.reference_time
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         """Extract source feature and time filter feature from either configuration-based options or string parsing."""

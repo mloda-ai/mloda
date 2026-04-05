@@ -86,7 +86,7 @@ class TimeWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Returns:
             The reference time column name to use
         """
-        reference_time_key = DefaultOptionKeys.reference_time.value
+        reference_time_key = DefaultOptionKeys.reference_time
         if options and options.get(reference_time_key):
             reference_time = options.get(reference_time_key)
             if not isinstance(reference_time, str):
@@ -94,7 +94,7 @@ class TimeWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
                     f"Invalid reference_time option: {reference_time}. Must be string. Is: {type(reference_time)}."
                 )
             return reference_time
-        return DefaultOptionKeys.reference_time.value
+        return DefaultOptionKeys.reference_time
 
     # Define supported window functions
     WINDOW_FUNCTIONS = {

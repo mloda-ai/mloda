@@ -62,7 +62,7 @@ class PropagateContextFeatureGroupTest(FeatureGroup):
         for source_feature in source_features:
             source_feature.options.add_to_group(
                 DefaultOptionKeys.feature_chainer_parser_key,
-                frozenset(["ident", DefaultOptionKeys.in_features.value]),
+                frozenset(["ident", DefaultOptionKeys.in_features]),
             )
             features.add(source_feature)
 

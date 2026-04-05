@@ -166,3 +166,52 @@ class TestFeatureGroupFinalFilters:
             data = res.to_pydict()
             # Final filtering should have eliminated the "inactive" rows
             assert data[feature_name] == [10, 30]
+
+    def test_mixed_final_and_inline_filters_in_same_run(
+        self, modes: Set[ParallelizationMode], flight_server: Any
+    ) -> None:
+        """Both inline and final filter modes should work correctly in the same run_all() call.
+
+        When requesting InlineMaskViaFeatureGroup (final_filters() -> False) and
+        RegularFeatureGroupForFilterTest (default final_filters() -> True) together
+        with a single GlobalFilter status=="active":
+
+        - InlineMaskViaFeatureGroup handles the filter inline via masking, preserving
+          all 4 rows with masked aggregation: [10, 10, 30, 30].
+        - RegularFeatureGroupForFilterTest relies on the framework's final filtering,
+          which eliminates non-matching rows: [10, 30].
+
+        This proves both filter modes operate independently and correctly within the
+        same API call.
+        """
+        inline_feature_name = "InlineMaskViaFeatureGroup"
+        final_feature_name = "RegularFeatureGroupForFilterTest"
+
+        features = Features([
+            Feature(name=inline_feature_name, initial_requested_data=True),
+            Feature(name=final_feature_name, initial_requested_data=True),
+        ])
+
+        global_filter = GlobalFilter()
+        global_filter.add_filter("status", "equal", {"value": "active"})
+
+        result = MlodaTestRunner.run_api(
+            features,
+            compute_frameworks={PyArrowTable},
+            parallelization_modes=modes,
+            flight_server=flight_server,
+            global_filter=global_filter,
+        )
+
+        results_by_feature = {}
+        for res in result.results:
+            data = res.to_pydict()
+            if inline_feature_name in data:
+                results_by_feature[inline_feature_name] = data[inline_feature_name]
+            if final_feature_name in data:
+                results_by_feature[final_feature_name] = data[final_feature_name]
+
+        # Inline FeatureGroup preserves all 4 rows with masked aggregation
+        assert results_by_feature[inline_feature_name] == [10, 10, 30, 30]
+        # Regular FeatureGroup has non-matching rows eliminated by final filtering
+        assert results_by_feature[final_feature_name] == [10, 30]

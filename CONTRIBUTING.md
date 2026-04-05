@@ -67,19 +67,6 @@ Run only the tests:
 pytest -n auto --timeout=10
 ```
 
-## Pull Request Workflow
-
-1. Create a feature branch from `main`:
-
-```bash
-git checkout -b fix/short-description
-```
-
-2. Make your changes and ensure `tox` passes locally.
-3. Commit using [Conventional Commits](https://www.conventionalcommits.org/) format.
-4. Push your branch and open a pull request targeting `main`.
-5. CI runs the full tox suite on Python 3.10, 3.11, 3.12, and 3.13. All checks must pass before merge.
-
 ## Ways to Contribute
 
 ### Core Development
@@ -102,6 +89,19 @@ To scaffold a new standalone plugin package with pre-configured CI/CD, use the [
 ### Report Issues
 
 Found a bug or have a feature request? [Open an issue](https://github.com/mloda-ai/mloda/issues/).
+
+## Pull Request Workflow
+
+1. Create a feature branch from `main`:
+
+```bash
+git checkout -b fix/short-description
+```
+
+2. Make your changes and ensure `tox` passes locally.
+3. Commit using [Conventional Commits](https://www.conventionalcommits.org/) format.
+4. Push your branch and open a pull request targeting `main`.
+5. CI runs the full tox suite on Python 3.10, 3.11, 3.12, and 3.13. All checks must pass before merge.
 
 ## License
 

@@ -40,4 +40,4 @@ result = mloda.run_all(
 `api_data` passes inline data to mloda. Each top-level key (e.g. `"SampleData"`)
 is a label grouping related columns. Features are matched to columns by name.
 
-Next: [API Request](https://mloda-ai.github.io/mloda/chapter1/api-request/) | [Feature Groups](https://mloda-ai.github.io/mloda/chapter1/feature-groups/)
+Next: [API Request](api-request.md) | [Feature Groups](feature-groups.md)

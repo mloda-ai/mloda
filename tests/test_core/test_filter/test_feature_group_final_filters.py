@@ -14,8 +14,9 @@ The matrix of (FG final_filters, Engine final_filters, reads inline) combination
   FG=True,  Engine=True,  inline=no  -- test_fg_force_final_with_final_engine
   FG=True,  Engine=True,  inline=yes -- test_inline_mask_with_final_elimination
 
-Validation:
+Validation (filter column must be present when row elimination applies):
   FG=True,  drops filter column       -- test_dropped_filter_column_raises_error
+  FG=None,  drops filter column       -- test_default_fg_drops_filter_column_raises_error
 """
 
 from typing import Any, Optional
@@ -301,6 +302,31 @@ class DropsFilterColumnFeatureGroup(FeatureGroup):
         )
 
 
+class DefaultFGDropsFilterColumn(FeatureGroup):
+    """FG does NOT override final_filters() (defaults to None) but drops the filter column.
+
+    The engine (PyArrowFilterEngine) returns True, so the framework applies
+    row elimination. The missing column should be caught by the validation.
+    """
+
+    @classmethod
+    def input_data(cls) -> Optional[BaseInputData]:
+        return DataCreator({cls.get_class_name(), "status"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table(
+            {
+                cls.get_class_name(): [10, 20, 30, 40],
+                # "status" intentionally omitted
+            }
+        )
+
+
 @PARALLELIZATION_MODES_SYNC_THREADING
 class TestFeatureGroupFinalFilters:
     """Tests that FeatureGroup.final_filters() controls inline vs. final filter application."""
@@ -549,6 +575,31 @@ class TestFeatureGroupFinalFilters:
         catch this and raise a clear error instead of crashing in the filter engine.
         """
         feature_name = "DropsFilterColumnFeatureGroup"
+
+        features = Features([Feature(name=feature_name, initial_requested_data=True)])
+
+        global_filter = GlobalFilter()
+        global_filter.add_filter("status", "equal", {"value": "active"})
+
+        with pytest.raises(Exception, match="missing filter column.*status.*row elimination"):
+            MlodaTestRunner.run_api(
+                features,
+                compute_frameworks={PyArrowTable},
+                parallelization_modes=modes,
+                flight_server=flight_server,
+                global_filter=global_filter,
+            )
+
+    def test_default_fg_drops_filter_column_raises_error(
+        self, modes: set[ParallelizationMode], flight_server: Any
+    ) -> None:
+        """FG=None (default), Engine=True, filter column missing. Framework must raise ValueError.
+
+        DefaultFGDropsFilterColumn does not override final_filters(), so the
+        engine fallback path applies row elimination. The validation must catch
+        the missing column on this path too, not only when the FG returns True.
+        """
+        feature_name = "DefaultFGDropsFilterColumn"
 
         features = Features([Feature(name=feature_name, initial_requested_data=True)])
 

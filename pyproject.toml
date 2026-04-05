@@ -39,6 +39,7 @@ test = [
     "types-toml",
     "scikit-learn>=1.0.0",
     "pip-audit<2.11.0",
+    "pip-licenses-cli",
     "tomli>=1.0.0; python_version < '3.11'",
 ]
 pandas = ["pandas"]
@@ -64,7 +65,6 @@ docs = [
     "notebook",
     "mermaid-py",
 ]
-licence = ["pip-licenses-cli"]
 all = [
     "mloda[test]",
     "mloda[pandas]",
@@ -75,7 +75,6 @@ all = [
     "mloda[sklearn]",
     "mloda[text_cleaning]",
     "mloda[docs]",
-    "mloda[licence]",
 ]
 
 [project.urls]

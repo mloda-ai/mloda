@@ -658,7 +658,7 @@ class ExecutionPlan:
                         continue
 
                 # Deduplicate using set equality
-                if not any(l == uuid_complete and r == _uuid_complete for l, r in valid_pairs):
+                if not any(left == uuid_complete and r == _uuid_complete for left, r in valid_pairs):
                     valid_pairs.append((uuid_complete, _uuid_complete))
 
         if len(valid_pairs) == 1:
@@ -671,8 +671,8 @@ class ExecutionPlan:
         if right_index is not None:
             # First pass: match by feature.index == link.right_index
             filtered = [
-                (l, r)
-                for l, r in valid_pairs
+                (left, r)
+                for left, r in valid_pairs
                 if any(
                     graph.nodes[u].feature.index is not None and graph.nodes[u].feature.index == right_index
                     for u in r
@@ -685,8 +685,8 @@ class ExecutionPlan:
             # Second pass: match by feature name appearing in right_index columns
             if not filtered:
                 filtered = [
-                    (l, r)
-                    for l, r in valid_pairs
+                    (left, r)
+                    for left, r in valid_pairs
                     if any(graph.nodes[u].feature.name in right_index.index for u in r if u in graph.nodes)
                 ]
                 if len(filtered) == 1:

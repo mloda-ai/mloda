@@ -17,7 +17,7 @@ class TestSklearnArtifact:
         """Test serialization and deserialization of sklearn artifacts."""
         # Skip test if sklearn/joblib not available
         try:
-            import joblib
+            import joblib  # noqa: F401
             from sklearn.preprocessing import StandardScaler
         except ImportError:
             pytest.skip("scikit-learn or joblib not available")
@@ -72,9 +72,9 @@ class TestSklearnArtifact:
         """Test custom_saver method."""
         # Skip test if sklearn/joblib not available
         try:
-            import joblib
+            import joblib  # noqa: F401
             from sklearn.preprocessing import StandardScaler
-            import tempfile
+            import tempfile  # noqa: F401
             import os
         except ImportError:
             pytest.skip("scikit-learn or joblib not available")
@@ -135,7 +135,7 @@ class TestSklearnArtifact:
         """Test custom_loader with stored artifact."""
         # Skip test if sklearn/joblib not available
         try:
-            import joblib
+            import joblib  # noqa: F401
             from sklearn.preprocessing import StandardScaler
             import os
             import glob

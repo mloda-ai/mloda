@@ -1,6 +1,6 @@
 import subprocess  # nosec
 import sys
-from typing import Any, Set, Type, Union
+from typing import Any, Set, Type
 
 from mloda.provider import FeatureGroup
 

@@ -1,5 +1,5 @@
 from typing import Union
-from unittest.mock import patch, Mock, MagicMock
+from unittest.mock import patch, Mock
 import pytest
 
 from mloda.provider import ComputeFramework

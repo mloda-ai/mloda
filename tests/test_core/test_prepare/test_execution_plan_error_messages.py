@@ -10,7 +10,7 @@ Target errors:
 3. Line 874: "Feature group {feature_group} has no matching api data class for feature."
 """
 
-from typing import Optional, Set, Type, Union
+from typing import Optional, Set, Union
 from unittest.mock import MagicMock, patch
 
 import pytest

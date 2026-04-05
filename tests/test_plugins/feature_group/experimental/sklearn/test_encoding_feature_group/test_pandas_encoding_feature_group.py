@@ -115,7 +115,7 @@ class TestPandasEncodingFeatureGroup:
 
         data = pd.DataFrame({"category": ["A", "B", None, "A", "B"], "value": [1, 2, 3, 4, 5]})
 
-        result = PandasEncodingFeatureGroup._apply_encoder(data, "category", mock_encoder)
+        _result = PandasEncodingFeatureGroup._apply_encoder(data, "category", mock_encoder)
 
         # Verify transform was called with filled data
         mock_encoder.transform.assert_called_once()

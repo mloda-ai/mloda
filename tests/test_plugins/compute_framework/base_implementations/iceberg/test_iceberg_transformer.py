@@ -105,12 +105,12 @@ class TestIcebergPyArrowTransformerUnavailable:
             "mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_pyarrow_transformer.IcebergTable",
             None,
         ):
-            assert IcebergPyArrowTransformer.framework() == NotImplementedError
+            assert IcebergPyArrowTransformer.framework() is NotImplementedError
 
     def test_other_framework_raises_when_not_installed(self) -> None:
         """Test that other_framework() raises ImportError when PyArrow is not installed."""
         with patch("mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_pyarrow_transformer.pa", None):
-            assert IcebergPyArrowTransformer.other_framework() == NotImplementedError
+            assert IcebergPyArrowTransformer.other_framework() is NotImplementedError
 
     def test_check_imports_false_when_not_installed(self) -> None:
         """Test that check_imports returns False when dependencies are not available."""

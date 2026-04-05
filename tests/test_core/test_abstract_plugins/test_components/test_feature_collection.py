@@ -1,7 +1,5 @@
 """Tests for domain propagation in Features class."""
 
-import pytest
-
 from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.feature import Feature
 

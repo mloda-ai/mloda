@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict, List, Set, Type, Union
+from typing import Any, Dict, List, Set, Type
 import logging
 
 from mloda.provider import FeatureGroup

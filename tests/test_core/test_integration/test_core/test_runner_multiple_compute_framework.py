@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Set, Type, Union
+from typing import Any, Dict, List, Optional, Set, Type
 import pyarrow as pa
 import pyarrow.compute as pc
 from mloda.provider import BaseInputData

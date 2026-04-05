@@ -27,7 +27,7 @@ class SqlBasePyArrowTransformer(BaseTransformer):
 
     @classmethod
     def import_other_fw(cls) -> None:
-        import pyarrow as pa  # noqa: F811
+        pass  # noqa: F811
 
     @classmethod
     def _convert_to_arrow(cls, data: Any) -> Any:

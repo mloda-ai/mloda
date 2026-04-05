@@ -1,4 +1,4 @@
-from typing import Any, Optional, Set, Type, Union
+from typing import Any, Optional, Set, Type
 
 from mloda.provider import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame

@@ -30,7 +30,6 @@ from mloda.user import Options
 from mloda.user import PluginLoader
 from mloda.user import PluginCollector
 from mloda.user import mloda
-from mloda.user import DataAccessCollection
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 

@@ -33,7 +33,7 @@ class TestPythonDictPyArrowTransformer:
 
     def test_framework(self) -> None:
         """Test that framework returns correct type."""
-        assert PythonDictPyArrowTransformer.framework() == list
+        assert PythonDictPyArrowTransformer.framework() is list
 
     def test_other_framework(self) -> None:
         """Test that other_framework returns correct type."""

@@ -7,7 +7,6 @@ instead of the default repr which shows "<class 'module.ClassName'>".
 
 from typing import Optional, Set
 from unittest.mock import MagicMock
-from uuid import uuid4
 
 import pytest
 

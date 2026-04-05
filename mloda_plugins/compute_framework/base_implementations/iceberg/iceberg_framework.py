@@ -53,8 +53,8 @@ class IcebergFramework(ComputeFramework):
     def is_available() -> bool:
         """Check if PyIceberg is installed and available."""
         try:
-            import pyiceberg
-            import pyarrow
+            import pyiceberg  # noqa: F401
+            import pyarrow  # noqa: F401
 
             return True
         except ImportError:

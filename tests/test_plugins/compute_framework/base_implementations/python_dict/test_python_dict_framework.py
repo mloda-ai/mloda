@@ -8,7 +8,7 @@ class TestPythonDictFramework:
     """Test suite for PythonDict compute framework."""
 
     def test_expected_data_framework(self) -> None:
-        assert PythonDictFramework.expected_data_framework() == list
+        assert PythonDictFramework.expected_data_framework() is list
 
     def test_transform_dict_to_list(self) -> None:
         """Test transformation from columnar dict to list of dicts."""

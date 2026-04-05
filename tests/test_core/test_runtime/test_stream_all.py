@@ -12,8 +12,6 @@ All tests are expected to FAIL because:
 
 import types
 
-import pytest
-
 
 class TestStreamAllImport:
     """Tests that stream_all is importable from the correct modules."""

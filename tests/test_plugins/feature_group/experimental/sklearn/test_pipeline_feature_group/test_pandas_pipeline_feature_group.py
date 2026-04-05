@@ -180,8 +180,8 @@ class TestPandasSklearnPipelineFeatureGroup:
         """Test end-to-end feature calculation."""
         # Skip test if sklearn not available
         try:
-            from sklearn.preprocessing import StandardScaler
-            from sklearn.pipeline import Pipeline
+            from sklearn.preprocessing import StandardScaler  # noqa: F401
+            from sklearn.pipeline import Pipeline  # noqa: F401
         except ImportError:
             pytest.skip("scikit-learn not available")
 

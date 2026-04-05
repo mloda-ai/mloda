@@ -2,7 +2,7 @@
 TestDataCreator classes for creating test data in different compute frameworks.
 """
 
-from typing import Any, Dict, Optional, Set, Type, Union
+from typing import Any, Dict, Optional, Set, Type
 import pandas as pd
 
 from mloda.provider import FeatureGroup

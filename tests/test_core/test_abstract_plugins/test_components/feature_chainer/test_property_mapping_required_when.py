@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional, Set, Type, Union
+from typing import Any, Optional, Set, Type
 
 import pandas as pd
 import pytest
@@ -183,15 +183,11 @@ class TestRequiredWhenUnit:
         # The property has a default, but required_when predicate always returns True.
         # Since order_by is absent, the required_when check rejects the match.
         options_absent = Options(context={"aggregation_type": "sum"})
-        assert MockWithBothDefaultAndRequiredWhen.match_feature_group_criteria(
-            "my_feature", options_absent
-        ) is False
+        assert MockWithBothDefaultAndRequiredWhen.match_feature_group_criteria("my_feature", options_absent) is False
 
         # When order_by is provided, predicate is satisfied.
         options_present = Options(context={"aggregation_type": "sum", "order_by": "ts"})
-        assert MockWithBothDefaultAndRequiredWhen.match_feature_group_criteria(
-            "my_feature", options_present
-        ) is True
+        assert MockWithBothDefaultAndRequiredWhen.match_feature_group_criteria("my_feature", options_present) is True
 
 
 class TestRequiredWhenIntegration:
@@ -200,41 +196,31 @@ class TestRequiredWhenIntegration:
     def test_string_match_first_without_order_by_rejected(self) -> None:
         """String-based matching also enforces required_when."""
         options = Options(context={"aggregation_type": "first"})
-        result = MockWithConditionalRequired.match_feature_group_criteria(
-            "source__first_windowed", options
-        )
+        result = MockWithConditionalRequired.match_feature_group_criteria("source__first_windowed", options)
         assert result is False
 
     def test_string_match_first_with_order_by_accepted(self) -> None:
         """String-based matching passes when required_when is satisfied."""
         options = Options(context={"aggregation_type": "first", "order_by": "ts"})
-        result = MockWithConditionalRequired.match_feature_group_criteria(
-            "source__first_windowed", options
-        )
+        result = MockWithConditionalRequired.match_feature_group_criteria("source__first_windowed", options)
         assert result is True
 
     def test_string_only_first_without_order_by_rejected(self) -> None:
         """Regression: aggregation_type parsed from name only (not in options) still triggers required_when."""
         options = Options(context={})
-        result = MockWithConditionalRequired.match_feature_group_criteria(
-            "source__first_windowed", options
-        )
+        result = MockWithConditionalRequired.match_feature_group_criteria("source__first_windowed", options)
         assert result is False
 
     def test_string_only_first_with_order_by_accepted(self) -> None:
         """Regression: aggregation_type from name + order_by in options satisfies required_when."""
         options = Options(context={"order_by": "ts"})
-        result = MockWithConditionalRequired.match_feature_group_criteria(
-            "source__first_windowed", options
-        )
+        result = MockWithConditionalRequired.match_feature_group_criteria("source__first_windowed", options)
         assert result is True
 
     def test_string_only_sum_without_order_by_accepted(self) -> None:
         """Regression: aggregation_type=sum from name only, no order_by needed."""
         options = Options(context={})
-        result = MockWithConditionalRequired.match_feature_group_criteria(
-            "source__sum_windowed", options
-        )
+        result = MockWithConditionalRequired.match_feature_group_criteria("source__sum_windowed", options)
         assert result is True
 
     def test_effective_options_preserve_propagate_context_keys(self) -> None:

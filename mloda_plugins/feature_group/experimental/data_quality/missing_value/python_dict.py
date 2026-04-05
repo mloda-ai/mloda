@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import statistics
 from collections import Counter
-from typing import Any, Dict, List, Optional, Set, Type, Union
+from typing import Any, Dict, List, Optional, Set, Type
 
 from mloda.provider import ComputeFramework
 

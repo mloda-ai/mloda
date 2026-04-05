@@ -1,7 +1,7 @@
 """Tests for column ordering in identify_naming_convention() and mlodaAPI."""
 
 from typing import Any, Optional, Set
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock
 from uuid import uuid4
 
 import pandas as pd

@@ -6,6 +6,10 @@ from __future__ import annotations
 
 from typing import Any, List, TYPE_CHECKING, cast
 
+from mloda.provider import ComputeFramework
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.feature_group.experimental.dimensionality_reduction.base import DimensionalityReductionFeatureGroup
+
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
@@ -25,11 +29,6 @@ try:
     from sklearn.preprocessing import StandardScaler
 except ImportError:
     SKLEARN_AVAILABLE = False
-
-
-from mloda.provider import ComputeFramework
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda_plugins.feature_group.experimental.dimensionality_reduction.base import DimensionalityReductionFeatureGroup
 
 
 class PandasDimensionalityReductionFeatureGroup(DimensionalityReductionFeatureGroup):

@@ -147,5 +147,8 @@ disable_error_code = ["misc", "call-arg", "arg-type"]
 [tool.ruff]
 line-length = 120
 
+[tool.ruff.lint.per-file-ignores]
+"docs/**/*.ipynb" = ["E402"]
+
 [project.scripts]
 mloda = "mloda_plugins.feature_group.experimental.llm.cli:main"

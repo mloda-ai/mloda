@@ -6,9 +6,8 @@ claim specific structured suffixes while ReadFile auto-excludes them.
 
 import os
 import tempfile
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Tuple
 
-import pytest
 
 from mloda.user import DataAccessCollection, Options
 from mloda_plugins.feature_group.input_data.read_file import ReadFile

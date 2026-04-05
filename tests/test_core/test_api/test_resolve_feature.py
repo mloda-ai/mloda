@@ -7,7 +7,7 @@ and candidate tracking.
 """
 
 import pytest
-from typing import Optional, Type, Union
+from typing import Optional, Union
 
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection

@@ -14,7 +14,7 @@ from mloda.provider import ComputeFramework  # noqa: F401
 from mloda.core.prepare.execution_plan import ExecutionPlan
 
 from mloda.core.runtime.run import ExecutionOrchestrator
-from mloda.core.core.cfw_manager import CfwManager, MyManager
+from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 
 

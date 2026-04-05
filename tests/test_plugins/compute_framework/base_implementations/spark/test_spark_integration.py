@@ -21,7 +21,7 @@ The tests use a shared SparkSession fixture to avoid Java gateway conflicts and
 ensure proper resource management across all test methods.
 """
 
-from typing import Any, Dict, Optional, Set, Type, Union
+from typing import Any, Dict, Optional, Set, Type
 import pytest
 
 from mloda.provider import MatchData

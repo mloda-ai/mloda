@@ -37,12 +37,10 @@ class IcebergPyArrowTransformer(BaseTransformer):
     @classmethod
     def import_fw(cls) -> None:
         """Import PyIceberg."""
-        import pyiceberg.table
 
     @classmethod
     def import_other_fw(cls) -> None:
         """Import PyArrow."""
-        import pyarrow
 
     @classmethod
     def transform_fw_to_other_fw(cls, data: Any) -> Any:

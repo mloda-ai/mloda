@@ -28,14 +28,14 @@ class TestPolarsLazyPyArrowTransformerAvailability:
         if pl is not None:
             assert PolarsLazyPyArrowTransformer.framework() == pl.LazyFrame
         else:
-            assert PolarsLazyPyArrowTransformer.framework() == NotImplementedError
+            assert PolarsLazyPyArrowTransformer.framework() is NotImplementedError
 
     def test_other_framework_when_pyarrow_available(self) -> None:
         """Test that other_framework() returns Table when pyarrow is available."""
         if pa is not None:
             assert PolarsLazyPyArrowTransformer.other_framework() == pa.Table
         else:
-            assert PolarsLazyPyArrowTransformer.other_framework() == NotImplementedError
+            assert PolarsLazyPyArrowTransformer.other_framework() is NotImplementedError
 
 
 @pytest.mark.skipif(pl is None or pa is None, reason="Polars or PyArrow is not installed. Skipping this test.")

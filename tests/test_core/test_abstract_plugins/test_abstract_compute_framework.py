@@ -38,5 +38,5 @@ class TestComputeFrameworkValidationErrors:
         )
         fw.data = "this is a string, not a dict"
 
-        with pytest.raises(ValueError, match=r"Expected:"):
+        with pytest.raises(ValueError, match=r"Expected type:"):
             fw.validate_expected_framework()

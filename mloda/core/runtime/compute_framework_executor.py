@@ -7,6 +7,7 @@ import logging
 from typing import Any, Callable, Dict, Optional, Set, Type
 from uuid import UUID, uuid4
 
+from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.core.cfw_manager import CfwManager
@@ -172,7 +173,14 @@ class ComputeFrameworkExecutor:
             )
 
         if cfw_uuid is None:
-            raise ValueError(f"This should not occur. {step}")
+            raise ValueError(
+                internal_invariant_error(
+                    "cfw_uuid is None after processing step in prepare_execute_step.",
+                    f"step type={type(step).__name__}, step={step}",
+                    "The compute framework UUID must be resolved for every step type "
+                    "(FeatureGroupStep, TransformFrameworkStep, or JoinStep).",
+                )
+            )
 
         return cfw_uuid
 

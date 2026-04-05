@@ -80,7 +80,7 @@ class JoinStep(Step):
             transformer = ComputeFrameworkTransformer()
 
             data = FlightServer.download_table(self.location, str(from_cfw))
-            data = cfw.convert_flyserver_data_back(data, transformer)
+            data = cfw.convert_flight_server_data_back(data, transformer)
             return data, from_cfw
         if isinstance(from_cfw, UUID):
             raise ValueError("From_cfw is a UUID, but we are not using flightserver.")

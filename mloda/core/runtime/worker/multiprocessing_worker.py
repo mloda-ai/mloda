@@ -8,6 +8,7 @@ from typing import Any, Set, Union
 from uuid import UUID
 from queue import Empty
 
+from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
@@ -88,7 +89,13 @@ def _handle_command_result(
         # uploaded if requested
         if command.features.get_initial_requested_features():
             if location is None:
-                raise ValueError("Location is not set. This should not happen.")
+                raise ValueError(
+                    internal_invariant_error(
+                        "FlightServer location is None during multiprocessing result handling.",
+                        f"command={command}",
+                        "The FlightServer location must be set before multiprocessing workers can upload results.",
+                    )
+                )
             cfw.upload_finished_data(location)
 
     if result_queue:

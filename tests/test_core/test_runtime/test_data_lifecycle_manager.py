@@ -353,7 +353,7 @@ class TestDataLifecycleManagerGetResultData:
         converted_data = {"feature1": [1, 2, 3]}
         selected_data = {"feature1": [1, 2, 3]}
 
-        mock_cfw.convert_flyserver_data_back.return_value = converted_data
+        mock_cfw.convert_flight_server_data_back.return_value = converted_data
         mock_cfw.select_data_by_column_names.return_value = selected_data
 
         feature_name = Mock(spec=FeatureName)
@@ -365,7 +365,7 @@ class TestDataLifecycleManagerGetResultData:
             result = manager.get_result_data(mock_cfw, selected_feature_names, location=location)
 
             mock_flight_server.download_table.assert_called_once_with(location, str(mock_cfw.uuid))
-            mock_cfw.convert_flyserver_data_back.assert_called_once_with(downloaded_data, manager.transformer)
+            mock_cfw.convert_flight_server_data_back.assert_called_once_with(downloaded_data, manager.transformer)
             mock_cfw.select_data_by_column_names.assert_called_once_with(
                 converted_data, selected_feature_names, column_ordering=None
             )
@@ -381,7 +381,7 @@ class TestDataLifecycleManagerGetResultData:
         feature_name = Mock(spec=FeatureName)
         selected_feature_names = {feature_name}
 
-        with pytest.raises(ValueError, match="Not implemented"):
+        with pytest.raises(ValueError, match="Cannot retrieve result data"):
             manager.get_result_data(mock_cfw, selected_feature_names, location=None)
 
 
@@ -559,7 +559,7 @@ class TestDataLifecycleManagerIntegration:
         mock_cfw2 = Mock(spec=ComputeFramework)
         mock_cfw2.uuid = cfw_uuid2
         mock_cfw2.data = None
-        mock_cfw2.convert_flyserver_data_back.return_value = {"feature2": [4, 5, 6]}
+        mock_cfw2.convert_flight_server_data_back.return_value = {"feature2": [4, 5, 6]}
         mock_cfw2.select_data_by_column_names.return_value = {"feature2": [4, 5, 6]}
 
         _cfw_collection = {cfw_uuid1: mock_cfw1, cfw_uuid2: mock_cfw2}

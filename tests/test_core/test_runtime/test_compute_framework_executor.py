@@ -481,7 +481,7 @@ class TestPrepareExecuteStep:
         step = Mock()
         step.__class__.__name__ = "UnknownStep"
 
-        with pytest.raises(ValueError, match="This should not occur"):
+        with pytest.raises(ValueError, match="Internal error: cfw_uuid is None"):
             executor.prepare_execute_step(step, ParallelizationMode.SYNC)
 
 

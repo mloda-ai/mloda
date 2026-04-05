@@ -1,6 +1,7 @@
 from typing import Any, Optional, Set, Type, Union
 from uuid import UUID, uuid4
 
+from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import (
     ComputeFrameworkTransformer,
 )
@@ -66,7 +67,13 @@ class TransformFrameworkStep(Step):
         self.location = cfw_register.get_location()
 
         if from_cfw is None:
-            raise ValueError("From_cfw is None in transform_framework_step. This should not happen.")
+            raise ValueError(
+                internal_invariant_error(
+                    "from_cfw is None when executing TransformFrameworkStep.",
+                    f"to_framework={self.to_framework.get_class_name()}, required_uuids={self.required_uuids}",
+                    "The source compute framework must be provided to transform data between frameworks.",
+                )
+            )
 
         data = self.get_data(from_cfw)
         column_names = self.get_column_names(cfw_register, from_cfw)

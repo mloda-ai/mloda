@@ -128,7 +128,7 @@ class TestPandasEncodingFeatureGroup:
         data = pd.DataFrame({"category": ["A", "B", "C"], "value": [1, 2, 3]})
         result = np.array([0, 1, 2])
 
-        updated_data = PandasEncodingFeatureGroup._add_result_to_data(data, "category__label_encoded", result, "label")
+        updated_data = PandasEncodingFeatureGroup._add_result_to_data(data, "category__label_encoded", result)
 
         # Check that new column was added
         assert "category__label_encoded" in updated_data.columns
@@ -144,9 +144,7 @@ class TestPandasEncodingFeatureGroup:
         # OneHotEncoder returns 2D array with multiple columns
         result = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
-        updated_data = PandasEncodingFeatureGroup._add_result_to_data(
-            data, "category__onehot_encoded", result, "onehot"
-        )
+        updated_data = PandasEncodingFeatureGroup._add_result_to_data(data, "category__onehot_encoded", result)
 
         # Check that multiple columns were added with ~ separator
         assert "category__onehot_encoded~0" in updated_data.columns
@@ -168,9 +166,7 @@ class TestPandasEncodingFeatureGroup:
         # OneHotEncoder with only one category
         result = np.array([[1], [1], [1]])
 
-        updated_data = PandasEncodingFeatureGroup._add_result_to_data(
-            data, "category__onehot_encoded", result, "onehot"
-        )
+        updated_data = PandasEncodingFeatureGroup._add_result_to_data(data, "category__onehot_encoded", result)
 
         # Should add single column without ~ separator
         assert "category__onehot_encoded" in updated_data.columns
@@ -182,9 +178,7 @@ class TestPandasEncodingFeatureGroup:
         # OrdinalEncoder returns 2D array but single column
         result = np.array([[0], [1], [2]])
 
-        updated_data = PandasEncodingFeatureGroup._add_result_to_data(
-            data, "category__ordinal_encoded", result, "ordinal"
-        )
+        updated_data = PandasEncodingFeatureGroup._add_result_to_data(data, "category__ordinal_encoded", result)
 
         # Check that new column was added (flattened from 2D)
         assert "category__ordinal_encoded" in updated_data.columns
@@ -203,7 +197,7 @@ class TestPandasEncodingFeatureGroup:
         mock_sparse_result.toarray.return_value = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
         updated_data = PandasEncodingFeatureGroup._add_result_to_data(
-            data, "category__onehot_encoded", mock_sparse_result, "onehot"
+            data, "category__onehot_encoded", mock_sparse_result
         )
 
         # Verify toarray was called
@@ -213,6 +207,30 @@ class TestPandasEncodingFeatureGroup:
         assert "category__onehot_encoded~0" in updated_data.columns
         assert "category__onehot_encoded~1" in updated_data.columns
         assert "category__onehot_encoded~2" in updated_data.columns
+
+    def test_add_result_to_data_specific_column_request(self) -> None:
+        """Test adding results when a specific column is requested via ~N suffix."""
+        data = pd.DataFrame({"category": ["A", "B", "C"], "value": [1, 2, 3]})
+        result = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+
+        updated_data = PandasEncodingFeatureGroup._add_result_to_data(data, "category__onehot_encoded~1", result)
+
+        # Should only add the specific requested column
+        assert "category__onehot_encoded~1" in updated_data.columns
+        assert list(updated_data["category__onehot_encoded~1"]) == [0, 1, 0]
+        # Should NOT add other columns
+        assert "category__onehot_encoded~0" not in updated_data.columns
+        assert "category__onehot_encoded~2" not in updated_data.columns
+
+    def test_add_result_to_data_column_index_out_of_range(self) -> None:
+        """Test that requesting a column index out of range raises ValueError."""
+        data = pd.DataFrame({"category": ["A", "B", "C"], "value": [1, 2, 3]})
+        result = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+
+        import pytest
+
+        with pytest.raises(ValueError, match="out of range"):
+            PandasEncodingFeatureGroup._add_result_to_data(data, "category__onehot_encoded~5", result)
 
     @patch(
         "mloda_plugins.feature_group.experimental.sklearn.encoding.pandas.PandasEncodingFeatureGroup._import_sklearn_components"

@@ -279,7 +279,7 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             result = cls._apply_encoder(data, base_source_feature, fitted_encoder)
 
             # Add result to data (handling multiple columns for OneHotEncoder)
-            data = cls._add_result_to_data(data, feature.get_name(), result, encoder_type)
+            data = cls._add_result_to_data(data, feature.get_name(), result)
 
         return data
 
@@ -519,7 +519,7 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     @classmethod
     @abstractmethod
-    def _add_result_to_data(cls, data: Any, feature_name: str, result: Any, encoder_type: str) -> Any:
+    def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
         """
         Add the result to the data.
 
@@ -527,7 +527,6 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             data: The input data
             feature_name: The name of the feature to add
             result: The result to add
-            encoder_type: The type of encoder used
 
         Returns:
             The updated data

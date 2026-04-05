@@ -48,7 +48,7 @@ class TestSqliteFilterEngine(FilterEngineTestMixin):
         data = SqliteRelation.from_arrow(connection, arrow_table)
 
         feature = Feature("age")
-        filter_type = FilterType.min
+        filter_type = FilterType.MIN
         parameter = {"value": 30}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -70,7 +70,7 @@ class TestSqliteFilterEngine(FilterEngineTestMixin):
         empty_data = SqliteRelation.from_arrow(connection, arrow_table)
 
         feature = Feature("age")
-        filter_type = FilterType.min
+        filter_type = FilterType.MIN
         parameter = {"value": 30}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -88,7 +88,7 @@ class TestSqliteFilterEngine(FilterEngineTestMixin):
         data = SqliteRelation.from_arrow(connection, arrow_table)
 
         feature = Feature("status")
-        filter_type = FilterType.equal
+        filter_type = FilterType.EQUAL
         parameter = {"value": "active"}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -114,7 +114,7 @@ class TestSqliteFilterEngine(FilterEngineTestMixin):
         data = SqliteRelation.from_arrow(connection, arrow_table)
 
         feature = Feature("email")
-        filter_type = FilterType.regex
+        filter_type = FilterType.REGEX
         parameter = {"value": r"\.com$"}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -145,7 +145,7 @@ class TestAdversarialInputs:
     ) -> None:
         """Filter value containing SQL injection payload must not execute injected SQL."""
         feature = Feature("name")
-        single_filter = SingleFilter(feature, FilterType.equal, {"value": "'; DROP TABLE users; --"})
+        single_filter = SingleFilter(feature, FilterType.EQUAL, {"value": "'; DROP TABLE users; --"})
         result = SqliteFilterEngine.do_equal_filter(base_data, single_filter)
         # Should return 0 rows (no row has that exact value), not crash
         assert len(result) == 0
@@ -153,7 +153,7 @@ class TestAdversarialInputs:
     def test_filter_value_with_or_injection(self, base_data: SqliteRelation, connection: sqlite3.Connection) -> None:
         """Filter value '1 OR 1=1' must be treated as a literal string, not SQL."""
         feature = Feature("name")
-        single_filter = SingleFilter(feature, FilterType.equal, {"value": "1 OR 1=1"})
+        single_filter = SingleFilter(feature, FilterType.EQUAL, {"value": "1 OR 1=1"})
         result = SqliteFilterEngine.do_equal_filter(base_data, single_filter)
         # Should return 0 rows, not all rows
         assert len(result) == 0
@@ -164,7 +164,7 @@ class TestAdversarialInputs:
         """Categorical values containing single quotes must be handled safely."""
         feature = Feature("name")
         single_filter = SingleFilter(
-            feature, FilterType.categorical_inclusion, {"values": ["alice", "bob's value", "'; DROP TABLE --"]}
+            feature, FilterType.CATEGORICAL_INCLUSION, {"values": ["alice", "bob's value", "'; DROP TABLE --"]}
         )
         result = SqliteFilterEngine.do_categorical_inclusion_filter(base_data, single_filter)
         # Only 'alice' matches; the others are literal strings with no match
@@ -176,7 +176,7 @@ class TestAdversarialInputs:
     ) -> None:
         """Numeric filter with a legitimate numeric value should work correctly."""
         feature = Feature("value")
-        single_filter = SingleFilter(feature, FilterType.min, {"value": 20})
+        single_filter = SingleFilter(feature, FilterType.MIN, {"value": 20})
         result = SqliteFilterEngine.do_min_filter(base_data, single_filter)
         assert len(result) == 2
         values = sorted(result.df()["value"].tolist())

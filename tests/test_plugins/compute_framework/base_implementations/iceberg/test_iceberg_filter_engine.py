@@ -56,7 +56,7 @@ class TestIcebergFilterEngine:
     def test_build_iceberg_expression_equal(self) -> None:
         """Test building equal filter expression."""
         feature = Feature("age")
-        filter_type = FilterType.equal
+        filter_type = FilterType.EQUAL
         parameter = {"value": 30}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -69,7 +69,7 @@ class TestIcebergFilterEngine:
     def test_build_iceberg_expression_min(self) -> None:
         """Test building min filter expression."""
         feature = Feature("age")
-        filter_type = FilterType.min
+        filter_type = FilterType.MIN
         parameter = {"value": 25}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -79,7 +79,7 @@ class TestIcebergFilterEngine:
     def test_build_iceberg_expression_max_simple(self) -> None:
         """Test building max filter expression with simple parameter."""
         feature = Feature("age")
-        filter_type = FilterType.max
+        filter_type = FilterType.MAX
         parameter = {"value": 50}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -89,7 +89,7 @@ class TestIcebergFilterEngine:
     def test_build_iceberg_expression_max_complex(self) -> None:
         """Test building max filter expression with complex parameter."""
         feature = Feature("age")
-        filter_type = FilterType.max
+        filter_type = FilterType.MAX
         parameter = {"max": 50, "max_exclusive": True}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -99,7 +99,7 @@ class TestIcebergFilterEngine:
     def test_build_iceberg_expression_range(self) -> None:
         """Test building range filter expression."""
         feature = Feature("age")
-        filter_type = FilterType.range
+        filter_type = FilterType.RANGE
         parameter = {"min": 25, "max": 50, "max_exclusive": False}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -109,7 +109,7 @@ class TestIcebergFilterEngine:
     def test_build_iceberg_expression_range_exclusive(self) -> None:
         """Test building range filter expression with exclusive max."""
         feature = Feature("age")
-        filter_type = FilterType.range
+        filter_type = FilterType.RANGE
         parameter = {"min": 25, "max": 50, "max_exclusive": True}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -119,7 +119,7 @@ class TestIcebergFilterEngine:
     def test_build_iceberg_expression_unsupported(self) -> None:
         """Test building expression for unsupported filter type."""
         feature = Feature("name")
-        filter_type = FilterType.regex
+        filter_type = FilterType.REGEX
         parameter = {"value": "^A"}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -129,7 +129,7 @@ class TestIcebergFilterEngine:
     def test_extract_parameter_value(self) -> None:
         """Test extracting parameter values."""
         feature = Feature("age")
-        filter_type = FilterType.equal
+        filter_type = FilterType.EQUAL
         parameter = {"value": 30}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -143,7 +143,7 @@ class TestIcebergFilterEngine:
     def test_has_parameter(self) -> None:
         """Test checking if parameter exists."""
         feature = Feature("age")
-        filter_type = FilterType.max
+        filter_type = FilterType.MAX
         parameter = {"max": 50, "max_exclusive": True}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -154,7 +154,7 @@ class TestIcebergFilterEngine:
     def test_apply_filters_iceberg_table(self, mock_iceberg_table: Mock, mock_feature_set: Mock) -> None:
         """Test applying filters to Iceberg table."""
         # Create filters
-        age_filter = SingleFilter(Feature("age"), FilterType.min, {"value": 25})
+        age_filter = SingleFilter(Feature("age"), FilterType.MIN, {"value": 25})
         mock_feature_set.filters = [age_filter]
 
         # Apply filters
@@ -201,8 +201,8 @@ class TestIcebergFilterEngine:
     def test_apply_filters_multiple_filters(self, mock_iceberg_table: Mock, mock_feature_set: Mock) -> None:
         """Test applying multiple filters."""
         # Create multiple filters
-        age_filter = SingleFilter(Feature("age"), FilterType.min, {"value": 25})
-        name_filter = SingleFilter(Feature("name"), FilterType.equal, {"value": "Alice"})
+        age_filter = SingleFilter(Feature("age"), FilterType.MIN, {"value": 25})
+        name_filter = SingleFilter(Feature("name"), FilterType.EQUAL, {"value": "Alice"})
         mock_feature_set.filters = [age_filter, name_filter]
 
         # Apply filters
@@ -216,8 +216,8 @@ class TestIcebergFilterEngine:
     def test_apply_filters_filtered_features(self, mock_iceberg_table: Mock, mock_feature_set: Mock) -> None:
         """Test applying filters where some features are not in the feature set."""
         # Create filter for feature not in feature set
-        unknown_filter = SingleFilter(Feature("unknown_column"), FilterType.equal, {"value": "test"})
-        age_filter = SingleFilter(Feature("age"), FilterType.min, {"value": 25})
+        unknown_filter = SingleFilter(Feature("unknown_column"), FilterType.EQUAL, {"value": "test"})
+        age_filter = SingleFilter(Feature("age"), FilterType.MIN, {"value": 25})
         mock_feature_set.filters = [unknown_filter, age_filter]
 
         # Apply filters
@@ -268,7 +268,7 @@ class TestIcebergFilterEngineUnavailable:
         """Test building expression when Iceberg expressions are not available."""
         with patch("mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_filter_engine.EqualTo", None):
             feature = Feature("age")
-            filter_type = FilterType.equal
+            filter_type = FilterType.EQUAL
             parameter = {"value": 30}
             single_filter = SingleFilter(feature, filter_type, parameter)
 

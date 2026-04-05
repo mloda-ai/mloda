@@ -217,7 +217,7 @@ class GlobalFilter:
         _time_from = self._check_and_convert_time_info(time_from)
         _time_to = self._check_and_convert_time_info(time_to)
         self.add_filter(
-            filter_feature, FilterType.range, {"min": _time_from, "max": _time_to, "max_exclusive": max_exclusive}
+            filter_feature, FilterType.RANGE, {"min": _time_from, "max": _time_to, "max_exclusive": max_exclusive}
         )
 
     def _check_and_convert_time_info(self, time_with_tz: datetime) -> str:

@@ -60,7 +60,7 @@ class FilterEngineTestMixin:
     def test_do_range_filter(self, filter_engine: Any, sample_data: Any) -> None:
         """Test range filter with min and max values."""
         feature = Feature("age")
-        filter_type = FilterType.range
+        filter_type = FilterType.RANGE
         parameter = {"min": 30, "max": 40, "max_exclusive": False}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -73,7 +73,7 @@ class FilterEngineTestMixin:
     def test_do_range_filter_exclusive(self, filter_engine: Any, sample_data: Any) -> None:
         """Test range filter with exclusive max value."""
         feature = Feature("age")
-        filter_type = FilterType.range
+        filter_type = FilterType.RANGE
         parameter = {"min": 30, "max": 40, "max_exclusive": True}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -86,7 +86,7 @@ class FilterEngineTestMixin:
     def test_do_min_filter(self, filter_engine: Any, sample_data: Any) -> None:
         """Test min filter."""
         feature = Feature("age")
-        filter_type = FilterType.min
+        filter_type = FilterType.MIN
         parameter = {"value": 40}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -99,7 +99,7 @@ class FilterEngineTestMixin:
     def test_do_max_filter(self, filter_engine: Any, sample_data: Any) -> None:
         """Test max filter."""
         feature = Feature("age")
-        filter_type = FilterType.max
+        filter_type = FilterType.MAX
         parameter = {"value": 30}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -112,7 +112,7 @@ class FilterEngineTestMixin:
     def test_do_max_filter_with_tuple(self, filter_engine: Any, sample_data: Any) -> None:
         """Test max filter with tuple parameter."""
         feature = Feature("age")
-        filter_type = FilterType.max
+        filter_type = FilterType.MAX
         parameter = {"max": 35, "max_exclusive": True}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -125,7 +125,7 @@ class FilterEngineTestMixin:
     def test_do_equal_filter(self, filter_engine: Any, sample_data: Any) -> None:
         """Test equal filter."""
         feature = Feature("age")
-        filter_type = FilterType.equal
+        filter_type = FilterType.EQUAL
         parameter = {"value": 35}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -138,7 +138,7 @@ class FilterEngineTestMixin:
     def test_do_regex_filter(self, filter_engine: Any, sample_data: Any) -> None:
         """Test regex filter."""
         feature = Feature("name")
-        filter_type = FilterType.regex
+        filter_type = FilterType.REGEX
         parameter = {"value": "^A"}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -151,7 +151,7 @@ class FilterEngineTestMixin:
     def test_do_categorical_inclusion_filter(self, filter_engine: Any, sample_data: Any) -> None:
         """Test categorical inclusion filter."""
         feature = Feature("category")
-        filter_type = FilterType.categorical_inclusion
+        filter_type = FilterType.CATEGORICAL_INCLUSION
         parameter = {"values": ["A", "B"]}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -165,8 +165,8 @@ class FilterEngineTestMixin:
         """Test applying multiple filters."""
         feature = Feature("age")
         filters = [
-            SingleFilter(feature, FilterType.min, {"value": 30}),
-            SingleFilter(Feature("category"), FilterType.equal, {"value": "A"}),
+            SingleFilter(feature, FilterType.MIN, {"value": 30}),
+            SingleFilter(Feature("category"), FilterType.EQUAL, {"value": "A"}),
         ]
 
         class MockFeatureSet:
@@ -192,7 +192,7 @@ class FilterEngineTestMixin:
     def test_do_range_filter_missing_parameters(self, filter_engine: Any, sample_data: Any) -> None:
         """Test range filter with missing parameters."""
         feature = Feature("age")
-        filter_type = FilterType.range
+        filter_type = FilterType.RANGE
         parameter = {"min": 30}  # Missing max parameter
         single_filter = SingleFilter(feature, filter_type, parameter)
 

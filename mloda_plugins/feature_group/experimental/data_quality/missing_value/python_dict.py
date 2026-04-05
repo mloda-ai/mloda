@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import statistics
 from collections import Counter
-from typing import Any, Dict, List, Optional, Set, Type
+from typing import Any, Dict, List, Optional, Set
 
 from mloda.provider import ComputeFramework
 
@@ -23,7 +23,7 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
     """
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PythonDictFramework}
 
     @classmethod

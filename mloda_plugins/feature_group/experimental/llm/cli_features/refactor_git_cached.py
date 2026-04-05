@@ -340,7 +340,7 @@ class RunToolFeatureGroup(FeatureGroup):
         return DataCreator({cls.get_class_name()})
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PandasDataFrame}
 
     @classmethod
@@ -371,7 +371,7 @@ class DiffFeatureGroup(RunToolFeatureGroup):
 
 class ToxFeatureGroup(FeatureGroup):
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PandasDataFrame}
 
     @classmethod

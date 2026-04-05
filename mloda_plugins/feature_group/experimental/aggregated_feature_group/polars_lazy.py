@@ -4,7 +4,7 @@ Polars Lazy implementation for aggregated feature groups.
 
 from __future__ import annotations
 
-from typing import Any, List, Set, Type
+from typing import Any, List, Set
 
 from mloda.provider import ComputeFramework
 
@@ -26,7 +26,7 @@ class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
     """
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         """Specify that this feature group works with Polars Lazy DataFrames."""
         return {PolarsLazyDataFrame}
 

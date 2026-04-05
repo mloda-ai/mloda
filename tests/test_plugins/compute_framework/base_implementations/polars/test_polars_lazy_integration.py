@@ -1,6 +1,7 @@
 import pytest
 from typing import Any, Dict, List, Optional, Set
 
+from mloda.provider import ComputeFramework
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
 from mloda.user import FeatureName
@@ -70,7 +71,7 @@ class PolarsLazySimpleTransformFeatureGroup(FeatureGroup):
     """Simple feature group for testing lazy transformations."""
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Any]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         """Support both lazy and eager Polars frameworks."""
         return {PolarsDataFrame, PolarsLazyDataFrame}
 
@@ -112,7 +113,7 @@ class SecondTransformFeatureGroup(FeatureGroup):
     """Second transformation that depends on the first."""
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Any]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PolarsLazyDataFrame}
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:

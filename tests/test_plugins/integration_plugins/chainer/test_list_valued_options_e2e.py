@@ -5,7 +5,7 @@ TypeError and that element order is preserved via tuple conversion.
 """
 
 import ast
-from typing import Any, Optional, Set, Type, Union
+from typing import Any, Optional, Set, Union
 
 from mloda.provider import ComputeFramework
 from mloda.provider import FeatureGroup
@@ -42,7 +42,7 @@ class ListValuedTestDataCreator(FeatureGroup):
         )
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PandasDataFrame}
 
 

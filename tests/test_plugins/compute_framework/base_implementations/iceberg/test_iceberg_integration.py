@@ -1,6 +1,6 @@
 from mloda.user import Features
 import pytest
-from typing import Any, List, Optional, Set, Type
+from typing import Any, List, Optional, Set
 from unittest.mock import Mock
 
 from mloda.provider import FeatureGroup
@@ -105,7 +105,7 @@ class IcebergTestDataCreator(FeatureGroup):
         return mock_table
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         """Return the Iceberg compute framework."""
         return {IcebergFramework}
 
@@ -146,7 +146,7 @@ class ATestIcebergFeatureGroup(FeatureGroup, MatchData):
         return None
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {IcebergFramework}
 
 
@@ -199,7 +199,7 @@ class IcebergSimpleTransformFeatureGroup(FeatureGroup):
         return {"doubled_value", "score_plus_ten"}
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {IcebergFramework}
 
 
@@ -235,7 +235,7 @@ class IcebergToArrowFeatureGroup(FeatureGroup):
         return {"arrow_doubled_value"}
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PyArrowTable}
 
 

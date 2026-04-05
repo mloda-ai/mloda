@@ -141,7 +141,7 @@ class ExampleOrderFilter(FeatureGroup):
         }
         return filtered_data
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PyArrowTable}
 
 result = mloda.run_all(

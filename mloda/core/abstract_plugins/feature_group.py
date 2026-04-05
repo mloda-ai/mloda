@@ -416,7 +416,7 @@ class FeatureGroup(ABC):
         return Domain.get_default_domain()
 
     @classmethod
-    def compute_framework_rule(cls) -> Optional[Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
         """
         Defines which compute frameworks this feature group supports.
 
@@ -427,7 +427,7 @@ class FeatureGroup(ABC):
 
     @final
     @classmethod
-    def compute_framework_definition(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_definition(cls) -> set[type[ComputeFramework]]:
         """
         Determines the set of compute frameworks supported by this feature group based on the
         `compute_framework_rule`.

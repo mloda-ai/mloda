@@ -4,7 +4,7 @@ Pandas implementation for scikit-learn encoding feature groups.
 
 from __future__ import annotations
 
-from typing import Any, List, Set, Type
+from typing import Any, List
 
 from mloda.provider import ComputeFramework
 
@@ -21,7 +21,7 @@ class PandasEncodingFeatureGroup(EncodingFeatureGroup):
     """
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         """Specify that this feature group works with Pandas."""
         return {PandasDataFrame}
 

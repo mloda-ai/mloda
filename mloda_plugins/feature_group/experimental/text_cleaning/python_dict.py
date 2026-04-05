@@ -7,7 +7,7 @@ from __future__ import annotations
 import re
 import string
 import unicodedata
-from typing import Any, Dict, List, Set, Type
+from typing import Any, Dict, List
 
 from mloda.provider import ComputeFramework
 
@@ -35,7 +35,7 @@ class PythonDictTextCleaningFeatureGroup(TextCleaningFeatureGroup):
     """
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PythonDictFramework}
 
     @classmethod

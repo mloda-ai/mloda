@@ -4,7 +4,7 @@ PyArrow implementation for time window feature groups.
 
 from __future__ import annotations
 
-from typing import Any, List, Optional, Set, Type
+from typing import Any, List, Optional, Set
 import datetime
 
 import pyarrow as pa
@@ -18,7 +18,7 @@ from mloda_plugins.feature_group.experimental.time_window.base import TimeWindow
 
 class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PyArrowTable}
 
     @classmethod

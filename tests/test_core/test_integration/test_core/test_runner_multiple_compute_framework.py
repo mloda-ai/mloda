@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Set, Type
+from typing import Any, Dict, List, Optional, Set
 import pyarrow as pa
 import pyarrow.compute as pc
 from mloda.provider import BaseInputData
@@ -31,7 +31,7 @@ class MultipleCfwTest1(FeatureGroup):
         return {cls.get_class_name(): [1, 2, 3]}
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PyArrowTable}
 
 
@@ -45,7 +45,7 @@ class MultipleCfwTest2(FeatureGroup):
         return {cls.get_class_name(): [4, 5, 6]}
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {SecondCfw}
 
 
@@ -54,7 +54,7 @@ class ChangeCfw(FeatureGroup):
         return {Feature.int32_of("MultipleCfwTest1")}
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {SecondCfw}
 
     @classmethod
@@ -68,7 +68,7 @@ class ChangeCfwThird(FeatureGroup):
         return {Feature.int32_of("ChangeCfw")}
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {ThirdCfw}
 
     @classmethod
@@ -78,7 +78,7 @@ class ChangeCfwThird(FeatureGroup):
         return pc.multiply(data.column("ChangeCfw"), 2)
 
 
-COMPUTE_FRAMEWORKS: Set[Type[ComputeFramework]] = {PyArrowTable, SecondCfw, ThirdCfw}
+COMPUTE_FRAMEWORKS: set[type[ComputeFramework]] = {PyArrowTable, SecondCfw, ThirdCfw}
 
 
 @PARALLELIZATION_MODES_SYNC_THREADING

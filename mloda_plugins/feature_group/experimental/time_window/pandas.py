@@ -4,7 +4,7 @@ Pandas implementation for time window feature groups.
 
 from __future__ import annotations
 
-from typing import Any, List, Optional, Set, Type
+from typing import Any, List, Optional, Set
 
 from mloda.provider import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -19,7 +19,7 @@ except ImportError:
 
 class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PandasDataFrame}
 
     @classmethod

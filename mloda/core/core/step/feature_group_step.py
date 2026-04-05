@@ -17,9 +17,11 @@ class FeatureGroupStep(Step):
         features: FeatureSet,
         required_uuids: Set[UUID],
         compute_framework: Type[ComputeFramework],
-        children_if_root: set[UUID] = set(),
+        children_if_root: Optional[set[UUID]] = None,
         api_input_data: Union[BaseApiData, bool] = False,
     ) -> None:
+        if children_if_root is None:
+            children_if_root = set()
         self.feature_group = feature_group
         self.features = features
         self.required_uuids = required_uuids

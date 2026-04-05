@@ -2,7 +2,6 @@ from collections import OrderedDict, defaultdict
 from typing import Any, Dict, List, Optional, Set, Tuple, Type, Union
 from uuid import UUID
 
-from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.abstract_plugins.components.link import Link
@@ -94,17 +93,9 @@ class LinkTrekker:
             if len(found_out[1]) >= len(found_in[1]):
                 k_to_drop = found_out[0]
                 k_not_to_drop = found_in[0]
-            elif len(found_out[1]) < len(found_in[1]):
+            else:
                 k_to_drop = found_in[0]
                 k_not_to_drop = found_out[0]
-            else:
-                raise ValueError(
-                    internal_invariant_error(
-                        "Unreachable branch in circular dependency resolution: "
-                        "comparison of link dependency counts did not match >= or < conditions.",
-                        f"found_out count={len(found_out[1])}, found_in count={len(found_in[1])}",
-                    )
-                )
 
             for k_order, v_order in self.order.items():
                 if k_not_to_drop != k_order:

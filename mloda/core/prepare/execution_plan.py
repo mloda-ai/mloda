@@ -2,6 +2,7 @@ from copy import copy, deepcopy
 from typing import Any, Generator, List, Optional, Set, Tuple, Type, Dict, Union
 from uuid import UUID
 
+from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.components.index.index import Index
 
 from mloda.core.abstract_plugins.components.input_data.api.api_input_data_collection import (
@@ -124,14 +125,24 @@ class ExecutionPlan:
         for fw in fw_execution_plan:
             if isinstance(fw, JoinStep) and fw.link.jointype in (JoinType.APPEND, JoinType.UNION):
                 if len(fw.left_framework_uuids) > 1:
-                    raise ValueError("This should not happen.")
+                    raise ValueError(
+                        internal_invariant_error(
+                            "APPEND/UNION JoinStep should have exactly 1 left_framework_uuid.",
+                            f"left_framework_uuids={fw.left_framework_uuids}, link={fw.link}",
+                        )
+                    )
                 map_left_framework_uuid_to_link_uuid[next(iter(fw.left_framework_uuids))].add(fw.link.uuid)
 
         # Use the mapping to update the required_uuids of the join step
         for fw in fw_execution_plan:
             if isinstance(fw, JoinStep) and fw.link.jointype in (JoinType.APPEND, JoinType.UNION):
                 if len(fw.right_framework_uuids) > 1:
-                    raise ValueError("This should not happen.")
+                    raise ValueError(
+                        internal_invariant_error(
+                            "APPEND/UNION JoinStep should have exactly 1 right_framework_uuid.",
+                            f"right_framework_uuids={fw.right_framework_uuids}, link={fw.link}",
+                        )
+                    )
 
                 right_framework_uuid = next(iter(fw.right_framework_uuids))
                 required = map_left_framework_uuid_to_link_uuid.get(right_framework_uuid)
@@ -623,7 +634,13 @@ class ExecutionPlan:
         feature_set_collection_per_uuid = self.find_feature_uuids(parents, local_feature_set_collection)
 
         if len(feature_set_collection_per_uuid) == 0:
-            raise ValueError("Feature set collection per uuid is None. This should not happen.")
+            raise ValueError(
+                internal_invariant_error(
+                    "feature_set_collection_per_uuid is empty in case_link_fw_is_equal_to_children_fw.",
+                    f"parents={parents}, link={link_fw[0]}, children_uuid={children_uuid}",
+                    "The feature set collections do not contain any of the parent UUIDs.",
+                )
+            )
 
         valid_pairs: List[Tuple[Set[UUID], Set[UUID]]] = []
 
@@ -738,7 +755,13 @@ class ExecutionPlan:
         feature_set_collection_per_uuid = self.find_feature_uuids(parents, local_feature_set_collection)
 
         if len(feature_set_collection_per_uuid) == 0:
-            raise ValueError("Feature set collection per uuid is None. This should not happen.")
+            raise ValueError(
+                internal_invariant_error(
+                    "feature_set_collection_per_uuid is empty in case_link_equal_feature_groups.",
+                    f"parents={parents}, link={link_fw[0]}, children_uuid={children_uuid}",
+                    "The feature set collections do not contain any of the parent UUIDs.",
+                )
+            )
 
         unique_solution_counter = 0
         left_uuids = None
@@ -779,7 +802,15 @@ class ExecutionPlan:
         if link_fw[0].jointype in (JoinType.APPEND, JoinType.UNION):
             if left_uuids is None or right_uuids is None:
                 raise ValueError(
-                    "This should not happen. Did you set an index for the append or union? Are the features unique? Link and Hash are not unique properties. In this case, set arbitrary options."
+                    f"Could not resolve left/right UUIDs for APPEND/UNION join.\n"
+                    f"link={link_fw[0]}, left_uuids={left_uuids}, right_uuids={right_uuids}\n"
+                    "Possible causes:\n"
+                    "  - The index was not set for the append or union Link.\n"
+                    "  - The features are not unique (Link hash alone does not distinguish them).\n"
+                    "Resolution: Set distinct options on each feature to make them unique, "
+                    "or ensure each side of the Link has an explicit index.\n"
+                    f"Please report this issue at https://github.com/mloda-ai/mloda/issues "
+                    f"if the problem persists."
                 )
             if unique_solution_counter > 0:
                 return (left_uuids, right_uuids)
@@ -788,7 +819,12 @@ class ExecutionPlan:
 
         if unique_solution_counter == 1:
             if left_uuids is None or right_uuids is None:
-                raise ValueError("This should not happen.")
+                raise ValueError(
+                    internal_invariant_error(
+                        "unique_solution_counter is 1 but left_uuids or right_uuids is None.",
+                        f"left_uuids={left_uuids}, right_uuids={right_uuids}, link={link_fw[0]}",
+                    )
+                )
             return (left_uuids, right_uuids)
         elif unique_solution_counter == 0:
             return False
@@ -816,10 +852,26 @@ class ExecutionPlan:
         self, pointer_dict: Dict[str, Any], link_fw: LinkFrameworkTrekker, graph: Graph, uuid: UUID
     ) -> bool:
         if link_fw[0].right_discriminator is None:
-            raise ValueError("This should not happen. If one alias is set, the other should be set as well.")
+            raise ValueError(
+                internal_invariant_error(
+                    "right_discriminator is None while left_discriminator is set in check_pointer.",
+                    f"left_discriminator={link_fw[0].left_discriminator}, "
+                    f"right_discriminator={link_fw[0].right_discriminator}",
+                    "When using discriminators for same-class FeatureGroup links, both "
+                    "left_discriminator and right_discriminator must be provided.",
+                )
+            )
 
         if link_fw[0].left_discriminator is None:
-            raise ValueError("This should not happen. If one alias is set, the other should be set as well.")
+            raise ValueError(
+                internal_invariant_error(
+                    "left_discriminator is None while right_discriminator is set in check_pointer.",
+                    f"left_discriminator={link_fw[0].left_discriminator}, "
+                    f"right_discriminator={link_fw[0].right_discriminator}",
+                    "When using discriminators for same-class FeatureGroup links, both "
+                    "left_discriminator and right_discriminator must be provided.",
+                )
+            )
 
         for k, v in graph.nodes[uuid].feature.options.items():
             for _k, _v in pointer_dict.items():

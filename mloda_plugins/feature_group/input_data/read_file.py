@@ -86,17 +86,27 @@ class ReadFile(BaseInputData):
     def init_reader(self, options: Optional[Options]) -> Tuple["ReadFile", Any]:
         if options is None:
             raise ValueError(
-                f"Options were not set for {self.__class__.__name__}. "
-                f"Provide an Options object containing a 'BaseInputData' key "
-                f"with a (reader_class, data_access) tuple."
+                f"Options were not set for {self.__class__.__name__}.init_reader().\n"
+                "When using ReadFile-based features, you must provide Options "
+                "with a 'BaseInputData' key.\n"
+                "Example:\n"
+                "  from mloda.user import Feature, Options\n"
+                "  feature = Feature('my_column', options=Options(context={\n"
+                "      'BaseInputData': (CsvReader, '/path/to/file.csv')\n"
+                "  }))"
             )
 
         reader_data_access = options.get("BaseInputData")
 
         if reader_data_access is None:
             raise ValueError(
-                f"'BaseInputData' key is missing or None in the provided Options for {self.__class__.__name__}. "
-                f"Set options with Options(group={{'BaseInputData': (ReaderClass, 'path/to/file')}})."
+                f"'BaseInputData' key is missing or None in the provided Options for {self.__class__.__name__}.\n"
+                "The 'BaseInputData' key in Options must map to a tuple of "
+                "(ReaderClass, data_access).\n"
+                "Example:\n"
+                "  options = Options(context={\n"
+                "      'BaseInputData': (CsvReader, '/path/to/file.csv')\n"
+                "  })"
             )
 
         reader, data_access = reader_data_access

@@ -4,6 +4,7 @@ from typing import Any, List
 
 import logging
 
+from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.runtime.flight.flight_server import FlightServer, create_location
 
 logger = logging.getLogger(__name__)
@@ -36,5 +37,10 @@ class ParallelRunnerFlightServer:
 
     def get_location(self) -> Any:
         if self.location is None:
-            raise ValueError("Location is not set. This should not happen.")
+            raise ValueError(
+                internal_invariant_error(
+                    "FlightServer location is None in ParallelRunnerFlightServer.get_location().",
+                    hint="Ensure start_flight_server_process() was called before get_location().",
+                )
+            )
         return self.location

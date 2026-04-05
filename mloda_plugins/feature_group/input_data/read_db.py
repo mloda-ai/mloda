@@ -106,8 +106,9 @@ class ReadDB(BaseInputData):
     def match_read_db_data_access(cls, data_accesses: List[Any], feature_names: List[str]) -> Any:
         if len(feature_names) > 1:
             raise ValueError(
-                f"ReadDB.match_read_db_data_access expected exactly one feature name, "
-                f"but received {len(feature_names)}: {feature_names}."
+                f"ReadDB.match_read_db_data_access expects exactly one feature name, "
+                f"but received {len(feature_names)}: {feature_names}.\n"
+                "Each database feature should be resolved individually."
             )
 
         for data_access in data_accesses:
@@ -131,9 +132,12 @@ class ReadDB(BaseInputData):
         connection = cls.connect(credentials)
         if connection is None:
             raise ValueError(
-                f"Connection to database failed for {cls.__name__}. "
-                f"The connect() method returned None. "
-                f"Verify that the database credentials are correct and the database server is reachable."
+                f"Connection to database failed for {cls.__name__}.\n"
+                f"Credentials type: {type(credentials).__name__}.\n"
+                "The connect() method returned None. Verify that:\n"
+                "  - The database server is reachable.\n"
+                "  - The credentials (host, port, user, password, database name) are correct.\n"
+                "  - The required database driver is installed."
             )
         return connection
 

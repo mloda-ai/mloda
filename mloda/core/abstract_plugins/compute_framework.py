@@ -309,9 +309,13 @@ class ComputeFramework(ABC):
             return
 
         if not isinstance(self.data, self.expected_data_framework()):
+            expected = self.expected_data_framework()
             raise ValueError(
-                f"Data type {type(self.data)} is not supported by {self.__class__.__name__}. "
-                f"Expected: {self.expected_data_framework()}."
+                f"Data type {type(self.data).__name__} is not supported by {self.__class__.__name__}.\n"
+                f"Expected type: {expected.__name__ if expected else 'not specified'}.\n"
+                "Ensure your FeatureGroup's calculate_feature returns data in the "
+                "framework's expected format, or register a ComputeFrameworkTransformer "
+                "to convert between formats."
             )
 
     @final
@@ -446,7 +450,7 @@ Available join types:
 
     @final
     @classmethod
-    def convert_flyserver_data_back(cls, data: Any, transformer: ComputeFrameworkTransformer) -> Any:
+    def convert_flight_server_data_back(cls, data: Any, transformer: ComputeFrameworkTransformer) -> Any:
         if not isinstance(data, pa.Table):
             return data
         if isinstance(data, cls.expected_data_framework()):

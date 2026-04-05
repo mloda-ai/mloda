@@ -124,9 +124,16 @@ class DataLifecycleManager:
             data = cfw.data
         elif location:
             data = FlightServer.download_table(location, str(cfw.uuid))
-            data = cfw.convert_flyserver_data_back(data, self.transformer)
+            data = cfw.convert_flight_server_data_back(data, self.transformer)
         else:
-            raise ValueError("Not implemented")
+            raise ValueError(
+                "Cannot retrieve result data: the compute framework has no local data "
+                "(cfw.data is None) and no FlightServer location was provided.\n"
+                "This typically means the feature was computed in a multiprocessing worker "
+                "but the FlightServer is not configured.\n"
+                "Ensure ParallelizationMode.MULTIPROCESSING is set up with a running "
+                "FlightServer, or use SYNC or THREADING mode."
+            )
 
         return cfw.select_data_by_column_names(data, selected_feature_names, column_ordering=self.column_ordering)
 

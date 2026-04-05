@@ -416,6 +416,10 @@ class FeatureGroup(ABC):
         return Domain.get_default_domain()
 
     @classmethod
+    def final_filters(cls) -> bool | None:
+        return None
+
+    @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
         """
         Defines which compute frameworks this feature group supports.

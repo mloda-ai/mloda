@@ -183,7 +183,7 @@ class ComputeFramework(ABC):
         # every one does this
         features = self.set_filter_engine(features)
         data = self.run_calculate_feature(feature_group, features)
-        data = self.run_final_filter(data, features)
+        data = self.run_final_filter(data, features, feature_group)
 
         names = features.get_all_names()
 
@@ -212,9 +212,17 @@ class ComputeFramework(ABC):
         return self.data
 
     @final
-    def run_final_filter(self, data: Any, features: Any) -> Any:
+    def run_final_filter(self, data: Any, features: Any, feature_group: Any = None) -> Any:
         if features.filter_engine is None:
             return data
+
+        if feature_group is not None:
+            fg_preference = feature_group.final_filters()
+            if fg_preference is False:
+                return data
+            if fg_preference is True:
+                filter_engine = features.filter_engine()
+                return filter_engine.apply_filters(data, features)
 
         try:
             if features.filter_engine().final_filters() is False:

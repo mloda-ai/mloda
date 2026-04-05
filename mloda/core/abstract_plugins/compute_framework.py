@@ -152,7 +152,7 @@ class ComputeFramework(ABC):
         return self.framework_connection_object
 
     def set_column_names(self) -> None:
-        pass
+        self.column_names = self._extract_column_names(self.data)
 
     @staticmethod
     def is_available() -> bool:

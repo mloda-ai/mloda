@@ -79,10 +79,6 @@ class SparkFramework(ComputeFramework):
         )
         return data.select(*list(_selected_feature_names))
 
-    def set_column_names(self) -> None:
-        if self.data is not None:
-            self.column_names = set(self.data.columns)
-
     def _extract_column_names(self, data: Any) -> set[str]:
         return set(data.columns)
 

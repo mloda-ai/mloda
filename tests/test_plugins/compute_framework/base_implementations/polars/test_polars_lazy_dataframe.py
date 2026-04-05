@@ -85,7 +85,7 @@ class TestPolarsLazyDataFrameComputeFramework:
     def test_set_column_names_invalid_data(self) -> None:
         """Test error when data doesn't have collect_schema method"""
         self.lazy_df.data = "invalid_data"
-        with pytest.raises(ValueError, match="Data does not have a collect_schema method"):
+        with pytest.raises(AttributeError):
             self.lazy_df.set_column_names()
 
     def test_merge_inner(self) -> None:

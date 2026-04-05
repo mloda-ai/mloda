@@ -89,14 +89,13 @@ class TestPythonDictFramework:
         expected_columns = {"col1", "col2", "col3"}
         assert framework.column_names == expected_columns
 
-    def test_set_column_names_empty_error(self) -> None:
-        """Test that empty data raises an error when setting column names."""
+    def test_set_column_names_empty_data(self) -> None:
+        """Test that empty data produces an empty column set."""
         framework = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
         framework.data = []
-
-        with pytest.raises(ValueError, match="Data is empty or not in expected format"):
-            framework.set_column_names()
+        framework.set_column_names()
+        assert framework.column_names == set()
 
     def test_merge_engine(self) -> None:
         """Test that merge engine returns correct type."""

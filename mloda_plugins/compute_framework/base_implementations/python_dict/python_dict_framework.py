@@ -57,17 +57,6 @@ class PythonDictFramework(ComputeFramework):
 
         return [{k: record.get(k) for k in _selected_feature_names if k in record} for record in data]
 
-    def set_column_names(self) -> None:
-        if self.data and isinstance(self.data, list) and len(self.data) > 0:
-            # Get all unique column names from all rows
-            all_columns: set[str] = set()
-            for row in self.data:
-                if isinstance(row, dict):
-                    all_columns.update(row.keys())
-            self.column_names = all_columns
-        else:
-            raise ValueError("Data is empty or not in expected format. Cannot set column names.")
-
     def _extract_column_names(self, data: Any) -> set[str]:
         all_columns: set[str] = set()
         for row in data:

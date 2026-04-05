@@ -100,11 +100,10 @@ class TestIcebergFrameworkComputeFramework:
         assert self.iceberg_framework.column_names == {"col1", "col2", "col3"}
 
     def test_set_column_names_no_data(self) -> None:
-        """Test setting column names when no data is present."""
+        """Test that None data raises an error when setting column names."""
         self.iceberg_framework.data = None
-        self.iceberg_framework.set_column_names()
-        # Should not raise an error, column_names should remain empty
-        assert self.iceberg_framework.column_names == set()
+        with pytest.raises(AttributeError):
+            self.iceberg_framework.set_column_names()
 
     def test_merge_engine_not_implemented(self) -> None:
         """Test that merge engine raises NotImplementedError."""

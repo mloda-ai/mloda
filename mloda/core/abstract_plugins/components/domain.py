@@ -42,7 +42,7 @@ class Domain:
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, Domain):
-            raise ValueError(f"Cannot compare Domain with {type(other)}")
+            return NotImplemented
         return self.name == other.name
 
     def __hash__(self) -> int:

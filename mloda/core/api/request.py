@@ -94,8 +94,9 @@ class mlodaAPI:
 
         return features
 
-    @staticmethod
+    @classmethod
     def run_all(
+        cls,
         features: Union[Features, list[Union[Feature, str]]],
         compute_frameworks: Union[Set[Type[ComputeFramework]], Optional[list[str]]] = None,
         links: Optional[Set[Link]] = None,
@@ -145,7 +146,7 @@ class mlodaAPI:
                 api_data={"UserQuery": {"row_index": [0], "query": ["hello"]}}
             )
         """
-        session = mlodaAPI.prepare(
+        session = cls.prepare(
             features,
             compute_frameworks,
             links,
@@ -165,8 +166,9 @@ class mlodaAPI:
             function_extender=function_extender,
         )
 
-    @staticmethod
+    @classmethod
     def stream_all(
+        cls,
         features: Union[Features, list[Union[Feature, str]]],
         compute_frameworks: Union[Set[Type[ComputeFramework]], Optional[list[str]]] = None,
         links: Optional[Set[Link]] = None,
@@ -189,7 +191,7 @@ class mlodaAPI:
         Yields:
             One complete result per feature group.
         """
-        session = mlodaAPI.prepare(
+        session = cls.prepare(
             features,
             compute_frameworks,
             links,

@@ -1,16 +1,16 @@
-"""Unit tests for mlodaAPI.stream_all static method."""
+"""Unit tests for mlodaAPI.stream_all classmethod."""
 
 import inspect
 import types
 
 
-class TestStreamAllStaticMethod:
-    """Tests that stream_all is a @staticmethod on mlodaAPI."""
+class TestStreamAllClassMethod:
+    """Tests that stream_all is a @classmethod on mlodaAPI."""
 
-    def test_stream_all_is_static_method_on_mloda_api(self) -> None:
+    def test_stream_all_is_classmethod_on_mloda_api(self) -> None:
         from mloda.core.api.request import mlodaAPI
 
-        assert isinstance(inspect.getattr_static(mlodaAPI, "stream_all"), staticmethod)
+        assert isinstance(inspect.getattr_static(mlodaAPI, "stream_all"), classmethod)
 
     def test_stream_all_returns_generator(self) -> None:
         from mloda.core.api.request import mlodaAPI

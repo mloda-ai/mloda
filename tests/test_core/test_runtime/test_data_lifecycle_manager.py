@@ -372,7 +372,7 @@ class TestDataLifecycleManagerGetResultData:
             assert result == selected_data
 
     def test_get_result_data_raises_error_when_no_data_and_no_location(self) -> None:
-        """Should raise ValueError when CFW has no data and no location is provided."""
+        """Should raise NotImplementedError when CFW has no data and no location is provided."""
         manager = DataLifecycleManager()
 
         mock_cfw = Mock(spec=ComputeFramework)
@@ -381,7 +381,7 @@ class TestDataLifecycleManagerGetResultData:
         feature_name = Mock(spec=FeatureName)
         selected_feature_names = {feature_name}
 
-        with pytest.raises(ValueError, match="Cannot retrieve result data"):
+        with pytest.raises(NotImplementedError, match="Cannot retrieve result data"):
             manager.get_result_data(mock_cfw, selected_feature_names, location=None)
 
 

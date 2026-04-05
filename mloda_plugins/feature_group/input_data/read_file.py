@@ -85,12 +85,19 @@ class ReadFile(BaseInputData):
 
     def init_reader(self, options: Optional[Options]) -> Tuple["ReadFile", Any]:
         if options is None:
-            raise ValueError("Options were not set.")
+            raise ValueError(
+                f"Options were not set for {self.__class__.__name__}. "
+                f"Provide an Options object containing a 'BaseInputData' key "
+                f"with a (reader_class, data_access) tuple."
+            )
 
         reader_data_access = options.get("BaseInputData")
 
         if reader_data_access is None:
-            raise ValueError("Reader data access was not set.")
+            raise ValueError(
+                f"'BaseInputData' key is missing or None in the provided Options for {self.__class__.__name__}. "
+                f"Set options with Options(group={{'BaseInputData': (ReaderClass, 'path/to/file')}})."
+            )
 
         reader, data_access = reader_data_access
         return reader(), data_access

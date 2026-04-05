@@ -309,7 +309,10 @@ class ComputeFramework(ABC):
             return
 
         if not isinstance(self.data, self.expected_data_framework()):
-            raise ValueError(f"Data type {type(self.data)} is not supported by {self.__class__.__name__}")
+            raise ValueError(
+                f"Data type {type(self.data)} is not supported by {self.__class__.__name__}. "
+                f"Expected: {self.expected_data_framework()}."
+            )
 
     @final
     def add_already_calculated_children_and_drop_if_possible(

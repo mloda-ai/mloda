@@ -45,19 +45,20 @@ class PandasTextCleaningFeatureGroup(TextCleaningFeatureGroup):
         return {PandasDataFrame}
 
     @classmethod
-    def _check_source_feature_exists(cls, data: pd.DataFrame, feature_name: str) -> None:
+    def _check_source_features_exist(cls, data: pd.DataFrame, feature_names: list[str]) -> None:
         """
-        Check if the source feature exists in the DataFrame.
+        Check if the source features exist in the DataFrame.
 
         Args:
             data: The pandas DataFrame
-            feature_name: The name of the feature to check
+            feature_names: List of feature names to check
 
         Raises:
-            ValueError: If the feature does not exist in the DataFrame
+            ValueError: If a feature does not exist in the DataFrame
         """
-        if feature_name not in data.columns:
-            raise ValueError(f"Feature '{feature_name}' not found in the data")
+        for feature_name in feature_names:
+            if feature_name not in data.columns:
+                raise ValueError(f"Feature '{feature_name}' not found in the data")
 
     @classmethod
     def _get_source_text(cls, data: pd.DataFrame, feature_name: str) -> pd.Series:

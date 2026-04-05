@@ -27,14 +27,17 @@ class TestPandasNodeCentralityFeatureGroup:
         ]
         return pd.DataFrame(edges)
 
-    def test_check_source_feature_exists(self, sample_data: pd.DataFrame) -> None:
-        """Test the _check_source_feature_exists method."""
+    def test_check_source_features_exist(self, sample_data: pd.DataFrame) -> None:
+        """Test the _check_source_features_exist method."""
         # Valid feature
-        PandasNodeCentralityFeatureGroup._check_source_feature_exists(sample_data, "source")
+        PandasNodeCentralityFeatureGroup._check_source_features_exist(sample_data, ["source"])
+
+        # Multiple valid features
+        PandasNodeCentralityFeatureGroup._check_source_features_exist(sample_data, ["source", "target"])
 
         # Invalid feature
         with pytest.raises(ValueError):
-            PandasNodeCentralityFeatureGroup._check_source_feature_exists(sample_data, "invalid_feature")
+            PandasNodeCentralityFeatureGroup._check_source_features_exist(sample_data, ["invalid_feature"])
 
     def test_add_result_to_data(self, sample_data: pd.DataFrame) -> None:
         """Test the _add_result_to_data method."""

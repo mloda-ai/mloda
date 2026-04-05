@@ -77,17 +77,17 @@ class TestPandasGeoDistanceFeatureGroup:
             }
         )
 
-    def test_check_point_features_exist(self) -> None:
-        """Test checking if point features exist."""
+    def test_check_source_features_exist(self) -> None:
+        """Test checking if source features exist."""
         # Test with existing features
-        PandasGeoDistanceFeatureGroup._check_point_features_exist(self.df, "sf", "nyc")
+        PandasGeoDistanceFeatureGroup._check_source_features_exist(self.df, ["sf", "nyc"])
 
         # Test with non-existing features
         with pytest.raises(ValueError):
-            PandasGeoDistanceFeatureGroup._check_point_features_exist(self.df, "sf", "invalid")
+            PandasGeoDistanceFeatureGroup._check_source_features_exist(self.df, ["sf", "invalid"])
 
         with pytest.raises(ValueError):
-            PandasGeoDistanceFeatureGroup._check_point_features_exist(self.df, "invalid", "nyc")
+            PandasGeoDistanceFeatureGroup._check_source_features_exist(self.df, ["invalid", "nyc"])
 
     def test_haversine_distance(self) -> None:
         """Test calculation of haversine distance."""

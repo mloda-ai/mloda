@@ -5,7 +5,7 @@ Base implementation for geo distance feature groups.
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Any, Optional, Set
+from typing import Any, List, Optional, Set
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
@@ -199,7 +199,7 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         for feature in features.features:
             distance_type, point1_feature, point2_feature = cls._extract_geo_distance_parameters(feature)
 
-            cls._check_point_features_exist(data, point1_feature, point2_feature)
+            cls._check_source_features_exist(data, [point1_feature, point2_feature])
 
             if distance_type not in cls.DISTANCE_TYPES:
                 raise ValueError(f"Unsupported distance type: {distance_type}")
@@ -275,17 +275,16 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     @classmethod
     @abstractmethod
-    def _check_point_features_exist(cls, data: Any, point1_feature: str, point2_feature: str) -> None:
+    def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
         """
-        Check if the point features exist in the data.
+        Check if the source features exist in the data.
 
         Args:
             data: The input data
-            point1_feature: The name of the first point feature
-            point2_feature: The name of the second point feature
+            feature_names: List of feature names to check
 
         Raises:
-            ValueError: If either feature does not exist in the data
+            ValueError: If a feature does not exist in the data
         """
         ...
 

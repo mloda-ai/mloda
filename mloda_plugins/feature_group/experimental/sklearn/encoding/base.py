@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import datetime
 from abc import abstractmethod
-from typing import Any, Dict, Optional, Set, Type
+from typing import Any, Dict, List, Optional, Set, Type
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
@@ -249,7 +249,7 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             base_source_feature = cls.get_column_base_feature(source_feature)
 
             # Check that source feature exists
-            cls._check_source_feature_exists(data, base_source_feature)
+            cls._check_source_features_exist(data, [base_source_feature])
 
             # Create unique artifact key that includes encoder type and source feature
             # This ensures different encoders on different features get separate artifacts
@@ -498,16 +498,16 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     @classmethod
     @abstractmethod
-    def _check_source_feature_exists(cls, data: Any, feature_name: str) -> None:
+    def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
         """
-        Check if the source feature exists in the data.
+        Check if the source features exist in the data.
 
         Args:
             data: The input data
-            feature_name: The name of the feature to check
+            feature_names: List of feature names to check
 
         Raises:
-            ValueError: If the feature does not exist in the data
+            ValueError: If a feature does not exist in the data
         """
         ...
 

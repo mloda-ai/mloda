@@ -32,14 +32,14 @@ class TestPandasTextCleaningFeatureGroup:
             }
         )
 
-    def test_check_source_feature_exists(self) -> None:
+    def test_check_source_features_exist(self) -> None:
         """Test that the source feature existence check works correctly."""
         # Feature exists
-        PandasTextCleaningFeatureGroup._check_source_feature_exists(self.df, "text")
+        PandasTextCleaningFeatureGroup._check_source_features_exist(self.df, ["text"])
 
         # Feature doesn't exist
         with pytest.raises(ValueError) as excinfo:
-            PandasTextCleaningFeatureGroup._check_source_feature_exists(self.df, "nonexistent")
+            PandasTextCleaningFeatureGroup._check_source_features_exist(self.df, ["nonexistent"])
 
         assert "not found in the data" in str(excinfo.value)
 

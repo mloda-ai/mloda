@@ -32,49 +32,43 @@ class PandasEncodingFeatureGroup(EncodingFeatureGroup):
             raise ValueError(f"Source feature '{feature_name}' not found in data")
 
     @classmethod
-    def _add_result_to_data(cls, data: Any, feature_name: str, result: Any, encoder_type: str) -> Any:
+    def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
         """Add the result to the DataFrame."""
         import re
 
-        # Handle different result types from sklearn encoders
-        if encoder_type == "onehot":
-            # Check if this is a request for a specific OneHot column (e.g., category__onehot_encoded~1)
-            onehot_column_match = re.match(r"^(.+)__onehot_encoded~(\d+)$", feature_name)
+        # Convert sparse matrix to dense if needed
+        if hasattr(result, "toarray"):
+            result = result.toarray()
 
-            # OneHotEncoder returns a sparse matrix or dense array with multiple columns
-            if hasattr(result, "toarray"):
-                # Convert sparse matrix to dense
-                result = result.toarray()
-
-            if hasattr(result, "shape") and len(result.shape) == 2 and result.shape[1] > 1:
-                if onehot_column_match:
-                    # Specific column requested - only add that column
-                    requested_column_index = int(onehot_column_match.group(2))
+        # Handle different result shapes
+        if hasattr(result, "shape") and len(result.shape) == 2:
+            if result.shape[1] > 1:
+                # Multi-column result (e.g., from OneHotEncoder)
+                # Check if a specific column is requested via ~N suffix
+                column_match = re.match(r"^(.+)~(\d+)$", feature_name)
+                if column_match:
+                    requested_column_index = int(column_match.group(2))
                     if requested_column_index < result.shape[1]:
                         data[feature_name] = result[:, requested_column_index]
                     else:
                         raise ValueError(
-                            f"Requested OneHot column index {requested_column_index} is out of range. Available columns: 0-{result.shape[1] - 1}"
+                            f"Requested column index {requested_column_index} is out of range. "
+                            f"Available columns: 0-{result.shape[1] - 1}"
                         )
                 else:
-                    # Full OneHot encoding requested - create all columns with ~ separator
+                    # Full multi-column encoding - create all columns with ~ separator
                     named_columns = cls.apply_naming_convention(result, feature_name)
                     for col_name, col_data in named_columns.items():
                         data[col_name] = col_data
             else:
-                # Single column or unexpected format
-                data[feature_name] = result.flatten() if hasattr(result, "flatten") else result
-        else:
-            # LabelEncoder and OrdinalEncoder return single column results
-            if hasattr(result, "shape") and len(result.shape) == 2:
-                # 2D result - flatten to 1D
+                # Single column 2D result - flatten to 1D
                 data[feature_name] = result.flatten()
-            elif hasattr(result, "shape") and len(result.shape) == 1:
-                # 1D result
-                data[feature_name] = result
-            else:
-                # Scalar or other result type
-                data[feature_name] = result
+        elif hasattr(result, "shape") and len(result.shape) == 1:
+            # 1D result
+            data[feature_name] = result
+        else:
+            # Scalar or other result type
+            data[feature_name] = result
 
         return data
 

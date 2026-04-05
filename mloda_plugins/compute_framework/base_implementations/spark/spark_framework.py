@@ -83,10 +83,8 @@ class SparkFramework(ComputeFramework):
         if self.data is not None:
             self.column_names = set(self.data.columns)
 
-    def _extract_column_names(self, data: Any) -> set[str] | None:
-        if data is not None:
-            return set(data.columns)
-        return None
+    def _extract_column_names(self, data: Any) -> set[str]:
+        return set(data.columns)
 
     @classmethod
     def spark_dataframe(cls) -> Any:

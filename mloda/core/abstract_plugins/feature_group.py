@@ -426,7 +426,7 @@ class FeatureGroup(ABC):
         elimination by returning ``True``.
 
         Returns:
-            None:  Defer to the FilterEngine (backwards compatible default).
+            None:  Defer to the FilterEngine (default).
             False: Skip row elimination (the FeatureGroup handles filters itself).
             True:  Force row elimination after calculation.
         """

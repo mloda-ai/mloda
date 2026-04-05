@@ -68,14 +68,12 @@ class PythonDictFramework(ComputeFramework):
         else:
             raise ValueError("Data is empty or not in expected format. Cannot set column names.")
 
-    def _extract_column_names(self, data: Any) -> set[str] | None:
-        if data and isinstance(data, list) and len(data) > 0:
-            all_columns: set[str] = set()
-            for row in data:
-                if isinstance(row, dict):
-                    all_columns.update(row.keys())
-            return all_columns
-        return None
+    def _extract_column_names(self, data: Any) -> set[str]:
+        all_columns: set[str] = set()
+        for row in data:
+            if isinstance(row, dict):
+                all_columns.update(row.keys())
+        return all_columns
 
     def transform(self, data: Any, feature_names: set[str]) -> list[dict[str, Any]]:
         """

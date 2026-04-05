@@ -43,7 +43,7 @@ class PolarsDataFrame(ComputeFramework):
     def set_column_names(self) -> None:
         self.column_names = set(self.data.columns)
 
-    def _extract_column_names(self, data: Any) -> set[str] | None:
+    def _extract_column_names(self, data: Any) -> set[str]:
         return set(data.columns)
 
     @classmethod

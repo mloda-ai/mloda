@@ -242,9 +242,6 @@ class ComputeFramework(ABC):
             return
 
         data_columns = self._extract_column_names(data)
-        if data_columns is None:
-            return
-
         feature_names = features.get_all_names()
         for single_filter in features.filters:
             col = single_filter.filter_feature.name
@@ -257,9 +254,9 @@ class ComputeFramework(ABC):
                     f"Available columns: {sorted(data_columns)}"
                 )
 
-    def _extract_column_names(self, data: Any) -> set[str] | None:
-        """Extract column names from the data. Subclasses must override."""
-        return None
+    def _extract_column_names(self, data: Any) -> set[str]:
+        """Extract column names from the data."""
+        raise NotImplementedError
 
     @final
     def set_filter_engine(self, features: Any) -> Any:

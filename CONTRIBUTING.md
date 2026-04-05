@@ -18,4 +18,4 @@ Found a bug or have a feature request? [Open an issue](https://github.com/mloda-
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the [Apache License, Version 2.0](https://github.com/mloda-ai/mloda/blob/main/LICENSE.TXT).
+By contributing, you agree that your contributions will be licensed under the [Apache License, Version 2.0](https://github.com/mloda-ai/mloda/blob/main/LICENSE).

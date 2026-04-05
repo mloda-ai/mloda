@@ -72,4 +72,4 @@ If you have additional questions about mloda visit our [FAQ](https://mloda-ai.gi
 
 ## License
 
-This project is licensed under the [Apache License, Version 2.0](https://github.com/mloda-ai/mloda/blob/main/LICENSE.TXT).
+This project is licensed under the [Apache License, Version 2.0](https://github.com/mloda-ai/mloda/blob/main/LICENSE).

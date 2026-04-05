@@ -2,7 +2,7 @@ global-exclude __pycache__/
 global-exclude *.pyc
 prune **/__pycache__
 include README.md
-include LICENSE.TXT
+include LICENSE
 include NOTICE.md
 include mloda/core/py.typed
 include mloda/provider/py.typed

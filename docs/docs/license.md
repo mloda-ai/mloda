@@ -6,7 +6,7 @@ This means:
 
 - You are free to use, modify, and distribute the software as long as you comply with the terms of the license.
 - Proper attribution is required when distributing the software.
-- For full details, see the [LICENSE.TXT](https://github.com/mloda-ai/mloda/blob/main/LICENSE.TXT) file in the GitHub repository.
+- For full details, see the [LICENSE](https://github.com/mloda-ai/mloda/blob/main/LICENSE) file in the GitHub repository.
 
 Attributions:
 

@@ -118,7 +118,7 @@ class DataLifecycleManager:
             The selected data from the CFW.
 
         Raises:
-            ValueError: If CFW has no data and no location is provided.
+            NotImplementedError: If CFW has no data and no location is provided.
         """
         if cfw.data is not None:
             data = cfw.data
@@ -126,7 +126,7 @@ class DataLifecycleManager:
             data = FlightServer.download_table(location, str(cfw.uuid))
             data = cfw.convert_flight_server_data_back(data, self.transformer)
         else:
-            raise ValueError(
+            raise NotImplementedError(
                 "Cannot retrieve result data: the compute framework has no local data "
                 "(cfw.data is None) and no FlightServer location was provided.\n"
                 "This typically means the feature was computed in a multiprocessing worker "

@@ -31,7 +31,11 @@
     <div class="wy-side-scroll">
       <div class="wy-side-nav-search">
           <a href="../.." class="icon icon-home"> mloda docs
-        </a>
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
       </div>
 
       <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
@@ -57,8 +61,6 @@
               <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/installation/">Installation</a>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
-                  </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/api-request/">API Request</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/feature-groups/">Feature Groups</a>
@@ -66,6 +68,10 @@
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/compute-frameworks/">Compute Frameworks</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/extender/">Extender</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/base_usage/">mloda demo: How can we make feature engineering shareable?</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
                   </li>
               </ul>
               <p class="caption"><span class="caption-text">In Depth - Basics</span></p>
@@ -96,9 +102,13 @@
         <ul>
     <li class="toctree-l3"><a class="reference internal" href="#feature-group-with-artifact-implementation">Feature Group with Artifact implementation</a>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#testing-artifacts">Testing Artifacts</a>
+        </ul>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#complex-artifact-example-sklearnartifact">Complex Artifact Example: SklearnArtifact</a>
+    <li class="toctree-l2"><a class="reference internal" href="#run-time-artifact-switching-with-preparerun">Run-time Artifact Switching with prepare/run</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#train-then-predict-in-a-single-session">Train-then-predict in a single session</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#cross-validation-pattern">Cross-validation pattern</a>
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#conclusion">Conclusion</a>
     </li>
@@ -151,6 +161,8 @@
                 </li>
     </ul>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
                 <li class="toctree-l2"><a class="reference internal" href="../troubleshooting/feature-group-resolution-errors/">Feature Group Resolution Errors</a>
@@ -168,8 +180,6 @@
               <p class="caption"><span class="caption-text">Need Help?</span></p>
               <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../../faq/">FAQ</a>
-                  </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../need-help/">Need Help</a>
                   </li>
               </ul>
       </div>
@@ -203,7 +213,7 @@ Example use cases are embeddings, Feature Matrices, Model Checkpoints and more.<
 <p>Artifacts are managed through a set of abstract and concrete classes that define how artifacts are created, saved, and loaded. The primary classes involved in artifact management include:</p>
 <ul>
 <li><code>BaseArtifact</code>: The base class for all artifacts.</li>
-<li><code>FeatureGroup</code>: The base class for feature groups, including methods for artifact management. This class may contain a <code>BaseArtfact</code>.</li>
+<li><code>FeatureGroup</code>: The base class for feature groups, including methods for artifact management. This class may contain a <code>BaseArtifact</code>.</li>
 </ul>
 <h2 id="key-components">Key Components</h2>
 <h4 id="baseartifact">BaseArtifact</h4>
@@ -243,7 +253,7 @@ class BaseExampleArtifactFeature(FeatureGroup):
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 api = mloda([&quot;BaseExampleArtifactFeature&quot;], {PyArrowTable})
-api._batch_run()
+api.run()
 artifacts = api.get_artifacts()
 print(artifacts)
 </code></pre>
@@ -254,18 +264,58 @@ print(artifacts)
 <pre><code class="language-python">from mloda.user import Feature, mloda
 
 feat = Feature(name=&quot;BaseExampleArtifactFeature&quot;, options=artifacts)
-api = mloda([feat], {PyArrowTable})
-api._batch_run()
+mloda.run_all([feat], {PyArrowTable})
 </code></pre>
 <p>Result:</p>
 <pre><code class="language-python">&quot;BasicArtifact is the loaded artifact.&quot;
 </code></pre>
-<h4 id="testing-artifacts">Testing Artifacts</h4>
-<p>Testing artifact features involves creating test cases that ensure artifacts are correctly saved and loaded. The following example shows how to test the <code>BaseTestArtifactFeature</code> class.</p>
-<p><a href="https://github.com/mloda-ai/mloda/blob/main/tests/test_core/test_artifacts/test_artifacts.py">View the test file on GitHub</a></p>
-<h4 id="complex-artifact-example-sklearnartifact">Complex Artifact Example: SklearnArtifact</h4>
-<p>For more advanced use cases, artifacts can handle complex data structures and multiple objects. The <code>SklearnArtifact</code> demonstrates this with fitted scikit-learn transformers:</p>
-<pre><code class="language-python">from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import SklearnArtifact
+<h2 id="run-time-artifact-switching-with-preparerun">Run-time Artifact Switching with prepare/run</h2>
+<p>The two-phase API (<code>prepare()</code> + <code>run()</code>) supports switching between save and
+load mode across <code>run()</code> calls. Pass a previously saved artifact dict to
+<code>run(artifacts=...)</code> to switch to load mode for that run without re-preparing.</p>
+<p>This is useful for train-then-predict workflows and cross-validation, where a
+single session alternates between training (save) and inference (load).</p>
+<h4 id="train-then-predict-in-a-single-session">Train-then-predict in a single session</h4>
+<pre><code class="language-python">from mloda.user import mloda
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+
+# 1. Prepare once
+session = mloda.prepare([&quot;BaseExampleArtifactFeature&quot;], {PyArrowTable})
+
+# 2. First run: save mode (train)
+session.run()
+saved_artifacts = session.get_artifacts()
+# {'BaseExampleArtifactFeature': 'BasicArtifact'}
+
+# 3. Second run: load mode (predict), using artifacts from step 2
+result = session.run(artifacts=saved_artifacts)
+</code></pre>
+<h4 id="cross-validation-pattern">Cross-validation pattern</h4>
+<p>``` title="pseudocode"
+session = mloda.prepare(["MyArtifactFeature"], {PyArrowTable})</p>
+<p>for fold_data in folds:
+    # Train fold
+    session.run()
+    trained = session.get_artifacts()</p>
+<pre><code># Predict fold
+session.run(artifacts=trained)
+</code></pre>
+<pre><code>
+When `artifacts` is not provided (the default), the artifact mode from
+`prepare()` is used.
+
+#### Testing Artifacts
+
+Testing artifact features involves creating test cases that ensure artifacts are correctly saved and loaded. The following example shows how to test the `BaseTestArtifactFeature` class.
+
+[View the test file on GitHub](https://github.com/mloda-ai/mloda/blob/main/tests/test_core/test_artifacts/test_artifacts.py)
+
+#### Complex Artifact Example: SklearnArtifact
+
+For more advanced use cases, artifacts can handle complex data structures and multiple objects. The `SklearnArtifact` demonstrates this with fitted scikit-learn transformers:
+
+```python
+from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import SklearnArtifact
 
 class MySklearnFeatureGroup(FeatureGroup):
     @staticmethod
@@ -329,6 +379,7 @@ class MySklearnFeatureGroup(FeatureGroup):
     <script>var base_url = "../..";</script>
     <script src="../../js/theme_extra.js"></script>
     <script src="../../js/theme.js"></script>
+      <script src="../../search/main.js"></script>
     <script>
         jQuery(function () {
             SphinxRtdTheme.Navigation.enable(true);

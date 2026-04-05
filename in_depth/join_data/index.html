@@ -31,7 +31,11 @@
     <div class="wy-side-scroll">
       <div class="wy-side-nav-search">
           <a href="../.." class="icon icon-home"> mloda docs
-        </a>
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
       </div>
 
       <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
@@ -57,8 +61,6 @@
               <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/installation/">Installation</a>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
-                  </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/api-request/">API Request</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/feature-groups/">Feature Groups</a>
@@ -66,6 +68,10 @@
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/compute-frameworks/">Compute Frameworks</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/extender/">Extender</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/base_usage/">mloda demo: How can we make feature engineering shareable?</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
                   </li>
               </ul>
               <p class="caption"><span class="caption-text">In Depth - Basics</span></p>
@@ -145,6 +151,8 @@
                 </li>
     </ul>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
                 <li class="toctree-l2"><a class="reference internal" href="../troubleshooting/feature-group-resolution-errors/">Feature Group Resolution Errors</a>
@@ -162,8 +170,6 @@
               <p class="caption"><span class="caption-text">Need Help?</span></p>
               <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../../faq/">FAQ</a>
-                  </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../need-help/">Need Help</a>
                   </li>
               </ul>
       </div>
@@ -225,7 +231,7 @@ multi_column_index = Index(('user_id', 'timestamp'))
 is_multi = multi_column_index.is_multi_index()  # Returns True
 
 # Check if single column is a part of a composite index
-is_a_part_of = single_column_index.is_a_part_of_(multi_column_index) # Returns True
+is_a_part_of = single_column_index.is_a_part_of(multi_column_index) # Returns True
 </code></pre>
 <h4 id="jointype">JoinType</h4>
 <p>Join Types specify how two datasets are merged based on their keys. The framework supports the following join types:</p>
@@ -452,7 +458,7 @@ def merge(self, left_data: Any, right_data: Any, jointype: JoinType, left_index:
 
         else:
             raise ValueError(
-                f&quot;JoinType {join_type} {left_index} {right_index} are not yet implemented {self.__class__.__name__}&quot;
+                f&quot;JoinType {join_type} {left_index} {right_index} is not yet implemented in {self.__class__.__name__}&quot;
             )
 </code></pre>
 <p>Key Components:</p>
@@ -502,6 +508,7 @@ def merge(self, left_data: Any, right_data: Any, jointype: JoinType, left_index:
     <script>var base_url = "../..";</script>
     <script src="../../js/theme_extra.js"></script>
     <script src="../../js/theme.js"></script>
+      <script src="../../search/main.js"></script>
     <script>
         jQuery(function () {
             SphinxRtdTheme.Navigation.enable(true);

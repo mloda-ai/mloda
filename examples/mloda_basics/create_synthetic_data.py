@@ -57,7 +57,8 @@ class PaymentSyntheticDataSet(OrderSyntheticDataSet):
 
         # Shuffle valid datetime informations
         valid_datetime_dates = pd.date_range(start="2024-01-01", end="2024-02-01", periods=num_samples, tz="UTC")
-        np.random.shuffle(valid_datetime_dates.values)
+        valid_datetime_dates = valid_datetime_dates.to_numpy(copy=True)
+        np.random.shuffle(valid_datetime_dates)
 
         return pd.DataFrame(
             {

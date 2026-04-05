@@ -31,7 +31,11 @@
     <div class="wy-side-scroll">
       <div class="wy-side-nav-search">
           <a href="../.." class="icon icon-home"> mloda docs
-        </a>
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
       </div>
 
       <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
@@ -57,8 +61,6 @@
               <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/installation/">Installation</a>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
-                  </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/api-request/">API Request</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/feature-groups/">Feature Groups</a>
@@ -66,6 +68,10 @@
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/compute-frameworks/">Compute Frameworks</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/extender/">Extender</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/base_usage/">mloda demo: How can we make feature engineering shareable?</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
                   </li>
               </ul>
               <p class="caption"><span class="caption-text">In Depth - Basics</span></p>
@@ -123,6 +129,8 @@
     </li>
     <li class="toctree-l4"><a class="reference internal" href="#custom-validation-functions">Custom Validation Functions</a>
     </li>
+    <li class="toctree-l4"><a class="reference internal" href="#type-validators">Type Validators</a>
+    </li>
     <li class="toctree-l4"><a class="reference internal" href="#default-values">Default Values</a>
     </li>
         </ul>
@@ -130,6 +138,12 @@
     <li class="toctree-l3"><a class="reference internal" href="#usage-in-feature-groups">Usage in Feature Groups</a>
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#validation-examples">Validation Examples</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#conditional-requirements-with-required_when">Conditional Requirements with required_when</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#predicate-contract">Predicate Contract</a>
+    </li>
+        </ul>
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#context-propagation">Context Propagation</a>
     </li>
@@ -151,6 +165,8 @@
                 </li>
     </ul>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
                 <li class="toctree-l2"><a class="reference internal" href="../troubleshooting/feature-group-resolution-errors/">Feature Group Resolution Errors</a>
@@ -168,8 +184,6 @@
               <p class="caption"><span class="caption-text">Need Help?</span></p>
               <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../../faq/">FAQ</a>
-                  </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../need-help/">Need Help</a>
                   </li>
               </ul>
       </div>
@@ -201,7 +215,7 @@
 <h2 id="overview">Overview</h2>
 <p>PROPERTY_MAPPING defines parameter validation and classification for modern feature groups using the unified parser approach.</p>
 <h2 id="basic-structure">Basic Structure</h2>
-<pre><code class="language-python">from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+<pre><code class="language-python">from mloda.provider import DefaultOptionKeys
 
 PROPERTY_MAPPING = {
     &quot;parameter_name&quot;: {
@@ -224,10 +238,17 @@ PROPERTY_MAPPING = {
     DefaultOptionKeys.context: True,
 }
 
-# Group parameter (affects Feature Group splitting)  
+# Group parameter (affects Feature Group splitting)
 &quot;data_source&quot;: {
     &quot;production&quot;: &quot;Production data&quot;,
     DefaultOptionKeys.group: True,
+}
+
+# Order-by parameter (defines sort order for sequential operations)
+DefaultOptionKeys.order_by: {
+    &quot;explanation&quot;: &quot;Column(s) controlling row order for rank, offset, or frame_aggregate&quot;,
+    DefaultOptionKeys.context: True,
+    DefaultOptionKeys.strict_validation: False,
 }
 </code></pre>
 <h2 id="validation-modes">Validation Modes</h2>
@@ -239,12 +260,33 @@ PROPERTY_MAPPING = {
 }
 </code></pre>
 <h3 id="custom-validation-functions">Custom Validation Functions</h3>
+<p>Use <code>validation_function</code> with <code>strict_validation=True</code> to validate individual
+parsed elements. The parser unpacks lists and calls the function on each element:</p>
 <pre><code class="language-python">&quot;window_size&quot;: {
     &quot;explanation&quot;: &quot;Size of time window&quot;,
     DefaultOptionKeys.validation_function: lambda x: isinstance(x, int) and x &gt; 0,
     DefaultOptionKeys.strict_validation: True,
 }
 </code></pre>
+<h3 id="type-validators">Type Validators</h3>
+<p>Use <code>type_validator</code> to validate the shape or composite type of the raw option
+value before any list unpacking. Unlike <code>validation_function</code>, it does not
+require <code>strict_validation</code>. The validator receives the value exactly as stored
+in Options and must return a truthy value for the match to succeed:</p>
+<pre><code class="language-python">def _is_list_of_strings(value):
+    return isinstance(value, list) and all(isinstance(item, str) for item in value)
+
+&quot;partition_by&quot;: {
+    &quot;explanation&quot;: &quot;List of columns to partition by&quot;,
+    DefaultOptionKeys.context: True,
+    DefaultOptionKeys.strict_validation: False,
+    DefaultOptionKeys.type_validator: _is_list_of_strings,
+}
+</code></pre>
+<p>When both <code>validation_function</code> and <code>type_validator</code> are present on the same
+entry, <code>validation_function</code> runs first (during property mapping validation on
+each parsed element), then <code>type_validator</code> runs on the raw value. Validators
+must be pure functions with no side effects.</p>
 <h3 id="default-values">Default Values</h3>
 <pre><code class="language-python">&quot;method&quot;: {
     &quot;linear&quot;: &quot;Linear interpolation&quot;,
@@ -283,15 +325,50 @@ Options(context={&quot;operation_type&quot;: &quot;custom&quot;})  # Raises Valu
 # Valid with flexible validation - any value allowed
 Options(context={&quot;in_features&quot;: &quot;any_feature_name&quot;})
 </code></pre>
+<h2 id="conditional-requirements-with-required_when">Conditional Requirements with <code>required_when</code></h2>
+<p>Use <code>DefaultOptionKeys.required_when</code> to declare options that are only required under certain conditions. Attach a predicate callable to a PROPERTY_MAPPING entry. The predicate receives an effective <code>Options</code> object and returns <code>True</code> when the option is required.</p>
+<p>This works for both configuration-based and string-based feature creation. For string-based features, the operation value parsed from the feature name is merged into the effective options before predicate evaluation, so predicates see values from both sources.</p>
+<pre><code class="language-python">from mloda.core.abstract_plugins.components.options import Options
+from mloda.provider import DefaultOptionKeys
+
+_ORDER_DEPENDENT = {&quot;first&quot;, &quot;last&quot;}
+
+def _needs_order_by(options: Options) -&gt; bool:
+    return options.get(&quot;aggregation_type&quot;) in _ORDER_DEPENDENT
+
+PROPERTY_MAPPING = {
+    &quot;aggregation_type&quot;: {
+        &quot;sum&quot;: &quot;Sum&quot;, &quot;avg&quot;: &quot;Average&quot;, &quot;first&quot;: &quot;First&quot;, &quot;last&quot;: &quot;Last&quot;,
+        DefaultOptionKeys.context: True,
+        DefaultOptionKeys.strict_validation: True,
+    },
+    &quot;order_by&quot;: {
+        &quot;explanation&quot;: &quot;Column to order by within each partition&quot;,
+        DefaultOptionKeys.context: True,
+        DefaultOptionKeys.strict_validation: False,
+        DefaultOptionKeys.required_when: _needs_order_by,
+    },
+}
+</code></pre>
+<p>When the predicate returns <code>True</code> and the option is absent, <code>match_feature_group_criteria</code> returns <code>False</code>. When the predicate returns <code>False</code>, the option is not required. Entries with <code>required_when</code> are treated as optional by the base parser.</p>
+<h3 id="predicate-contract">Predicate Contract</h3>
+<p>The predicate must satisfy:</p>
+<ul>
+<li><strong>Signature:</strong> <code>(Options) -&gt; bool</code></li>
+<li><strong>Must be callable.</strong> Non-callable values are skipped with a warning log.</li>
+<li><strong>Must not raise exceptions.</strong> Exceptions from predicates propagate uncaught.</li>
+<li><strong>Must be a pure function</strong> (no side effects).</li>
+<li>Non-bool truthy return values are treated as <code>True</code>.</li>
+</ul>
 <h2 id="context-propagation">Context Propagation</h2>
-<p>By default, context parameters are local — they don't flow through feature dependency chains. This is correct for feature-specific config like aggregation types.</p>
+<p>By default, context parameters are local: they do not flow through feature dependency chains. This is correct for feature-specific config like aggregation types.</p>
 <p>For cross-cutting metadata (session IDs, environment flags) that should flow through chains, use <code>propagate_context_keys</code> on <code>Options</code>:</p>
 <pre><code class="language-python">Options(
     context={&quot;session_id&quot;: &quot;abc&quot;, &quot;window_function&quot;: &quot;sum&quot;},
     propagate_context_keys=frozenset({&quot;session_id&quot;}),  # only session_id flows to dependents
 )
 </code></pre>
-<p>Only the specified keys propagate — everything else stays local. Group propagation is unchanged.</p>
+<p>Only the specified keys propagate. Everything else stays local. Group propagation is unchanged.</p>
               
             </div>
           </div><footer>
@@ -331,6 +408,7 @@ Options(context={&quot;in_features&quot;: &quot;any_feature_name&quot;})
     <script>var base_url = "../..";</script>
     <script src="../../js/theme_extra.js"></script>
     <script src="../../js/theme.js"></script>
+      <script src="../../search/main.js"></script>
     <script>
         jQuery(function () {
             SphinxRtdTheme.Navigation.enable(true);

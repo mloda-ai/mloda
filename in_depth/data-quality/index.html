@@ -31,7 +31,11 @@
     <div class="wy-side-scroll">
       <div class="wy-side-nav-search">
           <a href="../.." class="icon icon-home"> mloda docs
-        </a>
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
       </div>
 
       <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
@@ -57,8 +61,6 @@
               <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/installation/">Installation</a>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
-                  </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/api-request/">API Request</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/feature-groups/">Feature Groups</a>
@@ -66,6 +68,10 @@
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/compute-frameworks/">Compute Frameworks</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/extender/">Extender</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/base_usage/">mloda demo: How can we make feature engineering shareable?</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
                   </li>
               </ul>
               <p class="caption"><span class="caption-text">In Depth - Basics</span></p>
@@ -167,6 +173,8 @@
                 </li>
     </ul>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
                 <li class="toctree-l2"><a class="reference internal" href="../troubleshooting/feature-group-resolution-errors/">Feature Group Resolution Errors</a>
@@ -184,8 +192,6 @@
               <p class="caption"><span class="caption-text">Need Help?</span></p>
               <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../../faq/">FAQ</a>
-                  </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../need-help/">Need Help</a>
                   </li>
               </ul>
       </div>
@@ -242,12 +248,11 @@ class DocSimpleValidateInputFeatures(FeatureGroup):
         return {Feature(name=&quot;BaseValidateInputFeaturesBase&quot;, options=options)}
 
     @classmethod
-    def validate_input_features(cls, data: Any, features: FeatureSet) -&gt; Optional[bool]:
+    def validate_input_features(cls, data: Any, features: FeatureSet) -&gt; None:
         &quot;&quot;&quot;This function is a naive implementation of a validator.&quot;&quot;&quot;
 
-        if len(data[&quot;BaseValidateInputFeaturesBase&quot;]) == 3:
+        if len(data[&quot;BaseValidateInputFeaturesBase&quot;]) != 3:
             raise ValueError(&quot;Data should have 3 elements&quot;)
-        return True
 </code></pre>
 <p>As we run it, it will return an error.</p>
 <pre><code class="language-python">results = mloda.run_all(
@@ -265,7 +270,7 @@ This function shows 2 examples:</p>
 <pre><code class="language-python">class DocCustomValidateInputFeatures(DocSimpleValidateInputFeatures):
 
     @classmethod
-    def validate_input_features(cls, data: Any, features: FeatureSet) -&gt; Optional[bool]:
+    def validate_input_features(cls, data: Any, features: FeatureSet) -&gt; None:
         &quot;&quot;&quot;This function should be used to validate the input data.&quot;&quot;&quot;
 
         validation_rules = {
@@ -282,7 +287,7 @@ This function shows 2 examples:</p>
         # Instantiating a validator inplace
             validator = DocExamplePanderaValidator(validation_rules, validation_log_level)
 
-        return validator.validate(data)  # type: ignore
+        validator.validate(data)
 </code></pre>
 <p>The DocExamplePanderaValidator is based on the BaseValidator, which provides basic functionalities around logging. </p>
 <p>We show here an example by using the tool <a href="https://github.com/unionai-oss/pandera">Pandera</a>.</p>
@@ -296,7 +301,7 @@ from pandera.errors import SchemaError
 class DocExamplePanderaValidator(BaseValidator):
     &quot;&quot;&quot;Custom validator to validate input features based on a specific rule.&quot;&quot;&quot;
 
-    def validate(self, data: pa.Table) -&gt; Optional[bool]:
+    def validate(self, data: pa.Table) -&gt; None:
         &quot;&quot;&quot;This function should be used to validate the input data.&quot;&quot;&quot;
 
         # Convert PyArrow Table to Pandas DataFrame if necessary
@@ -309,7 +314,6 @@ class DocExamplePanderaValidator(BaseValidator):
             schema.validate(data)
         except SchemaError as e:
             self.handle_log_level(&quot;SchemaError:&quot;, e)
-        return True
 </code></pre>
 <p>The validator should raise an error again.</p>
 <pre><code class="language-python">results = mloda.run_all(
@@ -324,7 +328,18 @@ class DocExamplePanderaValidator(BaseValidator):
 <pre><code class="language-python">from mloda.user import mloda
 from mloda.steward import Extender, ExtenderHook
 from mloda.user import Feature
-from tests.test_documentation.test_documentation import DokuValidateInputFeatureExtender
+import time
+
+
+class DokuValidateInputFeatureExtender(Extender):
+    def wraps(self) -&gt; Set[ExtenderHook]:
+        return {ExtenderHook.VALIDATE_INPUT_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -&gt; Any:
+        start = time.time()
+        result = func(*args, **kwargs)
+        print(f&quot;Time taken: {time.time() - start}&quot;)
+        return result
 
 example_feature = Feature(&quot;DocCustomValidateInputFeatures&quot;, {&quot;ValidationLevel&quot;: &quot;warning&quot;})
 
@@ -347,7 +362,6 @@ results = mloda.run_all(
 <pre><code class="language-python">from mloda.user import mloda
 from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Options
-from tests.test_plugins.integration_plugins.test_validate_features.example_validator import BaseValidateOutputFeaturesBase
 
 
 class DocBaseValidateOutputFeaturesBase(FeatureGroup):
@@ -360,12 +374,11 @@ class DocBaseValidateOutputFeaturesBase(FeatureGroup):
         return {cls.get_class_name(): [1, 2, 3]}
 
     @classmethod
-    def validate_output_features(cls, data: Any, config: Options) -&gt; Optional[bool]:
+    def validate_output_features(cls, data: Any, config: Options) -&gt; None:
         &quot;&quot;&quot;This function should be used to validate the output data.&quot;&quot;&quot;
 
         if len(data[cls.get_class_name()]) != 3:
             raise ValueError(&quot;Data should have 3 elements&quot;)
-        return True
 
 results = mloda.run_all(
             [&quot;DocBaseValidateOutputFeaturesBase&quot;], {PyArrowTable}
@@ -379,14 +392,14 @@ results
     &quot;&quot;&quot;Pandera example test case. This one is related to the pandera testcase for validate_input_features.&quot;&quot;&quot;
 
     @classmethod
-    def validate_output_features(cls, data: Any, features: FeatureSet) -&gt; Optional[bool]:
+    def validate_output_features(cls, data: Any, features: FeatureSet) -&gt; None:
         &quot;&quot;&quot;This function should be used to validate the output data.&quot;&quot;&quot;
 
         validation_rules = {
             cls.get_class_name(): Column(int, Check.in_range(1, 2)),
         }
         validator = DocExamplePanderaValidator(validation_rules, features.get_options_key(&quot;ValidationLevel&quot;))
-        return validator.validate(data)
+        validator.validate(data)
 </code></pre>
 <p>This one should fail:</p>
 <pre><code class="language-python">results = mloda.run_all(
@@ -394,8 +407,17 @@ results
         )
 </code></pre>
 <h6 id="log-only-validator-and-extender-use_1">Log only validator and Extender use</h6>
-<p>We can of course also use an extender, which was defined somewhere else.</p>
-<pre><code class="language-python">from tests.test_plugins.integration_plugins.test_validate_features.test_validate_output_features import ValidateOutputFeatureExtender
+<p>We can of course also use an extender.</p>
+<pre><code class="language-python">class ValidateOutputFeatureExtender(Extender):
+    def wraps(self) -&gt; Set[ExtenderHook]:
+        return {ExtenderHook.VALIDATE_OUTPUT_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -&gt; Any:
+        start = time.time()
+        result = func(*args, **kwargs)
+        _measured_time = f&quot;Time taken: {time.time() - start}&quot;
+        print(_measured_time)
+        return result
 
 results = mloda.run_all(
             [&quot;DocBaseValidateOutputFeaturesBase&quot;], {PyArrowTable},
@@ -407,7 +429,7 @@ results = mloda.run_all(
 </code></pre>
 <h4 id="artifacts">Artifacts</h4>
 <p><code>Artifacts</code> can also be used for validation as the full mloda is available. A use case could be to store statistics of a feature and then validate them later on.
-For more details on artifacts, refer to the <a href="https://mloda-ai.github.io/mloda/in_depth/artifacts/">artifact documentation</a>.</p>
+For more details on artifacts, refer to the <a href="../artifacts/">artifact documentation</a>.</p>
 <h4 id="conclusion">Conclusion</h4>
 <p>In conclusion, feature validation is crucial for ensuring data quality in both input and output stages. By leveraging custom validators and extenders, validation can be tailored to specific needs while maintaining flexibility. This process helps detect inconsistencies early, improving the accuracy and robustness of data  and feature pipelines.</p>
 <h2 id="software-testing">Software Testing</h2>
@@ -460,6 +482,7 @@ For more details on artifacts, refer to the <a href="https://mloda-ai.github.io/
     <script>var base_url = "../..";</script>
     <script src="../../js/theme_extra.js"></script>
     <script src="../../js/theme.js"></script>
+      <script src="../../search/main.js"></script>
     <script>
         jQuery(function () {
             SphinxRtdTheme.Navigation.enable(true);

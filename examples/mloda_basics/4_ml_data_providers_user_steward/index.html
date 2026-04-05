@@ -31,7 +31,11 @@
     <div class="wy-side-scroll">
       <div class="wy-side-nav-search">
           <a href="../../.." class="icon icon-home"> mloda docs
-        </a>
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
       </div>
 
       <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
@@ -56,11 +60,11 @@
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#provider">Provider</a>
         <ul>
-    <li class="toctree-l3"><a class="reference internal" href="#featuregroup-mloda-plug-in-in-short">FeatureGroup mloda (plug-in) in short</a>
+    <li class="toctree-l3"><a class="reference internal" href="#featuregroup-mloda-plugin-in-short">FeatureGroup mloda (plugin) in short</a>
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#simple-example-implementation-of-the-featuregroup-mloda">Simple example implementation of the FeatureGroup mloda</a>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#complex-plug-ins">Complex plug-ins</a>
+    <li class="toctree-l3"><a class="reference internal" href="#complex-plugins">Complex plugins</a>
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#quality">Quality</a>
     </li>
@@ -89,8 +93,6 @@
               <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../../../chapter1/installation/">Installation</a>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
-                  </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../../chapter1/api-request/">API Request</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../../chapter1/feature-groups/">Feature Groups</a>
@@ -98,6 +100,10 @@
                   <li class="toctree-l1"><a class="reference internal" href="../../../chapter1/compute-frameworks/">Compute Frameworks</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../../chapter1/extender/">Extender</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../base_usage/">mloda demo: How can we make feature engineering shareable?</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
                   </li>
               </ul>
               <p class="caption"><span class="caption-text">In Depth - Basics</span></p>
@@ -159,6 +165,8 @@
                 </li>
     </ul>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../../in_depth/data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
                 <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/troubleshooting/feature-group-resolution-errors/">Feature Group Resolution Errors</a>
@@ -176,8 +184,6 @@
               <p class="caption"><span class="caption-text">Need Help?</span></p>
               <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../../../faq/">FAQ</a>
-                  </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../../need-help/">Need Help</a>
                   </li>
               </ul>
       </div>
@@ -948,10 +954,10 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <ul>
 <li>A data scientist or analyst might create simpler datasets or analytical outputs</li>
 <li>A data engineer might design access to complex data infrastructures, such as data lakes or warehouses</li>
-<li>Shares plug-ins and with it access to data</li>
+<li>Shares plugins and with it access to data</li>
 </ul>
 </li>
-<li><p>Data User: Interacts with mloda by applying plug-ins while making requests via the mlodaAPI.</p>
+<li><p>Data User: Interacts with mloda by applying plugins while making requests via the mlodaAPI.</p>
 <ul>
 <li>A data scientist or analyst who needs data and data transformations (features)</li>
 <li>Consumes features from other parts of the organizations</li>
@@ -1148,7 +1154,7 @@ mloda.run_all(
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h3 id="featuregroup-mloda-plug-in-in-short">FeatureGroup mloda (plug-in) in short<a class="anchor-link" href="#featuregroup-mloda-plug-in-in-short">¶</a></h3><p>In mloda, a provider defines access by creating feature groups. Here's an example implementation:</p>
+<h3 id="featuregroup-mloda-plugin-in-short">FeatureGroup mloda (plugin) in short<a class="anchor-link" href="#featuregroup-mloda-plugin-in-short">¶</a></h3><p>In mloda, a provider defines access by creating feature groups. Here's an example implementation:</p>
 <div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">FeatureGroupClass</span><span class="p">(</span><span class="n">FeatureGroup</span><span class="p">):</span>
 
     <span class="c1"># Root feature definition</span>
@@ -1174,7 +1180,7 @@ mloda.run_all(
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h3 id="simple-example-implementation-of-the-featuregroup-mloda">Simple example implementation of the FeatureGroup mloda<a class="anchor-link" href="#simple-example-implementation-of-the-featuregroup-mloda">¶</a></h3><p>In the background, mloda loads the plug-ins, which were created before, like this one.</p>
+<h3 id="simple-example-implementation-of-the-featuregroup-mloda">Simple example implementation of the FeatureGroup mloda<a class="anchor-link" href="#simple-example-implementation-of-the-featuregroup-mloda">¶</a></h3><p>In the background, mloda loads the plugins, which were created before, like this one.</p>
 <div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">ReadFileFeature</span><span class="p">(</span><span class="n">FeatureGroup</span><span class="p">):</span>
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">input_data</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">BaseInputData</span><span class="p">]:</span>
@@ -1218,7 +1224,7 @@ mloda.run_all(
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [2]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-2">
@@ -1263,14 +1269,12 @@ mloda.run_all(
         <span class="k">return</span> <span class="n">CsvReader2</span><span class="p">()</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">validate_output_features</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">features</span><span class="p">:</span> <span class="n">FeatureSet</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">validate_output_features</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">features</span><span class="p">:</span> <span class="n">FeatureSet</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">for</span> <span class="n">column_name</span> <span class="ow">in</span> <span class="n">features</span><span class="o">.</span><span class="n">get_all_names</span><span class="p">():</span>
             <span class="k">if</span> <span class="n">column_name</span> <span class="ow">in</span> <span class="n">data</span><span class="o">.</span><span class="n">column_names</span><span class="p">:</span>
                 <span class="n">column</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="n">column_name</span><span class="p">]</span>
                 <span class="k">if</span> <span class="n">column</span><span class="o">.</span><span class="n">null_count</span> <span class="o">==</span> <span class="n">column</span><span class="o">.</span><span class="n">length</span><span class="p">:</span>
-                    <span class="k">return</span> <span class="kc">False</span>
-            <span class="k">return</span> <span class="kc">True</span>
-        <span class="k">return</span> <span class="kc">True</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Column '</span><span class="si">{</span><span class="n">column_name</span><span class="si">}</span><span class="s2">' contains only null values."</span><span class="p">)</span>
 </pre></div>
 <div class="clipboard-copy-txt" id="cell-2"># In the following, we will just adjust a bit the CsvReader to handle a different delimiter.
 
@@ -1304,14 +1308,12 @@ class ReadFileFeature2(ReadFileFeature):
         return CsvReader2()
 
     @classmethod
-    def validate_output_features(cls, data: Any, features: FeatureSet) -&gt; Optional[bool]:
+    def validate_output_features(cls, data: Any, features: FeatureSet) -&gt; None:
         for column_name in features.get_all_names():
             if column_name in data.column_names:
                 column = data[column_name]
                 if column.null_count == column.length:
-                    return False
-            return True
-        return True</div>
+                    raise ValueError(f"Column '{column_name}' contains only null values.")</div>
 </div>
 </div>
 </div>
@@ -1384,7 +1386,7 @@ result = mloda.run_all(
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h3 id="complex-plug-ins">Complex plug-ins<a class="anchor-link" href="#complex-plug-ins">¶</a></h3><p>These can be quite varied:</p>
+<h3 id="complex-plugins">Complex plugins<a class="anchor-link" href="#complex-plugins">¶</a></h3><p>These can be quite varied:</p>
 <ul>
 <li>aggregate features</li>
 <li>entity features</li>
@@ -1480,7 +1482,7 @@ result = mloda.run_all(
 <li>First, formulate an optimized execution plan</li>
 <li>Second, to execute the plan accordingly</li>
 </ul>
-<p>What the user mostly gains is that the process is repeatable and can be run in most environments, as long as the plug-ins are available and the accesses exist (firewalls, credentials).</p>
+<p>What the user mostly gains is that the process is repeatable and can be run in most environments, as long as the plugins are available and the accesses exist (firewalls, credentials).</p>
 <p>The data user could run mloda API in following scenarios:</p>
 <ul>
 <li>POC notebooks</li>
@@ -1488,7 +1490,7 @@ result = mloda.run_all(
 <li>Micro service endpont</li>
 <li>KPI or QA test data ingestion</li>
 </ul>
-<p>With this, the whole ml lifecycle is represented and plug-ins can be reused in a testable and repeatable way along this cycle.</p>
+<p>With this, the whole ml lifecycle is represented and plugins can be reused in a testable and repeatable way along this cycle.</p>
 </div>
 </div>
 </div>
@@ -1502,7 +1504,7 @@ result = mloda.run_all(
 <h2 id="steward-role">Steward Role<a class="anchor-link" href="#steward-role">¶</a></h2><p>Stewards typically operate at various levels within an organization.</p>
 <p>It can be the one who produces the data, the business stakeholder responsible for the service, or, in some cases, may not be explicitly defined.</p>
 <p>In mloda, the steward is the one in control of the governance. However, as to date, this system is not included in this open-source offering, as this platform is reserved for development until the plugin ecosystem has a higher degree of maturity.</p>
-<p>We have the plug-in functionalities to integrate governance and operations systems in place. Two simple examples can be:</p>
+<p>We have the plugin functionalities to integrate governance and operations systems in place. Two simple examples can be:</p>
 <h4 id="using-organization-wide-logging">Using organization wide logging<a class="anchor-link" href="#using-organization-wide-logging">¶</a></h4><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">OtelExtender</span><span class="p">(</span><span class="n">Extender</span><span class="p">):</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">trace</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -1612,6 +1614,7 @@ result = mloda.run_all(
     <script>var base_url = "../../..";</script>
     <script src="../../../js/theme_extra.js"></script>
     <script src="../../../js/theme.js"></script>
+      <script src="../../../search/main.js"></script>
     <script>
         jQuery(function () {
             SphinxRtdTheme.Navigation.enable(true);

@@ -31,7 +31,11 @@
     <div class="wy-side-scroll">
       <div class="wy-side-nav-search">
           <a href="../.." class="icon icon-home"> mloda docs
-        </a>
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
       </div>
 
       <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
@@ -56,8 +60,6 @@
               <p class="caption"><span class="caption-text">Getting Started</span></p>
               <ul class="current">
                   <li class="toctree-l1"><a class="reference internal" href="../installation/">Installation</a>
-                  </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../api-request/">API Request</a>
                   </li>
@@ -98,6 +100,10 @@
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../extender/">Extender</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/base_usage/">mloda demo: How can we make feature engineering shareable?</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
                   </li>
               </ul>
               <p class="caption"><span class="caption-text">In Depth - Basics</span></p>
@@ -159,6 +165,8 @@
                 </li>
     </ul>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../in_depth/data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
                 <li class="toctree-l2"><a class="reference internal" href="../../in_depth/troubleshooting/feature-group-resolution-errors/">Feature Group Resolution Errors</a>
@@ -176,8 +184,6 @@
               <p class="caption"><span class="caption-text">Need Help?</span></p>
               <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../../faq/">FAQ</a>
-                  </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../need-help/">Need Help</a>
                   </li>
               </ul>
       </div>
@@ -285,7 +291,7 @@ class ExampleB(FeatureGroup):
     def compute_framework_rule(cls):
             return {PyArrowTable}
     def input_features(self, option, feature_name):
-        return {Feature(name=feature_name.name.split(&quot;_&quot;)[1], 
+        return {Feature(name=str(feature_name).split(&quot;_&quot;)[1], 
                 compute_framework=&quot;PandasDataFrame&quot;)}
 
     @classmethod
@@ -321,7 +327,7 @@ result[0]
 <tr>
 <td><strong>PandasDataFrame</strong></td>
 <td>pandas DataFrame</td>
-<td>Rich data transformation, familiar mloda</td>
+<td>Rich data transformation, familiar API</td>
 <td>Development, data exploration, smaller datasets</td>
 <td>pandas, numpy</td>
 </tr>
@@ -421,7 +427,7 @@ connection = duckdb.connect()
 
 # Set up data access with connection
 data_access_collection = DataAccessCollection(
-    initialized_connection_object={connection}
+    initialized_connection_objects={connection}
 )
 
 feature = Feature(&quot;id&quot;, options={&quot;compute_framework&quot;: &quot;DuckDBFramework&quot;})
@@ -536,6 +542,7 @@ result[0]  # Returns pyspark.sql.DataFrame
     <script>var base_url = "../..";</script>
     <script src="../../js/theme_extra.js"></script>
     <script src="../../js/theme.js"></script>
+      <script src="../../search/main.js"></script>
     <script>
         jQuery(function () {
             SphinxRtdTheme.Navigation.enable(true);

@@ -31,7 +31,11 @@
     <div class="wy-side-scroll">
       <div class="wy-side-nav-search">
           <a href="../.." class="icon icon-home"> mloda docs
-        </a>
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
       </div>
 
       <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
@@ -57,8 +61,6 @@
               <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/installation/">Installation</a>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
-                  </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/api-request/">API Request</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/feature-groups/">Feature Groups</a>
@@ -66,6 +68,10 @@
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/compute-frameworks/">Compute Frameworks</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/extender/">Extender</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/base_usage/">mloda demo: How can we make feature engineering shareable?</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
                   </li>
               </ul>
               <p class="caption"><span class="caption-text">In Depth - Basics</span></p>
@@ -143,6 +149,8 @@
                 </li>
     </ul>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
                 <li class="toctree-l2"><a class="reference internal" href="../troubleshooting/feature-group-resolution-errors/">Feature Group Resolution Errors</a>
@@ -160,8 +168,6 @@
               <p class="caption"><span class="caption-text">Need Help?</span></p>
               <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../../faq/">FAQ</a>
-                  </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../need-help/">Need Help</a>
                   </li>
               </ul>
       </div>
@@ -200,12 +206,12 @@
 <h4 id="filtertype">FilterType</h4>
 <p>This class is supposed to created similarity in the framework and by framework users.</p>
 <pre><code class="language-python">class FilterType(Enum):
-    min = &quot;min&quot;
-    max = &quot;max&quot;
-    equal = &quot;equal&quot;
-    range = &quot;range&quot;
-    regex = &quot;regex&quot;
-    categorical_inclusion = &quot;categorical_inclusion&quot;
+    MIN = &quot;min&quot;
+    MAX = &quot;max&quot;
+    EQUAL = &quot;equal&quot;
+    RANGE = &quot;range&quot;
+    REGEX = &quot;regex&quot;
+    CATEGORICAL_INCLUSION = &quot;categorical_inclusion&quot;
 </code></pre>
 <h4 id="globalfilter">GlobalFilter</h4>
 <p>The GlobalFilter provides methods to add filters to the collection. The prefered way to use the GlobalFilter is by using the following functions.</p>
@@ -215,7 +221,7 @@
 <li>filter_type</li>
 <li>parameter</li>
 </ul>
-<p><strong>add_time_and_time_travel_filters</strong>: Adds time and time travel filtering to the GlobalFiltering. This is a convenience mloda. Due to the complexity of time in data/ml/ai projects, this function should be used.</p>
+<p><strong>add_time_and_time_travel_filters</strong>: Adds time and time travel filtering to the GlobalFiltering. This is a convenience method. Due to the complexity of time in data/ml/ai projects, this function should be used.</p>
 <p>This method is useful for <strong>filtering data based on time ranges</strong> (event) and <strong>validity periods</strong> (valid).</p>
 <p><strong>Event Time Filter</strong>: For historical data (e.g., checking if a customer had a valid contract at the event time), only the event time filter is needed.</p>
 <p><strong>Time Travel Filter</strong>: If prior actions (e.g., payments made before the event) are relevant, the time travel filter is required.</p>
@@ -228,7 +234,7 @@
 <li>valid_to (Optional[datetime]): End of the validity period (optional, with timezone).</li>
 <li>max_exclusive (bool): If True, the upper bounds (event_to, valid_to) are treated as exclusive.</li>
 <li>event_time_column: The column name containing event timestamps. Default is "reference_time".</li>
-<li>validity_time_column: The column name containing validity timestamps. Default is "time_travel_filter".</li>
+<li>validity_time_column: The column name containing validity timestamps. Default is "time_travel".</li>
 </ul>
 <p>The <strong>single_filters</strong> created will be converted to UTC as ISO 8601 formatted strings to ensure consistency
     across time zones and avoid ambiguity when comparing or processing time-based data.</p>
@@ -258,7 +264,7 @@ global_filter.add_time_and_time_travel_filters(event_from, event_to, valid_from,
 global_filter.filters
 </code></pre>
 <p>Result</p>
-<pre><code class="language-python">{&lt;SingleFilter(feature_name=time_travel_filter, type=range, parameters=(('max', '2022-12-31T00:00:00+00:00'), ('max_exclusive', True), ('min', '2022-01-01T00:00:00+00:00')))&gt;,
+<pre><code class="language-python">{&lt;SingleFilter(feature_name=time_travel, type=range, parameters=(('max', '2022-12-31T00:00:00+00:00'), ('max_exclusive', True), ('min', '2022-01-01T00:00:00+00:00')))&gt;,
  &lt;SingleFilter(feature_name=reference_time, type=range, parameters=(('max', '2023-12-31T00:00:00+00:00'), ('max_exclusive', True), ('min', '2023-01-01T00:00:00+00:00')))&gt;}
 </code></pre>
 <h4 id="example-access-to-filters-in-the-feature-group">Example access to Filters in the Feature Group</h4>
@@ -297,7 +303,7 @@ class ExampleOrderFilter(FeatureGroup):
         }
         return filtered_data
     @classmethod
-    def compute_framework_rule(cls) -&gt; Union[bool, Set[Type[ComputeFramework]]]:
+    def compute_framework_rule(cls) -&gt; set[type[ComputeFramework]]:
         return {PyArrowTable}
 
 result = mloda.run_all(
@@ -351,6 +357,7 @@ result[0]
     <script>var base_url = "../..";</script>
     <script src="../../js/theme_extra.js"></script>
     <script src="../../js/theme.js"></script>
+      <script src="../../search/main.js"></script>
     <script>
         jQuery(function () {
             SphinxRtdTheme.Navigation.enable(true);

@@ -31,7 +31,11 @@
     <div class="wy-side-scroll">
       <div class="wy-side-nav-search">
           <a href="../.." class="icon icon-home"> mloda docs
-        </a>
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
       </div>
 
       <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
@@ -57,8 +61,6 @@
               <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/installation/">Installation</a>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
-                  </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/api-request/">API Request</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/feature-groups/">Feature Groups</a>
@@ -66,6 +68,10 @@
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/compute-frameworks/">Compute Frameworks</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/extender/">Extender</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/base_usage/">mloda demo: How can we make feature engineering shareable?</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
                   </li>
               </ul>
               <p class="caption"><span class="caption-text">In Depth - Basics</span></p>
@@ -129,6 +135,8 @@
                 </li>
     </ul>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
                 <li class="toctree-l2"><a class="reference internal" href="../troubleshooting/feature-group-resolution-errors/">Feature Group Resolution Errors</a>
@@ -146,8 +154,6 @@
               <p class="caption"><span class="caption-text">Need Help?</span></p>
               <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../../faq/">FAQ</a>
-                  </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../need-help/">Need Help</a>
                   </li>
               </ul>
       </div>
@@ -176,9 +182,9 @@
               
                 <h2 id="streaming-with-stream_all">Streaming with <code>stream_all</code></h2>
 <p><code>stream_all</code> lets you consume results incrementally instead of waiting for every feature group to finish.  Each time a feature group completes, its result is yielded immediately so you can begin processing it while the remaining groups are still computing.  It accepts the same parameters as <code>run_all</code> (see <a href="../mloda-api/">mloda API</a>).</p>
-<pre><code class="language-python3">from mloda.user import stream_all
+<pre><code class="language-python3">from mloda.user import mloda
 
-for result in stream_all([&quot;FeatureA&quot;, &quot;FeatureB&quot;, &quot;FeatureC&quot;]):
+for result in mloda.stream_all([&quot;FeatureA&quot;, &quot;FeatureB&quot;, &quot;FeatureC&quot;]):
     print(result)
 </code></pre>
 <h2 id="comparison-with-run_all">Comparison with <code>run_all</code></h2>
@@ -189,20 +195,20 @@ results = mloda.run_all([&quot;FeatureA&quot;, &quot;FeatureB&quot;, &quot;Featu
 # results is a list — all groups are already complete
 </code></pre>
 <p><code>stream_all</code> yields each result as soon as its group is done:</p>
-<pre><code class="language-python3">from mloda.user import stream_all
+<pre><code class="language-python3">from mloda.user import mloda
 
-for result in stream_all([&quot;FeatureA&quot;, &quot;FeatureB&quot;, &quot;FeatureC&quot;]):
+for result in mloda.stream_all([&quot;FeatureA&quot;, &quot;FeatureB&quot;, &quot;FeatureC&quot;]):
     # each result arrives as its feature group finishes
     process(result)
 </code></pre>
-<p>Both produce the same data — <code>list(stream_all(...))</code> is equivalent to <code>run_all(...)</code>.</p>
+<p>Both produce the same data: <code>list(mloda.stream_all(...))</code> is equivalent to <code>mloda.run_all(...)</code>.</p>
 <h2 id="what-streaming-means-here">What "streaming" means here</h2>
 <p>Streaming operates at <strong>feature-group granularity</strong>.  Each yielded value is a <strong>complete</strong> result table for one feature group (e.g. a <code>pa.Table</code>).  There is no partial or incremental data within a single group; you always receive the full result.</p>
 <h2 id="what-is-not-supported">What is not supported</h2>
 <ul>
-<li><strong>Row-by-row streaming</strong> — individual rows are not yielded as they are computed.</li>
-<li><strong>Partial results</strong> — you cannot observe a feature group's output before it has fully completed.</li>
-<li><strong>Chunked input</strong> — a single feature group's computation is not split into smaller streaming chunks.</li>
+<li><strong>Row-by-row streaming</strong> -- individual rows are not yielded as they are computed.</li>
+<li><strong>Partial results</strong> -- you cannot observe a feature group's output before it has fully completed.</li>
+<li><strong>Chunked input</strong> -- a single feature group's computation is not split into smaller streaming chunks.</li>
 </ul>
 <h2 id="when-to-use-stream_all">When to use <code>stream_all</code></h2>
 <p><code>stream_all</code> is most useful when you request <strong>many independent feature groups</strong> and want to start processing early results while the rest are still running.  Typical scenarios:</p>
@@ -213,9 +219,9 @@ for result in stream_all([&quot;FeatureA&quot;, &quot;FeatureB&quot;, &quot;Feat
 </ul>
 <p>If you only request a single feature group, <code>stream_all</code> behaves like <code>run_all</code> since there is only one result to yield.</p>
 <h2 id="continuous-data-processing">Continuous data processing</h2>
-<p>mloda processes data in <strong>blocks</strong> — complete datasets that are computed and returned at once. Continuous processing means wrapping an outer loop around mloda's APIs, feeding micro-batches from an external source (Kafka consumer, WebSocket, file watcher, generator) into mloda one block at a time.</p>
+<p>mloda processes data in <strong>blocks</strong>, complete datasets that are computed and returned at once. Continuous processing means wrapping an outer loop around mloda's APIs, feeding micro-batches from an external source (Kafka consumer, WebSocket, file watcher, generator) into mloda one block at a time.</p>
 <p>All patterns below build on the <a href="../mloda-api/#two-phase-execution-prepare-run">two-phase execution API (<code>prepare()</code> / <code>run()</code>)</a>.</p>
-<h2 id="pattern-1-micro-batch-loop-with-prepare-run">Pattern 1 — Micro-batch loop with <code>prepare()</code> / <code>run()</code></h2>
+<h2 id="pattern-1-micro-batch-loop-with-prepare-run">Pattern 1: Micro-batch loop with <code>prepare()</code> / <code>run()</code></h2>
 <p>The recommended pattern for continuous processing. Call <code>prepare()</code> once to build the execution plan, then loop <code>run()</code> for each micro-batch. The plan is reused across calls, so only the first call pays the planning cost.</p>
 <pre><code class="language-python3">from mloda.user import mloda
 
@@ -236,8 +242,8 @@ for batch in data_source():
     for result in results:
         consume(result)
 </code></pre>
-<p>This works with any iterable source — swap <code>data_source()</code> for a Kafka consumer, an async WebSocket buffer, or a directory watcher.</p>
-<h2 id="pattern-2-micro-batch-loop-with-prepare-stream_run">Pattern 2 — Micro-batch loop with <code>prepare()</code> / <code>stream_run()</code></h2>
+<p>This works with any iterable source.</p>
+<h2 id="pattern-2-micro-batch-loop-with-prepare-stream_run">Pattern 2: Micro-batch loop with <code>prepare()</code> / <code>stream_run()</code></h2>
 <p>Combines plan reuse with per-group streaming. Call <code>prepare()</code> once, then <code>stream_run()</code> for each micro-batch. Each feature group's result is yielded as soon as it completes, while the execution plan is reused across calls.</p>
 <pre><code class="language-python3">from mloda.user import mloda
 
@@ -264,11 +270,11 @@ for batch in sensor_source():
         dashboard.update_panel(result)
 </code></pre>
 <p><code>stream_run()</code> has the same parameters as <code>run()</code>. <code>list(session.stream_run(...))</code> produces the same results as <code>session.run(...)</code>.</p>
-<h2 id="pattern-3-one-shot-streaming-with-stream_all">Pattern 3 — One-shot streaming with <code>stream_all()</code></h2>
-<p>When you don't need plan reuse and want a single-call streaming API, use <code>stream_all()</code>. It internally calls <code>prepare()</code> + <code>stream_run()</code>.</p>
-<pre><code class="language-python3">from mloda.user import stream_all
+<h2 id="pattern-3-one-shot-streaming-with-stream_all">Pattern 3: One-shot streaming with <code>stream_all()</code></h2>
+<p>When you don't need plan reuse and want a single-call streaming API, use <code>mloda.stream_all()</code>. It internally calls <code>prepare()</code> + <code>stream_run()</code>.</p>
+<pre><code class="language-python3">from mloda.user import mloda
 
-for result in stream_all([&quot;FeatureA&quot;, &quot;FeatureB&quot;, &quot;FeatureC&quot;], api_data=batch):
+for result in mloda.stream_all([&quot;FeatureA&quot;, &quot;FeatureB&quot;, &quot;FeatureC&quot;], api_data=batch):
     process(result)
 </code></pre>
 <p><code>stream_all()</code> rebuilds the execution plan on every call. For repeated calls, prefer Pattern 2.</p>
@@ -287,31 +293,19 @@ for result in stream_all([&quot;FeatureA&quot;, &quot;FeatureB&quot;, &quot;Feat
 <td><strong>Plan reuse</strong></td>
 <td>Yes</td>
 <td>Yes</td>
-<td>No — rebuilt every call</td>
-</tr>
-<tr>
-<td><strong>Per-batch overhead</strong></td>
-<td>Low</td>
-<td>Low</td>
-<td>Higher (planning repeated)</td>
+<td>No</td>
 </tr>
 <tr>
 <td><strong>Result delivery</strong></td>
-<td>All groups finish, then list returned</td>
-<td>Each group yielded as it completes</td>
-<td>Each group yielded as it completes</td>
+<td>All at once</td>
+<td>Per feature group</td>
+<td>Per feature group</td>
 </tr>
 <tr>
 <td><strong>Best for</strong></td>
-<td>High-throughput pipelines, single feature group</td>
-<td>Multi-feature dashboards with plan reuse</td>
+<td>High-throughput pipelines</td>
+<td>Multi-feature dashboards</td>
 <td>Quick one-shot streaming</td>
-</tr>
-<tr>
-<td><strong>Memory</strong></td>
-<td>All results in memory at once per batch</td>
-<td>Results can be released incrementally</td>
-<td>Results can be released incrementally</td>
 </tr>
 </tbody>
 </table>
@@ -363,7 +357,7 @@ for result in stream_all([&quot;FeatureA&quot;, &quot;FeatureB&quot;, &quot;Feat
 </tr>
 </tbody>
 </table>
-<p>mloda is not a replacement for dedicated streaming frameworks. It is designed for scenarios where you want mloda's feature composition and dependency resolution applied to data that arrives continuously in small batches — for example, training a model on batch data and then reusing the same feature definitions for realtime inference, or powering live dashboards that update as new micro-batches arrive.</p>
+<p>mloda is not a replacement for dedicated streaming frameworks. It is designed for scenarios where you want mloda's feature composition and dependency resolution applied to data that arrives continuously in small batches.</p>
               
             </div>
           </div><footer>
@@ -403,6 +397,7 @@ for result in stream_all([&quot;FeatureA&quot;, &quot;FeatureB&quot;, &quot;Feat
     <script>var base_url = "../..";</script>
     <script src="../../js/theme_extra.js"></script>
     <script src="../../js/theme.js"></script>
+      <script src="../../search/main.js"></script>
     <script>
         jQuery(function () {
             SphinxRtdTheme.Navigation.enable(true);

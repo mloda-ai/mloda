@@ -31,7 +31,11 @@
     <div class="wy-side-scroll">
       <div class="wy-side-nav-search">
           <a href=".." class="icon icon-home"> mloda docs
-        </a>
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
       </div>
 
       <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
@@ -57,8 +61,6 @@
               <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../chapter1/installation/">Installation</a>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
-                  </li>
                   <li class="toctree-l1"><a class="reference internal" href="../chapter1/api-request/">API Request</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../chapter1/feature-groups/">Feature Groups</a>
@@ -66,6 +68,10 @@
                   <li class="toctree-l1"><a class="reference internal" href="../chapter1/compute-frameworks/">Compute Frameworks</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../chapter1/extender/">Extender</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../examples/base_usage/">mloda demo: How can we make feature engineering shareable?</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
                   </li>
               </ul>
               <p class="caption"><span class="caption-text">In Depth - Basics</span></p>
@@ -127,6 +133,8 @@
                 </li>
     </ul>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../in_depth/data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
                 <li class="toctree-l2"><a class="reference internal" href="../in_depth/troubleshooting/feature-group-resolution-errors/">Feature Group Resolution Errors</a>
@@ -183,7 +191,7 @@
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#how-does-mloda-ensure-data-governance-and-quality-control">How does mloda ensure data governance and quality control?</a>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#how-do-plug-ins-work-in-mloda-and-can-i-develop-my-own-plug-ins">How do plug-ins work in mloda, and can I develop my own plug-ins?</a>
+    <li class="toctree-l3"><a class="reference internal" href="#how-do-plugins-work-in-mloda-and-can-i-develop-my-own-plugins">How do plugins work in mloda, and can I develop my own plugins?</a>
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#how-do-i-join-a-feature-group-with-itself-self-join">How do I join a feature group with itself (self-join)?</a>
     </li>
@@ -198,8 +206,6 @@
     <li class="toctree-l2"><a class="reference internal" href="#if-you-have-other-questions-not-answered">If you have other questions not answered</a>
     </li>
     </ul>
-                  </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../need-help/">Need Help</a>
                   </li>
               </ul>
       </div>
@@ -245,12 +251,12 @@ result = mloda.run_all(features=features, compute_frameworks=[&quot;PandasDataFr
 <p>Yes. Plugins are small, template-like structures that are easy for AI to generate. The declarative nature of feature groups makes them ideal for AI-assisted development.</p>
 <h2 id="getting-started">Getting Started</h2>
 <h4 id="how-do-i-install-mloda-how-do-i-get-started-with-mloda">How do I install mloda? How do I get started with mloda?</h4>
-<p>Installation is straightforward via pip or by cloning the repository. <a href="https://mloda-ai.github.io/mloda/chapter1/installation/">Installation guide and step-by-step guide</a></p>
+<p>Installation is straightforward via pip or by cloning the repository. <a href="../chapter1/installation/">Installation guide and step-by-step guide</a></p>
 <h4 id="what-are-the-prerequisites-for-using-mloda">What are the prerequisites for using mloda?</h4>
 <p>You'll need Python and a bit of time to understand the framework. mloda introduces a different way of thinking compared to standard approaches, but it builds on standard practices while bridging multiple disciplines—data engineering, software engineering, data science, machine learning, and business analysis. </p>
 <p>You'll learn a lot along the way!</p>
 <h4 id="how-do-i-create-my-first-feature-group-using-mloda">How do I create my first feature group using mloda?</h4>
-<p>Feature Groups define dependencies and calculations. To create your first Feature Group, check out this <a href="https://mloda-ai.github.io/mloda/chapter1/feature-groups/">basic example here</a>. For more advanced topics, see our <a href="https://mloda-ai.github.io/mloda/in_depth/feature-chain-parser/">in-depth documentation on feature groups</a>.</p>
+<p>Feature Groups define dependencies and calculations. To create your first Feature Group, check out this <a href="../chapter1/feature-groups/">basic example here</a>. For more advanced topics, see our <a href="../in_depth/feature-chain-parser/">in-depth documentation on feature groups</a>.</p>
 <h2 id="features-and-functionality">Features and Functionality</h2>
 <h4 id="what-are-feature-groups-in-mloda-and-why-are-they-important">What are Feature Groups in mloda and why are they important?</h4>
 <p>Feature Groups are inspired by the concept of feature stores, where they represent logical groupings of reusable features. With mloda, Feature Groups define how features are calculated rather than stored, enabling hierarchical relationships between features that are resolved automatically—simplifying both creation and use.</p>
@@ -258,14 +264,14 @@ result = mloda.run_all(features=features, compute_frameworks=[&quot;PandasDataFr
 <p>mloda automatically manages feature dependencies, ensuring transformations are handled efficiently without manual intervention.</p>
 <h4 id="what-is-the-role-of-the-core-engine-in-mloda">What is the role of the Core Engine in mloda?</h4>
 <p>The Core Engine orchestrates dependencies between Feature Groups, compute frameworks, and extenders. Dependencies can include data collections, links, joins, filters, or hierarchical feature relations. </p>
-<p>The Core Engine creates an execution plan based on these dependencies and then runs the plan to execute feature calculations. This approach has the side effect that users describe the solution rather than the programm the solution itself. It is in that regard closer to databases paradigm than database paradigm.</p>
+<p>The Core Engine creates an execution plan based on these dependencies and then runs the plan to execute feature calculations. This approach has the side effect that users describe the solution rather than program it. In that regard it is closer to a declarative paradigm (like SQL) than an imperative one.</p>
 <h4 id="how-does-mloda-ensure-data-governance-and-quality-control">How does mloda ensure data governance and quality control?</h4>
 <p>mloda uses multiple mechanisms for governance and quality control. The extender feature logs relevant technical details, and users can incorporate data quality checks directly into feature definitions. Unit and integration testing are also simple to set up, enhancing reliability.</p>
-<h4 id="how-do-plug-ins-work-in-mloda-and-can-i-develop-my-own-plug-ins">How do plug-ins work in mloda, and can I develop my own plug-ins?</h4>
-<p>mloda automatically selects the appropriate plug-ins for a given feature. </p>
-<p>Users can develop custom plug-ins to extend the platform's capabilities, and contributions are always welcome—feedback and design critiques are also greatly appreciated!</p>
+<h4 id="how-do-plugins-work-in-mloda-and-can-i-develop-my-own-plugins">How do plugins work in mloda, and can I develop my own plugins?</h4>
+<p>mloda automatically selects the appropriate plugins for a given feature. </p>
+<p>Users can develop custom plugins to extend the platform's capabilities, and contributions are always welcome. Feedback and design critiques are also greatly appreciated!</p>
 <h4 id="how-do-i-join-a-feature-group-with-itself-self-join">How do I join a feature group with itself (self-join)?</h4>
-<p>When you need to use the same feature group on both sides of a join, you'll need to use pointer fields to distinguish between the left and right instances. See the <a href="../in_depth/join_data/#self-joins-with-pointer-fields">Join data guide - Self-Joins section</a> for details and examples.</p>
+<p>When you need to use the same feature group on both sides of a join, you'll need to use discriminators to distinguish between the left and right instances. See the <a href="../in_depth/join_data/#same-class-joins-with-discriminators">Join data guide - Same-Class Joins section</a> for details and examples.</p>
 <h2 id="technical-and-integration">Technical and Integration</h2>
 <h4 id="how-do-i-integrate-mloda-into-my-existing-data-infrastructure">How do I integrate mloda into my existing data infrastructure?</h4>
 <p>mloda is a straightforward Python module. You can install it and run it within your existing projects, or you can create a microservice that exposes the mloda API for broader integration.</p>
@@ -276,7 +282,6 @@ result = mloda.run_all(features=features, compute_frameworks=[&quot;PandasDataFr
           </div><footer>
     <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
         <a href="../license/" class="btn btn-neutral float-left" title="License - Apache 2.0"><span class="icon icon-circle-arrow-left"></span> Previous</a>
-        <a href="../need-help/" class="btn btn-neutral float-right" title="Need Help">Next <span class="icon icon-circle-arrow-right"></span></a>
     </div>
 
   <hr/>
@@ -302,14 +307,13 @@ result = mloda.run_all(features=features, compute_frameworks=[&quot;PandasDataFr
       <span><a href="../license/" style="color: #fcfcfc">&laquo; Previous</a></span>
     
     
-      <span><a href="../need-help/" style="color: #fcfcfc">Next &raquo;</a></span>
-    
   </span>
 </div>
     <script src="../js/jquery-3.6.0.min.js"></script>
     <script>var base_url = "..";</script>
     <script src="../js/theme_extra.js"></script>
     <script src="../js/theme.js"></script>
+      <script src="../search/main.js"></script>
     <script>
         jQuery(function () {
             SphinxRtdTheme.Navigation.enable(true);

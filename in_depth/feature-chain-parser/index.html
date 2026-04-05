@@ -31,7 +31,11 @@
     <div class="wy-side-scroll">
       <div class="wy-side-nav-search">
           <a href="../.." class="icon icon-home"> mloda docs
-        </a>
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
       </div>
 
       <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
@@ -57,8 +61,6 @@
               <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/installation/">Installation</a>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
-                  </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/api-request/">API Request</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/feature-groups/">Feature Groups</a>
@@ -66,6 +68,10 @@
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/compute-frameworks/">Compute Frameworks</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/extender/">Extender</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/base_usage/">mloda demo: How can we make feature engineering shareable?</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
                   </li>
               </ul>
               <p class="caption"><span class="caption-text">In Depth - Basics</span></p>
@@ -183,6 +189,8 @@
                 </li>
     </ul>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
                 <li class="toctree-l2"><a class="reference internal" href="../troubleshooting/feature-group-resolution-errors/">Feature Group Resolution Errors</a>
@@ -200,8 +208,6 @@
               <p class="caption"><span class="caption-text">Need Help?</span></p>
               <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../../faq/">FAQ</a>
-                  </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../need-help/">Need Help</a>
                   </li>
               </ul>
       </div>
@@ -338,7 +344,7 @@ feature = Feature(
 <p>The <code>FeatureChainParserMixin</code> provides default implementations for common feature chain parsing operations. Feature groups that use feature chaining should inherit from this mixin to reduce boilerplate code.</p>
 <h3 id="basic-usage">Basic Usage</h3>
 <pre><code class="language-python">from mloda.provider import FeatureGroup, FeatureChainParserMixin
-from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys
 
 class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     PREFIX_PATTERN = r&quot;.*__my_operation$&quot;
@@ -424,7 +430,7 @@ class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 <pre><code class="language-python">class TimeWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -&gt; Optional[Set[Feature]]:
         # Try string-based parsing first
-        _, in_feature = FeatureChainParser.parse_feature_name(feature_name.name, [self.PREFIX_PATTERN])
+        _, in_feature = FeatureChainParser.parse_feature_name(str(feature_name), [self.PREFIX_PATTERN])
         if in_feature is not None:
             time_filter_feature = Feature(self.get_reference_time_column(options))
             return {Feature(in_feature), time_filter_feature}
@@ -456,12 +462,41 @@ class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             return False
         return base_match
 </code></pre>
+<h4 id="4-operation-resolution-with-_resolve_operation">4. Operation Resolution with <code>_resolve_operation()</code></h4>
+<p>Use this helper to extract the operation type from either the feature name pattern or a config key, without calling <code>FeatureChainParser</code> directly:</p>
+<pre><code class="language-python">class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+    AGGREGATION_TYPE = &quot;aggregation_type&quot;
+
+    @classmethod
+    def calculate_feature(cls, data, features):
+        for feature in features.features:
+            # Two-arg form: pass a Feature and the config key
+            agg_type = cls._resolve_operation(feature, cls.AGGREGATION_TYPE)
+            # ... use agg_type
+</code></pre>
+<p>The three-arg form <code>cls._resolve_operation(feature_name, options, config_key)</code> is also supported for contexts where the name and options are already separate (e.g., <code>match_feature_group_criteria</code>).</p>
+<h4 id="5-type-validation-with-type_validator">5. Type Validation with <code>type_validator</code></h4>
+<p>Add a <code>DefaultOptionKeys.type_validator</code> callable to a PROPERTY_MAPPING entry to validate the shape or composite type of the raw option value. The mixin calls the validator after basic matching succeeds. If it returns a falsy value, <code>match_feature_group_criteria</code> returns False.</p>
+<p>Use <code>type_validator</code> when you need to validate the whole value (e.g., must be a list of strings). Use <code>validation_function</code> with <code>strict_validation=True</code> when you need to validate individual parsed elements (after list unpacking).</p>
+<pre><code class="language-python">def _is_list_of_strings(value):
+    return isinstance(value, list) and all(isinstance(item, str) for item in value)
+
+class GroupAggregation(FeatureChainParserMixin, FeatureGroup):
+    PROPERTY_MAPPING = {
+        &quot;partition_by&quot;: {
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: False,
+            DefaultOptionKeys.type_validator: _is_list_of_strings,
+        },
+    }
+</code></pre>
+<p>The validator is only called when the option is present (not None). Missing options are handled by the base PROPERTY_MAPPING validation. Validators must be pure functions with no side effects, since they may be called multiple times during feature group resolution. Return values use truthy/falsy semantics. If the validator raises a TypeError, ValueError, or AttributeError, the exception is caught and the value is treated as invalid (match returns False).</p>
 <h2 id="modern-implementation-in-feature-groups">Modern Implementation in Feature Groups</h2>
 <h3 id="1-define-property_mapping-configuration">1. Define PROPERTY_MAPPING Configuration</h3>
 <p>The modern approach uses <code>PROPERTY_MAPPING</code> to define parameter validation and classification:</p>
 <pre><code class="language-python">from mloda.provider import FeatureGroup
 from mloda.user import FeatureName
-from mloda_plugins.feature_group.experimental.default_options_key import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys
 
 class MyFeatureGroup(FeatureGroup):
     PREFIX_PATTERN = r&quot;__([a-zA-Z_]+)_operation$&quot;
@@ -522,7 +557,7 @@ def match_feature_group_criteria(cls, feature_name, options, data_access_collect
         try:
             in_features = feature.options.get_in_features()
             in_feature = next(iter(in_features))
-            in_feature_name = in_feature.get_name()
+            in_feature_name = in_feature.name
 
             # Extract parameters from options
             operation_type = feature.options.get(&quot;operation_type&quot;)
@@ -590,7 +625,7 @@ class MultiColumnProducer(FeatureGroup):
         result = encoder.transform(data)  # Returns 2D numpy array (n_samples, n_features)
 
         # Automatically apply naming convention
-        feature_name = features.get_name_of_one_feature().name
+        feature_name = str(features.get_name_of_one_feature())
         named_columns = cls.apply_naming_convention(result, feature_name)
         # Returns: {&quot;category__onehot_encoded~0&quot;: data, &quot;~1&quot;: data, &quot;~2&quot;: data}
 
@@ -615,7 +650,7 @@ class MultiColumnProducer(FeatureGroup):
         # Process all discovered columns
         result = sum(data[col] for col in columns)
 
-        feature_name = features.get_name_of_one_feature().name
+        feature_name = str(features.get_name_of_one_feature())
         return {feature_name: result}
 </code></pre>
 <h3 id="manual-column-access-legacy">Manual Column Access (Legacy)</h3>
@@ -673,6 +708,7 @@ another_column = &quot;category__onehot_encoded~1&quot;  # Access second column
     <script>var base_url = "../..";</script>
     <script src="../../js/theme_extra.js"></script>
     <script src="../../js/theme.js"></script>
+      <script src="../../search/main.js"></script>
     <script>
         jQuery(function () {
             SphinxRtdTheme.Navigation.enable(true);

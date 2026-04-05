@@ -31,7 +31,11 @@
     <div class="wy-side-scroll">
       <div class="wy-side-nav-search">
           <a href="../.." class="icon icon-home"> mloda docs
-        </a>
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
       </div>
 
       <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
@@ -57,8 +61,6 @@
               <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/installation/">Installation</a>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
-                  </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/api-request/">API Request</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/feature-groups/">Feature Groups</a>
@@ -66,6 +68,10 @@
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/compute-frameworks/">Compute Frameworks</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../chapter1/extender/">Extender</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/base_usage/">mloda demo: How can we make feature engineering shareable?</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
                   </li>
               </ul>
               <p class="caption"><span class="caption-text">In Depth - Basics</span></p>
@@ -149,6 +155,8 @@
                 </li>
     </ul>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
                 <li class="toctree-l2"><a class="reference internal" href="../troubleshooting/feature-group-resolution-errors/">Feature Group Resolution Errors</a>
@@ -166,8 +174,6 @@
               <p class="caption"><span class="caption-text">Need Help?</span></p>
               <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../../faq/">FAQ</a>
-                  </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../../need-help/">Need Help</a>
                   </li>
               </ul>
       </div>
@@ -262,8 +268,11 @@ session = mloda.prepare(
 result_1 = session.run(api_data={&quot;MyKey&quot;: {&quot;col&quot;: [1, 2]}})
 result_2 = session.run(api_data={&quot;MyKey&quot;: {&quot;col&quot;: [3, 4]}})
 </code></pre>
-<p><code>run_all()</code> is equivalent to <code>prepare()</code> followed by a single <code>run()</code>.</p>
-<p>For per-group streaming with plan reuse, call <code>session.stream_run()</code> instead of <code>session.run()</code> — it yields each feature group's result as it completes. See <a href="../streaming/">Streaming</a> for details.</p>
+<p><code>run()</code> also accepts an <code>artifacts</code> parameter for switching between artifact
+save and load modes across calls. See <a href="../artifacts/#run-time-artifact-switching-with-preparerun">Artifacts</a> for details.</p>
+<p><code>run_all()</code> is equivalent to <code>prepare()</code> followed by a single <code>run()</code>.
+<code>stream_all()</code> is equivalent to <code>prepare()</code> followed by a single <code>stream_run()</code>.</p>
+<p>For per-group streaming with plan reuse, call <code>session.stream_run()</code> instead of <code>session.run()</code> -- it yields each feature group's result as it completes. See <a href="../streaming/">Streaming</a> for details.</p>
 <h4 id="plugin-discovery">Plugin Discovery</h4>
 <p>mloda provides functions to discover and inspect available plugins. Import them from <code>mloda.steward</code>:</p>
 <pre><code class="language-python">from mloda.steward import (
@@ -357,7 +366,7 @@ extenders = get_extender_docs(wraps=&quot;formula&quot;)
             </div>
           </div><footer>
     <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
-        <a href="../../chapter1/extender/" class="btn btn-neutral float-left" title="Extender"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../../examples/sklearn_integration_basic/" class="btn btn-neutral float-left" title="mloda + scikit-learn Integration: Basic Example"><span class="icon icon-circle-arrow-left"></span> Previous</a>
         <a href="../streaming/" class="btn btn-neutral float-right" title="Streaming">Next <span class="icon icon-circle-arrow-right"></span></a>
     </div>
 
@@ -381,7 +390,7 @@ extenders = get_extender_docs(wraps=&quot;formula&quot;)
   <span class="rst-current-version" data-toggle="rst-current-version">
     
     
-      <span><a href="../../chapter1/extender/" style="color: #fcfcfc">&laquo; Previous</a></span>
+      <span><a href="../../examples/sklearn_integration_basic/" style="color: #fcfcfc">&laquo; Previous</a></span>
     
     
       <span><a href="../streaming/" style="color: #fcfcfc">Next &raquo;</a></span>
@@ -392,6 +401,7 @@ extenders = get_extender_docs(wraps=&quot;formula&quot;)
     <script>var base_url = "../..";</script>
     <script src="../../js/theme_extra.js"></script>
     <script src="../../js/theme.js"></script>
+      <script src="../../search/main.js"></script>
     <script>
         jQuery(function () {
             SphinxRtdTheme.Navigation.enable(true);

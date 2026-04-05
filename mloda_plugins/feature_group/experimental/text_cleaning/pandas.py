@@ -56,9 +56,11 @@ class PandasTextCleaningFeatureGroup(TextCleaningFeatureGroup):
         Raises:
             ValueError: If a feature does not exist in the DataFrame
         """
-        for feature_name in feature_names:
-            if feature_name not in data.columns:
-                raise ValueError(f"Feature '{feature_name}' not found in the data")
+        missing_features = [f for f in feature_names if f not in data.columns]
+        if missing_features:
+            raise ValueError(
+                f"Source features not found in data: {missing_features}. Available columns: {list(data.columns)}"
+            )
 
     @classmethod
     def _get_source_text(cls, data: pd.DataFrame, feature_name: str) -> pd.Series:

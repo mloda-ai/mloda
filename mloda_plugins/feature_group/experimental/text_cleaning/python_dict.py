@@ -43,10 +43,15 @@ class PythonDictTextCleaningFeatureGroup(TextCleaningFeatureGroup):
         if not data:
             raise ValueError("Data cannot be empty")
 
-        for feature_name in feature_names:
-            feature_exists = any(feature_name in row for row in data)
-            if not feature_exists:
-                raise ValueError(f"Feature '{feature_name}' not found in the data")
+        available_features: set[str] = set()
+        for row in data:
+            available_features.update(row.keys())
+        missing_features = [f for f in feature_names if f not in available_features]
+        if missing_features:
+            raise ValueError(
+                f"Source features not found in data: {missing_features}. "
+                f"Available columns: {sorted(available_features)}"
+            )
 
     @classmethod
     def _get_source_text(cls, data: List[Dict[str, Any]], feature_name: str) -> List[str]:

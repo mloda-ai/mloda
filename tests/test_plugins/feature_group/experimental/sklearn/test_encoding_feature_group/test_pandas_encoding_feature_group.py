@@ -39,7 +39,7 @@ class TestPandasEncodingFeatureGroup:
             PandasEncodingFeatureGroup._check_source_features_exist(data, ["nonexistent"])
             assert False, "Should have raised ValueError"
         except ValueError as e:
-            assert "Source feature 'nonexistent' not found in data" in str(e)
+            assert "Source features not found in data:" in str(e)
 
     def test_extract_training_data_basic(self) -> None:
         """Test extracting training data from pandas DataFrame."""

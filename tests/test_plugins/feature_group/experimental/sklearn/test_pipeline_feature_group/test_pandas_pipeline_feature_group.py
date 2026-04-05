@@ -34,7 +34,7 @@ class TestPandasSklearnPipelineFeatureGroup:
         """Test checking for non-existing source features."""
         df = pd.DataFrame({"feature1": [1, 2, 3], "feature2": [4, 5, 6]})
 
-        with pytest.raises(ValueError, match="Source feature 'nonexistent' not found in data"):
+        with pytest.raises(ValueError, match="Source features not found in data:"):
             PandasSklearnPipelineFeatureGroup._check_source_features_exist(df, ["nonexistent"])
 
     def test_add_result_to_data_1d_array(self) -> None:
@@ -228,5 +228,5 @@ class TestPandasSklearnPipelineFeatureGroup:
         features = FeatureSet()
         features.add(Feature("nonexistent__sklearn_pipeline_scaling"))
 
-        with pytest.raises(ValueError, match="Source feature 'nonexistent' not found in data"):
+        with pytest.raises(ValueError, match="Source features not found in data:"):
             PandasSklearnPipelineFeatureGroup.calculate_feature(df, features)

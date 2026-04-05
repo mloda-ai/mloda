@@ -33,7 +33,9 @@ class PandasMissingValueFeatureGroup(MissingValueFeatureGroup):
         """Check if the resolved source features exist in the DataFrame."""
         missing_features = [f for f in feature_names if f not in data.columns]
         if missing_features:
-            raise ValueError(f"Source features not found in data: {missing_features}")
+            raise ValueError(
+                f"Source features not found in data: {missing_features}. Available columns: {list(data.columns)}"
+            )
 
     @classmethod
     def _add_result_to_data(cls, data: pd.DataFrame, feature_name: str, result: Any) -> pd.DataFrame:

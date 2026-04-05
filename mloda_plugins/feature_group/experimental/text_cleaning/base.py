@@ -222,7 +222,7 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             feature_names: List of feature names to check
 
         Raises:
-            ValueError: If a feature does not exist in the data
+            ValueError: If any of the features do not exist in the data.
         """
         ...
 

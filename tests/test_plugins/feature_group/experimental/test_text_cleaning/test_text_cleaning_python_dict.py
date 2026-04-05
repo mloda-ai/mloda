@@ -99,7 +99,7 @@ class TestPythonDictTextCleaningFeatureGroup:
         with pytest.raises(ValueError) as excinfo:
             PythonDictTextCleaningFeatureGroup._check_source_features_exist(self.data, ["nonexistent"])
 
-        assert "not found in the data" in str(excinfo.value)
+        assert "Source features not found in data:" in str(excinfo.value)
 
         # Empty data
         with pytest.raises(ValueError, match="Data cannot be empty"):
@@ -282,7 +282,7 @@ class TestPythonDictTextCleaningFeatureGroup:
         with pytest.raises(ValueError) as excinfo:
             PythonDictTextCleaningFeatureGroup.calculate_feature(data_copy, feature_set)
 
-        assert "not found in the data" in str(excinfo.value)
+        assert "Source features not found in data:" in str(excinfo.value)
 
     def test_calculate_feature_invalid_operation(self) -> None:
         """Test calculate_feature with an invalid operation."""

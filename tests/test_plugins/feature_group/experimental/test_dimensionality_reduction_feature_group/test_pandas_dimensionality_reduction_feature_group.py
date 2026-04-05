@@ -226,7 +226,7 @@ class TestPandasDimensionalityReductionFeatureGroup:
         feature_set.add(Feature("missing_feature__pca_2d"))
 
         # Calculate the feature (should raise an error)
-        with pytest.raises(ValueError, match="Feature 'missing_feature' not found in the data"):
+        with pytest.raises(ValueError, match="Source features not found in data:"):
             PandasDimensionalityReductionFeatureGroup.calculate_feature(sample_data, feature_set)
 
     def test_unsupported_algorithm(self, sample_data: pd.DataFrame) -> None:

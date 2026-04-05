@@ -28,9 +28,11 @@ class PandasSklearnPipelineFeatureGroup(SklearnPipelineFeatureGroup):
     @classmethod
     def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
         """Check if the features exist in the DataFrame."""
-        for feature_name in feature_names:
-            if feature_name not in data.columns:
-                raise ValueError(f"Source feature '{feature_name}' not found in data")
+        missing_features = [f for f in feature_names if f not in data.columns]
+        if missing_features:
+            raise ValueError(
+                f"Source features not found in data: {missing_features}. Available columns: {list(data.columns)}"
+            )
 
     @classmethod
     def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:

@@ -110,3 +110,101 @@ class TestUnifiedCheckSourceFeaturesSignature:
         assert not hasattr(cls, "_check_point_features_exist"), (
             f"{cls.__name__} still has the old _check_point_features_exist method"
         )
+
+
+TOLERANT_PANDAS_CLASSES = [
+    PandasAggregatedFeatureGroup,
+    PandasClusteringFeatureGroup,
+]
+
+if HAS_TIME_WINDOW_PANDAS:
+    TOLERANT_PANDAS_CLASSES.append(PandasTimeWindowFeatureGroup)
+
+if HAS_FORECASTING_PANDAS:
+    TOLERANT_PANDAS_CLASSES.append(PandasForecastingFeatureGroup)
+
+STRICT_PANDAS_CLASSES = [
+    PandasMissingValueFeatureGroup,
+    PandasEncodingFeatureGroup,
+    PandasScalingFeatureGroup,
+    PandasSklearnPipelineFeatureGroup,
+    PandasDimensionalityReductionFeatureGroup,
+    PandasTextCleaningFeatureGroup,
+    PandasNodeCentralityFeatureGroup,
+    PandasGeoDistanceFeatureGroup,
+]
+
+
+class TestTolerantPluginsAllowPartialPresence:
+    """Tolerant plugins raise only when ALL features are missing, not when some are present."""
+
+    @pytest.mark.parametrize("cls", TOLERANT_PANDAS_CLASSES, ids=lambda c: c.__name__)
+    def test_no_raise_when_some_features_present(self, cls: Any) -> None:
+        """Tolerant plugins must NOT raise when at least one feature exists in the data."""
+        df = pd.DataFrame({"col_a": [1, 2], "col_b": [3, 4]})
+        # col_a exists, nonexistent does not -- tolerant plugins should accept this
+        cls._check_source_features_exist(df, ["col_a", "nonexistent"])
+
+
+class TestStrictPluginsRaiseOnPartialPresence:
+    """Strict plugins raise when ANY feature is missing, even if some are present."""
+
+    @pytest.mark.parametrize("cls", STRICT_PANDAS_CLASSES, ids=lambda c: c.__name__)
+    def test_raises_when_some_features_missing(self, cls: Any) -> None:
+        """Strict plugins must raise ValueError when any feature is missing from data."""
+        df = pd.DataFrame({"col_a": [1, 2], "col_b": [3, 4]})
+        with pytest.raises(ValueError):
+            cls._check_source_features_exist(df, ["col_a", "nonexistent"])
+
+
+class TestStrictPluginsReportAllMissingFeatures:
+    """Strict plugins must collect and report ALL missing features, not just the first one."""
+
+    @pytest.mark.parametrize("cls", STRICT_PANDAS_CLASSES, ids=lambda c: c.__name__)
+    def test_error_contains_all_missing_features(self, cls: Any) -> None:
+        """When multiple features are missing, ALL must appear in the error message."""
+        df = pd.DataFrame({"col_a": [1, 2]})
+        with pytest.raises(ValueError, match="missing1") as exc_info:
+            cls._check_source_features_exist(df, ["missing1", "missing2"])
+        error_msg = str(exc_info.value)
+        assert "missing1" in error_msg, f"{cls.__name__} error message does not contain 'missing1': {error_msg}"
+        assert "missing2" in error_msg, f"{cls.__name__} error message does not contain 'missing2': {error_msg}"
+
+
+class TestErrorMessagesIncludeAvailableColumns:
+    """All plugin error messages must include the available columns for debuggability."""
+
+    @pytest.mark.parametrize("cls", STRICT_PANDAS_CLASSES, ids=lambda c: c.__name__)
+    def test_strict_error_includes_available_columns(self, cls: Any) -> None:
+        """Strict plugin errors must list available columns so users can diagnose the issue."""
+        df = pd.DataFrame({"col_a": [1, 2], "col_b": [3, 4]})
+        with pytest.raises(ValueError) as exc_info:
+            cls._check_source_features_exist(df, ["nonexistent"])
+        error_msg = str(exc_info.value)
+        assert "col_a" in error_msg, f"{cls.__name__} error does not mention available column 'col_a': {error_msg}"
+        assert "col_b" in error_msg, f"{cls.__name__} error does not mention available column 'col_b': {error_msg}"
+
+    @pytest.mark.parametrize("cls", TOLERANT_PANDAS_CLASSES, ids=lambda c: c.__name__)
+    def test_tolerant_error_includes_available_columns(self, cls: Any) -> None:
+        """Tolerant plugin errors must list available columns so users can diagnose the issue."""
+        df = pd.DataFrame({"col_a": [1, 2], "col_b": [3, 4]})
+        with pytest.raises(ValueError) as exc_info:
+            cls._check_source_features_exist(df, ["nonexistent"])
+        error_msg = str(exc_info.value)
+        assert "col_a" in error_msg, f"{cls.__name__} error does not mention available column 'col_a': {error_msg}"
+        assert "col_b" in error_msg, f"{cls.__name__} error does not mention available column 'col_b': {error_msg}"
+
+
+class TestStrictPluginsUseNormalizedMessageFormat:
+    """Strict plugins must use the standardized error message prefix."""
+
+    @pytest.mark.parametrize("cls", STRICT_PANDAS_CLASSES, ids=lambda c: c.__name__)
+    def test_error_message_has_normalized_prefix(self, cls: Any) -> None:
+        """Error message must start with 'Source features not found in data:' for consistency."""
+        df = pd.DataFrame({"col_a": [1, 2], "col_b": [3, 4]})
+        with pytest.raises(ValueError) as exc_info:
+            cls._check_source_features_exist(df, ["nonexistent"])
+        error_msg = str(exc_info.value)
+        assert "Source features not found in data:" in error_msg, (
+            f"{cls.__name__} error does not use normalized prefix. Got: {error_msg}"
+        )

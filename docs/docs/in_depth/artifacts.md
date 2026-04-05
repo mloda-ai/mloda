@@ -88,6 +88,50 @@ Result:
 "BasicArtifact is the loaded artifact."
 ```
 
+## Run-time Artifact Switching with prepare/run
+
+The two-phase API (`prepare()` + `run()`) supports switching between save and
+load mode across `run()` calls. Pass a previously saved artifact dict to
+`run(artifacts=...)` to switch to load mode for that run without re-preparing.
+
+This is useful for train-then-predict workflows and cross-validation, where a
+single session alternates between training (save) and inference (load).
+
+#### Train-then-predict in a single session
+
+```python
+from mloda.user import mloda
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+
+# 1. Prepare once
+session = mloda.prepare(["BaseExampleArtifactFeature"], {PyArrowTable})
+
+# 2. First run: save mode (train)
+session.run()
+saved_artifacts = session.get_artifacts()
+# {'BaseExampleArtifactFeature': 'BasicArtifact'}
+
+# 3. Second run: load mode (predict), using artifacts from step 2
+result = session.run(artifacts=saved_artifacts)
+```
+
+#### Cross-validation pattern
+
+```python
+session = mloda.prepare(["BaseExampleArtifactFeature"], {PyArrowTable})
+
+for fold_data in folds:
+    # Train fold
+    session.run()
+    trained = session.get_artifacts()
+
+    # Predict fold
+    session.run(artifacts=trained)
+```
+
+When `artifacts` is not provided (the default), the artifact mode from
+`prepare()` is used, preserving full backward compatibility.
+
 #### Testing Artifacts
 
 Testing artifact features involves creating test cases that ensure artifacts are correctly saved and loaded. The following example shows how to test the `BaseTestArtifactFeature` class.

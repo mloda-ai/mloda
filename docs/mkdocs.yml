@@ -10,12 +10,12 @@ nav:
     - Provider, User, Steward in mloda: examples/mloda_basics/4_ml_data_providers_user_steward.ipynb
   - Getting Started:
     - Installation: chapter1/installation.md
-    - Base Usage: examples/base_usage.ipynb
-    - sklearn Integration Tutorial: examples/sklearn_integration_basic.ipynb
     - API Request: chapter1/api-request.md
     - Feature Groups: chapter1/feature-groups.md
     - Compute Frameworks: chapter1/compute-frameworks.md
     - Extender: chapter1/extender.md
+    - Base Usage: examples/base_usage.ipynb
+    - sklearn Integration Tutorial: examples/sklearn_integration_basic.ipynb
   - In Depth - Basics:
     - mloda API: in_depth/mloda-api.md
     - Streaming: in_depth/streaming.md
@@ -52,13 +52,11 @@ nav:
   - Need Help?:
     - FAQ: faq.md
 
-  # todo
-  #- Extender in Depth: TBD
-
 theme:
   name: readthedocs
 
 plugins:
+  - search
   - mkdocs-jupyter:
       include: ["*.ipynb"] 
       execute: false

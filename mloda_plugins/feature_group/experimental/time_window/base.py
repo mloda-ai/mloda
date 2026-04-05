@@ -184,6 +184,24 @@ class TimeWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return set(source_features) | {time_filter_feature}
 
     @classmethod
+    def _has_valid_time_window_suffix(cls, feature_name: str) -> bool:
+        """Check if feature_name has a suffix matching the time window pattern."""
+        suffix_start = feature_name.rfind("__")
+        if suffix_start == -1:
+            return False
+        suffix = feature_name[suffix_start + 2 :]
+        parts = suffix.split("_")
+        if len(parts) != 4 or parts[3] != "window":
+            return False
+        if parts[0] not in cls.WINDOW_FUNCTIONS:
+            return False
+        if parts[2] not in cls.TIME_UNITS:
+            return False
+        if not parts[1].isdigit() or int(parts[1]) <= 0:
+            return False
+        return True
+
+    @classmethod
     def _extract_time_window_params(cls, feature: Feature) -> tuple[Optional[str], Optional[int], Optional[str]]:
         """
         Extract time window parameters (window_function, window_size, time_unit) from a feature.
@@ -199,11 +217,9 @@ class TimeWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         feature_name = feature.get_name()
 
         # Try string-based parsing first
-        try:
+        if cls._has_valid_time_window_suffix(feature_name):
             window_function, window_size, time_unit = cls.parse_time_window_prefix(feature_name)
             return window_function, window_size, time_unit
-        except ValueError:
-            pass
 
         # Fall back to configuration
         window_function = feature.options.get(cls.WINDOW_FUNCTION)
@@ -286,12 +302,9 @@ class TimeWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             raise ValueError(f"Unsupported time unit: {time_unit}. Supported units: {', '.join(cls.TIME_UNITS.keys())}")
 
         # Convert window size to integer
-        try:
-            window_size = int(window_size_str)
-            if window_size <= 0:
-                raise ValueError("Window size must be positive")
-        except ValueError:
+        if not window_size_str.isdigit() or int(window_size_str) <= 0:
             raise ValueError(f"Invalid window size: {window_size_str}. Must be a positive integer.")
+        window_size = int(window_size_str)
 
         return window_function, window_size, time_unit
 

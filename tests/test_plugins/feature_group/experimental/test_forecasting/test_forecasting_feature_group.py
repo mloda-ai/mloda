@@ -201,3 +201,38 @@ class TestForecastingFeatureGroup:
         options.add_to_group(DefaultOptionKeys.reference_time.value, 123)  # Not a string
         with pytest.raises(ValueError):
             ForecastingFeatureGroup.get_reference_time_column(options)
+
+    def test_has_valid_forecast_suffix_valid(self) -> None:
+        """Test that _has_valid_forecast_suffix returns True for valid feature names."""
+        assert ForecastingFeatureGroup._has_valid_forecast_suffix("sales__linear_forecast_7day") is True
+        assert ForecastingFeatureGroup._has_valid_forecast_suffix("price__ridge_forecast_30week") is True
+        assert ForecastingFeatureGroup._has_valid_forecast_suffix("demand__randomforest_forecast_3month") is True
+        assert ForecastingFeatureGroup._has_valid_forecast_suffix("temp__gbr_forecast_12hour") is True
+
+    def test_has_valid_forecast_suffix_invalid(self) -> None:
+        """Test that _has_valid_forecast_suffix returns False for invalid feature names."""
+        assert ForecastingFeatureGroup._has_valid_forecast_suffix("invalid_feature_name") is False
+        assert ForecastingFeatureGroup._has_valid_forecast_suffix("sales__linear_7day") is False
+        assert ForecastingFeatureGroup._has_valid_forecast_suffix("sales__unknown_forecast_7day") is False
+        assert ForecastingFeatureGroup._has_valid_forecast_suffix("sales__linear_forecast_day") is False
+        assert ForecastingFeatureGroup._has_valid_forecast_suffix("sales__linear_forecast_7invalid") is False
+
+    def test_extract_forecast_params_string_based(self) -> None:
+        """Test that _extract_forecast_params extracts parameters from a string-based feature name."""
+        feature = Feature("sales__linear_forecast_7day")
+        algorithm, horizon, time_unit = ForecastingFeatureGroup._extract_forecast_params(feature)
+        assert algorithm == "linear"
+        assert horizon == 7
+        assert time_unit == "day"
+
+    def test_extract_forecast_params_config_fallback(self) -> None:
+        """Test that _extract_forecast_params falls back to configuration-based options."""
+        options = Options()
+        options.add_to_group(ForecastingFeatureGroup.ALGORITHM, "ridge")
+        options.add_to_group(ForecastingFeatureGroup.HORIZON, "14")
+        options.add_to_group(ForecastingFeatureGroup.TIME_UNIT, "day")
+        feature = Feature("some_feature", options)
+        algorithm, horizon, time_unit = ForecastingFeatureGroup._extract_forecast_params(feature)
+        assert algorithm == "ridge"
+        assert horizon == 14
+        assert time_unit == "day"

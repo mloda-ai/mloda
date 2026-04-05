@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import datetime
 from abc import abstractmethod
-from typing import Any, Dict, FrozenSet, List, Optional, Set, Type, Union
+from typing import Any, Optional
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
@@ -124,11 +124,11 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     MAX_IN_FEATURES: Optional[int] = None  # Unlimited
 
     @staticmethod
-    def artifact() -> Type[BaseArtifact] | None:
+    def artifact() -> type[BaseArtifact] | None:
         """Return the artifact class for sklearn pipeline persistence."""
         return SklearnArtifact
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         """Extract source features from either configuration-based options or string parsing."""
 
         # Try string-based parsing first
@@ -160,7 +160,7 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     @classmethod
     def match_feature_group_criteria(
         cls,
-        feature_name: Union[FeatureName, str],
+        feature_name: FeatureName | str,
         options: Options,
         data_access_collection: Optional[Any] = None,
     ) -> bool:
@@ -246,7 +246,7 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return data
 
     @classmethod
-    def _extract_pipeline_name_and_source_features(cls, feature: Feature) -> tuple[str, List[str]]:
+    def _extract_pipeline_name_and_source_features(cls, feature: Feature) -> tuple[str, list[str]]:
         """
         Extract pipeline name and source features from a feature.
 
@@ -302,7 +302,7 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return None
 
     @classmethod
-    def _get_pipeline_config_from_feature(cls, feature: Feature, pipeline_name: str) -> Dict[str, Any]:
+    def _get_pipeline_config_from_feature(cls, feature: Feature, pipeline_name: str) -> dict[str, Any]:
         """
         Get pipeline configuration from feature options or create default configuration.
 
@@ -332,7 +332,7 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return cls._create_default_pipeline_config(pipeline_name)
 
     @classmethod
-    def _reconstruct_pipeline_steps_from_frozenset(cls, pipeline_steps_frozenset: FrozenSet[Any]) -> List[Any]:
+    def _reconstruct_pipeline_steps_from_frozenset(cls, pipeline_steps_frozenset: frozenset[Any]) -> list[Any]:
         """
         Reconstruct pipeline steps from frozenset back to list of (name, transformer) tuples.
 
@@ -362,7 +362,7 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return steps_list
 
     @classmethod
-    def _reconstruct_pipeline_params_from_frozenset(cls, pipeline_params_frozenset: FrozenSet[Any]) -> Dict[str, Any]:
+    def _reconstruct_pipeline_params_from_frozenset(cls, pipeline_params_frozenset: frozenset[Any]) -> dict[str, Any]:
         """
         Reconstruct pipeline parameters from frozenset back to dictionary.
 
@@ -378,7 +378,7 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return params_dict
 
     @classmethod
-    def _get_transformer_map(cls) -> Dict[str, Any]:
+    def _get_transformer_map(cls) -> dict[str, Any]:
         """
         Get a mapping of transformer class names to transformer instances.
 
@@ -432,7 +432,7 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return transformer_map
 
     @classmethod
-    def _import_sklearn_components(cls) -> Dict[str, Any]:
+    def _import_sklearn_components(cls) -> dict[str, Any]:
         """
         Import sklearn components with fallback logic for different versions.
 
@@ -472,7 +472,7 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return components
 
     @classmethod
-    def _create_default_pipeline_config(cls, pipeline_name: str) -> Dict[str, Any]:
+    def _create_default_pipeline_config(cls, pipeline_name: str) -> dict[str, Any]:
         """
         Create default pipeline configuration based on pipeline name.
 
@@ -498,7 +498,7 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             return {"steps": [("scaler", StandardScaler())], "params": {}}
 
     @classmethod
-    def _pipeline_matches_config(cls, fitted_pipeline: Any, config: Dict[str, Any]) -> bool:
+    def _pipeline_matches_config(cls, fitted_pipeline: Any, config: dict[str, Any]) -> bool:
         """
         Check if a fitted pipeline matches the expected configuration.
 
@@ -516,7 +516,7 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return len(fitted_pipeline.steps) == len(config["steps"])
 
     @classmethod
-    def _create_and_fit_pipeline(cls, data: Any, source_features: List[Any], config: Dict[str, Any]) -> Any:
+    def _create_and_fit_pipeline(cls, data: Any, source_features: list[Any], config: dict[str, Any]) -> Any:
         """
         Create and fit a new pipeline.
 
@@ -552,7 +552,7 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     @classmethod
     @abstractmethod
-    def _extract_training_data(cls, data: Any, source_features: List[Any]) -> Any:
+    def _extract_training_data(cls, data: Any, source_features: list[Any]) -> Any:
         """
         Extract training data for the specified features.
 
@@ -567,7 +567,7 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     @classmethod
     @abstractmethod
-    def _apply_pipeline(cls, data: Any, source_features: List[Any], fitted_pipeline: Any) -> Any:
+    def _apply_pipeline(cls, data: Any, source_features: list[Any], fitted_pipeline: Any) -> Any:
         """
         Apply the fitted pipeline to the data.
 
@@ -583,7 +583,7 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     @classmethod
     @abstractmethod
-    def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
+    def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
         """
         Check if the source features exist in the data.
 

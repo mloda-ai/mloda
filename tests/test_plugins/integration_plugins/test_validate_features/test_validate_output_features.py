@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Any, Dict, List, Set
+from typing import Any
 
 import pytest
 
@@ -29,7 +29,7 @@ class BaseValidateOutputFeaturesBaseNegative(BaseValidateOutputFeaturesBase):
 
 
 class ValidateOutputFeatureExtender(DokuExtender):
-    def wraps(self) -> Set[ExtenderHook]:
+    def wraps(self) -> set[ExtenderHook]:
         return {ExtenderHook.VALIDATE_OUTPUT_FEATURE}
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
@@ -43,10 +43,10 @@ class ValidateOutputFeatureExtender(DokuExtender):
 
 @PARALLELIZATION_MODES_SYNC_THREADING
 class TestValidateOutputFeatures:
-    def get_features(self, feature_list: List[str], options: Dict[str, Any] = {}) -> Features:
+    def get_features(self, feature_list: list[str], options: dict[str, Any] = {}) -> Features:
         return Features([Feature(name=f_name, options=options, initial_requested_data=True) for f_name in feature_list])
 
-    def test_basic_validate_output_features(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
+    def test_basic_validate_output_features(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         features = self.get_features(["BaseValidateOutputFeaturesBase"])
         MlodaTestRunner.run_api_simple(features, parallelization_modes=modes, flight_server=flight_server)
 
@@ -54,7 +54,7 @@ class TestValidateOutputFeatures:
         with pytest.raises(Exception):
             MlodaTestRunner.run_api_simple(features, parallelization_modes=modes, flight_server=flight_server)
 
-    def test_pandera_validate_output_features(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
+    def test_pandera_validate_output_features(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         features = self.get_features(["BaseValidateOutputFeaturesBaseNegativePandera"])
 
         with pytest.raises(Exception) as excinfo:
@@ -64,7 +64,7 @@ class TestValidateOutputFeatures:
         assert "BaseValidateOutputFeaturesBaseNegativePandera" in str(excinfo.value)
 
     def test_extender_validate_output_features(
-        self, modes: Set[ParallelizationMode], flight_server: Any, caplog: Any
+        self, modes: set[ParallelizationMode], flight_server: Any, caplog: Any
     ) -> None:
         features = self.get_features(["BaseValidateOutputFeaturesBase"])
 

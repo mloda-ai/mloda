@@ -5,7 +5,7 @@ Common fixtures and utilities for time window feature group tests.
 import pandas as pd
 import pyarrow as pa
 import pytest
-from typing import Any, Dict, List
+from typing import Any
 
 from mloda.user import Feature
 from mloda.provider import FeatureSet
@@ -66,7 +66,7 @@ def feature_set_multiple_windows() -> FeatureSet:
 
 # Expected values for different window functions
 # These are the expected results for the sample data with a 3-day window
-EXPECTED_VALUES: Dict[str, List[Any]] = {
+EXPECTED_VALUES: dict[str, list[Any]] = {
     "avg": [20.0, 21.0, 20.33, 21.33, 22.33, 23.0, 21.33, 19.67, 20.0, 22.0],
     "sum": [20, 42, 61, 64, 67, 69, 64, 59, 60, 66],
     "min": [20, 20, 19, 19, 19, 21, 18, 18, 18, 20],

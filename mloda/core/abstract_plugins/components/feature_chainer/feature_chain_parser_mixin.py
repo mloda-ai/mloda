@@ -46,7 +46,7 @@ group). Return values use truthy/falsy semantics: any falsy return (``False``,
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Set, cast
+from typing import Any, Optional, cast
 
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -111,7 +111,7 @@ class FeatureChainParserMixin:
         """
         return True
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         """
         Parse input features from feature name or options.
 
@@ -144,7 +144,7 @@ class FeatureChainParserMixin:
         self._validate_in_feature_count(list(in_features_set), feature_name)
         return set(in_features_set)
 
-    def _validate_in_feature_count(self, in_features: List[Any], feature_name: str) -> None:
+    def _validate_in_feature_count(self, in_features: list[Any], feature_name: str) -> None:
         """
         Validate that in_feature count meets min/max constraints.
 
@@ -281,7 +281,7 @@ class FeatureChainParserMixin:
         return result
 
     @classmethod
-    def _get_prefix_patterns(cls) -> List[str]:
+    def _get_prefix_patterns(cls) -> list[str]:
         """Get prefix/suffix patterns from class attributes."""
         patterns = []
         if hasattr(cls, "PREFIX_PATTERN"):
@@ -291,14 +291,14 @@ class FeatureChainParserMixin:
         return patterns
 
     @classmethod
-    def _get_property_mapping(cls) -> Optional[Dict[str, Any]]:
+    def _get_property_mapping(cls) -> Optional[dict[str, Any]]:
         """Get property mapping from class attribute."""
         if hasattr(cls, "PROPERTY_MAPPING"):
-            return cast(Dict[str, Any], cls.PROPERTY_MAPPING)
+            return cast(dict[str, Any], cls.PROPERTY_MAPPING)
         return None
 
     @staticmethod
-    def _has_required_when_predicates(property_mapping: Dict[str, Any]) -> bool:
+    def _has_required_when_predicates(property_mapping: dict[str, Any]) -> bool:
         """Return True if any entry in property_mapping uses required_when."""
         for value in property_mapping.values():
             if isinstance(value, dict) and DefaultOptionKeys.required_when in value:
@@ -309,8 +309,8 @@ class FeatureChainParserMixin:
     def _build_effective_options(
         cls,
         feature_name: str,
-        prefix_patterns: List[str],
-        property_mapping: Dict[str, Any],
+        prefix_patterns: list[str],
+        property_mapping: dict[str, Any],
         options: Options,
     ) -> Options:
         """Build effective options by merging string-parsed values with explicit options.
@@ -354,7 +354,7 @@ class FeatureChainParserMixin:
         return options
 
     @classmethod
-    def _extract_source_features(cls, feature: Feature) -> List[str]:
+    def _extract_source_features(cls, feature: Feature) -> list[str]:
         """
         Extract source features from a feature.
 

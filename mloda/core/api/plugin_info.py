@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Optional, Set, Type, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -11,8 +11,8 @@ class FeatureGroupInfo:
     description: str
     version: str
     module: str
-    compute_frameworks: List[str]
-    supported_feature_names: Set[str]
+    compute_frameworks: list[str]
+    supported_feature_names: set[str]
     prefix: str
 
 
@@ -32,12 +32,12 @@ class ExtenderInfo:
     name: str
     description: str
     module: str
-    wraps: List[str]
+    wraps: list[str]
 
 
 @dataclass
 class ResolvedFeature:
     feature_name: str
-    feature_group: Optional[Type["FeatureGroup"]]
-    candidates: List[Type["FeatureGroup"]]
+    feature_group: Optional[type["FeatureGroup"]]
+    candidates: list[type["FeatureGroup"]]
     error: Optional[str]

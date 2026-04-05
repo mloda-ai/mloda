@@ -1,4 +1,4 @@
-from typing import Any, Optional, Type
+from typing import Any, Optional
 import pytest
 
 from mloda.provider import BaseMergeEngine
@@ -23,12 +23,12 @@ class TestPolarsLazyMergeEngine(MultiIndexMergeEngineTestBase):
     """Test PolarsLazyMergeEngine using shared multi-index test scenarios."""
 
     @classmethod
-    def merge_engine_class(cls) -> Type[BaseMergeEngine]:
+    def merge_engine_class(cls) -> type[BaseMergeEngine]:
         """Return the PolarsLazyMergeEngine class."""
         return PolarsLazyMergeEngine
 
     @classmethod
-    def framework_type(cls) -> Type[Any]:
+    def framework_type(cls) -> type[Any]:
         """Return polars LazyFrame type."""
         if pl is None:
             raise ImportError("Polars is not installed")

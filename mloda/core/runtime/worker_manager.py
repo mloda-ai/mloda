@@ -5,7 +5,7 @@ import queue
 import threading
 import time
 import logging
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Optional
 from uuid import UUID
 
 logger = logging.getLogger(__name__)
@@ -16,10 +16,10 @@ class WorkerManager:
 
     def __init__(self) -> None:
         """Initialize empty state."""
-        self.tasks: List[Union[threading.Thread, multiprocessing.Process]] = []
-        self.process_register: Dict[UUID, Tuple[Any, Any, Any]] = {}
-        self.result_queues_collection: Set[Any] = set()
-        self.result_uuids_collection: Set[UUID] = set()
+        self.tasks: list[threading.Thread | multiprocessing.Process] = []
+        self.process_register: dict[UUID, tuple[Any, Any, Any]] = {}
+        self.result_queues_collection: set[Any] = set()
+        self.result_uuids_collection: set[UUID] = set()
 
     def add_thread_task(self, task: threading.Thread) -> None:
         """Add task to list and call task.start()."""
@@ -27,8 +27,8 @@ class WorkerManager:
         task.start()
 
     def create_worker_process(
-        self, cfw_uuid: UUID, target: Callable[..., None], args: Tuple[Any, ...]
-    ) -> Tuple[Any, Any, Any]:
+        self, cfw_uuid: UUID, target: Callable[..., None], args: tuple[Any, ...]
+    ) -> tuple[Any, Any, Any]:
         """Create worker process with command and result queues."""
         command_queue: multiprocessing.Queue[Any] = multiprocessing.Queue()
         result_queue: multiprocessing.Queue[Any] = multiprocessing.Queue()
@@ -42,7 +42,7 @@ class WorkerManager:
 
         return process, command_queue, result_queue
 
-    def get_process_queues(self, cfw_uuid: UUID) -> Optional[Tuple[Any, Any, Any]]:
+    def get_process_queues(self, cfw_uuid: UUID) -> Optional[tuple[Any, Any, Any]]:
         """Return registered tuple or None."""
         return self.process_register.get(cfw_uuid)
 

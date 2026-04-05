@@ -6,7 +6,7 @@ claim specific structured suffixes while ReadFile auto-excludes them.
 
 import os
 import tempfile
-from typing import Any, List, Tuple
+from typing import Any
 
 
 from mloda.user import DataAccessCollection, Options
@@ -18,11 +18,11 @@ class StubJsonReader(ReadFile):
     """ReadFile subclass that handles .json files with column validation."""
 
     @classmethod
-    def suffix(cls) -> Tuple[str, ...]:
+    def suffix(cls) -> tuple[str, ...]:
         return (".json", ".JSON")
 
     @classmethod
-    def get_column_names(cls, file_name: str) -> List[str]:
+    def get_column_names(cls, file_name: str) -> list[str]:
         return ["id", "value"]
 
     @classmethod
@@ -34,7 +34,7 @@ class StubJsonDocReader(ReadDocument):
     """ReadDocument subclass that handles .json files as documents."""
 
     @classmethod
-    def suffix(cls) -> Tuple[str, ...]:
+    def suffix(cls) -> tuple[str, ...]:
         return (".json", ".JSON")
 
     @classmethod
@@ -62,7 +62,7 @@ class TestDefaultSuffixOwnership:
 
         class StubMdReader(ReadDocument):
             @classmethod
-            def suffix(cls) -> Tuple[str, ...]:
+            def suffix(cls) -> tuple[str, ...]:
                 return (".md",)
 
             @classmethod
@@ -95,11 +95,11 @@ class TestDocumentSuffixesOverride:
 
         class StubCsvReader(ReadFile):
             @classmethod
-            def suffix(cls) -> Tuple[str, ...]:
+            def suffix(cls) -> tuple[str, ...]:
                 return (".csv",)
 
             @classmethod
-            def get_column_names(cls, file_name: str) -> List[str]:
+            def get_column_names(cls, file_name: str) -> list[str]:
                 return ["col"]
 
             @classmethod

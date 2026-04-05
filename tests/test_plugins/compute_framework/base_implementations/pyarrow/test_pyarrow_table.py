@@ -1,4 +1,4 @@
-from typing import Any, Optional, Type
+from typing import Any, Optional
 import pytest
 import pyarrow as pa
 
@@ -65,7 +65,7 @@ class TestPyArrowTableMerge(DataFrameTestBase):
     """Test PyArrowTable merge operations using the base test class."""
 
     @classmethod
-    def framework_class(cls) -> Type[Any]:
+    def framework_class(cls) -> type[Any]:
         """Return the PyArrowTable class."""
         return PyArrowTable
 

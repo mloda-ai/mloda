@@ -5,7 +5,7 @@ This test demonstrates how the ForecastingFeatureGroup artifacts can be saved an
 allowing trained models to be reused for future forecasts.
 """
 
-from typing import Any, Dict
+from typing import Any
 from datetime import datetime, timedelta
 
 from mloda.user import Feature
@@ -25,7 +25,7 @@ class ForecastingArtifactTestDataCreator(ATestDataCreator):
     compute_framework = PandasDataFrame
 
     @classmethod
-    def get_raw_data(cls) -> Dict[str, Any]:
+    def get_raw_data(cls) -> dict[str, Any]:
         """Return the raw data as a dictionary."""
         # Create time series data for 30 days
         dates = [datetime(2025, 1, 1) + timedelta(days=i) for i in range(30)]

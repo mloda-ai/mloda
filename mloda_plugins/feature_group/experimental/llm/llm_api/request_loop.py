@@ -1,5 +1,5 @@
 from copy import copy
-from typing import Any, Set, Tuple
+from typing import Any
 
 
 from mloda.user import Feature
@@ -53,7 +53,7 @@ class RequestLoop(LLMBaseRequest):
     def api(cls) -> Any:
         NotImplementedError
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Set[Feature] | None:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         features = SourceInputFeatureComposite.input_features(options, feature_name) or set()
 
         if options.get("project_meta_data") is not None:
@@ -143,7 +143,7 @@ class RequestLoop(LLMBaseRequest):
         return messages
 
     @classmethod
-    def initial_prompt_message(cls, messages: Any, initial_prompt: str) -> Tuple[Any, Any]:
+    def initial_prompt_message(cls, messages: Any, initial_prompt: str) -> tuple[Any, Any]:
         if not messages:
             messages = initial_prompt
             _messages = copy(messages)

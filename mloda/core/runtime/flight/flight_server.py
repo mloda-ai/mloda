@@ -1,4 +1,4 @@
-from typing import Any, Dict, Set
+from typing import Any
 from uuid import uuid4
 from pyarrow import flight
 import pyarrow as pa
@@ -20,7 +20,7 @@ def create_location(host: str = "0.0.0.0") -> str:
 
 class FlightServer(flight.FlightServerBase):  # type: ignore[misc]
     def __init__(self, location: Any = create_location()) -> None:
-        self.tables: Dict[str, Any] = {}  # Dictionary to store tables
+        self.tables: dict[str, Any] = {}  # Dictionary to store tables
         self.location = location
 
         # the default with 4 MB leads to crashes of the test suite
@@ -87,7 +87,7 @@ class FlightServer(flight.FlightServerBase):  # type: ignore[misc]
             del self.tables[table_key]
 
     @staticmethod
-    def drop_tables(location: str, table_key: Set[str]) -> None:
+    def drop_tables(location: str, table_key: set[str]) -> None:
         with flight.FlightClient(location) as client:
             for key in table_key:
                 action = flight.Action("drop_table", key.encode("utf-8"))
@@ -111,7 +111,7 @@ class FlightServer(flight.FlightServerBase):  # type: ignore[misc]
             yield flight.FlightInfo(schema, descriptor, [endpoint], -1, -1)
 
     @staticmethod
-    def list_flight_infos(location: str) -> Set[str]:
+    def list_flight_infos(location: str) -> set[str]:
         with flight.FlightClient(location) as client:
             flight_infos = {x.descriptor.path[0] for x in client.list_flights()}
         client.close()

@@ -1,5 +1,4 @@
 import os
-from typing import List
 
 from mloda.user import PluginLoader
 from mloda_plugins.feature_group.experimental.llm.cli import format_array
@@ -36,7 +35,7 @@ def test_llm_file_selector() -> None:
 
     PluginLoader().all()
 
-    features: List[Feature | str] = [
+    features: list[Feature | str] = [
         Feature(
             name="LLMFileSelector",
             options={

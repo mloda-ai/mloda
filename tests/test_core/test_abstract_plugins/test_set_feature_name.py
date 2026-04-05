@@ -1,4 +1,4 @@
-from typing import Any, Optional, Set, Union
+from typing import Any, Optional
 from mloda.provider import FeatureGroup
 from mloda.user import DataAccessCollection
 from mloda.user import Feature
@@ -26,7 +26,7 @@ class ATestSetFeatureNameBase(FeatureGroup):
     @classmethod
     def match_feature_group_criteria(
         cls,
-        feature_name: Union[FeatureName, str],
+        feature_name: FeatureName | str,
         options: Options,
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
@@ -38,7 +38,7 @@ class ATestSetFeatureNameBase(FeatureGroup):
 
 
 class ATestSetFeatureNameFeature(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {Feature.int64_of("ATestSetFeatureNameBase1"), Feature.int64_of("ATestSetFeatureNameBase2")}
 
     @classmethod

@@ -7,7 +7,7 @@ and candidate tracking.
 """
 
 import pytest
-from typing import Optional, Union
+from typing import Optional
 
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
@@ -205,7 +205,7 @@ class TestResolveFeatureSubclassFiltering:
             @classmethod
             def match_feature_group_criteria(
                 cls,
-                feature_name: Union[FeatureName, str],
+                feature_name: FeatureName | str,
                 options: Options,
                 data_access_collection: Optional[DataAccessCollection] = None,
             ) -> bool:
@@ -239,7 +239,7 @@ class TestResolveFeatureSubclassFiltering:
             @classmethod
             def match_feature_group_criteria(
                 cls,
-                feature_name: Union[FeatureName, str],
+                feature_name: FeatureName | str,
                 options: Options,
                 data_access_collection: Optional[DataAccessCollection] = None,
             ) -> bool:

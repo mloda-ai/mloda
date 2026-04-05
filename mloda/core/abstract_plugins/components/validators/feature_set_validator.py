@@ -1,4 +1,4 @@
-from typing import Any, Optional, Set, TYPE_CHECKING
+from typing import Any, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.components.feature import Feature
@@ -11,7 +11,7 @@ class FeatureSetValidator:
             raise ValueError(f"Options not initialized in {context}")
 
     @staticmethod
-    def validate_equal_options(features: Set["Feature"]) -> None:
+    def validate_equal_options(features: set["Feature"]) -> None:
         if len(features) <= 1:
             return
 

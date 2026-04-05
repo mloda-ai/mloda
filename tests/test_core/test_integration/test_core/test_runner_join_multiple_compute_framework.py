@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Optional
 import pytest
 from mloda.provider import BaseInputData
 from mloda.provider import DataCreator
@@ -102,7 +102,7 @@ class JoinCfwTest4(FeatureGroup):
 
 
 class Join2CfwTest(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {Feature.int32_of("JoinCfwTest1"), Feature.int32_of("JoinCfwTest2")}
 
     @classmethod
@@ -113,7 +113,7 @@ class Join2CfwTest(FeatureGroup):
 
 
 class Join3CfwTest(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {Feature.int32_of("JoinCfwTest1"), Feature.int32_of("JoinCfwTest2"), Feature.int32_of("JoinCfwTest3")}
 
     @classmethod
@@ -129,7 +129,7 @@ class Join3CfwTest(FeatureGroup):
 
 
 class Join4CfwTest(Join3CfwTest):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {
             Feature.int32_of("JoinCfwTest1"),
             Feature.int32_of("JoinCfwTest2"),
@@ -233,7 +233,7 @@ class MultiIndexJoinTest4(FeatureGroup):
 class JoinMultiIndexTest(FeatureGroup):
     """Consumer feature group that uses all 4 multi-index feature groups."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {
             Feature.int32_of("MultiIndexJoinTest1"),
             Feature.int32_of("MultiIndexJoinTest2"),
@@ -257,10 +257,10 @@ class JoinMultiIndexTest(FeatureGroup):
 
 @PARALLELIZATION_MODES_SYNC_THREADING
 class TestEngineMultipleJoinCfw:
-    def get_features(self, feature_list: List[str], options: Dict[str, Any] = {}) -> Features:
+    def get_features(self, feature_list: list[str], options: dict[str, Any] = {}) -> Features:
         return Features([Feature(name=f_name, options=options, initial_requested_data=True) for f_name in feature_list])
 
-    def test_runner_join_multiple_cfw1_most_basic(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
+    def test_runner_join_multiple_cfw1_most_basic(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         def inner_loop(join_type: str) -> None:
             idx = Index(
                 ("idx",),
@@ -286,7 +286,7 @@ class TestEngineMultipleJoinCfw:
             inner_loop(join_type)
 
     def base_join_runner(
-        self, modes: Set[ParallelizationMode], flight_server: Any, links: Set[Link], f_name: str = "3"
+        self, modes: set[ParallelizationMode], flight_server: Any, links: set[Link], f_name: str = "3"
     ) -> None:
         f_name = f"Join{f_name}CfwTest"
         features = self.get_features([f_name])
@@ -301,7 +301,7 @@ class TestEngineMultipleJoinCfw:
         assert res[0].to_pydict() == {f_name: [33, 2, 3]}
 
     def test_runner_join_multiple_cfw2_join_to_same_base(
-        self, modes: Set[ParallelizationMode], flight_server: Any
+        self, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
         idx = Index(
             ("idx",),
@@ -315,7 +315,7 @@ class TestEngineMultipleJoinCfw:
         self.base_join_runner(modes, flight_server, links)
 
     def test_runner_join_multiple_cfw3_join_to_right_base(
-        self, modes: Set[ParallelizationMode], flight_server: Any
+        self, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
         idx = Index(
             ("idx",),
@@ -328,7 +328,7 @@ class TestEngineMultipleJoinCfw:
 
         self.base_join_runner(modes, flight_server, links)
 
-    def test_runner_join_multiple_cfw4_chained_join(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
+    def test_runner_join_multiple_cfw4_chained_join(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         idx = Index(
             ("idx",),
         )
@@ -341,7 +341,7 @@ class TestEngineMultipleJoinCfw:
         self.base_join_runner(modes, flight_server, links)
 
     def test_runner_join_multiple_cfw5_double_chained_join(
-        self, modes: Set[ParallelizationMode], flight_server: Any
+        self, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
         idx = Index(
             ("idx",),
@@ -358,7 +358,7 @@ class TestEngineMultipleJoinCfw:
         self.base_join_runner(modes, flight_server, links, f_name="4")
 
     def test_runner_join_multiple_cfw6_double_chained_join(
-        self, modes: Set[ParallelizationMode], flight_server: Any
+        self, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
         idx = Index(
             ("idx",),
@@ -378,7 +378,7 @@ class TestEngineMultipleJoinCfw:
         self.base_join_runner(modes, flight_server, links, f_name="4")
 
     def test_runner_join_multiple_cfw6_double_chained_join_left(
-        self, modes: Set[ParallelizationMode], flight_server: Any
+        self, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
         idx = Index(
             ("idx",),
@@ -399,7 +399,7 @@ class TestEngineMultipleJoinCfw:
         self.base_join_runner(modes, flight_server, links, f_name="4")
 
     def test_runner_join_multiple_cfw6_double_chained_join_right(
-        self, modes: Set[ParallelizationMode], flight_server: Any
+        self, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
         idx = Index(
             ("idx",),
@@ -422,7 +422,7 @@ class TestEngineMultipleJoinCfw:
             self.base_join_runner(modes, flight_server, links, f_name="4")
 
     def test_runner_join_multiple_cfw7_double_chained_join(
-        self, modes: Set[ParallelizationMode], flight_server: Any
+        self, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
         idx = Index(
             ("idx",),
@@ -440,7 +440,7 @@ class TestEngineMultipleJoinCfw:
         self.base_join_runner(modes, flight_server, links, f_name="4")
 
     def test_raise_exception_if_duplicated_links_given(
-        self, modes: Set[ParallelizationMode], flight_server: Any
+        self, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
         """This test should be moved to a unit test rather as it tests that Link.validate in engine init is working correctly. Was faster to test here."""
 

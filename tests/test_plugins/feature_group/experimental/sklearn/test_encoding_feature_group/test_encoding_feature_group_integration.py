@@ -3,7 +3,7 @@ Integration tests for the EncodingFeatureGroup classes.
 """
 
 import pytest
-from typing import Any, Dict
+from typing import Any
 
 from mloda.user import PluginLoader
 from mloda.user import Feature
@@ -23,7 +23,7 @@ class EncodingIntegrationTestDataCreator(ATestDataCreator):
     compute_framework = PandasDataFrame
 
     @classmethod
-    def get_raw_data(cls) -> Dict[str, Any]:
+    def get_raw_data(cls) -> dict[str, Any]:
         """Return the raw data as a dictionary."""
         return {
             "customer_id": [1, 2, 3, 4, 5],

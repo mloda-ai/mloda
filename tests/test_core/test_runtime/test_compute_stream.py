@@ -9,7 +9,7 @@ as results become available, instead of accumulating them internally.
 from __future__ import annotations
 
 import types
-from typing import Any, Generator, Iterator, Tuple
+from typing import Any, Generator, Iterator
 from unittest.mock import Mock, MagicMock
 from uuid import UUID, uuid4
 
@@ -93,7 +93,7 @@ class TestComputeStreamYieldsResults:
         # Mock pop_result_data_collection to yield one result, then empty on subsequent calls
         pop_call_count = 0
 
-        def mock_pop() -> Generator[Tuple[UUID, Any], None, None]:
+        def mock_pop() -> Generator[tuple[UUID, Any], None, None]:
             nonlocal pop_call_count
             pop_call_count += 1
             if pop_call_count == 1:
@@ -129,7 +129,7 @@ class TestComputeStreamYieldsResults:
 
         pop_call_count = 0
 
-        def mock_pop() -> Generator[Tuple[UUID, Any], None, None]:
+        def mock_pop() -> Generator[tuple[UUID, Any], None, None]:
             nonlocal pop_call_count
             pop_call_count += 1
             if pop_call_count == 1:
@@ -163,7 +163,7 @@ class TestComputeStreamYieldsResults:
 
         pop_call_count = 0
 
-        def mock_pop() -> Generator[Tuple[UUID, Any], None, None]:
+        def mock_pop() -> Generator[tuple[UUID, Any], None, None]:
             nonlocal pop_call_count
             pop_call_count += 1
             if pop_call_count == 1:
@@ -244,7 +244,7 @@ class TestComputeStreamCleanup:
 
         pop_call_count = 0
 
-        def mock_pop() -> Generator[Tuple[UUID, Any], None, None]:
+        def mock_pop() -> Generator[tuple[UUID, Any], None, None]:
             nonlocal pop_call_count
             pop_call_count += 1
             if pop_call_count == 1:

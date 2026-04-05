@@ -5,22 +5,22 @@ These scenarios are framework-agnostic and can be used by any compute framework
 test by converting the dict format to the framework's native format.
 """
 
-from typing import Any, Dict, List, TypedDict
+from typing import Any, TypedDict
 
 
 class MergeScenario(TypedDict):
     """Type definition for a merge test scenario."""
 
-    left: List[Dict[str, Any]]
-    right: List[Dict[str, Any]]
+    left: list[dict[str, Any]]
+    right: list[dict[str, Any]]
     index: tuple[str, ...]
     expected_rows: int
-    expected_columns: List[str]
+    expected_columns: list[str]
     description: str
 
 
 # Standard multi-index test scenarios
-SCENARIOS: Dict[str, MergeScenario] = {
+SCENARIOS: dict[str, MergeScenario] = {
     "inner_basic": {
         "description": "Basic INNER join with all rows matching on 2-column index",
         "left": [

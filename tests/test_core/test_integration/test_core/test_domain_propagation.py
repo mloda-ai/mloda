@@ -7,7 +7,7 @@ dependency chain.
 Uses pytest.mark.parametrize for matrix testing of various scenarios.
 """
 
-from typing import Any, Optional, Set, Union
+from typing import Any, Optional
 
 import pytest
 
@@ -56,7 +56,7 @@ class ChildFeatureGroup(FeatureGroup):
     @classmethod
     def match_feature_group_criteria(
         cls,
-        feature_name: Union[FeatureName, str],
+        feature_name: FeatureName | str,
         options: Options,
         data_access_collection: Any = None,
     ) -> bool:
@@ -64,7 +64,7 @@ class ChildFeatureGroup(FeatureGroup):
             feature_name = str(feature_name)
         return feature_name == "child_feature"
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {"base_value"}  # type: ignore[arg-type]
 
     @classmethod
@@ -87,7 +87,7 @@ class ParentFeatureGroup(FeatureGroup):
     @classmethod
     def match_feature_group_criteria(
         cls,
-        feature_name: Union[FeatureName, str],
+        feature_name: FeatureName | str,
         options: Options,
         data_access_collection: Any = None,
     ) -> bool:
@@ -95,7 +95,7 @@ class ParentFeatureGroup(FeatureGroup):
             feature_name = str(feature_name)
         return feature_name == "parent_feature"
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {"child_feature"}  # type: ignore[arg-type]
 
     @classmethod
@@ -118,7 +118,7 @@ class GrandchildFeatureGroup(FeatureGroup):
     @classmethod
     def match_feature_group_criteria(
         cls,
-        feature_name: Union[FeatureName, str],
+        feature_name: FeatureName | str,
         options: Options,
         data_access_collection: Any = None,
     ) -> bool:
@@ -126,7 +126,7 @@ class GrandchildFeatureGroup(FeatureGroup):
             feature_name = str(feature_name)
         return feature_name == "grandchild_feature"
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {"base_value"}  # type: ignore[arg-type]
 
     @classmethod
@@ -149,7 +149,7 @@ class IntermediateFeatureGroup(FeatureGroup):
     @classmethod
     def match_feature_group_criteria(
         cls,
-        feature_name: Union[FeatureName, str],
+        feature_name: FeatureName | str,
         options: Options,
         data_access_collection: Any = None,
     ) -> bool:
@@ -157,7 +157,7 @@ class IntermediateFeatureGroup(FeatureGroup):
             feature_name = str(feature_name)
         return feature_name == "intermediate_feature"
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {"grandchild_feature"}  # type: ignore[arg-type]
 
     @classmethod
@@ -180,7 +180,7 @@ class GrandparentFeatureGroup(FeatureGroup):
     @classmethod
     def match_feature_group_criteria(
         cls,
-        feature_name: Union[FeatureName, str],
+        feature_name: FeatureName | str,
         options: Options,
         data_access_collection: Any = None,
     ) -> bool:
@@ -188,7 +188,7 @@ class GrandparentFeatureGroup(FeatureGroup):
             feature_name = str(feature_name)
         return feature_name == "grandparent_feature"
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {"intermediate_feature"}  # type: ignore[arg-type]
 
     @classmethod
@@ -230,7 +230,7 @@ class TestDomainPropagationMatrix:
         self,
         parent_feature_name: str,
         parent_domain: str,
-        expected_children_with_domain: Set[str],
+        expected_children_with_domain: set[str],
     ) -> None:
         """Domain should propagate from parent to all children in the chain."""
         from mloda.core.core.engine import Engine
@@ -245,7 +245,7 @@ class TestDomainPropagationMatrix:
             plugin_collector=PLUGIN_COLLECTOR,
         )
 
-        found_features: Set[str] = set()
+        found_features: set[str] = set()
         for feature_group_class, feature_set in engine.feature_group_collection.items():
             for feature in feature_set:
                 if feature.name in expected_children_with_domain:
@@ -311,7 +311,7 @@ class TestDomainPropagationMatrix:
     )
     def test_features_class_domain_propagation(
         self,
-        child_input: Union[str, Feature],
+        child_input: str | Feature,
         parent_domain: Optional[str],
         expected_child_domain: Optional[str],
     ) -> None:

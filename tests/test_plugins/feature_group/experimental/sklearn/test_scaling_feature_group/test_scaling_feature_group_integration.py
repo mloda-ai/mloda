@@ -4,7 +4,7 @@ Integration test for ScalingFeatureGroup with mloda and artifact management.
 
 from mloda.user import PluginLoader
 import pytest
-from typing import Any, Dict
+from typing import Any
 
 from mloda.user import Feature
 from mloda.user import PluginCollector
@@ -23,7 +23,7 @@ class ScalingIntegrationTestDataCreator(ATestDataCreator):
     compute_framework = PandasDataFrame
 
     @classmethod
-    def get_raw_data(cls) -> Dict[str, Any]:
+    def get_raw_data(cls) -> dict[str, Any]:
         """Return the raw data as a dictionary."""
         return {
             "Sales": [100, 200, 300, 400, 500],

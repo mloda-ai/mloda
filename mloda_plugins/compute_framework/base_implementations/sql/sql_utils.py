@@ -11,7 +11,7 @@ SQL injection prevention follows two layers:
 """
 
 import math
-from typing import Any, Tuple
+from typing import Any
 
 
 def quote_ident(name: str) -> str:
@@ -35,7 +35,7 @@ def quote_value(value: Any) -> str:
     raise TypeError(f"Unsupported type for SQL literal: {type(value).__name__}")
 
 
-def inline_params(condition: str, params: Tuple[Any, ...]) -> str:
+def inline_params(condition: str, params: tuple[Any, ...]) -> str:
     """Replace ``?`` placeholders with ``quote_value`` output.
 
     Fallback for backends whose API lacks PEP 249 parameter binding.

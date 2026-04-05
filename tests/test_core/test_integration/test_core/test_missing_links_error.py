@@ -13,7 +13,7 @@ This prevents confusing KeyError messages at runtime and educates users about
 the requirement for explicit Links when merging multiple dependencies.
 """
 
-from typing import Any, Optional, Set
+from typing import Any, Optional
 
 import pyarrow.compute as pc
 import pytest
@@ -70,7 +70,7 @@ class MultiDependencyFeature(FeatureGroup):
     This will trigger the validation error when Links are not provided.
     """
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {
             Feature.int32_of("RootFeatureA"),
             Feature.int32_of("RootFeatureB"),

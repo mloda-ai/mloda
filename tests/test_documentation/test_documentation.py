@@ -5,7 +5,7 @@ import pytest
 from mktestdocs import check_md_file
 
 
-from typing import Set, Any
+from typing import Any
 import time
 from mloda.steward import ExtenderHook, Extender
 from mloda.user import PluginLoader
@@ -19,7 +19,7 @@ PluginLoader.all()
 
 # We need this to test DokuExtender
 class DokuExtender(Extender):
-    def wraps(self) -> Set[ExtenderHook]:
+    def wraps(self) -> set[ExtenderHook]:
         return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
@@ -30,7 +30,7 @@ class DokuExtender(Extender):
 
 
 class DokuValidateInputFeatureExtender(Extender):
-    def wraps(self) -> Set[ExtenderHook]:
+    def wraps(self) -> set[ExtenderHook]:
         return {ExtenderHook.VALIDATE_INPUT_FEATURE}
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:

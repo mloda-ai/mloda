@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, List, Optional, Set
+from typing import Any, Optional
 
 import pandas as pd
 
@@ -30,7 +30,7 @@ class FeatureInputFeatureTest(FeatureGroup):
         return {cls.get_class_name(): ["TestValue", "TestValue2"]}
 
     @classmethod
-    def feature_names_supported(cls) -> Set[str]:
+    def feature_names_supported(cls) -> set[str]:
         return {cls.get_class_name()}
 
 
@@ -70,7 +70,7 @@ class TestInputFeatures:
     )
 
     def test_input_feature_feature(self) -> None:
-        feature_list: List[str | Feature] = []
+        feature_list: list[str | Feature] = []
 
         feature_list.append(
             Feature(
@@ -102,7 +102,7 @@ class TestInputFeatures:
 
         We pass api_data directly to run_all() - the ApiInputDataCollection is created internally.
         """
-        feature_list: List[Feature | str] = []
+        feature_list: list[Feature | str] = []
         feature_list.append(
             Feature(
                 name=self._requested_name,
@@ -128,7 +128,7 @@ class TestInputFeatures:
         assert len(result) == 2
 
     def test_input_feature_data_creator(self) -> None:
-        feature_list: List[Feature | str] = []
+        feature_list: list[Feature | str] = []
         feature_list.append(
             Feature(
                 name=self._requested_name,
@@ -155,7 +155,7 @@ class TestInputFeatures:
     def test_input_feature_feature_scope(self) -> None:
         file_path = Path(__file__).resolve().parent
 
-        feature_list: List[Feature | str] = []
+        feature_list: list[Feature | str] = []
         feature_list.append(
             Feature(
                 name=self._requested_name,
@@ -180,7 +180,7 @@ class TestInputFeatures:
         file_path = file_path.joinpath("example.csv")
         data_access_collection = DataAccessCollection(files={str(file_path)})
 
-        feature_list: List[Feature | str] = []
+        feature_list: list[Feature | str] = []
         feature_list.append(
             Feature(
                 name=self._requested_name,
@@ -207,7 +207,7 @@ class TestInputFeatures:
         other_path = file_path.joinpath("example.csv")
         data_access_collection = DataAccessCollection(files={str(other_path)})
         # global scope
-        feature_list: List[Feature | str] = []
+        feature_list: list[Feature | str] = []
         feature_list.append(
             Feature(
                 name=self._requested_name,
@@ -278,7 +278,7 @@ class TestInputFeatures:
         data_access_collection = DataAccessCollection(files={str(file_path)})
 
         # global scope, feature
-        feature_list: List[Feature | str] = []
+        feature_list: list[Feature | str] = []
         feature_list.append(
             Feature(
                 name=requested_feature,
@@ -333,7 +333,7 @@ class TestInputFeatures:
         data_access_collection = DataAccessCollection(files={str(file_path)})
 
         # global scope, feature
-        feature_list: List[Feature | str] = []
+        feature_list: list[Feature | str] = []
         feature_list.append(
             Feature(
                 name=requested_feature,

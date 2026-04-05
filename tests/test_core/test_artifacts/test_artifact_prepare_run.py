@@ -6,7 +6,7 @@ single prepare() session.
 """
 
 import hashlib
-from typing import Any, Optional, Type
+from typing import Any, Optional
 
 from mloda.provider import BaseArtifact, BaseInputData, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Feature, mloda, PluginCollector
@@ -21,7 +21,7 @@ class PrepareRunArtifactFeature(FeatureGroup):
         return DataCreator({cls.get_class_name()})
 
     @staticmethod
-    def artifact() -> Type[BaseArtifact] | None:
+    def artifact() -> type[BaseArtifact] | None:
         return BaseArtifact
 
     @classmethod
@@ -56,7 +56,7 @@ class VerifiableArtifactFeature(FeatureGroup):
         return DataCreator({cls.get_class_name()})
 
     @staticmethod
-    def artifact() -> Type[BaseArtifact] | None:
+    def artifact() -> type[BaseArtifact] | None:
         return BaseArtifact
 
     @classmethod

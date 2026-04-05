@@ -2,7 +2,7 @@
 Integration tests for the TextCleaningFeatureGroup with mloda.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 from mloda.user import Feature
 from mloda.user import Options
@@ -22,7 +22,7 @@ class TextCleaningTestDataCreator(ATestDataCreator):
     compute_framework = PandasDataFrame
 
     @classmethod
-    def get_raw_data(cls) -> Dict[str, Any]:
+    def get_raw_data(cls) -> dict[str, Any]:
         """Return the raw data as a dictionary."""
         return {
             "text1": [

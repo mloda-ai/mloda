@@ -1,7 +1,5 @@
 """Tests for _resolve_pinned_file suffix handling on base vs concrete classes."""
 
-from typing import List, Tuple
-
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda.user import DataAccessCollection
 
@@ -10,11 +8,11 @@ class ConcreteWithSuffix(BaseInputData):
     """Concrete subclass that implements suffix()."""
 
     @classmethod
-    def suffix(cls) -> Tuple[str, ...]:
+    def suffix(cls) -> tuple[str, ...]:
         return (".csv", ".CSV")
 
     @classmethod
-    def validate_columns(cls, file_path: str, feature_names: List[str]) -> bool:
+    def validate_columns(cls, file_path: str, feature_names: list[str]) -> bool:
         return True
 
 
@@ -22,11 +20,11 @@ class ConcreteNoSuffix(BaseInputData):
     """Subclass where suffix() raises NotImplementedError (like the base)."""
 
     @classmethod
-    def suffix(cls) -> Tuple[str, ...]:
+    def suffix(cls) -> tuple[str, ...]:
         raise NotImplementedError
 
     @classmethod
-    def validate_columns(cls, file_path: str, feature_names: List[str]) -> bool:
+    def validate_columns(cls, file_path: str, feature_names: list[str]) -> bool:
         return True
 
 

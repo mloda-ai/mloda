@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict
+from typing import Any
 
 
 import logging
@@ -32,7 +32,7 @@ class BaseValidator(ABC):
             Handles logging based on the specified log level. Raises an exception if the log level is "error".
     """
 
-    def __init__(self, validation_rules: Dict[str, Any], log_level: str = "error") -> None:
+    def __init__(self, validation_rules: dict[str, Any], log_level: str = "error") -> None:
         self.validation_rules = validation_rules
         self.log_level = log_level or "error"
 

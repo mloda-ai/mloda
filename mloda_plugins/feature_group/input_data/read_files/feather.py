@@ -1,4 +1,4 @@
-from typing import Any, Tuple
+from typing import Any
 
 from pyarrow import feather as pyarrow_feather
 
@@ -98,7 +98,7 @@ class FeatherReader(ReadFile):
     """
 
     @classmethod
-    def suffix(cls) -> Tuple[str, ...]:
+    def suffix(cls) -> tuple[str, ...]:
         return (
             ".feather",
             ".feather",

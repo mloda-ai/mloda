@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Set, Optional, Union, List
+from typing import Any, Optional
 
 from mloda.provider import FeatureGroup, FeatureSet
 from mloda.user import (
@@ -34,7 +34,7 @@ class TestJoinSpecWithoutIndexColumns:
             @classmethod
             def match_feature_group_criteria(
                 cls,
-                feature_name: Union[FeatureName, str],
+                feature_name: FeatureName | str,
                 options: Options,
                 data_access_collection: Optional[DataAccessCollection] = None,
             ) -> bool:
@@ -56,13 +56,13 @@ class TestJoinSpecWithoutIndexColumns:
             """Reads 'Class' from CSV. Defines index_columns() returning [Index(('id',))]."""
 
             @classmethod
-            def index_columns(cls) -> Optional[List[Index]]:
+            def index_columns(cls) -> Optional[list[Index]]:
                 return [Index(("id",))]
 
             @classmethod
             def match_feature_group_criteria(
                 cls,
-                feature_name: Union[FeatureName, str],
+                feature_name: FeatureName | str,
                 options: Options,
                 data_access_collection: Optional[DataAccessCollection] = None,
             ) -> bool:
@@ -86,7 +86,7 @@ class TestJoinSpecWithoutIndexColumns:
             @classmethod
             def match_feature_group_criteria(
                 cls,
-                feature_name: Union[FeatureName, str],
+                feature_name: FeatureName | str,
                 options: Options,
                 data_access_collection: Optional[DataAccessCollection] = None,
             ) -> bool:
@@ -94,7 +94,7 @@ class TestJoinSpecWithoutIndexColumns:
                     feature_name = str(feature_name)
                 return feature_name == "JoinSpecNoIndexResult"
 
-            def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+            def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
                 return {Feature("Amount"), Feature("Class")}
 
             @classmethod

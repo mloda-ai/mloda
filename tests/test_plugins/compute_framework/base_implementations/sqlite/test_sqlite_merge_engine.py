@@ -1,5 +1,5 @@
 import sqlite3
-from typing import Any, Optional, Type
+from typing import Any, Optional
 
 import pyarrow as pa
 import pytest
@@ -306,11 +306,11 @@ def test_register_table_raises_value_error_when_no_connection() -> None:
 
 class TestSqliteMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):
     @classmethod
-    def merge_engine_class(cls) -> Type[BaseMergeEngine]:
+    def merge_engine_class(cls) -> type[BaseMergeEngine]:
         return SqliteMergeEngine
 
     @classmethod
-    def framework_type(cls) -> Type[Any]:
+    def framework_type(cls) -> type[Any]:
         return SqliteRelation
 
     def get_connection(self) -> Optional[Any]:

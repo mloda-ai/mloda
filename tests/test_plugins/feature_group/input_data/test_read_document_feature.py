@@ -1,4 +1,4 @@
-from typing import Any, Tuple
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -13,7 +13,7 @@ class ConcreteReadDocument(ReadDocument):
     """Minimal concrete subclass for testing calculate_feature delegation."""
 
     @classmethod
-    def suffix(cls) -> Tuple[str, ...]:
+    def suffix(cls) -> tuple[str, ...]:
         return (".json",)
 
     @classmethod

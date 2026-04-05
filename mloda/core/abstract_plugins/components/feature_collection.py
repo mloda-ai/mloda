@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Generator, List, Optional, Set, Union
+from typing import Generator, Optional
 from uuid import UUID
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -15,12 +15,12 @@ class Features:
 
     def __init__(
         self,
-        features: List[Union[Feature, str]],
+        features: list[Feature | str],
         child_options: Optional[Options] = None,
         child_uuid: Optional[UUID] = None,
         parent_domain: Optional[str] = None,
     ) -> None:
-        self.collection: List[Feature] = []
+        self.collection: list[Feature] = []
         self.child_uuid: Optional[UUID] = child_uuid
         self.parent_domain: Optional[str] = parent_domain
 
@@ -33,7 +33,7 @@ class Features:
         self.build_feature_collection(features, child_options, child_uuid)
 
     def build_feature_collection(
-        self, features: List[Union[Feature, str]], child_options: Options, child_uuid: Optional[UUID] = None
+        self, features: list[Feature | str], child_options: Options, child_uuid: Optional[UUID] = None
     ) -> None:
         for feature in features:
             if child_options.group == {} and child_options.context == {}:
@@ -104,8 +104,8 @@ class Features:
     def __iter__(self) -> Generator[Feature, None, None]:
         yield from self.collection
 
-    def check_for_duplicate_string_features(self, features: List[Union[Feature, str]]) -> None:
-        check_set: Set[str] = set()
+    def check_for_duplicate_string_features(self, features: list[Feature | str]) -> None:
+        check_set: set[str] = set()
         for feature in features:
             if isinstance(feature, str):
                 if feature in check_set:

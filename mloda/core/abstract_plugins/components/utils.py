@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from typing import Any, Type
+from typing import Any
 
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-def get_all_subclasses(cls: Any, log_n_subclasses: int = 0) -> set[Type[Any]]:
+def get_all_subclasses(cls: Any, log_n_subclasses: int = 0) -> set[type[Any]]:
     all_subclasses = set()
 
     for subclass in cls.__subclasses__():

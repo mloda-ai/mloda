@@ -1,7 +1,7 @@
 import logging
 import os
 import re
-from typing import Any, List, Optional, Set, Type
+from typing import Any, Optional
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
@@ -38,7 +38,7 @@ class RunRefactorGeminiRequestLoop(GeminiRequestLoop):
 
 class RunRefactorDiffCached:
     def __init__(self) -> None:
-        self.compute_frameworks: Set[Type[ComputeFramework]] = {PandasDataFrame}
+        self.compute_frameworks: set[type[ComputeFramework]] = {PandasDataFrame}
 
     def run(self) -> None:
         # check tests are passing
@@ -63,7 +63,7 @@ class RunRefactorDiffCached:
                 break
 
     def fix_code_smell(
-        self, run_number: int, files: List[str], code_smell: str, previous: str, current_git_diff: str
+        self, run_number: int, files: list[str], code_smell: str, previous: str, current_git_diff: str
     ) -> str:
         prompt = f""" 
 
@@ -155,14 +155,14 @@ class RunRefactorDiffCached:
             return res
         raise ValueError("Wrong type of result")
 
-    def split_related_files(self, related_files_to_git_diff: str) -> List[str]:
+    def split_related_files(self, related_files_to_git_diff: str) -> list[str]:
         files = related_files_to_git_diff.split(",")
         new_files = []
         for file in files:
             new_files.append(file.strip("\n"))
         return new_files
 
-    def identify_one_code_smell(self, files: List[str], git_diff_cached: str) -> str:
+    def identify_one_code_smell(self, files: list[str], git_diff_cached: str) -> str:
         """
         - Potential performance bottlenecks (e.g., inefficient algorithms, unnecessary loops)
             - Dead code (unused variables, functions, or code paths)
@@ -217,7 +217,7 @@ class RunRefactorDiffCached:
             return res
         raise ValueError("Wrong type of result")
 
-    def get_tool_output_by_feature_group_(self, tool_feature_group: Type[FeatureGroup]) -> str:
+    def get_tool_output_by_feature_group_(self, tool_feature_group: type[FeatureGroup]) -> str:
         _feature_name = tool_feature_group.get_class_name()
         results = mloda.run_all(
             [_feature_name],
@@ -333,7 +333,7 @@ class RunRefactorDiffCached:
 
 
 class RunToolFeatureGroup(FeatureGroup):
-    _tool: Type[BaseTool] | None = None
+    _tool: type[BaseTool] | None = None
 
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
@@ -350,7 +350,7 @@ class RunToolFeatureGroup(FeatureGroup):
         return {cls.get_class_name(): [result_string]}
 
     @classmethod
-    def get_tool(cls) -> Type[BaseTool]:
+    def get_tool(cls) -> type[BaseTool]:
         if cls._tool is None:
             raise NotImplementedError("Tool not implemented.")
         return cls._tool

@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Any, Optional
 
 import pyarrow as pa
 
@@ -82,10 +82,10 @@ class GlobalFilterHasDifferentNameTest(GlobalFilterBasicTest):
 
 @PARALLELIZATION_MODES_ALL
 class TestGlobalFilter:
-    def get_features(self, feature_list: List[str], options: Dict[str, Any] = {}) -> Features:
+    def get_features(self, feature_list: list[str], options: dict[str, Any] = {}) -> Features:
         return Features([Feature(name=f_name, options=options, initial_requested_data=True) for f_name in feature_list])
 
-    def test_basic_global_filter(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
+    def test_basic_global_filter(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         global_filter_test_basic = "GlobalFilterBasicTest"
 
         features = self.get_features([global_filter_test_basic])
@@ -121,7 +121,7 @@ class TestGlobalFilter:
             assert next(iter(global_filter.filters)).uuid == single_feature.uuid
 
     def test_global_filter_filter_requests_other_column(
-        self, modes: Set[ParallelizationMode], flight_server: Any
+        self, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
         base_feature_name = "GlobalFilterFromDifferentColumn"
 
@@ -131,7 +131,7 @@ class TestGlobalFilter:
 
         # We could have parametized this test, but we don t want to add too many tests for no reason.
         if ParallelizationMode.MULTIPROCESSING in modes:
-            filter_feat: Union[str, Feature] = f"{base_feature_name}2"
+            filter_feat: str | Feature = f"{base_feature_name}2"
         else:
             filter_feat = Feature(name=f"{base_feature_name}2")
 
@@ -144,7 +144,7 @@ class TestGlobalFilter:
             res = result.to_pydict()
             assert res == {"GlobalFilterFromDifferentColumn1": [1]}
 
-    def test_global_filter_filter_has_different_name(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
+    def test_global_filter_filter_has_different_name(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         base_feature_name = "GlobalFilterHasDifferentName"
 
         features = self.get_features([f"{base_feature_name}1"])
@@ -153,7 +153,7 @@ class TestGlobalFilter:
 
         # We could have parametized this test, but we don t want to add too many tests for no reason.
         if ParallelizationMode.MULTIPROCESSING not in modes:
-            filter_feat: Union[str, Feature] = f"{base_feature_name}2"
+            filter_feat: str | Feature = f"{base_feature_name}2"
         else:
             filter_feat = Feature(name=f"{base_feature_name}2")
 

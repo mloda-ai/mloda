@@ -1,6 +1,6 @@
 """Unit tests for the PythonDictFilterEngine class."""
 
-from typing import Any, List
+from typing import Any
 
 import pytest
 
@@ -35,7 +35,7 @@ class TestPythonDictFilterEngine(FilterEngineTestMixin):
             {"id": 5, "age": 45, "name": "Eve", "category": "B"},
         ]
 
-    def get_column_values(self, result: Any, column: str) -> List[Any]:
+    def get_column_values(self, result: Any, column: str) -> list[Any]:
         """Extract column values from list of dicts."""
         return [row[column] for row in result]
 

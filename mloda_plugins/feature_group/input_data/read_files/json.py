@@ -1,4 +1,4 @@
-from typing import Any, Tuple
+from typing import Any
 
 from pyarrow import json as pyarrow_json
 
@@ -116,7 +116,7 @@ class JsonReader(ReadFile):
     """
 
     @classmethod
-    def suffix(cls) -> Tuple[str, ...]:
+    def suffix(cls) -> tuple[str, ...]:
         return (
             ".json",
             ".JSON",

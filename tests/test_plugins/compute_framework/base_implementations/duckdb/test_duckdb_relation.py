@@ -1,6 +1,6 @@
 """Tests for the DuckdbRelation class."""
 
-from typing import Any, List
+from typing import Any
 import logging
 
 import pytest
@@ -39,7 +39,7 @@ class TestDuckdbRelation(RelationTestMixin):
     def relation_class(self) -> Any:
         return DuckdbRelation
 
-    def get_column_values(self, result: Any, column: str) -> List[Any]:
+    def get_column_values(self, result: Any, column: str) -> list[Any]:
         return result.df()[column].tolist()  # type: ignore[no-any-return]
 
     # DuckDB-specific tests

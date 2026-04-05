@@ -5,11 +5,10 @@ This module provides parsers for configuration files in JSON format.
 """
 
 import json
-from typing import List
 from mloda.core.api.feature_config.models import FeatureConfig, FeatureConfigItem
 
 
-def parse_json(config_str: str) -> List[FeatureConfigItem]:
+def parse_json(config_str: str) -> list[FeatureConfigItem]:
     """Parse a JSON configuration string into feature config items.
 
     Args:
@@ -23,7 +22,7 @@ def parse_json(config_str: str) -> List[FeatureConfigItem]:
     if not isinstance(data, list):
         raise ValueError("Configuration must be a JSON array")
 
-    result: List[FeatureConfigItem] = []
+    result: list[FeatureConfigItem] = []
     for item in data:
         if isinstance(item, str):
             result.append(item)

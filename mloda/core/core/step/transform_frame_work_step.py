@@ -1,4 +1,4 @@
-from typing import Any, Optional, Set, Type, Union
+from typing import Any, Optional
 from uuid import UUID, uuid4
 
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
@@ -15,13 +15,13 @@ from mloda.core.runtime.flight.flight_server import FlightServer
 class TransformFrameworkStep(Step):
     def __init__(
         self,
-        from_framework: Type[ComputeFramework],
-        to_framework: Type[ComputeFramework],
-        required_uuids: Set[UUID],
-        from_feature_group: Type[FeatureGroup],
-        to_feature_group: Type[FeatureGroup],
+        from_framework: type[ComputeFramework],
+        to_framework: type[ComputeFramework],
+        required_uuids: set[UUID],
+        from_feature_group: type[FeatureGroup],
+        to_feature_group: type[FeatureGroup],
         link_id: Optional[UUID] = None,
-        right_framework_uuids: Optional[Set[UUID]] = None,
+        right_framework_uuids: Optional[set[UUID]] = None,
     ) -> None:
         if right_framework_uuids is None:
             right_framework_uuids = set()
@@ -54,14 +54,14 @@ class TransformFrameworkStep(Step):
     def __hash__(self) -> int:
         return hash((self.from_framework, self.to_framework, self.from_feature_group, self.to_feature_group))
 
-    def get_uuids(self) -> Set[UUID]:
+    def get_uuids(self) -> set[UUID]:
         return {self.uuid}
 
     def execute(
         self,
         cfw_register: CfwManager,
         cfw: ComputeFramework,
-        from_cfw: Optional[Union[ComputeFramework, UUID]] = None,
+        from_cfw: Optional[ComputeFramework | UUID] = None,
         data: Optional[Any] = None,
     ) -> Optional[Any]:
         self.location = cfw_register.get_location()
@@ -88,7 +88,7 @@ class TransformFrameworkStep(Step):
             return data
         return None
 
-    def get_column_names(self, cfw_register: CfwManager, from_cfw: Union[ComputeFramework, UUID]) -> Set[str]:
+    def get_column_names(self, cfw_register: CfwManager, from_cfw: ComputeFramework | UUID) -> set[str]:
         if self.location and isinstance(from_cfw, UUID):
             return cfw_register.get_column_names(from_cfw)
 
@@ -97,7 +97,7 @@ class TransformFrameworkStep(Step):
 
         return from_cfw.get_column_names()
 
-    def get_data(self, cfw: Union[ComputeFramework, UUID]) -> Any:
+    def get_data(self, cfw: ComputeFramework | UUID) -> Any:
         """
         This method is used to get the data from the compute framework.
         If we are using multiprocessing, we use flightserver to transport the data.
@@ -116,7 +116,7 @@ class TransformFrameworkStep(Step):
     def set_data(self, cfw: ComputeFramework, data: Any) -> None:
         cfw.set_data(data)
 
-    def transform(self, cfw: ComputeFramework, data: Any, feature_names: Set[str]) -> Any:
+    def transform(self, cfw: ComputeFramework, data: Any, feature_names: set[str]) -> Any:
         if self.equal_frameworks():
             return data
 

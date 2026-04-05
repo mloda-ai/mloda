@@ -1,5 +1,5 @@
 import pytest
-from typing import Any, Optional, Type
+from typing import Any, Optional
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
@@ -98,7 +98,7 @@ class TestPandasDataFrameMerge(DataFrameTestBase):
     """Test PandasDataFrame merge operations using the base test class."""
 
     @classmethod
-    def framework_class(cls) -> Type[Any]:
+    def framework_class(cls) -> type[Any]:
         """Return the PandasDataFrame class."""
         return PandasDataFrame
 

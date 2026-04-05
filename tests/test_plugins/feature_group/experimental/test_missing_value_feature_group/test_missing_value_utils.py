@@ -2,7 +2,7 @@
 Utility functions and data creators for missing value tests.
 """
 
-from typing import Any, Dict, List
+from typing import Any
 
 import pandas as pd
 
@@ -14,7 +14,7 @@ from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCr
 
 
 # List of missing value features to test
-MISSING_VALUE_FEATURES: List[Feature | str] = [
+MISSING_VALUE_FEATURES: list[Feature | str] = [
     "income__mean_imputed",  # Mean imputation
     "age__median_imputed",  # Median imputation
     "category__mode_imputed",  # Mode imputation
@@ -27,7 +27,7 @@ class MissingValueTestDataCreator(ATestDataCreator):
     """Base class for missing value test data creators."""
 
     @classmethod
-    def get_raw_data(cls) -> Dict[str, Any]:
+    def get_raw_data(cls) -> dict[str, Any]:
         """Return the raw data as a dictionary."""
         return {
             "income": [50000, None, 75000, None, 60000],
@@ -46,7 +46,7 @@ class PyArrowMissingValueTestDataCreator(MissingValueTestDataCreator):
     compute_framework = PyArrowTable
 
 
-def validate_missing_value_features(result: List[pd.DataFrame]) -> None:
+def validate_missing_value_features(result: list[pd.DataFrame]) -> None:
     # Verify the results
     assert len(result) == 2, "Expected two results: one for source data, one for imputed features"
 

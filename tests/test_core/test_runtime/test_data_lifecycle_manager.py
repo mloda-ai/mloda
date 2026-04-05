@@ -1,7 +1,6 @@
 # mypy: disable-error-code="arg-type, unused-ignore"
 """Tests for DataLifecycleManager class that manages data dropping, result collection, and artifacts."""
 
-from typing import Dict
 from unittest.mock import Mock, patch
 from uuid import UUID, uuid4
 
@@ -183,7 +182,7 @@ class TestDataLifecycleManagerDropCfwData:
         """Should handle missing CFW UUID in collection."""
         manager = DataLifecycleManager()
         cfw_uuid = uuid4()
-        cfw_collection: Dict[UUID, ComputeFramework] = {}
+        cfw_collection: dict[UUID, ComputeFramework] = {}
 
         # Should raise KeyError when CFW not in collection
         with pytest.raises(KeyError):

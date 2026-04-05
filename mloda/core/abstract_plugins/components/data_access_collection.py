@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Optional
 
 from mloda.core.abstract_plugins.components.hashable_dict import HashableDict
 
@@ -14,27 +14,27 @@ class DataAccessCollection:
 
     def __init__(
         self,
-        files: Optional[Set[str]] = None,
-        folders: Optional[Set[str]] = None,
-        credential_dicts: Optional[Dict[str, Any]] = None,
-        initialized_connection_objects: Optional[Set[Any]] = None,
-        uninitialized_connection_objects: Optional[List[Any]] = None,
-        column_to_file: Optional[Dict[str, str]] = None,
+        files: Optional[set[str]] = None,
+        folders: Optional[set[str]] = None,
+        credential_dicts: Optional[dict[str, Any]] = None,
+        initialized_connection_objects: Optional[set[Any]] = None,
+        uninitialized_connection_objects: Optional[list[Any]] = None,
+        column_to_file: Optional[dict[str, str]] = None,
     ) -> None:
-        self.files: Set[str] = files if files is not None else set()
-        self.folders: Set[str] = folders if folders is not None else set()
+        self.files: set[str] = files if files is not None else set()
+        self.folders: set[str] = folders if folders is not None else set()
         self.add_credential_dict(credential_dicts if credential_dicts is not None else {})
-        self.initialized_connection_objects: Set[Any] = (
+        self.initialized_connection_objects: set[Any] = (
             initialized_connection_objects if initialized_connection_objects is not None else set()
         )
-        self.uninitialized_connection_objects: List[Any] = (
+        self.uninitialized_connection_objects: list[Any] = (
             uninitialized_connection_objects if uninitialized_connection_objects is not None else []
         )
         if column_to_file is not None:
             for value in column_to_file.values():
                 if value not in self.files:
                     raise ValueError(f"column_to_file value '{value}' is not in files.")
-        self.column_to_file: Optional[Dict[str, str]] = column_to_file
+        self.column_to_file: Optional[dict[str, str]] = column_to_file
 
     def add_file(self, file: str) -> None:
         self.files.add(file)
@@ -42,7 +42,7 @@ class DataAccessCollection:
     def add_folder(self, folder: str) -> None:
         self.folders.add(folder)
 
-    def add_credential_dict(self, credential_dict: Dict[str, Any]) -> None:
+    def add_credential_dict(self, credential_dict: dict[str, Any]) -> None:
         self.credential_dicts = HashableDict(credential_dict)
 
     def add_initialized_connection_object(self, connection_object: Any) -> None:

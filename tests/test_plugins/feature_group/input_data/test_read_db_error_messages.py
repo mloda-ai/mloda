@@ -1,6 +1,6 @@
 """Tests for improved error messages in ReadDB."""
 
-from typing import Any, Dict, Optional, Set, Union
+from typing import Any, Optional
 
 import pytest
 
@@ -17,13 +17,13 @@ class ConcreteReadDB(ReadDB):
     @classmethod
     def match_feature_group_criteria(
         cls,
-        feature_name: Union[FeatureName, str],
+        feature_name: FeatureName | str,
         options: Options,
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
         return False
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return None
 
     @classmethod
@@ -31,7 +31,7 @@ class ConcreteReadDB(ReadDB):
         return None
 
     @classmethod
-    def is_valid_credentials(cls, credentials: Dict[str, Any]) -> bool:
+    def is_valid_credentials(cls, credentials: dict[str, Any]) -> bool:
         return False
 
 

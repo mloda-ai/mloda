@@ -5,7 +5,7 @@ Base implementation for forecasting feature groups.
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Any, List, Optional, Set, Type
+from typing import Any, Optional
 
 from mloda.provider import FeatureGroup
 from mloda.provider import BaseArtifact
@@ -168,7 +168,7 @@ class ForecastingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     }
 
     @staticmethod
-    def artifact() -> Type[BaseArtifact] | None:
+    def artifact() -> type[BaseArtifact] | None:
         """
         Returns the artifact class for this feature group.
 
@@ -198,7 +198,7 @@ class ForecastingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             return reference_time
         return DefaultOptionKeys.reference_time
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         """Extract source feature and time filter feature from either configuration-based options or string parsing."""
 
         source_feature: str | None = None
@@ -519,7 +519,7 @@ class ForecastingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     @classmethod
     @abstractmethod
-    def _get_available_columns(cls, data: Any) -> Set[str]:
+    def _get_available_columns(cls, data: Any) -> set[str]:
         """
         Get the set of available column names from the data.
 
@@ -533,7 +533,7 @@ class ForecastingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     @classmethod
     @abstractmethod
-    def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
+    def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
         """
         Check if the resolved source features exist in the data.
 
@@ -570,7 +570,7 @@ class ForecastingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         algorithm: str,
         horizon: int,
         time_unit: str,
-        in_features: List[str],
+        in_features: list[str],
         time_filter_feature: str,
         model_artifact: Optional[Any] = None,
     ) -> tuple[Any, Optional[Any]]:
@@ -603,7 +603,7 @@ class ForecastingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         algorithm: str,
         horizon: int,
         time_unit: str,
-        in_features: List[str],
+        in_features: list[str],
         time_filter_feature: str,
         model_artifact: Optional[Any] = None,
     ) -> tuple[Any, Any, Any, Optional[Any]]:

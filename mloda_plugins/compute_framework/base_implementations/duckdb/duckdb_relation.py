@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, List, Literal, Optional, cast
+from typing import Any, Literal, Optional, cast
 
 try:
     import duckdb
@@ -41,7 +41,7 @@ class DuckdbRelation:
         return self._connection
 
     @property
-    def columns(self) -> List[str]:
+    def columns(self) -> list[str]:
         return self._relation.columns
 
     def filter(self, condition: str, params: tuple[Any, ...] = ()) -> "DuckdbRelation":

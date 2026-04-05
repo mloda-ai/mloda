@@ -1,4 +1,3 @@
-from typing import Dict, Set, Type
 from uuid import UUID
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.graph.properties import EdgeProperties, NodeProperties
@@ -9,8 +8,8 @@ from mloda.core.abstract_plugins.components.feature import Feature
 class BuildGraph:
     def __init__(
         self,
-        feature_link_parents: Dict[UUID, Set[UUID]],
-        feature_group_collection: Dict[Type[FeatureGroup], Set[Feature]],
+        feature_link_parents: dict[UUID, set[UUID]],
+        feature_group_collection: dict[type[FeatureGroup], set[Feature]],
     ) -> None:
         self._graph = Graph()
         self.feature_link_parents = feature_link_parents
@@ -29,8 +28,8 @@ class BuildGraph:
                 self.graph.add_edge(parent, child, self._create_edge_properties(parent, child))
 
     def _create_property_mapping(
-        self, feature_group_collection: Dict[Type[FeatureGroup], Set[Feature]]
-    ) -> Dict[UUID, NodeProperties]:
+        self, feature_group_collection: dict[type[FeatureGroup], set[Feature]]
+    ) -> dict[UUID, NodeProperties]:
         """
         Creates a flattened mapping of feature UUIDs to NodeProperties.
         """

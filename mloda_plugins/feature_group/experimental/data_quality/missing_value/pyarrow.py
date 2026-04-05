@@ -4,7 +4,7 @@ PyArrow implementation for missing value imputation feature groups.
 
 from __future__ import annotations
 
-from typing import Any, List, Optional, Set
+from typing import Any, Optional
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -21,12 +21,12 @@ class PyArrowMissingValueFeatureGroup(MissingValueFeatureGroup):
         return {PyArrowTable}
 
     @classmethod
-    def _get_available_columns(cls, data: pa.Table) -> Set[str]:
+    def _get_available_columns(cls, data: pa.Table) -> set[str]:
         """Get the set of available column names from the Table."""
         return set(data.schema.names)
 
     @classmethod
-    def _check_source_features_exist(cls, data: pa.Table, feature_names: List[str]) -> None:
+    def _check_source_features_exist(cls, data: pa.Table, feature_names: list[str]) -> None:
         """Check if the resolved source features exist in the Table."""
         missing_features = [f for f in feature_names if f not in data.schema.names]
         if missing_features:
@@ -52,9 +52,9 @@ class PyArrowMissingValueFeatureGroup(MissingValueFeatureGroup):
         cls,
         data: pa.Table,
         imputation_method: str,
-        in_features: List[str],
+        in_features: list[str],
         constant_value: Optional[Any] = None,
-        group_by_features: Optional[List[str]] = None,
+        group_by_features: Optional[list[str]] = None,
     ) -> pa.Array:
         """
         Perform the imputation using PyArrow compute functions.
@@ -168,7 +168,7 @@ class PyArrowMissingValueFeatureGroup(MissingValueFeatureGroup):
         imputation_method: str,
         in_features: str,  # Note: grouped imputation only supports single column
         constant_value: Optional[Any],
-        group_by_features: List[str],
+        group_by_features: list[str],
     ) -> pa.Array:
         """
         Perform imputation within groups.

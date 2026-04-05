@@ -1,5 +1,5 @@
 import os
-from typing import Any, List, Set
+from typing import Any
 import time
 
 from mloda.user import PluginLoader
@@ -36,8 +36,8 @@ class TestMixComputeFramework:
     PluginLoader().all()
 
     @classmethod
-    def get_feature_list_from_local_scope(cls, features: List[str], path: str) -> List[str | Feature]:
-        _feature_list: List[str | Feature] = []
+    def get_feature_list_from_local_scope(cls, features: list[str], path: str) -> list[str | Feature]:
+        _feature_list: list[str | Feature] = []
         for feature in features:
             compute_framework = "PyArrowTable" if feature == "Amount" else "PandasDataFrame"
             _f = Feature(
@@ -75,7 +75,7 @@ class TestMixComputeFramework:
     )
     def test_mix_cfw_can_be_called_from_same_feature(
         self,
-        modes: Set[ParallelizationMode],
+        modes: set[ParallelizationMode],
         flight_server: Any,  # noqa: F811
     ) -> None:
         from tests.test_plugins.integration_plugins.features_for_testing import MixedCfwFeature
@@ -117,7 +117,7 @@ class TestMixComputeFramework:
     )
     def test_duplicate_feature_setup(
         self,
-        modes: Set[ParallelizationMode],
+        modes: set[ParallelizationMode],
         flight_server: Any,  # noqa: F811
     ) -> None:
         from tests.test_plugins.integration_plugins.features_for_testing import DuplicateFeatureSetup

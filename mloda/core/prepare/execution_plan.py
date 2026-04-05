@@ -1,5 +1,5 @@
 from copy import copy, deepcopy
-from typing import Any, Generator, List, Optional, Set, Tuple, Type, Dict, Union
+from typing import Any, Generator, Optional
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
@@ -37,15 +37,15 @@ class ExecutionPlan:
         global_filter: Optional[GlobalFilter] = None,
         api_input_data_collection: Optional[ApiInputDataCollection] = None,
     ) -> None:
-        self.tfs_collecion: Set[TransformFrameworkStep] = set()
+        self.tfs_collecion: set[TransformFrameworkStep] = set()
         self.joinstep_collection = JoinStepCollection()
         self.global_filter = global_filter
         self.api_input_data_collection = api_input_data_collection
 
         # Helper variable
-        self.feature_set_collections: List[Set[UUID]] = []
+        self.feature_set_collections: list[set[UUID]] = []
 
-    def __iter__(self) -> Generator[Union[TransformFrameworkStep, JoinStep, FeatureGroupStep], None, None]:
+    def __iter__(self) -> Generator[TransformFrameworkStep | JoinStep | FeatureGroupStep, None, None]:
         yield from self.execution_plan
 
     def __len__(self) -> int:
@@ -60,10 +60,10 @@ class ExecutionPlan:
     def add_feature_group_step(
         self,
         queue: PlannedQueue,
-        parent_to_children_mapping: Dict[UUID, Set[UUID]],
-        child_links: Dict[UUID, Set[LinkFrameworkTrekker]],
-    ) -> List[Union[LinkFrameworkTrekker, FeatureGroupStep]]:
-        pre_execution_plan: List[Union[LinkFrameworkTrekker, FeatureGroupStep]] = []
+        parent_to_children_mapping: dict[UUID, set[UUID]],
+        child_links: dict[UUID, set[LinkFrameworkTrekker]],
+    ) -> list[LinkFrameworkTrekker | FeatureGroupStep]:
+        pre_execution_plan: list[LinkFrameworkTrekker | FeatureGroupStep] = []
 
         for element in queue:
             if isinstance(element[0], Link):
@@ -85,11 +85,11 @@ class ExecutionPlan:
 
     def add_joinstep(
         self,
-        pre_execution_plan: List[Union[LinkFrameworkTrekker, FeatureGroupStep]],
+        pre_execution_plan: list[LinkFrameworkTrekker | FeatureGroupStep],
         link_trekker: LinkTrekker,
         graph: Graph,
-    ) -> List[Union[JoinStep, FeatureGroupStep]]:
-        fw_execution_plan: List[Union[JoinStep, FeatureGroupStep]] = []
+    ) -> list[JoinStep | FeatureGroupStep]:
+        fw_execution_plan: list[JoinStep | FeatureGroupStep] = []
 
         for pex in pre_execution_plan:
             if isinstance(pex, tuple):
@@ -105,8 +105,8 @@ class ExecutionPlan:
 
     def handle_append_or_union_joinstep(
         self,
-        fw_execution_plan: List[Union[JoinStep, FeatureGroupStep]],
-    ) -> List[Union[JoinStep, FeatureGroupStep]]:
+        fw_execution_plan: list[JoinStep | FeatureGroupStep],
+    ) -> list[JoinStep | FeatureGroupStep]:
         """
         This part is for the case that we have a join step with append or union.
 
@@ -119,7 +119,7 @@ class ExecutionPlan:
         2) We use the mapping to update the required_uuids of the join step
         """
 
-        map_left_framework_uuid_to_link_uuid: Dict[UUID, Set[UUID]] = defaultdict(set)
+        map_left_framework_uuid_to_link_uuid: dict[UUID, set[UUID]] = defaultdict(set)
 
         # Map the left framework uuid to the link uuid
         for fw in fw_execution_plan:
@@ -174,12 +174,12 @@ class ExecutionPlan:
         )
 
     def add_tfs(
-        self, execution_plan: List[Union[JoinStep, FeatureGroupStep]], graph: Graph
-    ) -> List[Union[TransformFrameworkStep, JoinStep, FeatureGroupStep]]:
-        new_execution_plan: List[Union[TransformFrameworkStep, JoinStep, FeatureGroupStep]] = []
+        self, execution_plan: list[JoinStep | FeatureGroupStep], graph: Graph
+    ) -> list[TransformFrameworkStep | JoinStep | FeatureGroupStep]:
+        new_execution_plan: list[TransformFrameworkStep | JoinStep | FeatureGroupStep] = []
 
-        left_join_frameworks: Set[JoinStep] = {ep for ep in execution_plan if isinstance(ep, JoinStep)}
-        need_to_upload_collector: Set[UUID] = set()
+        left_join_frameworks: set[JoinStep] = {ep for ep in execution_plan if isinstance(ep, JoinStep)}
+        need_to_upload_collector: set[UUID] = set()
 
         for ep in execution_plan:
             if isinstance(ep, JoinStep):
@@ -332,8 +332,8 @@ class ExecutionPlan:
         joinsteps = self.joinstep_collection.collection
 
         # Step 1: Identify all left-most and right-most indexes
-        left_indexes: Set[Index] = set()
-        right_indexes: Set[Index] = set()
+        left_indexes: set[Index] = set()
+        right_indexes: set[Index] = set()
 
         for js, _ in joinsteps.items():
             # Skip if the index does not belong to the FeatureGroupStep.
@@ -373,7 +373,7 @@ class ExecutionPlan:
         left_most_index = next(iter(left_indexes))  # Extract the single left-most index
 
         # Step 3: Update the relevant fields in `inner_ep` based on conditions
-        right_memory_index: Set[Index] = set()
+        right_memory_index: set[Index] = set()
 
         for js, _ in joinsteps.items():
             # Skip if the left index is already in the memory index
@@ -390,7 +390,7 @@ class ExecutionPlan:
                 inner_ep.tfs_ids = {store_val}
                 inner_ep.features.any_uuid = store_val
 
-    def get_parent_parents(self, parents: Set[UUID], graph: Graph) -> Set[UUID]:
+    def get_parent_parents(self, parents: set[UUID], graph: Graph) -> set[UUID]:
         parent_parents = set()
         for parent in parents:
             parent_parent = graph.parent_to_children_mapping[parent]
@@ -403,7 +403,7 @@ class ExecutionPlan:
         link_fw: LinkFrameworkTrekker,
         link_trekker: LinkTrekker,
         graph: Graph,
-        pre_execution_plan: List[Union[LinkFrameworkTrekker, FeatureGroupStep]],
+        pre_execution_plan: list[LinkFrameworkTrekker | FeatureGroupStep],
     ) -> JoinStep | None:
         link = link_fw[0]
         left_framework = link_fw[1]
@@ -415,7 +415,7 @@ class ExecutionPlan:
             right_framework = link_fw[1]
 
         # This gets the id of the children which needs the link to be calculated.
-        children_uuids: Set[UUID] = set()
+        children_uuids: set[UUID] = set()
 
         for stored_links, uuids in link_trekker.data.items():
             if link_fw == stored_links:
@@ -437,13 +437,13 @@ class ExecutionPlan:
         children_uuids = self.reduce_children_to_one_level(children_uuids, graph)
 
         # This gets the parent ids of the joinstep, which needs to be calulated before the link.
-        required_uuids: Set[UUID] = set()
+        required_uuids: set[UUID] = set()
         for uuid in children_uuids:
             required_uuids.update(graph.parent_to_children_mapping[uuid])
 
         # This filters the required_uuids to only the one with the final compute framework.
-        left_framework_uuids: Set[UUID] = set()
-        right_framework_uuids: Set[UUID] = set()
+        left_framework_uuids: set[UUID] = set()
+        right_framework_uuids: set[UUID] = set()
 
         for uuid in required_uuids:
             if graph.get_nodes()[uuid].feature.get_compute_framework() == left_framework:
@@ -491,8 +491,8 @@ class ExecutionPlan:
         return js
 
     def find_fg_per_uuid(
-        self, pre_execution_plan: List[Union[LinkFrameworkTrekker, FeatureGroupStep]], uuid: UUID
-    ) -> Type[FeatureGroup]:
+        self, pre_execution_plan: list[LinkFrameworkTrekker | FeatureGroupStep], uuid: UUID
+    ) -> type[FeatureGroup]:
         """
         This function finds the feature group per UUID in the pre_execution_plan.
 
@@ -508,9 +508,9 @@ class ExecutionPlan:
         self,
         link: Link,
         link_fw: LinkFrameworkTrekker,
-        required_uuids: Set[UUID],
+        required_uuids: set[UUID],
         graph: Graph,
-        pre_execution_plan: List[Union[LinkFrameworkTrekker, FeatureGroupStep]],
+        pre_execution_plan: list[LinkFrameworkTrekker | FeatureGroupStep],
     ) -> JoinStep:
         """
         Create a JoinStep for APPEND or UNION operations in the framework execution plan.
@@ -580,12 +580,12 @@ class ExecutionPlan:
             right_framework_uuids={right_feature_uuid},
         )
 
-    def reduce_children_to_one_level(self, children_uuids: Set[UUID], graph: Graph) -> Set[UUID]:
+    def reduce_children_to_one_level(self, children_uuids: set[UUID], graph: Graph) -> set[UUID]:
         """
         We reduce the children to one level. This is needed for the joinstep creation.
         """
 
-        new_children_uuids: Set[UUID] = copy(children_uuids)
+        new_children_uuids: set[UUID] = copy(children_uuids)
         for child in children_uuids:
             child_of_child = graph.adjacency_list[child]
 
@@ -601,7 +601,7 @@ class ExecutionPlan:
         children_fw: type[ComputeFramework],
         children_uuid: UUID,
         graph: Graph,
-    ) -> bool | Tuple[Set[UUID], Set[UUID]]:
+    ) -> bool | tuple[set[UUID], set[UUID]]:
         """Identify if the join is valid. If not, this marks it as invalid and returns False."""
 
         # Check that we handle links with equal feature groups specifically!
@@ -621,7 +621,7 @@ class ExecutionPlan:
 
     def case_link_fw_is_equal_to_children_fw(
         self, link_fw: LinkFrameworkTrekker, children_uuid: UUID, graph: Graph
-    ) -> bool | Tuple[Set[UUID], Set[UUID]]:
+    ) -> bool | tuple[set[UUID], set[UUID]]:
         # check that we only support non-right joins for equal/polymorphic feature groups
         if link_fw[0].jointype == JoinType.RIGHT:
             raise Exception(
@@ -642,7 +642,7 @@ class ExecutionPlan:
                 )
             )
 
-        valid_pairs: List[Tuple[Set[UUID], Set[UUID]]] = []
+        valid_pairs: list[tuple[set[UUID], set[UUID]]] = []
 
         for uuid, uuid_complete in feature_set_collection_per_uuid.items():
             # get the feature set collection, where feature cfw = left link cfw
@@ -721,7 +721,7 @@ class ExecutionPlan:
         children_fw: type[ComputeFramework],
         children_uuid: UUID,
         graph: Graph,
-    ) -> bool | Tuple[Set[UUID], Set[UUID]]:
+    ) -> bool | tuple[set[UUID], set[UUID]]:
         """
         If we have equal feature groups in the link object, this creates an interesting scenario.
 
@@ -840,7 +840,7 @@ class ExecutionPlan:
                 "The discriminator values must match the corresponding feature's options."
             )
 
-    def _matches_discriminator(self, discriminator: Dict[str, Any], graph: Graph, uuid: UUID) -> bool:
+    def _matches_discriminator(self, discriminator: dict[str, Any], graph: Graph, uuid: UUID) -> bool:
         """Check if a node's feature options match the discriminator key-value pairs."""
         for k, v in graph.nodes[uuid].feature.options.items():
             for dk, dv in discriminator.items():
@@ -849,7 +849,7 @@ class ExecutionPlan:
         return False
 
     def check_pointer(
-        self, pointer_dict: Dict[str, Any], link_fw: LinkFrameworkTrekker, graph: Graph, uuid: UUID
+        self, pointer_dict: dict[str, Any], link_fw: LinkFrameworkTrekker, graph: Graph, uuid: UUID
     ) -> bool:
         if link_fw[0].right_discriminator is None:
             raise ValueError(
@@ -880,8 +880,8 @@ class ExecutionPlan:
         return False
 
     def find_feature_uuids(
-        self, parents: Set[UUID], local_feature_set_collection: List[Set[UUID]]
-    ) -> Dict[UUID, Set[UUID]]:
+        self, parents: set[UUID], local_feature_set_collection: list[set[UUID]]
+    ) -> dict[UUID, set[UUID]]:
         """
         We group the feature_uuids by the feature_set_collection, which represent features of one concrete feature group (step).
         """
@@ -897,12 +897,12 @@ class ExecutionPlan:
         return feature_set_collection_per_uuid
 
     def _split_features_by_dependency_levels(
-        self, features: Set[Feature], parent_to_children_mapping: Dict[UUID, Set[UUID]]
-    ) -> List[Set[Feature]]:
+        self, features: set[Feature], parent_to_children_mapping: dict[UUID, set[UUID]]
+    ) -> list[set[Feature]]:
         feature_uuids = {f.uuid for f in features}
         uuid_to_feature = {f.uuid: f for f in features}
 
-        intra_deps: Dict[UUID, Set[UUID]] = {}
+        intra_deps: dict[UUID, set[UUID]] = {}
         for feature in features:
             ancestors = parent_to_children_mapping.get(feature.uuid, set())
             intra_deps[feature.uuid] = ancestors & feature_uuids
@@ -910,9 +910,9 @@ class ExecutionPlan:
         if not any(deps for deps in intra_deps.values()):
             return [features]
 
-        levels: List[Set[Feature]] = []
+        levels: list[set[Feature]] = []
         remaining = set(feature_uuids)
-        placed: Set[UUID] = set()
+        placed: set[UUID] = set()
 
         while remaining:
             ready = {uuid for uuid in remaining if intra_deps[uuid].issubset(placed)}
@@ -927,14 +927,14 @@ class ExecutionPlan:
 
     def run_feature_group(
         self,
-        feature_group_features: Tuple[Type[FeatureGroup], Set[Feature]],
-        parent_to_children_mapping: Dict[UUID, Set[UUID]],
-        pre_required_uuids: Set[UUID],
-    ) -> Dict[Any, FeatureGroupStep]:
+        feature_group_features: tuple[type[FeatureGroup], set[Feature]],
+        parent_to_children_mapping: dict[UUID, set[UUID]],
+        pre_required_uuids: set[UUID],
+    ) -> dict[Any, FeatureGroupStep]:
         feature_group, features = feature_group_features[0], feature_group_features[1]
         features_grouped_by_framework_and_options = self.group_features_by_compute_framework_and_options(features)
 
-        fg_steps: Dict[Any, FeatureGroupStep] = {}
+        fg_steps: dict[Any, FeatureGroupStep] = {}
 
         root_parent_children_mapping = self.get_parent_children_mapping(parent_to_children_mapping)
 
@@ -976,9 +976,7 @@ class ExecutionPlan:
                 fg_steps[(f_hash, level_idx)] = feature_group_step
         return fg_steps
 
-    def prepare_api_input_data(
-        self, feature_group: Type[FeatureGroup], feature_set: FeatureSet
-    ) -> Union[bool, BaseApiData]:
+    def prepare_api_input_data(self, feature_group: type[FeatureGroup], feature_set: FeatureSet) -> bool | BaseApiData:
         if not isinstance(feature_group.input_data(), ApiInputData):
             return False
 
@@ -1005,20 +1003,20 @@ class ExecutionPlan:
 
         return matching_cls_initialized
 
-    def add_artifact_to_feature_set(self, feature_group: Type[FeatureGroup], feature_set: FeatureSet) -> None:
+    def add_artifact_to_feature_set(self, feature_group: type[FeatureGroup], feature_set: FeatureSet) -> None:
         if feature_group.artifact() is None:
             return
 
         feature_set.add_artifact_name()
 
-    def add_single_filters_to_feature_set(self, feature_group: Type[FeatureGroup], feature_set: FeatureSet) -> None:
+    def add_single_filters_to_feature_set(self, feature_group: type[FeatureGroup], feature_set: FeatureSet) -> None:
         if self.global_filter is None:
             return
 
         if len(self.global_filter.collection.keys()) == 0:
             return
 
-        relevant_filters: Set[SingleFilter] = set()
+        relevant_filters: set[SingleFilter] = set()
 
         for (
             filtered_feature_group,
@@ -1042,8 +1040,8 @@ class ExecutionPlan:
 
         feature_set.add_filters(relevant_filters)
 
-    def get_parent_children_mapping(self, parent_to_children_mapping: Dict[UUID, Set[UUID]]) -> Dict[UUID, Set[UUID]]:
-        inverted_dict: Dict[UUID, Set[UUID]] = {}
+    def get_parent_children_mapping(self, parent_to_children_mapping: dict[UUID, set[UUID]]) -> dict[UUID, set[UUID]]:
+        inverted_dict: dict[UUID, set[UUID]] = {}
         for key, values in parent_to_children_mapping.items():
             for value in values:
                 if value not in inverted_dict:
@@ -1052,8 +1050,8 @@ class ExecutionPlan:
 
         return inverted_dict
 
-    def invert_link_trekker(self, link_trekker: LinkTrekker) -> Dict[UUID, Set[LinkFrameworkTrekker]]:
-        new_dict: Dict[UUID, Set[LinkFrameworkTrekker]] = defaultdict(set)
+    def invert_link_trekker(self, link_trekker: LinkTrekker) -> dict[UUID, set[LinkFrameworkTrekker]]:
+        new_dict: dict[UUID, set[LinkFrameworkTrekker]] = defaultdict(set)
 
         for link, uuids in link_trekker.data.items():
             for uuid in uuids:
@@ -1062,9 +1060,9 @@ class ExecutionPlan:
         return new_dict
 
     def retrieve_links_which_must_be_calculated_before(
-        self, features: Set[Feature], child_links: Dict[UUID, Set[LinkFrameworkTrekker]]
-    ) -> Set[UUID]:
-        new_set: Set[UUID] = set()
+        self, features: set[Feature], child_links: dict[UUID, set[LinkFrameworkTrekker]]
+    ) -> set[UUID]:
+        new_set: set[UUID] = set()
 
         for feature in features:
             if feature.uuid in child_links:
@@ -1072,15 +1070,15 @@ class ExecutionPlan:
         return new_set
 
     def retrieve_nodes_which_must_be_calculated_before(
-        self, features: Set[Feature], parent_to_children_mapping: Dict[UUID, Set[UUID]]
-    ) -> Set[UUID]:
-        new_set: Set[UUID] = set()
+        self, features: set[Feature], parent_to_children_mapping: dict[UUID, set[UUID]]
+    ) -> set[UUID]:
+        new_set: set[UUID] = set()
         for feature in features:
             if feature.uuid in parent_to_children_mapping:
                 new_set.update(parent_to_children_mapping[feature.uuid])
         return new_set
 
-    def group_features_by_compute_framework_and_options(self, features: Set[Feature]) -> Dict[int, Set[Feature]]:
+    def group_features_by_compute_framework_and_options(self, features: set[Feature]) -> dict[int, set[Feature]]:
         """Group features by compute framework, options, and data type.
 
         Features with data_type=None are "lenient" - they join existing groups
@@ -1088,7 +1086,7 @@ class ExecutionPlan:
         This allows index columns (which have no explicit type) to stay grouped
         with typed features from the same FeatureGroup.
         """
-        hash_collector: Dict[int, Set[Feature]] = defaultdict(set)
+        hash_collector: dict[int, set[Feature]] = defaultdict(set)
         none_typed_features: list[Feature] = []
 
         # First pass: group features with explicit data_type

@@ -1,4 +1,3 @@
-from typing import Tuple
 import uuid
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.prepare.resolve_graph import PlannedQueue
@@ -15,7 +14,7 @@ from tests.test_core.test_abstract_plugins.test_abstract_feature_group import (
 
 
 class TestExecutionPlan:
-    def get_link_trekker(self) -> Tuple[LinkTrekker, LinkFrameworkTrekker]:
+    def get_link_trekker(self) -> tuple[LinkTrekker, LinkFrameworkTrekker]:
         link_trekker = LinkTrekker()
         link = Link.inner(
             JoinSpec(BaseLinkTestFeatureGroup1, Index(tuple(["Index1"]))),

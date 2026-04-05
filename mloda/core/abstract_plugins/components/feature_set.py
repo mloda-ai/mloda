@@ -1,4 +1,4 @@
-from typing import Any, Dict, Iterable, Optional, Set, Type
+from typing import Any, Iterable, Optional
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -11,16 +11,16 @@ from mloda.core.filter.single_filter import SingleFilter
 
 class FeatureSet:
     def __init__(self, features: Optional[Iterable[Feature]] = None) -> None:
-        self.features: Set[Feature] = set()
+        self.features: set[Feature] = set()
         self.options: Optional[Options] = None
         # This is just one uuid for easier access
         self.any_uuid: Optional[UUID] = None
-        self.filters: Optional[Set[SingleFilter]] = None
+        self.filters: Optional[set[SingleFilter]] = None
         self.name_of_one_feature: Optional[FeatureName] = None
         self.artifact_to_save: Optional[str] = None
         self.artifact_to_load: Optional[str] = None
         self.save_artifact: Optional[Any] = None
-        self.filter_engine: Type[BaseFilterEngine] = BaseFilterEngine
+        self.filter_engine: type[BaseFilterEngine] = BaseFilterEngine
 
         if features is not None:
             for feature in features:
@@ -37,7 +37,7 @@ class FeatureSet:
 
         self.artifact_to_save = self.get_name_of_one_feature()
 
-    def resolve_artifact_for_runtime(self, runtime_artifacts: Dict[str, Any]) -> None:
+    def resolve_artifact_for_runtime(self, runtime_artifacts: dict[str, Any]) -> None:
         """Re-resolve artifact save/load mode using runtime artifacts from run().
 
         Called at step execution time on the deep-copied FeatureSet when
@@ -68,10 +68,10 @@ class FeatureSet:
     def remove(self, feature: Feature) -> None:
         self.features.discard(feature)
 
-    def get_all_feature_ids(self) -> Set[UUID]:
+    def get_all_feature_ids(self) -> set[UUID]:
         return {feature.uuid for feature in self.features}
 
-    def get_all_names(self) -> Set[str]:
+    def get_all_names(self) -> set[str]:
         return {feature.name for feature in self.features}
 
     def __str__(self) -> str:
@@ -106,7 +106,7 @@ class FeatureSet:
         """Checks if all features have the same options."""
         FeatureSetValidator.validate_equal_options(self.features)
 
-    def get_initial_requested_features(self) -> Set[FeatureName]:
+    def get_initial_requested_features(self) -> set[FeatureName]:
         return {feature.name for feature in self.features if feature.initial_requested_data}
 
     def get_name_of_one_feature(self) -> FeatureName:
@@ -116,7 +116,7 @@ class FeatureSet:
         assert self.name_of_one_feature is not None  # Type narrowing for mypy
         return self.name_of_one_feature
 
-    def add_filters(self, single_filters: Set[SingleFilter]) -> None:
+    def add_filters(self, single_filters: set[SingleFilter]) -> None:
         FeatureSetValidator.validate_filters_not_set(self.filters)
         FeatureSetValidator.validate_filters_is_set_type(single_filters)
         self.filters = single_filters

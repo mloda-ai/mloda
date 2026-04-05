@@ -1,20 +1,20 @@
 from collections import OrderedDict
-from typing import Any, Dict, Set
+from typing import Any
 from uuid import UUID
 
 
 class ResolveLinkValidator:
     @staticmethod
     def validate_data_consistency(
-        data: Dict[Any, Set[UUID]],
-        data_ordered: "OrderedDict[Any, Set[UUID]]",
+        data: dict[Any, set[UUID]],
+        data_ordered: "OrderedDict[Any, set[UUID]]",
     ) -> None:
         if len(data.items()) != len(data_ordered.items()):
             raise ValueError("Data and data_ordered have different lengths")
 
     @staticmethod
-    def validate_no_conflicting_join_types(data: Dict[Any, Set[UUID]]) -> None:
-        seen_pairs: Dict[Any, Any] = {}
+    def validate_no_conflicting_join_types(data: dict[Any, set[UUID]]) -> None:
+        seen_pairs: dict[Any, Any] = {}
         for key in data.keys():
             link, _, _ = key
             left_fg = link.left_feature_group

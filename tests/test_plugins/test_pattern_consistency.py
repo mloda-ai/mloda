@@ -8,13 +8,12 @@ These tests detect two categories of violations:
 import ast
 import pathlib
 import re
-from typing import List
 
 
 PLUGIN_DIR = pathlib.Path("mloda_plugins/feature_group/experimental")
 
 
-def _collect_python_files() -> List[pathlib.Path]:
+def _collect_python_files() -> list[pathlib.Path]:
     """Collect all Python files under the experimental plugins directory."""
     return sorted(PLUGIN_DIR.rglob("*.py"))
 

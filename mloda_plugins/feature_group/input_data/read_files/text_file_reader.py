@@ -1,4 +1,4 @@
-from typing import Any, Tuple
+from typing import Any
 
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
 
@@ -7,7 +7,7 @@ from mloda.provider import FeatureSet
 
 class TextFileReader(ReadDocument):
     @classmethod
-    def suffix(cls) -> Tuple[str, ...]:
+    def suffix(cls) -> tuple[str, ...]:
         return (".text",)
 
     @classmethod
@@ -24,5 +24,5 @@ class TextFileReader(ReadDocument):
 
 class PyFileReader(TextFileReader):
     @classmethod
-    def suffix(cls) -> Tuple[str, ...]:
+    def suffix(cls) -> tuple[str, ...]:
         return (".py",)

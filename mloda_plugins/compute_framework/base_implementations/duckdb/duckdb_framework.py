@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Set, Type, Optional
+from typing import Any, Optional
 from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_merge_engine import DuckDBMergeEngine
 from mloda.user import FeatureName, ParallelizationMode
@@ -52,11 +52,11 @@ class DuckDBFramework(ComputeFramework):
         return cls.duckdb_relation()
 
     @classmethod
-    def merge_engine(cls) -> Type[BaseMergeEngine]:
+    def merge_engine(cls) -> type[BaseMergeEngine]:
         return DuckDBMergeEngine
 
     def select_data_by_column_names(
-        self, data: Any, selected_feature_names: Set[FeatureName], column_ordering: Optional[str] = None
+        self, data: Any, selected_feature_names: set[FeatureName], column_ordering: Optional[str] = None
     ) -> Any:
         """Materialize the final result as a PyArrow Table.
 
@@ -83,7 +83,7 @@ class DuckDBFramework(ComputeFramework):
     def transform(
         self,
         data: Any,
-        feature_names: Set[str],
+        feature_names: set[str],
     ) -> Any:
         transformed_data = self.apply_compute_framework_transformer(data)
         if transformed_data is not None:
@@ -113,9 +113,9 @@ class DuckDBFramework(ComputeFramework):
         raise ValueError(f"Data {type(data)} is not supported by {self.__class__.__name__}")
 
     @classmethod
-    def supported_parallelization_modes(cls) -> Set[ParallelizationMode]:
+    def supported_parallelization_modes(cls) -> set[ParallelizationMode]:
         return {ParallelizationMode.SYNC}
 
     @classmethod
-    def filter_engine(cls) -> Type[BaseFilterEngine]:
+    def filter_engine(cls) -> type[BaseFilterEngine]:
         return DuckDBFilterEngine

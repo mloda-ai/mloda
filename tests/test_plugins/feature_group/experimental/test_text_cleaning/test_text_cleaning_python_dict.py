@@ -3,7 +3,7 @@ Tests for the PythonDictTextCleaningFeatureGroup implementation.
 """
 
 import pytest
-from typing import Any, Dict, List
+from typing import Any
 
 from mloda.user import Feature
 from mloda.user import FeatureName
@@ -25,7 +25,7 @@ class PythonDictTextCleaningTestDataCreator(ATestDataCreator):
     compute_framework = PythonDictFramework
 
     @classmethod
-    def get_raw_data(cls) -> Dict[str, Any]:
+    def get_raw_data(cls) -> dict[str, Any]:
         """Return the raw data as a dictionary."""
         return {
             "text": [
@@ -52,7 +52,7 @@ class PythonDictTextCleaningTestDataCreator(ATestDataCreator):
         }
 
     @classmethod
-    def transform_format_for_testing(cls, data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def transform_format_for_testing(cls, data: dict[str, Any]) -> list[dict[str, Any]]:
         """Transform the data to PythonDict format (List[Dict[str, Any]])."""
         # Convert columnar format to row-based format
         if not data:
@@ -115,7 +115,7 @@ class TestPythonDictTextCleaningFeatureGroup:
         assert result[1] == "TESTING text normalization"
 
         # Test with None values
-        data_with_none: List[Dict[str, Any]] = [{"text": "Hello"}, {"text": None}, {"text": "World"}]
+        data_with_none: list[dict[str, Any]] = [{"text": "Hello"}, {"text": None}, {"text": "World"}]
         result_with_none = PythonDictTextCleaningFeatureGroup._get_source_text(data_with_none, "text")
         assert result_with_none == ["Hello", "", "World"]
 

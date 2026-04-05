@@ -152,6 +152,34 @@ class TestExtrasConsistency:
         )
 
 
+class TestRuffConfig:
+    """Validate that ruff lint rules enforce modern Python typing conventions."""
+
+    def test_up006_and_up007_rules_configured(self) -> None:
+        """UP006 (PEP 585 builtins) and UP007 (PEP 604 unions) must be enforced."""
+        with open(PROJECT_ROOT / "pyproject.toml", "rb") as f:
+            data: dict[str, Any] = tomllib.load(f)
+        extend_select = data.get("tool", {}).get("ruff", {}).get("lint", {}).get("extend-select", [])
+        assert "UP006" in extend_select, "ruff must enforce UP006 (use builtin generics instead of typing generics)"
+        assert "UP007" in extend_select, "ruff must enforce UP007 (use X | Y instead of Union/Optional)"
+
+    def test_no_redundant_typing_generics_in_source(self) -> None:
+        """Source files must not import redundant typing generics that UP006/UP007 replace."""
+        redundant_names = {"Dict", "FrozenSet", "List", "Set", "Tuple", "Type"}
+        source_dirs = [PROJECT_ROOT / "mloda", PROJECT_ROOT / "mloda_plugins"]
+        violations: list[str] = []
+        for source_dir in source_dirs:
+            for py_file in source_dir.rglob("*.py"):
+                for i, line in enumerate(py_file.read_text().splitlines(), start=1):
+                    if not line.startswith("from typing import"):
+                        continue
+                    imported = {name.strip() for name in line.split("import")[1].split(",")}
+                    found = imported & redundant_names
+                    if found:
+                        violations.append(f"{py_file.relative_to(PROJECT_ROOT)}:{i} imports {found}")
+        assert not violations, "Redundant typing imports found:\n" + "\n".join(violations)
+
+
 class TestPackagingConfig:
     """Validate that pyproject.toml is the single source of packaging truth."""
 

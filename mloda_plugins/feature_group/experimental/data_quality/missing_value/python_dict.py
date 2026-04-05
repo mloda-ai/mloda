@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import statistics
 from collections import Counter
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Optional
 
 from mloda.provider import ComputeFramework
 
@@ -27,7 +27,7 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
         return {PythonDictFramework}
 
     @classmethod
-    def _get_available_columns(cls, data: List[Dict[str, Any]]) -> Set[str]:
+    def _get_available_columns(cls, data: list[dict[str, Any]]) -> set[str]:
         """Get the set of available column names from the data."""
         if not data:
             return set()
@@ -38,7 +38,7 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
         return all_keys
 
     @classmethod
-    def _check_source_features_exist(cls, data: List[Dict[str, Any]], feature_names: List[str]) -> None:
+    def _check_source_features_exist(cls, data: list[dict[str, Any]], feature_names: list[str]) -> None:
         """Check if the resolved source features exist in the data."""
         if not data:
             raise ValueError("Data cannot be empty")
@@ -55,8 +55,8 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
 
     @classmethod
     def _add_result_to_data(
-        cls, data: List[Dict[str, Any]], feature_name: str, result: List[Any]
-    ) -> List[Dict[str, Any]]:
+        cls, data: list[dict[str, Any]], feature_name: str, result: list[Any]
+    ) -> list[dict[str, Any]]:
         """Add the result to the data."""
         if len(result) != len(data):
             raise ValueError(f"Result length {len(result)} does not match data length {len(data)}")
@@ -69,12 +69,12 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
     @classmethod
     def _perform_imputation(
         cls,
-        data: List[Dict[str, Any]],
+        data: list[dict[str, Any]],
         imputation_method: str,
-        in_features: List[str],
+        in_features: list[str],
         constant_value: Optional[Any] = None,
-        group_by_features: Optional[List[str]] = None,
-    ) -> List[Any]:
+        group_by_features: Optional[list[str]] = None,
+    ) -> list[Any]:
         """
         Perform the imputation using pure Python operations.
 
@@ -162,12 +162,12 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
     @classmethod
     def _perform_grouped_imputation(
         cls,
-        data: List[Dict[str, Any]],
+        data: list[dict[str, Any]],
         imputation_method: str,
         in_features: str,  # Note: grouped imputation only supports single column
         constant_value: Optional[Any],
-        group_by_features: List[str],
-    ) -> List[Any]:
+        group_by_features: list[str],
+    ) -> list[Any]:
         """
         Perform imputation within groups.
 
@@ -182,7 +182,7 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
             The result of the grouped imputation as a list of values
         """
         # Create groups based on group_by_features
-        groups: Dict[tuple[Any, ...], List[int]] = {}
+        groups: dict[tuple[Any, ...], list[int]] = {}
         for i, row in enumerate(data):
             group_key = tuple(row.get(feature) for feature in group_by_features)
             if group_key not in groups:
@@ -269,7 +269,7 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
         return result
 
     @classmethod
-    def _impute_mean(cls, values: List[Any]) -> List[Any]:
+    def _impute_mean(cls, values: list[Any]) -> list[Any]:
         """Impute missing values with the mean."""
         non_null_values = [val for val in values if val is not None]
         if not non_null_values:
@@ -279,7 +279,7 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
         return [mean_value if val is None else val for val in values]
 
     @classmethod
-    def _impute_median(cls, values: List[Any]) -> List[Any]:
+    def _impute_median(cls, values: list[Any]) -> list[Any]:
         """Impute missing values with the median."""
         non_null_values = [val for val in values if val is not None]
         if not non_null_values:
@@ -289,7 +289,7 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
         return [median_value if val is None else val for val in values]
 
     @classmethod
-    def _impute_mode(cls, values: List[Any]) -> List[Any]:
+    def _impute_mode(cls, values: list[Any]) -> list[Any]:
         """Impute missing values with the mode (most frequent value)."""
         non_null_values = [val for val in values if val is not None]
         if not non_null_values:
@@ -301,12 +301,12 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
         return [mode_value if val is None else val for val in values]
 
     @classmethod
-    def _impute_constant(cls, values: List[Any], constant_value: Any) -> List[Any]:
+    def _impute_constant(cls, values: list[Any], constant_value: Any) -> list[Any]:
         """Impute missing values with a constant value."""
         return [constant_value if val is None else val for val in values]
 
     @classmethod
-    def _impute_ffill(cls, values: List[Any]) -> List[Any]:
+    def _impute_ffill(cls, values: list[Any]) -> list[Any]:
         """Impute missing values with forward fill."""
         result = values.copy()
         last_valid = None
@@ -320,7 +320,7 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
         return result
 
     @classmethod
-    def _impute_bfill(cls, values: List[Any]) -> List[Any]:
+    def _impute_bfill(cls, values: list[Any]) -> list[Any]:
         """Impute missing values with backward fill."""
         result = values.copy()
         next_valid = None

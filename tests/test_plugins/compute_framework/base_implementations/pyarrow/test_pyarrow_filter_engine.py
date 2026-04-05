@@ -1,6 +1,6 @@
 """Unit tests for the PyArrowFilterEngine class."""
 
-from typing import Any, List
+from typing import Any
 
 import pytest
 import pyarrow as pa
@@ -32,6 +32,6 @@ class TestPyArrowFilterEngine(FilterEngineTestMixin):
             }
         )
 
-    def get_column_values(self, result: Any, column: str) -> List[Any]:
+    def get_column_values(self, result: Any, column: str) -> list[Any]:
         """Extract column values from PyArrow table."""
         return result[column].to_pylist()  # type: ignore[no-any-return]

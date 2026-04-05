@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any, Optional
 
 from mloda.provider import BaseInputData, FeatureSet
 from mloda.user import DataAccessCollection, Options
@@ -34,7 +34,7 @@ class ReadDocument(BaseInputData):
         raise NotImplementedError
 
     @classmethod
-    def suffix(cls) -> Tuple[str, ...]:
+    def suffix(cls) -> tuple[str, ...]:
         raise NotImplementedError
 
     def load(self, features: FeatureSet) -> Any:
@@ -54,7 +54,7 @@ class ReadDocument(BaseInputData):
 
         return data
 
-    def init_reader(self, options: Optional[Options]) -> Tuple["ReadDocument", Any]:
+    def init_reader(self, options: Optional[Options]) -> tuple["ReadDocument", Any]:
         if options is None:
             raise ValueError("Options were not set.")
 
@@ -67,7 +67,7 @@ class ReadDocument(BaseInputData):
         return reader(), data_access
 
     @classmethod
-    def match_subclass_data_access(cls, data_access: Any, feature_names: List[str], options: Options) -> Any:
+    def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
         if isinstance(data_access, DataAccessCollection):
             if data_access.column_to_file is not None:
                 pinned = cls._resolve_pinned_file(data_access, feature_names)
@@ -87,8 +87,8 @@ class ReadDocument(BaseInputData):
     @classmethod
     def match_document_data_access(
         cls,
-        data_accesses: List[str],
-        feature_names: List[str],
+        data_accesses: list[str],
+        feature_names: list[str],
         document_suffixes: Optional["frozenset[str]"] = None,
     ) -> Any:
         try:

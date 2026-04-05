@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Tuple, Type
+from typing import Any
 
 import pytest
 
@@ -16,7 +16,7 @@ from mloda_plugins.feature_group.experimental.sklearn.scaling.base import Scalin
 from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 
-ALL_PLUGINS: List[Type[Any]] = [
+ALL_PLUGINS: list[type[Any]] = [
     AggregatedFeatureGroup,
     ClusteringFeatureGroup,
     MissingValueFeatureGroup,
@@ -31,7 +31,7 @@ ALL_PLUGINS: List[Type[Any]] = [
     TimeWindowFeatureGroup,
 ]
 
-METADATA_KEYS: Tuple[Any, ...] = (
+METADATA_KEYS: tuple[Any, ...] = (
     DefaultOptionKeys.context,
     DefaultOptionKeys.default,
     DefaultOptionKeys.strict_validation,
@@ -43,14 +43,14 @@ METADATA_KEYS: Tuple[Any, ...] = (
     "explanation",
 )
 
-DOK_VALUES: List[str] = [dok.value for dok in DefaultOptionKeys]
+DOK_VALUES: list[str] = [dok.value for dok in DefaultOptionKeys]
 
 
 @pytest.mark.parametrize("plugin_cls", ALL_PLUGINS, ids=lambda c: c.__name__)
 class TestPropertyMappingConsistency:
-    def test_every_entry_has_explicit_strict_validation(self, plugin_cls: Type[Any]) -> None:
-        mapping: Dict[str, Any] = plugin_cls.PROPERTY_MAPPING
-        violations: List[str] = []
+    def test_every_entry_has_explicit_strict_validation(self, plugin_cls: type[Any]) -> None:
+        mapping: dict[str, Any] = plugin_cls.PROPERTY_MAPPING
+        violations: list[str] = []
         for prop_key, entry in mapping.items():
             if not isinstance(entry, dict):
                 continue
@@ -60,9 +60,9 @@ class TestPropertyMappingConsistency:
             f"{plugin_cls.__name__} PROPERTY_MAPPING entries missing DefaultOptionKeys.strict_validation: {violations}"
         )
 
-    def test_no_raw_string_metadata_keys(self, plugin_cls: Type[Any]) -> None:
-        mapping: Dict[str, Any] = plugin_cls.PROPERTY_MAPPING
-        violations: List[Tuple[str, str]] = []
+    def test_no_raw_string_metadata_keys(self, plugin_cls: type[Any]) -> None:
+        mapping: dict[str, Any] = plugin_cls.PROPERTY_MAPPING
+        violations: list[tuple[str, str]] = []
         for prop_key, entry in mapping.items():
             if not isinstance(entry, dict):
                 continue
@@ -74,9 +74,9 @@ class TestPropertyMappingConsistency:
             f"DefaultOptionKeys enum members should be used: {violations}"
         )
 
-    def test_enum_entries_have_strict_validation_true(self, plugin_cls: Type[Any]) -> None:
-        mapping: Dict[str, Any] = plugin_cls.PROPERTY_MAPPING
-        violations: List[str] = []
+    def test_enum_entries_have_strict_validation_true(self, plugin_cls: type[Any]) -> None:
+        mapping: dict[str, Any] = plugin_cls.PROPERTY_MAPPING
+        violations: list[str] = []
         for prop_key, entry in mapping.items():
             if not isinstance(entry, dict):
                 continue

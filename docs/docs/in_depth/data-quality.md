@@ -131,7 +131,18 @@ results = mloda.run_all(
 from mloda.user import mloda
 from mloda.steward import Extender, ExtenderHook
 from mloda.user import Feature
-from tests.test_documentation.test_documentation import DokuValidateInputFeatureExtender
+import time
+
+
+class DokuValidateInputFeatureExtender(Extender):
+    def wraps(self) -> Set[ExtenderHook]:
+        return {ExtenderHook.VALIDATE_INPUT_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        start = time.time()
+        result = func(*args, **kwargs)
+        print(f"Time taken: {time.time() - start}")
+        return result
 
 example_feature = Feature("DocCustomValidateInputFeatures", {"ValidationLevel": "warning"})
 
@@ -161,7 +172,6 @@ Output features are validated to ensure they meet the expected outcomes and perf
 from mloda.user import mloda
 from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Options
-from tests.test_plugins.integration_plugins.test_validate_features.example_validator import BaseValidateOutputFeaturesBase
 
 
 class DocBaseValidateOutputFeaturesBase(FeatureGroup):
@@ -216,10 +226,19 @@ results = mloda.run_all(
 
 ###### Log only validator and Extender use
 
-We can of course also use an extender, which was defined somewhere else.
+We can of course also use an extender.
 
 ```python
-from tests.test_plugins.integration_plugins.test_validate_features.test_validate_output_features import ValidateOutputFeatureExtender
+class ValidateOutputFeatureExtender(Extender):
+    def wraps(self) -> Set[ExtenderHook]:
+        return {ExtenderHook.VALIDATE_OUTPUT_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        start = time.time()
+        result = func(*args, **kwargs)
+        _measured_time = f"Time taken: {time.time() - start}"
+        print(_measured_time)
+        return result
 
 results = mloda.run_all(
             ["DocBaseValidateOutputFeaturesBase"], {PyArrowTable},

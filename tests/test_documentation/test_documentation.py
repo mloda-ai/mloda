@@ -45,6 +45,20 @@ def test_files_good(fpath: Any) -> None:
     check_md_file(fpath=fpath, memory=True)
 
 
+CODE_BLOCK_PATTERN = re.compile(r"```python\n(.*?)```", re.DOTALL)
+TEST_IMPORT_PATTERN = re.compile(r"^\s*from\s+tests\.", re.MULTILINE)
+
+
+@pytest.mark.parametrize("fpath", sorted(Path("docs/docs").rglob("*.md")), ids=str)
+def test_no_test_imports_in_docs(fpath: Path) -> None:
+    text = fpath.read_text(encoding="utf-8")
+    violations = []
+    for block in CODE_BLOCK_PATTERN.finditer(text):
+        for match in TEST_IMPORT_PATTERN.finditer(block.group(1)):
+            violations.append(match.group().strip())
+    assert not violations, f"{fpath} imports from test modules (not available to users): {violations}"
+
+
 DOCS_ROOT = Path("docs/docs")
 ABSOLUTE_LINK_PATTERN = re.compile(r"\[([^\]]*)\]\(https://mloda-ai\.github\.io/mloda/[^)]*\)")
 MARKDOWN_LINK_PATTERN = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")

@@ -23,7 +23,7 @@ class SparkFilterEngine(BaseFilterEngine):
         if min_parameter is None or max_parameter is None:
             raise ValueError(f"Filter parameter {filter_feature.parameter} not supported")
 
-        column_name = filter_feature.name.name
+        column_name = filter_feature.name
 
         if max_operator is True:
             condition = (F.col(column_name) >= min_parameter) & (F.col(column_name) < max_parameter)
@@ -34,7 +34,7 @@ class SparkFilterEngine(BaseFilterEngine):
 
     @classmethod
     def do_min_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        column_name = filter_feature.name.name
+        column_name = filter_feature.name
 
         # Extract the value from the parameter
 
@@ -47,7 +47,7 @@ class SparkFilterEngine(BaseFilterEngine):
 
     @classmethod
     def do_max_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        column_name = filter_feature.name.name
+        column_name = filter_feature.name
 
         # Check if this is a complex parameter with max/max_exclusive or a simple one with value
 
@@ -89,7 +89,7 @@ class SparkFilterEngine(BaseFilterEngine):
 
     @classmethod
     def do_equal_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        column_name = filter_feature.name.name
+        column_name = filter_feature.name
 
         # Extract the value from the parameter
 
@@ -102,7 +102,7 @@ class SparkFilterEngine(BaseFilterEngine):
 
     @classmethod
     def do_regex_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        column_name = filter_feature.name.name
+        column_name = filter_feature.name
 
         # Extract the value from the parameter
 
@@ -116,7 +116,7 @@ class SparkFilterEngine(BaseFilterEngine):
 
     @classmethod
     def do_categorical_inclusion_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        column_name = filter_feature.name.name
+        column_name = filter_feature.name
 
         # Extract the values from the parameter
 

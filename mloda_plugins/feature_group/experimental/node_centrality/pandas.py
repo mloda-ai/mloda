@@ -159,7 +159,7 @@ class PandasNodeCentralityFeatureGroup(NodeCentralityFeatureGroup):
     def _create_adjacency_matrix(
         cls,
         df: pd.DataFrame,
-        nodes: np.ndarray,  # type: ignore
+        nodes: np.ndarray[Any, Any],
         source_col: str,
         target_col: str,
         weight_column: Optional[str] = None,
@@ -199,7 +199,9 @@ class PandasNodeCentralityFeatureGroup(NodeCentralityFeatureGroup):
         return adj_matrix
 
     @classmethod
-    def _calculate_degree_centrality(cls, adj_matrix: pd.DataFrame, nodes: np.ndarray, graph_type: str) -> pd.Series:  # type: ignore
+    def _calculate_degree_centrality(
+        cls, adj_matrix: pd.DataFrame, nodes: np.ndarray[Any, Any], graph_type: str
+    ) -> pd.Series:
         """
         Calculate degree centrality for each node.
 
@@ -233,7 +235,7 @@ class PandasNodeCentralityFeatureGroup(NodeCentralityFeatureGroup):
         return degree_centrality
 
     @classmethod
-    def _calculate_closeness_centrality(cls, adj_matrix: pd.DataFrame, nodes: np.ndarray) -> pd.Series:  # type: ignore
+    def _calculate_closeness_centrality(cls, adj_matrix: pd.DataFrame, nodes: np.ndarray[Any, Any]) -> pd.Series:
         """
         Calculate closeness centrality for each node.
 
@@ -290,7 +292,7 @@ class PandasNodeCentralityFeatureGroup(NodeCentralityFeatureGroup):
         return closeness
 
     @classmethod
-    def _calculate_betweenness_centrality(cls, adj_matrix: pd.DataFrame, nodes: np.ndarray) -> pd.Series:  # type: ignore
+    def _calculate_betweenness_centrality(cls, adj_matrix: pd.DataFrame, nodes: np.ndarray[Any, Any]) -> pd.Series:
         """
         Calculate betweenness centrality for each node.
 
@@ -354,7 +356,7 @@ class PandasNodeCentralityFeatureGroup(NodeCentralityFeatureGroup):
         return betweenness
 
     @classmethod
-    def _dijkstra(cls, dist_matrix: pd.DataFrame, source: int) -> tuple[np.ndarray, Dict[int, list[int]]]:  # type: ignore
+    def _dijkstra(cls, dist_matrix: pd.DataFrame, source: int) -> tuple[np.ndarray[Any, Any], Dict[int, list[int]]]:
         """
         Dijkstra's algorithm for single-source shortest paths.
 
@@ -463,7 +465,7 @@ class PandasNodeCentralityFeatureGroup(NodeCentralityFeatureGroup):
     def _calculate_eigenvector_centrality(
         cls,
         adj_matrix: pd.DataFrame,
-        nodes: np.ndarray,  # type: ignore
+        nodes: np.ndarray[Any, Any],
         max_iter: int = 100,
         tol: float = 1e-6,
     ) -> pd.Series:
@@ -510,7 +512,7 @@ class PandasNodeCentralityFeatureGroup(NodeCentralityFeatureGroup):
     def _calculate_pagerank_centrality(
         cls,
         adj_matrix: pd.DataFrame,
-        nodes: np.ndarray,  # type: ignore
+        nodes: np.ndarray[Any, Any],
         alpha: float = 0.85,
         max_iter: int = 100,
         tol: float = 1e-6,

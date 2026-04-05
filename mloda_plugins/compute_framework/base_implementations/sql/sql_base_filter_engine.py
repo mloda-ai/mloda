@@ -37,7 +37,7 @@ class SqlBaseFilterEngine(BaseFilterEngine):
         if min_parameter is None or max_parameter is None:
             raise ValueError(f"Filter parameter {filter_feature.parameter} not supported")
 
-        filter_feature_name = filter_feature.name.name
+        filter_feature_name = filter_feature.name
 
         if max_operator is True:
             condition = f"{quote_ident(filter_feature_name)} >= ? AND {quote_ident(filter_feature_name)} < ?"
@@ -48,7 +48,7 @@ class SqlBaseFilterEngine(BaseFilterEngine):
 
     @classmethod
     def do_min_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        column_name = filter_feature.name.name
+        column_name = filter_feature.name
         value = filter_feature.parameter.value
 
         if value is None:
@@ -59,7 +59,7 @@ class SqlBaseFilterEngine(BaseFilterEngine):
 
     @classmethod
     def do_max_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        column_name = filter_feature.name.name
+        column_name = filter_feature.name
 
         has_max = filter_feature.parameter.max_value is not None
         has_value = filter_feature.parameter.value is not None
@@ -97,7 +97,7 @@ class SqlBaseFilterEngine(BaseFilterEngine):
 
     @classmethod
     def do_equal_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        column_name = filter_feature.name.name
+        column_name = filter_feature.name
         value = filter_feature.parameter.value
 
         if value is None:
@@ -108,7 +108,7 @@ class SqlBaseFilterEngine(BaseFilterEngine):
 
     @classmethod
     def do_regex_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        column_name = filter_feature.name.name
+        column_name = filter_feature.name
         value = filter_feature.parameter.value
 
         if value is None:
@@ -119,7 +119,7 @@ class SqlBaseFilterEngine(BaseFilterEngine):
 
     @classmethod
     def do_categorical_inclusion_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        column_name = filter_feature.name.name
+        column_name = filter_feature.name
         values = filter_feature.parameter.values
 
         if values is None:

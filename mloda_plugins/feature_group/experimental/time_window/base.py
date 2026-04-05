@@ -168,7 +168,7 @@ class TimeWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         source_feature: str | None = None
 
         # Try string-based parsing first
-        _, source_feature = FeatureChainParser.parse_feature_name(feature_name.name, [self.PREFIX_PATTERN])
+        _, source_feature = FeatureChainParser.parse_feature_name(str(feature_name), [self.PREFIX_PATTERN])
         if source_feature is not None:
             time_filter_feature = Feature(self.get_reference_time_column(options))
             return {Feature(source_feature), time_filter_feature}
@@ -214,7 +214,7 @@ class TimeWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Returns:
             Tuple of (window_function, window_size, time_unit), where any value may be None if not found
         """
-        feature_name = feature.get_name()
+        feature_name = feature.name
 
         # Try string-based parsing first
         if cls._has_valid_time_window_suffix(feature_name):
@@ -371,7 +371,7 @@ class TimeWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
                 data, window_function, window_size, time_unit, resolved_columns, reference_time_column
             )
 
-            data = cls._add_result_to_data(data, feature.get_name(), result)
+            data = cls._add_result_to_data(data, feature.name, result)
 
         return data
 

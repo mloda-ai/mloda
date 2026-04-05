@@ -167,7 +167,7 @@ class ScalingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             result = cls._apply_scaler(data, source_feature, fitted_scaler)
 
             # Add result to data
-            data = cls._add_result_to_data(data, feature.get_name(), result)
+            data = cls._add_result_to_data(data, feature.name, result)
 
         return data
 

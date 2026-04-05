@@ -193,10 +193,10 @@ class Feature:
                 if isinstance(val, frozenset):
                     for v in val:
                         if isinstance(v, Feature):
-                            child_options.group[DefaultOptionKeys.in_features] = v.name.name
+                            child_options.group[DefaultOptionKeys.in_features] = v.name
 
                 if isinstance(val, Feature):
-                    child_options.group[DefaultOptionKeys.in_features] = val.name.name
+                    child_options.group[DefaultOptionKeys.in_features] = val.name
 
         return hash((self.name, self.options, self.domain, compute_frameworks_hashable, self.data_type, child_options))
 
@@ -257,6 +257,3 @@ class Feature:
         FeatureValidator.validate_compute_frameworks_resolved(self.compute_frameworks, str(self.name))
         assert self.compute_frameworks is not None
         return next(iter(self.compute_frameworks))
-
-    def get_name(self) -> str:
-        return self.name.name

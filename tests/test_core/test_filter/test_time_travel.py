@@ -59,7 +59,7 @@ class TimeTravelPositiveFilterTest(FeatureGroup):
         _: Options,
         _2=None,
     ) -> bool:
-        if feature_name.name in ["TimeTravelPositiveFilterTest", "reference_time", "time_travel_filter"]:  # type: ignore
+        if str(feature_name) in ["TimeTravelPositiveFilterTest", "reference_time", "time_travel_filter"]:
             return True
         return False
 

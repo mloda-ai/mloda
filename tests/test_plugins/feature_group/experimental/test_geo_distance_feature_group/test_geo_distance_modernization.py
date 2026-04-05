@@ -435,7 +435,7 @@ class TestGeoDistanceModernization:
         input_features = feature_group.input_features(string_options, string_feature_name)
         assert input_features is not None
         assert len(input_features) == 2
-        feature_names = {f.get_name() for f in input_features}
+        feature_names = {f.name for f in input_features}
         assert "sf_location" in feature_names
         assert "nyc_location" in feature_names
 
@@ -450,6 +450,6 @@ class TestGeoDistanceModernization:
         input_features = feature_group.input_features(config_options, config_feature_name)
         assert input_features is not None
         assert len(input_features) == 2
-        feature_names = {f.get_name() for f in input_features}
+        feature_names = {f.name for f in input_features}
         assert "point_a" in feature_names
         assert "point_b" in feature_names

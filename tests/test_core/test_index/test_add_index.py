@@ -69,7 +69,7 @@ class TestAddIndex:
                     return False
 
                 if isinstance(feature_name, FeatureName):
-                    feature_name = feature_name.name
+                    feature_name = str(feature_name)
 
                 if cls().is_root(options, feature_name):
                     input_data_class = cls.input_data()
@@ -106,7 +106,7 @@ class TestAddIndex:
                 options: Options,
                 data_access_collection: Optional[DataAccessCollection] = None,
             ) -> bool:
-                if "TestAddIndexFeature" in feature_name.name:  # type: ignore
+                if "TestAddIndexFeature" in str(feature_name):
                     return True
                 return False
 

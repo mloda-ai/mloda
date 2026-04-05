@@ -128,7 +128,7 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         # Try string-based parsing first
         # For L->R: "point1&point2__distance_type_distance"
         # We need to extract everything before the last "__"
-        feature_name_str = feature_name.name if hasattr(feature_name, "name") else str(feature_name)
+        feature_name_str = feature_name
         parts = feature_name_str.rsplit("__", 1)
         if len(parts) == 2:
             # parts[0] contains "point1&point2", parts[1] contains "distance_type_distance"
@@ -206,7 +206,7 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
             result = cls._calculate_distance(data, distance_type, point1_feature, point2_feature)
 
-            data = cls._add_result_to_data(data, feature.get_name(), result)
+            data = cls._add_result_to_data(data, feature.name, result)
 
         return data
 
@@ -254,7 +254,7 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             ValueError: If distance type is invalid
         """
         # Try string-based parsing first
-        feature_name_str = feature.name.name if hasattr(feature.name, "name") else str(feature.name)
+        feature_name_str = feature.name
 
         if FeatureChainParser.is_chained_feature(feature_name_str):
             distance_type = cls.get_distance_type(feature_name_str)

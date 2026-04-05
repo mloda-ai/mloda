@@ -14,7 +14,7 @@ class ATestSetFeatureNameBase(FeatureGroup):
         return {"ATestSetFeatureNameBaseL": [12, 2, 3], "ATestSetFeatureNameBaseR": [1, 2, 3]}
 
     def set_feature_name(self, config: Options, feature_name: FeatureName) -> FeatureName:
-        return FeatureName(self.resolve_name(feature_name.name, config))
+        return FeatureName(self.resolve_name(str(feature_name), config))
 
     def resolve_name(self, feature_name: str, config: Options) -> str:
         if "1" in feature_name:
@@ -31,7 +31,7 @@ class ATestSetFeatureNameBase(FeatureGroup):
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
         if isinstance(feature_name, FeatureName):
-            feature_name = feature_name.name
+            feature_name = str(feature_name)
         if "ATestSetFeatureNameBase" in feature_name:
             return True
         return False

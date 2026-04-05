@@ -1,26 +1,15 @@
 from __future__ import annotations
-from typing import Any
+
+from enum import Enum
 
 
-class FeatureName:
-    def __init__(self, name: str):
-        self.name = name
+class FeatureName(str):
+    def __new__(cls, name: str) -> FeatureName:
+        if isinstance(name, FeatureName):
+            return name
+        if isinstance(name, Enum):
+            name = name.value
+        return super().__new__(cls, name)
 
-    def __eq__(self, other: Any) -> bool:
-        if isinstance(other, FeatureName):
-            return self.name == other.name
-        if isinstance(other, str):
-            return self.name == other
-        return NotImplemented
-
-    def __hash__(self) -> int:
-        return hash(self.name)
-
-    def __str__(self) -> str:
-        return self.name
-
-    def __contains__(self, item: str) -> bool:
-        return item in self.name
-
-    def get_name(self) -> str:
-        return self.name
+    def __repr__(self) -> str:
+        return f"FeatureName({super().__repr__()})"

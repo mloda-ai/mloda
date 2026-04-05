@@ -330,8 +330,7 @@ class TestDataLifecycleManagerGetResultData:
         selected_data = {"feature1": [1, 2, 3]}
         mock_cfw.select_data_by_column_names.return_value = selected_data
 
-        feature_name = Mock(spec=FeatureName)
-        feature_name.name = "feature1"
+        feature_name = FeatureName("feature1")
         selected_feature_names = {feature_name}
 
         result = manager.get_result_data(mock_cfw, selected_feature_names)

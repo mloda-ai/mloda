@@ -135,7 +135,7 @@ class SparkSimpleTransformFeatureGroup(ATestSparkFeatureGroup):
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         """Require base features for transformation."""
-        feature_name_str = feature_name.name if isinstance(feature_name, FeatureName) else str(feature_name)
+        feature_name_str = str(feature_name) if isinstance(feature_name, FeatureName) else str(feature_name)
 
         if feature_name_str == "doubled_value":
             return {Feature("value")}
@@ -196,7 +196,7 @@ class SparkAggregationFeatureGroup(ATestSparkFeatureGroup):
     """Feature group for testing Spark aggregation capabilities."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
-        feature_name_str = feature_name.name if isinstance(feature_name, FeatureName) else str(feature_name)
+        feature_name_str = str(feature_name) if isinstance(feature_name, FeatureName) else str(feature_name)
 
         if feature_name_str in ["avg_value_by_category", "count_by_category"]:
             return {Feature("value"), Feature("category")}
@@ -234,7 +234,7 @@ class CheckData(FeatureGroup):
     """Feature group for testing cross-framework transformation (Spark to PyArrow)."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
-        feature_name_str = feature_name.name if isinstance(feature_name, FeatureName) else str(feature_name)
+        feature_name_str = str(feature_name) if isinstance(feature_name, FeatureName) else str(feature_name)
 
         if feature_name_str in ["pyarrow_avg_value_by_category"]:
             return {Feature("avg_value_by_category")}

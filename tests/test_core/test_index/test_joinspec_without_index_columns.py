@@ -42,7 +42,7 @@ class TestJoinSpecWithoutIndexColumns:
                     return False
 
                 if isinstance(feature_name, FeatureName):
-                    feature_name = feature_name.name
+                    feature_name = str(feature_name)
 
                 if feature_name != "Amount":
                     return False
@@ -70,7 +70,7 @@ class TestJoinSpecWithoutIndexColumns:
                     return False
 
                 if isinstance(feature_name, FeatureName):
-                    feature_name = feature_name.name
+                    feature_name = str(feature_name)
 
                 if feature_name != "Class":
                     return False
@@ -91,7 +91,7 @@ class TestJoinSpecWithoutIndexColumns:
                 data_access_collection: Optional[DataAccessCollection] = None,
             ) -> bool:
                 if isinstance(feature_name, FeatureName):
-                    feature_name = feature_name.name
+                    feature_name = str(feature_name)
                 return feature_name == "JoinSpecNoIndexResult"
 
             def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:

@@ -24,7 +24,7 @@ class NFeatureConsumer(FeatureGroup):
         # Access the columns from NFeatureNameBase using the naming convention
         col1 = data["NFeatureNameBase~1"] + data["NFeatureNameBase~2"]
 
-        feature_name = features.get_name_of_one_feature().name
+        feature_name = str(features.get_name_of_one_feature())
         return {feature_name: col1}
 
 

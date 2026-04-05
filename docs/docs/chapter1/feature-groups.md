@@ -30,7 +30,7 @@ The calculation logic for multiplying each feature by 2 is implemented in the ca
 ```python
 class Example(FeatureGroup):
     def input_features(self, _, feature_name):
-        return {feature_name.name.split("_")[1]}
+        return {str(feature_name).split("_")[1]}
 
     @classmethod
     def calculate_feature(cls, data, _):

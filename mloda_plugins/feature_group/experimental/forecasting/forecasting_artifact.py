@@ -124,7 +124,7 @@ class ForecastingArtifact(BaseArtifact):
         if options is None or features.name_of_one_feature is None:
             return None
 
-        serialized_artifact = options.get(features.name_of_one_feature.name)
+        serialized_artifact = options.get(str(features.name_of_one_feature))
         if serialized_artifact is None:
             return None
 

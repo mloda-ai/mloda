@@ -149,7 +149,7 @@ def test_load_creates_options_with_group_context() -> None:
 
     assert len(result) == 1
     assert isinstance(result[0], Feature)
-    assert result[0].name.name == "optimized_feature"
+    assert result[0].name == "optimized_feature"
 
     # Verify Options object has correct group options
     assert result[0].options.group == {"data_source": "production", "threshold": 0.5}

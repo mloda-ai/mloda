@@ -224,7 +224,7 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Returns:
             Imputation method name or None if not found
         """
-        feature_name = feature.get_name()
+        feature_name = feature.name
 
         # Try string-based parsing first
         if FeatureChainParser.is_chained_feature(feature_name):
@@ -308,7 +308,7 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             )
 
             # Add the result to the data
-            data = cls._add_result_to_data(data, feature.get_name(), result)
+            data = cls._add_result_to_data(data, feature.name, result)
         return data
 
     @classmethod

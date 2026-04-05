@@ -146,7 +146,7 @@ class TestGlobalFilterTimeTravel:
 
         # Check that the filter has the correct feature name
         added_filter = next(iter(self.global_filter.filters)).filter_feature
-        assert added_filter.name.name == event_time_column
+        assert added_filter.name == event_time_column
 
     def test_add_time_travel_filters_with_custom_feature(self) -> None:
         """Test adding time-travel filters with a custom feature name."""
@@ -214,7 +214,7 @@ class TestGlobalFilterTimeTravel:
 
         # Check that the filter has the correct feature name
         added_filter = next(iter(self.global_filter.filters)).filter_feature
-        assert added_filter.name.name == event_time_column
+        assert added_filter.name == event_time_column
 
     def test_add_time_filters_with_validity_time_column(self) -> None:
         """Test adding time-travel filters with the new validity_time_column parameter name."""

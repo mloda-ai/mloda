@@ -196,7 +196,7 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
             result = cls._perform_aggregation(data, aggregation_type, resolved_columns)
 
-            data = cls._add_result_to_data(data, feature.get_name(), result)
+            data = cls._add_result_to_data(data, feature.name, result)
 
         return data
 

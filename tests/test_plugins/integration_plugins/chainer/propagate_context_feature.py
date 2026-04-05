@@ -74,7 +74,7 @@ class PropagateContextFeatureGroupTest(FeatureGroup):
     def perform_operation(cls, data: Any, feature: Feature) -> Any:
         source_features = feature.options.get_in_features()
         source_feature = next(iter(source_features))
-        source_feature_name: str = source_feature.get_name()
+        source_feature_name: str = source_feature.name
 
         ident = feature.options.get("ident")
         if ident == "identifier1":
@@ -92,7 +92,7 @@ class PropagateContextFeatureGroupTest(FeatureGroup):
         else:
             offset = 0
 
-        name = feature.get_name()
+        name = feature.name
         data[name] = data[source_feature_name] * multiplier + offset
         return data
 

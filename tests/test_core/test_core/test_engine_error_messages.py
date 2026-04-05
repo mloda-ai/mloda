@@ -33,7 +33,7 @@ class NoIndexFeatureGroup(FeatureGroup):
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
         if isinstance(feature_name, FeatureName):
-            return "NoIndexTestFeature" in feature_name.name
+            return "NoIndexTestFeature" in str(feature_name)
         return "NoIndexTestFeature" in feature_name
 
     @classmethod

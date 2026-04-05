@@ -49,7 +49,7 @@ class TestTextCleaningFeatureGroupBase:
 
         assert input_features is not None
         assert len(input_features) == 1
-        assert next(iter(input_features)).name.name == "review"
+        assert next(iter(input_features)).name == "review"
 
     def test_feature_chaining(self) -> None:
         """Test that the feature group works with chained features."""
@@ -62,7 +62,7 @@ class TestTextCleaningFeatureGroupBase:
 
         assert input_features is not None
         assert len(input_features) == 1
-        assert next(iter(input_features)).name.name == "sum_aggr__sales"
+        assert next(iter(input_features)).name == "sum_aggr__sales"
 
 
 class TestTextCleaningFeatureChainParser:
@@ -109,4 +109,4 @@ class TestTextCleaningFeatureChainParser:
         assert input_features is not None
         assert len(input_features) == 1
         source_feature = next(iter(input_features))
-        assert source_feature.name.name == "review"
+        assert source_feature.name == "review"

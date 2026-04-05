@@ -228,4 +228,4 @@ class TestPandasTextCleaningFeatureGroup:
         assert input_features is not None
         assert len(input_features) == 1
         source_feature = next(iter(input_features))
-        assert source_feature.name.name == "text"
+        assert source_feature.name == "text"

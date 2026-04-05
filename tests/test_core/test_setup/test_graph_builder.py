@@ -22,7 +22,7 @@ class BaseTestGraphFeatureGroup3(BaseTestFeatureGroup1):
         options: Options,
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
-        if "GraphFeature" in feature_name.name:  # type: ignore
+        if "GraphFeature" in str(feature_name):
             return True
         return False
 
@@ -39,7 +39,7 @@ class BaseTestGraphFeatureGroup4(BaseTestGraphFeatureGroup3):
         options: Options,
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
-        if "GraphFeatureIndex" in feature_name.name:  # type: ignore
+        if "GraphFeatureIndex" in str(feature_name):
             return True
         return False
 

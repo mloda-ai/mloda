@@ -72,7 +72,7 @@ class ListValuedFeatureGroup(FeatureGroup):
         options: Options,
         data_access_collection: Optional[Any] = None,
     ) -> bool:
-        _name = feature_name.name if isinstance(feature_name, FeatureName) else feature_name
+        _name = str(feature_name) if isinstance(feature_name, FeatureName) else feature_name
         return FeatureChainParser.match_configuration_feature_chain_parser(
             _name,
             options,
@@ -100,7 +100,7 @@ class ListValuedFeatureGroup(FeatureGroup):
             for i in range(1, len(columns)):
                 result = result + data[columns[i]] * weights[i]
 
-            data[feature.get_name()] = result
+            data[feature.name] = result
         return data
 
 

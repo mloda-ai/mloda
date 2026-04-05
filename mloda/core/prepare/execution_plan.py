@@ -935,11 +935,11 @@ class ExecutionPlan:
                 f"Feature group {feature_group} has an api input data class, but no api_input_data_collection was given."
             )
 
-        if feature_set.get_name_of_one_feature().name is None:
+        if feature_set.get_name_of_one_feature() is None:
             raise ValueError(f"Feature group {format_feature_group_class(feature_group)} has no feature set name.")
 
         api_input_name, matching_cls = self.api_input_data_collection.get_name_cls_by_matching_column_name(
-            feature_set.get_name_of_one_feature().name
+            feature_set.get_name_of_one_feature()
         )
 
         if matching_cls is None:
@@ -948,7 +948,7 @@ class ExecutionPlan:
             )
 
         matching_cls_initialized = matching_cls(
-            api_input_name, feature_set.get_name_of_one_feature().name, feature_set.options
+            api_input_name, feature_set.get_name_of_one_feature(), feature_set.options
         )
 
         return matching_cls_initialized

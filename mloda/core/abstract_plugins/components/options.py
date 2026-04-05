@@ -181,7 +181,7 @@ class Options:
 
         def _convert_to_feature(item: Any) -> "Feature":
             """Convert item to Feature object if possible."""
-            if hasattr(item, "get_name"):  # Already a Feature object
+            if hasattr(item, "options"):  # Already a Feature object
                 return cast("Feature", item)
             elif isinstance(item, str):
                 # Import Feature locally to avoid circular import
@@ -200,7 +200,7 @@ class Options:
                 return frozenset(_convert_to_feature(name) for name in feature_names)
             else:
                 return frozenset([_convert_to_feature(val)])
-        elif hasattr(val, "get_name"):  # Handle Feature objects
+        elif hasattr(val, "options"):  # Handle Feature objects
             return frozenset([_convert_to_feature(val)])
         else:
             raise TypeError(

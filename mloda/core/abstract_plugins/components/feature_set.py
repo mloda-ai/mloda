@@ -35,7 +35,7 @@ class FeatureSet:
                 self.artifact_to_load = feature_name
                 return
 
-        self.artifact_to_save = self.get_name_of_one_feature().name
+        self.artifact_to_save = self.get_name_of_one_feature()
 
     def resolve_artifact_for_runtime(self, runtime_artifacts: Dict[str, Any]) -> None:
         """Re-resolve artifact save/load mode using runtime artifacts from run().
@@ -55,7 +55,7 @@ class FeatureSet:
                 return
 
         self.artifact_to_load = None
-        self.artifact_to_save = self.get_name_of_one_feature().name
+        self.artifact_to_save = self.get_name_of_one_feature()
 
     def add(self, feature: Feature) -> None:
         self.features.add(feature)
@@ -72,7 +72,7 @@ class FeatureSet:
         return {feature.uuid for feature in self.features}
 
     def get_all_names(self) -> Set[str]:
-        return {feature.name.name for feature in self.features}
+        return {feature.name for feature in self.features}
 
     def __str__(self) -> str:
         return f"{self.features}"
@@ -111,7 +111,7 @@ class FeatureSet:
 
     def get_name_of_one_feature(self) -> FeatureName:
         FeatureSetValidator.validate_feature_added(
-            self.name_of_one_feature.name if self.name_of_one_feature else None, "get_name_of_one_feature"
+            self.name_of_one_feature if self.name_of_one_feature else None, "get_name_of_one_feature"
         )
         assert self.name_of_one_feature is not None  # Type narrowing for mypy
         return self.name_of_one_feature

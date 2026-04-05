@@ -242,7 +242,7 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             result = cls._calculate_centrality(data, centrality_type, source_feature_str, graph_type, weight_column)
 
             # Add the result to the data
-            data = cls._add_result_to_data(data, feature.get_name(), result)
+            data = cls._add_result_to_data(data, feature.name, result)
 
         return data
 

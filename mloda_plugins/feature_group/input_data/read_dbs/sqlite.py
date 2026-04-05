@@ -173,7 +173,7 @@ class SQLITEReader(ReadDB):
 
         options = None
         for feature in features.features:
-            query += f"{feature.get_name()}, "
+            query += f"{feature.name}, "
             options = feature.options
 
         query = query[:-2] + " "  # last comma is removed
@@ -217,7 +217,7 @@ class SQLITEReader(ReadDB):
 
     @classmethod
     def read_as_pa_data(cls, result: Any, column_names: Any, features: Any) -> Any:
-        feature_map = {f.get_name(): f for f in features.features}
+        feature_map = {f.name: f for f in features.features}
 
         schema_fields = []
         for i, col_name in enumerate(column_names):

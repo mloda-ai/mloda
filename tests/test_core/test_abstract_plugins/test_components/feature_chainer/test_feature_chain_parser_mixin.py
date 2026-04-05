@@ -368,7 +368,7 @@ class TestFeatureChainParserMixinEdgeCases:
         assert result is not None
         assert len(result) == 3
         # Result is a set, so we just check all features are present
-        feature_names = {f.get_name() for f in result}
+        feature_names = {f.name for f in result}
         assert feature_names == {"first", "second", "third"}
 
 

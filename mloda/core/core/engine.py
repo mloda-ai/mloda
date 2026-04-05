@@ -179,7 +179,7 @@ class Engine:
         if self.links is None:
             return
 
-        feature_name_str = feature.name.name if hasattr(feature.name, "name") else str(feature.name)
+        feature_name_str = feature.name
 
         for link in self.links:
             if link.jointype in (JoinType.APPEND, JoinType.UNION):

@@ -61,7 +61,7 @@ class ChildFeatureGroup(FeatureGroup):
         data_access_collection: Any = None,
     ) -> bool:
         if isinstance(feature_name, FeatureName):
-            feature_name = feature_name.name
+            feature_name = str(feature_name)
         return feature_name == "child_feature"
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
@@ -92,7 +92,7 @@ class ParentFeatureGroup(FeatureGroup):
         data_access_collection: Any = None,
     ) -> bool:
         if isinstance(feature_name, FeatureName):
-            feature_name = feature_name.name
+            feature_name = str(feature_name)
         return feature_name == "parent_feature"
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
@@ -123,7 +123,7 @@ class GrandchildFeatureGroup(FeatureGroup):
         data_access_collection: Any = None,
     ) -> bool:
         if isinstance(feature_name, FeatureName):
-            feature_name = feature_name.name
+            feature_name = str(feature_name)
         return feature_name == "grandchild_feature"
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
@@ -154,7 +154,7 @@ class IntermediateFeatureGroup(FeatureGroup):
         data_access_collection: Any = None,
     ) -> bool:
         if isinstance(feature_name, FeatureName):
-            feature_name = feature_name.name
+            feature_name = str(feature_name)
         return feature_name == "intermediate_feature"
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
@@ -185,7 +185,7 @@ class GrandparentFeatureGroup(FeatureGroup):
         data_access_collection: Any = None,
     ) -> bool:
         if isinstance(feature_name, FeatureName):
-            feature_name = feature_name.name
+            feature_name = str(feature_name)
         return feature_name == "grandparent_feature"
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
@@ -248,12 +248,12 @@ class TestDomainPropagationMatrix:
         found_features: Set[str] = set()
         for feature_group_class, feature_set in engine.feature_group_collection.items():
             for feature in feature_set:
-                if feature.name.name in expected_children_with_domain:
-                    assert feature.domain is not None, f"{feature.name.name} should have inherited domain but has None"
+                if feature.name in expected_children_with_domain:
+                    assert feature.domain is not None, f"{feature.name} should have inherited domain but has None"
                     assert feature.domain.name == parent_domain, (
-                        f"{feature.name.name} should have domain '{parent_domain}' but has '{feature.domain.name}'"
+                        f"{feature.name} should have domain '{parent_domain}' but has '{feature.domain.name}'"
                     )
-                    found_features.add(feature.name.name)
+                    found_features.add(feature.name)
 
         assert found_features == expected_children_with_domain, (
             f"Expected features {expected_children_with_domain} but found {found_features}"
@@ -287,7 +287,7 @@ class TestDomainPropagationMatrix:
 
         for feature_group_class, feature_set in engine.feature_group_collection.items():
             for feature in feature_set:
-                if feature.name.name == child_to_check:
+                if feature.name == child_to_check:
                     assert feature.domain is None, f"{child_to_check} should have no domain but has '{feature.domain}'"
 
     @pytest.mark.parametrize(

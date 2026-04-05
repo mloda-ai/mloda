@@ -118,7 +118,7 @@ class ChainedContextFeatureGroupTest(FeatureGroup):
         try:
             source_features = feature.options.get_in_features()
             source_feature = next(iter(source_features))
-            source_feature_name: str | None = source_feature.get_name()
+            source_feature_name: str | None = source_feature.name
 
             # Apply configuration from options
             has_prefix_configuration = feature.options.get("ident")
@@ -129,7 +129,7 @@ class ChainedContextFeatureGroupTest(FeatureGroup):
             else:
                 raise ValueError("does not match the expected property mapping")
 
-            if "placeholder" in feature.get_name():
+            if "placeholder" in feature.name:
                 if feature.options.get("property2") == "specific_val_3_test":
                     val = 4
 
@@ -158,7 +158,7 @@ class ChainedContextFeatureGroupTest(FeatureGroup):
             if source_feature_name is None:
                 raise ValueError("Source feature name is None, cannot perform operation.")
 
-        data[feature.get_name()] = data[source_feature_name] * 2 + val
+        data[feature.name] = data[source_feature_name] * 2 + val
         return data
 
     @classmethod
@@ -189,13 +189,13 @@ def assert_propert2_is_set(feature: Feature) -> None:
         "placeholder4": "value1",
         "placeholder4_5": "specific_val_3_test",
         "placeholder4_6": "value1",
-    }.get(feature.get_name())
+    }.get(feature.name)
 
     if expected is None:
-        raise ValueError(f"Unknown feature name: {feature.get_name()}. Cannot assert 'property2' value.")
+        raise ValueError(f"Unknown feature name: {feature.name}. Cannot assert 'property2' value.")
 
     if val != expected:
-        raise ValueError(f"Property 'property2' for {feature.get_name()} should be '{expected}', but got '{val}'")
+        raise ValueError(f"Property 'property2' for {feature.name} should be '{expected}', but got '{val}'")
 
 
 def assert_property3_is_set(feature: Feature) -> None:
@@ -220,16 +220,16 @@ def assert_property3_is_set(feature: Feature) -> None:
         "placeholder4_6": None,  # Should NOT have property3 (optional)
     }
 
-    expected = expected_values.get(feature.get_name())
+    expected = expected_values.get(feature.name)
 
-    if expected is None and feature.get_name() not in expected_values:
-        raise ValueError(f"Unknown feature name: {feature.get_name()}. Cannot assert 'property3' value.")
+    if expected is None and feature.name not in expected_values:
+        raise ValueError(f"Unknown feature name: {feature.name}. Cannot assert 'property3' value.")
 
     # For features that should NOT have property3
     if expected is None:
         if val is not None:
-            raise ValueError(f"Property 'property3' for {feature.get_name()} should be None (absent), but got '{val}'")
+            raise ValueError(f"Property 'property3' for {feature.name} should be None (absent), but got '{val}'")
     # For features that should have property3
     else:
         if val != expected:
-            raise ValueError(f"Property 'property3' for {feature.get_name()} should be '{expected}', but got '{val}'")
+            raise ValueError(f"Property 'property3' for {feature.name} should be '{expected}', but got '{val}'")

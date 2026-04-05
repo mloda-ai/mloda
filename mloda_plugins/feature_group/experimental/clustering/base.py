@@ -232,7 +232,7 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         # Try string-based parsing first
         algorithm_str, source_features_str = FeatureChainParser.parse_feature_name(feature.name, [cls.PREFIX_PATTERN])
         if algorithm_str is not None and source_features_str is not None:
-            algorithm, k_value_str = cls.parse_clustering_prefix(feature.get_name())
+            algorithm, k_value_str = cls.parse_clustering_prefix(feature.name)
             k_value: Union[int, str] = "auto" if k_value_str == "auto" else int(k_value_str)
             return algorithm, k_value
 
@@ -317,16 +317,16 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
                 )
 
                 # Add the cluster labels
-                data = cls._add_result_to_data(data, feature.get_name(), result)
+                data = cls._add_result_to_data(data, feature.name, result)
 
                 # Add probability columns using ~N suffix pattern
                 for cluster_idx in range(probabilities.shape[1]):
-                    prob_column_name = f"{feature.get_name()}~{cluster_idx}"
+                    prob_column_name = f"{feature.name}~{cluster_idx}"
                     data = cls._add_result_to_data(data, prob_column_name, probabilities[:, cluster_idx])
             else:
                 # Original behavior: only output cluster labels
                 result = cls._perform_clustering(data, algorithm, k_value, resolved_features)
-                data = cls._add_result_to_data(data, feature.get_name(), result)
+                data = cls._add_result_to_data(data, feature.name, result)
 
         return data
 

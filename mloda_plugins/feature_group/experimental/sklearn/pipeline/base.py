@@ -172,7 +172,7 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         has_pipeline_name = options.get(cls.PIPELINE_NAME)
         has_pipeline_steps = options.get(cls.PIPELINE_STEPS)
 
-        feature_name = feature_name.name if isinstance(feature_name, FeatureName) else str(feature_name)
+        feature_name = str(feature_name) if isinstance(feature_name, FeatureName) else str(feature_name)
 
         if has_pipeline_name is None and has_pipeline_steps is None:
             if "sklearn_pipeline_" not in feature_name:
@@ -244,7 +244,7 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             result = cls._apply_pipeline(data, source_features, fitted_pipeline)
 
             # Add result to data
-            data = cls._add_result_to_data(data, feature.get_name(), result)
+            data = cls._add_result_to_data(data, feature.name, result)
 
         return data
 
@@ -284,7 +284,7 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             Pipeline name or None if extraction fails
         """
         # Try string-based parsing first
-        feature_name_str = feature.name.name if hasattr(feature.name, "name") else str(feature.name)
+        feature_name_str = feature.name
 
         if FeatureChainParser.is_chained_feature(feature_name_str):
             prefix_part, _ = FeatureChainParser.parse_feature_name(feature_name_str, [cls.PREFIX_PATTERN])

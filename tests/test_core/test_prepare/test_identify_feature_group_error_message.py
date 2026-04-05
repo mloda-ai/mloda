@@ -43,7 +43,7 @@ class ConflictingFeatureGroupA(FeatureGroup):
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
         if isinstance(feature_name, FeatureName):
-            feature_name = feature_name.name
+            feature_name = str(feature_name)
         return feature_name == "conflicting_test_feature"
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
@@ -69,7 +69,7 @@ class ConflictingFeatureGroupB(FeatureGroup):
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
         if isinstance(feature_name, FeatureName):
-            feature_name = feature_name.name
+            feature_name = str(feature_name)
         return feature_name == "conflicting_test_feature"
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
@@ -234,7 +234,7 @@ class KnownFeatureGroup(FeatureGroup):
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
         if isinstance(feature_name, FeatureName):
-            feature_name = feature_name.name
+            feature_name = str(feature_name)
         return feature_name == "known_feature"
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
@@ -326,7 +326,7 @@ class NoComputeFrameworkFeatureGroup(FeatureGroup):
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
         if isinstance(feature_name, FeatureName):
-            feature_name = feature_name.name
+            feature_name = str(feature_name)
         return feature_name == "no_compute_framework_test_feature"
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:

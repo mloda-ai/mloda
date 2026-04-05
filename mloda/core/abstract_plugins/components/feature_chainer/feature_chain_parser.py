@@ -59,7 +59,7 @@ class FeatureChainParser:
         pattern: str = CHAIN_SEPARATOR,
     ) -> Tuple[str | None, str | None]:
         """Internal method for parsing feature names - used by match_configuration_feature_chain_parser."""
-        _feature_name: str = feature_name.name if isinstance(feature_name, FeatureName) else feature_name
+        _feature_name: str = feature_name
 
         parts = _feature_name.rsplit(pattern, 1)
         source_feature = parts[0] if len(parts) > 1 else ""
@@ -219,7 +219,7 @@ class FeatureChainParser:
         collected_property_value = set()
         for found_property_val in found_property_value:
             if isinstance(found_property_val, Feature):
-                found_property_val = found_property_val.get_name()
+                found_property_val = found_property_val.name
 
             if isinstance(found_property_val, tuple):
                 # Convert tuple to string representation for hashability

@@ -44,6 +44,11 @@ class PolarsLazyDataFrame(PolarsDataFrame):
         else:
             raise ValueError("Data does not have a collect_schema method, cannot set column names.")
 
+    def _extract_column_names(self, data: Any) -> set[str] | None:
+        if hasattr(data, "collect_schema"):
+            return set(data.collect_schema().names())
+        return None
+
     @classmethod
     def pl_lazy_frame(cls) -> Any:
         if pl is None:

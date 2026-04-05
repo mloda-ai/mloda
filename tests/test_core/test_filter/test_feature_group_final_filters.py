@@ -13,10 +13,14 @@ The matrix of (FG final_filters, Engine final_filters, reads inline) combination
   FG=True,  Engine=False, inline=no  -- test_fg_force_final_overrides_inline_engine
   FG=True,  Engine=True,  inline=no  -- test_fg_force_final_with_final_engine
   FG=True,  Engine=True,  inline=yes -- test_inline_mask_with_final_elimination
+
+Validation:
+  FG=True,  drops filter column       -- test_dropped_filter_column_raises_error
 """
 
 from typing import Any, Optional
 
+import pytest
 import pyarrow as pa
 import pyarrow.compute as pc
 
@@ -268,6 +272,35 @@ class InlineMaskWithFinalElimination(FeatureGroup):
         )
 
 
+class DropsFilterColumnFeatureGroup(FeatureGroup):
+    """FG returns final_filters()=True but drops the filter column from its output.
+
+    This violates the overlap contract: row elimination needs the filter column
+    to decide which rows to remove. The framework should raise a clear error.
+    """
+
+    @classmethod
+    def input_data(cls) -> Optional[BaseInputData]:
+        return DataCreator({cls.get_class_name(), "status"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def final_filters(cls) -> bool:
+        return True
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table(
+            {
+                cls.get_class_name(): [10, 20, 30, 40],
+                # "status" intentionally omitted
+            }
+        )
+
+
 @PARALLELIZATION_MODES_SYNC_THREADING
 class TestFeatureGroupFinalFilters:
     """Tests that FeatureGroup.final_filters() controls inline vs. final filter application."""
@@ -507,3 +540,26 @@ class TestFeatureGroupFinalFilters:
             data = res.to_pydict()
             # Inline masking changed values (15 not 10/5), elimination removed inactive row
             assert data[feature_name] == [15, 15, 30]
+
+    def test_dropped_filter_column_raises_error(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
+        """FG=True but filter column missing from output. Framework must raise ValueError.
+
+        DropsFilterColumnFeatureGroup returns final_filters()=True but omits the
+        "status" column from its output table. The framework's validation should
+        catch this and raise a clear error instead of crashing in the filter engine.
+        """
+        feature_name = "DropsFilterColumnFeatureGroup"
+
+        features = Features([Feature(name=feature_name, initial_requested_data=True)])
+
+        global_filter = GlobalFilter()
+        global_filter.add_filter("status", "equal", {"value": "active"})
+
+        with pytest.raises(Exception, match="missing filter column.*status"):
+            MlodaTestRunner.run_api(
+                features,
+                compute_frameworks={PyArrowTable},
+                parallelization_modes=modes,
+                flight_server=flight_server,
+                global_filter=global_filter,
+            )

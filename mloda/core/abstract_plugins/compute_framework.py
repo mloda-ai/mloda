@@ -221,6 +221,7 @@ class ComputeFramework(ABC):
             if fg_preference is False:
                 return data
             if fg_preference is True:
+                self._validate_filter_columns(data, features, feature_group)
                 filter_engine = features.filter_engine()
                 return filter_engine.apply_filters(data, features)
 
@@ -234,6 +235,31 @@ class ComputeFramework(ABC):
         result = filter_engine.apply_filters(data, features)
 
         return result
+
+    def _validate_filter_columns(self, data: Any, features: Any, feature_group: Any) -> None:
+        """Validate that filter columns exist in the output when a FeatureGroup requests row elimination."""
+        if features.filters is None:
+            return
+
+        data_columns = self._extract_column_names(data)
+        if data_columns is None:
+            return
+
+        feature_names = features.get_all_names()
+        for single_filter in features.filters:
+            col = single_filter.filter_feature.name
+            if col in feature_names and col not in data_columns:
+                raise ValueError(
+                    f"{feature_group.get_class_name()} returns final_filters()=True "
+                    f"but its output is missing filter column '{col}'. "
+                    f"FeatureGroups that request row elimination must preserve "
+                    f"filter columns in their output. "
+                    f"Available columns: {sorted(data_columns)}"
+                )
+
+    def _extract_column_names(self, data: Any) -> set[str] | None:
+        """Extract column names from the data. Subclasses must override."""
+        return None
 
     @final
     def set_filter_engine(self, features: Any) -> Any:

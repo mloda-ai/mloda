@@ -106,6 +106,11 @@ class IcebergFramework(ComputeFramework):
         if self.data is not None and isinstance(self.data, IcebergTable):
             self.column_names = set(self.data.schema().column_names)
 
+    def _extract_column_names(self, data: Any) -> set[str] | None:
+        if data is not None and IcebergTable is not None and isinstance(data, IcebergTable):
+            return set(data.schema().column_names)
+        return None
+
     def transform(self, data: Any, feature_names: set[str]) -> Any:
         """
         Transform data to Iceberg table format.

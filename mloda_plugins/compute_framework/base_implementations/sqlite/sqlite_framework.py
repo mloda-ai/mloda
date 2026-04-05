@@ -61,6 +61,9 @@ class SqliteFramework(ComputeFramework):
     def set_column_names(self) -> None:
         self.column_names = set(self.data.columns)
 
+    def _extract_column_names(self, data: Any) -> set[str] | None:
+        return set(data.columns)
+
     def transform(
         self,
         data: Any,

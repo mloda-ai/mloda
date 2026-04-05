@@ -43,6 +43,9 @@ class PolarsDataFrame(ComputeFramework):
     def set_column_names(self) -> None:
         self.column_names = set(self.data.columns)
 
+    def _extract_column_names(self, data: Any) -> set[str] | None:
+        return set(data.columns)
+
     @classmethod
     def pl_dataframe(cls) -> Any:
         if pl is None:

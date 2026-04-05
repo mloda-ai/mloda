@@ -62,7 +62,7 @@ from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 api = mloda(["BaseExampleArtifactFeature"], {PyArrowTable})
-api._batch_run()
+api.run()
 artifacts = api.get_artifacts()
 print(artifacts)
 ```
@@ -79,8 +79,7 @@ Now, let us use this artifact.
 from mloda.user import Feature, mloda
 
 feat = Feature(name="BaseExampleArtifactFeature", options=artifacts)
-api = mloda([feat], {PyArrowTable})
-api._batch_run()
+mloda.run_all([feat], {PyArrowTable})
 ```
 
 Result:

@@ -50,12 +50,19 @@ class ReadDB(BaseInputData):
 
     def init_reader(self, options: Optional[Options]) -> Tuple["ReadDB", Any]:
         if options is None:
-            raise ValueError("Options were not set.")
+            raise ValueError(
+                f"Options were not set for {self.__class__.__name__}. "
+                f"Provide an Options object containing a 'BaseInputData' key "
+                f"with a (reader_class, data_access) tuple."
+            )
 
         reader_data_access = options["BaseInputData"]
 
         if reader_data_access is None:
-            raise ValueError("Reader data access was not set.")
+            raise ValueError(
+                f"'BaseInputData' key is missing or None in the provided Options for {self.__class__.__name__}. "
+                f"Set options with Options(group={{'BaseInputData': (ReaderClass, credentials_dict)}})."
+            )
 
         reader, data_access = reader_data_access
         return reader(), data_access
@@ -98,7 +105,10 @@ class ReadDB(BaseInputData):
     @classmethod
     def match_read_db_data_access(cls, data_accesses: List[Any], feature_names: List[str]) -> Any:
         if len(feature_names) > 1:
-            raise ValueError("This should not happen.")
+            raise ValueError(
+                f"ReadDB.match_read_db_data_access expected exactly one feature name, "
+                f"but received {len(feature_names)}: {feature_names}."
+            )
 
         for data_access in data_accesses:
             try:
@@ -118,10 +128,13 @@ class ReadDB(BaseInputData):
     @classmethod
     def get_connection(cls, credentials: Any) -> Any:
         """Establishes a database connection using the provided credentials."""
-        connection = None
         connection = cls.connect(credentials)
         if connection is None:
-            raise ValueError("Connection to database failed.")
+            raise ValueError(
+                f"Connection to database failed for {cls.__name__}. "
+                f"The connect() method returned None. "
+                f"Verify that the database credentials are correct and the database server is reachable."
+            )
         return connection
 
     @classmethod

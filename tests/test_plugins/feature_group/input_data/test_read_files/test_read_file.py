@@ -209,6 +209,49 @@ class TestInputData:
                 assert v[0] == -4.757493165076248
 
 
+class TestReadFileValidationErrors:
+    def test_init_reader_none_options_message(self) -> None:
+        """When init_reader is called with None, the error should mention the class name.
+
+        Currently the message is a generic 'Options were not set.' without indicating
+        which reader class encountered the problem.
+        """
+
+        class MyCustomReader(ReadFile):
+            @classmethod
+            def get_column_names(cls, file_name: str) -> List[str]:
+                return []
+
+            @classmethod
+            def suffix(cls) -> Tuple[str, ...]:
+                return (".csv",)
+
+        reader = MyCustomReader()
+        with pytest.raises(ValueError, match=r"MyCustomReader"):
+            reader.init_reader(None)
+
+    def test_init_reader_missing_base_input_data_message(self) -> None:
+        """When options lack BaseInputData, the error should mention 'BaseInputData'.
+
+        Currently the message is a generic 'Reader data access was not set.' without
+        telling the user which key is missing.
+        """
+
+        class AnotherReader(ReadFile):
+            @classmethod
+            def get_column_names(cls, file_name: str) -> List[str]:
+                return []
+
+            @classmethod
+            def suffix(cls) -> Tuple[str, ...]:
+                return (".csv",)
+
+        reader = AnotherReader()
+        options = Options(group={"SomeOtherKey": "value"})
+        with pytest.raises(ValueError, match=r"BaseInputData"):
+            reader.init_reader(options)
+
+
 class TestReadFile:
     def test_validate_columns(self) -> None:
         class TestReadFile(ReadFile):

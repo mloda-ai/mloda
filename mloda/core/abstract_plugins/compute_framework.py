@@ -231,14 +231,17 @@ class ComputeFramework(ABC):
         except NotImplementedError:
             return data
 
+        self._validate_filter_columns(data, features, feature_group)
         filter_engine = features.filter_engine()
         result = filter_engine.apply_filters(data, features)
 
         return result
 
     def _validate_filter_columns(self, data: Any, features: Any, feature_group: Any) -> None:
-        """Validate that filter columns exist in the output when a FeatureGroup requests row elimination.
+        """Validate that filter columns exist in the output before row elimination.
 
+        Called on every path where the framework will apply filters, regardless of
+        whether the FeatureGroup or the FilterEngine requested elimination.
         Uses filter_engine.applicable_filters() to determine which columns will
         be processed, so this check and apply_filters() share the same gate.
         """
@@ -248,14 +251,13 @@ class ComputeFramework(ABC):
             return
 
         data_columns = self._extract_column_names(data)
+        fg_name = feature_group.get_class_name() if feature_group is not None else "Unknown"
         for single_filter in applicable:
             col = single_filter.filter_feature.name
             if col not in data_columns:
                 raise ValueError(
-                    f"{feature_group.get_class_name()} returns final_filters()=True "
-                    f"but its output is missing filter column '{col}'. "
-                    f"FeatureGroups that request row elimination must preserve "
-                    f"filter columns in their output. "
+                    f"{fg_name} output is missing filter column '{col}' "
+                    f"required for row elimination. "
                     f"Available columns: {sorted(data_columns)}"
                 )
 

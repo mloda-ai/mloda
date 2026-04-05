@@ -555,7 +555,7 @@ class TestFeatureGroupFinalFilters:
         global_filter = GlobalFilter()
         global_filter.add_filter("status", "equal", {"value": "active"})
 
-        with pytest.raises(Exception, match="missing filter column.*status"):
+        with pytest.raises(Exception, match="missing filter column.*status.*row elimination"):
             MlodaTestRunner.run_api(
                 features,
                 compute_frameworks={PyArrowTable},

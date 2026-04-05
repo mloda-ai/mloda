@@ -69,6 +69,11 @@ class TestFeatureNameWithEnum:
         fn = FeatureName(DefaultOptionKeys.reference_time)
         assert repr(fn) == "FeatureName('reference_time')"
 
+    def test_enum_value_extracted_for_time_travel(self) -> None:
+        fn = FeatureName(DefaultOptionKeys.time_travel)
+        assert fn == "time_travel"
+        assert fn == DefaultOptionKeys.time_travel.value
+
 
 class TestFeatureNameAccess:
     def test_feature_dot_name_is_str(self) -> None:

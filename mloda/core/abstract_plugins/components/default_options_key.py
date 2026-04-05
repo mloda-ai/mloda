@@ -33,3 +33,9 @@ class DefaultOptionKeys(str, Enum):
     strict_type_enforcement = "strict_type_enforcement"
     required_when = "required_when"
     type_validator = "type_validator"
+
+    def __str__(self) -> str:
+        return self.value
+
+    def __format__(self, format_spec: str) -> str:
+        return self.value.__format__(format_spec)

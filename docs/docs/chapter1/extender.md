@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 A simple DokuExtender class:
 
-``` python
+```python
 class DokuExtender(Extender):
     def wraps(self) -> Set[ExtenderHook]:
         return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
@@ -34,7 +34,6 @@ We will now run the **mlodaAPI** call, including our custom **DokuExtender** to 
 ```python
 from mloda.user import mloda
 from mloda.user import DataAccessCollection
-from tests.test_documentation.test_documentation import DokuExtender
 
 file_path = "tests/test_plugins/feature_group/src/dataset/creditcard_2023_short.csv"
 data_access_collection = DataAccessCollection(files={file_path})

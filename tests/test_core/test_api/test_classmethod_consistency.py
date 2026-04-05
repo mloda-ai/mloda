@@ -1,8 +1,4 @@
-"""Tests that all mlodaAPI entry points use @classmethod so subclasses dispatch correctly.
-
-Covers issue #267: run_all and stream_all were @staticmethod while prepare was @classmethod,
-which meant subclassing mlodaAPI and calling SubClass.run_all() would still construct mlodaAPI.
-"""
+"""Tests that all mlodaAPI entry points use @classmethod so subclasses dispatch correctly."""
 
 import inspect
 import types

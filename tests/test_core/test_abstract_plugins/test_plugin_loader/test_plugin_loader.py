@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
 from mloda.core.abstract_plugins.components.input_data.base_input_data import (
-    _collect_filtered_subclasses,
+    _collect_filtered_subclasses,  # noqa: F401
     get_all_filtered_subclasses,
 )
 from mloda.user import PluginLoader

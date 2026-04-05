@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any, List, TYPE_CHECKING, cast
 
-from mloda.provider import ComputeFramework
+from mloda.provider import ComputeFramework, DefaultOptionKeys
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.dimensionality_reduction.base import DimensionalityReductionFeatureGroup
 

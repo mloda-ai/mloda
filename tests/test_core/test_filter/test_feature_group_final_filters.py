@@ -9,6 +9,14 @@ engine subclasses.
 Expected failures:
 - FeatureGroup does not yet expose a `final_filters()` method.
 - `run_final_filter()` does not yet consult the FeatureGroup for this decision.
+
+The matrix of (FG final_filters, Engine final_filters) combinations:
+
+  FG=False, Engine=True  -- test_inline_filter_without_custom_compute_framework
+  FG=None,  Engine=True  -- test_regular_feature_group_still_uses_final_filters
+  FG=False, Engine=False -- test_fg_skip_with_inline_engine
+  FG=True,  Engine=False -- test_fg_force_final_overrides_inline_engine
+  FG=True,  Engine=True  -- test_fg_force_final_with_final_engine
 """
 
 from typing import Any, Optional, Set, Type
@@ -16,11 +24,28 @@ from typing import Any, Optional, Set, Type
 import pyarrow as pa
 import pyarrow.compute as pc
 
-from mloda.provider import ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import BaseFilterEngine, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
 from mloda.provider import BaseInputData
+from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_filter_engine import PyArrowFilterEngine
 from mloda.user import Feature, Features, GlobalFilter, ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_SYNC_THREADING
+
+
+class InlineFilterEngine(PyArrowFilterEngine):
+    """Filter engine that returns final_filters()=False, simulating Iceberg-like behavior."""
+
+    @classmethod
+    def final_filters(cls) -> bool:
+        return False
+
+
+class PyArrowTableInlineEngine(PyArrowTable):
+    """PyArrowTable variant with an inline (non-final) filter engine."""
+
+    @classmethod
+    def filter_engine(cls) -> type[BaseFilterEngine]:
+        return InlineFilterEngine
 
 
 class InlineMaskViaFeatureGroup(FeatureGroup):
@@ -89,6 +114,77 @@ class RegularFeatureGroupForFilterTest(FeatureGroup):
     @classmethod
     def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
         return {PyArrowTable}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({
+            cls.get_class_name(): [10, 20, 30, 40],
+            "status": ["active", "inactive", "active", "inactive"],
+        })
+
+
+class InlineMaskOnInlineEngine(InlineMaskViaFeatureGroup):
+    """FG says False, Engine says False. Both agree: skip final filtering.
+
+    Reuses InlineMaskViaFeatureGroup's calculate_feature (inline masking) but
+    runs on PyArrowTableInlineEngine whose filter engine also returns False.
+    """
+
+    @classmethod
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+        return {PyArrowTableInlineEngine}
+
+    @classmethod
+    def final_filters(cls) -> bool:
+        return False
+
+
+class ForceFinalOnInlineEngine(FeatureGroup):
+    """FG says True, Engine says False. FG overrides: force row elimination.
+
+    The filter engine on PyArrowTableInlineEngine returns final_filters()=False,
+    but this FeatureGroup explicitly returns True, so the framework should apply
+    final filtering and eliminate non-matching rows.
+    """
+
+    @classmethod
+    def input_data(cls) -> Optional[BaseInputData]:
+        return DataCreator({cls.get_class_name(), "status"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+        return {PyArrowTableInlineEngine}
+
+    @classmethod
+    def final_filters(cls) -> bool:
+        return True
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({
+            cls.get_class_name(): [10, 20, 30, 40],
+            "status": ["active", "inactive", "active", "inactive"],
+        })
+
+
+class ForceFinalOnFinalEngine(FeatureGroup):
+    """FG says True, Engine says True. Both agree: apply final filtering.
+
+    Both the FeatureGroup and the PyArrowTable filter engine agree that final
+    filtering should be applied. Non-matching rows should be eliminated.
+    """
+
+    @classmethod
+    def input_data(cls) -> Optional[BaseInputData]:
+        return DataCreator({cls.get_class_name(), "status"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def final_filters(cls) -> bool:
+        return True
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -215,3 +311,94 @@ class TestFeatureGroupFinalFilters:
         assert results_by_feature[inline_feature_name] == [10, 10, 30, 30]
         # Regular FeatureGroup has non-matching rows eliminated by final filtering
         assert results_by_feature[final_feature_name] == [10, 30]
+
+    def test_fg_skip_with_inline_engine(
+        self, modes: Set[ParallelizationMode], flight_server: Any
+    ) -> None:
+        """FG=False, Engine=False. Both agree to skip final filtering. Rows preserved.
+
+        InlineMaskOnInlineEngine inherits inline masking from InlineMaskViaFeatureGroup
+        and runs on PyArrowTableInlineEngine (whose filter engine also returns
+        final_filters()=False). Since both the FeatureGroup and the engine agree that
+        final filtering should be skipped, the inline mask logic preserves all 4 rows
+        with masked aggregation: [10, 10, 30, 30].
+        """
+        feature_name = "InlineMaskOnInlineEngine"
+
+        features = Features([Feature(name=feature_name, initial_requested_data=True)])
+
+        global_filter = GlobalFilter()
+        global_filter.add_filter("status", "equal", {"value": "active"})
+
+        result = MlodaTestRunner.run_api(
+            features,
+            compute_frameworks={PyArrowTableInlineEngine},
+            parallelization_modes=modes,
+            flight_server=flight_server,
+            global_filter=global_filter,
+        )
+
+        for res in result.results:
+            data = res.to_pydict()
+            # Both FG and engine say skip: inline masking preserves all 4 rows
+            assert data[feature_name] == [10, 10, 30, 30]
+
+    def test_fg_force_final_overrides_inline_engine(
+        self, modes: Set[ParallelizationMode], flight_server: Any
+    ) -> None:
+        """FG=True, Engine=False. FG overrides engine. Rows eliminated.
+
+        ForceFinalOnInlineEngine explicitly returns final_filters()=True, while
+        PyArrowTableInlineEngine's filter engine returns False. The FeatureGroup's
+        decision should override the engine: final filtering is applied and
+        non-matching rows are eliminated, leaving only [10, 30].
+        """
+        feature_name = "ForceFinalOnInlineEngine"
+
+        features = Features([Feature(name=feature_name, initial_requested_data=True)])
+
+        global_filter = GlobalFilter()
+        global_filter.add_filter("status", "equal", {"value": "active"})
+
+        result = MlodaTestRunner.run_api(
+            features,
+            compute_frameworks={PyArrowTableInlineEngine},
+            parallelization_modes=modes,
+            flight_server=flight_server,
+            global_filter=global_filter,
+        )
+
+        for res in result.results:
+            data = res.to_pydict()
+            # FG overrides engine: rows eliminated despite engine saying skip
+            assert data[feature_name] == [10, 30]
+
+    def test_fg_force_final_with_final_engine(
+        self, modes: Set[ParallelizationMode], flight_server: Any
+    ) -> None:
+        """FG=True, Engine=True. Both agree to apply final filtering. Rows eliminated.
+
+        ForceFinalOnFinalEngine explicitly returns final_filters()=True and runs on
+        standard PyArrowTable (whose PyArrowFilterEngine also returns True). Since
+        both agree, final filtering is applied and non-matching rows are eliminated,
+        leaving only [10, 30].
+        """
+        feature_name = "ForceFinalOnFinalEngine"
+
+        features = Features([Feature(name=feature_name, initial_requested_data=True)])
+
+        global_filter = GlobalFilter()
+        global_filter.add_filter("status", "equal", {"value": "active"})
+
+        result = MlodaTestRunner.run_api(
+            features,
+            compute_frameworks={PyArrowTable},
+            parallelization_modes=modes,
+            flight_server=flight_server,
+            global_filter=global_filter,
+        )
+
+        for res in result.results:
+            data = res.to_pydict()
+            # Both FG and engine agree: rows eliminated
+            assert data[feature_name] == [10, 30]

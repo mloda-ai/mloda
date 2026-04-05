@@ -60,21 +60,21 @@ mloda automatically manages feature dependencies, ensuring transformations are h
 
 The Core Engine orchestrates dependencies between Feature Groups, compute frameworks, and extenders. Dependencies can include data collections, links, joins, filters, or hierarchical feature relations. 
 
-The Core Engine creates an execution plan based on these dependencies and then runs the plan to execute feature calculations. This approach has the side effect that users describe the solution rather than the programm the solution itself. It is in that regard closer to databases paradigm than database paradigm.
+The Core Engine creates an execution plan based on these dependencies and then runs the plan to execute feature calculations. This approach has the side effect that users describe the solution rather than program it. In that regard it is closer to a declarative paradigm (like SQL) than an imperative one.
 
 #### How does mloda ensure data governance and quality control?
 
 mloda uses multiple mechanisms for governance and quality control. The extender feature logs relevant technical details, and users can incorporate data quality checks directly into feature definitions. Unit and integration testing are also simple to set up, enhancing reliability.
 
-#### How do plug-ins work in mloda, and can I develop my own plug-ins?
+#### How do plugins work in mloda, and can I develop my own plugins?
 
-mloda automatically selects the appropriate plug-ins for a given feature. 
+mloda automatically selects the appropriate plugins for a given feature. 
 
-Users can develop custom plug-ins to extend the platform's capabilities, and contributions are always welcome—feedback and design critiques are also greatly appreciated!
+Users can develop custom plugins to extend the platform's capabilities, and contributions are always welcome. Feedback and design critiques are also greatly appreciated!
 
 #### How do I join a feature group with itself (self-join)?
 
-When you need to use the same feature group on both sides of a join, you'll need to use pointer fields to distinguish between the left and right instances. See the [Join data guide - Same-Class Joins section](in_depth/join_data.md#same-class-joins-with-discriminators) for details and examples.
+When you need to use the same feature group on both sides of a join, you'll need to use discriminators to distinguish between the left and right instances. See the [Join data guide - Same-Class Joins section](in_depth/join_data.md#same-class-joins-with-discriminators) for details and examples.
 
 ## Technical and Integration
 

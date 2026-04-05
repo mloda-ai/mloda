@@ -34,7 +34,7 @@ The GlobalFilter provides methods to add filters to the collection. The prefered
 -   filter_type
 -   parameter
 
-**add_time_and_time_travel_filters**: Adds time and time travel filtering to the GlobalFiltering. This is a convenience mloda. Due to the complexity of time in data/ml/ai projects, this function should be used.
+**add_time_and_time_travel_filters**: Adds time and time travel filtering to the GlobalFiltering. This is a convenience method. Due to the complexity of time in data/ml/ai projects, this function should be used.
 
 This method is useful for **filtering data based on time ranges** (event) and **validity periods** (valid).
 

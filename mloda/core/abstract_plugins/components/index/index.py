@@ -23,7 +23,7 @@ class Index:
     def __hash__(self) -> int:
         return hash(self.index)
 
-    def is_a_part_of_(self, other: Index) -> bool:
+    def is_a_part_of(self, other: Index) -> bool:
         len_index = len(self.index)
 
         # index is larger

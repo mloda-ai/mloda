@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 from mloda.core.abstract_plugins.components.input_data.base_input_data import (
     _collect_filtered_subclasses,
-    get_all_filtereted_subclasses,
+    get_all_filtered_subclasses,
 )
 from mloda.user import PluginLoader
 
@@ -42,7 +42,7 @@ class TestPluginLoader:
         PluginLoader._disabled_groups.discard("_test_group")
 
     def test_disable_auto_load_suppresses_lazy_load(self) -> None:
-        """When auto-load is disabled for a group, get_all_filtereted_subclasses returns empty without loading."""
+        """When auto-load is disabled for a group, get_all_filtered_subclasses returns empty without loading."""
         from unittest.mock import MagicMock
 
         from mloda_plugins.feature_group.input_data.read_file import ReadFile
@@ -58,7 +58,7 @@ class TestPluginLoader:
                     "mloda.core.abstract_plugins.plugin_loader.plugin_loader.PluginLoader.load_group",
                     mock_load,
                 ):
-                    result = get_all_filtereted_subclasses(ReadFile, ReadFile)
+                    result = get_all_filtered_subclasses(ReadFile, ReadFile)
             assert result == []
             mock_load.assert_not_called()
         finally:
@@ -82,7 +82,7 @@ class TestPluginLoader:
                 "mloda.core.abstract_plugins.plugin_loader.plugin_loader.PluginLoader.load_group",
                 mock_load,
             ):
-                get_all_filtereted_subclasses(ReadFile, ReadFile)
+                get_all_filtered_subclasses(ReadFile, ReadFile)
 
         mock_load.assert_called_once_with("feature_group/input_data/read_files")
 

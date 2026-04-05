@@ -312,7 +312,7 @@ class FeatureGroup(ABC):
             return None
 
         for supported_index_column in supported_index_columns:
-            if index.is_a_part_of_(supported_index_column):
+            if index.is_a_part_of(supported_index_column):
                 return True
 
         return False

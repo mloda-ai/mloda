@@ -41,7 +41,7 @@ multi_column_index = Index(('user_id', 'timestamp'))
 is_multi = multi_column_index.is_multi_index()  # Returns True
 
 # Check if single column is a part of a composite index
-is_a_part_of = single_column_index.is_a_part_of_(multi_column_index) # Returns True
+is_a_part_of = single_column_index.is_a_part_of(multi_column_index) # Returns True
 ```
 
 #### JoinType

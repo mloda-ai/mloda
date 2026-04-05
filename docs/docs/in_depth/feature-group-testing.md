@@ -1,8 +1,5 @@
 # Feature Group Testing
 
-
-Most feature groups were generated automatically by using an agent. It is good practise to give the agents examples of other tests. Some agents tend to skip tests. Please be aware of that.
-
 This guide outlines key aspects to test in feature groups and provides brief examples.
 
 ## What to Test

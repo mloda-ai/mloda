@@ -74,6 +74,9 @@ result_1 = session.run(api_data={"MyKey": {"col": [1, 2]}})
 result_2 = session.run(api_data={"MyKey": {"col": [3, 4]}})
 ```
 
+`run()` also accepts an `artifacts` parameter for switching between artifact
+save and load modes across calls. See [Artifacts](artifacts.md#run-time-artifact-switching-with-preparerun) for details.
+
 `run_all()` is equivalent to `prepare()` followed by a single `run()`.
 `stream_all()` is equivalent to `prepare()` followed by a single `stream_run()`.
 

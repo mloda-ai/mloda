@@ -55,6 +55,8 @@ class CfwManager:
 
         self.artifact_to_save: Dict[str, Any] = {}
 
+        self.runtime_artifacts: Optional[Dict[str, Any]] = None
+
         self.api_data: Optional[Dict[str, Any]] = None
 
     def add_uuid_flyway_datasets(self, cf_uuid: UUID, object_ids: Set[UUID]) -> None:
@@ -219,6 +221,14 @@ class CfwManager:
     def get_artifacts(self) -> Dict[str, Any]:
         """Retrieves the dictionary of saved artifacts."""
         return self.artifact_to_save
+
+    def set_runtime_artifacts(self, artifacts: Dict[str, Any]) -> None:
+        """Sets runtime artifacts passed to run() for load-mode resolution."""
+        self.runtime_artifacts = artifacts
+
+    def get_runtime_artifacts(self) -> Optional[Dict[str, Any]]:
+        """Retrieves runtime artifacts, or None if not provided."""
+        return self.runtime_artifacts
 
     def set_api_data(self, api_data: Dict[str, Any]) -> None:
         """Sets the API data."""

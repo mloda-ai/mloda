@@ -310,6 +310,7 @@ class ExecutionOrchestrator:
         parallelization_modes: Set[ParallelizationMode] = {ParallelizationMode.SYNC},
         function_extender: Optional[Set[Extender]] = None,
         api_data: Optional[Dict[str, Any]] = None,
+        artifacts: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         Enters the context of the ExecutionOrchestrator.
@@ -336,6 +337,9 @@ class ExecutionOrchestrator:
 
         if api_data:
             self.cfw_register.set_api_data(api_data)
+
+        if artifacts:
+            self.cfw_register.set_runtime_artifacts(artifacts)
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """

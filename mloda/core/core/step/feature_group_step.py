@@ -47,6 +47,11 @@ class FeatureGroupStep(Step):
         data: Optional[Any] = None,
     ) -> Optional[Any]:
         self.location = cfw_register.get_location()
+
+        runtime_artifacts = cfw_register.get_runtime_artifacts()
+        if runtime_artifacts is not None and self.feature_group.artifact() is not None:
+            self.features.resolve_artifact_for_runtime(runtime_artifacts)
+
         if self.api_input_data:
             data = self.get_api_input_data(data, cfw_register)
 

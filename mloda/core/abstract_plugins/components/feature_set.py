@@ -1,4 +1,4 @@
-from typing import Any, Iterable, Optional, Set, Type
+from typing import Any, Dict, Iterable, Optional, Set, Type
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -35,6 +35,26 @@ class FeatureSet:
                 self.artifact_to_load = feature_name
                 return
 
+        self.artifact_to_save = self.get_name_of_one_feature().name
+
+    def resolve_artifact_for_runtime(self, runtime_artifacts: Dict[str, Any]) -> None:
+        """Re-resolve artifact save/load mode using runtime artifacts from run().
+
+        Called at step execution time on the deep-copied FeatureSet when
+        artifacts are passed to run(). This enables switching between save
+        and load modes across run() calls without re-preparing.
+        """
+        FeatureSetValidator.validate_options_initialized(self.options, "resolve_artifact_for_runtime")
+        assert self.options is not None
+
+        for feature_name in self.get_all_names():
+            if feature_name in runtime_artifacts:
+                self.artifact_to_load = feature_name
+                self.artifact_to_save = None
+                self.options.set(feature_name, runtime_artifacts[feature_name])
+                return
+
+        self.artifact_to_load = None
         self.artifact_to_save = self.get_name_of_one_feature().name
 
     def add(self, feature: Feature) -> None:

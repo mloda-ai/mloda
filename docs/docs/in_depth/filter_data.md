@@ -309,8 +309,9 @@ This is safe as long as you follow one rule: **preserve the filter column with i
 original values in your output**.
 
 The framework's row elimination works by matching against the filter column in your
-returned data. If your FeatureGroup modifies or drops that column, the framework's filter
-will produce wrong results or silently return an empty dataset.
+returned data. If your FeatureGroup drops that column, the framework raises a
+`ValueError` with a clear message naming the missing column. If your FeatureGroup
+modifies the column values, the filter may produce wrong results silently.
 
 ```
 # Correct: filter column preserved with original values
@@ -325,10 +326,10 @@ return pa.table({
     "status": [1, 0, 1, 0],   # mapped to ints; "equal" filter for "active" matches nothing
 })
 
-# Wrong: filter column omitted
+# Wrong: filter column omitted -- raises ValueError at runtime
 return pa.table({
     cls.get_class_name(): computed_values,
-    # "status" missing; framework skips the filter silently
+    # "status" missing; framework raises: "missing filter column 'status'"
 })
 ```
 

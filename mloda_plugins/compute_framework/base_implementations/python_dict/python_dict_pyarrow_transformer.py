@@ -33,7 +33,7 @@ class PythonDictPyArrowTransformer(BaseTransformer):
 
     @classmethod
     def import_other_fw(cls) -> None:
-        pass
+        import pyarrow as pa  # noqa: F401
 
     @classmethod
     def transform_fw_to_other_fw(cls, data: Any) -> Any:

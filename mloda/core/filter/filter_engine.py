@@ -15,14 +15,22 @@ class BaseFilterEngine(ABC):
         return cls.apply_single_filters(data, features)
 
     @classmethod
+    def applicable_filters(cls, features: Any) -> list[SingleFilter]:
+        """Return the filters that apply_filters will actually process.
+
+        A filter is applicable when its column name appears in features.get_all_names().
+        This method is the single source of truth for that decision; both the filter
+        engine and the pre-elimination validator in ComputeFramework use it.
+        """
+        if features.filters is None:
+            return []
+        all_names = features.get_all_names()
+        return [sf for sf in features.filters if sf.filter_feature.name in all_names]
+
+    @classmethod
     def apply_single_filters(cls, data: Any, features: Any) -> Any:
         """This function should be used to apply filters to the data if filters are applied one by one."""
-        if features.filters is None:
-            return data
-
-        for single_filter in features.filters:
-            if single_filter.filter_feature.name not in features.get_all_names():
-                continue
+        for single_filter in cls.applicable_filters(features):
             data = cls.do_filter(data, single_filter)
 
         return data

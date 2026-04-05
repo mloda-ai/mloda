@@ -101,10 +101,11 @@ class IcebergFramework(ComputeFramework):
         # Use Iceberg's scan with column selection
         return data.scan(selected_fields=tuple(_selected_feature_names))
 
-    def set_column_names(self) -> None:
-        """Set column names from the current data."""
-        if self.data is not None and isinstance(self.data, IcebergTable):
-            self.column_names = set(self.data.schema().column_names)
+    def _extract_column_names(self, data: Any) -> set[str]:
+        if IcebergTable is not None and isinstance(data, IcebergTable):
+            return set(data.schema().column_names)
+        # After transform, data may be a PyArrow table
+        return set(data.schema.names)
 
     def transform(self, data: Any, feature_names: set[str]) -> Any:
         """

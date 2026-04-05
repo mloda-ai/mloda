@@ -1,26 +1,27 @@
 """Tests that a FeatureGroup can control whether filters are applied inline vs. final.
 
-Currently, `final_filters()` lives on the FilterEngine (tied to the ComputeFramework).
-If a FeatureGroup wants inline filtering, it must create boilerplate subclasses of both
-the FilterEngine and ComputeFramework. These tests prove that a FeatureGroup can
-override `final_filters()` directly, without any custom compute framework or filter
-engine subclasses.
+``FeatureGroup.final_filters()`` controls post-calculation row elimination only.
+``features.filters`` is always available inside ``calculate_feature()`` regardless
+of what ``final_filters()`` returns, so inline filter reading and row elimination
+are independent concerns.
 
-Expected failures:
-- FeatureGroup does not yet expose a `final_filters()` method.
-- `run_final_filter()` does not yet consult the FeatureGroup for this decision.
+The matrix of (FG final_filters, Engine final_filters, reads inline) combinations:
 
-The matrix of (FG final_filters, Engine final_filters) combinations:
+  FG=False, Engine=True,  inline=yes -- test_inline_filter_without_custom_compute_framework
+  FG=None,  Engine=True,  inline=no  -- test_regular_feature_group_still_uses_final_filters
+  FG=False, Engine=False, inline=yes -- test_fg_skip_with_inline_engine
+  FG=True,  Engine=False, inline=no  -- test_fg_force_final_overrides_inline_engine
+  FG=True,  Engine=True,  inline=no  -- test_fg_force_final_with_final_engine
+  FG=True,  Engine=True,  inline=yes -- test_inline_mask_with_final_elimination
 
-  FG=False, Engine=True  -- test_inline_filter_without_custom_compute_framework
-  FG=None,  Engine=True  -- test_regular_feature_group_still_uses_final_filters
-  FG=False, Engine=False -- test_fg_skip_with_inline_engine
-  FG=True,  Engine=False -- test_fg_force_final_overrides_inline_engine
-  FG=True,  Engine=True  -- test_fg_force_final_with_final_engine
+Validation (filter column must be present when row elimination applies):
+  FG=True,  drops filter column       -- test_dropped_filter_column_raises_error
+  FG=None,  drops filter column       -- test_default_fg_drops_filter_column_raises_error
 """
 
 from typing import Any, Optional
 
+import pytest
 import pyarrow as pa
 import pyarrow.compute as pc
 
@@ -198,6 +199,130 @@ class ForceFinalOnFinalEngine(FeatureGroup):
             {
                 cls.get_class_name(): [10, 20, 30, 40],
                 "status": ["active", "inactive", "active", "inactive"],
+            }
+        )
+
+
+class InlineMaskWithFinalElimination(FeatureGroup):
+    """FG reads filters inline for masking AND returns True for row elimination.
+
+    Proves that inline filter reading and final row elimination are independent.
+    The FeatureGroup reads ``features.filters`` during ``calculate_feature()``
+    to mask non-matching values before aggregation, then returns
+    ``final_filters() = True`` so the framework also eliminates non-matching
+    rows afterward.
+
+    Data layout (3 active, 1 inactive across two regions):
+        region: [A, A, A, B], status: [active, active, inactive, active]
+        value:  [10, 5, 20, 30]
+
+    With filter status=="active":
+        Masked values:  [10, 5, None, 30]
+        Region sums:    A=15, B=30
+        Broadcast:      [15, 15, 15, 30]
+        Row elimination: removes the inactive row -> [15, 15, 30]
+
+    Without inline masking (raw + elimination only):
+        Would be [10, 5, 30] (raw active values, no aggregation).
+
+    The expected [15, 15, 30] is distinguishable from both the inline-only
+    result [15, 15, 15, 30] and the elimination-only result [10, 5, 30].
+    """
+
+    @classmethod
+    def input_data(cls) -> Optional[BaseInputData]:
+        return DataCreator({cls.get_class_name(), "status"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def final_filters(cls) -> bool:
+        return True
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        region = pa.array(["A", "A", "A", "B"])
+        status = pa.array(["active", "active", "inactive", "active"])
+        value = pa.array([10, 5, 20, 30])
+
+        mask = pa.array([True, True, True, True])
+        if features.filters is not None:
+            for single_filter in features.filters:
+                if single_filter.name == "status":
+                    filter_value = single_filter.parameter.value
+                    mask = pc.and_(mask, pc.equal(status, filter_value))
+
+        masked_value = pc.if_else(mask, value, None)
+
+        result = []
+        for i in range(len(region)):
+            region_i = region[i].as_py()
+            total = 0
+            for j in range(len(region)):
+                if region[j].as_py() == region_i and masked_value[j].is_valid:
+                    total += masked_value[j].as_py()
+            result.append(total)
+
+        return pa.table(
+            {
+                cls.get_class_name(): result,
+                "status": status,
+            }
+        )
+
+
+class DropsFilterColumnFeatureGroup(FeatureGroup):
+    """FG returns final_filters()=True but drops the filter column from its output.
+
+    This violates the overlap contract: row elimination needs the filter column
+    to decide which rows to remove. The framework should raise a clear error.
+    """
+
+    @classmethod
+    def input_data(cls) -> Optional[BaseInputData]:
+        return DataCreator({cls.get_class_name(), "status"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def final_filters(cls) -> bool:
+        return True
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table(
+            {
+                cls.get_class_name(): [10, 20, 30, 40],
+                # "status" intentionally omitted
+            }
+        )
+
+
+class DefaultFGDropsFilterColumn(FeatureGroup):
+    """FG does NOT override final_filters() (defaults to None) but drops the filter column.
+
+    The engine (PyArrowFilterEngine) returns True, so the framework applies
+    row elimination. The missing column should be caught by the validation.
+    """
+
+    @classmethod
+    def input_data(cls) -> Optional[BaseInputData]:
+        return DataCreator({cls.get_class_name(), "status"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table(
+            {
+                cls.get_class_name(): [10, 20, 30, 40],
+                # "status" intentionally omitted
             }
         )
 
@@ -406,3 +531,90 @@ class TestFeatureGroupFinalFilters:
             data = res.to_pydict()
             # Both FG and engine agree: rows eliminated
             assert data[feature_name] == [10, 30]
+
+    def test_inline_mask_with_final_elimination(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
+        """FG=True, Engine=True, reads inline. Masking AND elimination are independent.
+
+        InlineMaskWithFinalElimination reads features.filters during calculation
+        to mask inactive values before aggregation, AND returns final_filters()=True
+        so the framework also eliminates non-matching rows afterward.
+
+        Data: region=[A,A,A,B], status=[active,active,inactive,active], value=[10,5,20,30]
+        After inline mask + region sum + broadcast: [15, 15, 15, 30]
+        After row elimination (remove inactive):   [15, 15, 30]
+
+        This result is distinguishable from:
+        - inline only (no elimination):  [15, 15, 15, 30] (4 rows)
+        - elimination only (no masking): [10, 5, 30] (raw active values)
+        """
+        feature_name = "InlineMaskWithFinalElimination"
+
+        features = Features([Feature(name=feature_name, initial_requested_data=True)])
+
+        global_filter = GlobalFilter()
+        global_filter.add_filter("status", "equal", {"value": "active"})
+
+        result = MlodaTestRunner.run_api(
+            features,
+            compute_frameworks={PyArrowTable},
+            parallelization_modes=modes,
+            flight_server=flight_server,
+            global_filter=global_filter,
+        )
+
+        for res in result.results:
+            data = res.to_pydict()
+            # Inline masking changed values (15 not 10/5), elimination removed inactive row
+            assert data[feature_name] == [15, 15, 30]
+
+    def test_dropped_filter_column_raises_error(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
+        """FG=True but filter column missing from output. Framework must raise ValueError.
+
+        DropsFilterColumnFeatureGroup returns final_filters()=True but omits the
+        "status" column from its output table. The framework's validation should
+        catch this and raise a clear error instead of crashing in the filter engine.
+        """
+        feature_name = "DropsFilterColumnFeatureGroup"
+
+        features = Features([Feature(name=feature_name, initial_requested_data=True)])
+
+        global_filter = GlobalFilter()
+        global_filter.add_filter("status", "equal", {"value": "active"})
+
+        # ValueError from _validate_filter_columns is wrapped in a generic
+        # Exception by the threading/worker layer (see thread_worker.py).
+        with pytest.raises(Exception, match="missing filter column.*status.*bug in the FeatureGroup"):
+            MlodaTestRunner.run_api(
+                features,
+                compute_frameworks={PyArrowTable},
+                parallelization_modes=modes,
+                flight_server=flight_server,
+                global_filter=global_filter,
+            )
+
+    def test_default_fg_drops_filter_column_raises_error(
+        self, modes: set[ParallelizationMode], flight_server: Any
+    ) -> None:
+        """FG=None (default), Engine=True, filter column missing. Framework must raise ValueError.
+
+        DefaultFGDropsFilterColumn does not override final_filters(), so the
+        engine fallback path applies row elimination. The validation must catch
+        the missing column on this path too, not only when the FG returns True.
+        """
+        feature_name = "DefaultFGDropsFilterColumn"
+
+        features = Features([Feature(name=feature_name, initial_requested_data=True)])
+
+        global_filter = GlobalFilter()
+        global_filter.add_filter("status", "equal", {"value": "active"})
+
+        # ValueError from _validate_filter_columns is wrapped in a generic
+        # Exception by the threading/worker layer (see thread_worker.py).
+        with pytest.raises(Exception, match="missing filter column.*status.*bug in the FeatureGroup"):
+            MlodaTestRunner.run_api(
+                features,
+                compute_frameworks={PyArrowTable},
+                parallelization_modes=modes,
+                flight_server=flight_server,
+                global_filter=global_filter,
+            )

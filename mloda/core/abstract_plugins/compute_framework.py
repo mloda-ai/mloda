@@ -152,7 +152,7 @@ class ComputeFramework(ABC):
         return self.framework_connection_object
 
     def set_column_names(self) -> None:
-        pass
+        self.column_names = self._extract_column_names(self.data)
 
     @staticmethod
     def is_available() -> bool:
@@ -221,6 +221,7 @@ class ComputeFramework(ABC):
             if fg_preference is False:
                 return data
             if fg_preference is True:
+                self._validate_filter_columns(data, features, feature_group)
                 filter_engine = features.filter_engine()
                 return filter_engine.apply_filters(data, features)
 
@@ -230,10 +231,43 @@ class ComputeFramework(ABC):
         except NotImplementedError:
             return data
 
+        self._validate_filter_columns(data, features, feature_group)
         filter_engine = features.filter_engine()
         result = filter_engine.apply_filters(data, features)
 
         return result
+
+    def _validate_filter_columns(self, data: Any, features: Any, feature_group: Any) -> None:
+        """Validate that filter columns exist in the output before row elimination.
+
+        Called on every path where the framework will apply filters, regardless of
+        whether the FeatureGroup or the FilterEngine requested elimination.
+        Uses filter_engine.applicable_filters() to determine which columns will
+        be processed, so this check and apply_filters() share the same gate.
+        """
+        filter_engine_cls = features.filter_engine()
+        applicable = filter_engine_cls.applicable_filters(features)
+        if not applicable:
+            return
+
+        data_columns = self._extract_column_names(data)
+        fg_name = feature_group.get_class_name() if feature_group is not None else "Unknown"
+        for single_filter in applicable:
+            col = single_filter.filter_feature.name
+            if col not in data_columns:
+                raise ValueError(
+                    f"{fg_name} output is missing filter column '{col}' "
+                    f"required for row elimination. "
+                    f"This is a bug in the FeatureGroup, not in your filter. "
+                    f"Available columns: {sorted(data_columns)}"
+                )
+
+    def _extract_column_names(self, data: Any) -> set[str]:
+        """Extract column names from the data.
+
+        Called only with the non-None output of calculate_feature.
+        """
+        raise NotImplementedError
 
     @final
     def set_filter_engine(self, features: Any) -> Any:

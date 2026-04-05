@@ -144,7 +144,7 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
             "explanation": "Maximum number of iterations for t-SNE optimization",
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: False,
-            "default": 250,
+            DefaultOptionKeys.default: 250,
             DefaultOptionKeys.validation_function: lambda value: (
                 isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0
             ),
@@ -153,7 +153,7 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
             "explanation": "Maximum iterations without progress before early stopping (t-SNE)",
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: False,
-            "default": 50,
+            DefaultOptionKeys.default: 50,
             DefaultOptionKeys.validation_function: lambda value: (
                 isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0
             ),
@@ -163,8 +163,8 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
             "exact": "Exact method (slower, O(n^2))",
             "explanation": "t-SNE computation method",
             DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            "default": "barnes_hut",
+            DefaultOptionKeys.strict_validation: True,
+            DefaultOptionKeys.default: "barnes_hut",
         },
         # PCA specific parameters
         PCA_SVD_SOLVER: {
@@ -174,15 +174,15 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
             "randomized": "Randomized SVD",
             "explanation": "SVD solver algorithm for PCA",
             DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            "default": "auto",
+            DefaultOptionKeys.strict_validation: True,
+            DefaultOptionKeys.default: "auto",
         },
         # ICA specific parameters
         ICA_MAX_ITER: {
             "explanation": "Maximum number of iterations for ICA",
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: False,
-            "default": 200,
+            DefaultOptionKeys.default: 200,
             DefaultOptionKeys.validation_function: lambda value: (
                 isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0
             ),
@@ -192,7 +192,7 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
             "explanation": "Number of neighbors for Isomap",
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: False,
-            "default": 5,
+            DefaultOptionKeys.default: 5,
             DefaultOptionKeys.validation_function: lambda value: (
                 isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0
             ),

@@ -118,6 +118,7 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         DefaultOptionKeys.in_features: {
             "explanation": "Source feature to apply text cleaning operations to",
             DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: False,
         },
     }
 

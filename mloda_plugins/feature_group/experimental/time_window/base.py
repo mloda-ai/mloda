@@ -9,7 +9,7 @@ from typing import Any, List, Optional, Set
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
-from mloda.provider import FeatureChainParser
+from mloda.provider import CHAIN_SEPARATOR, FeatureChainParser
 from mloda.provider import (
     FeatureChainParserMixin,
 )
@@ -153,8 +153,7 @@ class TimeWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         },
     }
 
-    # Define the pattern separator and regex for this feature group
-    PATTERN = "__"
+    # Define the regex pattern for this feature group
     PREFIX_PATTERN = r".*__([\w]+)_(\d+)_([\w]+)_window$"
 
     # In-feature configuration for FeatureChainParserMixin
@@ -186,7 +185,7 @@ class TimeWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     @classmethod
     def _has_valid_time_window_suffix(cls, feature_name: str) -> bool:
         """Check if feature_name has a suffix matching the time window pattern."""
-        suffix_start = feature_name.rfind("__")
+        suffix_start = feature_name.rfind(CHAIN_SEPARATOR)
         if suffix_start == -1:
             return False
         suffix = feature_name[suffix_start + 2 :]
@@ -272,7 +271,7 @@ class TimeWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         """
         # Extract the suffix part (everything after the last double underscore before the window pattern)
         # Use rfind to support chained features in L->R format (e.g., price__mean_imputed__sum_7_day_window)
-        suffix_start = feature_name.rfind("__")
+        suffix_start = feature_name.rfind(CHAIN_SEPARATOR)
         if suffix_start == -1:
             raise ValueError(
                 f"Invalid time window feature name format: {feature_name}. Missing double underscore separator."

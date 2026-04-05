@@ -9,7 +9,7 @@ from typing import Any, List, Optional, Set, Union
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
-from mloda.provider import FeatureChainParser
+from mloda.provider import CHAIN_SEPARATOR, FeatureChainParser
 from mloda.provider import (
     FeatureChainParserMixin,
 )
@@ -166,7 +166,7 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             ValueError: If the suffix doesn't match the expected pattern
         """
         # Extract the suffix part (everything after the double underscore)
-        suffix_start = feature_name.find("__")
+        suffix_start = feature_name.find(CHAIN_SEPARATOR)
         if suffix_start == -1:
             raise ValueError(
                 f"Invalid clustering feature name format: {feature_name}. Missing double underscore separator."

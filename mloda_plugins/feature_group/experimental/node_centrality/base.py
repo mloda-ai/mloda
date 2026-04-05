@@ -9,7 +9,7 @@ from typing import Any, List, Optional
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
-from mloda.provider import FeatureChainParser
+from mloda.provider import CHAIN_SEPARATOR, FeatureChainParser
 from mloda.provider import (
     FeatureChainParserMixin,
 )
@@ -179,7 +179,7 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             ValueError: If the suffix doesn't match the expected pattern
         """
         # Extract the suffix part (everything after the LAST double underscore for L→R format)
-        suffix_start = feature_name.rfind("__")
+        suffix_start = feature_name.rfind(CHAIN_SEPARATOR)
         if suffix_start == -1:
             raise ValueError(
                 f"Invalid centrality feature name format: {feature_name}. Missing double underscore separator."

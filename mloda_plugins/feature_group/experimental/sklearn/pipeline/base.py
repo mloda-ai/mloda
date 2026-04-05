@@ -115,8 +115,6 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         },
     }
 
-    # Define patterns for parsing
-    PATTERN = "__"
     PREFIX_PATTERN = r".*__sklearn_pipeline_([\w]+)$"
 
     # In-feature configuration for FeatureChainParserMixin

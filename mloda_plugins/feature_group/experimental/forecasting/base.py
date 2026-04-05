@@ -10,7 +10,7 @@ from typing import Any, List, Optional, Set, Type
 from mloda.provider import FeatureGroup
 from mloda.provider import BaseArtifact
 from mloda.user import Feature
-from mloda.provider import FeatureChainParser, FeatureChainParserMixin, FeatureSet
+from mloda.provider import CHAIN_SEPARATOR, FeatureChainParser, FeatureChainParserMixin, FeatureSet
 from mloda.user import FeatureName
 from mloda.user import Options
 from mloda.provider import DefaultOptionKeys
@@ -235,7 +235,7 @@ class ForecastingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             ValueError: If the suffix doesn't match the expected pattern
         """
         # Extract the suffix part (everything after the double underscore)
-        suffix_start = feature_name.find("__")
+        suffix_start = feature_name.find(CHAIN_SEPARATOR)
         if suffix_start == -1:
             raise ValueError(
                 f"Invalid forecast feature name format: {feature_name}. Missing double underscore separator."
@@ -433,7 +433,7 @@ class ForecastingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     @classmethod
     def _has_valid_forecast_suffix(cls, feature_name: str) -> bool:
         """Check if feature_name has a suffix matching the forecast pattern."""
-        suffix_start = feature_name.find("__")
+        suffix_start = feature_name.find(CHAIN_SEPARATOR)
         if suffix_start == -1:
             return False
         suffix = feature_name[suffix_start + 2 :]

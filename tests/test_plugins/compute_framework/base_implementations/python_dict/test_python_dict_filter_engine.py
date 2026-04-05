@@ -44,7 +44,7 @@ class TestPythonDictFilterEngine(FilterEngineTestMixin):
     def test_do_min_filter_missing_value(self, sample_data: Any) -> None:
         """Test min filter with missing value parameter."""
         feature = Feature("age")
-        filter_type = FilterType.min
+        filter_type = FilterType.MIN
         parameter = {"invalid": 30}  # Wrong parameter name
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -54,7 +54,7 @@ class TestPythonDictFilterEngine(FilterEngineTestMixin):
     def test_do_equal_filter_missing_value(self, sample_data: Any) -> None:
         """Test equal filter with missing value parameter."""
         feature = Feature("age")
-        filter_type = FilterType.equal
+        filter_type = FilterType.EQUAL
         parameter = {"invalid": 30}  # Wrong parameter name
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -64,7 +64,7 @@ class TestPythonDictFilterEngine(FilterEngineTestMixin):
     def test_do_regex_filter_missing_value(self, sample_data: Any) -> None:
         """Test regex filter with missing value parameter."""
         feature = Feature("name")
-        filter_type = FilterType.regex
+        filter_type = FilterType.REGEX
         parameter = {"invalid": "^A"}  # Wrong parameter name
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -74,7 +74,7 @@ class TestPythonDictFilterEngine(FilterEngineTestMixin):
     def test_do_categorical_inclusion_filter_missing_values(self, sample_data: Any) -> None:
         """Test categorical inclusion filter with missing values parameter."""
         feature = Feature("category")
-        filter_type = FilterType.categorical_inclusion
+        filter_type = FilterType.CATEGORICAL_INCLUSION
         parameter = {"invalid": ["A", "B"]}  # Wrong parameter name
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -86,7 +86,7 @@ class TestPythonDictFilterEngine(FilterEngineTestMixin):
         data_with_none = sample_data + [{"id": 6, "age": None, "name": "Frank", "category": "A"}]
 
         feature = Feature("age")
-        filter_type = FilterType.min
+        filter_type = FilterType.MIN
         parameter = {"value": 30}
         single_filter = SingleFilter(feature, filter_type, parameter)
 

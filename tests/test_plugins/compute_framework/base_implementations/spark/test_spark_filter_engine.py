@@ -75,7 +75,7 @@ class TestSparkFilterEngine:
     def test_range_filter_inclusive(self, sample_data: Any) -> None:
         """Test range filter with inclusive bounds."""
         feature = Feature("age")
-        filter_type = FilterType.range
+        filter_type = FilterType.RANGE
         parameter = {"min": 25, "max": 35, "max_exclusive": False}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -90,7 +90,7 @@ class TestSparkFilterEngine:
     def test_range_filter_exclusive_max(self, sample_data: Any) -> None:
         """Test range filter with exclusive max bound."""
         feature = Feature("age")
-        filter_type = FilterType.range
+        filter_type = FilterType.RANGE
         parameter = {"min": 25, "max": 35, "max_exclusive": True}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -105,7 +105,7 @@ class TestSparkFilterEngine:
     def test_range_filter_missing_parameters(self, sample_data: Any) -> None:
         """Test range filter with missing parameters."""
         feature = Feature("age")
-        filter_type = FilterType.range
+        filter_type = FilterType.RANGE
         parameter = {"min": 25}  # Missing max parameter
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -115,7 +115,7 @@ class TestSparkFilterEngine:
     def test_min_filter(self, sample_data: Any) -> None:
         """Test minimum value filter."""
         feature = Feature("age")
-        filter_type = FilterType.min
+        filter_type = FilterType.MIN
         parameter = {"value": 30}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -131,7 +131,7 @@ class TestSparkFilterEngine:
     def test_min_filter_missing_value(self, sample_data: Any) -> None:
         """Test min filter with missing value parameter."""
         feature = Feature("age")
-        filter_type = FilterType.min
+        filter_type = FilterType.MIN
         parameter = {"invalid": 30}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -141,7 +141,7 @@ class TestSparkFilterEngine:
     def test_max_filter_simple(self, sample_data: Any) -> None:
         """Test maximum value filter with simple value parameter."""
         feature = Feature("age")
-        filter_type = FilterType.max
+        filter_type = FilterType.MAX
         parameter = {"value": 30}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -156,7 +156,7 @@ class TestSparkFilterEngine:
     def test_max_filter_complex_inclusive(self, sample_data: Any) -> None:
         """Test maximum value filter with complex max parameter (inclusive)."""
         feature = Feature("age")
-        filter_type = FilterType.max
+        filter_type = FilterType.MAX
         parameter = {"max": 30, "max_exclusive": False}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -171,7 +171,7 @@ class TestSparkFilterEngine:
     def test_max_filter_complex_exclusive(self, sample_data: Any) -> None:
         """Test maximum value filter with complex max_exclusive parameter."""
         feature = Feature("age")
-        filter_type = FilterType.max
+        filter_type = FilterType.MAX
         parameter = {"max": 30, "max_exclusive": True}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -186,7 +186,7 @@ class TestSparkFilterEngine:
     def test_max_filter_invalid_parameters(self, sample_data: Any) -> None:
         """Test max filter with invalid parameters."""
         feature = Feature("age")
-        filter_type = FilterType.max
+        filter_type = FilterType.MAX
         parameter = {"invalid": 30}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -196,7 +196,7 @@ class TestSparkFilterEngine:
     def test_max_filter_with_min_parameter(self, sample_data: Any) -> None:
         """Test max filter with min parameter (should raise error)."""
         feature = Feature("age")
-        filter_type = FilterType.max
+        filter_type = FilterType.MAX
         parameter = {"min": 20, "max": 30}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -206,7 +206,7 @@ class TestSparkFilterEngine:
     def test_equal_filter(self, sample_data: Any) -> None:
         """Test equality filter."""
         feature = Feature("age")
-        filter_type = FilterType.equal
+        filter_type = FilterType.EQUAL
         parameter = {"value": 30}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -221,7 +221,7 @@ class TestSparkFilterEngine:
     def test_equal_filter_string(self, sample_data: Any) -> None:
         """Test equality filter on string column."""
         feature = Feature("name")
-        filter_type = FilterType.equal
+        filter_type = FilterType.EQUAL
         parameter = {"value": "Alice"}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -236,7 +236,7 @@ class TestSparkFilterEngine:
     def test_equal_filter_boolean(self, sample_data: Any) -> None:
         """Test equality filter on boolean column."""
         feature = Feature("is_active")
-        filter_type = FilterType.equal
+        filter_type = FilterType.EQUAL
         parameter = {"value": True}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -251,7 +251,7 @@ class TestSparkFilterEngine:
     def test_equal_filter_missing_value(self, sample_data: Any) -> None:
         """Test equal filter with missing value parameter."""
         feature = Feature("age")
-        filter_type = FilterType.equal
+        filter_type = FilterType.EQUAL
         parameter = {"invalid": 30}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -261,7 +261,7 @@ class TestSparkFilterEngine:
     def test_regex_filter(self, sample_data: Any) -> None:
         """Test regex filter."""
         feature = Feature("name")
-        filter_type = FilterType.regex
+        filter_type = FilterType.REGEX
         parameter = {"value": "^A.*"}  # Names starting with 'A'
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -275,7 +275,7 @@ class TestSparkFilterEngine:
     def test_regex_filter_multiple_matches(self, sample_data: Any) -> None:
         """Test regex filter with multiple matches."""
         feature = Feature("name")
-        filter_type = FilterType.regex
+        filter_type = FilterType.REGEX
         parameter = {"value": ".*e$"}  # Names ending with 'e'
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -290,7 +290,7 @@ class TestSparkFilterEngine:
     def test_regex_filter_missing_value(self, sample_data: Any) -> None:
         """Test regex filter with missing value parameter."""
         feature = Feature("name")
-        filter_type = FilterType.regex
+        filter_type = FilterType.REGEX
         parameter = {"invalid": "^A.*"}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -300,7 +300,7 @@ class TestSparkFilterEngine:
     def test_categorical_inclusion_filter(self, sample_data: Any) -> None:
         """Test categorical inclusion filter."""
         feature = Feature("category")
-        filter_type = FilterType.categorical_inclusion
+        filter_type = FilterType.CATEGORICAL_INCLUSION
         parameter = {"values": ["A", "B"]}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -315,7 +315,7 @@ class TestSparkFilterEngine:
     def test_categorical_inclusion_filter_single_value(self, sample_data: Any) -> None:
         """Test categorical inclusion filter with single value."""
         feature = Feature("category")
-        filter_type = FilterType.categorical_inclusion
+        filter_type = FilterType.CATEGORICAL_INCLUSION
         parameter = {"values": ["C"]}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -330,7 +330,7 @@ class TestSparkFilterEngine:
     def test_categorical_inclusion_filter_missing_values(self, sample_data: Any) -> None:
         """Test categorical inclusion filter with missing values parameter."""
         feature = Feature("category")
-        filter_type = FilterType.categorical_inclusion
+        filter_type = FilterType.CATEGORICAL_INCLUSION
         parameter = {"invalid": ["A", "B"]}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -340,7 +340,7 @@ class TestSparkFilterEngine:
     def test_filter_on_float_column(self, sample_data: Any) -> None:
         """Test filters on float/double columns."""
         feature = Feature("score")
-        filter_type = FilterType.range
+        filter_type = FilterType.RANGE
         parameter = {"min": 80.0, "max": 90.0, "max_exclusive": False}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -356,7 +356,7 @@ class TestSparkFilterEngine:
     def test_filter_empty_result(self, sample_data: Any) -> None:
         """Test filter that returns empty result."""
         feature = Feature("age")
-        filter_type = FilterType.equal
+        filter_type = FilterType.EQUAL
         parameter = {"value": 100}  # No one is 100 years old
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -369,7 +369,7 @@ class TestSparkFilterEngine:
     def test_filter_nonexistent_column(self, sample_data: Any) -> None:
         """Test filter on nonexistent column."""
         feature = Feature("nonexistent")
-        filter_type = FilterType.equal
+        filter_type = FilterType.EQUAL
         parameter = {"value": 30}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -391,7 +391,7 @@ class TestSparkFilterEngine:
 
         # Test regex filter for emails ending with .com
         feature = Feature("email")
-        filter_type = FilterType.regex
+        filter_type = FilterType.REGEX
         parameter = {"value": r"\.com$"}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -414,7 +414,7 @@ class TestSparkFilterEngine:
 
         # Test min filter - should exclude null values
         feature = Feature("age")
-        filter_type = FilterType.min
+        filter_type = FilterType.MIN
         parameter = {"value": 30}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -440,7 +440,7 @@ class TestSparkFilterEngine:
 
         # Test min filter on empty data
         feature = Feature("age")
-        filter_type = FilterType.min
+        filter_type = FilterType.MIN
         parameter = {"value": 30}
         single_filter = SingleFilter(feature, filter_type, parameter)
 

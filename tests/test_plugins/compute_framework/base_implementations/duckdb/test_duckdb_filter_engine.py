@@ -68,7 +68,7 @@ class TestDuckDBFilterEngine(FilterEngineTestMixin):
         extended_data = DuckdbRelation.from_arrow(conn, arrow_table)
 
         feature = Feature("age")
-        filter_type = FilterType.min
+        filter_type = FilterType.MIN
         parameter = {"value": 30}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -94,7 +94,7 @@ class TestDuckDBFilterEngine(FilterEngineTestMixin):
         empty_data = DuckdbRelation.from_arrow(conn, arrow_table)
 
         feature = Feature("age")
-        filter_type = FilterType.min
+        filter_type = FilterType.MIN
         parameter = {"value": 30}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -115,7 +115,7 @@ class TestDuckDBFilterEngine(FilterEngineTestMixin):
         data = DuckdbRelation.from_arrow(conn, arrow_table)
 
         feature = Feature("status")
-        filter_type = FilterType.equal
+        filter_type = FilterType.EQUAL
         parameter = {"value": "active"}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -138,7 +138,7 @@ class TestDuckDBFilterEngine(FilterEngineTestMixin):
         data = DuckdbRelation.from_arrow(conn, arrow_table)
 
         feature = Feature("is_active")
-        filter_type = FilterType.equal
+        filter_type = FilterType.EQUAL
         parameter = {"value": True}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
@@ -166,7 +166,7 @@ class TestDuckDBFilterEngine(FilterEngineTestMixin):
         data = DuckdbRelation.from_arrow(conn, arrow_table)
 
         feature = Feature("email")
-        filter_type = FilterType.regex
+        filter_type = FilterType.REGEX
         parameter = {"value": r"\.com$"}
         single_filter = SingleFilter(feature, filter_type, parameter)
 

@@ -10,7 +10,7 @@ class TestSingleFilter:
     def setup_method(self) -> None:
         """Set up test variables."""
         self.feature = Feature("age")
-        self.filter_type = FilterType.range
+        self.filter_type = FilterType.RANGE
         self.parameter = {"min": 25, "max": 50}
 
     def test_single_filter_initialization(self) -> None:

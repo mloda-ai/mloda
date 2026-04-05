@@ -2,9 +2,9 @@ from enum import Enum
 
 
 class FilterType(Enum):
-    min = "min"
-    max = "max"
-    equal = "equal"
-    range = "range"
-    regex = "regex"
-    categorical_inclusion = "categorical_inclusion"
+    MIN = "min"
+    MAX = "max"
+    EQUAL = "equal"
+    RANGE = "range"
+    REGEX = "regex"
+    CATEGORICAL_INCLUSION = "categorical_inclusion"

@@ -57,7 +57,7 @@ class TestPolarsFilterEngine(FilterEngineTestMixin):
         )
 
         feature = Feature("age")
-        filter_type = FilterType.min
+        filter_type = FilterType.MIN
         parameter = {"value": 30}
         single_filter = SingleFilter(feature, filter_type, parameter)
 

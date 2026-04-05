@@ -117,8 +117,8 @@ result = session.run(artifacts=saved_artifacts)
 
 #### Cross-validation pattern
 
-```python
-session = mloda.prepare(["BaseExampleArtifactFeature"], {PyArrowTable})
+``` title="pseudocode"
+session = mloda.prepare(["MyArtifactFeature"], {PyArrowTable})
 
 for fold_data in folds:
     # Train fold
@@ -130,7 +130,7 @@ for fold_data in folds:
 ```
 
 When `artifacts` is not provided (the default), the artifact mode from
-`prepare()` is used, preserving full backward compatibility.
+`prepare()` is used.
 
 #### Testing Artifacts
 

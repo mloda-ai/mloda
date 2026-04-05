@@ -4,7 +4,7 @@ Pandas implementation for geo distance feature groups.
 
 from __future__ import annotations
 
-from typing import Any, Set, Type
+from typing import Any, List, Set, Type
 
 import numpy as np
 
@@ -21,12 +21,11 @@ class PandasGeoDistanceFeatureGroup(GeoDistanceFeatureGroup):
         return {PandasDataFrame}
 
     @classmethod
-    def _check_point_features_exist(cls, data: Any, point1_feature: str, point2_feature: str) -> None:
-        """Check if the point features exist in the DataFrame."""
-        if point1_feature not in data.columns:
-            raise ValueError(f"Point feature '{point1_feature}' not found in data")
-        if point2_feature not in data.columns:
-            raise ValueError(f"Point feature '{point2_feature}' not found in data")
+    def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
+        """Check if the source features exist in the DataFrame."""
+        for feature_name in feature_names:
+            if feature_name not in data.columns:
+                raise ValueError(f"Source feature '{feature_name}' not found in data")
 
     @classmethod
     def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:

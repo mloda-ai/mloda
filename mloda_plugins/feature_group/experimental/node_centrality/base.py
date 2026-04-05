@@ -5,7 +5,7 @@ Base implementation for node centrality feature groups.
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
@@ -236,7 +236,7 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
                 )
 
             # Check if source feature exists
-            cls._check_source_feature_exists(data, source_feature_str)
+            cls._check_source_features_exist(data, [source_feature_str])
 
             # Calculate centrality
             result = cls._calculate_centrality(data, centrality_type, source_feature_str, graph_type, weight_column)
@@ -297,16 +297,16 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     @classmethod
     @abstractmethod
-    def _check_source_feature_exists(cls, data: Any, feature_name: str) -> None:
+    def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
         """
-        Check if the source feature exists in the data.
+        Check if the source features exist in the data.
 
         Args:
             data: The input data
-            feature_name: The name of the feature to check
+            feature_names: List of feature names to check
 
         Raises:
-            ValueError: If the feature does not exist in the data
+            ValueError: If a feature does not exist in the data
         """
         ...
 

@@ -21,21 +21,22 @@ class TestPandasEncodingFeatureGroup:
         frameworks = PandasEncodingFeatureGroup.compute_framework_rule()
         assert frameworks == {PandasDataFrame}
 
-    def test_check_source_feature_exists_valid(self) -> None:
+    def test_check_source_features_exist_valid(self) -> None:
         """Test checking for existing source features."""
         data = pd.DataFrame({"category": ["A", "B", "C"], "value": [1, 2, 3]})
 
-        # Should not raise for existing feature
-        PandasEncodingFeatureGroup._check_source_feature_exists(data, "category")
-        PandasEncodingFeatureGroup._check_source_feature_exists(data, "value")
+        # Should not raise for existing features
+        PandasEncodingFeatureGroup._check_source_features_exist(data, ["category"])
+        PandasEncodingFeatureGroup._check_source_features_exist(data, ["value"])
+        PandasEncodingFeatureGroup._check_source_features_exist(data, ["category", "value"])
 
-    def test_check_source_feature_exists_invalid(self) -> None:
+    def test_check_source_features_exist_invalid(self) -> None:
         """Test checking for non-existing source features."""
         data = pd.DataFrame({"category": ["A", "B", "C"], "value": [1, 2, 3]})
 
         # Should raise for non-existing feature
         try:
-            PandasEncodingFeatureGroup._check_source_feature_exists(data, "nonexistent")
+            PandasEncodingFeatureGroup._check_source_features_exist(data, ["nonexistent"])
             assert False, "Should have raised ValueError"
         except ValueError as e:
             assert "Source feature 'nonexistent' not found in data" in str(e)

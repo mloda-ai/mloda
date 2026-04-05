@@ -208,8 +208,7 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             pipeline_name, source_features = cls._extract_pipeline_name_and_source_features(feature)
 
             # Check that all source features exist
-            for source_feature in source_features:
-                cls._check_source_feature_exists(data, source_feature)
+            cls._check_source_features_exist(data, source_features)
 
             # Get pipeline configuration from options or create default
             pipeline_config = cls._get_pipeline_config_from_feature(feature, pipeline_name)
@@ -586,16 +585,16 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     @classmethod
     @abstractmethod
-    def _check_source_feature_exists(cls, data: Any, feature_name: str) -> None:
+    def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
         """
-        Check if the source feature exists in the data.
+        Check if the source features exist in the data.
 
         Args:
             data: The input data
-            feature_name: The name of the feature to check
+            feature_names: List of feature names to check
 
         Raises:
-            ValueError: If the feature does not exist in the data
+            ValueError: If a feature does not exist in the data
         """
         ...
 

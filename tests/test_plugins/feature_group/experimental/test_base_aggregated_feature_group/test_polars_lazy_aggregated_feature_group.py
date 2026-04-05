@@ -82,14 +82,14 @@ class TestPolarsLazyAggregatedFeatureGroup:
         """Test compute_framework_rule method."""
         assert PolarsLazyAggregatedFeatureGroup.compute_framework_rule() == {PolarsLazyDataFrame}
 
-    def test_check_source_feature_exists_valid(self, sample_lazy_dataframe: Any) -> None:
-        """Test _check_source_feature_exists with valid feature."""
+    def test_check_source_features_exist_valid(self, sample_lazy_dataframe: Any) -> None:
+        """Test _check_source_features_exist with valid feature."""
         # Should not raise an exception
         PolarsLazyAggregatedFeatureGroup._check_source_features_exist(sample_lazy_dataframe, ["sales"])
         PolarsLazyAggregatedFeatureGroup._check_source_features_exist(sample_lazy_dataframe, ["price"])
 
-    def test_check_source_feature_exists_invalid(self, sample_lazy_dataframe: Any) -> None:
-        """Test _check_source_feature_exists with invalid feature."""
+    def test_check_source_features_exist_invalid(self, sample_lazy_dataframe: Any) -> None:
+        """Test _check_source_features_exist with invalid feature."""
         with pytest.raises(ValueError, match="None of the source features"):
             PolarsLazyAggregatedFeatureGroup._check_source_features_exist(sample_lazy_dataframe, ["missing"])
 

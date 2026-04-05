@@ -39,14 +39,14 @@ class PythonDictTextCleaningFeatureGroup(TextCleaningFeatureGroup):
         return {PythonDictFramework}
 
     @classmethod
-    def _check_source_feature_exists(cls, data: List[Dict[str, Any]], feature_name: str) -> None:
+    def _check_source_features_exist(cls, data: List[Dict[str, Any]], feature_names: List[str]) -> None:
         if not data:
             raise ValueError("Data cannot be empty")
 
-        # Check if feature exists in any row
-        feature_exists = any(feature_name in row for row in data)
-        if not feature_exists:
-            raise ValueError(f"Feature '{feature_name}' not found in the data")
+        for feature_name in feature_names:
+            feature_exists = any(feature_name in row for row in data)
+            if not feature_exists:
+                raise ValueError(f"Feature '{feature_name}' not found in the data")
 
     @classmethod
     def _get_source_text(cls, data: List[Dict[str, Any]], feature_name: str) -> List[str]:

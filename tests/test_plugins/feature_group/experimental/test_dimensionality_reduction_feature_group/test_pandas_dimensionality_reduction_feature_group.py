@@ -47,14 +47,17 @@ class TestPandasDimensionalityReductionFeatureGroup:
 
         return df
 
-    def test_check_source_feature_exists(self, sample_data: pd.DataFrame) -> None:
-        """Test the _check_source_feature_exists method."""
+    def test_check_source_features_exist(self, sample_data: pd.DataFrame) -> None:
+        """Test the _check_source_features_exist method."""
         # Valid feature
-        PandasDimensionalityReductionFeatureGroup._check_source_feature_exists(sample_data, "feature0")
+        PandasDimensionalityReductionFeatureGroup._check_source_features_exist(sample_data, ["feature0"])
+
+        # Multiple valid features
+        PandasDimensionalityReductionFeatureGroup._check_source_features_exist(sample_data, ["feature0", "feature1"])
 
         # Invalid feature
         with pytest.raises(ValueError):
-            PandasDimensionalityReductionFeatureGroup._check_source_feature_exists(sample_data, "invalid_feature")
+            PandasDimensionalityReductionFeatureGroup._check_source_features_exist(sample_data, ["invalid_feature"])
 
     def test_add_result_to_data(self, sample_data: pd.DataFrame) -> None:
         """Test the _add_result_to_data method."""

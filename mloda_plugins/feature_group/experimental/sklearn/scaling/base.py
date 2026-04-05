@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import datetime
 from abc import abstractmethod
-from typing import Any, Dict, Optional, Type
+from typing import Any, Dict, List, Optional, Type
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
@@ -138,7 +138,7 @@ class ScalingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             scaler_type, source_feature = cls._extract_scaler_type_and_source_feature(feature)
 
             # Check that source feature exists
-            cls._check_source_feature_exists(data, source_feature)
+            cls._check_source_features_exist(data, [source_feature])
 
             # Create unique artifact key for this scaler
             artifact_key = f"{source_feature}__{scaler_type}_scaled"
@@ -360,16 +360,16 @@ class ScalingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     @classmethod
     @abstractmethod
-    def _check_source_feature_exists(cls, data: Any, feature_name: str) -> None:
+    def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
         """
-        Check if the source feature exists in the data.
+        Check if the source features exist in the data.
 
         Args:
             data: The input data
-            feature_name: The name of the feature to check
+            feature_names: List of feature names to check
 
         Raises:
-            ValueError: If the feature does not exist in the data
+            ValueError: If a feature does not exist in the data
         """
         ...
 

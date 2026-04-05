@@ -21,20 +21,21 @@ class TestPandasSklearnPipelineFeatureGroup:
         rule = PandasSklearnPipelineFeatureGroup.compute_framework_rule()
         assert PandasDataFrame in rule
 
-    def test_check_source_feature_exists_valid(self) -> None:
+    def test_check_source_features_exist_valid(self) -> None:
         """Test checking for existing source features."""
         df = pd.DataFrame({"feature1": [1, 2, 3], "feature2": [4, 5, 6]})
 
         # Should not raise exception for existing features
-        PandasSklearnPipelineFeatureGroup._check_source_feature_exists(df, "feature1")
-        PandasSklearnPipelineFeatureGroup._check_source_feature_exists(df, "feature2")
+        PandasSklearnPipelineFeatureGroup._check_source_features_exist(df, ["feature1"])
+        PandasSklearnPipelineFeatureGroup._check_source_features_exist(df, ["feature2"])
+        PandasSklearnPipelineFeatureGroup._check_source_features_exist(df, ["feature1", "feature2"])
 
-    def test_check_source_feature_exists_invalid(self) -> None:
+    def test_check_source_features_exist_invalid(self) -> None:
         """Test checking for non-existing source features."""
         df = pd.DataFrame({"feature1": [1, 2, 3], "feature2": [4, 5, 6]})
 
         with pytest.raises(ValueError, match="Source feature 'nonexistent' not found in data"):
-            PandasSklearnPipelineFeatureGroup._check_source_feature_exists(df, "nonexistent")
+            PandasSklearnPipelineFeatureGroup._check_source_features_exist(df, ["nonexistent"])
 
     def test_add_result_to_data_1d_array(self) -> None:
         """Test adding 1D array result to DataFrame."""

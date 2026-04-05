@@ -4,7 +4,7 @@ Pandas implementation for scikit-learn scaling feature groups.
 
 from __future__ import annotations
 
-from typing import Any, Set, Type
+from typing import Any, List, Set, Type
 
 from mloda.provider import ComputeFramework
 
@@ -26,10 +26,11 @@ class PandasScalingFeatureGroup(ScalingFeatureGroup):
         return {PandasDataFrame}
 
     @classmethod
-    def _check_source_feature_exists(cls, data: Any, feature_name: str) -> None:
-        """Check if the feature exists in the DataFrame."""
-        if feature_name not in data.columns:
-            raise ValueError(f"Source feature '{feature_name}' not found in data")
+    def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
+        """Check if the features exist in the DataFrame."""
+        for feature_name in feature_names:
+            if feature_name not in data.columns:
+                raise ValueError(f"Source feature '{feature_name}' not found in data")
 
     @classmethod
     def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:

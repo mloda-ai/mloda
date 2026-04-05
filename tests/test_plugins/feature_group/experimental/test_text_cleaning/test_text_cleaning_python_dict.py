@@ -90,20 +90,20 @@ class TestPythonDictTextCleaningFeatureGroup:
         """Test compute_framework_rule method."""
         assert PythonDictTextCleaningFeatureGroup.compute_framework_rule() == {PythonDictFramework}
 
-    def test_check_source_feature_exists(self) -> None:
+    def test_check_source_features_exist(self) -> None:
         """Test that the source feature existence check works correctly."""
         # Feature exists
-        PythonDictTextCleaningFeatureGroup._check_source_feature_exists(self.data, "text")
+        PythonDictTextCleaningFeatureGroup._check_source_features_exist(self.data, ["text"])
 
         # Feature doesn't exist
         with pytest.raises(ValueError) as excinfo:
-            PythonDictTextCleaningFeatureGroup._check_source_feature_exists(self.data, "nonexistent")
+            PythonDictTextCleaningFeatureGroup._check_source_features_exist(self.data, ["nonexistent"])
 
         assert "not found in the data" in str(excinfo.value)
 
         # Empty data
         with pytest.raises(ValueError, match="Data cannot be empty"):
-            PythonDictTextCleaningFeatureGroup._check_source_feature_exists([], "text")
+            PythonDictTextCleaningFeatureGroup._check_source_features_exist([], ["text"])
 
     def test_get_source_text(self) -> None:
         """Test that the source text is correctly retrieved."""

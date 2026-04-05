@@ -13,6 +13,84 @@ from packaging.requirements import Requirement
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
+class TestContributingFile:
+    """Validate that CONTRIBUTING.md has substantive content for contributors."""
+
+    def test_contributing_file_exists(self) -> None:
+        assert (PROJECT_ROOT / "CONTRIBUTING.md").is_file(), "CONTRIBUTING.md must exist at project root"
+
+    def test_contributing_has_dev_setup_section(self) -> None:
+        content = (PROJECT_ROOT / "CONTRIBUTING.md").read_text()
+        content_lower = content.lower()
+        assert "development" in content_lower or "setup" in content_lower or "getting started" in content_lower, (
+            "CONTRIBUTING.md must include a development setup section"
+        )
+
+    def test_contributing_mentions_uv(self) -> None:
+        content = (PROJECT_ROOT / "CONTRIBUTING.md").read_text()
+        assert "uv" in content, "CONTRIBUTING.md must mention uv as the dependency manager"
+
+    def test_contributing_mentions_tox(self) -> None:
+        content = (PROJECT_ROOT / "CONTRIBUTING.md").read_text()
+        assert "tox" in content, "CONTRIBUTING.md must mention tox as the test runner"
+
+    def test_contributing_mentions_python_version(self) -> None:
+        content = (PROJECT_ROOT / "CONTRIBUTING.md").read_text()
+        assert "3.10" in content, "CONTRIBUTING.md must specify the minimum supported Python version (3.10)"
+
+    def test_contributing_has_code_style_section(self) -> None:
+        content = (PROJECT_ROOT / "CONTRIBUTING.md").read_text()
+        content_lower = content.lower()
+        assert "code style" in content_lower or "coding standard" in content_lower or "style" in content_lower, (
+            "CONTRIBUTING.md must include a code style section"
+        )
+
+    def test_contributing_mentions_ruff(self) -> None:
+        content = (PROJECT_ROOT / "CONTRIBUTING.md").read_text()
+        assert "ruff" in content, "CONTRIBUTING.md must mention ruff as the linter/formatter"
+
+    def test_contributing_mentions_mypy(self) -> None:
+        content = (PROJECT_ROOT / "CONTRIBUTING.md").read_text()
+        assert "mypy" in content, "CONTRIBUTING.md must mention mypy for type checking"
+
+    def test_contributing_has_pr_workflow_section(self) -> None:
+        content = (PROJECT_ROOT / "CONTRIBUTING.md").read_text()
+        content_lower = content.lower()
+        assert "pull request" in content_lower or "pr" in content_lower, (
+            "CONTRIBUTING.md must describe the pull request workflow"
+        )
+
+    def test_contributing_mentions_license(self) -> None:
+        content = (PROJECT_ROOT / "CONTRIBUTING.md").read_text()
+        assert "Apache" in content, "CONTRIBUTING.md must mention the Apache 2.0 license"
+
+    def test_contributing_has_plugin_development_section(self) -> None:
+        content = (PROJECT_ROOT / "CONTRIBUTING.md").read_text()
+        content_lower = content.lower()
+        assert "plugin" in content_lower, "CONTRIBUTING.md must cover plugin development"
+
+    def test_contributing_mentions_registry_guides(self) -> None:
+        content = (PROJECT_ROOT / "CONTRIBUTING.md").read_text()
+        assert "mloda-registry" in content, "CONTRIBUTING.md must reference the mloda-registry guides"
+        assert "guides" in content.lower(), "CONTRIBUTING.md must mention the plugin development guides"
+
+    def test_contributing_mentions_plugin_template(self) -> None:
+        content = (PROJECT_ROOT / "CONTRIBUTING.md").read_text()
+        assert "mloda-plugin-template" in content, "CONTRIBUTING.md must reference the mloda-plugin-template"
+
+    def test_contributing_describes_fork_workflow(self) -> None:
+        content = (PROJECT_ROOT / "CONTRIBUTING.md").read_text()
+        content_lower = content.lower()
+        assert "fork" in content_lower, "CONTRIBUTING.md must describe the fork workflow for external contributors"
+
+    def test_contributing_clarifies_pytest_is_not_sufficient(self) -> None:
+        content = (PROJECT_ROOT / "CONTRIBUTING.md").read_text()
+        content_lower = content.lower()
+        assert "not a substitute" in content_lower or "not sufficient" in content_lower, (
+            "CONTRIBUTING.md must clarify that running pytest alone is not a substitute for tox"
+        )
+
+
 class TestLicenseFile:
     def test_license_file_exists(self) -> None:
         assert (PROJECT_ROOT / "LICENSE").is_file(), "LICENSE file must exist at project root"

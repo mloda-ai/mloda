@@ -154,11 +154,13 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         WEIGHT_COLUMN: {
             "explanation": "Column name for edge weights (optional)",
             DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: False,
             DefaultOptionKeys.default: None,
         },
         DefaultOptionKeys.in_features: {
             "explanation": "Source feature representing the nodes for centrality calculation",
             DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: False,
         },
     }
 

@@ -30,7 +30,9 @@ class PyArrowMissingValueFeatureGroup(MissingValueFeatureGroup):
         """Check if the resolved source features exist in the Table."""
         missing_features = [f for f in feature_names if f not in data.schema.names]
         if missing_features:
-            raise ValueError(f"Source features not found in data: {missing_features}")
+            raise ValueError(
+                f"Source features not found in data: {missing_features}. Available columns: {list(data.schema.names)}"
+            )
 
     @classmethod
     def _add_result_to_data(cls, data: pa.Table, feature_name: str, result: Any) -> pa.Table:

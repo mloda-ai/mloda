@@ -41,7 +41,7 @@ class TestPandasTextCleaningFeatureGroup:
         with pytest.raises(ValueError) as excinfo:
             PandasTextCleaningFeatureGroup._check_source_features_exist(self.df, ["nonexistent"])
 
-        assert "not found in the data" in str(excinfo.value)
+        assert "Source features not found in data:" in str(excinfo.value)
 
     def test_get_source_text(self) -> None:
         """Test that the source text is correctly retrieved."""
@@ -184,7 +184,7 @@ class TestPandasTextCleaningFeatureGroup:
         with pytest.raises(ValueError) as excinfo:
             PandasTextCleaningFeatureGroup.calculate_feature(self.df.copy(), feature_set)
 
-        assert "not found in the data" in str(excinfo.value)
+        assert "Source features not found in data:" in str(excinfo.value)
 
     def test_calculate_feature_invalid_operation(self) -> None:
         """Test calculate_feature with an invalid operation."""

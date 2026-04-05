@@ -355,7 +355,7 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             feature_names: List of resolved feature names (may contain ~N suffixes)
 
         Raises:
-            ValueError: If none of the features exist in the data
+            ValueError: If none of the features exist in the data (partial presence is accepted).
         """
         ...
 

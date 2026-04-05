@@ -49,9 +49,11 @@ class PandasDimensionalityReductionFeatureGroup(DimensionalityReductionFeatureGr
         Raises:
             ValueError: If a feature does not exist in the DataFrame
         """
-        for feature_name in feature_names:
-            if feature_name not in data.columns:
-                raise ValueError(f"Feature '{feature_name}' not found in the data")
+        missing_features = [f for f in feature_names if f not in data.columns]
+        if missing_features:
+            raise ValueError(
+                f"Source features not found in data: {missing_features}. Available columns: {list(data.columns)}"
+            )
 
     @classmethod
     def _add_result_to_data(cls, data: "pd.DataFrame", feature_name: str, result: "NDArray[Any]") -> "pd.DataFrame":

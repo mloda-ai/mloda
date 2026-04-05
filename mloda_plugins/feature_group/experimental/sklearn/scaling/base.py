@@ -80,8 +80,6 @@ class ScalingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         "normalizer": "Normalizer",
     }
 
-    # Define patterns for parsing
-    PATTERN = "__"
     PREFIX_PATTERN = r".*__(standard|minmax|robust|normalizer)_scaled$"
 
     # In-feature configuration for FeatureChainParserMixin

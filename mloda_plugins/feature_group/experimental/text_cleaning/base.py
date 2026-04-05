@@ -83,8 +83,7 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         "remove_urls": "Remove URLs and email addresses",
     }
 
-    # Define prefix pattern and pattern
-    PATTERN = "__"
+    # Define prefix pattern
     PREFIX_PATTERN = r".*__cleaned_text$"
 
     # In-feature configuration for FeatureChainParserMixin

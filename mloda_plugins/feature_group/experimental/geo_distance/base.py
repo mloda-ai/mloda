@@ -12,7 +12,7 @@ from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.user import Options
-from mloda.provider import FeatureChainParser
+from mloda.provider import CHAIN_SEPARATOR, FeatureChainParser
 from mloda.provider import (
     FeatureChainParserMixin,
 )
@@ -129,7 +129,7 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         # For L->R: "point1&point2__distance_type_distance"
         # We need to extract everything before the last "__"
         feature_name_str = feature_name
-        parts = feature_name_str.rsplit("__", 1)
+        parts = feature_name_str.rsplit(CHAIN_SEPARATOR, 1)
         if len(parts) == 2:
             # parts[0] contains "point1&point2", parts[1] contains "distance_type_distance"
             point_parts = parts[0].split("&", 1)
@@ -165,7 +165,7 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         """Extract the two point features from the feature name."""
         # For L->R: "point1&point2__distance_type_distance"
         # Split from right to remove the distance suffix
-        parts = feature_name.rsplit("__", 1)
+        parts = feature_name.rsplit(CHAIN_SEPARATOR, 1)
         if len(parts) != 2:
             raise ValueError(
                 f"Invalid geo distance feature name format: {feature_name}. Missing double underscore separator."

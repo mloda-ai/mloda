@@ -9,7 +9,7 @@ from typing import Any, List, Optional
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
-from mloda.provider import FeatureChainParser
+from mloda.provider import CHAIN_SEPARATOR, FeatureChainParser
 from mloda.provider import (
     FeatureChainParserMixin,
 )
@@ -214,13 +214,13 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
             ValueError: If the suffix doesn't match the expected pattern
         """
         # Extract the suffix part (everything after the last double underscore)
-        suffix_start = feature_name.rfind("__")
+        suffix_start = feature_name.rfind(CHAIN_SEPARATOR)
         if suffix_start == -1:
             raise ValueError(
                 f"Invalid dimensionality reduction feature name format: {feature_name}. Missing double underscore separator."
             )
 
-        suffix = feature_name[suffix_start + 2 :]  # Skip the "__"
+        suffix = feature_name[suffix_start + len(CHAIN_SEPARATOR) :]
 
         # Parse the suffix components
         parts = suffix.split("_")

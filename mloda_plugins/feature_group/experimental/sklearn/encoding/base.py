@@ -170,8 +170,6 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         "ordinal": "OrdinalEncoder",
     }
 
-    # Define patterns for parsing
-    PATTERN = "__"
     PREFIX_PATTERN = r".*__(onehot|label|ordinal)_encoded(~\d+)?$"
 
     # In-feature configuration for FeatureChainParserMixin

@@ -1,7 +1,4 @@
-"""Tests that mutable default arguments are not shared across instances.
-
-Verifies the fix for https://github.com/mloda-ai/mloda/issues/265.
-"""
+"""Tests that mutable default arguments are not shared across instances."""
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature

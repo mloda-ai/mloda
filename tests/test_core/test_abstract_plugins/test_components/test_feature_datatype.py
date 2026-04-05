@@ -1,16 +1,16 @@
 """Tests for Feature data_type handling and similarity properties.
 
 These tests validate:
-1. has_similarity_properties() includes data_type when explicitly set
-2. base_similarity_properties() excludes data_type for lenient grouping
+1. similarity_hash() includes data_type when explicitly set
+2. base_similarity_hash() excludes data_type for lenient grouping
 3. is_different_data_type() correctly identifies features with different data types
 """
 
 from mloda.user import Feature
 
 
-def test_has_similarity_properties_includes_data_type() -> None:
-    """Test that has_similarity_properties() includes data_type when explicitly set.
+def test_similarity_hash_includes_data_type() -> None:
+    """Test that similarity_hash() includes data_type when explicitly set.
 
     Two features with the same name and options but different explicit data types
     should have DIFFERENT similarity property hashes.
@@ -21,8 +21,8 @@ def test_has_similarity_properties_includes_data_type() -> None:
     feature_int32 = Feature.int32_of("age")
     feature_int64 = Feature.int64_of("age")
 
-    hash_int32 = feature_int32.has_similarity_properties()
-    hash_int64 = feature_int64.has_similarity_properties()
+    hash_int32 = feature_int32.similarity_hash()
+    hash_int64 = feature_int64.similarity_hash()
 
     assert hash_int32 != hash_int64, (
         "Features with different explicit data types should have different hashes. "
@@ -30,7 +30,7 @@ def test_has_similarity_properties_includes_data_type() -> None:
     )
 
 
-def test_has_similarity_properties_none_type_uses_base_hash() -> None:
+def test_similarity_hash_none_type_uses_base_hash() -> None:
     """Test that features with data_type=None use the base hash (no data_type).
 
     None-typed features (like index columns) should have the same hash as
@@ -40,14 +40,14 @@ def test_has_similarity_properties_none_type_uses_base_hash() -> None:
     feature_untyped = Feature.not_typed("id")
 
     # Untyped feature should use base hash
-    assert feature_untyped.has_similarity_properties() == feature_untyped.base_similarity_properties()
+    assert feature_untyped.similarity_hash() == feature_untyped.base_similarity_hash()
 
     # Typed feature should have different hash than its base (includes data_type)
-    assert feature_typed.has_similarity_properties() != feature_typed.base_similarity_properties()
+    assert feature_typed.similarity_hash() != feature_typed.base_similarity_hash()
 
 
-def test_base_similarity_properties_excludes_data_type() -> None:
-    """Test that base_similarity_properties() excludes data_type.
+def test_base_similarity_hash_excludes_data_type() -> None:
+    """Test that base_similarity_hash() excludes data_type.
 
     This allows None-typed features to match typed features during lenient grouping.
     """
@@ -56,9 +56,9 @@ def test_base_similarity_properties_excludes_data_type() -> None:
     feature_untyped = Feature.not_typed("age")
 
     # All should have the same base hash (excludes data_type)
-    base_int32 = feature_int32.base_similarity_properties()
-    base_int64 = feature_int64.base_similarity_properties()
-    base_untyped = feature_untyped.base_similarity_properties()
+    base_int32 = feature_int32.base_similarity_hash()
+    base_int64 = feature_int64.base_similarity_hash()
+    base_untyped = feature_untyped.base_similarity_hash()
 
     assert base_int32 == base_int64 == base_untyped, (
         "All features with same options should have same base hash. "
@@ -104,3 +104,19 @@ def test_is_different_data_type_correct_behavior() -> None:
     assert feature_age.is_different_data_type(feature_height) is False, (
         "Features with different names should return False regardless of data types"
     )
+
+
+def test_similarity_hash_returns_int() -> None:
+    """Verify similarity_hash() and base_similarity_hash() exist and return int."""
+    feature = Feature.int32_of("age")
+
+    assert isinstance(feature.similarity_hash(), int)
+    assert isinstance(feature.base_similarity_hash(), int)
+
+
+def test_old_method_names_removed() -> None:
+    """Verify the old method names no longer exist on Feature."""
+    feature = Feature.int32_of("age")
+
+    assert not hasattr(feature, "has_similarity_properties")
+    assert not hasattr(feature, "base_similarity_properties")

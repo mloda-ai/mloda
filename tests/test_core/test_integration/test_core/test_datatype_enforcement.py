@@ -69,8 +69,8 @@ class TestDataTypeEnforcementSeparation:
         feature_int32 = Feature.int32_of("age")
         feature_int64 = Feature.int64_of("age")
 
-        hash_int32 = feature_int32.has_similarity_properties()
-        hash_int64 = feature_int64.has_similarity_properties()
+        hash_int32 = feature_int32.similarity_hash()
+        hash_int64 = feature_int64.similarity_hash()
 
         # Different types should produce different hashes
         assert hash_int32 != hash_int64, "Same feature with different types should have different hashes"
@@ -80,8 +80,8 @@ class TestDataTypeEnforcementSeparation:
         feature_int32_a = Feature.int32_of("age")
         feature_int32_b = Feature.int32_of("age")
 
-        hash_a = feature_int32_a.has_similarity_properties()
-        hash_b = feature_int32_b.has_similarity_properties()
+        hash_a = feature_int32_a.similarity_hash()
+        hash_b = feature_int32_b.similarity_hash()
 
         # Same types should produce identical hashes
         assert hash_a == hash_b, "Same feature with same type should have identical hashes"
@@ -91,8 +91,8 @@ class TestDataTypeEnforcementSeparation:
         feature_untyped_a = Feature.not_typed("age")
         feature_untyped_b = Feature.not_typed("age")
 
-        hash_a = feature_untyped_a.has_similarity_properties()
-        hash_b = feature_untyped_b.has_similarity_properties()
+        hash_a = feature_untyped_a.similarity_hash()
+        hash_b = feature_untyped_b.similarity_hash()
 
         # Untyped features should have identical hashes
         assert hash_a == hash_b, "Untyped features with same name should have identical hashes"
@@ -102,8 +102,8 @@ class TestDataTypeEnforcementSeparation:
         feature_typed = Feature.int32_of("age")
         feature_untyped = Feature.not_typed("age")
 
-        hash_typed = feature_typed.has_similarity_properties()
-        hash_untyped = feature_untyped.has_similarity_properties()
+        hash_typed = feature_typed.similarity_hash()
+        hash_untyped = feature_untyped.similarity_hash()
 
         # Typed vs untyped should produce different hashes
         assert hash_typed != hash_untyped, "Typed and untyped features should have different hashes"

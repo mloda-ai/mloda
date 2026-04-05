@@ -1096,18 +1096,18 @@ class ExecutionPlan:
             if feature.data_type is None:
                 none_typed_features.append(feature)
             else:
-                f_hash = feature.has_similarity_properties()
+                f_hash = feature.similarity_hash()
                 hash_collector[f_hash].add(feature)
 
         # Second pass: assign None-typed features to existing groups with matching base hash
         for feature in none_typed_features:
-            base_hash = feature.base_similarity_properties()
+            base_hash = feature.base_similarity_hash()
             assigned = False
 
             # Find an existing group with matching base properties
             for existing_hash, group in hash_collector.items():
                 any_feature = next(iter(group))
-                if any_feature.base_similarity_properties() == base_hash:
+                if any_feature.base_similarity_hash() == base_hash:
                     hash_collector[existing_hash].add(feature)
                     assigned = True
                     break

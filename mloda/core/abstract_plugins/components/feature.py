@@ -68,7 +68,7 @@ class Feature:
     def __init__(
         self,
         name: Union[str, FeatureName],
-        options: Union[Dict[str, Any], Options] = {},
+        options: Optional[Union[Dict[str, Any], Options]] = None,
         domain: Optional[str] = None,
         compute_framework: Optional[str] = None,
         data_type: Optional[Union[DataType, str]] = None,
@@ -76,6 +76,8 @@ class Feature:
         link: Optional[Link] = None,
         index: Optional[Index] = None,
     ):
+        if options is None:
+            options = {}
         self.name = FeatureName(name) if isinstance(name, str) else name
         self.options = Options(options) if isinstance(options, dict) else options
         self.domain = self._set_domain(domain, self.options.get("domain"))
@@ -106,56 +108,62 @@ class Feature:
         self.index = index  # Index is a feature currently only used for append/union features.
 
     @classmethod
-    def not_typed(cls, name: Union[str, FeatureName], options: dict[str, Any] = {}) -> Feature:
+    def not_typed(cls, name: Union[str, FeatureName], options: Optional[dict[str, Any]] = None) -> Feature:
+        if options is None:
+            options = {}
         name = FeatureName(name) if isinstance(name, str) else name
         return cls(name=name, options=options)
 
     @classmethod
-    def str_of(cls, name: Union[str, FeatureName], options: dict[str, Any] = {}) -> Feature:
+    def str_of(cls, name: Union[str, FeatureName], options: Optional[dict[str, Any]] = None) -> Feature:
         return cls._typed_of(name, DataType.STRING, options)
 
     @classmethod
-    def int32_of(cls, name: Union[str, FeatureName], options: dict[str, Any] = {}) -> Feature:
+    def int32_of(cls, name: Union[str, FeatureName], options: Optional[dict[str, Any]] = None) -> Feature:
         return cls._typed_of(name, DataType.INT32, options)
 
     @classmethod
-    def int64_of(cls, name: Union[str, FeatureName], options: dict[str, Any] = {}) -> "Feature":
+    def int64_of(cls, name: Union[str, FeatureName], options: Optional[dict[str, Any]] = None) -> "Feature":
         return cls._typed_of(name, DataType.INT64, options)
 
     @classmethod
-    def float_of(cls, name: Union[str, FeatureName], options: dict[str, Any] = {}) -> "Feature":
+    def float_of(cls, name: Union[str, FeatureName], options: Optional[dict[str, Any]] = None) -> "Feature":
         return cls._typed_of(name, DataType.FLOAT, options)
 
     @classmethod
-    def double_of(cls, name: Union[str, FeatureName], options: dict[str, Any] = {}) -> "Feature":
+    def double_of(cls, name: Union[str, FeatureName], options: Optional[dict[str, Any]] = None) -> "Feature":
         return cls._typed_of(name, DataType.DOUBLE, options)
 
     @classmethod
-    def boolean_of(cls, name: Union[str, FeatureName], options: dict[str, Any] = {}) -> "Feature":
+    def boolean_of(cls, name: Union[str, FeatureName], options: Optional[dict[str, Any]] = None) -> "Feature":
         return cls._typed_of(name, DataType.BOOLEAN, options)
 
     @classmethod
-    def binary_of(cls, name: Union[str, FeatureName], options: dict[str, Any] = {}) -> "Feature":
+    def binary_of(cls, name: Union[str, FeatureName], options: Optional[dict[str, Any]] = None) -> "Feature":
         return cls._typed_of(name, DataType.BINARY, options)
 
     @classmethod
-    def date_of(cls, name: Union[str, FeatureName], options: dict[str, Any] = {}) -> "Feature":
+    def date_of(cls, name: Union[str, FeatureName], options: Optional[dict[str, Any]] = None) -> "Feature":
         return cls._typed_of(name, DataType.DATE, options)
 
     @classmethod
-    def timestamp_millis_of(cls, name: Union[str, FeatureName], options: dict[str, Any] = {}) -> "Feature":
+    def timestamp_millis_of(cls, name: Union[str, FeatureName], options: Optional[dict[str, Any]] = None) -> "Feature":
         return cls._typed_of(name, DataType.TIMESTAMP_MILLIS, options)
 
     @classmethod
-    def timestamp_micros_of(cls, name: Union[str, FeatureName], options: dict[str, Any] = {}) -> "Feature":
+    def timestamp_micros_of(cls, name: Union[str, FeatureName], options: Optional[dict[str, Any]] = None) -> "Feature":
         return cls._typed_of(name, DataType.TIMESTAMP_MICROS, options)
 
     @classmethod
-    def decimal_of(cls, name: Union[str, FeatureName], options: dict[str, Any] = {}) -> "Feature":
+    def decimal_of(cls, name: Union[str, FeatureName], options: Optional[dict[str, Any]] = None) -> "Feature":
         return cls._typed_of(name, DataType.DECIMAL, options)
 
     @classmethod
-    def _typed_of(cls, name: Union[str, FeatureName], data_type: DataType, options: dict[str, Any] = {}) -> Feature:
+    def _typed_of(
+        cls, name: Union[str, FeatureName], data_type: DataType, options: Optional[dict[str, Any]] = None
+    ) -> Feature:
+        if options is None:
+            options = {}
         name = FeatureName(name) if isinstance(name, str) else name
         return cls(name=name, data_type=data_type, options=options)
 

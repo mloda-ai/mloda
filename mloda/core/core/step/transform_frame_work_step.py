@@ -20,8 +20,10 @@ class TransformFrameworkStep(Step):
         from_feature_group: Type[FeatureGroup],
         to_feature_group: Type[FeatureGroup],
         link_id: Optional[UUID] = None,
-        right_framework_uuids: Set[UUID] = set(),
+        right_framework_uuids: Optional[Set[UUID]] = None,
     ) -> None:
+        if right_framework_uuids is None:
+            right_framework_uuids = set()
         self.from_framework = from_framework
         self.to_framework = to_framework
         self.required_uuids = required_uuids
@@ -33,7 +35,7 @@ class TransformFrameworkStep(Step):
 
         # This variable is only set, if the TFS was requested by a joinstep.
         self.right_framework_uuid: Optional[UUID] = None
-        if right_framework_uuids is not None and len(right_framework_uuids) > 0:
+        if len(right_framework_uuids) > 0:
             self.right_framework_uuid = next(iter(right_framework_uuids))
 
         self.step_is_done = False

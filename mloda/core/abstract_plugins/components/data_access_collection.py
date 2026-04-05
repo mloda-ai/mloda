@@ -14,18 +14,22 @@ class DataAccessCollection:
 
     def __init__(
         self,
-        files: Set[str] = set(),
-        folders: Set[str] = set(),
-        credential_dicts: Dict[str, Any] = {},
-        initialized_connection_objects: Set[Any] = set(),
-        uninitialized_connection_objects: List[Any] = [],
+        files: Optional[Set[str]] = None,
+        folders: Optional[Set[str]] = None,
+        credential_dicts: Optional[Dict[str, Any]] = None,
+        initialized_connection_objects: Optional[Set[Any]] = None,
+        uninitialized_connection_objects: Optional[List[Any]] = None,
         column_to_file: Optional[Dict[str, str]] = None,
     ) -> None:
-        self.files: Set[str] = files
-        self.folders: Set[str] = folders
-        self.add_credential_dict(credential_dicts)
-        self.initialized_connection_objects: Set[Any] = initialized_connection_objects
-        self.uninitialized_connection_objects: List[Any] = uninitialized_connection_objects
+        self.files: Set[str] = files if files is not None else set()
+        self.folders: Set[str] = folders if folders is not None else set()
+        self.add_credential_dict(credential_dicts if credential_dicts is not None else {})
+        self.initialized_connection_objects: Set[Any] = (
+            initialized_connection_objects if initialized_connection_objects is not None else set()
+        )
+        self.uninitialized_connection_objects: List[Any] = (
+            uninitialized_connection_objects if uninitialized_connection_objects is not None else []
+        )
         if column_to_file is not None:
             for value in column_to_file.values():
                 if value not in self.files:

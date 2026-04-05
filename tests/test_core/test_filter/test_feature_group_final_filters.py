@@ -19,7 +19,7 @@ The matrix of (FG final_filters, Engine final_filters) combinations:
   FG=True,  Engine=True  -- test_fg_force_final_with_final_engine
 """
 
-from typing import Any, Optional, Set, Type
+from typing import Any, Optional
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -60,7 +60,7 @@ class InlineMaskViaFeatureGroup(FeatureGroup):
         return DataCreator({cls.get_class_name(), "status"})
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PyArrowTable}
 
     @classmethod
@@ -114,7 +114,7 @@ class RegularFeatureGroupForFilterTest(FeatureGroup):
         return DataCreator({cls.get_class_name(), "status"})
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PyArrowTable}
 
     @classmethod
@@ -135,7 +135,7 @@ class InlineMaskOnInlineEngine(InlineMaskViaFeatureGroup):
     """
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PyArrowTableInlineEngine}
 
     @classmethod
@@ -156,7 +156,7 @@ class ForceFinalOnInlineEngine(FeatureGroup):
         return DataCreator({cls.get_class_name(), "status"})
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PyArrowTableInlineEngine}
 
     @classmethod
@@ -185,7 +185,7 @@ class ForceFinalOnFinalEngine(FeatureGroup):
         return DataCreator({cls.get_class_name(), "status"})
 
     @classmethod
-    def compute_framework_rule(cls) -> Set[Type[ComputeFramework]]:
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PyArrowTable}
 
     @classmethod
@@ -207,7 +207,7 @@ class TestFeatureGroupFinalFilters:
     """Tests that FeatureGroup.final_filters() controls inline vs. final filter application."""
 
     def test_inline_filter_without_custom_compute_framework(
-        self, modes: Set[ParallelizationMode], flight_server: Any
+        self, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
         """A FeatureGroup with final_filters() returning False should handle filters inline.
 
@@ -241,7 +241,7 @@ class TestFeatureGroupFinalFilters:
             assert data[feature_name] == [10, 10, 30, 30]
 
     def test_regular_feature_group_still_uses_final_filters(
-        self, modes: Set[ParallelizationMode], flight_server: Any
+        self, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
         """A FeatureGroup without final_filters() override should still have rows eliminated.
 
@@ -272,7 +272,7 @@ class TestFeatureGroupFinalFilters:
             assert data[feature_name] == [10, 30]
 
     def test_mixed_final_and_inline_filters_in_same_run(
-        self, modes: Set[ParallelizationMode], flight_server: Any
+        self, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
         """Both inline and final filter modes should work correctly in the same run_all() call.
 
@@ -322,7 +322,7 @@ class TestFeatureGroupFinalFilters:
         # Regular FeatureGroup has non-matching rows eliminated by final filtering
         assert results_by_feature[final_feature_name] == [10, 30]
 
-    def test_fg_skip_with_inline_engine(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
+    def test_fg_skip_with_inline_engine(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         """FG=False, Engine=False. Both agree to skip final filtering. Rows preserved.
 
         InlineMaskOnInlineEngine inherits inline masking from InlineMaskViaFeatureGroup
@@ -351,7 +351,7 @@ class TestFeatureGroupFinalFilters:
             # Both FG and engine say skip: inline masking preserves all 4 rows
             assert data[feature_name] == [10, 10, 30, 30]
 
-    def test_fg_force_final_overrides_inline_engine(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
+    def test_fg_force_final_overrides_inline_engine(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         """FG=True, Engine=False. FG overrides engine. Rows eliminated.
 
         ForceFinalOnInlineEngine explicitly returns final_filters()=True, while
@@ -379,7 +379,7 @@ class TestFeatureGroupFinalFilters:
             # FG overrides engine: rows eliminated despite engine saying skip
             assert data[feature_name] == [10, 30]
 
-    def test_fg_force_final_with_final_engine(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
+    def test_fg_force_final_with_final_engine(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         """FG=True, Engine=True. Both agree to apply final filtering. Rows eliminated.
 
         ForceFinalOnFinalEngine explicitly returns final_filters()=True and runs on

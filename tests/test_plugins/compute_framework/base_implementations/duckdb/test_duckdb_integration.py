@@ -3,7 +3,7 @@ from mloda.provider import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 import pytest
 
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Optional
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
@@ -62,7 +62,7 @@ class DuckDBTestDataCreator(ATestDataCreator):
     }
 
     @classmethod
-    def get_raw_data(cls) -> Dict[str, Any]:
+    def get_raw_data(cls) -> dict[str, Any]:
         """Return the raw test data as a dictionary."""
         return duckdb_test_dict
 
@@ -107,7 +107,7 @@ class ATestDuckDBFeatureGroup(FeatureGroup, MatchData):
 class DuckDBSimpleTransformFeatureGroup(ATestDuckDBFeatureGroup):
     """Simple feature group for testing DuckDB transformations."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         """Require base features for transformation."""
         feature_name_str = str(feature_name) if isinstance(feature_name, FeatureName) else str(feature_name)
 
@@ -138,14 +138,14 @@ class DuckDBSimpleTransformFeatureGroup(ATestDuckDBFeatureGroup):
         return result_data
 
     @classmethod
-    def feature_names_supported(cls) -> Set[str]:
+    def feature_names_supported(cls) -> set[str]:
         return {"doubled_value", "score_plus_ten"}
 
 
 class DuckDBSecondTransformFeatureGroup(ATestDuckDBFeatureGroup):
     """Second transformation that depends on the first."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {Feature("doubled_value")}
 
     @classmethod
@@ -162,14 +162,14 @@ class DuckDBSecondTransformFeatureGroup(ATestDuckDBFeatureGroup):
         return result_data
 
     @classmethod
-    def feature_names_supported(cls) -> Set[str]:
+    def feature_names_supported(cls) -> set[str]:
         return {"quadrupled_value"}
 
 
 class DuckDBAggregationFeatureGroup(ATestDuckDBFeatureGroup):
     """Feature group for testing DuckDB aggregation capabilities."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         feature_name_str = str(feature_name) if isinstance(feature_name, FeatureName) else str(feature_name)
 
         if feature_name_str in ["avg_value_by_category", "count_by_category"]:
@@ -200,14 +200,14 @@ class DuckDBAggregationFeatureGroup(ATestDuckDBFeatureGroup):
         return result_data
 
     @classmethod
-    def feature_names_supported(cls) -> Set[str]:
+    def feature_names_supported(cls) -> set[str]:
         return {"avg_value_by_category", "count_by_category"}
 
 
 class CheckData(FeatureGroup):
     """Feature group for testing DuckDB aggregation capabilities."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         feature_name_str = str(feature_name) if isinstance(feature_name, FeatureName) else str(feature_name)
 
         if feature_name_str in ["pyarrow_avg_value_by_category"]:
@@ -221,7 +221,7 @@ class CheckData(FeatureGroup):
         return data
 
     @classmethod
-    def feature_names_supported(cls) -> Set[str]:
+    def feature_names_supported(cls) -> set[str]:
         return {"pyarrow_avg_value_by_category"}
 
     @classmethod
@@ -238,7 +238,7 @@ class TestDuckDBIntegrationWithMlodaAPI:
         [({ParallelizationMode.SYNC})],
     )
     def test_basic_duckdb_feature_calculation(
-        self, modes: Set[ParallelizationMode], flight_server: Any, duckdb_conn: Any
+        self, modes: set[ParallelizationMode], flight_server: Any, duckdb_conn: Any
     ) -> None:
         """Test basic feature calculation with DuckDB."""
         # Enable the test feature groups
@@ -247,7 +247,7 @@ class TestDuckDBIntegrationWithMlodaAPI:
         )
 
         # Define features to calculate
-        feature_list: List[Feature | str] = ["doubled_value", "score_plus_ten"]
+        feature_list: list[Feature | str] = ["doubled_value", "score_plus_ten"]
 
         feature_list = [
             Feature(name="doubled_value", options={"DuckDBTestDataCreator": duckdb_conn}),
@@ -289,7 +289,7 @@ class TestDuckDBIntegrationWithMlodaAPI:
         )
 
         # Define features to calculate
-        feature_list: List[Feature | str] = ["doubled_value", "score_plus_ten"]
+        feature_list: list[Feature | str] = ["doubled_value", "score_plus_ten"]
 
         feature_list = [
             Feature(name="avg_value_by_category", options={"DuckDBTestDataCreator": duckdb_conn}),

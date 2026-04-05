@@ -4,7 +4,7 @@ Pandas implementation for missing value imputation feature groups.
 
 from __future__ import annotations
 
-from typing import Any, List, Optional, Set
+from typing import Any, Optional
 
 
 from mloda.provider import ComputeFramework
@@ -24,12 +24,12 @@ class PandasMissingValueFeatureGroup(MissingValueFeatureGroup):
         return {PandasDataFrame}
 
     @classmethod
-    def _get_available_columns(cls, data: pd.DataFrame) -> Set[str]:
+    def _get_available_columns(cls, data: pd.DataFrame) -> set[str]:
         """Get the set of available column names from the DataFrame."""
         return set(data.columns)
 
     @classmethod
-    def _check_source_features_exist(cls, data: pd.DataFrame, feature_names: List[str]) -> None:
+    def _check_source_features_exist(cls, data: pd.DataFrame, feature_names: list[str]) -> None:
         """Check if the resolved source features exist in the DataFrame."""
         missing_features = [f for f in feature_names if f not in data.columns]
         if missing_features:
@@ -48,9 +48,9 @@ class PandasMissingValueFeatureGroup(MissingValueFeatureGroup):
         cls,
         data: pd.DataFrame,
         imputation_method: str,
-        in_features: List[str],
+        in_features: list[str],
         constant_value: Optional[Any] = None,
-        group_by_features: Optional[List[str]] = None,
+        group_by_features: Optional[list[str]] = None,
     ) -> pd.Series:
         """
         Perform the imputation using Pandas.
@@ -138,7 +138,7 @@ class PandasMissingValueFeatureGroup(MissingValueFeatureGroup):
         imputation_method: str,
         in_features: str,
         constant_value: Optional[Any],
-        group_by_features: List[str],
+        group_by_features: list[str],
     ) -> pd.Series:
         """
         Perform imputation within groups.

@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 from mloda.provider import DefaultOptionKeys
 import pytest
 from mloda.user import mloda
@@ -116,7 +116,7 @@ class ChainedFeatureTestDataCreator(ATestDataCreator):
     compute_framework = PandasDataFrame
 
     @classmethod
-    def get_raw_data(cls) -> Dict[str, Any]:
+    def get_raw_data(cls) -> dict[str, Any]:
         """Return the raw data as a dictionary."""
         return {
             "age": [25, 30, 35, 40, 45],
@@ -274,7 +274,7 @@ def test_end2end_multi_column_access() -> None:
         compute_framework = PandasDataFrame
 
         @classmethod
-        def get_raw_data(cls) -> Dict[str, Any]:
+        def get_raw_data(cls) -> dict[str, Any]:
             """Return the raw data as a dictionary."""
             return {
                 "state": ["CA", "NY", "CA", "TX", "NY"],

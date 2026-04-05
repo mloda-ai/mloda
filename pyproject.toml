@@ -124,6 +124,9 @@ disable_error_code = ["misc", "call-arg", "arg-type"]
 [tool.ruff]
 line-length = 120
 
+[tool.ruff.lint]
+extend-select = ["UP006", "UP007"]
+
 [tool.ruff.lint.per-file-ignores]
 "docs/**/*.ipynb" = ["E402"]
 

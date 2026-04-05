@@ -1,4 +1,4 @@
-from typing import Any, Union
+from typing import Any
 
 from mloda.user import Index
 from mloda.user import JoinType
@@ -47,7 +47,7 @@ class PolarsMergeEngine(BaseMergeEngine):
         return column_name in result.columns
 
     def handle_empty_data(
-        self, left_data: Any, right_data: Any, left_idx: Union[str, list[str]], right_idx: Union[str, list[str]]
+        self, left_data: Any, right_data: Any, left_idx: str | list[str], right_idx: str | list[str]
     ) -> Any:
         """Handle empty data cases. Override in subclasses for different data types."""
         if self.is_empty_data(left_data) or self.is_empty_data(right_data):
@@ -86,8 +86,8 @@ class PolarsMergeEngine(BaseMergeEngine):
     def join_logic(
         self, join_type: str, left_data: Any, right_data: Any, left_index: Index, right_index: Index, jointype: JoinType
     ) -> Any:
-        left_idx: Union[str, list[str]]
-        right_idx: Union[str, list[str]]
+        left_idx: str | list[str]
+        right_idx: str | list[str]
         if left_index.is_multi_index() or right_index.is_multi_index():
             left_idx = list(left_index.index)
             right_idx = list(right_index.index)

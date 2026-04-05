@@ -2,8 +2,6 @@
 Integration tests for combined feature groups.
 """
 
-from typing import List
-
 from mloda.user import mloda
 from mloda.user import Feature
 from mloda.user import PluginCollector
@@ -50,7 +48,7 @@ class TestCombinedFeatureGroupsPandas:
         )
 
         # Define the feature chain
-        features: List[Feature | str] = [
+        features: list[Feature | str] = [
             "price",  # Source data with missing values
             "price__mean_imputed",  # Step 1: Mean imputation
             "price__mean_imputed__sum_7_day_window",  # Step 2: 7-day window sum
@@ -109,7 +107,7 @@ class TestCombinedFeatureGroupsPyArrow:
         )
 
         # Define the feature chain
-        features: List[Feature | str] = [
+        features: list[Feature | str] = [
             "price",  # Source data with missing values
             "price__mean_imputed",  # Step 1: Mean imputation
             "price__mean_imputed__sum_7_day_window",  # Step 2: 7-day window sum

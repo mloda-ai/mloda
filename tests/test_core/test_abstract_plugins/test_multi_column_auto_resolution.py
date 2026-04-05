@@ -7,7 +7,7 @@ This test shows the complete flow of:
 3. Chained processor works with consumer's single-column output
 """
 
-from typing import Any, List, Optional, Set, Union
+from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -61,11 +61,11 @@ class MultiColumnProducer(FeatureGroup):
     """
 
     @classmethod
-    def feature_names_supported(cls) -> Set[str]:
+    def feature_names_supported(cls) -> set[str]:
         """Explicitly support base_feature."""
         return {"base_feature"}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         """Requires source_data as input."""
         return {Feature("source_data")}
 
@@ -114,11 +114,11 @@ class MultiColumnConsumer(FeatureGroup):
     """
 
     @classmethod
-    def feature_names_supported(cls) -> Set[str]:
+    def feature_names_supported(cls) -> set[str]:
         """Explicitly support consumed_feature."""
         return {"consumed_feature"}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         """
         Requires base_feature as input (without ~N suffix).
 
@@ -183,11 +183,11 @@ class ChainedProcessor(FeatureGroup):
     """
 
     @classmethod
-    def feature_names_supported(cls) -> Set[str]:
+    def feature_names_supported(cls) -> set[str]:
         """Explicitly support chained_feature."""
         return {"chained_feature"}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         """Requires consumed_feature as input."""
         return {Feature("consumed_feature")}
 
@@ -253,7 +253,7 @@ def test_multi_column_auto_resolution_with_chaining() -> None:
     # This triggers the entire chain:
     # source_data -> base_feature -> consumed_feature -> chained_feature
     # We request all intermediate features to verify the complete flow
-    features_to_request: List[Union[Feature, str]] = [
+    features_to_request: list[Feature | str] = [
         Feature("base_feature"),  # Multi-column producer output
         Feature("consumed_feature"),  # Consumer output that discovered multi-columns
         Feature("chained_feature"),  # Final chained output

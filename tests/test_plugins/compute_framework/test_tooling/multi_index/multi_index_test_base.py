@@ -6,7 +6,7 @@ for multi-index merge operations across all compute frameworks.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, List, Optional, Type
+from typing import Any, Callable, Optional
 import logging
 
 import pytest
@@ -45,13 +45,13 @@ class MultiIndexMergeEngineTestBase(ABC):
 
     @classmethod
     @abstractmethod
-    def merge_engine_class(cls) -> Type[BaseMergeEngine]:
+    def merge_engine_class(cls) -> type[BaseMergeEngine]:
         """Return the merge engine class for this framework."""
         pass
 
     @classmethod
     @abstractmethod
-    def framework_type(cls) -> Type[Any]:
+    def framework_type(cls) -> type[Any]:
         """Return the framework's expected data type (e.g., pd.DataFrame, pa.Table)."""
         pass
 
@@ -62,11 +62,11 @@ class MultiIndexMergeEngineTestBase(ABC):
 
     # ==================== HELPER METHODS ====================
 
-    def convert_dict_to_framework(self, data: List[Dict[str, Any]]) -> Any:
+    def convert_dict_to_framework(self, data: list[dict[str, Any]]) -> Any:
         """Convert List[Dict] to this framework's native format using the converter."""
         return self.converter.to_framework(data, self.framework_type(), self.get_connection())
 
-    def convert_framework_to_dict(self, data: Any) -> List[Dict[str, Any]]:
+    def convert_framework_to_dict(self, data: Any) -> list[dict[str, Any]]:
         """Convert framework data back to List[Dict] for assertions."""
         return self.converter.from_framework(data, self.framework_type())
 
@@ -74,7 +74,7 @@ class MultiIndexMergeEngineTestBase(ABC):
         self,
         scenario_key: str,
         merge_method: str,
-        additional_assertions: Optional[Callable[[List[Dict[str, Any]], MergeScenario], None]] = None,
+        additional_assertions: Optional[Callable[[list[dict[str, Any]], MergeScenario], None]] = None,
     ) -> None:
         """
         Run a merge test using a predefined scenario.
@@ -111,12 +111,12 @@ class MultiIndexMergeEngineTestBase(ABC):
         if additional_assertions:
             additional_assertions(result_dicts, scenario)
 
-    def _assert_row_count(self, result: List[Dict[str, Any]], expected: int) -> None:
+    def _assert_row_count(self, result: list[dict[str, Any]], expected: int) -> None:
         """Assert that result has expected number of rows."""
         actual = len(result)
         assert actual == expected, f"Expected {expected} rows, got {actual}"
 
-    def _assert_columns_exist(self, result: List[Dict[str, Any]], expected_columns: List[str]) -> None:
+    def _assert_columns_exist(self, result: list[dict[str, Any]], expected_columns: list[str]) -> None:
         """Assert that all expected columns exist in result."""
         if not result:
             return  # Empty result, skip column check
@@ -125,7 +125,7 @@ class MultiIndexMergeEngineTestBase(ABC):
         for col in expected_columns:
             assert col in actual_columns, f"Expected column '{col}' not found in result. Available: {actual_columns}"
 
-    def _assert_has_null_values(self, result: List[Dict[str, Any]], column: str) -> bool:
+    def _assert_has_null_values(self, result: list[dict[str, Any]], column: str) -> bool:
         """Check if any row has null value in specified column."""
         import math
 
@@ -142,7 +142,7 @@ class MultiIndexMergeEngineTestBase(ABC):
     def test_merge_inner_with_multi_index(self) -> None:
         """Test INNER join with 2-column multi-index."""
 
-        def additional_checks(result: List[Dict[str, Any]], scenario: MergeScenario) -> None:
+        def additional_checks(result: list[dict[str, Any]], scenario: MergeScenario) -> None:
             # All rows should have values in both left and right columns
             for row in result:
                 assert row.get("left_value") is not None, "INNER join should not have null left values"
@@ -153,7 +153,7 @@ class MultiIndexMergeEngineTestBase(ABC):
     def test_merge_left_with_multi_index(self) -> None:
         """Test LEFT join with 2-column multi-index."""
 
-        def additional_checks(result: List[Dict[str, Any]], scenario: MergeScenario) -> None:
+        def additional_checks(result: list[dict[str, Any]], scenario: MergeScenario) -> None:
             # All rows should have left_value, but some may have null right_value
             for row in result:
                 assert row.get("left_value") is not None, "LEFT join should have all left values"
@@ -165,7 +165,7 @@ class MultiIndexMergeEngineTestBase(ABC):
     def test_merge_full_outer_with_multi_index(self) -> None:
         """Test OUTER join with 2-column multi-index."""
 
-        def additional_checks(result: List[Dict[str, Any]], scenario: MergeScenario) -> None:
+        def additional_checks(result: list[dict[str, Any]], scenario: MergeScenario) -> None:
             # Should have nulls on both sides
             assert self._assert_has_null_values(result, "left_value"), "OUTER join should have some null left values"
             assert self._assert_has_null_values(result, "right_value"), "OUTER join should have some null right values"
@@ -175,7 +175,7 @@ class MultiIndexMergeEngineTestBase(ABC):
     def test_merge_append_with_multi_index(self) -> None:
         """Test APPEND with 2-column multi-index."""
 
-        def additional_checks(result: List[Dict[str, Any]], scenario: MergeScenario) -> None:
+        def additional_checks(result: list[dict[str, Any]], scenario: MergeScenario) -> None:
             # All rows should have values (no nulls in APPEND)
             for row in result:
                 assert row.get("value") is not None, "APPEND should not have null values"
@@ -185,7 +185,7 @@ class MultiIndexMergeEngineTestBase(ABC):
     def test_merge_union_with_multi_index(self) -> None:
         """Test UNION with 2-column multi-index."""
 
-        def additional_checks(result: List[Dict[str, Any]], scenario: MergeScenario) -> None:
+        def additional_checks(result: list[dict[str, Any]], scenario: MergeScenario) -> None:
             # All rows should have values (no nulls in UNION)
             for row in result:
                 assert row.get("value") is not None, "UNION should not have null values"

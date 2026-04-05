@@ -7,7 +7,7 @@ This test verifies that the modernization successfully supports both approaches:
 """
 
 import pytest
-from typing import Any, Dict, List
+from typing import Any
 from datetime import datetime, timedelta
 
 from mloda.user import Feature
@@ -28,7 +28,7 @@ class ForecastingModernizationTestDataCreator(ATestDataCreator):
     compute_framework = PandasDataFrame
 
     @classmethod
-    def get_raw_data(cls) -> Dict[str, Any]:
+    def get_raw_data(cls) -> dict[str, Any]:
         """Return the raw data as a dictionary."""
         # Create time series data for 1000 days to ensure robust testing with lag features
         dates = [datetime(2025, 1, 1) + timedelta(days=i) for i in range(1000)]
@@ -216,7 +216,7 @@ class TestForecastingModernization:
         )
 
         algorithms = ["linear", "ridge", "randomforest"]
-        features: List[Feature | str] = []
+        features: list[Feature | str] = []
 
         for i, algorithm in enumerate(algorithms):
             feature = Feature(

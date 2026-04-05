@@ -1,5 +1,5 @@
 import sqlite3
-from typing import Any, List
+from typing import Any
 
 import pyarrow as pa
 import pytest
@@ -31,8 +31,8 @@ class TestSqliteRelation(RelationTestMixin):
     def relation_class(self) -> Any:
         return SqliteRelation
 
-    def get_column_values(self, result: Any, column: str) -> List[Any]:
-        values: List[Any] = result.df()[column].tolist()
+    def get_column_values(self, result: Any, column: str) -> list[Any]:
+        values: list[Any] = result.df()[column].tolist()
         return values
 
     def test_drop_removes_table(self, sample_relation: SqliteRelation) -> None:

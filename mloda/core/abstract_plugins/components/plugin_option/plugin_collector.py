@@ -1,5 +1,3 @@
-from typing import Set, Type
-
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
 
@@ -15,16 +13,16 @@ class PluginCollector:
     """
 
     def __init__(self) -> None:
-        self.disabled_feature_group_classes: Set[Type[FeatureGroup]] = set()
-        self.enabled_feature_group_classes: Set[Type[FeatureGroup]] = set()
+        self.disabled_feature_group_classes: set[type[FeatureGroup]] = set()
+        self.enabled_feature_group_classes: set[type[FeatureGroup]] = set()
 
-    def add_disabled_feature_group_classes(self, feature_group_cls: Set[Type[FeatureGroup]]) -> None:
+    def add_disabled_feature_group_classes(self, feature_group_cls: set[type[FeatureGroup]]) -> None:
         self.disabled_feature_group_classes.update(feature_group_cls)
 
-    def add_enabled_feature_group_classes(self, feature_group_cls: Set[Type[FeatureGroup]]) -> None:
+    def add_enabled_feature_group_classes(self, feature_group_cls: set[type[FeatureGroup]]) -> None:
         self.enabled_feature_group_classes.update(feature_group_cls)
 
-    def applicable_feature_group_class(self, feature_group_cls: Type[FeatureGroup]) -> bool:
+    def applicable_feature_group_class(self, feature_group_cls: type[FeatureGroup]) -> bool:
         if feature_group_cls in self.disabled_feature_group_classes:
             return False
 
@@ -38,9 +36,9 @@ class PluginCollector:
 
     @staticmethod
     def disabled_feature_groups(
-        feature_group_cls: Set[Type[FeatureGroup]] | Type[FeatureGroup],
+        feature_group_cls: set[type[FeatureGroup]] | type[FeatureGroup],
     ) -> "PluginCollector":
-        if not isinstance(feature_group_cls, Set):
+        if not isinstance(feature_group_cls, set):
             feature_group_cls = {feature_group_cls}
 
         plugin_collector = PluginCollector()
@@ -49,9 +47,9 @@ class PluginCollector:
 
     @staticmethod
     def enabled_feature_groups(
-        feature_group_cls: Set[Type[FeatureGroup]] | Type[FeatureGroup],
+        feature_group_cls: set[type[FeatureGroup]] | type[FeatureGroup],
     ) -> "PluginCollector":
-        if not isinstance(feature_group_cls, Set):
+        if not isinstance(feature_group_cls, set):
             feature_group_cls = {feature_group_cls}
 
         plugin_collector = PluginCollector()

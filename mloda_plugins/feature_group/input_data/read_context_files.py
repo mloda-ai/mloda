@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import Any, List, Set
+from typing import Any
 
 
 from mloda.provider import FeatureGroup
@@ -40,7 +40,7 @@ class ConcatenatedFileContent(FeatureGroup):
     # This feature should just be created once mlodaAPI run.
     join_feature_name = "FGConcatenatedFileContent_JoinLLMFiles"
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Set[Feature] | None:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         disallowed_files = list(options.get("disallowed_files")) if options.get("disallowed_files") else ["__init__.py"]
 
         if options.get("file_paths"):
@@ -85,8 +85,8 @@ class ConcatenatedFileContent(FeatureGroup):
         )
 
     def _create_source_tuples(
-        self, file_paths: List[str], feature_name: FeatureName, document_reader_class: str
-    ) -> Set[Feature]:
+        self, file_paths: list[str], feature_name: FeatureName, document_reader_class: str
+    ) -> set[Feature]:
         """
         Creates the source tuples for reading the python files.
 
@@ -133,8 +133,8 @@ class ConcatenatedFileContent(FeatureGroup):
 
 
 def find_file_paths(
-    root_directory: List[Path | str], suffix: str, not_allowed_files_names: List[str] = []
-) -> List[str]:
+    root_directory: list[Path | str], suffix: str, not_allowed_files_names: list[str] = []
+) -> list[str]:
     file_paths = set()
 
     if not isinstance(root_directory, list):

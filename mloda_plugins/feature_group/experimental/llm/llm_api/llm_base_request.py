@@ -1,5 +1,5 @@
 from abc import ABC
-from typing import Any, Dict, Type, Union, List
+from typing import Any
 
 
 from mloda.provider import FeatureGroup
@@ -20,8 +20,8 @@ class LLMBaseApi(ABC):
     def request(
         cls,
         model: str,
-        prompt: Union[str, List[Dict[str, str]]],
-        model_parameters: Dict[str, Any],
+        prompt: str | list[dict[str, str]],
+        model_parameters: dict[str, Any],
         tools: ToolCollection | None,
     ) -> Any:
         """
@@ -30,7 +30,7 @@ class LLMBaseApi(ABC):
         raise NotImplementedError
 
     @classmethod
-    def _execute_tools(cls, tool_calls: List[Any], features: FeatureSet, tools: ToolCollection) -> str:
+    def _execute_tools(cls, tool_calls: list[Any], features: FeatureSet, tools: ToolCollection) -> str:
         """Executes all tool calls."""
         tool_results = []
         for tool_call in tool_calls:
@@ -51,7 +51,7 @@ class LLMBaseApi(ABC):
         return tool_result
 
     @classmethod
-    def _execute_tool(cls, tool_name: str, args: Dict[str, Any], tools: ToolCollection) -> str:
+    def _execute_tool(cls, tool_name: str, args: dict[str, Any], tools: ToolCollection) -> str:
         """
         Executes the tool and apppend the tool_result string.
         """
@@ -77,7 +77,7 @@ class LLMBaseRequest(FeatureGroup):
     tools = "tools"
 
     @classmethod
-    def api(cls) -> Type[LLMBaseApi]:
+    def api(cls) -> type[LLMBaseApi]:
         raise NotImplementedError
 
     @classmethod
@@ -106,7 +106,7 @@ class LLMBaseRequest(FeatureGroup):
         return model
 
     @classmethod
-    def get_model_parameters(cls, features: FeatureSet) -> Dict[str, Any]:
+    def get_model_parameters(cls, features: FeatureSet) -> dict[str, Any]:
         model_parameters = features.get_options_key(cls.model_parameters) or {}
         if not isinstance(model_parameters, dict):
             raise ValueError(f"Model parameters must be a dict. {model_parameters}")

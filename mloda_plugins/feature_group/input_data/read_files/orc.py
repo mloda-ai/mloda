@@ -1,4 +1,4 @@
-from typing import Any, Tuple
+from typing import Any
 
 from pyarrow import orc as pyarrow_orc
 
@@ -98,7 +98,7 @@ class OrcReader(ReadFile):
     """
 
     @classmethod
-    def suffix(cls) -> Tuple[str, ...]:
+    def suffix(cls) -> tuple[str, ...]:
         return (
             ".orc",
             ".ORC",

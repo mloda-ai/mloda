@@ -10,7 +10,6 @@ Tests verify:
 - Filters type validation
 """
 
-from typing import Set
 import pytest
 
 from mloda.user import Feature
@@ -46,7 +45,7 @@ class TestValidateEqualOptions:
     def test_all_same_options_passes(self) -> None:
         """All features with identical options should not raise."""
         options = Options(group={"key": "value"})
-        features: Set[Feature] = {
+        features: set[Feature] = {
             Feature("feature1", options),
             Feature("feature2", options),
             Feature("feature3", options),
@@ -59,7 +58,7 @@ class TestValidateEqualOptions:
         """Features with different options should raise ValueError."""
         options1 = Options(group={"key": "value1"})
         options2 = Options(group={"key": "value2"})
-        features: Set[Feature] = {
+        features: set[Feature] = {
             Feature("feature1", options1),
             Feature("feature2", options2),
         }
@@ -69,7 +68,7 @@ class TestValidateEqualOptions:
 
     def test_empty_features_passes(self) -> None:
         """Empty feature set should not raise."""
-        features: Set[Feature] = set()
+        features: set[Feature] = set()
 
         # Should not raise
         FeatureSetValidator.validate_equal_options(features)
@@ -77,7 +76,7 @@ class TestValidateEqualOptions:
     def test_single_feature_passes(self) -> None:
         """Single feature should not raise."""
         options = Options(group={"key": "value"})
-        features: Set[Feature] = {Feature("feature1", options)}
+        features: set[Feature] = {Feature("feature1", options)}
 
         # Should not raise
         FeatureSetValidator.validate_equal_options(features)
@@ -115,7 +114,7 @@ class TestValidateFiltersNotSet:
     def test_filters_already_set_raises(self) -> None:
         """Non-None filters should raise ValueError."""
         filter1 = SingleFilter("feature1", "range", {"min": 0, "max": 100})
-        filters: Set[SingleFilter] = {filter1}
+        filters: set[SingleFilter] = {filter1}
 
         with pytest.raises(ValueError):
             FeatureSetValidator.validate_filters_not_set(filters)
@@ -127,7 +126,7 @@ class TestValidateFiltersIsSetType:
     def test_set_type_passes(self) -> None:
         """Set type should not raise."""
         filter1 = SingleFilter("feature1", "range", {"min": 0, "max": 100})
-        filters: Set[SingleFilter] = {filter1}
+        filters: set[SingleFilter] = {filter1}
 
         # Should not raise
         FeatureSetValidator.validate_filters_is_set_type(filters)

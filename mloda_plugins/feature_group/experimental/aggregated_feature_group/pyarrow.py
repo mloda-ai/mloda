@@ -4,7 +4,7 @@ PyArrow implementation for aggregated feature groups.
 
 from __future__ import annotations
 
-from typing import Any, List, Set
+from typing import Any
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -28,12 +28,12 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
         return {PyArrowTable}
 
     @classmethod
-    def _get_available_columns(cls, data: pa.Table) -> Set[str]:
+    def _get_available_columns(cls, data: pa.Table) -> set[str]:
         """Get the set of available column names from the Table schema."""
         return set(data.schema.names)
 
     @classmethod
-    def _check_source_features_exist(cls, data: pa.Table, feature_names: List[str]) -> None:
+    def _check_source_features_exist(cls, data: pa.Table, feature_names: list[str]) -> None:
         """
         Check if the resolved features exist in the Table.
 
@@ -62,7 +62,7 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
         return data.append_column(feature_name, repeated_result)
 
     @classmethod
-    def _perform_aggregation(cls, data: pa.Table, aggregation_type: str, in_features: List[str]) -> Any:
+    def _perform_aggregation(cls, data: pa.Table, aggregation_type: str, in_features: list[str]) -> Any:
         """
         Perform the aggregation using PyArrow compute functions.
 

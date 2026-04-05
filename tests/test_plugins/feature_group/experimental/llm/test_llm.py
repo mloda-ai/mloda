@@ -1,5 +1,5 @@
 import os
-from typing import List, Optional, Union
+from typing import Optional
 
 from mloda.user import Index
 from mloda_plugins.feature_group.experimental.llm.cli import format_array
@@ -35,7 +35,7 @@ class TestReadLLMFiles:
             @classmethod
             def match_feature_group_criteria(
                 cls,
-                feature_name: Union[FeatureName, str],
+                feature_name: FeatureName | str,
                 options: Options,
                 data_access_collection: Optional[DataAccessCollection] = None,
             ) -> bool:
@@ -48,7 +48,7 @@ class TestReadLLMFiles:
         project_root = os.getcwd() + "/mloda_plugins"
         file_paths = find_file_paths([project_root], "py", not_allowed_files_names=["__init__.py"])
 
-        new_features: List[Feature | str] = []
+        new_features: list[Feature | str] = []
         for f in file_paths:
             feat = Feature(name=LLMBasic.get_class_name(), options={PyFileReader.__name__: f})
             new_features.append(feat)
@@ -68,7 +68,7 @@ class TestPlugInLLM:
             else:
                 _model = "gemini-1.5-flash-8b"
 
-            features: List[Feature | str] = [
+            features: list[Feature | str] = [
                 Feature(
                     name=_cls.get_class_name(),
                     options={
@@ -107,7 +107,7 @@ class TestPlugInLLM:
         _test_classes = [OpenAIRequestLoop, GeminiRequestLoop]
 
         for _cls in _test_classes:
-            features: List[Feature | str] = [
+            features: list[Feature | str] = [
                 Feature(
                     name=_cls.get_class_name(),
                     options={
@@ -147,7 +147,7 @@ class TestGeminiLLMFiles:
 
         _test_classes = [OpenAIRequestLoop, GeminiRequestLoop]
         for _cls in _test_classes:
-            features: List[Feature | str] = [
+            features: list[Feature | str] = [
                 Feature(
                     name=_cls.get_class_name(),
                     options={
@@ -210,7 +210,7 @@ class TestGeminiLLMFiles:
             else:
                 _model = "gemini-2.0-flash-exp"
 
-            features: List[Feature | str] = [
+            features: list[Feature | str] = [
                 Feature(
                     name=_cls.get_class_name(),
                     options={

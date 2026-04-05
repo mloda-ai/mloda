@@ -4,7 +4,7 @@ Pandas implementation for forecasting feature groups.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Set, Tuple, cast
+from typing import Any, Optional, cast
 
 from datetime import datetime, timedelta
 
@@ -38,7 +38,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         return {PandasDataFrame}
 
     @classmethod
-    def _get_available_columns(cls, data: pd.DataFrame) -> Set[str]:
+    def _get_available_columns(cls, data: pd.DataFrame) -> set[str]:
         """Get the set of available column names from the DataFrame."""
         return set(data.columns)
 
@@ -79,7 +79,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
             )
 
     @classmethod
-    def _check_source_features_exist(cls, data: pd.DataFrame, feature_names: List[str]) -> None:
+    def _check_source_features_exist(cls, data: pd.DataFrame, feature_names: list[str]) -> None:
         """
         Check if the resolved features exist in the DataFrame.
 
@@ -119,10 +119,10 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         algorithm: str,
         horizon: int,
         time_unit: str,
-        in_features: List[str],
+        in_features: list[str],
         time_filter_feature: str,
         model_artifact: Optional[Any] = None,
-    ) -> Tuple[pd.Series, Dict[str, Any]]:
+    ) -> tuple[pd.Series, dict[str, Any]]:
         """
         Perform forecasting using scikit-learn models.
 
@@ -236,7 +236,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         return result, artifact
 
     @classmethod
-    def _generate_future_timestamps(cls, last_timestamp: datetime, horizon: int, time_unit: str) -> List[datetime]:
+    def _generate_future_timestamps(cls, last_timestamp: datetime, horizon: int, time_unit: str) -> list[datetime]:
         """
         Generate future timestamps for forecasting.
 
@@ -269,7 +269,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         return future_timestamps
 
     @classmethod
-    def _determine_lag_features(cls, horizon: int, time_unit: str, data_size: int) -> List[int]:
+    def _determine_lag_features(cls, horizon: int, time_unit: str, data_size: int) -> list[int]:
         """
         Determine appropriate lag features based on horizon, time unit, and data size.
 
@@ -313,8 +313,8 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
 
     @classmethod
     def _create_features(
-        cls, df: pd.DataFrame, in_features: str, time_filter_feature: str, lag_features: List[int]
-    ) -> Tuple[pd.DataFrame, pd.Series]:
+        cls, df: pd.DataFrame, in_features: str, time_filter_feature: str, lag_features: list[int]
+    ) -> tuple[pd.DataFrame, pd.Series]:
         """
         Create features for training the forecasting model.
 
@@ -397,7 +397,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         return df
 
     @classmethod
-    def _create_lag_features(cls, df: pd.DataFrame, feature_name: str, lags: List[int] = [1, 2, 3]) -> pd.DataFrame:
+    def _create_lag_features(cls, df: pd.DataFrame, feature_name: str, lags: list[int] = [1, 2, 3]) -> pd.DataFrame:
         """
         Create lag features (previous values) for the specified feature.
 
@@ -418,10 +418,10 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
     def _create_future_features(
         cls,
         df: pd.DataFrame,
-        future_timestamps: List[datetime],
+        future_timestamps: list[datetime],
         in_features: str,
         time_filter_feature: str,
-        lag_features: List[int],
+        lag_features: list[int],
     ) -> pd.DataFrame:
         """
         Create features for future timestamps.
@@ -466,7 +466,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         return future_df
 
     @classmethod
-    def _train_model(cls, X: pd.DataFrame, y: pd.Series, algorithm: str) -> Tuple[Any, Optional[StandardScaler]]:
+    def _train_model(cls, X: pd.DataFrame, y: pd.Series, algorithm: str) -> tuple[Any, Optional[StandardScaler]]:
         """
         Train a forecasting model using the specified algorithm.
 
@@ -512,10 +512,10 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         algorithm: str,
         horizon: int,
         time_unit: str,
-        in_features: List[str],
+        in_features: list[str],
         time_filter_feature: str,
         model_artifact: Optional[Any] = None,
-    ) -> Tuple[pd.Series, pd.Series, pd.Series, Dict[str, Any]]:
+    ) -> tuple[pd.Series, pd.Series, pd.Series, dict[str, Any]]:
         """
         Perform forecasting with confidence intervals.
 
@@ -680,7 +680,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         X: np.ndarray[Any, Any],
         predictions: np.ndarray[Any, Any],
         algorithm: str,
-    ) -> Tuple[np.ndarray[Any, Any], np.ndarray[Any, Any]]:
+    ) -> tuple[np.ndarray[Any, Any], np.ndarray[Any, Any]]:
         """
         Compute confidence intervals for ensemble models (RandomForest, GBR).
 

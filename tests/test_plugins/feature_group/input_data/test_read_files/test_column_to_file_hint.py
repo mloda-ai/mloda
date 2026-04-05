@@ -1,7 +1,7 @@
 import csv
 import os
 import tempfile
-from typing import Any, List, Tuple
+from typing import Any
 
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
 
@@ -16,11 +16,11 @@ class TestColumnToFileHint:
     def test_pins_correct_file(self) -> None:
         class TestRF(ReadFile):
             @classmethod
-            def get_column_names(cls, file_name: str) -> List[str]:
+            def get_column_names(cls, file_name: str) -> list[str]:
                 return ["id", "val"]
 
             @classmethod
-            def suffix(cls) -> Tuple[str, ...]:
+            def suffix(cls) -> tuple[str, ...]:
                 return (".csv",)
 
         dac = DataAccessCollection(files={"a.csv", "b.csv"}, column_to_file={"id": "a.csv", "val": "a.csv"})
@@ -30,11 +30,11 @@ class TestColumnToFileHint:
     def test_unpinned_feature_falls_through(self) -> None:
         class TestRF(ReadFile):
             @classmethod
-            def get_column_names(cls, file_name: str) -> List[str]:
+            def get_column_names(cls, file_name: str) -> list[str]:
                 return ["id", "val", "other_col"]
 
             @classmethod
-            def suffix(cls) -> Tuple[str, ...]:
+            def suffix(cls) -> tuple[str, ...]:
                 return (".csv",)
 
         dac = DataAccessCollection(files={"a.csv", "b.csv"}, column_to_file={"id": "a.csv"})
@@ -45,11 +45,11 @@ class TestColumnToFileHint:
     def test_no_hint_preserves_behavior(self) -> None:
         class TestRF(ReadFile):
             @classmethod
-            def get_column_names(cls, file_name: str) -> List[str]:
+            def get_column_names(cls, file_name: str) -> list[str]:
                 return ["id", "val"]
 
             @classmethod
-            def suffix(cls) -> Tuple[str, ...]:
+            def suffix(cls) -> tuple[str, ...]:
                 return (".csv",)
 
         dac = DataAccessCollection(files={"a.csv"})
@@ -59,11 +59,11 @@ class TestColumnToFileHint:
     def test_conflict_in_batch_raises(self) -> None:
         class TestRF(ReadFile):
             @classmethod
-            def get_column_names(cls, file_name: str) -> List[str]:
+            def get_column_names(cls, file_name: str) -> list[str]:
                 return ["id", "val"]
 
             @classmethod
-            def suffix(cls) -> Tuple[str, ...]:
+            def suffix(cls) -> tuple[str, ...]:
                 return (".csv",)
 
         dac = DataAccessCollection(
@@ -76,11 +76,11 @@ class TestColumnToFileHint:
     def test_mixed_batch_raises(self) -> None:
         class TestRF(ReadFile):
             @classmethod
-            def get_column_names(cls, file_name: str) -> List[str]:
+            def get_column_names(cls, file_name: str) -> list[str]:
                 return ["id", "unpinned_col"]
 
             @classmethod
-            def suffix(cls) -> Tuple[str, ...]:
+            def suffix(cls) -> tuple[str, ...]:
                 return (".csv",)
 
         dac = DataAccessCollection(
@@ -93,11 +93,11 @@ class TestColumnToFileHint:
     def test_wrong_suffix_falls_through(self) -> None:
         class TestRFCsv(ReadFile):
             @classmethod
-            def get_column_names(cls, file_name: str) -> List[str]:
+            def get_column_names(cls, file_name: str) -> list[str]:
                 return ["id", "val"]
 
             @classmethod
-            def suffix(cls) -> Tuple[str, ...]:
+            def suffix(cls) -> tuple[str, ...]:
                 return (".csv",)
 
         # column_to_file points to parquet files, but this reader only handles .csv
@@ -151,7 +151,7 @@ class TestColumnToFileHintReadDocument:
     def test_document_pins_correct_file(self) -> None:
         class TestRD(ReadDocument):
             @classmethod
-            def suffix(cls) -> Tuple[str, ...]:
+            def suffix(cls) -> tuple[str, ...]:
                 return (".txt",)
 
             @classmethod
@@ -168,7 +168,7 @@ class TestColumnToFileHintReadDocument:
     def test_document_no_hint_falls_through(self) -> None:
         class TestRD(ReadDocument):
             @classmethod
-            def suffix(cls) -> Tuple[str, ...]:
+            def suffix(cls) -> tuple[str, ...]:
                 return (".txt",)
 
             @classmethod
@@ -183,7 +183,7 @@ class TestColumnToFileHintReadDocument:
     def test_document_mixed_batch_raises(self) -> None:
         class TestRD(ReadDocument):
             @classmethod
-            def suffix(cls) -> Tuple[str, ...]:
+            def suffix(cls) -> tuple[str, ...]:
                 return (".txt",)
 
             @classmethod
@@ -200,7 +200,7 @@ class TestColumnToFileHintReadDocument:
     def test_document_folder_traversal(self) -> None:
         class TestRD(ReadDocument):
             @classmethod
-            def suffix(cls) -> Tuple[str, ...]:
+            def suffix(cls) -> tuple[str, ...]:
                 return (".txt",)
 
             @classmethod
@@ -223,7 +223,7 @@ class TestColumnToFileHintReadDocument:
     def test_document_str_path_suffix_check(self) -> None:
         class TestRD(ReadDocument):
             @classmethod
-            def suffix(cls) -> Tuple[str, ...]:
+            def suffix(cls) -> tuple[str, ...]:
                 return (".txt",)
 
             @classmethod
@@ -236,7 +236,7 @@ class TestColumnToFileHintReadDocument:
     def test_document_str_path_correct_suffix(self) -> None:
         class TestRD(ReadDocument):
             @classmethod
-            def suffix(cls) -> Tuple[str, ...]:
+            def suffix(cls) -> tuple[str, ...]:
                 return (".txt",)
 
             @classmethod

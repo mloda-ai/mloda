@@ -2,7 +2,7 @@
 Utility functions and data creators for combined feature group tests.
 """
 
-from typing import Any, Dict, List
+from typing import Any
 
 import pandas as pd
 
@@ -15,7 +15,7 @@ from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCr
 
 
 # List of features to test in the combined feature chain
-COMBINED_FEATURES: List[Feature | str] = [
+COMBINED_FEATURES: list[Feature | str] = [
     "price__mean_imputed",  # Step 1: Mean imputation
     "price__mean_imputed__sum_7_day_window",  # Step 2: 7-day window sum
     "price__mean_imputed__sum_7_day_window__max_aggr",  # Step 3: Max aggregation
@@ -26,7 +26,7 @@ class CombinedFeatureTestDataCreator(ATestDataCreator):
     """Base class for combined feature test data creators."""
 
     @classmethod
-    def get_raw_data(cls) -> Dict[str, Any]:
+    def get_raw_data(cls) -> dict[str, Any]:
         """Return the raw data as a dictionary with missing values and time series."""
         dates = pd.date_range(start="2023-01-01", periods=10, freq="D")
         return {
@@ -45,7 +45,7 @@ class PyArrowCombinedFeatureTestDataCreator(CombinedFeatureTestDataCreator):
     compute_framework = PyArrowTable
 
 
-def validate_combined_features(result: List[Any]) -> None:
+def validate_combined_features(result: list[Any]) -> None:
     """
     Validate the results of the combined feature test.
 

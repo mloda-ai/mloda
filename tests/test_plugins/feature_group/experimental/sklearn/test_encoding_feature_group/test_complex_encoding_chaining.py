@@ -4,7 +4,7 @@ Complex integration test for EncodingFeatureGroup with multiple feature chains i
 
 from mloda.user import Features
 import pytest
-from typing import Any, Dict, List
+from typing import Any
 
 from mloda.user import PluginLoader
 from mloda.user import Feature
@@ -24,7 +24,7 @@ class ComplexEncodingTestDataCreator(ATestDataCreator):
     compute_framework = PandasDataFrame
 
     @classmethod
-    def get_raw_data(cls) -> Dict[str, Any]:
+    def get_raw_data(cls) -> dict[str, Any]:
         """Return the raw data as a dictionary."""
         return {
             "customer_id": [1, 2, 3, 4, 5, 6, 7, 8],
@@ -75,7 +75,7 @@ class TestComplexEncodingChaining:
 
         # Create multiple complex chained features with unique artifact storage path
         artifact_options = Options({"artifact_storage_path": str(tmp_path)})
-        complex_features: Features | List[Feature | str] = [
+        complex_features: Features | list[Feature | str] = [
             # OneHot encoding -> Standard scaling -> Sum aggregation (L→R)
             Feature("category__onehot_encoded~1__standard_scaled__sum_aggr", artifact_options),
             # Label encoding -> Mean aggregation (no scaling) (L→R)
@@ -164,7 +164,7 @@ class TestComplexEncodingChaining:
         assert not label_result.equals(ordinal_result), "Label and Ordinal encoding results should differ"
 
         # Phase 2: Test artifact reuse with all complex features
-        complex_features_reuse: Features | List[Feature | str] = [
+        complex_features_reuse: Features | list[Feature | str] = [
             Feature(
                 feature.name,  # type: ignore
                 Options({**artifacts1, "artifact_storage_path": str(tmp_path)}),

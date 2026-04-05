@@ -1,7 +1,7 @@
 # mypy: disable-error-code="type-arg"
 """Integration tests for mlodaAPI.stream_all."""
 
-from typing import Any, List, Set
+from typing import Any
 
 import pyarrow as pa
 
@@ -9,15 +9,15 @@ from mloda.user import Feature, Features, ParallelizationMode, mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
-COMPUTE_FRAMEWORKS: Set[Any] = {PyArrowTable}
-PARALLELIZATION_MODES: Set[ParallelizationMode] = {ParallelizationMode.SYNC}
+COMPUTE_FRAMEWORKS: set[Any] = {PyArrowTable}
+PARALLELIZATION_MODES: set[ParallelizationMode] = {ParallelizationMode.SYNC}
 
 
-def _get_features(feature_list: List[str]) -> Features:
+def _get_features(feature_list: list[str]) -> Features:
     return Features([Feature(name=f_name, initial_requested_data=True) for f_name in feature_list])
 
 
-def _run_all_results(feature_list: List[str]) -> List[Any]:
+def _run_all_results(feature_list: list[str]) -> list[Any]:
     return mlodaAPI.run_all(
         _get_features(feature_list),
         compute_frameworks=COMPUTE_FRAMEWORKS,
@@ -25,7 +25,7 @@ def _run_all_results(feature_list: List[str]) -> List[Any]:
     )
 
 
-def _stream_all_results(feature_list: List[str]) -> List[Any]:
+def _stream_all_results(feature_list: list[str]) -> list[Any]:
     return list(
         mlodaAPI.stream_all(
             _get_features(feature_list),
@@ -78,7 +78,7 @@ class TestStreamAllMatchesRunAll:
 
         assert len(stream_result) == len(run_result)
 
-        def to_comparable(results: List[Any]) -> Set[frozenset]:
+        def to_comparable(results: list[Any]) -> set[frozenset]:
             return {frozenset((k, tuple(v)) for k, v in t.to_pydict().items()) for t in results}
 
         assert to_comparable(stream_result) == to_comparable(run_result)

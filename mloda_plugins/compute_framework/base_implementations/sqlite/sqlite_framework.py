@@ -1,7 +1,7 @@
 import logging
 import re
 import sqlite3
-from typing import Any, Optional, Set, Type
+from typing import Any, Optional
 
 from mloda.provider import BaseMergeEngine
 from mloda.provider import ComputeFramework
@@ -44,11 +44,11 @@ class SqliteFramework(ComputeFramework):
         return SqliteRelation
 
     @classmethod
-    def merge_engine(cls) -> Type[BaseMergeEngine]:
+    def merge_engine(cls) -> type[BaseMergeEngine]:
         return SqliteMergeEngine
 
     def select_data_by_column_names(
-        self, data: Any, selected_feature_names: Set[FeatureName], column_ordering: Optional[str] = None
+        self, data: Any, selected_feature_names: set[FeatureName], column_ordering: Optional[str] = None
     ) -> Any:
         column_names = set(data.columns)
         _selected_feature_names = self.identify_naming_convention(
@@ -64,7 +64,7 @@ class SqliteFramework(ComputeFramework):
     def transform(
         self,
         data: Any,
-        feature_names: Set[str],
+        feature_names: set[str],
     ) -> Any:
         transformed_data = self.apply_compute_framework_transformer(data)
         if transformed_data is not None:
@@ -88,9 +88,9 @@ class SqliteFramework(ComputeFramework):
         raise ValueError(f"Data {type(data)} is not supported by {self.__class__.__name__}")
 
     @classmethod
-    def supported_parallelization_modes(cls) -> Set[ParallelizationMode]:
+    def supported_parallelization_modes(cls) -> set[ParallelizationMode]:
         return {ParallelizationMode.SYNC}
 
     @classmethod
-    def filter_engine(cls) -> Type[BaseFilterEngine]:
+    def filter_engine(cls) -> type[BaseFilterEngine]:
         return SqliteFilterEngine

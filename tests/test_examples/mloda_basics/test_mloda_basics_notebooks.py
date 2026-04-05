@@ -3,7 +3,7 @@ import os
 
 
 from pathlib import Path
-from typing import Any, List
+from typing import Any
 
 from mloda.user import PluginCollector
 from testbook import testbook
@@ -58,7 +58,7 @@ class TestMlodaBasicsNotebooks:
         # We are setting the MlLifeCycleDataCreator to not get confused with other tests
         example_options = {MlLifeCycleDataCreator.__name__: True, "num_samples": 100}
 
-        feature_list: List[Feature | str] = []
+        feature_list: list[Feature | str] = []
         for feature in str_feature_list:
             feature_list.append(Feature(name=feature, options=example_options))
 

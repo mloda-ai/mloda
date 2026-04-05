@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
@@ -234,7 +234,7 @@ class TypeValidatorTestDataCreator(ATestDataCreator):
     compute_framework = PandasDataFrame
 
     @classmethod
-    def get_raw_data(cls) -> Dict[str, Any]:
+    def get_raw_data(cls) -> dict[str, Any]:
         return {
             "Sales": [100, 200, 300, 400, 500],
             "region": ["A", "A", "B", "B", "A"],

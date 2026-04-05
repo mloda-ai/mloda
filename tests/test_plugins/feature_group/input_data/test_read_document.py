@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Tuple
+from typing import Any
 
 import pytest
 
@@ -12,7 +12,7 @@ class ConcreteReadDocument(ReadDocument):
     """Minimal concrete subclass for testing load/init_reader behavior."""
 
     @classmethod
-    def suffix(cls) -> Tuple[str, ...]:
+    def suffix(cls) -> tuple[str, ...]:
         return (".json",)
 
     @classmethod
@@ -86,7 +86,7 @@ class TestReadDocumentLoad:
     def test_load_raises_when_data_is_none(self) -> None:
         class NoneReturningReader(ReadDocument):
             @classmethod
-            def suffix(cls) -> Tuple[str, ...]:
+            def suffix(cls) -> tuple[str, ...]:
                 return (".json",)
 
             @classmethod

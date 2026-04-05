@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Set, Type
+from typing import Any, Optional
 from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_merge_engine import (
     PythonDictMergeEngine,
@@ -34,20 +34,20 @@ class PythonDictFramework(ComputeFramework):
         return list
 
     @classmethod
-    def merge_engine(cls) -> Type[BaseMergeEngine]:
+    def merge_engine(cls) -> type[BaseMergeEngine]:
         return PythonDictMergeEngine
 
     def select_data_by_column_names(
         self,
-        data: List[Dict[str, Any]],
-        selected_feature_names: Set[FeatureName],
+        data: list[dict[str, Any]],
+        selected_feature_names: set[FeatureName],
         column_ordering: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         if not data:
             raise ValueError(f"Data cannot be empty: {selected_feature_names}")
 
         # Get all unique column names from all rows
-        column_names: Set[str] = set()
+        column_names: set[str] = set()
         for row in data:
             column_names.update(row.keys())
 
@@ -60,7 +60,7 @@ class PythonDictFramework(ComputeFramework):
     def set_column_names(self) -> None:
         if self.data and isinstance(self.data, list) and len(self.data) > 0:
             # Get all unique column names from all rows
-            all_columns: Set[str] = set()
+            all_columns: set[str] = set()
             for row in self.data:
                 if isinstance(row, dict):
                     all_columns.update(row.keys())
@@ -68,7 +68,7 @@ class PythonDictFramework(ComputeFramework):
         else:
             raise ValueError("Data is empty or not in expected format. Cannot set column names.")
 
-    def transform(self, data: Any, feature_names: Set[str]) -> List[Dict[str, Any]]:
+    def transform(self, data: Any, feature_names: set[str]) -> list[dict[str, Any]]:
         """
         Transforms data to the PythonDict framework format.
 
@@ -125,7 +125,7 @@ class PythonDictFramework(ComputeFramework):
         raise ValueError(f"Data type {type(data)} is not supported by {self.__class__.__name__}")
 
     @classmethod
-    def filter_engine(cls) -> Type[BaseFilterEngine]:
+    def filter_engine(cls) -> type[BaseFilterEngine]:
         """
         Returns the filter engine for PythonDict framework.
 

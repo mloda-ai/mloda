@@ -7,7 +7,7 @@ from __future__ import annotations
 import re
 import string
 import unicodedata
-from typing import Any, Dict, List
+from typing import Any
 
 from mloda.provider import ComputeFramework
 
@@ -39,7 +39,7 @@ class PythonDictTextCleaningFeatureGroup(TextCleaningFeatureGroup):
         return {PythonDictFramework}
 
     @classmethod
-    def _check_source_features_exist(cls, data: List[Dict[str, Any]], feature_names: List[str]) -> None:
+    def _check_source_features_exist(cls, data: list[dict[str, Any]], feature_names: list[str]) -> None:
         if not data:
             raise ValueError("Data cannot be empty")
 
@@ -54,7 +54,7 @@ class PythonDictTextCleaningFeatureGroup(TextCleaningFeatureGroup):
             )
 
     @classmethod
-    def _get_source_text(cls, data: List[Dict[str, Any]], feature_name: str) -> List[str]:
+    def _get_source_text(cls, data: list[dict[str, Any]], feature_name: str) -> list[str]:
         """
         Get the source text from the data.
 
@@ -70,8 +70,8 @@ class PythonDictTextCleaningFeatureGroup(TextCleaningFeatureGroup):
 
     @classmethod
     def _add_result_to_data(
-        cls, data: List[Dict[str, Any]], feature_name: str, result: List[str]
-    ) -> List[Dict[str, Any]]:
+        cls, data: list[dict[str, Any]], feature_name: str, result: list[str]
+    ) -> list[dict[str, Any]]:
         """
         Add the cleaning result to the data.
 
@@ -92,7 +92,7 @@ class PythonDictTextCleaningFeatureGroup(TextCleaningFeatureGroup):
         return data
 
     @classmethod
-    def _apply_operation(cls, data: List[Dict[str, Any]], text: List[str], operation: str) -> List[str]:
+    def _apply_operation(cls, data: list[dict[str, Any]], text: list[str], operation: str) -> list[str]:
         """
         Apply a cleaning operation to the text.
 
@@ -123,7 +123,7 @@ class PythonDictTextCleaningFeatureGroup(TextCleaningFeatureGroup):
             raise ValueError(f"Unsupported cleaning operation: {operation}")
 
     @classmethod
-    def _normalize_text(cls, text: List[str]) -> List[str]:
+    def _normalize_text(cls, text: list[str]) -> list[str]:
         """
         Normalize text by converting to lowercase and removing accents.
 
@@ -151,7 +151,7 @@ class PythonDictTextCleaningFeatureGroup(TextCleaningFeatureGroup):
         return result
 
     @classmethod
-    def _remove_stopwords(cls, text: List[str]) -> List[str]:
+    def _remove_stopwords(cls, text: list[str]) -> list[str]:
         """
         Remove common stopwords from text.
 
@@ -182,7 +182,7 @@ class PythonDictTextCleaningFeatureGroup(TextCleaningFeatureGroup):
             return text
 
     @classmethod
-    def _remove_punctuation(cls, text: List[str]) -> List[str]:
+    def _remove_punctuation(cls, text: list[str]) -> list[str]:
         """
         Remove punctuation from text.
 
@@ -196,7 +196,7 @@ class PythonDictTextCleaningFeatureGroup(TextCleaningFeatureGroup):
         return [input_str.translate(translator) for input_str in text]
 
     @classmethod
-    def _remove_special_chars(cls, text: List[str]) -> List[str]:
+    def _remove_special_chars(cls, text: list[str]) -> list[str]:
         """
         Remove special characters from text.
 
@@ -211,7 +211,7 @@ class PythonDictTextCleaningFeatureGroup(TextCleaningFeatureGroup):
         return [re.sub(pattern, "", input_str) for input_str in text]
 
     @classmethod
-    def _normalize_whitespace(cls, text: List[str]) -> List[str]:
+    def _normalize_whitespace(cls, text: list[str]) -> list[str]:
         """
         Normalize whitespace in text.
 
@@ -230,7 +230,7 @@ class PythonDictTextCleaningFeatureGroup(TextCleaningFeatureGroup):
         return result
 
     @classmethod
-    def _remove_urls(cls, text: List[str]) -> List[str]:
+    def _remove_urls(cls, text: list[str]) -> list[str]:
         """
         Remove URLs and email addresses from text.
 

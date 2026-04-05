@@ -5,7 +5,7 @@ Base implementation for dimensionality reduction feature groups.
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Any, List, Optional
+from typing import Any, Optional
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
@@ -365,7 +365,7 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
 
     @classmethod
     @abstractmethod
-    def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
+    def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
         """
         Check if the source features exist in the data.
 

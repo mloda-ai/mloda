@@ -1,5 +1,5 @@
 import os
-from typing import Any, Optional, Type
+from typing import Any, Optional
 import pytest
 from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
 from mloda.user import FeatureName
@@ -93,7 +93,7 @@ class TestPolarsDataFrameMerge(DataFrameTestBase):
     """Test PolarsDataFrame merge operations using the base test class."""
 
     @classmethod
-    def framework_class(cls) -> Type[Any]:
+    def framework_class(cls) -> type[Any]:
         """Return the PolarsDataFrame class."""
         return PolarsDataFrame
 

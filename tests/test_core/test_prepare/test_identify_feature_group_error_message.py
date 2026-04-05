@@ -4,7 +4,7 @@ This test verifies that error messages use formatted output from
 format_feature_group_classes instead of raw dict/class representation.
 """
 
-from typing import Optional, Set, Union
+from typing import Optional
 
 import pytest
 
@@ -38,7 +38,7 @@ class ConflictingFeatureGroupA(FeatureGroup):
     @classmethod
     def match_feature_group_criteria(
         cls,
-        feature_name: Union[FeatureName, str],
+        feature_name: FeatureName | str,
         options: Options,
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
@@ -46,7 +46,7 @@ class ConflictingFeatureGroupA(FeatureGroup):
             feature_name = str(feature_name)
         return feature_name == "conflicting_test_feature"
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return None
 
 
@@ -64,7 +64,7 @@ class ConflictingFeatureGroupB(FeatureGroup):
     @classmethod
     def match_feature_group_criteria(
         cls,
-        feature_name: Union[FeatureName, str],
+        feature_name: FeatureName | str,
         options: Options,
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
@@ -72,7 +72,7 @@ class ConflictingFeatureGroupB(FeatureGroup):
             feature_name = str(feature_name)
         return feature_name == "conflicting_test_feature"
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return None
 
 
@@ -229,7 +229,7 @@ class KnownFeatureGroup(FeatureGroup):
     @classmethod
     def match_feature_group_criteria(
         cls,
-        feature_name: Union[FeatureName, str],
+        feature_name: FeatureName | str,
         options: Options,
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
@@ -237,7 +237,7 @@ class KnownFeatureGroup(FeatureGroup):
             feature_name = str(feature_name)
         return feature_name == "known_feature"
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return None
 
 
@@ -321,7 +321,7 @@ class NoComputeFrameworkFeatureGroup(FeatureGroup):
     @classmethod
     def match_feature_group_criteria(
         cls,
-        feature_name: Union[FeatureName, str],
+        feature_name: FeatureName | str,
         options: Options,
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
@@ -329,7 +329,7 @@ class NoComputeFrameworkFeatureGroup(FeatureGroup):
             feature_name = str(feature_name)
         return feature_name == "no_compute_framework_test_feature"
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return None
 
 

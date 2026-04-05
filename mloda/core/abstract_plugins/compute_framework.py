@@ -1,5 +1,5 @@
 from abc import ABC
-from typing import Any, List, Optional, Set, Type, Union, final
+from typing import Any, Optional, final
 from uuid import UUID, uuid4
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import (
     ComputeFrameworkTransformer,
@@ -47,14 +47,14 @@ class ComputeFramework(ABC):
         mode: ParallelizationMode,
         children_if_root: frozenset[UUID],
         uuid: UUID = uuid4(),
-        function_extender: Optional[Set[Extender]] = None,
+        function_extender: Optional[set[Extender]] = None,
     ) -> None:
         """This class is initialized step execution."""
         self.mode = mode
         self.data: Any = None
         self.children_if_root = children_if_root
-        self.already_calculated_children_tracker: Set[UUID] = set()
-        self.column_names: Set[str] = set()
+        self.already_calculated_children_tracker: set[UUID] = set()
+        self.column_names: set[str] = set()
         self.function_extender = function_extender if function_extender is not None else set()
 
         self.uuid = uuid
@@ -62,7 +62,7 @@ class ComputeFramework(ABC):
         self.transformer = ComputeFrameworkTransformer()
 
         # collects all datasets which were created based on this feature group except if it is the !final! feature
-        self.object_ids: List[str] = []
+        self.object_ids: list[str] = []
 
         # connection object for frameworks that need persistent connections (e.g., DuckDB, Spark)
         self.framework_connection_object: Optional[Any] = None
@@ -76,7 +76,7 @@ class ComputeFramework(ABC):
         return None
 
     @classmethod
-    def filter_engine(cls) -> Type[BaseFilterEngine]:
+    def filter_engine(cls) -> type[BaseFilterEngine]:
         """
         This function should return the filtered data.
         The BaseFilterEngine should be overwritten by the appropriate ComputeFramework if needed
@@ -86,7 +86,7 @@ class ComputeFramework(ABC):
     def transform(
         self,
         data: Any,
-        feature_names: Set[str],
+        feature_names: set[str],
     ) -> Any:
         """This function should be used to transform the data.
         The idea here is that we can transform the data to a common format.
@@ -118,7 +118,7 @@ class ComputeFramework(ABC):
         return None
 
     def select_data_by_column_names(
-        self, data: Any, selected_feature_names: Set[FeatureName], column_ordering: Optional[str] = None
+        self, data: Any, selected_feature_names: set[FeatureName], column_ordering: Optional[str] = None
     ) -> Any:
         """
         If you only want to store the requested features, implement this functionality depending on your framework.
@@ -129,7 +129,7 @@ class ComputeFramework(ABC):
         return data
 
     @classmethod
-    def merge_engine(cls) -> Type[BaseMergeEngine]:
+    def merge_engine(cls) -> type[BaseMergeEngine]:
         """
         This function should return a subclass of the BaseMergeEngine.
         With this, we can merge data from the same compute framework.
@@ -166,7 +166,7 @@ class ComputeFramework(ABC):
         return True  # Default implementation assumes no external dependencies
 
     @classmethod
-    def supported_parallelization_modes(cls) -> Set[ParallelizationMode]:
+    def supported_parallelization_modes(cls) -> set[ParallelizationMode]:
         """Returns parallelization modes this framework supports. Override to restrict."""
         return {ParallelizationMode.SYNC, ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING}
 
@@ -275,7 +275,7 @@ class ComputeFramework(ABC):
             extender(feature_group.validate_output_features, self.data, features)
 
     @final
-    def get_column_names(self) -> Set[str]:
+    def get_column_names(self) -> set[str]:
         return self.column_names
 
     @classmethod
@@ -320,8 +320,8 @@ class ComputeFramework(ABC):
 
     @final
     def add_already_calculated_children_and_drop_if_possible(
-        self, children: Set[UUID], location: Optional[str] = None
-    ) -> Union[bool, frozenset[UUID]]:
+        self, children: set[UUID], location: Optional[str] = None
+    ) -> bool | frozenset[UUID]:
         # if len(self.object_ids) > 1:
         #    if location is None:
         #        raise ValueError("Location is not set")
@@ -421,7 +421,7 @@ Available join types:
         return self.data
 
     @final
-    def get_object_ids(self) -> List[str]:
+    def get_object_ids(self) -> list[str]:
         return self.object_ids
 
     @final
@@ -468,7 +468,7 @@ Available join types:
         )
 
     @final
-    def drop_data(self, table_keys: Set[str], location: str) -> None:
+    def drop_data(self, table_keys: set[str], location: str) -> None:
         FlightServer.drop_tables(location, table_keys)
 
     @final
@@ -487,10 +487,10 @@ Available join types:
     @final
     def identify_naming_convention(
         self,
-        selected_feature_names: Set[FeatureName],
-        column_names: Set[str],
+        selected_feature_names: set[FeatureName],
+        column_names: set[str],
         ordering: Optional[str] = None,
-    ) -> Union[Set[str], List[str]]:
+    ) -> set[str] | list[str]:
         """
         Identifies columns that match feature names or follow the naming convention pattern.
 
@@ -517,7 +517,7 @@ Available join types:
             raise ValueError(f"Invalid ordering value: '{ordering}'. Must be None, 'alphabetical', or 'request_order'.")
 
         feature_name_strings = {str(f) for f in selected_feature_names}
-        _selected_feature_names: Set[str] = set()
+        _selected_feature_names: set[str] = set()
 
         for col in column_names:
             for feature_name in feature_name_strings:
@@ -540,7 +540,7 @@ Available join types:
             return sorted(_selected_feature_names)
 
         # ordering == "request_order"
-        result: List[str] = []
+        result: list[str] = []
         for feature in selected_feature_names:
             feature_name_str = str(feature)
             matching_cols = []

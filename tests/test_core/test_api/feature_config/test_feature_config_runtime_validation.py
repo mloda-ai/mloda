@@ -4,7 +4,7 @@ Tests all features from test_config_features.json with mloda.run_all.
 """
 
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 from mloda.user import mloda
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -23,7 +23,7 @@ class IntegrationDataCreator(ATestDataCreator):
     compute_framework = PandasDataFrame
 
     @classmethod
-    def get_raw_data(cls) -> Dict[str, Any]:
+    def get_raw_data(cls) -> dict[str, Any]:
         return {
             "age": [25, 30, 35, 40, 45],
             "weight": [150, 160, 170, 180, 190],

@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, List, Optional, final
+from typing import Any, Optional, final
 from mloda.core.abstract_plugins.components.options import Options
 
 
@@ -31,7 +31,7 @@ class BaseApiData(ABC):
 
     @classmethod
     @abstractmethod
-    def column_names(cls) -> List[str]:
+    def column_names(cls) -> list[str]:
         """Abstract method to retrieve the list of column names associated with the API data."""
         raise NotImplementedError
 

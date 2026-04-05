@@ -1,5 +1,5 @@
 import pytest
-from typing import Any, Optional, Type
+from typing import Any, Optional
 
 from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.pandas.pandas_merge_engine import PandasMergeEngine
@@ -23,17 +23,17 @@ class TestPandasMergeEngine(MultiIndexMergeEngineTestBase):
     """Test PandasMergeEngine using shared multi-index test scenarios."""
 
     @classmethod
-    def merge_engine_class(cls) -> Type[BaseMergeEngine]:
+    def merge_engine_class(cls) -> type[BaseMergeEngine]:
         """Return the PandasMergeEngine class."""
         return PandasMergeEngine
 
     @classmethod
-    def framework_type(cls) -> Type[Any]:
+    def framework_type(cls) -> type[Any]:
         """Return pandas DataFrame type."""
         if pd is None:
             raise ImportError("Pandas is not installed")
         # mypy can't infer pd.DataFrame type correctly
-        dataframe_type: Type[Any] = pd.DataFrame
+        dataframe_type: type[Any] = pd.DataFrame
         return dataframe_type
 
     def get_connection(self) -> Optional[Any]:

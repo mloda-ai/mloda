@@ -1,5 +1,5 @@
 import pytest
-from typing import Any, Dict, Set
+from typing import Any
 
 from mloda.provider import OptionsValidator
 
@@ -39,8 +39,8 @@ class TestValidateNoDuplicateKeys:
 
     def test_empty_dicts_pass(self) -> None:
         """Empty dictionaries should not raise any errors."""
-        group: Dict[str, Any] = {}
-        context: Dict[str, Any] = {}
+        group: dict[str, Any] = {}
+        context: dict[str, Any] = {}
 
         # Act & Assert - should not raise
         OptionsValidator.validate_no_duplicate_keys(group=group, context=context)
@@ -96,7 +96,7 @@ class TestValidateCanAddToGroup:
         key = "problem_key"
         value = "new_value"
         group = {"problem_key": "old_value"}
-        context: Dict[str, Any] = {}
+        context: dict[str, Any] = {}
 
         # Act & Assert
         with pytest.raises(ValueError) as exc_info:
@@ -155,7 +155,7 @@ class TestValidateCanAddToContext:
         """Error message should include the problematic key."""
         key = "problem_key"
         value = "new_value"
-        group: Dict[str, Any] = {}
+        group: dict[str, Any] = {}
         context = {"problem_key": "old_value"}
 
         # Act & Assert
@@ -207,8 +207,8 @@ class TestValidateNoGroupContextConflicts:
 
     def test_empty_sets_pass(self) -> None:
         """Empty sets should not raise any errors."""
-        other_group_keys: Set[str] = set()
-        self_context_keys: Set[str] = set()
+        other_group_keys: set[str] = set()
+        self_context_keys: set[str] = set()
 
         # Act & Assert - should not raise
         OptionsValidator.validate_no_group_context_conflicts(

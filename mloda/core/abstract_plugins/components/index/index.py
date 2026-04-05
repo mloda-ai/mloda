@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Any, Tuple
+from typing import Any
 
 
 class Index:
@@ -12,7 +12,7 @@ class Index:
     The tuples represent the multi index. (e.g. ("a", "b") is a multi index with two columns)
     """
 
-    def __init__(self, index: Tuple[str, ...]) -> None:
+    def __init__(self, index: tuple[str, ...]) -> None:
         self.index = index
 
     def __eq__(self, other: Any) -> bool:

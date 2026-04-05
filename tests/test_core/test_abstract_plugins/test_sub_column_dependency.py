@@ -13,7 +13,7 @@ Expected Behavior:
 - Feature("base~0") returns ONLY base~0 column (new capability)
 """
 
-from typing import Any, List, Optional, Set, Union
+from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -64,10 +64,10 @@ class MultiColumnProducerForSubColumnTest(FeatureGroup):
     """
 
     @classmethod
-    def feature_names_supported(cls) -> Set[str]:
+    def feature_names_supported(cls) -> set[str]:
         return {"base_feature"}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {Feature("source_data")}
 
     @classmethod
@@ -94,10 +94,10 @@ class SubColumnConsumer(FeatureGroup):
     """
 
     @classmethod
-    def feature_names_supported(cls) -> Set[str]:
+    def feature_names_supported(cls) -> set[str]:
         return {"sub_column_consumer_output"}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {Feature("base_feature~1")}
 
     @classmethod
@@ -169,7 +169,7 @@ class TestSubColumnDependencyResolution:
             }
         )
 
-        features_to_request: List[Union[Feature, str]] = [Feature("sub_column_consumer_output")]
+        features_to_request: list[Feature | str] = [Feature("sub_column_consumer_output")]
 
         api = mloda(
             features_to_request,
@@ -383,10 +383,10 @@ class TestSubColumnIntegration:
             """Consumer that validates it only receives the requested sub-column."""
 
             @classmethod
-            def feature_names_supported(cls) -> Set[str]:
+            def feature_names_supported(cls) -> set[str]:
                 return {"validating_consumer_output"}
 
-            def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+            def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
                 return {Feature("base_feature~1")}
 
             @classmethod
@@ -447,10 +447,10 @@ class TestSubColumnIntegration:
             """Consumer that depends on multiple specific sub-columns."""
 
             @classmethod
-            def feature_names_supported(cls) -> Set[str]:
+            def feature_names_supported(cls) -> set[str]:
                 return {"multi_sub_column_consumer_output"}
 
-            def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+            def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
                 return {Feature("base_feature~0"), Feature("base_feature~2")}
 
             @classmethod
@@ -513,7 +513,7 @@ class TestSubColumnIntegration:
             SUFFIX_PATTERN = r".*__value_doubled$"
 
             @classmethod
-            def feature_names_supported(cls) -> Set[str]:
+            def feature_names_supported(cls) -> set[str]:
                 return set()
 
             @classmethod
@@ -636,10 +636,10 @@ class TestSubColumnIntegration:
             """First consumer that depends on base_feature~1."""
 
             @classmethod
-            def feature_names_supported(cls) -> Set[str]:
+            def feature_names_supported(cls) -> set[str]:
                 return {"first_consumer_output"}
 
-            def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+            def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
                 return {Feature("base_feature~1")}
 
             @classmethod
@@ -656,10 +656,10 @@ class TestSubColumnIntegration:
             """Second consumer that depends on first_consumer_output."""
 
             @classmethod
-            def feature_names_supported(cls) -> Set[str]:
+            def feature_names_supported(cls) -> set[str]:
                 return {"second_consumer_output"}
 
-            def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+            def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
                 return {Feature("first_consumer_output")}
 
             @classmethod

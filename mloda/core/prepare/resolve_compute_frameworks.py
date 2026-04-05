@@ -1,5 +1,5 @@
 from copy import deepcopy
-from typing import Any, Dict, List, Set, Type
+from typing import Any
 from collections import defaultdict
 from uuid import UUID
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -11,7 +11,7 @@ from mloda.core.abstract_plugins.components.link import JoinType, Link
 class ResolveComputeFrameworks:
     def __init__(self, graph: Graph) -> None:
         self.graph = graph
-        self.to_invert_trekker_collection: List[LinkFrameworkTrekker] = []
+        self.to_invert_trekker_collection: list[LinkFrameworkTrekker] = []
 
     def links(self, planned_queue: Any, link_trekker: LinkTrekker) -> Any:
         new_planned_queue = []
@@ -38,9 +38,9 @@ class ResolveComputeFrameworks:
         orders = link_trekker.order
 
         new_planned_queue = []
-        link_already_added: Set[UUID] = set()
+        link_already_added: set[UUID] = set()
 
-        issue_collector: Dict[UUID, Set[tuple[Any]]] = defaultdict(set)
+        issue_collector: dict[UUID, set[tuple[Any]]] = defaultdict(set)
 
         for pos, p in enumerate(planned_queue):
             breaker = False
@@ -87,14 +87,14 @@ class ResolveComputeFrameworks:
         return new_planned_queue
 
     @classmethod
-    def access_link_by_child_uuid(cls, child_uuid: UUID, link_trekker: LinkTrekker) -> List[LinkFrameworkTrekker]:
+    def access_link_by_child_uuid(cls, child_uuid: UUID, link_trekker: LinkTrekker) -> list[LinkFrameworkTrekker]:
         link_framework_trekker = []
         for trekker, uuids in link_trekker.data_ordered.items():
             if child_uuid in uuids:
                 link_framework_trekker.append(trekker)
         return link_framework_trekker
 
-    def trekker_right_left_adjuster(self, link_trekker: LinkTrekker, feature_uuids: Set[UUID]) -> None:
+    def trekker_right_left_adjuster(self, link_trekker: LinkTrekker, feature_uuids: set[UUID]) -> None:
         if not self.to_invert_trekker_collection:
             return
 
@@ -108,8 +108,8 @@ class ResolveComputeFrameworks:
         self.to_invert_trekker_collection = []
 
     def resolve_trekked_links(
-        self, trekked_links: List[LinkFrameworkTrekker], compute_frameworks: Set[Type[ComputeFramework]]
-    ) -> Set[Type[ComputeFramework]]:
+        self, trekked_links: list[LinkFrameworkTrekker], compute_frameworks: set[type[ComputeFramework]]
+    ) -> set[type[ComputeFramework]]:
         new_cfws = set()
 
         for link, left_cfw, right_cfw in trekked_links:

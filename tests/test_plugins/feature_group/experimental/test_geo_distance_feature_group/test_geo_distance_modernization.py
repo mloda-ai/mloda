@@ -6,7 +6,7 @@ This test verifies that the modernization successfully supports both approaches:
 2. Configuration-based feature creation (modern)
 """
 
-from typing import Any, Dict, List
+from typing import Any
 
 import pytest
 
@@ -29,7 +29,7 @@ class GeoDistanceModernizationTestDataCreator(ATestDataCreator):
     compute_framework = PandasDataFrame
 
     @classmethod
-    def get_raw_data(cls) -> Dict[str, Any]:
+    def get_raw_data(cls) -> dict[str, Any]:
         """Return the raw data as a dictionary."""
         return {
             # San Francisco coordinates (lat, lon)
@@ -58,7 +58,7 @@ class TestGeoDistanceModernization:
         )
 
         # Create string-based features
-        features: Features | List[str | Feature] = [
+        features: Features | list[str | Feature] = [
             Feature("sf_location&nyc_location__haversine_distance"),
             Feature("point_a&point_b__euclidean_distance"),
             Feature("origin&destination__manhattan_distance"),
@@ -96,7 +96,7 @@ class TestGeoDistanceModernization:
         )
 
         # Create configuration-based features
-        features: Features | List[str | Feature] = [
+        features: Features | list[str | Feature] = [
             Feature(
                 name="geo_distance_haversine",
                 options=Options(
@@ -251,7 +251,7 @@ class TestGeoDistanceModernization:
         )
 
         distance_types = ["haversine", "euclidean", "manhattan"]
-        features: Features | List[str | Feature] = []
+        features: Features | list[str | Feature] = []
 
         for distance_type in distance_types:
             # Use appropriate point features for each distance type
@@ -379,7 +379,7 @@ class TestGeoDistanceModernization:
         )
 
         # Mix string-based and configuration-based features
-        features: Features | List[str | Feature] = [
+        features: Features | list[str | Feature] = [
             # String-based features
             Feature("sf_location&la_location__haversine_distance"),
             Feature("point_a&point_b__euclidean_distance"),

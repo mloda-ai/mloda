@@ -4,7 +4,7 @@ Pandas implementation for dimensionality reduction feature groups.
 
 from __future__ import annotations
 
-from typing import Any, List, TYPE_CHECKING, cast
+from typing import Any, TYPE_CHECKING, cast
 
 from mloda.provider import ComputeFramework, DefaultOptionKeys
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -38,7 +38,7 @@ class PandasDimensionalityReductionFeatureGroup(DimensionalityReductionFeatureGr
         return {PandasDataFrame}
 
     @classmethod
-    def _check_source_features_exist(cls, data: pd.DataFrame, feature_names: List[str]) -> None:
+    def _check_source_features_exist(cls, data: pd.DataFrame, feature_names: list[str]) -> None:
         """
         Check if the source features exist in the DataFrame.
 
@@ -85,7 +85,7 @@ class PandasDimensionalityReductionFeatureGroup(DimensionalityReductionFeatureGr
         data: Any,
         algorithm: str,
         dimension: int,
-        source_features: List[str],
+        source_features: list[str],
         options: Any,
     ) -> "NDArray[Any]":
         """

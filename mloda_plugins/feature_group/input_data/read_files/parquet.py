@@ -1,4 +1,4 @@
-from typing import Any, Tuple
+from typing import Any
 
 from pyarrow import parquet as pyarrow_parquet
 
@@ -98,7 +98,7 @@ class ParquetReader(ReadFile):
     """
 
     @classmethod
-    def suffix(cls) -> Tuple[str, ...]:
+    def suffix(cls) -> tuple[str, ...]:
         return (
             ".parquet",
             ".PARQUET",

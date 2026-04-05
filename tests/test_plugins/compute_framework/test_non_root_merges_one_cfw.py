@@ -1,4 +1,4 @@
-from typing import Any, Optional, Set
+from typing import Any, Optional
 
 import pytest
 
@@ -41,7 +41,7 @@ class SecondNonRootJoinTestFeature(NonRootJoinTestFeature):
 
 
 class GroupedNonRootJoinTestFeature(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         if options.get("test_non_root_merge_multiple_join"):
             return {Feature(name="NonRootJoinTestFeature"), Feature(name="NonRootJoinTestFeatureB")}
 
@@ -57,7 +57,7 @@ class GroupedNonRootJoinTestFeature(FeatureGroup):
 
 
 class GroupedSecondNonRootJoinTestFeature(GroupedNonRootJoinTestFeature):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {Feature(name="SecondNonRootJoinTestFeature")}
 
     @classmethod
@@ -70,7 +70,7 @@ class GroupedSecondNonRootJoinTestFeature(GroupedNonRootJoinTestFeature):
 
 
 class Call2GroupedNonRootJoinTestFeature(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {
             Feature(name=GroupedNonRootJoinTestFeature.get_class_name()),
             Feature(name=GroupedSecondNonRootJoinTestFeature.get_class_name()),
@@ -97,7 +97,7 @@ class Call2GroupedNonRootJoinTestFeature(FeatureGroup):
     ],
 )
 class TestNonRootMerge:
-    def test_non_root_merge_simple(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
+    def test_non_root_merge_simple(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         """
         This test is for testing a merge on the second level of the feature graph.
         """
@@ -131,7 +131,7 @@ class TestNonRootMerge:
             assert len(res.columns) == 1
             assert len(res) == 1
 
-    def test_non_root_merge_multiple_join(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
+    def test_non_root_merge_multiple_join(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         """
         This test is for testing a merge on the first and second level of the feature graph.
         """

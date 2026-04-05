@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, List
+from typing import Any
 import logging
 
 from mloda_plugins.feature_group.experimental.llm.tools.tool_data_classes import (
@@ -56,8 +56,8 @@ class BaseTool(ABC):
         cls,
         name: str,
         description: str,
-        parameters: List[InputDataObject],
-        required: List[str],
+        parameters: list[InputDataObject],
+        required: list[str],
     ) -> ToolFunctionDeclaration:
         """
         Utility method to create ToolFunctionDeclaration objects.

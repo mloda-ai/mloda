@@ -2,7 +2,6 @@
 Integration tests for time window feature groups.
 """
 
-from typing import List
 from mloda.user import mloda
 from mloda.user import Feature
 from mloda.user import PluginCollector
@@ -19,7 +18,7 @@ from tests.test_plugins.feature_group.experimental.test_time_window_feature_grou
 
 
 # List of time window features to test
-TIME_WINDOW_FEATURES: List[Feature | str] = [
+TIME_WINDOW_FEATURES: list[Feature | str] = [
     "temperature__avg_3_day_window",  # 3-day average temperature
     "humidity__max_5_day_window",  # 5-day maximum humidity
     "pressure__min_2_day_window",  # 2-day minimum pressure

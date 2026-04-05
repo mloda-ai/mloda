@@ -1,6 +1,6 @@
 """Tests for column ordering in identify_naming_convention() and mlodaAPI."""
 
-from typing import Any, Optional, Set
+from typing import Any, Optional
 from unittest.mock import Mock
 from uuid import uuid4
 
@@ -54,7 +54,7 @@ class ConcreteComputeFramework(ComputeFramework):
         return data
 
     @classmethod
-    def select_data(cls, data: Any, column_names: Set[str]) -> Any:
+    def select_data(cls, data: Any, column_names: set[str]) -> Any:
         return {k: v for k, v in data.items() if k in column_names}
 
     @classmethod
@@ -82,7 +82,7 @@ class SimpleTestFeature(FeatureGroup):
         return {"SimpleTestFeature": [1, 2, 3]}
 
     @classmethod
-    def feature_names_supported(cls) -> Set[str]:
+    def feature_names_supported(cls) -> set[str]:
         return {"SimpleTestFeature"}
 
 
@@ -341,7 +341,7 @@ class MultiFeatureGroup(FeatureGroup):
         return result
 
     @classmethod
-    def feature_names_supported(cls) -> Set[str]:
+    def feature_names_supported(cls) -> set[str]:
         return {"FeatureA", "FeatureB", "FeatureC", "FeatureD", "FeatureE"}
 
 

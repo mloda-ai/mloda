@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Set, Tuple, Type
+from typing import Any, Optional
 from mloda.core.abstract_plugins.components.hashable_dict import HashableDict
 from mloda.core.abstract_plugins.components.input_data.api.base_api_data import BaseApiData
 
@@ -11,13 +11,13 @@ class ApiInputDataCollection:
     and retrieval of API input data classes based on their names and associated column names.
     """
 
-    def __init__(self, registry: Optional[Dict[str, Type[BaseApiData]]] = None) -> None:
-        self._registry: Dict[str, Type[BaseApiData]] = registry if registry is not None else {}
+    def __init__(self, registry: Optional[dict[str, type[BaseApiData]]] = None) -> None:
+        self._registry: dict[str, type[BaseApiData]] = registry if registry is not None else {}
 
         # Keep track of used key names to avoid misalignment
-        self._used_key_names: Set[str] = set()
+        self._used_key_names: set[str] = set()
 
-    def register(self, name: str, api_data_cls: Type[BaseApiData]) -> None:
+    def register(self, name: str, api_data_cls: type[BaseApiData]) -> None:
         """Register additional ApiData subclass with a unique name."""
         if name in self._registry:
             raise ValueError(f"An ApiData with name '{name}' is already registered.")
@@ -30,14 +30,14 @@ class ApiInputDataCollection:
             columns.data[name] = tuple(cls.column_names())
         return columns
 
-    def get_name_cls_by_matching_column_name(self, column_name: str) -> Tuple[str, Type[BaseApiData]]:
+    def get_name_cls_by_matching_column_name(self, column_name: str) -> tuple[str, type[BaseApiData]]:
         """Get the ApiData class by matching column name."""
         for name, cls in self._registry.items():
             if column_name in cls.column_names():
                 return name, cls
         raise ValueError(f"Column name {column_name} not found in any registered ApiData: {self._registry.keys()}.")
 
-    def setup_key_class(self, key_name: str, column_names: List[str]) -> None:
+    def setup_key_class(self, key_name: str, column_names: list[str]) -> None:
         """
         Setup a key class with the given column names.
 
@@ -59,7 +59,7 @@ class ApiInputDataCollection:
 
         self.register(key_name, DynamicApiCls)
 
-    def setup_key_api_data(self, key_name: str, api_input_data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    def setup_key_api_data(self, key_name: str, api_input_data: dict[str, Any]) -> dict[str, dict[str, Any]]:
         """
         Setup a key API data with the given data.
 

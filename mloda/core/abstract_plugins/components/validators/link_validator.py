@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Optional, Set, Tuple, Union
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.components.link import Link
@@ -6,7 +6,7 @@ if TYPE_CHECKING:
 
 class LinkValidator:
     @staticmethod
-    def validate_index_not_empty(index: Union[str, Tuple[str, ...]], context: str = "index") -> None:
+    def validate_index_not_empty(index: str | tuple[str, ...], context: str = "index") -> None:
         if not index:
             raise ValueError(f"{context} cannot be empty")
 
@@ -18,7 +18,7 @@ class LinkValidator:
             raise ValueError(f"Join type {jointype} is not supported")
 
     @staticmethod
-    def validate_no_double_joins(links: Set["Link"]) -> None:
+    def validate_no_double_joins(links: set["Link"]) -> None:
         from mloda.core.abstract_plugins.components.link import JoinType
 
         for i_link in links:
@@ -35,7 +35,7 @@ class LinkValidator:
                     )
 
     @staticmethod
-    def validate_no_conflicting_join_types(links: Set["Link"]) -> None:
+    def validate_no_conflicting_join_types(links: set["Link"]) -> None:
         for i_link in links:
             for j_link in links:
                 if i_link == j_link:
@@ -50,7 +50,7 @@ class LinkValidator:
                     )
 
     @staticmethod
-    def validate_right_join_constraints(links: Set["Link"]) -> None:
+    def validate_right_join_constraints(links: set["Link"]) -> None:
         from mloda.core.abstract_plugins.components.link import JoinType
 
         for i_link in links:
@@ -67,7 +67,7 @@ class LinkValidator:
                         )
 
     @classmethod
-    def validate_links(cls, links: Optional[Set["Link"]]) -> None:
+    def validate_links(cls, links: Optional[set["Link"]]) -> None:
         if links is None:
             return
 

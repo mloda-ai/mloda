@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import FrozenInstanceError
 from enum import Enum
 from uuid import uuid4
-from typing import Any, Dict, Optional, Tuple, Type, Union
+from typing import Any, Optional
 
 
 from mloda.core.abstract_plugins.components.index.index import Index
@@ -42,10 +42,10 @@ class JoinSpec:
             - Index: explicit Index object
     """
 
-    feature_group: Type[Any]
+    feature_group: type[Any]
     index: Index
 
-    def __init__(self, feature_group: Type[Any], index: Union[Index, Tuple[str, ...], str]) -> None:
+    def __init__(self, feature_group: type[Any], index: Index | tuple[str, ...] | str) -> None:
         """Create JoinSpec, converting index input to Index if needed."""
         if isinstance(index, str):
             LinkValidator.validate_index_not_empty(index, "Index column name")
@@ -70,7 +70,7 @@ class JoinSpec:
 
 
 def _get_index_from_feature_group(
-    feature_group: Type[Any],
+    feature_group: type[Any],
     index_position: int,
     side_name: str,
 ) -> Index:
@@ -196,11 +196,11 @@ class Link:
 
     def __init__(
         self,
-        jointype: Union[JoinType, str],
+        jointype: JoinType | str,
         left: JoinSpec,
         right: JoinSpec,
-        left_discriminator: Optional[Dict[str, Any]] = None,
-        right_discriminator: Optional[Dict[str, Any]] = None,
+        left_discriminator: Optional[dict[str, Any]] = None,
+        right_discriminator: Optional[dict[str, Any]] = None,
     ) -> None:
         self.jointype = JoinType(jointype) if isinstance(jointype, str) else jointype
         self.left_feature_group = left.feature_group
@@ -220,8 +220,8 @@ class Link:
         cls,
         left: JoinSpec,
         right: JoinSpec,
-        left_discriminator: Optional[Dict[str, Any]] = None,
-        right_discriminator: Optional[Dict[str, Any]] = None,
+        left_discriminator: Optional[dict[str, Any]] = None,
+        right_discriminator: Optional[dict[str, Any]] = None,
     ) -> "Link":
         return cls(
             JoinType.INNER, left, right, left_discriminator=left_discriminator, right_discriminator=right_discriminator
@@ -232,8 +232,8 @@ class Link:
         cls,
         left: JoinSpec,
         right: JoinSpec,
-        left_discriminator: Optional[Dict[str, Any]] = None,
-        right_discriminator: Optional[Dict[str, Any]] = None,
+        left_discriminator: Optional[dict[str, Any]] = None,
+        right_discriminator: Optional[dict[str, Any]] = None,
     ) -> "Link":
         return cls(
             JoinType.LEFT, left, right, left_discriminator=left_discriminator, right_discriminator=right_discriminator
@@ -244,8 +244,8 @@ class Link:
         cls,
         left: JoinSpec,
         right: JoinSpec,
-        left_discriminator: Optional[Dict[str, Any]] = None,
-        right_discriminator: Optional[Dict[str, Any]] = None,
+        left_discriminator: Optional[dict[str, Any]] = None,
+        right_discriminator: Optional[dict[str, Any]] = None,
     ) -> "Link":
         return cls(
             JoinType.RIGHT, left, right, left_discriminator=left_discriminator, right_discriminator=right_discriminator
@@ -256,8 +256,8 @@ class Link:
         cls,
         left: JoinSpec,
         right: JoinSpec,
-        left_discriminator: Optional[Dict[str, Any]] = None,
-        right_discriminator: Optional[Dict[str, Any]] = None,
+        left_discriminator: Optional[dict[str, Any]] = None,
+        right_discriminator: Optional[dict[str, Any]] = None,
     ) -> "Link":
         return cls(
             JoinType.OUTER, left, right, left_discriminator=left_discriminator, right_discriminator=right_discriminator
@@ -268,8 +268,8 @@ class Link:
         cls,
         left: JoinSpec,
         right: JoinSpec,
-        left_discriminator: Optional[Dict[str, Any]] = None,
-        right_discriminator: Optional[Dict[str, Any]] = None,
+        left_discriminator: Optional[dict[str, Any]] = None,
+        right_discriminator: Optional[dict[str, Any]] = None,
     ) -> "Link":
         return cls(
             JoinType.APPEND, left, right, left_discriminator=left_discriminator, right_discriminator=right_discriminator
@@ -280,8 +280,8 @@ class Link:
         cls,
         left: JoinSpec,
         right: JoinSpec,
-        left_discriminator: Optional[Dict[str, Any]] = None,
-        right_discriminator: Optional[Dict[str, Any]] = None,
+        left_discriminator: Optional[dict[str, Any]] = None,
+        right_discriminator: Optional[dict[str, Any]] = None,
     ) -> "Link":
         return cls(
             JoinType.UNION, left, right, left_discriminator=left_discriminator, right_discriminator=right_discriminator
@@ -290,12 +290,12 @@ class Link:
     @classmethod
     def inner_on(
         cls,
-        left: Type[Any],
-        right: Type[Any],
+        left: type[Any],
+        right: type[Any],
         left_index: int = 0,
         right_index: int = 0,
-        left_discriminator: Optional[Dict[str, Any]] = None,
-        right_discriminator: Optional[Dict[str, Any]] = None,
+        left_discriminator: Optional[dict[str, Any]] = None,
+        right_discriminator: Optional[dict[str, Any]] = None,
     ) -> "Link":
         """Create INNER join using feature groups' index_columns()."""
         left_idx = _get_index_from_feature_group(left, left_index, "left")
@@ -311,12 +311,12 @@ class Link:
     @classmethod
     def left_on(
         cls,
-        left: Type[Any],
-        right: Type[Any],
+        left: type[Any],
+        right: type[Any],
         left_index: int = 0,
         right_index: int = 0,
-        left_discriminator: Optional[Dict[str, Any]] = None,
-        right_discriminator: Optional[Dict[str, Any]] = None,
+        left_discriminator: Optional[dict[str, Any]] = None,
+        right_discriminator: Optional[dict[str, Any]] = None,
     ) -> "Link":
         """Create LEFT join using feature groups' index_columns()."""
         left_idx = _get_index_from_feature_group(left, left_index, "left")
@@ -332,12 +332,12 @@ class Link:
     @classmethod
     def right_on(
         cls,
-        left: Type[Any],
-        right: Type[Any],
+        left: type[Any],
+        right: type[Any],
         left_index: int = 0,
         right_index: int = 0,
-        left_discriminator: Optional[Dict[str, Any]] = None,
-        right_discriminator: Optional[Dict[str, Any]] = None,
+        left_discriminator: Optional[dict[str, Any]] = None,
+        right_discriminator: Optional[dict[str, Any]] = None,
     ) -> "Link":
         """Create RIGHT join using feature groups' index_columns()."""
         left_idx = _get_index_from_feature_group(left, left_index, "left")
@@ -353,12 +353,12 @@ class Link:
     @classmethod
     def outer_on(
         cls,
-        left: Type[Any],
-        right: Type[Any],
+        left: type[Any],
+        right: type[Any],
         left_index: int = 0,
         right_index: int = 0,
-        left_discriminator: Optional[Dict[str, Any]] = None,
-        right_discriminator: Optional[Dict[str, Any]] = None,
+        left_discriminator: Optional[dict[str, Any]] = None,
+        right_discriminator: Optional[dict[str, Any]] = None,
     ) -> "Link":
         """Create OUTER join using feature groups' index_columns()."""
         left_idx = _get_index_from_feature_group(left, left_index, "left")
@@ -374,12 +374,12 @@ class Link:
     @classmethod
     def append_on(
         cls,
-        left: Type[Any],
-        right: Type[Any],
+        left: type[Any],
+        right: type[Any],
         left_index: int = 0,
         right_index: int = 0,
-        left_discriminator: Optional[Dict[str, Any]] = None,
-        right_discriminator: Optional[Dict[str, Any]] = None,
+        left_discriminator: Optional[dict[str, Any]] = None,
+        right_discriminator: Optional[dict[str, Any]] = None,
     ) -> "Link":
         """Create APPEND join using feature groups' index_columns()."""
         left_idx = _get_index_from_feature_group(left, left_index, "left")
@@ -395,12 +395,12 @@ class Link:
     @classmethod
     def union_on(
         cls,
-        left: Type[Any],
-        right: Type[Any],
+        left: type[Any],
+        right: type[Any],
         left_index: int = 0,
         right_index: int = 0,
-        left_discriminator: Optional[Dict[str, Any]] = None,
-        right_discriminator: Optional[Dict[str, Any]] = None,
+        left_discriminator: Optional[dict[str, Any]] = None,
+        right_discriminator: Optional[dict[str, Any]] = None,
     ) -> "Link":
         """Create UNION join using feature groups' index_columns()."""
         left_idx = _get_index_from_feature_group(left, left_index, "left")
@@ -415,8 +415,8 @@ class Link:
 
     def matches_exact(
         self,
-        other_left_feature_group: Type[Any],
-        other_right_feature_group: Type[Any],
+        other_left_feature_group: type[Any],
+        other_right_feature_group: type[Any],
     ) -> bool:
         """Exact class identity match only."""
         left_match: bool = self.left_feature_group is other_left_feature_group
@@ -425,8 +425,8 @@ class Link:
 
     def matches_polymorphic(
         self,
-        other_left_feature_group: Type[Any],
-        other_right_feature_group: Type[Any],
+        other_left_feature_group: type[Any],
+        other_right_feature_group: type[Any],
     ) -> bool:
         """Subclass match (inheritance). Returns True if both sides are subclasses."""
         return issubclass(other_left_feature_group, self.left_feature_group) and issubclass(
@@ -435,8 +435,8 @@ class Link:
 
     def matches(
         self,
-        other_left_feature_group: Type[Any],
-        other_right_feature_group: Type[Any],
+        other_left_feature_group: type[Any],
+        other_right_feature_group: type[Any],
     ) -> bool:
         """Combined match: exact OR polymorphic."""
         return self.matches_exact(other_left_feature_group, other_right_feature_group) or self.matches_polymorphic(

@@ -1,4 +1,4 @@
-from typing import Any, Tuple
+from typing import Any
 
 from mloda.provider import BaseFilterEngine
 from mloda.user import SingleFilter
@@ -23,11 +23,11 @@ class SqlBaseFilterEngine(BaseFilterEngine):
         return True
 
     @classmethod
-    def _apply_filter(cls, data: Any, condition: str, params: Tuple[Any, ...] = ()) -> Any:
+    def _apply_filter(cls, data: Any, condition: str, params: tuple[Any, ...] = ()) -> Any:
         return data.filter(condition, params)
 
     @classmethod
-    def _build_regex_condition(cls, column_name: str, value: str) -> Tuple[str, Tuple[Any, ...]]:
+    def _build_regex_condition(cls, column_name: str, value: str) -> tuple[str, tuple[Any, ...]]:
         raise NotImplementedError
 
     @classmethod
@@ -81,7 +81,7 @@ class SqlBaseFilterEngine(BaseFilterEngine):
                 condition = f"{quote_ident(column_name)} < ?"
             else:
                 condition = f"{quote_ident(column_name)} <= ?"
-            params: Tuple[Any, ...] = (max_parameter,)
+            params: tuple[Any, ...] = (max_parameter,)
         elif has_value:
             value = filter_feature.parameter.value
 

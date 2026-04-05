@@ -5,7 +5,7 @@ use the format_feature_group_class format: "ClassName (module.path)"
 instead of the default repr which shows "<class 'module.ClassName'>".
 """
 
-from typing import Optional, Set
+from typing import Optional
 from unittest.mock import MagicMock
 
 import pytest
@@ -20,7 +20,7 @@ from mloda.user import Feature, Options
 class MockFeatureGroup(FeatureGroup):
     """A mock feature group for testing error messages."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return None
 
 

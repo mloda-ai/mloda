@@ -2,7 +2,7 @@
 TestDataCreator classes for creating test data in different compute frameworks.
 """
 
-from typing import Any, Dict, Optional, Type
+from typing import Any, Optional
 import pandas as pd
 
 from mloda.provider import FeatureGroup
@@ -26,7 +26,7 @@ class ATestDataCreator(FeatureGroup):
     compute frameworks and their conversion functions.
     """
 
-    compute_framework: Type[ComputeFramework] = PandasDataFrame
+    compute_framework: type[ComputeFramework] = PandasDataFrame
 
     conversion = {
         PandasDataFrame: pd.DataFrame,
@@ -39,7 +39,7 @@ class ATestDataCreator(FeatureGroup):
         return DataCreator(set(cls.get_raw_data().keys()))
 
     @classmethod
-    def get_raw_data(cls) -> Dict[str, Any]:
+    def get_raw_data(cls) -> dict[str, Any]:
         """Return the raw data as a dictionary."""
         return {}
 
@@ -49,7 +49,7 @@ class ATestDataCreator(FeatureGroup):
         return cls.transform_format_for_testing(raw_data)
 
     @classmethod
-    def transform_format_for_testing(cls, data: Dict[str, Any]) -> Any:
+    def transform_format_for_testing(cls, data: dict[str, Any]) -> Any:
         """
         Transform the data to the appropriate format for the compute framework.
         """

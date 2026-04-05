@@ -1,5 +1,5 @@
 import os
-from typing import Any, Optional, Type
+from typing import Any, Optional
 import pytest
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
@@ -111,7 +111,7 @@ class TestDuckDBFrameworkMerge(DataFrameTestBase):
     """Test DuckDBFramework merge operations using the base test class."""
 
     @classmethod
-    def framework_class(cls) -> Type[Any]:
+    def framework_class(cls) -> type[Any]:
         """Return the DuckDBFramework class."""
         return DuckDBFramework
 

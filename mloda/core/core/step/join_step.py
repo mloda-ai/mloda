@@ -1,4 +1,4 @@
-from typing import Optional, Set, Type, Any, Union
+from typing import Optional, Any
 from uuid import UUID, uuid4
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -13,11 +13,11 @@ class JoinStep(Step):
     def __init__(
         self,
         link: Link,
-        left_framework: Type[ComputeFramework],
-        right_framework: Type[ComputeFramework],
-        required_uuids: Set[UUID],
-        left_framework_uuids: Set[UUID],
-        right_framework_uuids: Set[UUID],
+        left_framework: type[ComputeFramework],
+        right_framework: type[ComputeFramework],
+        required_uuids: set[UUID],
+        left_framework_uuids: set[UUID],
+        right_framework_uuids: set[UUID],
     ) -> None:
         self.link = link
         self.left_framework = left_framework
@@ -28,7 +28,7 @@ class JoinStep(Step):
         self.uuid = uuid4()
         self.step_is_done = False
 
-    def get_uuids(self) -> Set[UUID]:
+    def get_uuids(self) -> set[UUID]:
         return {self.uuid, self.link.uuid}
 
     def _merge_data(self, cfw: ComputeFramework, from_cfw_data: Any) -> None:
@@ -52,7 +52,7 @@ class JoinStep(Step):
         self,
         cfw_register: CfwManager,
         cfw: ComputeFramework,
-        from_cfw: Optional[Union[ComputeFramework, UUID]] = None,
+        from_cfw: Optional[ComputeFramework | UUID] = None,
         data: Optional[Any] = None,
     ) -> Optional[Any]:
         self.location = cfw_register.get_location()
@@ -69,7 +69,7 @@ class JoinStep(Step):
 
         return None
 
-    def get_data(self, from_cfw: Union[UUID, ComputeFramework], cfw: ComputeFramework) -> Any:
+    def get_data(self, from_cfw: UUID | ComputeFramework, cfw: ComputeFramework) -> Any:
         """
         This method is used to get the data from the compute framework.
         If we are using multiprocessing, we use flightserver to transport the data.
@@ -86,7 +86,7 @@ class JoinStep(Step):
             raise ValueError("From_cfw is a UUID, but we are not using flightserver.")
         return from_cfw.get_data(), from_cfw.uuid
 
-    def matched(self, other_framework: Type[ComputeFramework], uuid: UUID) -> Optional[UUID]:
+    def matched(self, other_framework: type[ComputeFramework], uuid: UUID) -> Optional[UUID]:
         """
         If matched, return the uuid of the join step.
         """

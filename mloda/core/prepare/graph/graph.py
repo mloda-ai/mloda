@@ -1,6 +1,5 @@
 from collections import defaultdict
 from copy import copy
-from typing import DefaultDict, Dict, List, Set
 from uuid import UUID
 
 from mloda.core.prepare.graph.properties import EdgeProperties, NodeProperties
@@ -8,19 +7,19 @@ from mloda.core.prepare.graph.properties import EdgeProperties, NodeProperties
 
 class Graph:
     def __init__(self) -> None:
-        self.nodes: DefaultDict[UUID, NodeProperties] = defaultdict(lambda: NodeProperties(None, None))  # type: ignore[arg-type]
-        self.edges: DefaultDict[tuple[UUID, UUID], EdgeProperties] = defaultdict(lambda: EdgeProperties(None, None))  # type: ignore[arg-type]
+        self.nodes: defaultdict[UUID, NodeProperties] = defaultdict(lambda: NodeProperties(None, None))  # type: ignore[arg-type]
+        self.edges: defaultdict[tuple[UUID, UUID], EdgeProperties] = defaultdict(lambda: EdgeProperties(None, None))  # type: ignore[arg-type]
 
-        self.adjacency_list: Dict[UUID, list[UUID]] = defaultdict(list)
+        self.adjacency_list: dict[UUID, list[UUID]] = defaultdict(list)
 
-        self.roots: List[UUID] = []
-        self.queue: List[UUID] = []
+        self.roots: list[UUID] = []
+        self.queue: list[UUID] = []
 
         # track parent children relations easier
-        self.parents_by_direct_: Dict[UUID, Set[UUID]] = defaultdict(set)
+        self.parents_by_direct_: dict[UUID, set[UUID]] = defaultdict(set)
 
-        self.parent_to_children_mapping: Dict[UUID, Set[UUID]] = defaultdict(set)
-        self.child_with_root: Dict[UUID, Set[UUID]] = defaultdict(set)
+        self.parent_to_children_mapping: dict[UUID, set[UUID]] = defaultdict(set)
+        self.child_with_root: dict[UUID, set[UUID]] = defaultdict(set)
 
     def add_node(self, node: UUID, node_properties: NodeProperties) -> None:
         self.nodes[node] = node_properties
@@ -30,10 +29,10 @@ class Graph:
 
         self.adjacency_list[parent].append(child)
 
-    def get_nodes(self) -> Dict[UUID, NodeProperties]:
+    def get_nodes(self) -> dict[UUID, NodeProperties]:
         return self.nodes
 
-    def get_edges(self) -> Dict[tuple[UUID, UUID], EdgeProperties]:
+    def get_edges(self) -> dict[tuple[UUID, UUID], EdgeProperties]:
         return self.edges
 
     def dfs(self, node: UUID) -> None:
@@ -49,7 +48,7 @@ class Graph:
             self.dfs(child)
 
     def iterate_nodes_and_edges(self) -> None:
-        self.visited: Set[UUID] = set()
+        self.visited: set[UUID] = set()
 
         # Start DFS from each node with in-degree 0
         in_degree = self.create_in_degree()
@@ -59,15 +58,15 @@ class Graph:
         for root in self.roots:
             self.dfs(root)
 
-    def create_in_degree(self) -> Dict[UUID, int]:
-        in_degree: Dict[UUID, int] = defaultdict(int)
+    def create_in_degree(self) -> dict[UUID, int]:
+        in_degree: dict[UUID, int] = defaultdict(int)
 
         for parent, children in self.adjacency_list.items():
             for child in children:
                 in_degree[child] += 1
         return in_degree
 
-    def get_direct_parents_for_each_child(self, parent: UUID, children: List[UUID]) -> None:
+    def get_direct_parents_for_each_child(self, parent: UUID, children: list[UUID]) -> None:
         for child in children:
             self.parents_by_direct_[child].add(parent)
             self.get_direct_parents_for_each_child(child, self.adjacency_list[child])
@@ -76,11 +75,11 @@ class Graph:
         for parent, children in self.adjacency_list.items():
             self.get_direct_parents_for_each_child(parent, children)
 
-    def get_all_parents_for_each_child(self, child: UUID, parents: Set[UUID]) -> Set[UUID]:
+    def get_all_parents_for_each_child(self, child: UUID, parents: set[UUID]) -> set[UUID]:
         if not parents:
             return parents
 
-        result_set: Set[UUID] = set()
+        result_set: set[UUID] = set()
 
         for parent in parents:
             parents_of_parent = self.parents_by_direct_[parent]

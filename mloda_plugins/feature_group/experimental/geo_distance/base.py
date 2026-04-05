@@ -5,7 +5,7 @@ Base implementation for geo distance feature groups.
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Any, List, Optional, Set
+from typing import Any, Optional
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
@@ -122,7 +122,7 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         },
     }
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         """Extract point features from either configuration-based options or string parsing."""
 
         # Try string-based parsing first
@@ -275,7 +275,7 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     @classmethod
     @abstractmethod
-    def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
+    def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
         """
         Check if the source features exist in the data.
 

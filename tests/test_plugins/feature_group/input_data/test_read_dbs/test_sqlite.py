@@ -1,5 +1,5 @@
 import sqlite3
-from typing import Any, List
+from typing import Any
 import pytest
 from unittest.mock import MagicMock, patch
 
@@ -11,11 +11,11 @@ from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 
 
 class MockFeatureSet:
-    def __init__(self, feature_names: List[str], options: Any = None) -> None:
+    def __init__(self, feature_names: list[str], options: Any = None) -> None:
         self._feature_names = feature_names
         self.options = options
 
-    def get_all_names(self) -> List[str]:
+    def get_all_names(self) -> list[str]:
         return self._feature_names
 
 

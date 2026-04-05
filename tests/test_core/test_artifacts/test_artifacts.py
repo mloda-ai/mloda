@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Set, Type
+from typing import Any, Optional
 
 from mloda.provider import BaseArtifact
 from mloda.provider import BaseInputData
@@ -22,7 +22,7 @@ class BaseTestArtifactFeature(FeatureGroup):
         return DataCreator({cls.get_class_name()})
 
     @staticmethod
-    def artifact() -> Type[BaseArtifact] | None:
+    def artifact() -> type[BaseArtifact] | None:
         return BaseArtifact
 
     @classmethod
@@ -66,10 +66,10 @@ class BaseTestArtifactFeature(FeatureGroup):
 
 @PARALLELIZATION_MODES_ALL
 class TestBaseArtifacts:
-    def get_features(self, feature_list: List[str], options: Dict[str, Any] = {}) -> Features:
+    def get_features(self, feature_list: list[str], options: dict[str, Any] = {}) -> Features:
         return Features([Feature(name=f_name, options=options, initial_requested_data=True) for f_name in feature_list])
 
-    def test_basic_artifact_feature(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
+    def test_basic_artifact_feature(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         _features = "BaseTestArtifactFeature"
 
         features = self.get_features([_features])

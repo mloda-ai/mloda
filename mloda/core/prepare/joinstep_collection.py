@@ -1,5 +1,4 @@
 from collections import defaultdict
-from typing import Dict, Set, Type
 from uuid import UUID
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.core.step.join_step import JoinStep
@@ -7,11 +6,11 @@ from mloda.core.core.step.join_step import JoinStep
 
 class JoinStepCollection:
     def __init__(self) -> None:
-        self.collection: Dict[JoinStep, Set[UUID]] = defaultdict(set)
+        self.collection: dict[JoinStep, set[UUID]] = defaultdict(set)
 
     def similar_dependent_joins_uuids(
-        self, left_framework: Type[ComputeFramework], right_framework: Type[ComputeFramework]
-    ) -> Set[UUID]:
+        self, left_framework: type[ComputeFramework], right_framework: type[ComputeFramework]
+    ) -> set[UUID]:
         """
         This functionality makes sure that we do not write on the same datasets due to overlapping joins at once.
         This can be optimized, but I just added a hard solution.
@@ -32,5 +31,5 @@ class JoinStepCollection:
         required_join_uuids = self.similar_dependent_joins_uuids(join_step.left_framework, join_step.right_framework)
         self.collection[join_step] = required_join_uuids
 
-    def get_required_join_uuids(self, join_step: JoinStep) -> Set[UUID]:
+    def get_required_join_uuids(self, join_step: JoinStep) -> set[UUID]:
         return self.collection[join_step]

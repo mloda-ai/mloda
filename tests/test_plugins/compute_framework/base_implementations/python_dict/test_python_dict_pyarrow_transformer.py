@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any
 import pytest
 
 try:
@@ -88,7 +88,7 @@ class TestPythonDictPyArrowTransformer:
 
     def test_transform_empty_list(self) -> None:
         """Test transformation of empty list."""
-        empty_list: List[Dict[str, Any]] = []
+        empty_list: list[dict[str, Any]] = []
         result = PythonDictPyArrowTransformer.transform_fw_to_other_fw(empty_list)
 
         assert isinstance(result, pa.Table)

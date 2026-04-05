@@ -2,7 +2,7 @@
 Integration tests for node centrality feature groups.
 """
 
-from typing import Any, Dict, List
+from typing import Any
 
 import pandas as pd
 
@@ -24,7 +24,7 @@ class NodeCentralityTestDataCreator(ATestDataCreator):
     compute_framework = PandasDataFrame
 
     @classmethod
-    def get_raw_data(cls) -> Dict[str, Any]:
+    def get_raw_data(cls) -> dict[str, Any]:
         """Return the raw data as a DataFrame with network/graph data."""
         """Return the raw data as a dictionary."""
         # Create a sample network with nodes and edges
@@ -36,7 +36,7 @@ class NodeCentralityTestDataCreator(ATestDataCreator):
 
 
 # List of node centrality features to test
-NODE_CENTRALITY_FEATURES: List[Feature | str] = [
+NODE_CENTRALITY_FEATURES: list[Feature | str] = [
     "source__degree_centrality",  # Degree centrality for source nodes
     "source__betweenness_centrality",  # Betweenness centrality for source nodes
     "source__closeness_centrality",  # Closeness centrality for source nodes
@@ -45,7 +45,7 @@ NODE_CENTRALITY_FEATURES: List[Feature | str] = [
 ]
 
 
-def validate_node_centrality_features(result_df: pd.DataFrame, expected_features: List[Feature | str]) -> None:
+def validate_node_centrality_features(result_df: pd.DataFrame, expected_features: list[Feature | str]) -> None:
     """
     Validate node centrality features in a Pandas DataFrame.
 

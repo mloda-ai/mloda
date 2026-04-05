@@ -2,7 +2,7 @@
 Integration tests for the AggregatedFeatureGroup with mloda.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 from mloda.user import mloda
 from mloda.user import Feature
@@ -22,7 +22,7 @@ class AggregatedParserTestDataCreator(ATestDataCreator):
     compute_framework = PandasDataFrame
 
     @classmethod
-    def get_raw_data(cls) -> Dict[str, Any]:
+    def get_raw_data(cls) -> dict[str, Any]:
         """Return the raw data as a dictionary."""
         return {
             "Sales": [100, 200, 300, 400, 500],

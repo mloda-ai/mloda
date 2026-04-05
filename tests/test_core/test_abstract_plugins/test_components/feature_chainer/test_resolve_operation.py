@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
@@ -126,7 +126,7 @@ class ResolveOperationTestDataCreator(ATestDataCreator):
     compute_framework = PandasDataFrame
 
     @classmethod
-    def get_raw_data(cls) -> Dict[str, Any]:
+    def get_raw_data(cls) -> dict[str, Any]:
         return {"Sales": [100, 200, 300, 400, 500]}
 
 

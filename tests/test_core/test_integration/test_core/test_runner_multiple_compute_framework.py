@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Optional
 import pyarrow as pa
 import pyarrow.compute as pc
 from mloda.provider import BaseInputData
@@ -50,7 +50,7 @@ class MultipleCfwTest2(FeatureGroup):
 
 
 class ChangeCfw(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {Feature.int32_of("MultipleCfwTest1")}
 
     @classmethod
@@ -63,7 +63,7 @@ class ChangeCfw(FeatureGroup):
 
 
 class ChangeCfwThird(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         # return {Feature.int32_of("ChangeCfw"), Feature.int32_of("MultipleCfwTest1")}
         return {Feature.int32_of("ChangeCfw")}
 
@@ -83,10 +83,10 @@ COMPUTE_FRAMEWORKS: set[type[ComputeFramework]] = {PyArrowTable, SecondCfw, Thir
 
 @PARALLELIZATION_MODES_SYNC_THREADING
 class TestEngineMultipleCfw:
-    def get_features(self, feature_list: List[str], options: Dict[str, Any] = {}) -> Features:
+    def get_features(self, feature_list: list[str], options: dict[str, Any] = {}) -> Features:
         return Features([Feature(name=f_name, options=options, initial_requested_data=True) for f_name in feature_list])
 
-    def test_runner_two_cfws(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
+    def test_runner_two_cfws(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         features = self.get_features(["MultipleCfwTest1", "MultipleCfwTest2"])
         runner = MlodaTestRunner.run_engine(
             features, compute_frameworks=COMPUTE_FRAMEWORKS, parallelization_modes=modes, flight_server=flight_server
@@ -103,7 +103,7 @@ class TestEngineMultipleCfw:
             else:
                 assert res == {"MultipleCfwTest2": [4, 5, 6]}
 
-    def test_runner_change_cfw_basic(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
+    def test_runner_change_cfw_basic(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         features = self.get_features(["ChangeCfw"])
         runner = MlodaTestRunner.run_engine(
             features, compute_frameworks=COMPUTE_FRAMEWORKS, parallelization_modes=modes, flight_server=flight_server
@@ -128,7 +128,7 @@ class TestEngineMultipleCfw:
         assert result[0].to_pydict() == {"ChangeCfw": [2, 4, 6]}
 
     def test_runner_change_cfw_first_framework_result(
-        self, modes: Set[ParallelizationMode], flight_server: Any
+        self, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
         features = self.get_features(["ChangeCfw", "MultipleCfwTest1", "MultipleCfwTest2"])
         runner = MlodaTestRunner.run_engine(
@@ -160,7 +160,7 @@ class TestEngineMultipleCfw:
                 assert res == {"ChangeCfw": [2, 4, 6]}
 
     def test_runner_change_cfw_third_framework_result(
-        self, modes: Set[ParallelizationMode], flight_server: Any
+        self, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
         features = self.get_features(["ChangeCfwThird"])
         runner = MlodaTestRunner.run_engine(

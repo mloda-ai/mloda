@@ -2,7 +2,7 @@
 
 import inspect
 import types
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Any, Optional
 from unittest.mock import patch
 
 from mloda.core.api.request import mlodaAPI
@@ -15,7 +15,7 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 class ClassMethodFeature(FeatureGroup):
     """A simple feature for classmethod dispatch tests."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {
             Feature(name="cm_id", index=Index(("cm_id",))),
             Feature(name="cm_value", index=Index(("cm_id",))),
@@ -27,7 +27,7 @@ class ClassMethodFeature(FeatureGroup):
         return data
 
     @classmethod
-    def feature_names_supported(cls) -> Set[str]:
+    def feature_names_supported(cls) -> set[str]:
         return {cls.get_class_name()}
 
 
@@ -38,14 +38,14 @@ _enabled = PluginCollector.enabled_feature_groups(
     }
 )
 
-_api_data: Dict[str, Dict[str, Any]] = {
+_api_data: dict[str, dict[str, Any]] = {
     "ClassMethodInput": {
         "cm_id": [1, 2],
         "cm_value": ["a", "b"],
     }
 }
 
-_features: List[Union[Feature, str]] = [Feature(name="ClassMethodFeature")]
+_features: list[Feature | str] = [Feature(name="ClassMethodFeature")]
 
 
 class TestEntryPointsAreClassMethods:

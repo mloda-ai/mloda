@@ -4,7 +4,7 @@ Pandas implementation for scikit-learn pipeline feature groups.
 
 from __future__ import annotations
 
-from typing import Any, List
+from typing import Any
 
 from mloda.provider import ComputeFramework
 
@@ -26,7 +26,7 @@ class PandasSklearnPipelineFeatureGroup(SklearnPipelineFeatureGroup):
         return {PandasDataFrame}
 
     @classmethod
-    def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
+    def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
         """Check if the features exist in the DataFrame."""
         missing_features = [f for f in feature_names if f not in data.columns]
         if missing_features:

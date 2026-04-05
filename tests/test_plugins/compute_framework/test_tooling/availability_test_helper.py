@@ -1,11 +1,11 @@
 """Shared helper for testing compute framework availability."""
 
-from typing import Any, Type
+from typing import Any
 from unittest.mock import patch
 
 
 def assert_unavailable_when_import_blocked(
-    framework_class: Type[Any],
+    framework_class: type[Any],
     modules_to_block: list[str],
 ) -> None:
     """Assert that framework.is_available() returns False when imports are blocked.

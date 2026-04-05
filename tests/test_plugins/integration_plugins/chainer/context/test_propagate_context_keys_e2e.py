@@ -1,6 +1,6 @@
 """E2E integration tests for propagate_context_keys in chained features."""
 
-from typing import Any, List
+from typing import Any
 
 from mloda.user import Feature, Options, PluginCollector, mloda
 from mloda.provider import DefaultOptionKeys
@@ -11,7 +11,7 @@ from tests.test_plugins.integration_plugins.chainer.context.test_chained_optiona
 )
 
 
-def find_column(results: List[Any], column_name: str) -> List[Any]:
+def find_column(results: list[Any], column_name: str) -> list[Any]:
     for df in results:
         if column_name in df.columns:
             return list(df[column_name].values)

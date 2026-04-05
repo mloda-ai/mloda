@@ -1,6 +1,6 @@
 import pytest
 from collections import OrderedDict
-from typing import Any, Set
+from typing import Any
 from uuid import UUID, uuid4
 
 from mloda.user import Link, JoinSpec
@@ -54,7 +54,7 @@ class TestValidateDataConsistency:
 
         data = {link_fw_trekker1: {uuid4()}, link_fw_trekker2: {uuid4()}}
 
-        data_ordered: OrderedDict[Any, Set[UUID]] = OrderedDict()
+        data_ordered: OrderedDict[Any, set[UUID]] = OrderedDict()
         data_ordered[link_fw_trekker1] = {uuid4()}
         data_ordered[link_fw_trekker2] = {uuid4()}
 
@@ -74,7 +74,7 @@ class TestValidateDataConsistency:
         data = {link_fw_trekker1: {uuid4()}, link_fw_trekker2: {uuid4()}}
 
         # data_ordered has only 1 item - inconsistent!
-        data_ordered: OrderedDict[Any, Set[UUID]] = OrderedDict()
+        data_ordered: OrderedDict[Any, set[UUID]] = OrderedDict()
         data_ordered[link_fw_trekker1] = {uuid4()}
 
         # Act & Assert

@@ -1,4 +1,4 @@
-from typing import Any, List, Optional, Type
+from typing import Any, Optional
 from mloda.provider import BaseFilterEngine
 from mloda.user import SingleFilter
 
@@ -14,14 +14,14 @@ try:
         Reference,
     )
 except ImportError:
-    IcebergTable: Optional[Type[Any]] = None  # type: ignore[no-redef]
-    GreaterThan: Optional[Type[Any]] = None  # type: ignore[no-redef]
-    LessThan: Optional[Type[Any]] = None  # type: ignore[no-redef]
-    GreaterThanOrEqual: Optional[Type[Any]] = None  # type: ignore[no-redef]
-    LessThanOrEqual: Optional[Type[Any]] = None  # type: ignore[no-redef]
-    EqualTo: Optional[Type[Any]] = None  # type: ignore[no-redef]
-    And: Optional[Type[Any]] = None  # type: ignore[no-redef]
-    Reference: Optional[Type[Any]] = None  # type: ignore[no-redef]
+    IcebergTable: Optional[type[Any]] = None  # type: ignore[no-redef]
+    GreaterThan: Optional[type[Any]] = None  # type: ignore[no-redef]
+    LessThan: Optional[type[Any]] = None  # type: ignore[no-redef]
+    GreaterThanOrEqual: Optional[type[Any]] = None  # type: ignore[no-redef]
+    LessThanOrEqual: Optional[type[Any]] = None  # type: ignore[no-redef]
+    EqualTo: Optional[type[Any]] = None  # type: ignore[no-redef]
+    And: Optional[type[Any]] = None  # type: ignore[no-redef]
+    Reference: Optional[type[Any]] = None  # type: ignore[no-redef]
 
 
 class IcebergFilterEngine(BaseFilterEngine):
@@ -111,7 +111,7 @@ class IcebergFilterEngine(BaseFilterEngine):
 
         elif filter_type == "range":
             min_param, max_param, is_max_exclusive = cls.get_min_max_operator(filter_feature)
-            expressions: List[Any] = []
+            expressions: list[Any] = []
 
             if min_param is not None:
                 expressions.append(GreaterThanOrEqual(Reference(column_name), min_param))

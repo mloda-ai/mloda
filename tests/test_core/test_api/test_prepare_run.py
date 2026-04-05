@@ -6,7 +6,7 @@ These tests define the contract for a two-phase execution model:
   2. run() - instance method that executes with fresh api_data, reusing the cached plan
 """
 
-from typing import Any, List, Optional, Set, Union
+from typing import Any, Optional
 
 from mloda.user import mloda, mlodaAPI, Feature, PluginCollector
 from mloda.provider import FeatureGroup, FeatureSet, ApiInputDataFeature
@@ -17,7 +17,7 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 class PrepareRunApiFeature(FeatureGroup):
     """A simple feature that consumes api data for prepare/run tests."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {
             Feature(name="api_id", index=Index(("api_id",))),
             Feature(name="api_value", index=Index(("api_id",))),
@@ -29,7 +29,7 @@ class PrepareRunApiFeature(FeatureGroup):
         return data
 
     @classmethod
-    def feature_names_supported(cls) -> Set[str]:
+    def feature_names_supported(cls) -> set[str]:
         return {cls.get_class_name()}
 
 
@@ -53,7 +53,7 @@ class TestPrepareReturnsInstance:
             }
         }
 
-        features: List[Union[Feature, str]] = [Feature(name="PrepareRunApiFeature")]
+        features: list[Feature | str] = [Feature(name="PrepareRunApiFeature")]
 
         session = mloda.prepare(
             features,
@@ -77,7 +77,7 @@ class TestRunReturnsResults:
             }
         }
 
-        features: List[Union[Feature, str]] = [Feature(name="PrepareRunApiFeature")]
+        features: list[Feature | str] = [Feature(name="PrepareRunApiFeature")]
 
         session = mloda.prepare(
             features,
@@ -108,7 +108,7 @@ class TestRunMatchesRunAllOutput:
             }
         }
 
-        features: List[Union[Feature, str]] = [Feature(name="PrepareRunApiFeature")]
+        features: list[Feature | str] = [Feature(name="PrepareRunApiFeature")]
 
         run_all_result = mloda.run_all(
             features,
@@ -147,7 +147,7 @@ class TestMultipleSequentialRuns:
             }
         }
 
-        features: List[Union[Feature, str]] = [Feature(name="PrepareRunApiFeature")]
+        features: list[Feature | str] = [Feature(name="PrepareRunApiFeature")]
 
         session = mloda.prepare(
             features,
@@ -197,7 +197,7 @@ class TestStepStateDoesNotLeakBetweenRuns:
             }
         }
 
-        features: List[Union[Feature, str]] = [Feature(name="PrepareRunApiFeature")]
+        features: list[Feature | str] = [Feature(name="PrepareRunApiFeature")]
 
         session = mloda.prepare(
             features,

@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Optional
 
 import pytest
 from pandera import Check, Column
@@ -36,7 +36,7 @@ class SimpleValidateInputFeatures(FeatureGroup):
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): [1, 2, 3]}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {Feature(name="BaseValidateInputFeaturesBase", options=options)}
 
     @classmethod
@@ -52,7 +52,7 @@ class CustomValidateInputFeatures(FeatureGroup):
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): [1, 2, 3]}  # dummy return
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {Feature(name="BaseValidateInputFeaturesBase", options=options)}
 
     @classmethod
@@ -75,7 +75,7 @@ class CustomValidateInputFeatures(FeatureGroup):
 
 
 class ValidateInputFeatureExtender(Extender):
-    def wraps(self) -> Set[ExtenderHook]:
+    def wraps(self) -> set[ExtenderHook]:
         return {ExtenderHook.VALIDATE_INPUT_FEATURE}
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
@@ -88,13 +88,13 @@ class ValidateInputFeatureExtender(Extender):
 class TrackingExtender(Extender):
     """Extender that tracks execution order for testing multiple extenders."""
 
-    execution_log: List[str] = []
+    execution_log: list[str] = []
 
     def __init__(self, name: str, priority: int = 100):
         self.name = name
         self.priority = priority
 
-    def wraps(self) -> Set[ExtenderHook]:
+    def wraps(self) -> set[ExtenderHook]:
         return {ExtenderHook.VALIDATE_INPUT_FEATURE}
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
@@ -104,10 +104,10 @@ class TrackingExtender(Extender):
 
 @PARALLELIZATION_MODES_SYNC_THREADING
 class TestValidateInputFeatures:
-    def get_features(self, feature_list: List[str], options: Dict[str, Any] = {}) -> Features:
+    def get_features(self, feature_list: list[str], options: dict[str, Any] = {}) -> Features:
         return Features([Feature(name=f_name, options=options, initial_requested_data=True) for f_name in feature_list])
 
-    def test_basic_validate_input_features(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
+    def test_basic_validate_input_features(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         _features = "SimpleValidateInputFeatures"
 
         features = self.get_features([_features])
@@ -115,7 +115,7 @@ class TestValidateInputFeatures:
         with pytest.raises(Exception):
             MlodaTestRunner.run_api_simple(features, parallelization_modes=modes, flight_server=flight_server)
 
-    def test_custom_validate_input_features_error(self, modes: Set[ParallelizationMode], flight_server: Any) -> None:
+    def test_custom_validate_input_features_error(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         _features = "CustomValidateInputFeatures"
 
         features = self.get_features([_features])
@@ -128,7 +128,7 @@ class TestValidateInputFeatures:
         assert "failure cases: 3" in str(excinfo.value)
 
     def test_custom_validate_input_features_warning(
-        self, modes: Set[ParallelizationMode], flight_server: Any, caplog: Any
+        self, modes: set[ParallelizationMode], flight_server: Any, caplog: Any
     ) -> None:
         _features = "CustomValidateInputFeatures"
 
@@ -144,7 +144,7 @@ class TestValidateInputFeatures:
             )
 
     def test_custom_validate_input_features_given_example_valiator(
-        self, modes: Set[ParallelizationMode], flight_server: Any
+        self, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
         _features = "CustomValidateInputFeatures"
 
@@ -162,7 +162,7 @@ class TestValidateInputFeatures:
         assert "failure cases: 3" in str(excinfo.value)
 
     def test_custom_validate_input_features_extender(
-        self, modes: Set[ParallelizationMode], flight_server: Any, caplog: Any
+        self, modes: set[ParallelizationMode], flight_server: Any, caplog: Any
     ) -> None:
         _features = "CustomValidateInputFeatures"
 
@@ -180,7 +180,7 @@ class TestValidateInputFeatures:
             assert "Time taken" in caplog.text
 
     def test_multiple_extenders_execute_in_priority_order(
-        self, modes: Set[ParallelizationMode], flight_server: Any
+        self, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
         """Integration test: multiple extenders are chained and execute in priority order."""
         _features = "CustomValidateInputFeatures"

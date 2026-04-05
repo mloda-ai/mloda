@@ -4,7 +4,7 @@ Pandas implementation for node centrality feature groups.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Optional, cast
 
 
 try:
@@ -26,7 +26,7 @@ class PandasNodeCentralityFeatureGroup(NodeCentralityFeatureGroup):
         return {PandasDataFrame}
 
     @classmethod
-    def _check_source_features_exist(cls, data: pd.DataFrame, feature_names: List[str]) -> None:
+    def _check_source_features_exist(cls, data: pd.DataFrame, feature_names: list[str]) -> None:
         """
         Check if the source features exist in the DataFrame.
 
@@ -359,7 +359,7 @@ class PandasNodeCentralityFeatureGroup(NodeCentralityFeatureGroup):
         return betweenness
 
     @classmethod
-    def _dijkstra(cls, dist_matrix: pd.DataFrame, source: int) -> tuple[np.ndarray[Any, Any], Dict[int, list[int]]]:
+    def _dijkstra(cls, dist_matrix: pd.DataFrame, source: int) -> tuple[np.ndarray[Any, Any], dict[int, list[int]]]:
         """
         Dijkstra's algorithm for single-source shortest paths.
 
@@ -412,7 +412,7 @@ class PandasNodeCentralityFeatureGroup(NodeCentralityFeatureGroup):
         return distances, predecessors
 
     @classmethod
-    def _count_shortest_paths(cls, predecessors: Dict[int, list[int]], source: int, target: int) -> int:
+    def _count_shortest_paths(cls, predecessors: dict[int, list[int]], source: int, target: int) -> int:
         """
         Count the number of shortest paths from source to target.
 
@@ -441,7 +441,7 @@ class PandasNodeCentralityFeatureGroup(NodeCentralityFeatureGroup):
 
     @classmethod
     def _count_shortest_paths_through(
-        cls, predecessors: Dict[int, list[int]], source: int, target: int, through: int
+        cls, predecessors: dict[int, list[int]], source: int, target: int, through: int
     ) -> int:
         """
         Count the number of shortest paths from source to target that pass through a specific node.

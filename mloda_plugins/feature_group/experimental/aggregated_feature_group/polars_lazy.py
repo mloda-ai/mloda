@@ -4,7 +4,7 @@ Polars Lazy implementation for aggregated feature groups.
 
 from __future__ import annotations
 
-from typing import Any, List, Set
+from typing import Any
 
 from mloda.provider import ComputeFramework
 
@@ -31,7 +31,7 @@ class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
         return {PolarsLazyDataFrame}
 
     @classmethod
-    def _get_available_columns(cls, data: Any) -> Set[str]:
+    def _get_available_columns(cls, data: Any) -> set[str]:
         """Get the set of available column names from the LazyFrame schema."""
         if hasattr(data, "collect_schema"):
             return set(data.collect_schema().names())
@@ -39,7 +39,7 @@ class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
             raise ValueError("Data does not have a collect_schema method, cannot get available columns.")
 
     @classmethod
-    def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
+    def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
         """
         Check if the resolved features exist in the LazyFrame schema.
 
@@ -68,7 +68,7 @@ class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
         return data.with_columns(result.alias(feature_name))
 
     @classmethod
-    def _perform_aggregation(cls, data: Any, aggregation_type: str, in_features: List[str]) -> Any:
+    def _perform_aggregation(cls, data: Any, aggregation_type: str, in_features: list[str]) -> Any:
         """
         Perform the aggregation using Polars lazy expressions.
 

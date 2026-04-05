@@ -1,7 +1,7 @@
 from dataclasses import asdict
 import os
 import time
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 
 from mloda.provider import FeatureSet
@@ -36,7 +36,7 @@ def python_type_to_gemini_type(python_type: str) -> str:
     return type_mapping.get(python_type, "STRING")  # Default to STRING if not found
 
 
-def parse_tool_function_easier(function_declaration: ToolFunctionDeclaration) -> Dict[str, Any]:
+def parse_tool_function_easier(function_declaration: ToolFunctionDeclaration) -> dict[str, Any]:
     """Parses a ToolFunctionDeclaration into a dict using asdict."""
     # convert the entire tool_function to a dictionary
 
@@ -66,8 +66,8 @@ class GeminiAPI(LLMBaseApi):
     def request(
         cls,
         model: str,
-        prompt: str | List[Dict[str, str]],
-        model_parameters: Dict[str, Any],
+        prompt: str | list[dict[str, str]],
+        model_parameters: dict[str, Any],
         tools: ToolCollection | None,
     ) -> Any:
         if not isinstance(prompt, str):
@@ -99,10 +99,10 @@ class GeminiAPI(LLMBaseApi):
         return genai.GenerativeModel(model)
 
     @classmethod
-    def parse_tools(cls, tools: ToolCollection | None) -> List[Dict[str, Any]]:
+    def parse_tools(cls, tools: ToolCollection | None) -> list[dict[str, Any]]:
         """Parses all tools in the ToolCollection."""
 
-        parsed_tools: List[Dict[str, Any]] = []
+        parsed_tools: list[dict[str, Any]] = []
 
         if tools is None:
             return parsed_tools
@@ -113,7 +113,7 @@ class GeminiAPI(LLMBaseApi):
     @classmethod
     def handle_response(
         cls, response: Any, features: FeatureSet, tools: ToolCollection | None
-    ) -> Tuple[List[Dict[str, str]], str]:
+    ) -> tuple[list[dict[str, str]], str]:
         responses = []
         used_tool = ""
 
@@ -144,7 +144,7 @@ class GeminiAPI(LLMBaseApi):
     def generate_response(
         llm_model: Any,
         prompt: str,  # Single prompt expected for Gemini
-        generation_config: Dict[str, Any],
+        generation_config: dict[str, Any],
         tools: Any,
         max_retries: int = 5,
         initial_retry_delay: int = 10,

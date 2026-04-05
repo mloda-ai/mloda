@@ -7,7 +7,7 @@ rather than name-based identity. This ensures that dynamically created classes w
 `__name__` but different domains (or different class objects) are treated as distinct entities.
 """
 
-from typing import Any, Optional, Set, Type
+from typing import Any, Optional
 
 import pandas as pd
 
@@ -30,7 +30,7 @@ def create_feature_group_class(name: str, domain: Domain) -> type:
         def get_domain(cls) -> Domain:
             return domain
 
-        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Any]]:
+        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Any]]:
             return None
 
     DynamicFeatureGroup.__name__ = name
@@ -151,7 +151,7 @@ class TestFeatureGroupClassIdentity:
         assert feature_dict[finance_instance] == "finance_data"
 
 
-def create_domain_feature_group(domain_name: str, feature_value: int) -> Type[FeatureGroup]:
+def create_domain_feature_group(domain_name: str, feature_value: int) -> type[FeatureGroup]:
     """Create a FeatureGroup class with a specific domain and feature value.
 
     All created classes have __name__ = "DomainHandler" to test class identity.

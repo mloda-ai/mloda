@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Set, TYPE_CHECKING, cast
+from typing import Any, Optional, TYPE_CHECKING, cast
 from copy import deepcopy
 
 from mloda.core.abstract_plugins.components.hashable_dict import _make_hashable
 from mloda.core.abstract_plugins.components.validators.options_validator import OptionsValidator
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
+import builtins
 
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.components.feature import Feature
@@ -207,7 +208,7 @@ class Options:
                 f"Unsupported type for source feature: {type(val)}. Expected frozenset, str, list, set, or Feature object."
             )
 
-    def __deepcopy__(self, memo: Dict[int, Any]) -> "Options":
+    def __deepcopy__(self, memo: dict[int, Any]) -> "Options":
         def safe_deepcopy_dict(d: dict[str, Any]) -> dict[str, Any]:
             """Safely deepcopy a dictionary, falling back to shallow copy for unpickleable objects."""
             result = {}
@@ -230,7 +231,7 @@ class Options:
         parts += ")"
         return parts
 
-    def update_with_protected_keys(self, other: "Options", protected_keys: Set[str] | None = None) -> None:
+    def update_with_protected_keys(self, other: "Options", protected_keys: builtins.set[str] | None = None) -> None:
         """
         Updates this Options object with data from another Options object, respecting protected keys.
 

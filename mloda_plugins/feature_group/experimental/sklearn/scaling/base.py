@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import datetime
 from abc import abstractmethod
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, Optional
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
@@ -101,7 +101,7 @@ class ScalingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     }
 
     @staticmethod
-    def artifact() -> Type[BaseArtifact] | None:
+    def artifact() -> type[BaseArtifact] | None:
         """Return the artifact class for sklearn scaler persistence."""
         return SklearnArtifact
 
@@ -217,7 +217,7 @@ class ScalingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return scaler_type
 
     @classmethod
-    def _import_sklearn_components(cls) -> Dict[str, Any]:
+    def _import_sklearn_components(cls) -> dict[str, Any]:
         """
         Import sklearn components with fallback logic for different versions.
 
@@ -358,7 +358,7 @@ class ScalingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     @classmethod
     @abstractmethod
-    def _check_source_features_exist(cls, data: Any, feature_names: List[str]) -> None:
+    def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
         """
         Check if the source features exist in the data.
 

@@ -150,3 +150,24 @@ class TestExtrasConsistency:
         assert len(unique_specs) == 1, (
             f"scikit-learn has inconsistent version constraints across extras groups: {sklearn_specs}"
         )
+
+
+class TestPackagingConfig:
+    """Validate that pyproject.toml is the single source of packaging truth."""
+
+    def test_no_setup_py(self) -> None:
+        assert not (PROJECT_ROOT / "setup.py").exists(), (
+            "setup.py must not exist; pyproject.toml is the single source of packaging configuration"
+        )
+
+    def test_no_setup_cfg(self) -> None:
+        assert not (PROJECT_ROOT / "setup.cfg").exists(), (
+            "setup.cfg must not exist; pyproject.toml is the single source of packaging configuration"
+        )
+
+    def test_pyproject_has_build_system(self) -> None:
+        with open(PROJECT_ROOT / "pyproject.toml", "rb") as f:
+            data: dict[str, Any] = tomllib.load(f)
+        assert "build-system" in data, "pyproject.toml must have a [build-system] section"
+        assert "requires" in data["build-system"], "pyproject.toml [build-system] must specify 'requires'"
+        assert "build-backend" in data["build-system"], "pyproject.toml [build-system] must specify 'build-backend'"

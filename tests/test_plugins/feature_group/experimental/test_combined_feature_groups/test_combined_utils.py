@@ -33,7 +33,7 @@ class CombinedFeatureTestDataCreator(ATestDataCreator):
             "price": [100.0, None, 90.0, 95.0, None, 105.0, 110.0, None, 100.0, 95.0],
             "quantity": [10, 15, 12, 8, 14, 9, 11, 13, 10, 12],
             "category": ["A", "B", None, "A", "B", None, "A", "B", "A", None],
-            DefaultOptionKeys.reference_time.value: dates,
+            DefaultOptionKeys.reference_time: dates,
         }
 
 

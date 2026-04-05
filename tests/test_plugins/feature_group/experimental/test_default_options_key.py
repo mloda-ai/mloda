@@ -58,3 +58,24 @@ class TestDefaultOptionKeys:
         """
         for member in DefaultOptionKeys:
             assert member == member.name
+
+
+class TestDefaultOptionKeysStrBehavior:
+    def test_str_returns_value(self) -> None:
+        assert str(DefaultOptionKeys.reference_time) == "reference_time"
+
+    def test_str_returns_value_for_time_travel(self) -> None:
+        assert str(DefaultOptionKeys.time_travel) == "time_travel"
+
+    def test_format_returns_value(self) -> None:
+        assert format(DefaultOptionKeys.reference_time) == "reference_time"
+
+    def test_fstring_returns_value(self) -> None:
+        assert f"{DefaultOptionKeys.reference_time}" == "reference_time"
+
+    def test_fstring_returns_value_for_time_travel(self) -> None:
+        assert f"{DefaultOptionKeys.time_travel}" == "time_travel"
+
+    def test_str_consistency_all_members(self) -> None:
+        for member in DefaultOptionKeys:
+            assert str(member) == member.value

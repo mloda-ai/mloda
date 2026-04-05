@@ -341,7 +341,7 @@ class FeatureChainParserMixin:
                 category = FeatureChainParser._determine_parameter_category(prop_key, prop_value, options)
                 merged_group = dict(options.group)
                 merged_context = dict(options.context)
-                if category == DefaultOptionKeys.context.value:
+                if category == DefaultOptionKeys.context:
                     merged_context[prop_key] = operation_config
                 else:
                     merged_group[prop_key] = operation_config

@@ -50,7 +50,7 @@ class TestForecastingArtifactIntegration:
         feature = Feature(feature_name)
 
         # Set reference time option
-        options = Options({DefaultOptionKeys.reference_time.value: "time_filter"})
+        options = Options({DefaultOptionKeys.reference_time: "time_filter"})
         feature.options = options
 
         # First run: Train and save the model artifact

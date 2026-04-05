@@ -127,7 +127,7 @@ class TestBaseMergeEngine:
         feature = Feature(
             name=GroupedAppendMergeTestFeature.get_class_name(),
             options={
-                DefaultOptionKeys.in_features.value: features,
+                DefaultOptionKeys.in_features: features,
                 "left_link_cls": AppendMergeTestFeature,
                 "right_link_cls": AppendMergeTestFeature,
             },

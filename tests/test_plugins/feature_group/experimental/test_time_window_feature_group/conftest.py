@@ -22,7 +22,7 @@ def sample_time_dataframe() -> pd.DataFrame:
             "humidity": [65, 70, 75, 60, 55, 65, 70, 75, 60, 55],
             "pressure": [1012, 1010, 1008, 1007, 1009, 1011, 1013, 1012, 1010, 1009],
             "wind_speed": [5, 7, 10, 8, 6, 4, 9, 11, 7, 5],
-            DefaultOptionKeys.reference_time.value: dates,
+            DefaultOptionKeys.reference_time: dates,
         }
     )
     return df
@@ -39,7 +39,7 @@ def sample_time_table() -> pa.Table:
             "humidity": [65, 70, 75, 60, 55, 65, 70, 75, 60, 55],
             "pressure": [1012, 1010, 1008, 1007, 1009, 1011, 1013, 1012, 1010, 1009],
             "wind_speed": [5, 7, 10, 8, 6, 4, 9, 11, 7, 5],
-            DefaultOptionKeys.reference_time.value: dates,
+            DefaultOptionKeys.reference_time: dates,
         }
     )
     return pa.Table.from_pandas(df)

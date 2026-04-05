@@ -31,7 +31,7 @@ class TestForecastingFeatureGroup:
         self.feature_set.add(Feature("sales__linear_forecast_7day"))
 
         # Create options
-        self.options = Options({DefaultOptionKeys.reference_time.value: "time_filter"})
+        self.options = Options({DefaultOptionKeys.reference_time: "time_filter"})
         self.feature_set.options = self.options
 
     def test_feature_name_parsing(self) -> None:
@@ -180,7 +180,7 @@ class TestForecastingFeatureGroup:
     def test_get_reference_time_column_default(self) -> None:
         """Test get_reference_time_column method returns default column name when no options provided."""
         # Test with no options - should return default column name
-        assert ForecastingFeatureGroup.get_reference_time_column() == DefaultOptionKeys.reference_time.value
+        assert ForecastingFeatureGroup.get_reference_time_column() == DefaultOptionKeys.reference_time
 
     def test_get_reference_time_column_custom(self) -> None:
         """Test get_reference_time_column method returns custom column name when reference_time option is set."""
@@ -191,14 +191,14 @@ class TestForecastingFeatureGroup:
 
         # Test with custom options using DefaultOptionKeys.reference_time.value
         options = Options()
-        options.add_to_group(DefaultOptionKeys.reference_time.value, "another_custom_column")
+        options.add_to_group(DefaultOptionKeys.reference_time, "another_custom_column")
         assert ForecastingFeatureGroup.get_reference_time_column(options) == "another_custom_column"
 
     def test_get_reference_time_column_invalid_type(self) -> None:
         """Test get_reference_time_column method raises ValueError when option value is not a string."""
         # Test with invalid options (non-string value)
         options = Options()
-        options.add_to_group(DefaultOptionKeys.reference_time.value, 123)  # Not a string
+        options.add_to_group(DefaultOptionKeys.reference_time, 123)  # Not a string
         with pytest.raises(ValueError):
             ForecastingFeatureGroup.get_reference_time_column(options)
 

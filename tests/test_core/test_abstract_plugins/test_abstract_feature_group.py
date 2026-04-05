@@ -17,7 +17,7 @@ class BaseTestFeatureGroup1(FeatureGroup):
         options: Options,
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
-        if "BaseTestFeature" in feature_name.name and "1" in feature_name.name:  # type: ignore
+        if "BaseTestFeature" in str(feature_name) and "1" in str(feature_name):
             return True
         return False
 
@@ -30,7 +30,7 @@ class BaseTestFeatureGroup2(FeatureGroup):
         options: Options,
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
-        if "BaseTestFeature" in feature_name.name and "2" in feature_name.name:  # type: ignore
+        if "BaseTestFeature" in str(feature_name) and "2" in str(feature_name):
             return True
         return False
 

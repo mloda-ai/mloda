@@ -81,7 +81,7 @@ class BaseArtifact(ABC):
         options = cls.get_singular_option_from_options(features)
         if options is None or features.name_of_one_feature is None:
             return None
-        return options[features.name_of_one_feature.name]
+        return options[str(features.name_of_one_feature)]
 
     @classmethod
     def get_singular_option_from_options(cls, features: FeatureSet) -> Options | None:

@@ -357,9 +357,6 @@ class FeatureGroup(ABC):
         then you can overwrite this function.
         """
 
-        if isinstance(feature_name, FeatureName):
-            feature_name = feature_name.name
-
         base_feature_name = cls.get_column_base_feature(feature_name)
 
         if cls._is_root_and_matches_input_data(base_feature_name, options, data_access_collection):

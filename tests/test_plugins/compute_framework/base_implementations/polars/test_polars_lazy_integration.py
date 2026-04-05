@@ -76,7 +76,7 @@ class PolarsLazySimpleTransformFeatureGroup(FeatureGroup):
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         """Require base features for transformation."""
-        feature_name_str = feature_name.name if isinstance(feature_name, FeatureName) else str(feature_name)
+        feature_name_str = str(feature_name) if isinstance(feature_name, FeatureName) else str(feature_name)
 
         if feature_name_str == "doubled_value":
             return {Feature("value")}

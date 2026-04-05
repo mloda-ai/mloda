@@ -175,7 +175,7 @@ Override when you need to add additional input features (e.g., time filter):
 class TimeWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         # Try string-based parsing first
-        _, in_feature = FeatureChainParser.parse_feature_name(feature_name.name, [self.PREFIX_PATTERN])
+        _, in_feature = FeatureChainParser.parse_feature_name(str(feature_name), [self.PREFIX_PATTERN])
         if in_feature is not None:
             time_filter_feature = Feature(self.get_reference_time_column(options))
             return {Feature(in_feature), time_filter_feature}
@@ -334,7 +334,7 @@ def calculate_feature(self, features, options):
         try:
             in_features = feature.options.get_in_features()
             in_feature = next(iter(in_features))
-            in_feature_name = in_feature.get_name()
+            in_feature_name = in_feature.name
             
             # Extract parameters from options
             operation_type = feature.options.get("operation_type")
@@ -420,7 +420,7 @@ class MultiColumnProducer(FeatureGroup):
         result = encoder.transform(data)  # Returns 2D numpy array (n_samples, n_features)
 
         # Automatically apply naming convention
-        feature_name = features.get_name_of_one_feature().name
+        feature_name = str(features.get_name_of_one_feature())
         named_columns = cls.apply_naming_convention(result, feature_name)
         # Returns: {"category__onehot_encoded~0": data, "~1": data, "~2": data}
 
@@ -449,7 +449,7 @@ class MultiColumnConsumer(FeatureGroup):
         # Process all discovered columns
         result = sum(data[col] for col in columns)
 
-        feature_name = features.get_name_of_one_feature().name
+        feature_name = str(features.get_name_of_one_feature())
         return {feature_name: result}
 ```
 

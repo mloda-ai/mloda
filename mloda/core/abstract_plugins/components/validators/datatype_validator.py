@@ -72,7 +72,7 @@ class DataTypeValidator:
             if feature.data_type is None:
                 continue
 
-            col_name = feature.get_name()
+            col_name = feature.name
             if col_name not in data.column_names:
                 continue
 

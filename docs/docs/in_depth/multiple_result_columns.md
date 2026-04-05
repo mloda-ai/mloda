@@ -38,7 +38,7 @@ When implementing a feature group that returns multiple columns:
 class MultiColumnFeatureGroup(FeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        feature_name = features.get_name_of_one_feature().name
+        feature_name = str(features.get_name_of_one_feature())
         
         # Return multiple columns with the naming convention
         return {
@@ -71,7 +71,7 @@ class MultiColumnConsumer(FeatureGroup):
         # Process all discovered columns
         result = sum(data[col] for col in columns)
 
-        feature_name = features.get_name_of_one_feature().name
+        feature_name = str(features.get_name_of_one_feature())
         return {feature_name: result}
 ```
 
@@ -98,7 +98,7 @@ class MultiColumnConsumer(FeatureGroup):
         # Perform calculations using these columns
         result = mean_values + max_values
 
-        feature_name = features.get_name_of_one_feature().name
+        feature_name = str(features.get_name_of_one_feature())
         return {feature_name: result}
 ```
 
@@ -117,7 +117,7 @@ class SpecificSubColumnConsumer(FeatureGroup):
         # Only base_feature~1 is available
         values = data["base_feature~1"]
 
-        feature_name = features.get_name_of_one_feature().name
+        feature_name = str(features.get_name_of_one_feature())
         return {feature_name: values * 10}
 ```
 

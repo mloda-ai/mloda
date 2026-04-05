@@ -509,7 +509,7 @@ Available join types:
         if ordering is not None and ordering not in ("alphabetical", "request_order"):
             raise ValueError(f"Invalid ordering value: '{ordering}'. Must be None, 'alphabetical', or 'request_order'.")
 
-        feature_name_strings = {f.name for f in selected_feature_names}
+        feature_name_strings = {str(f) for f in selected_feature_names}
         _selected_feature_names: Set[str] = set()
 
         for col in column_names:
@@ -535,10 +535,10 @@ Available join types:
         # ordering == "request_order"
         result: List[str] = []
         for feature in selected_feature_names:
-            feature_name = feature.name
+            feature_name_str = str(feature)
             matching_cols = []
             for col in _selected_feature_names:
-                if col == feature_name or col.startswith(f"{feature_name}~"):
+                if col == feature_name_str or col.startswith(f"{feature_name_str}~"):
                     matching_cols.append(col)
             matching_cols.sort()
             result.extend(matching_cols)

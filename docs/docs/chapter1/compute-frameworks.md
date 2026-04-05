@@ -97,7 +97,7 @@ class ExampleB(FeatureGroup):
     def compute_framework_rule(cls):
             return {PyArrowTable}
     def input_features(self, option, feature_name):
-        return {Feature(name=feature_name.name.split("_")[1], 
+        return {Feature(name=str(feature_name).split("_")[1], 
                 compute_framework="PandasDataFrame")}
 
     @classmethod

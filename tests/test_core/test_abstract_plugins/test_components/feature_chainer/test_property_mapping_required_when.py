@@ -277,7 +277,7 @@ class ConditionalRequiredFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        feature_name = features.get_name_of_one_feature().name
+        feature_name = str(features.get_name_of_one_feature())
         agg_type = features.get_options_key("aggregation_type")
         return pd.DataFrame({feature_name: [f"computed_{agg_type}"]})
 

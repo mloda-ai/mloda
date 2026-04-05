@@ -279,7 +279,7 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             result = cls._apply_encoder(data, base_source_feature, fitted_encoder)
 
             # Add result to data (handling multiple columns for OneHotEncoder)
-            data = cls._add_result_to_data(data, feature.get_name(), result)
+            data = cls._add_result_to_data(data, feature.name, result)
 
         return data
 
@@ -321,7 +321,7 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Raises:
             ValueError: If encoder type is unsupported
         """
-        feature_name_str = feature.name.name if hasattr(feature.name, "name") else str(feature.name)
+        feature_name_str = feature.name
 
         if FeatureChainParser.is_chained_feature(feature_name_str):
             encoder_type = cls.get_encoder_type(feature_name_str)

@@ -40,7 +40,7 @@ class TestReadLLMFiles:
                 data_access_collection: Optional[DataAccessCollection] = None,
             ) -> bool:
                 if isinstance(feature_name, FeatureName):
-                    feature_name = feature_name.name
+                    feature_name = str(feature_name)
                 if cls.feature_name_equal_to_class_name(feature_name):
                     return True
                 return False

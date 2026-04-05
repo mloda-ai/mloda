@@ -128,22 +128,20 @@ class FeatureChainParserMixin:
         Raises:
             ValueError: If in_feature constraints are violated
         """
-        _feature_name = feature_name.name if isinstance(feature_name, FeatureName) else feature_name
-
         prefix_patterns = self._get_prefix_patterns()
         operation_config, in_feature = FeatureChainParser.parse_feature_name(
-            _feature_name, prefix_patterns, CHAIN_SEPARATOR
+            feature_name, prefix_patterns, CHAIN_SEPARATOR
         )
 
         # String-based parsing succeeded
         if operation_config is not None and in_feature is not None and in_feature:
             in_features = in_feature.split(self.IN_FEATURE_SEPARATOR)
-            self._validate_in_feature_count(in_features, _feature_name)
+            self._validate_in_feature_count(in_features, feature_name)
             return {Feature(f) for f in in_features}
 
         # Configuration-based fallback using get_in_features()
         in_features_set = options.get_in_features()
-        self._validate_in_feature_count(list(in_features_set), _feature_name)
+        self._validate_in_feature_count(list(in_features_set), feature_name)
         return set(in_features_set)
 
     def _validate_in_feature_count(self, in_features: List[Any], feature_name: str) -> None:
@@ -200,15 +198,13 @@ class FeatureChainParserMixin:
         Returns:
             True if feature matches criteria, False otherwise
         """
-        _feature_name = feature_name.name if isinstance(feature_name, FeatureName) else feature_name
-
         prefix_patterns = cls._get_prefix_patterns()
         property_mapping = cls._get_property_mapping()
 
         try:
             # Use the unified parser for basic matching
             result = FeatureChainParser.match_configuration_feature_chain_parser(
-                _feature_name,
+                feature_name,
                 options,
                 property_mapping=property_mapping,
                 prefix_patterns=prefix_patterns,
@@ -219,17 +215,17 @@ class FeatureChainParserMixin:
         # If basic match succeeded and it's a string-based feature, call validation hook
         if result:
             operation_config, source_feature = FeatureChainParser.parse_feature_name(
-                _feature_name, prefix_patterns, CHAIN_SEPARATOR
+                feature_name, prefix_patterns, CHAIN_SEPARATOR
             )
             if operation_config is not None and source_feature is not None:
-                if not cls._validate_string_match(_feature_name, operation_config, source_feature):
+                if not cls._validate_string_match(feature_name, operation_config, source_feature):
                     return False
 
         # Enforce required_when constraints from PROPERTY_MAPPING.
         # Build effective options by merging string-parsed operation_config into
         # the Options object so predicates see values from both sources.
         if result and property_mapping is not None and cls._has_required_when_predicates(property_mapping):
-            effective_options = cls._build_effective_options(_feature_name, prefix_patterns, property_mapping, options)
+            effective_options = cls._build_effective_options(feature_name, prefix_patterns, property_mapping, options)
             for key, mapping_entry in property_mapping.items():
                 if not isinstance(mapping_entry, dict):
                     continue
@@ -371,11 +367,10 @@ class FeatureChainParserMixin:
         Returns:
             List of source feature names
         """
-        feature_name = feature.get_name()
         prefix_patterns = cls._get_prefix_patterns()
 
         operation_config, source_feature = FeatureChainParser.parse_feature_name(
-            feature_name, prefix_patterns, CHAIN_SEPARATOR
+            feature.name, prefix_patterns, CHAIN_SEPARATOR
         )
 
         # String-based parsing succeeded
@@ -384,7 +379,7 @@ class FeatureChainParserMixin:
 
         # Configuration-based fallback using get_in_features()
         in_features_set = feature.options.get_in_features()
-        return [f.get_name() for f in in_features_set]
+        return [f.name for f in in_features_set]
 
     @classmethod
     def _resolve_operation(
@@ -422,12 +417,13 @@ class FeatureChainParserMixin:
         Returns:
             The resolved operation as a string, or None if neither path matches.
         """
+        _name: str
         if isinstance(feature_or_name, Feature) and isinstance(options_or_key, str):
-            _name = feature_or_name.get_name()
+            _name = feature_or_name.name
             _options = feature_or_name.options
             _key = options_or_key
         else:
-            _name = feature_or_name.name if isinstance(feature_or_name, FeatureName) else str(feature_or_name)
+            _name = str(feature_or_name)
             _options = options_or_key
             _key = config_key if config_key is not None else ""
 

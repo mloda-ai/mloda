@@ -39,7 +39,7 @@ class EngineRunnerTest2(FeatureGroup):
         options: Options,
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
-        if cls.f_name in feature_name.name:  # type: ignore
+        if cls.f_name in str(feature_name):
             return True
         return False
 
@@ -64,7 +64,7 @@ class EngineRunnerTest3(FeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return pc.multiply(data.column(cls.feature_2.get_name()), 3)
+        return pc.multiply(data.column(cls.feature_2.name), 3)
 
 
 class EngineRunnerTest4(FeatureGroup):
@@ -94,7 +94,7 @@ class SumFeature(FeatureGroup):
         options: Options,
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
-        if "sum_of_" in feature_name.name:  # type: ignore
+        if "sum_of_" in str(feature_name):
             return True
         return False
 

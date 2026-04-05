@@ -333,7 +333,7 @@ class ForecastingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         original_data = data
 
         # Collect all results before modifying the data
-        results = []
+        results: list[tuple[str, Any]] = []
 
         # Process each requested feature with the original clean data
         for feature in features.features:
@@ -380,9 +380,9 @@ class ForecastingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
                     features.save_artifact = updated_artifact
 
                 # Store the results for later addition (main forecast + confidence bounds)
-                results.append((feature.get_name(), result))
-                results.append((f"{feature.get_name()}~lower", lower_bound))
-                results.append((f"{feature.get_name()}~upper", upper_bound))
+                results.append((feature.name, result))
+                results.append((f"{feature.name}~lower", lower_bound))
+                results.append((f"{feature.name}~upper", upper_bound))
             else:
                 # Original behavior: only output point forecast
                 result, updated_artifact = cls._perform_forecasting(
@@ -400,7 +400,7 @@ class ForecastingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
                     features.save_artifact = updated_artifact
 
                 # Store the result for later addition
-                results.append((feature.get_name(), result))
+                results.append((feature.name, result))
 
         # Add all results to the data at once
         for feature_name, result in results:
@@ -475,7 +475,7 @@ class ForecastingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             Tuple of (algorithm, horizon, time_unit), where any value may be None if not found
         """
         # Try string-based first using parse_forecast_suffix
-        feature_name_str = feature.name.name if hasattr(feature.name, "name") else str(feature.name)
+        feature_name_str = feature.name
         if cls._has_valid_forecast_suffix(feature_name_str):
             algorithm, horizon, time_unit = cls.parse_forecast_suffix(feature_name_str)
             return algorithm, horizon, time_unit

@@ -51,7 +51,7 @@ class GlobalFilterFromDifferentColumnTest(GlobalFilterBasicTest):
             raise ValueError("Filter feature not found.")
 
         for feat in features.features:
-            if feat.name.name == "GlobalFilterFromDifferentColumn2":
+            if feat.name == "GlobalFilterFromDifferentColumn2":
                 if feat.initial_requested_data is not False:
                     raise ValueError("Filter should not lead to automatic requested data.")
 
@@ -110,7 +110,7 @@ class TestGlobalFilter:
             assert issubclass(key[0], FeatureGroup)
             assert isinstance(key[1], FeatureName)
             assert key[0].get_class_name() == global_filter_test_basic
-            assert key[1].name == global_filter_test_basic
+            assert str(key[1]) == global_filter_test_basic
 
             assert isinstance(value, set)
             assert len(value) == 1

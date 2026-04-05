@@ -25,7 +25,7 @@ def test_end2end_feature_config() -> None:
 
     # Second feature: Feature object with name and options
     assert isinstance(features[1], Feature)
-    assert features[1].name.name == "weight"
+    assert features[1].name == "weight"
     assert features[1].options.get("imputation_method") == "mean"
 
 
@@ -47,50 +47,50 @@ def test_integration_json_file() -> None:
 
     # Second feature: Feature object with name and options
     assert isinstance(features[1], Feature)
-    assert features[1].name.name == "weight"
+    assert features[1].name == "weight"
     assert features[1].options.get("imputation_method") == "mean"
 
     # Third feature: Chained feature (source inferred from name)
     assert isinstance(features[2], Feature)
-    assert features[2].name.name == "age__mean_imputed__standard_scaled"
+    assert features[2].name == "age__mean_imputed__standard_scaled"
     # No explicit mloda_source - will be inferred from name as "age__mean_imputed"
 
     # Fourth feature: Chained feature (source inferred from name)
     assert isinstance(features[3], Feature)
-    assert features[3].name.name == "weight__mean_imputed__max_aggr"
+    assert features[3].name == "weight__mean_imputed__max_aggr"
     # No explicit mloda_source - will be inferred from name as "weight__mean_imputed"
 
     # Fifth feature: Chained feature with options (source inferred from name)
     assert isinstance(features[4], Feature)
-    assert features[4].name.name == "weight__mean_imputed__min_aggr"
+    assert features[4].name == "weight__mean_imputed__min_aggr"
     # No explicit mloda_source - will be inferred from name as "weight__mean_imputed"
     # Verify timewindow option is in group options
     assert features[4].options.group.get("timewindow") == 3
 
     # Sixth feature: Feature with column_index (column selector)
     assert isinstance(features[5], Feature)
-    assert features[5].name.name == "state__onehot_encoded~0"
+    assert features[5].name == "state__onehot_encoded~0"
 
     # Seventh feature: Feature with column_index (column selector)
     assert isinstance(features[6], Feature)
-    assert features[6].name.name == "state__onehot_encoded~1"
+    assert features[6].name == "state__onehot_encoded~1"
 
     # Eighth feature: minmaxscaledage with mloda_source "age"
     assert isinstance(features[7], Feature)
-    assert features[7].name.name == "minmaxscaledage"
+    assert features[7].name == "minmaxscaledage"
     assert features[7].options.group.get("in_features") == "age"
     assert features[7].options.group.get("scaler_type") == "minmax"
 
     # Ninth feature: age__max_aggr with in_features=["minmaxscaledage"]
     assert isinstance(features[8], Feature)
-    assert features[8].name.name == "age__max_aggr"
+    assert features[8].name == "age__max_aggr"
     # The in_features should be a frozenset referencing feature 7
     mloda_source_8 = features[8].options.context.get("in_features")
     assert mloda_source_8 == frozenset({"minmaxscaledage"})
 
     # Tenth feature: min_max with in_features="age__max_aggr" in options
     assert isinstance(features[9], Feature)
-    assert features[9].name.name == "min_max"
+    assert features[9].name == "min_max"
     # The in_features should be in group options
     mloda_source_9 = features[9].options.group.get("in_features")
     assert mloda_source_9 == "age__max_aggr"
@@ -98,11 +98,11 @@ def test_integration_json_file() -> None:
 
     # Eleventh feature: customer_location&store_location__haversine_distance (geo distance feature)
     assert isinstance(features[10], Feature)
-    assert features[10].name.name == "customer_location&store_location__haversine_distance"
+    assert features[10].name == "customer_location&store_location__haversine_distance"
 
     # Twelfth feature: custom_geo_distance with in_features (multiple sources)
     assert isinstance(features[11], Feature)
-    assert features[11].name.name == "custom_geo_distance"
+    assert features[11].name == "custom_geo_distance"
     # Verify in_features is converted to frozenset and stored correctly
     in_features_11 = features[11].options.context.get(DefaultOptionKeys.in_features)
     assert isinstance(in_features_11, frozenset)
@@ -213,7 +213,7 @@ def test_end2end_group_context_options() -> None:
 
     # Verify the feature is a Feature object
     assert isinstance(features[0], Feature)
-    assert features[0].name.name == "feature_with_separation"
+    assert features[0].name == "feature_with_separation"
 
     # Verify group options are correctly set
     assert features[0].options.group.get("data_source") == "production"
@@ -358,7 +358,7 @@ def test_end2end_multiple_source_features() -> None:
 
     # Sixth feature: distance_feature with in_features
     assert isinstance(features[5], Feature)
-    assert features[5].name.name == "distance_feature"
+    assert features[5].name == "distance_feature"
     # Verify in_features is converted to frozenset
     in_features_5 = features[5].options.context.get(DefaultOptionKeys.in_features)
     assert isinstance(in_features_5, frozenset)
@@ -368,7 +368,7 @@ def test_end2end_multiple_source_features() -> None:
 
     # Seventh feature: multi_source_aggregation with in_features
     assert isinstance(features[6], Feature)
-    assert features[6].name.name == "multi_source_aggregation"
+    assert features[6].name == "multi_source_aggregation"
     # Verify in_features is converted to frozenset
     in_features_6 = features[6].options.context.get(DefaultOptionKeys.in_features)
     assert isinstance(in_features_6, frozenset)
@@ -378,7 +378,7 @@ def test_end2end_multiple_source_features() -> None:
 
     # Eighth feature: feature_with_both (in_features with group_options and context_options)
     assert isinstance(features[7], Feature)
-    assert features[7].name.name == "feature_with_both"
+    assert features[7].name == "feature_with_both"
     # Verify in_features is converted to frozenset
     in_features_7 = features[7].options.context.get(DefaultOptionKeys.in_features)
     assert isinstance(in_features_7, frozenset)
@@ -431,26 +431,26 @@ def test_complete_integration_json() -> None:
     # 2. Features with options
     # Feature index 1: weight with imputation_method option
     assert isinstance(features[1], Feature), "Feature 'weight' should be a Feature object"
-    assert features[1].name.name == "weight", "Feature name should be 'weight'"
+    assert features[1].name == "weight", "Feature name should be 'weight'"
     assert features[1].options.get("imputation_method") == "mean", "imputation_method should be 'mean'"
     validated_patterns["feature_with_options"] = True
 
     # 3. Chained features (with __ in name, source inferred from name)
     # Feature index 2: age__mean_imputed__standard_scaled
     assert isinstance(features[2], Feature), "Chained feature should be a Feature object"
-    assert features[2].name.name == "age__mean_imputed__standard_scaled", "Chained feature name incorrect"
+    assert features[2].name == "age__mean_imputed__standard_scaled", "Chained feature name incorrect"
     # No explicit mloda_source - will be inferred from name as "age__mean_imputed"
     validated_patterns["chained_feature"] = True
 
     # Feature index 3: Another chained feature (aggregation on mean imputation)
     assert isinstance(features[3], Feature), "Second chained feature should be a Feature object"
-    assert features[3].name.name == "weight__mean_imputed__max_aggr", "Second chained feature name incorrect"
+    assert features[3].name == "weight__mean_imputed__max_aggr", "Second chained feature name incorrect"
     # No explicit mloda_source - will be inferred from name as "weight__mean_imputed"
 
     # 4. Group/context options separation
     # Feature index 4: weight__mean_imputed__min_aggr with options (source inferred from name)
     assert isinstance(features[4], Feature), "Feature with group/context options should be a Feature object"
-    assert features[4].name.name == "weight__mean_imputed__min_aggr", (
+    assert features[4].name == "weight__mean_imputed__min_aggr", (
         "Feature name should be 'weight__mean_imputed__min_aggr'"
     )
     # No explicit mloda_source - will be inferred from name as "weight__mean_imputed"
@@ -460,29 +460,29 @@ def test_complete_integration_json() -> None:
     # 5. Multi-column access (column_index with ~ syntax)
     # Feature index 5: state__onehot_encoded~0
     assert isinstance(features[5], Feature), "Column selector feature should be a Feature object"
-    assert features[5].name.name == "state__onehot_encoded~0", "Column selector feature should have ~0 suffix"
+    assert features[5].name == "state__onehot_encoded~0", "Column selector feature should have ~0 suffix"
     validated_patterns["column_selector"] = True
 
     # Feature index 6: state__onehot_encoded~1
     assert isinstance(features[6], Feature), "Second column selector feature should be a Feature object"
-    assert features[6].name.name == "state__onehot_encoded~1", "Second column selector should have ~1 suffix"
+    assert features[6].name == "state__onehot_encoded~1", "Second column selector should have ~1 suffix"
 
     # 6. Feature references (@syntax)
     # Feature index 7: minmaxscaledage (base feature)
     assert isinstance(features[7], Feature), "Base feature for reference should be a Feature object"
-    assert features[7].name.name == "minmaxscaledage", "Base feature name should be 'minmaxscaledage'"
+    assert features[7].name == "minmaxscaledage", "Base feature name should be 'minmaxscaledage'"
     assert features[7].options.group.get("in_features") == "age", "Base feature mloda_source should be 'age'"
 
     # Feature index 8: age__max_aggr with in_features=["minmaxscaledage"]
     assert isinstance(features[8], Feature), "Feature with aggregation should be a Feature object"
-    assert features[8].name.name == "age__max_aggr", "Feature name should be 'age__max_aggr'"
+    assert features[8].name == "age__max_aggr", "Feature name should be 'age__max_aggr'"
     mloda_source_8 = features[8].options.context.get("in_features")
     assert mloda_source_8 == frozenset({"minmaxscaledage"}), "in_features should be frozenset with 'minmaxscaledage'"
     validated_patterns["feature_reference"] = True
 
     # Feature index 9: min_max with in_features="age__max_aggr" in options
     assert isinstance(features[9], Feature), "Feature with scaling should be a Feature object"
-    assert features[9].name.name == "min_max", "Feature name should be 'min_max'"
+    assert features[9].name == "min_max", "Feature name should be 'min_max'"
     mloda_source_9 = features[9].options.group.get("in_features")
     assert mloda_source_9 == "age__max_aggr", "in_features should be 'age__max_aggr'"
     assert features[9].options.group.get("scaler_type") == "minmax", "scaler_type should be 'minmax'"
@@ -490,7 +490,7 @@ def test_complete_integration_json() -> None:
     # 7. Geo distance feature (string-based naming pattern)
     # Feature index 10: customer_location&store_location__haversine_distance
     assert isinstance(features[10], Feature), "Geo distance feature should be a Feature object"
-    assert features[10].name.name == "customer_location&store_location__haversine_distance", (
+    assert features[10].name == "customer_location&store_location__haversine_distance", (
         "Feature name should be 'customer_location&store_location__haversine_distance'"
     )
     # The string-based geo distance feature uses the pattern: {point1}&{point2}__{distance_type}_distance
@@ -499,7 +499,7 @@ def test_complete_integration_json() -> None:
 
     # Feature index 11: custom_geo_distance with in_features ["customer_location", "store_location"]
     assert isinstance(features[11], Feature), "Second multi-source feature should be a Feature object"
-    assert features[11].name.name == "custom_geo_distance", "Feature name should be 'custom_geo_distance'"
+    assert features[11].name == "custom_geo_distance", "Feature name should be 'custom_geo_distance'"
     in_features_11 = features[11].options.context.get(DefaultOptionKeys.in_features)
     assert isinstance(in_features_11, frozenset), "in_features should be converted to frozenset"
     assert in_features_11 == frozenset(["customer_location", "store_location"]), (

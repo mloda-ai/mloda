@@ -59,7 +59,7 @@ def validate_node_centrality_features(result_df: pd.DataFrame, expected_features
     # Verify all expected features exist
     for feature in expected_features:
         # Get the feature name if it's a Feature object, otherwise use it directly
-        feature_name = feature.name.name if isinstance(feature, Feature) else feature
+        feature_name = feature.name if isinstance(feature, Feature) else feature
         assert feature_name in result_df.columns, f"Expected feature '{feature_name}' not found"
 
         # Verify the feature values are valid (non-negative)

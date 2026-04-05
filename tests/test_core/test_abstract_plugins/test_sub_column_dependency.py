@@ -519,7 +519,7 @@ class TestSubColumnIntegration:
             @classmethod
             def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
                 for feature in features.features:
-                    feature_name = feature.get_name()
+                    feature_name = feature.name
                     _, source_feature = FeatureChainParser.parse_feature_name(feature_name, [cls.SUFFIX_PATTERN])
                     if source_feature and source_feature in data.columns:
                         data[feature_name] = data[source_feature].values * 2

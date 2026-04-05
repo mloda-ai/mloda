@@ -36,9 +36,9 @@ def test_load_features_with_objects() -> None:
     assert len(result) == 2
     assert isinstance(result[0], Feature)
     assert isinstance(result[1], Feature)
-    assert result[0].name.name == "feature1"
+    assert result[0].name == "feature1"
     assert result[0].options.get("enabled") is True
-    assert result[1].name.name == "feature2"
+    assert result[1].name == "feature2"
     assert result[1].options.get("threshold") == 0.8
 
 
@@ -57,7 +57,7 @@ def test_load_features_mixed() -> None:
     assert isinstance(result[1], Feature)
     assert isinstance(result[2], str)
     assert result[0] == "simple_feature"
-    assert result[1].name.name == "complex_feature"
+    assert result[1].name == "complex_feature"
     assert result[1].options.get("param") == "value"
     assert result[2] == "another_simple"
 
@@ -80,7 +80,7 @@ def test_load_features_preserves_options() -> None:
 
     assert len(result) == 1
     assert isinstance(result[0], Feature)
-    assert result[0].name.name == "feature_with_options"
+    assert result[0].name == "feature_with_options"
     assert result[0].options.get("key1") == "value1"
     assert result[0].options.get("key2") == 42
     assert result[0].options.get("key3") is True
@@ -109,7 +109,7 @@ def test_load_features_with_mloda_source() -> None:
 
     assert len(result) == 1
     assert isinstance(result[0], Feature)
-    assert result[0].name.name == "scale__age"
+    assert result[0].name == "scale__age"
 
     # in_features should be in options.context as a frozenset
     in_features_value = result[0].options.context.get(DefaultOptionKeys.in_features)
@@ -156,14 +156,14 @@ def test_load_features_mixed_chained_and_simple() -> None:
 
     # Second feature: regular Feature with options only
     assert isinstance(result[1], Feature)
-    assert result[1].name.name == "weight"
+    assert result[1].name == "weight"
     assert result[1].options.group.get("unit") == "kg"
     # Should NOT have in_features in context
     assert DefaultOptionKeys.in_features not in result[1].options.context
 
     # Third feature: chained Feature with in_features
     assert isinstance(result[2], Feature)
-    assert result[2].name.name == "standard_scaled__mean_imputed__age"
+    assert result[2].name == "standard_scaled__mean_imputed__age"
     in_features_value = result[2].options.context.get(DefaultOptionKeys.in_features)
     assert isinstance(in_features_value, frozenset)
     assert in_features_value == frozenset({"age"})
@@ -191,7 +191,7 @@ def test_load_features_with_simple_options() -> None:
 
     assert len(result) == 1
     assert isinstance(result[0], Feature)
-    assert result[0].name.name == "simple_feature"
+    assert result[0].name == "simple_feature"
 
     # Options should be in group
     assert result[0].options.group.get("param1") == "value1"
@@ -223,7 +223,7 @@ def test_load_features_with_group_context_options() -> None:
 
     assert len(result) == 1
     assert isinstance(result[0], Feature)
-    assert result[0].name.name == "modern_feature"
+    assert result[0].name == "modern_feature"
 
     # Group options should be in group
     assert result[0].options.group.get("threshold") == 0.5
@@ -264,25 +264,25 @@ def test_load_creates_proper_options_object() -> None:
 
     # Simple feature: options in group, context empty
     assert isinstance(result[0], Feature)
-    assert result[0].name.name == "simple"
+    assert result[0].name == "simple"
     assert result[0].options.group.get("simple_param") == "value"
     assert len(result[0].options.context) == 0
 
     # Explicit feature: proper group/context separation
     assert isinstance(result[1], Feature)
-    assert result[1].name.name == "explicit"
+    assert result[1].name == "explicit"
     assert result[1].options.group.get("group_param") == "group_value"
     assert result[1].options.context.get("context_param") == "context_value"
 
     # Only group options feature
     assert isinstance(result[2], Feature)
-    assert result[2].name.name == "only_group"
+    assert result[2].name == "only_group"
     assert result[2].options.group.get("only_group_param") == "only_group_value"
     assert len(result[2].options.context) == 0
 
     # Only context options feature
     assert isinstance(result[3], Feature)
-    assert result[3].name.name == "only_context"
+    assert result[3].name == "only_context"
     assert result[3].options.context.get("only_context_param") == "only_context_value"
     assert len(result[3].options.group) == 0
 
@@ -323,15 +323,15 @@ def test_load_features_with_column_index() -> None:
 
     # First feature: column_index 0
     assert isinstance(result[0], Feature)
-    assert result[0].name.name == "onehot_encoded__state~0"
+    assert result[0].name == "onehot_encoded__state~0"
 
     # Second feature: column_index 1
     assert isinstance(result[1], Feature)
-    assert result[1].name.name == "onehot_encoded__state~1"
+    assert result[1].name == "onehot_encoded__state~1"
 
     # Third feature: column_index 2 with options
     assert isinstance(result[2], Feature)
-    assert result[2].name.name == "onehot_encoded__state~2"
+    assert result[2].name == "onehot_encoded__state~2"
     assert result[2].options.get("drop_first") is True
 
 
@@ -379,12 +379,12 @@ def test_load_appends_tilde_syntax_to_name() -> None:
 
     # First: with simple options
     assert isinstance(result[0], Feature)
-    assert result[0].name.name == "onehot__category~0"
+    assert result[0].name == "onehot__category~0"
     assert result[0].options.get("method") == "standard"
 
     # Second: with in_features
     assert isinstance(result[1], Feature)
-    assert result[1].name.name == "scale__mean_imputed__age~1"
+    assert result[1].name == "scale__mean_imputed__age~1"
     in_features_value = result[1].options.context.get(DefaultOptionKeys.in_features)
     assert isinstance(in_features_value, frozenset)
     assert in_features_value == frozenset({"age"})
@@ -392,13 +392,13 @@ def test_load_appends_tilde_syntax_to_name() -> None:
 
     # Third: with group_options and context_options
     assert isinstance(result[2], Feature)
-    assert result[2].name.name == "vectorized__text~2"
+    assert result[2].name == "vectorized__text~2"
     assert result[2].options.group.get("max_features") == 100
     assert result[2].options.context.get("encoding") == "utf-8"
 
     # Fourth: minimal configuration
     assert isinstance(result[3], Feature)
-    assert result[3].name.name == "embedded__description~3"
+    assert result[3].name == "embedded__description~3"
 
 
 def test_load_features_with_multiple_in_features() -> None:
@@ -433,7 +433,7 @@ def test_load_features_with_multiple_in_features() -> None:
 
     assert len(result) == 1
     assert isinstance(result[0], Feature)
-    assert result[0].name.name == "distance_feature"
+    assert result[0].name == "distance_feature"
 
     # in_features should be converted to frozenset in options.context with singular key name
     in_features_value = result[0].options.context.get(DefaultOptionKeys.in_features)
@@ -477,7 +477,7 @@ def test_load_creates_frozenset_for_in_features() -> None:
 
     # First feature: multiple sources
     assert isinstance(result[0], Feature)
-    assert result[0].name.name == "multi_source_aggregation"
+    assert result[0].name == "multi_source_aggregation"
     in_features_1 = result[0].options.context.get(DefaultOptionKeys.in_features)
     assert isinstance(in_features_1, frozenset), "Should be frozenset"
     assert in_features_1 == frozenset({"sales", "revenue", "profit"})
@@ -485,7 +485,7 @@ def test_load_creates_frozenset_for_in_features() -> None:
 
     # Second feature: duplicates should be deduplicated by frozenset
     assert isinstance(result[1], Feature)
-    assert result[1].name.name == "duplicate_sources"
+    assert result[1].name == "duplicate_sources"
     in_features_2 = result[1].options.context.get(DefaultOptionKeys.in_features)
     assert isinstance(in_features_2, frozenset), "Should be frozenset"
     # frozenset automatically handles duplicates - should contain 2 items, not 3
@@ -523,7 +523,7 @@ def test_load_adds_in_features_to_in_features_option() -> None:
 
     # First feature: single source - stored as frozenset in in_features
     assert isinstance(result[0], Feature)
-    assert result[0].name.name == "single_source_feature"
+    assert result[0].name == "single_source_feature"
     # Should have in_features (singular) in context
     assert DefaultOptionKeys.in_features in result[0].options.context
     in_features_value_0 = result[0].options.context.get(DefaultOptionKeys.in_features)
@@ -532,7 +532,7 @@ def test_load_adds_in_features_to_in_features_option() -> None:
 
     # Second feature: multiple sources - stored as frozenset in in_features
     assert isinstance(result[1], Feature)
-    assert result[1].name.name == "multi_source_feature"
+    assert result[1].name == "multi_source_feature"
     # Should have in_features (singular) in context (unified key for both single and multiple)
     assert DefaultOptionKeys.in_features in result[1].options.context
     in_features_value = result[1].options.context.get(DefaultOptionKeys.in_features)

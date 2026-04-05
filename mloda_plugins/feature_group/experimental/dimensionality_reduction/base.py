@@ -308,7 +308,7 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
         Returns:
             Tuple of (algorithm, dimension, algorithm_options)
         """
-        feature_name_str = feature.name.name if hasattr(feature.name, "name") else str(feature.name)
+        feature_name_str = feature.name
 
         # Try string-based parsing first
         if FeatureChainParser.is_chained_feature(feature_name_str):
@@ -361,7 +361,7 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
             result = cls._perform_reduction(data, algorithm, dimension, source_features, options)
 
             # Add the result to the data
-            data = cls._add_result_to_data(data, feature.get_name(), result)
+            data = cls._add_result_to_data(data, feature.name, result)
         return data
 
     @classmethod

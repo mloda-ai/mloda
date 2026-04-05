@@ -135,7 +135,7 @@ class DynamicFeatureGroupCreator:
     def custom_match_criteria(cls, feature_name, options, dac):
         # Match based on runtime conditions
         if isinstance(feature_name, FeatureName):
-            feature_name = feature_name.name
+            feature_name = str(feature_name)
         return "custom_prefix" in feature_name
 
     properties = {

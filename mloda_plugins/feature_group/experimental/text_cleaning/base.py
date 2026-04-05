@@ -158,7 +158,7 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             Tuple of cleaning operations, or None if not found
         """
         # Try string-based parsing first
-        feature_name_str = feature.name.name if hasattr(feature.name, "name") else str(feature.name)
+        feature_name_str = feature.name
 
         if FeatureChainParser.is_chained_feature(feature_name_str):
             # For string-based features, get operations from options
@@ -207,7 +207,7 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, FeatureGroup):
                 result = cls._apply_operation(data, result, operation)
 
             # Add result to data
-            data = cls._add_result_to_data(data, feature.get_name(), result)
+            data = cls._add_result_to_data(data, feature.name, result)
 
         return data
 

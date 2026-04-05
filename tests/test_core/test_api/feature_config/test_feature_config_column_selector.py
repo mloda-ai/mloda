@@ -68,8 +68,8 @@ def test_parse_feature_with_tilde_syntax() -> None:
     assert isinstance(result[1], Feature)
 
     # Feature names should have tilde syntax appended
-    assert result[0].name.name == "onehot_encoded__state~0"
-    assert result[1].name.name == "onehot_encoded__state~1"
+    assert result[0].name == "onehot_encoded__state~0"
+    assert result[1].name == "onehot_encoded__state~1"
 
 
 def test_load_column_selector_feature() -> None:
@@ -104,7 +104,7 @@ def test_load_column_selector_feature() -> None:
 
     feature = result[0]
     # Feature name should have tilde syntax appended
-    assert feature.name.name == "onehot_encoded__state~2"
+    assert feature.name == "onehot_encoded__state~2"
 
     # Original options should be preserved
     assert feature.options.get("drop_first") is True

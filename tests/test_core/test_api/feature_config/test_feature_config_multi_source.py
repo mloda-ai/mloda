@@ -95,7 +95,7 @@ def test_load_multiple_sources_as_frozenset() -> None:
 
     # First feature: in_features with simple options
     assert isinstance(result[0], Feature)
-    assert result[0].name.name == "distance_from_center"
+    assert result[0].name == "distance_from_center"
 
     # in_features should be converted to frozenset and stored in context
     # Note: Using DefaultOptionKeys.in_features (singular)
@@ -108,7 +108,7 @@ def test_load_multiple_sources_as_frozenset() -> None:
 
     # Second feature: in_features with group_options and context_options
     assert isinstance(result[1], Feature)
-    assert result[1].name.name == "area_calculation"
+    assert result[1].name == "area_calculation"
 
     # in_features should be converted to frozenset and stored in context
     in_features_2 = result[1].options.context.get(DefaultOptionKeys.in_features)

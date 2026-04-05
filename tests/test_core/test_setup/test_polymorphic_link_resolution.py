@@ -89,7 +89,7 @@ class AssemblerWithConcreteLinks(FeatureGroup):
     def match_feature_group_criteria(
         cls, feature_name: Union[FeatureName, str], options: Any, data_access_collection: Any = None
     ) -> bool:
-        name = feature_name.name if isinstance(feature_name, FeatureName) else feature_name
+        name = str(feature_name) if isinstance(feature_name, FeatureName) else feature_name
         return name == cls.FEATURE_NAME
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
@@ -121,7 +121,7 @@ class AssemblerWithPolymorphicLinks(FeatureGroup):
     def match_feature_group_criteria(
         cls, feature_name: Union[FeatureName, str], options: Any, data_access_collection: Any = None
     ) -> bool:
-        name = feature_name.name if isinstance(feature_name, FeatureName) else feature_name
+        name = str(feature_name) if isinstance(feature_name, FeatureName) else feature_name
         return name == cls.FEATURE_NAME
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
@@ -203,7 +203,7 @@ class AssemblerWithMixedLink(FeatureGroup):
     def match_feature_group_criteria(
         cls, feature_name: Union[FeatureName, str], options: Any, data_access_collection: Any = None
     ) -> bool:
-        name = feature_name.name if isinstance(feature_name, FeatureName) else feature_name
+        name = str(feature_name) if isinstance(feature_name, FeatureName) else feature_name
         return name == cls.FEATURE_NAME
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:

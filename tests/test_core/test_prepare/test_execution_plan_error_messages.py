@@ -50,7 +50,7 @@ class ApiInputDataFeatureGroupFixture(FeatureGroup):
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
         if isinstance(feature_name, FeatureName):
-            feature_name = feature_name.name
+            feature_name = str(feature_name)
         return feature_name == "test_api_feature"
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
@@ -68,7 +68,7 @@ class NoUuidFeatureGroup(FeatureGroup):
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
         if isinstance(feature_name, FeatureName):
-            feature_name = feature_name.name
+            feature_name = str(feature_name)
         return feature_name == "no_uuid_test_feature"
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
@@ -98,10 +98,7 @@ class TestNoFeatureSetNameErrorMessage:
         feature = Feature("test_api_feature")
         feature_set.add(feature)
 
-        mock_feature_name = MagicMock(spec=FeatureName)
-        mock_feature_name.name = None
-
-        with patch.object(feature_set, "get_name_of_one_feature", return_value=mock_feature_name):
+        with patch.object(feature_set, "get_name_of_one_feature", return_value=None):
             with pytest.raises(ValueError) as exc_info:
                 execution_plan.prepare_api_input_data(ApiInputDataFeatureGroupFixture, feature_set)
 
@@ -129,10 +126,7 @@ class TestNoFeatureSetNameErrorMessage:
         feature = Feature("test_api_feature")
         feature_set.add(feature)
 
-        mock_feature_name = MagicMock(spec=FeatureName)
-        mock_feature_name.name = None
-
-        with patch.object(feature_set, "get_name_of_one_feature", return_value=mock_feature_name):
+        with patch.object(feature_set, "get_name_of_one_feature", return_value=None):
             with pytest.raises(ValueError) as exc_info:
                 execution_plan.prepare_api_input_data(ApiInputDataFeatureGroupFixture, feature_set)
 
@@ -161,10 +155,7 @@ class TestNoFeatureSetNameErrorMessage:
         feature = Feature("test_api_feature")
         feature_set.add(feature)
 
-        mock_feature_name = MagicMock(spec=FeatureName)
-        mock_feature_name.name = None
-
-        with patch.object(feature_set, "get_name_of_one_feature", return_value=mock_feature_name):
+        with patch.object(feature_set, "get_name_of_one_feature", return_value=None):
             with pytest.raises(ValueError) as exc_info:
                 execution_plan.prepare_api_input_data(ApiInputDataFeatureGroupFixture, feature_set)
 

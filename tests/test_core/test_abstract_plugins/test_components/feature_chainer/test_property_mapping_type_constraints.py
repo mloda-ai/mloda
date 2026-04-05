@@ -275,7 +275,7 @@ class TypeValidatedAggregation(FeatureChainParserMixin, FeatureGroup):
 
             if agg_type == "sum":
                 result = table.groupby(partition_by, dropna=False)[source_col].transform("sum")
-                table[feature.get_name()] = result
+                table[feature.name] = result
         return table
 
     @classmethod

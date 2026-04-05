@@ -106,7 +106,7 @@ def test_features_runtime_one_by_one() -> None:
 
     # Verify each feature appears in results
     for i, feature in enumerate(features_to_test):
-        feature_name = feature if isinstance(feature, str) else feature.name.name
+        feature_name = feature if isinstance(feature, str) else feature.name
 
         # Check if feature column exists in any result DataFrame
         found = any(feature_name in df.columns for df in results)

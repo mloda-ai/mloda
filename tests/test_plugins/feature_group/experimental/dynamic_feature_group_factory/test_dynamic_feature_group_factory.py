@@ -106,7 +106,7 @@ class TestDynamicFeatureGroupFactory:
 
     def test_dynamic_feature_group_creator_with_complex_logic(self) -> None:
         def custom_set_feature_name(self: Any, config: Options, feature_name: FeatureName) -> FeatureName:
-            return FeatureName(f"custom_{feature_name.name}")
+            return FeatureName(f"custom_{feature_name}")
 
         def custom_match_criteria(
             cls: Type[FeatureGroup],
@@ -115,7 +115,7 @@ class TestDynamicFeatureGroupFactory:
             data_access_collection: Optional[DataAccessCollection] = None,
         ) -> bool:
             if isinstance(feature_name, FeatureName):
-                feature_name = feature_name.name
+                feature_name = str(feature_name)
             return "custom" in feature_name
 
         def custom_input_features(self: Any, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:

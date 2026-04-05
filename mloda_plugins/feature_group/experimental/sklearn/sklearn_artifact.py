@@ -141,7 +141,7 @@ class SklearnArtifact(BaseArtifact):
             storage_path = tempfile.gettempdir()
 
         # Create a unique filename based on feature name and configuration
-        feature_name = features.name_of_one_feature.name
+        feature_name = str(features.name_of_one_feature)
 
         # Create a hash of the feature configuration for uniqueness
         # Exclude artifact-related keys to ensure consistent hashing

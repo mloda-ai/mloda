@@ -84,7 +84,7 @@ def test_load_chained_feature_as_string() -> None:
     assert isinstance(result[0], Feature)
 
     feature = result[0]
-    assert feature.name.name == "age__scale"
+    assert feature.name == "age__scale"
 
     # The in_features should be added to options as in_features
     # It should be in the context section, not group, as a frozenset
@@ -136,7 +136,7 @@ def test_load_chained_feature_from_config() -> None:
 
     # Second feature should be a regular Feature with options
     assert isinstance(result[1], Feature)
-    assert result[1].name.name == "weight"
+    assert result[1].name == "weight"
     assert result[1].options.group.get("unit") == "kg"
     assert result[1].options.group.get("precision") == 2
     # Should NOT have in_features
@@ -144,7 +144,7 @@ def test_load_chained_feature_from_config() -> None:
 
     # Third feature should be a chained Feature with in_features in context as frozenset
     assert isinstance(result[2], Feature)
-    assert result[2].name.name == "age__scale"
+    assert result[2].name == "age__scale"
     in_features_value = result[2].options.context.get(DefaultOptionKeys.in_features)
     assert isinstance(in_features_value, frozenset)
     assert in_features_value == frozenset({"age"})

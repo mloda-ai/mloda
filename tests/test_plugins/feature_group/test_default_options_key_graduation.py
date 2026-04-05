@@ -39,9 +39,21 @@ class TestDefaultOptionKeysCoreLocation:
         from mloda.provider import DefaultOptionKeys
 
         assert DefaultOptionKeys.reference_time.value == "reference_time"
-        assert DefaultOptionKeys.time_travel.value == "time_travel_filter"
+        assert DefaultOptionKeys.time_travel.value == "time_travel"
         assert DefaultOptionKeys.group.value == "group"
         assert DefaultOptionKeys.order_by.value == "order_by"
+
+    def test_all_member_names_match_values(self) -> None:
+        """Every enum member's name must equal its value to prevent silent mismatches.
+
+        See: https://github.com/mloda-ai/mloda/issues/271
+        """
+        from mloda.provider import DefaultOptionKeys
+
+        for member in DefaultOptionKeys:
+            assert member.name == member.value, (
+                f"DefaultOptionKeys.{member.name} has value {member.value!r}; name and value must be identical"
+            )
 
     def test_core_and_provider_same_class(self) -> None:
         from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys as Core

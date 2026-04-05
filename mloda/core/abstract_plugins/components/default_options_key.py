@@ -10,7 +10,7 @@ class DefaultOptionKeys(str, Enum):
 
     Time-Related Keys:
     - `reference_time`: Key for the event timestamp column. Value: "reference_time"
-    - `time_travel`: Key for the validity timestamp column. Value: "time_travel_filter"
+    - `time_travel`: Key for the validity timestamp column. Value: "time_travel"
 
     Data Shaping Keys:
     - `group`: Key for grouping/partitioning columns. Value: "group"
@@ -23,7 +23,7 @@ class DefaultOptionKeys(str, Enum):
     in_features = "in_features"
     feature_chainer_parser_key = "feature_chainer_parser_key"
     reference_time = "reference_time"
-    time_travel = "time_travel_filter"
+    time_travel = "time_travel"
     default = "default"
     context = "context"
     group = "group"

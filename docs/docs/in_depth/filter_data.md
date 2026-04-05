@@ -52,7 +52,7 @@ Parameters:
 -   valid_to (Optional[datetime]): End of the validity period (optional, with timezone).
 -   max_exclusive (bool): If True, the upper bounds (event_to, valid_to) are treated as exclusive.
 -   event_time_column: The column name containing event timestamps. Default is "reference_time".
--   validity_time_column: The column name containing validity timestamps. Default is "time_travel_filter".
+-   validity_time_column: The column name containing validity timestamps. Default is "time_travel".
 
 The **single_filters** created will be converted to UTC as ISO 8601 formatted strings to ensure consistency
     across time zones and avoid ambiguity when comparing or processing time-based data.
@@ -96,7 +96,7 @@ global_filter.filters
 Result
 
 ``` python
-{<SingleFilter(feature_name=time_travel_filter, type=range, parameters=(('max', '2022-12-31T00:00:00+00:00'), ('max_exclusive', True), ('min', '2022-01-01T00:00:00+00:00')))>,
+{<SingleFilter(feature_name=time_travel, type=range, parameters=(('max', '2022-12-31T00:00:00+00:00'), ('max_exclusive', True), ('min', '2022-01-01T00:00:00+00:00')))>,
  <SingleFilter(feature_name=reference_time, type=range, parameters=(('max', '2023-12-31T00:00:00+00:00'), ('max_exclusive', True), ('min', '2023-01-01T00:00:00+00:00')))>}
 ```
 

@@ -3,9 +3,9 @@
 `stream_all` lets you consume results incrementally instead of waiting for every feature group to finish.  Each time a feature group completes, its result is yielded immediately so you can begin processing it while the remaining groups are still computing.  It accepts the same parameters as `run_all` (see [mloda API](mloda-api.md)).
 
 ``` python3
-from mloda.user import stream_all
+from mloda.user import mloda
 
-for result in stream_all(["FeatureA", "FeatureB", "FeatureC"]):
+for result in mloda.stream_all(["FeatureA", "FeatureB", "FeatureC"]):
     print(result)
 ```
 
@@ -23,14 +23,14 @@ results = mloda.run_all(["FeatureA", "FeatureB", "FeatureC"])
 `stream_all` yields each result as soon as its group is done:
 
 ``` python3
-from mloda.user import stream_all
+from mloda.user import mloda
 
-for result in stream_all(["FeatureA", "FeatureB", "FeatureC"]):
+for result in mloda.stream_all(["FeatureA", "FeatureB", "FeatureC"]):
     # each result arrives as its feature group finishes
     process(result)
 ```
 
-Both produce the same data — `list(stream_all(...))` is equivalent to `run_all(...)`.
+Both produce the same data: `list(mloda.stream_all(...))` is equivalent to `mloda.run_all(...)`.
 
 ## What "streaming" means here
 
@@ -38,9 +38,9 @@ Streaming operates at **feature-group granularity**.  Each yielded value is a **
 
 ## What is not supported
 
-- **Row-by-row streaming** — individual rows are not yielded as they are computed.
-- **Partial results** — you cannot observe a feature group's output before it has fully completed.
-- **Chunked input** — a single feature group's computation is not split into smaller streaming chunks.
+- **Row-by-row streaming** -- individual rows are not yielded as they are computed.
+- **Partial results** -- you cannot observe a feature group's output before it has fully completed.
+- **Chunked input** -- a single feature group's computation is not split into smaller streaming chunks.
 
 ## When to use `stream_all`
 
@@ -54,11 +54,11 @@ If you only request a single feature group, `stream_all` behaves like `run_all` 
 
 ## Continuous data processing
 
-mloda processes data in **blocks** — complete datasets that are computed and returned at once. Continuous processing means wrapping an outer loop around mloda's APIs, feeding micro-batches from an external source (Kafka consumer, WebSocket, file watcher, generator) into mloda one block at a time.
+mloda processes data in **blocks**, complete datasets that are computed and returned at once. Continuous processing means wrapping an outer loop around mloda's APIs, feeding micro-batches from an external source (Kafka consumer, WebSocket, file watcher, generator) into mloda one block at a time.
 
 All patterns below build on the [two-phase execution API (`prepare()` / `run()`)](mloda-api.md#two-phase-execution-prepare-run).
 
-## Pattern 1 — Micro-batch loop with `prepare()` / `run()`
+## Pattern 1: Micro-batch loop with `prepare()` / `run()`
 
 The recommended pattern for continuous processing. Call `prepare()` once to build the execution plan, then loop `run()` for each micro-batch. The plan is reused across calls, so only the first call pays the planning cost.
 
@@ -83,9 +83,9 @@ for batch in data_source():
         consume(result)
 ```
 
-This works with any iterable source — swap `data_source()` for a Kafka consumer, an async WebSocket buffer, or a directory watcher.
+This works with any iterable source.
 
-## Pattern 2 — Micro-batch loop with `prepare()` / `stream_run()`
+## Pattern 2: Micro-batch loop with `prepare()` / `stream_run()`
 
 Combines plan reuse with per-group streaming. Call `prepare()` once, then `stream_run()` for each micro-batch. Each feature group's result is yielded as soon as it completes, while the execution plan is reused across calls.
 
@@ -117,14 +117,14 @@ for batch in sensor_source():
 
 `stream_run()` has the same parameters as `run()`. `list(session.stream_run(...))` produces the same results as `session.run(...)`.
 
-## Pattern 3 — One-shot streaming with `stream_all()`
+## Pattern 3: One-shot streaming with `stream_all()`
 
-When you don't need plan reuse and want a single-call streaming API, use `stream_all()`. It internally calls `prepare()` + `stream_run()`.
+When you don't need plan reuse and want a single-call streaming API, use `mloda.stream_all()`. It internally calls `prepare()` + `stream_run()`.
 
 ``` python3
-from mloda.user import stream_all
+from mloda.user import mloda
 
-for result in stream_all(["FeatureA", "FeatureB", "FeatureC"], api_data=batch):
+for result in mloda.stream_all(["FeatureA", "FeatureB", "FeatureC"], api_data=batch):
     process(result)
 ```
 
@@ -134,11 +134,9 @@ for result in stream_all(["FeatureA", "FeatureB", "FeatureC"], api_data=batch):
 
 | | Pattern 1: `prepare()` / `run()` | Pattern 2: `prepare()` / `stream_run()` | Pattern 3: `stream_all()` |
 |---|---|---|---|
-| **Plan reuse** | Yes | Yes | No — rebuilt every call |
-| **Per-batch overhead** | Low | Low | Higher (planning repeated) |
-| **Result delivery** | All groups finish, then list returned | Each group yielded as it completes | Each group yielded as it completes |
-| **Best for** | High-throughput pipelines, single feature group | Multi-feature dashboards with plan reuse | Quick one-shot streaming |
-| **Memory** | All results in memory at once per batch | Results can be released incrementally | Results can be released incrementally |
+| **Plan reuse** | Yes | Yes | No |
+| **Result delivery** | All at once | Per feature group | Per feature group |
+| **Best for** | High-throughput pipelines | Multi-feature dashboards | Quick one-shot streaming |
 
 ## Capabilities and limitations
 
@@ -154,4 +152,4 @@ The table below compares what mloda's block-based streaming achieves versus true
 | **Plan reuse** | Yes, via `prepare()` / `run()` | N/A (continuous operators) |
 | **Feature composition** | Full mloda feature graph per batch | Limited to streaming operator algebra |
 
-mloda is not a replacement for dedicated streaming frameworks. It is designed for scenarios where you want mloda's feature composition and dependency resolution applied to data that arrives continuously in small batches — for example, training a model on batch data and then reusing the same feature definitions for realtime inference, or powering live dashboards that update as new micro-batches arrive.
+mloda is not a replacement for dedicated streaming frameworks. It is designed for scenarios where you want mloda's feature composition and dependency resolution applied to data that arrives continuously in small batches.

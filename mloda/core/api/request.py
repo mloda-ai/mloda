@@ -165,6 +165,50 @@ class mlodaAPI:
             function_extender=function_extender,
         )
 
+    @staticmethod
+    def stream_all(
+        features: Union[Features, list[Union[Feature, str]]],
+        compute_frameworks: Union[Set[Type[ComputeFramework]], Optional[list[str]]] = None,
+        links: Optional[Set[Link]] = None,
+        data_access_collection: Optional[DataAccessCollection] = None,
+        parallelization_modes: Set[ParallelizationMode] = {ParallelizationMode.SYNC},
+        flight_server: Optional[Any] = None,
+        function_extender: Optional[Set[Extender]] = None,
+        global_filter: Optional[GlobalFilter] = None,
+        api_data: Optional[Dict[str, Dict[str, Any]]] = None,
+        plugin_collector: Optional[PluginCollector] = None,
+        copy_features: bool = True,
+        strict_type_enforcement: bool = False,
+        column_ordering: Optional[str] = None,
+    ) -> Generator[Any, None, None]:
+        """Stream results at feature-group granularity.
+
+        Like ``run_all`` but yields each feature group's result as it completes.
+        ``list(stream_all(...))`` equals ``run_all(...)``.
+
+        Yields:
+            One complete result per feature group.
+        """
+        session = mlodaAPI.prepare(
+            features,
+            compute_frameworks,
+            links,
+            data_access_collection,
+            global_filter,
+            api_data=api_data,
+            plugin_collector=plugin_collector,
+            copy_features=copy_features,
+            strict_type_enforcement=strict_type_enforcement,
+            column_ordering=column_ordering,
+            parallelization_modes=parallelization_modes,
+        )
+        yield from session.stream_run(
+            api_data=api_data,
+            parallelization_modes=parallelization_modes,
+            flight_server=flight_server,
+            function_extender=function_extender,
+        )
+
     @classmethod
     def prepare(
         cls,

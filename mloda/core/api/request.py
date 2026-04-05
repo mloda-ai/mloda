@@ -205,13 +205,23 @@ class mlodaAPI:
         parallelization_modes: Set[ParallelizationMode] = {ParallelizationMode.SYNC},
         flight_server: Optional[Any] = None,
         function_extender: Optional[Set[Extender]] = None,
+        artifacts: Optional[Dict[str, Any]] = None,
     ) -> List[Any]:
         """Execute the prepared session and return results.
 
         Can be called multiple times on the same session with different ``api_data``
-        to re-run the execution plan against new inputs.
+        and/or ``artifacts`` to re-run the execution plan against new inputs.
+
+        Args:
+            api_data: Fresh runtime data, replacing any data from prepare().
+            artifacts: Artifact dict from a previous run's ``get_artifacts()``.
+                When provided, feature groups with matching artifact names
+                switch to load mode for this run, enabling train-then-predict
+                workflows without re-preparing.
         """
-        runner = self._batch_run(parallelization_modes, flight_server, function_extender, api_data=api_data)
+        runner = self._batch_run(
+            parallelization_modes, flight_server, function_extender, api_data=api_data, artifacts=artifacts
+        )
         self.runner = runner
         return self.get_result()
 
@@ -221,12 +231,13 @@ class mlodaAPI:
         parallelization_modes: Set[ParallelizationMode] = {ParallelizationMode.SYNC},
         flight_server: Optional[Any] = None,
         function_extender: Optional[Set[Extender]] = None,
+        artifacts: Optional[Dict[str, Any]] = None,
     ) -> Generator[Any, None, None]:
         """Execute the prepared session and yield each feature group's result as it completes."""
         _api_data = api_data if api_data is not None else self.api_data
         runner = self._setup_engine_runner(parallelization_modes, flight_server)
         try:
-            self._enter_runner_context(runner, parallelization_modes, function_extender, _api_data)
+            self._enter_runner_context(runner, parallelization_modes, function_extender, _api_data, artifacts=artifacts)
             for _step_uuid, result in runner.compute_stream():
                 yield result
         finally:
@@ -239,12 +250,13 @@ class mlodaAPI:
         flight_server: Optional[Any] = None,
         function_extender: Optional[Set[Extender]] = None,
         api_data: Optional[Dict[str, Any]] = None,
+        artifacts: Optional[Dict[str, Any]] = None,
     ) -> ExecutionOrchestrator:
         """Sets up the engine runner and runs the engine computation."""
         # Use stored api_data if not explicitly provided
         _api_data = api_data if api_data is not None else self.api_data
         runner = self._setup_engine_runner(parallelization_modes, flight_server)
-        self._run_engine_computation(runner, parallelization_modes, function_extender, _api_data)
+        self._run_engine_computation(runner, parallelization_modes, function_extender, _api_data, artifacts=artifacts)
         self.runner = runner
         return runner
 
@@ -254,13 +266,14 @@ class mlodaAPI:
         parallelization_modes: Set[ParallelizationMode] = {ParallelizationMode.SYNC},
         function_extender: Optional[Set[Extender]] = None,
         api_data: Optional[Dict[str, Any]] = None,
+        artifacts: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Runs the engine computation within a context manager."""
         if not isinstance(runner, ExecutionOrchestrator):
             raise ValueError("Internal error: execution orchestrator not initialized. This is likely a bug in mloda.")
 
         try:
-            self._enter_runner_context(runner, parallelization_modes, function_extender, api_data)
+            self._enter_runner_context(runner, parallelization_modes, function_extender, api_data, artifacts=artifacts)
             runner.compute()
         finally:
             self._exit_runner_context(runner)
@@ -271,9 +284,10 @@ class mlodaAPI:
         parallelization_modes: Set[ParallelizationMode],
         function_extender: Optional[Set[Extender]],
         api_data: Optional[Dict[str, Any]],
+        artifacts: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Enters the runner context."""
-        runner.__enter__(parallelization_modes, function_extender, api_data)
+        runner.__enter__(parallelization_modes, function_extender, api_data, artifacts)
 
     def _exit_runner_context(self, runner: ExecutionOrchestrator) -> None:
         """Exits the runner context."""

@@ -581,6 +581,8 @@ class TestFeatureGroupFinalFilters:
         global_filter = GlobalFilter()
         global_filter.add_filter("status", "equal", {"value": "active"})
 
+        # ValueError from _validate_filter_columns is wrapped in a generic
+        # Exception by the threading/worker layer (see thread_worker.py).
         with pytest.raises(Exception, match="missing filter column.*status.*row elimination"):
             MlodaTestRunner.run_api(
                 features,
@@ -606,6 +608,8 @@ class TestFeatureGroupFinalFilters:
         global_filter = GlobalFilter()
         global_filter.add_filter("status", "equal", {"value": "active"})
 
+        # ValueError from _validate_filter_columns is wrapped in a generic
+        # Exception by the threading/worker layer (see thread_worker.py).
         with pytest.raises(Exception, match="missing filter column.*status.*row elimination"):
             MlodaTestRunner.run_api(
                 features,

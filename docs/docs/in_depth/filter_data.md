@@ -181,8 +181,8 @@ can access them via `features.filters`:
 def calculate_feature(cls, data, features: FeatureSet):
     if features.filters is not None:
         for single_filter in features.filters:
-            column = single_filter.filter_feature.name   # e.g. "status"
-            value  = single_filter.parameter.value        # e.g. "active"
+            column = single_filter.name             # e.g. "status"
+            value  = single_filter.parameter.value  # e.g. "active"
             # ... use however you need
 ```
 

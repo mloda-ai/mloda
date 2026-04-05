@@ -461,7 +461,7 @@ class FeatureGroup(ABC):
         """
         if isinstance(another, FeatureGroup):
             return type(self) is type(another)
-        raise Exception(f"Cannot compare FeatureGroup with another type. {another} ")
+        return NotImplemented
 
     def __hash__(self) -> int:
         """

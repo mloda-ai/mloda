@@ -11,7 +11,7 @@ class FeatureName:
             return self.name == other.name
         if isinstance(other, str):
             return self.name == other
-        raise TypeError(f"Cannot compare FeatureName with {type(other)}.")
+        return NotImplemented
 
     def __hash__(self) -> int:
         return hash(self.name)

@@ -2,7 +2,7 @@
 
 This example demonstrates a simple request to the mloda API. You describe WHAT data you need - mloda resolves HOW to get it.
 
-> **Tip:** For AI agents or quick prototyping, you can also use inline data with `api_data` - see the [30-second example](https://mloda-ai.github.io/mloda/#30-second-example).
+> **Tip:** For AI agents or quick prototyping, you can also use inline data with `api_data` - see the [30-second example](installation.md#4-quick-start).
 
 In this example, mloda automatically determines that a **CsvReader** feature group will fulfill the request and respond with the resulting DataFrame.
 
@@ -86,4 +86,4 @@ features = load_features_from_config(llm_request, format="json")
 result = mloda.run_all(features=features, compute_frameworks=["PandasDataFrame"], ...)
 ```
 
-See [Feature Configuration](https://mloda-ai.github.io/mloda/in_depth/feature-config/) for more details on JSON-based configuration.
+See [Feature Configuration](../in_depth/feature-config.md) for more details on JSON-based configuration.

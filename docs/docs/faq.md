@@ -34,7 +34,7 @@ Yes. Plugins are small, template-like structures that are easy for AI to generat
 
 #### How do I install mloda? How do I get started with mloda?
 
-Installation is straightforward via pip or by cloning the repository. [Installation guide and step-by-step guide](https://mloda-ai.github.io/mloda/chapter1/installation/)
+Installation is straightforward via pip or by cloning the repository. [Installation guide and step-by-step guide](chapter1/installation.md)
 
 #### What are the prerequisites for using mloda? 
 
@@ -44,7 +44,7 @@ You'll learn a lot along the way!
 
 #### How do I create my first feature group using mloda? 
 
-Feature Groups define dependencies and calculations. To create your first Feature Group, check out this [basic example here](https://mloda-ai.github.io/mloda/chapter1/feature-groups/). For more advanced topics, see our [in-depth documentation on feature groups](https://mloda-ai.github.io/mloda/in_depth/feature-chain-parser/).
+Feature Groups define dependencies and calculations. To create your first Feature Group, check out this [basic example here](chapter1/feature-groups.md). For more advanced topics, see our [in-depth documentation on feature groups](in_depth/feature-chain-parser.md).
 
 ## Features and Functionality
 

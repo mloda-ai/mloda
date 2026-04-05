@@ -103,7 +103,7 @@ class GlobalFilter:
     def unify_options(self, feat_options: Options, filter_options: Options) -> Options:
         for key, value in feat_options.items():
             if key not in filter_options:
-                filter_options[key] = value
+                filter_options.add_to_group(key, value)
             else:
                 if filter_options[key] == value:
                     continue

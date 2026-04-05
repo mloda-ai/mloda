@@ -33,14 +33,6 @@ class TestOptions:
         with pytest.raises(ValueError, match="Keys cannot exist in both group and context"):
             Options(group={"shared_key": "value1"}, context={"shared_key": "value2"})
 
-    def test_add_legacy_method(self) -> None:
-        """Test legacy add method adds to group."""
-        options = Options()
-        options.add("key1", "value1")
-
-        assert options.group == {"key1": "value1"}
-        assert options.context == {}
-
     def test_add_to_group(self) -> None:
         """Test adding parameters to group."""
         options = Options()
@@ -194,24 +186,6 @@ class TestOptions:
         """options["missing"] returns None, consistent with get()."""
         options = Options(group={"key": "value"})
         assert options["missing"] is None
-
-    def test_setitem_adds_new_key_to_group(self) -> None:
-        """options["new_key"] = value adds key to group."""
-        options = Options(group={"existing": "value"})
-        options["new_key"] = "new_value"
-        assert options.group["new_key"] == "new_value"
-
-    def test_setitem_updates_existing_group_key(self) -> None:
-        """options["existing_group_key"] = new_value updates group key."""
-        options = Options(group={"key": "old_value"})
-        options["key"] = "new_value"
-        assert options.group["key"] == "new_value"
-
-    def test_setitem_updates_existing_context_key(self) -> None:
-        """options["existing_context_key"] = new_value updates context key."""
-        options = Options(group={"g": 1}, context={"ctx_key": "old_value"})
-        options["ctx_key"] = "new_value"
-        assert options.context["ctx_key"] == "new_value"
 
     def test_migration_scenario(self) -> None:
         """Test typical migration scenario: all options start in group."""

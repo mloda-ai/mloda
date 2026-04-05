@@ -216,7 +216,7 @@ class TestIncompatibleTypeCoercion:
         table = pa.table({"value": pa.array([25, 30], type=pa.int64())})
 
         feature = Feature.int32_of("value")  # Declared as INT32
-        feature.options.add(DefaultOptionKeys.strict_type_enforcement, True)
+        feature.options.add_to_group(DefaultOptionKeys.strict_type_enforcement, True)
         feature_set = FeatureSet()
         feature_set.add(feature)
 
@@ -229,7 +229,7 @@ class TestIncompatibleTypeCoercion:
 
         # Feature declared as FLOAT
         feature = Feature(name="value", data_type=DataType.FLOAT)
-        feature.options.add(DefaultOptionKeys.strict_type_enforcement, True)
+        feature.options.add_to_group(DefaultOptionKeys.strict_type_enforcement, True)
         feature_set = FeatureSet()
         feature_set.add(feature)
 

@@ -90,7 +90,7 @@ class mlodaAPI:
             self._add_api_input_data(feature, api_input_data_collection)
             # Propagate strict_type_enforcement to typed features only
             if self.strict_type_enforcement and feature.data_type is not None:
-                feature.options.add(DefaultOptionKeys.strict_type_enforcement, True)
+                feature.options.add_to_group(DefaultOptionKeys.strict_type_enforcement, True)
 
         return features
 
@@ -332,4 +332,4 @@ class mlodaAPI:
             api_input_data_column_names = api_input_data_collection.get_column_names()
             if len(api_input_data_column_names.data) == 0:
                 raise ValueError("No entry names found in ApiInputDataCollection.")
-            feature.options.add("ApiInputData", api_input_data_collection.get_column_names())
+            feature.options.add_to_group("ApiInputData", api_input_data_collection.get_column_names())

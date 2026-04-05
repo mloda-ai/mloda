@@ -168,19 +168,19 @@ class TestTimeWindowFeatureGroup:
         """Test get_reference_time_column method returns custom column name when reference_time option is set."""
         # Test with custom options using DefaultOptionKeys.reference_time
         options = Options()
-        options.add(DefaultOptionKeys.reference_time, "custom_time_column")
+        options.add_to_group(DefaultOptionKeys.reference_time, "custom_time_column")
         assert TimeWindowFeatureGroup.get_reference_time_column(options) == "custom_time_column"
 
         # Test with custom options using DefaultOptionKeys.reference_time.value
         options = Options()
-        options.add(DefaultOptionKeys.reference_time.value, "another_custom_column")
+        options.add_to_group(DefaultOptionKeys.reference_time.value, "another_custom_column")
         assert TimeWindowFeatureGroup.get_reference_time_column(options) == "another_custom_column"
 
     def test_get_reference_time_column_invalid_type(self) -> None:
         """Test get_reference_time_column method raises ValueError when option value is not a string."""
         # Test with invalid options (non-string value)
         options = Options()
-        options.add(DefaultOptionKeys.reference_time.value, 123)  # Not a string
+        options.add_to_group(DefaultOptionKeys.reference_time.value, 123)  # Not a string
         with pytest.raises(ValueError):
             TimeWindowFeatureGroup.get_reference_time_column(options)
 

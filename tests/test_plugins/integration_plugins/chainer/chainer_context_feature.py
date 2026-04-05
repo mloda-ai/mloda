@@ -95,7 +95,7 @@ class ChainedContextFeatureGroupTest(FeatureGroup):
         # Configuration-based approach
         source_features = options.get_in_features()
         for source_feature in source_features:
-            source_feature.options.add(
+            source_feature.options.add_to_group(
                 DefaultOptionKeys.feature_chainer_parser_key,
                 frozenset(["ident", DefaultOptionKeys.in_features.value, "property2", "property3"]),
             )

@@ -64,6 +64,20 @@ class TestContributingFile:
         content = (PROJECT_ROOT / "CONTRIBUTING.md").read_text()
         assert "Apache" in content, "CONTRIBUTING.md must mention the Apache 2.0 license"
 
+    def test_contributing_has_plugin_development_section(self) -> None:
+        content = (PROJECT_ROOT / "CONTRIBUTING.md").read_text()
+        content_lower = content.lower()
+        assert "plugin" in content_lower, "CONTRIBUTING.md must cover plugin development"
+
+    def test_contributing_mentions_registry_guides(self) -> None:
+        content = (PROJECT_ROOT / "CONTRIBUTING.md").read_text()
+        assert "mloda-registry" in content, "CONTRIBUTING.md must reference the mloda-registry guides"
+        assert "guides" in content.lower(), "CONTRIBUTING.md must mention the plugin development guides"
+
+    def test_contributing_mentions_plugin_template(self) -> None:
+        content = (PROJECT_ROOT / "CONTRIBUTING.md").read_text()
+        assert "mloda-plugin-template" in content, "CONTRIBUTING.md must reference the mloda-plugin-template"
+
 
 class TestLicenseFile:
     def test_license_file_exists(self) -> None:

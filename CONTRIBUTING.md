@@ -88,10 +88,16 @@ For contributions to the mloda core framework, see our [Documentation](https://m
 
 ### Plugin Development
 
-The easiest way to extend mloda is by creating plugins:
+The easiest way to extend mloda is by creating plugins. The [mloda-registry](https://github.com/mloda-ai/mloda-registry) contains 40+ guides organized as a step-by-step journey:
 
-- **[mloda-registry](https://github.com/mloda-ai/mloda-registry)**: Browse 40+ guides covering the complete plugin development journey.
-- **[mloda-plugin-template](https://github.com/mloda-ai/mloda-plugin-template)**: Use our template to create standalone plugin repositories with pre-configured CI/CD.
+1. **Using plugins**: Learn to use and discover existing plugins.
+2. **Creating plugins**: Build a plugin in your project, then package it.
+3. **Sharing plugins**: Distribute via private repos, publish to the community registry, or contribute to official plugins.
+4. **Advanced patterns**: Deep dives into feature groups, compute frameworks, and extenders, with dedicated pattern catalogs for each.
+
+Start with the [Plugin Journey overview](https://github.com/mloda-ai/mloda-registry/blob/main/docs/guides/index.md) to find the right guide for your level.
+
+To scaffold a new standalone plugin package with pre-configured CI/CD, use the [mloda-plugin-template](https://github.com/mloda-ai/mloda-plugin-template).
 
 ### Report Issues
 

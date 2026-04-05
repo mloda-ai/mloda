@@ -29,7 +29,7 @@ List options:
 
 4.  **Initialized connection object:** Stores connection objects that are already initialized: (DBConnectionObject)
 
-5.  **Unitialized connection object:** Stores not initialized connection objects: (UninitializedDBConnection)
+5.  **Uninitialized connection object:** Stores not initialized connection objects: (UninitializedDBConnection)
 
 You can apply these options like so:
 
@@ -148,7 +148,7 @@ In this case, we need to provide the specific reader class: CsvReader.
 
 ``` python
 
-# This feature is already implemented as plug-in, so do not run it again. This will raise intentional errors.
+# This feature is already implemented as plugin, so do not run it again. This will raise intentional errors.
 class ReadFileFeature(FeatureGroup):
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
@@ -291,7 +291,7 @@ Output
 1          TestValue6
 ```
 
-Finally, as also the most important way to get data, is actually to depent on data inside the framework already. For this purpose, a feature can load data depending on other features.
+Finally, as also the most important way to get data, is actually to depend on data inside the framework already. For this purpose, a feature can load data depending on other features.
 
 #### Input features 
 

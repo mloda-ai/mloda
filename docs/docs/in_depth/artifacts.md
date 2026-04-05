@@ -8,7 +8,7 @@ Example use cases are embeddings, Feature Matrices, Model Checkpoints and more.
 Artifacts are managed through a set of abstract and concrete classes that define how artifacts are created, saved, and loaded. The primary classes involved in artifact management include:
 
 - `BaseArtifact`: The base class for all artifacts.
-- `FeatureGroup`: The base class for feature groups, including methods for artifact management. This class may contain a `BaseArtfact`.
+- `FeatureGroup`: The base class for feature groups, including methods for artifact management. This class may contain a `BaseArtifact`.
 
 ## Key Components
 

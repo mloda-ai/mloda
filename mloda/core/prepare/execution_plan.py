@@ -779,7 +779,7 @@ class ExecutionPlan:
         if link_fw[0].jointype in (JoinType.APPEND, JoinType.UNION):
             if left_uuids is None or right_uuids is None:
                 raise ValueError(
-                    "This should not happen. Did you set an index for the append or union? Are the features unique? Link and Hash are not unique properties. In this, case, set an arbritarys options."
+                    "This should not happen. Did you set an index for the append or union? Are the features unique? Link and Hash are not unique properties. In this case, set arbitrary options."
                 )
             if unique_solution_counter > 0:
                 return (left_uuids, right_uuids)

@@ -40,9 +40,9 @@ class BaseInputData(ABC):
     @classmethod
     def feature_scope_data_access(cls, options: Options, feature_name: str) -> bool:
         """
-        We check for the feature scrope data access if any child classes match the data access.
+        We check for the feature scope data access if any child classes match the data access.
         """
-        subclasses = get_all_filtereted_subclasses(BaseInputData, cls)
+        subclasses = get_all_filtered_subclasses(BaseInputData, cls)
         for subclass in subclasses:
             for key, value in options.items():
                 _key = cls.deal_with_base_input_data_name_as_cls_or_str(key)
@@ -98,7 +98,7 @@ class BaseInputData(ABC):
         """
         We check for data access collection if any child classes match the data access.
         """
-        subclasses = get_all_filtereted_subclasses(BaseInputData, cls)
+        subclasses = get_all_filtered_subclasses(BaseInputData, cls)
 
         for subclass in subclasses:
             matched_data_access = subclass.match_subclass_data_access(  # type: ignore[attr-defined]
@@ -215,7 +215,7 @@ def _collect_filtered_subclasses(cls: Any, parent_class: Any) -> List[Type[BaseI
     return result
 
 
-def get_all_filtereted_subclasses(cls: Any, parent_class: Any) -> List[Type[BaseInputData]]:
+def get_all_filtered_subclasses(cls: Any, parent_class: Any) -> List[Type[BaseInputData]]:
     filtered_subclasses = _collect_filtered_subclasses(cls, parent_class)
     if not filtered_subclasses:
         auto_load_group = getattr(parent_class, "_auto_load_group", None)

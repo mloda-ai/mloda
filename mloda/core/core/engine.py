@@ -240,7 +240,7 @@ class Engine:
         features: Features,
     ) -> None:
         if self.global_filter:
-            matched_filters = self.global_filter.identity_matched_filters(
+            matched_filters = self.global_filter.identify_matched_filters(
                 feature_group_class, feature, self.data_access_collection
             )
 

@@ -67,7 +67,7 @@ class GlobalFilter:
             self.collection[(feature_group, filtered_feature_name)] = set([single_filter])
         self.collection[(feature_group, filtered_feature_name)].add(single_filter)
 
-    def identity_matched_filters(
+    def identify_matched_filters(
         self,
         feature_group: Type[FeatureGroup],
         feat: Feature,

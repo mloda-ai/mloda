@@ -125,7 +125,7 @@ In this case, the feature group ExampleB will only run on the PyArrowTable frame
 
 | Framework | Technology | Strengths | Best For | Dependencies |
 |-----------|------------|-----------|----------|--------------|
-| **PandasDataFrame** | pandas DataFrame | Rich data transformation, familiar mloda | Development, data exploration, smaller datasets | pandas, numpy |
+| **PandasDataFrame** | pandas DataFrame | Rich data transformation, familiar API | Development, data exploration, smaller datasets | pandas, numpy |
 | **PyArrowTable** | Apache Arrow Tables | Memory-efficient, high performance, columnar format | Production, big data, interoperability | pyarrow |
 | **PolarsDataFrame** | Polars DataFrame | Fast, memory-efficient, eager evaluation | Development, immediate results | polars |
 | **PolarsLazyDataFrame** | Polars LazyFrame | Query optimization, lazy evaluation | Large datasets, performance optimization | polars |

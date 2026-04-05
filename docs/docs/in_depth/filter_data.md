@@ -220,6 +220,10 @@ always available for inline reading.
 
 ### Usage patterns
 
+The examples below use pseudocode helpers (`compute_totals`, `build_mask_from_filters`,
+`broadcast_sum`) to keep the focus on the filter interaction pattern. Replace these with
+your framework-specific logic.
+
 #### Pattern 1: Let the framework handle everything (default)
 
 The most common case. Your FeatureGroup ignores filters entirely, and the framework

@@ -258,11 +258,15 @@ class ComputeFramework(ABC):
                 raise ValueError(
                     f"{fg_name} output is missing filter column '{col}' "
                     f"required for row elimination. "
+                    f"This is a bug in the FeatureGroup, not in your filter. "
                     f"Available columns: {sorted(data_columns)}"
                 )
 
     def _extract_column_names(self, data: Any) -> set[str]:
-        """Extract column names from the data."""
+        """Extract column names from the data.
+
+        Called only with the non-None output of calculate_feature.
+        """
         raise NotImplementedError
 
     @final

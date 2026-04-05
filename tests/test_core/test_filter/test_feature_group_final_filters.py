@@ -583,7 +583,7 @@ class TestFeatureGroupFinalFilters:
 
         # ValueError from _validate_filter_columns is wrapped in a generic
         # Exception by the threading/worker layer (see thread_worker.py).
-        with pytest.raises(Exception, match="missing filter column.*status.*row elimination"):
+        with pytest.raises(Exception, match="missing filter column.*status.*bug in the FeatureGroup"):
             MlodaTestRunner.run_api(
                 features,
                 compute_frameworks={PyArrowTable},
@@ -610,7 +610,7 @@ class TestFeatureGroupFinalFilters:
 
         # ValueError from _validate_filter_columns is wrapped in a generic
         # Exception by the threading/worker layer (see thread_worker.py).
-        with pytest.raises(Exception, match="missing filter column.*status.*row elimination"):
+        with pytest.raises(Exception, match="missing filter column.*status.*bug in the FeatureGroup"):
             MlodaTestRunner.run_api(
                 features,
                 compute_frameworks={PyArrowTable},

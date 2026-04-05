@@ -2,7 +2,7 @@
 
 If you are contributing to mloda or working on its development, follow these steps to set up your environment, including using the provided dev container and running tests with tox.
 
-By contributing, you agree that your contributions will be licensed under the [Apache License, Version 2.0](https://github.com/mloda-ai/mloda/blob/main/LICENSE.TXT).
+By contributing, you agree that your contributions will be licensed under the [Apache License, Version 2.0](https://github.com/mloda-ai/mloda/blob/main/LICENSE).
 
 
 #### 1. Clone the repository:

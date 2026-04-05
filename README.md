@@ -3,7 +3,7 @@
 [![Website](https://img.shields.io/badge/website-mloda.ai-blue.svg)](https://mloda.ai)
 [![Documentation](https://img.shields.io/badge/docs-github.io-blue.svg)](https://mloda-ai.github.io/mloda/)
 [![PyPI version](https://badge.fury.io/py/mloda.svg)](https://badge.fury.io/py/mloda)
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/mloda-ai/mloda/blob/main/LICENSE.TXT)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/mloda-ai/mloda/blob/main/LICENSE)
 [![Tests](https://img.shields.io/badge/tests-1500%2B-green.svg)](https://github.com/mloda-ai/mloda)
 
 > **Declarative data access for AI agents. Describe what you need - mloda delivers it.**

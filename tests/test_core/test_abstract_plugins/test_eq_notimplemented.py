@@ -15,20 +15,15 @@ from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.options import Options
 
 
-def create_feature_group_class(name: str, domain: Domain) -> type:
-    """Factory function to create FeatureGroup subclasses with specific name and domain."""
+class _EqTestFeatureGroup(FeatureGroup):
+    """Concrete FeatureGroup subclass for __eq__ testing.
 
-    class DynamicFeatureGroup(FeatureGroup):
-        @classmethod
-        def get_domain(cls) -> Domain:
-            return domain
+    Defined at module level so inspect.getsource() works when get_feature_group_docs()
+    discovers it via FeatureGroup.__subclasses__().
+    """
 
-        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Any]]:
-            return None
-
-    DynamicFeatureGroup.__name__ = name
-    DynamicFeatureGroup.__qualname__ = name
-    return DynamicFeatureGroup
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Any]]:
+        return None
 
 
 class TestFeatureGroupEqTypeMismatch:
@@ -45,8 +40,7 @@ class TestFeatureGroupEqTypeMismatch:
     )
     def test_feature_group_eq_non_feature_group_returns_false(self, other: Any) -> None:
         """Comparing a FeatureGroup to a non-FeatureGroup type should return False, not raise."""
-        FGClass = create_feature_group_class("TestFG", Domain("test"))
-        instance = FGClass()
+        instance = _EqTestFeatureGroup()
         assert (instance == other) is False
 
 

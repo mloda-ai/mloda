@@ -4,7 +4,6 @@ Tests for the modernized AggregatedFeatureGroup with configuration-based approac
 
 from typing import Any, List, Set
 
-import pytest
 
 from mloda.user import Feature
 from mloda.user import FeatureName

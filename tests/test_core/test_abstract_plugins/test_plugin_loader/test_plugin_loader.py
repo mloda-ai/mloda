@@ -95,7 +95,7 @@ class TestPluginLoader:
 
     def test_load_matching_only_loads_transformer_files(self) -> None:
         """load_matching with '*transformer*' loads only transformer files, not dataframe/filter/merge."""
-        from unittest.mock import MagicMock, call
+        from unittest.mock import MagicMock
 
         plugin_loader = PluginLoader()
         mock_load_plugin = MagicMock()

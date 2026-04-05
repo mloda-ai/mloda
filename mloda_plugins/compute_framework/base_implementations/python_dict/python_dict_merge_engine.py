@@ -75,10 +75,10 @@ class PythonDictMergeEngine(BaseMergeEngine):
         right_index_map = {tuple(r.get(col) for col in right_cols): r for r in right_data}
 
         result = []
-        for l in left_data:
-            key = tuple(l.get(col) for col in left_cols)
+        for left in left_data:
+            key = tuple(left.get(col) for col in left_cols)
             if key in right_index_map:
-                merged = {**l, **right_index_map[key]}
+                merged = {**left, **right_index_map[key]}
                 result.append(merged)
 
         return result
@@ -96,18 +96,18 @@ class PythonDictMergeEngine(BaseMergeEngine):
         right_columns = right_columns - set(right_cols)
 
         left_columns = set()
-        for l in left_data:
-            left_columns.update(l.keys())
+        for left in left_data:
+            left_columns.update(left.keys())
         right_columns = right_columns - left_columns
 
         result = []
-        for l in left_data:
-            key = tuple(l.get(col) for col in left_cols)
+        for left in left_data:
+            key = tuple(left.get(col) for col in left_cols)
             if key in right_index_map:
-                merged = {**l, **right_index_map[key]}
+                merged = {**left, **right_index_map[key]}
                 result.append(merged)
             else:
-                merged = {**l}
+                merged = {**left}
                 for col in right_columns:
                     merged[col] = None
                 result.append(merged)
@@ -118,12 +118,12 @@ class PythonDictMergeEngine(BaseMergeEngine):
         self, left_data: Any, right_data: Any, left_cols: Tuple[str, ...], right_cols: Tuple[str, ...]
     ) -> Any:
         """Performs right join."""
-        left_index_map = {tuple(l.get(col) for col in left_cols): l for l in left_data}
+        left_index_map = {tuple(left.get(col) for col in left_cols): left for left in left_data}
 
         # Get left columns for null filling
         left_columns = set()
-        for l in left_data:
-            left_columns.update(l.keys())
+        for left in left_data:
+            left_columns.update(left.keys())
         left_columns = left_columns - set(left_cols)
 
         right_columns = set()
@@ -149,7 +149,7 @@ class PythonDictMergeEngine(BaseMergeEngine):
         self, left_data: Any, right_data: Any, left_cols: Tuple[str, ...], right_cols: Tuple[str, ...]
     ) -> Any:
         """Performs outer join."""
-        left_index_map = {tuple(l.get(col) for col in left_cols): l for l in left_data}
+        left_index_map = {tuple(left.get(col) for col in left_cols): left for left in left_data}
         right_index_map = {tuple(r.get(col) for col in right_cols): r for r in right_data}
 
         all_keys = set(left_index_map.keys()) | set(right_index_map.keys())
@@ -157,8 +157,8 @@ class PythonDictMergeEngine(BaseMergeEngine):
         # Get all column names
         left_columns = set()
         right_columns = set()
-        for l in left_data:
-            left_columns.update(l.keys())
+        for left in left_data:
+            left_columns.update(left.keys())
         for r in right_data:
             right_columns.update(r.keys())
 

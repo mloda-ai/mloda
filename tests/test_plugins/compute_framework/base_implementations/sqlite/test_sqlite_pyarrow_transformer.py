@@ -1,5 +1,4 @@
 import sqlite3
-from typing import Any
 
 import pyarrow as pa
 import pytest

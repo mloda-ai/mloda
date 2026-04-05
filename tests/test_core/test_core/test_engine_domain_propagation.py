@@ -4,17 +4,15 @@ These tests verify that the parent feature's domain is correctly propagated
 to child features during the recursion process in the Engine class.
 """
 
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch, MagicMock
 from uuid import uuid4
 
-import pytest
 
 from mloda.core.core.engine import Engine
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
-from mloda.core.abstract_plugins.components.domain import Domain
 
 from tests.test_core.test_abstract_plugins.test_abstract_compute_framework import (
     BaseTestComputeFramework1,

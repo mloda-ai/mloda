@@ -64,7 +64,7 @@ class DataConverter:
             raise ImportError("PyArrow is required for test data conversion")
 
         # Special case: if target is already list, no conversion needed
-        if target_framework_type == list:
+        if target_framework_type is list:
             return data
 
         # Step 1: List[Dict] → PyArrow
@@ -72,9 +72,7 @@ class DataConverter:
             transformer_list_to_arrow = self.transformer.transformer_map[(list, pa.Table)]
             arrow_data = transformer_list_to_arrow.transform(list, pa.Table, data, None)
         except KeyError:
-            raise KeyError(
-                f"No transformer found for list → PyArrow. Ensure PythonDictPyarrowTransformer is available."
-            )
+            raise KeyError("No transformer found for list → PyArrow. Ensure PythonDictPyarrowTransformer is available.")
 
         # Special case: if target is PyArrow, we're done
         if target_framework_type == pa.Table:
@@ -109,7 +107,7 @@ class DataConverter:
             raise ImportError("PyArrow is required for test data conversion")
 
         # Special case: if source is already list, no conversion needed
-        if source_framework_type == list:
+        if source_framework_type is list:
             assert isinstance(data, list), "Expected list data"
             return data
 
@@ -133,6 +131,4 @@ class DataConverter:
             result: List[Dict[str, Any]] = transformer_arrow_to_list.transform(pa.Table, list, arrow_data, None)
             return result
         except KeyError:
-            raise KeyError(
-                f"No transformer found for PyArrow → list. Ensure PythonDictPyarrowTransformer is available."
-            )
+            raise KeyError("No transformer found for PyArrow → list. Ensure PythonDictPyarrowTransformer is available.")

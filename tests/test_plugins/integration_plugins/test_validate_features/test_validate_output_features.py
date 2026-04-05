@@ -8,12 +8,11 @@ from mloda.user import Feature
 from mloda.user import Features
 from mloda.provider import FeatureSet
 from mloda.user import ParallelizationMode
-from mloda.steward import ExtenderHook, Extender
+from mloda.steward import ExtenderHook
 from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_SYNC_THREADING
 from tests.test_documentation.test_documentation import DokuExtender
 from tests.test_plugins.integration_plugins.test_validate_features.example_validator import (
     BaseValidateOutputFeaturesBase,
-    BaseValidateOutputFeaturesBaseNegativePandera,
 )
 
 logger = logging.getLogger(__name__)

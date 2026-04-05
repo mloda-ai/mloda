@@ -38,7 +38,7 @@ class TestScalingFeatureGroupIntegration:
         """Test scaling feature group using aggregated feature as source with artifact save/load."""
         # Skip test if sklearn not available
         try:
-            import sklearn
+            import sklearn  # noqa: F401
         except ImportError:
             pytest.skip("scikit-learn not available")
 

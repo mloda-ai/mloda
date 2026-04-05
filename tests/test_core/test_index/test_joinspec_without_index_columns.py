@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from typing import Any, Set, Optional, Union, List
 
-from mloda.provider import FeatureGroup, FeatureSet, HashableDict
+from mloda.provider import FeatureGroup, FeatureSet
 from mloda.user import (
     DataAccessCollection,
     Feature,

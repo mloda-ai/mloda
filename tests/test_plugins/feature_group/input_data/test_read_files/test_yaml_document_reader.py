@@ -4,7 +4,6 @@ import os
 import tempfile
 from typing import Any
 
-import pytest
 import yaml
 
 from mloda.user import Options

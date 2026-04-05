@@ -7,10 +7,9 @@ rather than name-based identity. This ensures that dynamically created classes w
 `__name__` but different domains (or different class objects) are treated as distinct entities.
 """
 
-from typing import Any, Optional, Set, Type, Union
+from typing import Any, Optional, Set, Type
 
 import pandas as pd
-import pytest
 
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework

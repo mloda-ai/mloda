@@ -170,17 +170,13 @@ class TestTypeConstraintValidation:
     def test_string_match_with_type_constraint(self) -> None:
         """String-based feature matching works alongside type constraints."""
         options = Options(context={"operation": "sum", "partition_by": ["region"]})
-        result = MockWithTypeConstraint.match_feature_group_criteria(
-            "source__sum_typed", options
-        )
+        result = MockWithTypeConstraint.match_feature_group_criteria("source__sum_typed", options)
         assert result is True
 
     def test_string_match_rejects_invalid_type(self) -> None:
         """String-based match also rejects when type_validator fails."""
         options = Options(context={"operation": "sum", "partition_by": "not_a_list"})
-        result = MockWithTypeConstraint.match_feature_group_criteria(
-            "source__sum_typed", options
-        )
+        result = MockWithTypeConstraint.match_feature_group_criteria("source__sum_typed", options)
         assert result is False
 
     def test_strict_validation_with_type_validator_accepts_valid(self) -> None:

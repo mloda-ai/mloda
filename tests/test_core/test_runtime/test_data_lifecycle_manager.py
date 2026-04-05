@@ -563,7 +563,7 @@ class TestDataLifecycleManagerIntegration:
         mock_cfw2.convert_flyserver_data_back.return_value = {"feature2": [4, 5, 6]}
         mock_cfw2.select_data_by_column_names.return_value = {"feature2": [4, 5, 6]}
 
-        cfw_collection = {cfw_uuid1: mock_cfw1, cfw_uuid2: mock_cfw2}
+        _cfw_collection = {cfw_uuid1: mock_cfw1, cfw_uuid2: mock_cfw2}
 
         feature_name1 = Mock(spec=FeatureName)
         features1 = Mock(spec=FeatureSet)

@@ -229,9 +229,7 @@ class FeatureChainParserMixin:
         # Build effective options by merging string-parsed operation_config into
         # the Options object so predicates see values from both sources.
         if result and property_mapping is not None and cls._has_required_when_predicates(property_mapping):
-            effective_options = cls._build_effective_options(
-                _feature_name, prefix_patterns, property_mapping, options
-            )
+            effective_options = cls._build_effective_options(_feature_name, prefix_patterns, property_mapping, options)
             for key, mapping_entry in property_mapping.items():
                 if not isinstance(mapping_entry, dict):
                     continue
@@ -247,8 +245,7 @@ class FeatureChainParserMixin:
                     continue
                 if predicate(effective_options) and effective_options.get(key) is None:
                     logger.debug(
-                        "Feature group %s requires option '%s' (predicate %s is satisfied) "
-                        "but it was not provided.",
+                        "Feature group %s requires option '%s' (predicate %s is satisfied) but it was not provided.",
                         cls.__name__,
                         key,
                         getattr(predicate, "__name__", repr(predicate)),

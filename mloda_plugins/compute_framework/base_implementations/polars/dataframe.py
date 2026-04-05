@@ -17,7 +17,7 @@ class PolarsDataFrame(ComputeFramework):
     def is_available() -> bool:
         """Check if Polars is installed and available."""
         try:
-            import polars
+            import polars  # noqa: F401
 
             return True
         except ImportError:

@@ -244,7 +244,7 @@ class TestDuckDBPyArrowTransformer:
             "mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_pyarrow_transformer.duckdb",
             None,
         )
-        assert DuckDBPyArrowTransformer.framework() == NotImplementedError
+        assert DuckDBPyArrowTransformer.framework() is NotImplementedError
 
     def test_schema_preservation(self, connection: Any) -> None:
         """Test that schema information is preserved during transformation."""

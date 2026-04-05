@@ -37,11 +37,11 @@ class SparkPyArrowTransformer(BaseTransformer):
 
     @classmethod
     def import_fw(cls) -> None:
-        from pyspark.sql import DataFrame
+        pass
 
     @classmethod
     def import_other_fw(cls) -> None:
-        import pyarrow as pa
+        pass
 
     @classmethod
     def transform_fw_to_other_fw(cls, data: Any) -> Any:

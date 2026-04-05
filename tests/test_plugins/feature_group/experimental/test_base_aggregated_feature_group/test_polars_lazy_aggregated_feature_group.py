@@ -270,7 +270,7 @@ class TestPolarsLazyAggregationIntegration:
         """Test that lazy evaluation is maintained throughout the process."""
 
         # Enable the necessary feature groups
-        plugin_collector = PluginCollector.enabled_feature_groups(
+        _plugin_collector = PluginCollector.enabled_feature_groups(
             {PolarsLazyAggregatedTestDataCreator, PolarsLazyAggregatedFeatureGroup}
         )
 

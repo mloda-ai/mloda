@@ -158,7 +158,7 @@ class TestIcebergFilterEngine:
         mock_feature_set.filters = [age_filter]
 
         # Apply filters
-        result = IcebergFilterEngine.apply_filters(mock_iceberg_table, mock_feature_set)
+        _result = IcebergFilterEngine.apply_filters(mock_iceberg_table, mock_feature_set)
 
         # Verify that scan was called with a filter
         mock_iceberg_table.scan.assert_called_once()
@@ -206,7 +206,7 @@ class TestIcebergFilterEngine:
         mock_feature_set.filters = [age_filter, name_filter]
 
         # Apply filters
-        result = IcebergFilterEngine.apply_filters(mock_iceberg_table, mock_feature_set)
+        _result = IcebergFilterEngine.apply_filters(mock_iceberg_table, mock_feature_set)
 
         # Verify that scan was called with combined filter
         mock_iceberg_table.scan.assert_called_once()
@@ -221,7 +221,7 @@ class TestIcebergFilterEngine:
         mock_feature_set.filters = [unknown_filter, age_filter]
 
         # Apply filters
-        result = IcebergFilterEngine.apply_filters(mock_iceberg_table, mock_feature_set)
+        _result = IcebergFilterEngine.apply_filters(mock_iceberg_table, mock_feature_set)
 
         # Should only apply the age filter (unknown_column is not in get_all_names)
         mock_iceberg_table.scan.assert_called_once()

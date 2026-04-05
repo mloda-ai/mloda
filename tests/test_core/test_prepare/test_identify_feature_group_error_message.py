@@ -4,7 +4,7 @@ This test verifies that error messages use formatted output from
 format_feature_group_classes instead of raw dict/class representation.
 """
 
-from typing import Optional, Set, Type, Union
+from typing import Optional, Set, Union
 
 import pytest
 

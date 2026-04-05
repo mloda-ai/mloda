@@ -40,7 +40,7 @@ class TestEncodingFeatureGroupIntegration:
         """Test label encoding feature group with artifact save/load."""
         # Skip test if sklearn not available
         try:
-            import sklearn
+            import sklearn  # noqa: F401
         except ImportError:
             pytest.skip("scikit-learn not available")
 
@@ -109,7 +109,7 @@ class TestEncodingFeatureGroupIntegration:
         """Test one-hot encoding feature group with artifact save/load."""
         # Skip test if sklearn not available
         try:
-            import sklearn
+            import sklearn  # noqa: F401
         except ImportError:
             pytest.skip("scikit-learn not available")
 
@@ -155,7 +155,7 @@ class TestEncodingFeatureGroupIntegration:
         """Test one-hot encoding with specific column access using ~0, ~1, etc."""
         # Skip test if sklearn not available
         try:
-            import sklearn
+            import sklearn  # noqa: F401
         except ImportError:
             pytest.skip("scikit-learn not available")
 
@@ -232,7 +232,7 @@ class TestEncodingFeatureGroupIntegration:
         """Test configuration-based OneHot encoding with specific column access (~0, ~1)."""
         # Skip test if sklearn not available
         try:
-            import sklearn
+            import sklearn  # noqa: F401
         except ImportError:
             pytest.skip("scikit-learn not available")
 

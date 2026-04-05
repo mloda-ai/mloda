@@ -17,7 +17,7 @@ class PandasDataFrame(ComputeFramework):
     def is_available() -> bool:
         """Check if Pandas is installed and available."""
         try:
-            import pandas
+            import pandas  # noqa: F401
 
             return True
         except ImportError:

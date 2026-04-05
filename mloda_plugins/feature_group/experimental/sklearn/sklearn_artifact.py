@@ -10,10 +10,10 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-logger = logging.getLogger(__name__)
-
 from mloda.provider import BaseArtifact
 from mloda.provider import FeatureSet
+
+logger = logging.getLogger(__name__)
 
 
 class SklearnArtifact(BaseArtifact):

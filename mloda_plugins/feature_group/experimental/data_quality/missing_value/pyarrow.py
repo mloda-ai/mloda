@@ -4,7 +4,7 @@ PyArrow implementation for missing value imputation feature groups.
 
 from __future__ import annotations
 
-from typing import Any, List, Optional, Set, Type, Union
+from typing import Any, List, Optional, Set, Type
 
 import pyarrow as pa
 import pyarrow.compute as pc

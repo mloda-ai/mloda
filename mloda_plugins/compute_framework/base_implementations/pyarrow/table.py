@@ -20,7 +20,7 @@ class PyArrowTable(ComputeFramework):
     def is_available() -> bool:
         """Check if PyArrow is installed and available."""
         try:
-            import pyarrow
+            import pyarrow  # noqa: F401
 
             return True
         except ImportError:

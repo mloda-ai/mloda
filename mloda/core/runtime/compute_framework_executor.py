@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import multiprocessing
+import multiprocessing  # noqa: F401
 import threading
 import traceback
 import logging

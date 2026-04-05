@@ -118,13 +118,13 @@ class TestConcatenatedFileContentUsesReadDocumentFeature:
             for st in source_tuples:
                 if st.left_link is not None:
                     assert st.left_link[0] is not ReadFileFeature, (
-                        f"SourceTuple left_link still references ReadFileFeature. "
-                        f"Must use ReadDocumentFeature after PyFileReader migration."
+                        "SourceTuple left_link still references ReadFileFeature. "
+                        "Must use ReadDocumentFeature after PyFileReader migration."
                     )
                 if st.right_link is not None:
                     assert st.right_link[0] is not ReadFileFeature, (
-                        f"SourceTuple right_link still references ReadFileFeature. "
-                        f"Must use ReadDocumentFeature after PyFileReader migration."
+                        "SourceTuple right_link still references ReadFileFeature. "
+                        "Must use ReadDocumentFeature after PyFileReader migration."
                     )
 
 

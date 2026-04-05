@@ -1,5 +1,5 @@
 from typing import Any
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import patch
 from mloda.user import DataType
 
 from mloda.user import FeatureName

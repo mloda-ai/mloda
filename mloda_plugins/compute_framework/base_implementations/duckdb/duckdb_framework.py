@@ -41,7 +41,7 @@ class DuckDBFramework(ComputeFramework):
         """Check if DuckDB is installed and available."""
 
         try:
-            import duckdb
+            import duckdb  # noqa: F401
 
             return True
         except ImportError:

@@ -70,7 +70,7 @@ class TestSparkInstallation:
     def test_spark_is_installed(self, spark_session: Any) -> None:
         """Test that PySpark is properly installed and can be imported."""
         try:
-            import pyarrow as pa
+            import pyarrow as pa  # noqa: F401
 
             # Test basic functionality using the shared spark_session fixture
             data = [{"a": 1, "b": 2}, {"a": 3, "b": 4}]

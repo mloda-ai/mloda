@@ -1,7 +1,5 @@
 """Tests that strict_validation ValueError is caught and returns False."""
 
-import pytest
-
 from mloda.user import FeatureName, Options
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,

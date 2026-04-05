@@ -1,6 +1,5 @@
 from pathlib import Path
-from typing import Any, List, Tuple
-from unittest.mock import MagicMock
+from typing import Any, Tuple
 
 import pytest
 

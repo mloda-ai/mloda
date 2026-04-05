@@ -14,7 +14,7 @@ def test_nltk_availability() -> None:
     """Test if NLTK is available in the test environment."""
     try:
         import nltk
-        from nltk.corpus import stopwords
+        from nltk.corpus import stopwords  # noqa: F401
 
         print(f"NLTK version: {nltk.__version__}")
         assert nltk.__version__, "NLTK version not found"

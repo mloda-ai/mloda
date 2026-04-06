@@ -15,6 +15,7 @@ from mloda.core.abstract_plugins.function_extender import (
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.filter.filter_engine import BaseFilterEngine
+from mloda.core.filter.filter_mask_engine import BaseFilterMaskEngine
 from mloda.core.runtime.flight.flight_server import FlightServer
 
 
@@ -82,6 +83,15 @@ class ComputeFramework(ABC):
         The BaseFilterEngine should be overwritten by the appropriate ComputeFramework if needed
         """
         raise NotImplementedError
+
+    @classmethod
+    def filter_mask_engine(cls) -> type[BaseFilterMaskEngine] | None:
+        """Return the mask engine for building boolean masks inside calculate_feature().
+
+        Override in framework plugins that support inline filter masking.
+        Returns None by default (mask support is optional).
+        """
+        return None
 
     def transform(
         self,
@@ -417,6 +427,11 @@ class ComputeFramework(ABC):
 
         except NotImplementedError:
             pass
+
+        mask_engine = self.filter_mask_engine()
+        if mask_engine is not None:
+            features.filter_mask_engine = mask_engine
+
         return features
 
     @final

@@ -3,8 +3,9 @@ from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.pandas.pandas_merge_engine import PandasMergeEngine
 from mloda.user import FeatureName
 from mloda.provider import ComputeFramework
-from mloda.provider import BaseFilterEngine
+from mloda.provider import BaseFilterEngine, BaseFilterMaskEngine
 from mloda_plugins.compute_framework.base_implementations.pandas.pandas_filter_engine import PandasFilterEngine
+from mloda_plugins.compute_framework.base_implementations.pandas.pandas_filter_mask_engine import PandasFilterMaskEngine
 
 try:
     import pandas as pd
@@ -99,3 +100,7 @@ class PandasDataFrame(ComputeFramework):
     @classmethod
     def filter_engine(cls) -> type[BaseFilterEngine]:
         return PandasFilterEngine
+
+    @classmethod
+    def filter_mask_engine(cls) -> type[BaseFilterMaskEngine]:
+        return PandasFilterMaskEngine

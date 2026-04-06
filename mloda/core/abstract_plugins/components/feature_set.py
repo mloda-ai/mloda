@@ -6,6 +6,7 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.validators.feature_set_validator import FeatureSetValidator
 from mloda.core.filter.filter_engine import BaseFilterEngine
+from mloda.core.filter.filter_mask_engine import BaseFilterMaskEngine
 from mloda.core.filter.single_filter import SingleFilter
 
 
@@ -21,6 +22,7 @@ class FeatureSet:
         self.artifact_to_load: Optional[str] = None
         self.save_artifact: Optional[Any] = None
         self.filter_engine: type[BaseFilterEngine] = BaseFilterEngine
+        self.filter_mask_engine: type[BaseFilterMaskEngine] | None = None
 
         if features is not None:
             for feature in features:

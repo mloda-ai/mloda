@@ -219,6 +219,83 @@ mloda resolves the full chain - you declare the end result, not the steps.
 
 **Automatic dependency resolution:** You only declare what you need. If `pii_redacted` depends on `retrieved` which depends on `documents`, just ask for `pii_redacted` - mloda traces back and resolves the full chain.
 
+Here is a concrete example. You request a single feature, and mloda resolves the full dependency tree:
+
+```
+risk_assessment               <- you request this
+|-- debt_to_income            <- intermediate (auto-resolved)
+|   |-- debt                  <- raw data (auto-resolved)
+|   |-- income                <- raw data (auto-resolved)
+|-- age                       <- raw data (auto-resolved)
+|-- employment_years          <- raw data (auto-resolved)
+|-- credit_score              <- raw data (auto-resolved)
+```
+
+```python
+import pandas as pd
+from mloda.provider import FeatureGroup, FeatureSet, DataCreator
+from mloda.user import Feature, PluginCollector, mloda
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+
+# Data source: raw customer data
+class CustomerData(FeatureGroup):
+    @classmethod
+    def input_data(cls):
+        return DataCreator({"income", "age", "employment_years", "debt", "credit_score"})
+
+    @classmethod
+    def calculate_feature(cls, data, features):
+        return pd.DataFrame({
+            "income": [50000, 100000, 40000], "age": [25, 45, 35],
+            "employment_years": [2, 20, 8], "debt": [10000, 10000, 20000],
+            "credit_score": [680, 720, 640],
+        })
+
+    @classmethod
+    def compute_framework_rule(cls):
+        return {PandasDataFrame}
+
+# Intermediate feature: debt / income ratio (2 input features)
+class DebtToIncome(FeatureGroup):
+    @classmethod
+    def feature_names_supported(cls):
+        return {"debt_to_income"}
+
+    def input_features(self, options, feature_name):
+        return {Feature("debt"), Feature("income")}
+
+    @classmethod
+    def calculate_feature(cls, data, features):
+        data["debt_to_income"] = data["debt"] / data["income"]
+        return data
+
+# Top-level feature: combines 4 inputs (one derived, three raw)
+class RiskAssessment(FeatureGroup):
+    @classmethod
+    def feature_names_supported(cls):
+        return {"risk_assessment"}
+
+    def input_features(self, options, feature_name):
+        return {Feature("debt_to_income"), Feature("age"), Feature("employment_years"), Feature("credit_score")}
+
+    @classmethod
+    def calculate_feature(cls, data, features):
+        data["risk_assessment"] = (
+            data["credit_score"] - data["debt_to_income"] * 100 + data["employment_years"] * 2
+        )
+        return data
+
+# Request only the end result. mloda resolves all 5 dependencies automatically.
+result = mloda.run_all(
+    features=[Feature(name="risk_assessment")],
+    compute_frameworks={PandasDataFrame},
+    plugin_collector=PluginCollector.enabled_feature_groups(
+        {CustomerData, DebtToIncome, RiskAssessment}
+    ),
+)
+# result: [664.0, 750.0, 606.0]
+```
+
 ---
 
 ## Compute Frameworks

@@ -1,23 +1,13 @@
 """Unit tests for filter column dtype compatibility validation.
 
-Tests the dtype extraction and compatibility checking logic added to
-ComputeFramework._validate_filter_columns (issue #371).
+Tests the dtype classification, filter value extraction, and base class
+defaults added to ComputeFramework (issue #371). Framework-specific
+_extract_column_dtype tests live in the DtypeExtractionTestMixin.
 """
 
-import pyarrow as pa
-
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from uuid import uuid4
-
-
-def _make_pyarrow_fw() -> PyArrowTable:
-    return PyArrowTable(
-        mode=ParallelizationMode.SYNC,
-        children_if_root=frozenset(),
-        uuid=uuid4(),
-    )
 
 
 class TestIsStringDtype:
@@ -76,28 +66,6 @@ class TestIsNumericDtype:
 
     def test_bool_is_not_numeric(self) -> None:
         assert ComputeFramework._is_numeric_dtype("bool") is False
-
-
-class TestExtractColumnDtypePyArrow:
-    def test_int_column(self) -> None:
-        fw = _make_pyarrow_fw()
-        data = pa.table({"col": [1, 2, 3]})
-        assert fw._extract_column_dtype(data, "col") == "int64"
-
-    def test_string_column(self) -> None:
-        fw = _make_pyarrow_fw()
-        data = pa.table({"col": ["a", "b", "c"]})
-        assert fw._extract_column_dtype(data, "col") == "string"
-
-    def test_float_column(self) -> None:
-        fw = _make_pyarrow_fw()
-        data = pa.table({"col": [1.0, 2.0, 3.0]})
-        assert fw._extract_column_dtype(data, "col") == "double"
-
-    def test_missing_column_returns_none(self) -> None:
-        fw = _make_pyarrow_fw()
-        data = pa.table({"col": [1, 2, 3]})
-        assert fw._extract_column_dtype(data, "nonexistent") is None
 
 
 class TestExtractColumnDtypeBaseReturnsNone:

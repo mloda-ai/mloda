@@ -73,6 +73,7 @@ from mloda.core.abstract_plugins.components.framework_transformer.cfw_transforme
 
 # Engines
 from mloda.core.filter.filter_engine import BaseFilterEngine
+from mloda.core.filter.filter_mask import FilterMask
 from mloda.core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
 
 __all__ = [
@@ -118,5 +119,6 @@ __all__ = [
     "ComputeFrameworkTransformer",
     # Engines
     "BaseFilterEngine",
+    "FilterMask",
     "BaseMergeEngine",
 ]

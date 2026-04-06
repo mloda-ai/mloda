@@ -48,6 +48,14 @@ class FilterParameterImpl:
     def max_exclusive(self) -> bool:
         return cast(bool, self._get("max_exclusive", False))
 
+    def __hash__(self) -> int:
+        def _make_hashable(v: Any) -> Any:
+            if isinstance(v, list):
+                return tuple(v)
+            return v
+
+        return hash(tuple((k, _make_hashable(v)) for k, v in self._raw))
+
     def _get(self, key: str, default: Any = None) -> Any:
         for k, v in self._raw:
             if k == key:

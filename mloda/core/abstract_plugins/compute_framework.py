@@ -307,17 +307,81 @@ class ComputeFramework(ABC):
             values.append(param.max_value)
         return values
 
+    _STRING_TYPES: frozenset[str] = frozenset(
+        {
+            "str",
+            "string",
+            "utf8",
+            "large_utf8",
+            "large_string",
+            "object",
+            "varchar",
+            "nvarchar",
+            "text",
+            "ntext",
+            # Spark
+            "stringtype()",
+        }
+    )
+
+    _NUMERIC_TYPES: frozenset[str] = frozenset(
+        {
+            # Python / generic
+            "int",
+            "float",
+            "double",
+            "long",
+            "short",
+            "byte",
+            # PyArrow / Pandas / Polars sized types
+            "int8",
+            "int16",
+            "int32",
+            "int64",
+            "uint8",
+            "uint16",
+            "uint32",
+            "uint64",
+            "float16",
+            "float32",
+            "float64",
+            # SQL types
+            "integer",
+            "bigint",
+            "smallint",
+            "tinyint",
+            "hugeint",
+            "ubigint",
+            "uinteger",
+            "usmallint",
+            "utinyint",
+            "uhugeint",
+            "real",
+            "numeric",
+            "number",
+            # Spark types
+            "longtype()",
+            "integertype()",
+            "shorttype()",
+            "bytetype()",
+            "floattype()",
+            "doubletype()",
+        }
+    )
+
+    _NUMERIC_PREFIXES: tuple[str, ...] = ("decimal",)
+
     @staticmethod
     def _is_string_dtype(dtype_str: str) -> bool:
         """Classify whether a dtype string represents a string/text type."""
-        if dtype_str == "str":
-            return True
-        return any(s in dtype_str for s in ("string", "utf8", "object", "large_string", "varchar", "text"))
+        return dtype_str in ComputeFramework._STRING_TYPES
 
     @staticmethod
     def _is_numeric_dtype(dtype_str: str) -> bool:
         """Classify whether a dtype string represents a numeric type."""
-        return any(s in dtype_str for s in ("int", "float", "double", "decimal", "uint", "numeric", "real", "long"))
+        if dtype_str in ComputeFramework._NUMERIC_TYPES:
+            return True
+        return any(dtype_str.startswith(p) for p in ComputeFramework._NUMERIC_PREFIXES)
 
     def _extract_column_names(self, data: Any) -> set[str]:
         """Extract column names from the data.

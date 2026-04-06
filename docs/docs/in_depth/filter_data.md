@@ -172,9 +172,14 @@ The previous sections show how **users** create filters. This section explains h
 ### How filters reach your FeatureGroup
 
 When a user passes a `GlobalFilter`, the framework matches each `SingleFilter` to the
-FeatureGroups that declare the filter's column as an input. Matched filters are attached
-to the `FeatureSet` before `calculate_feature()` is called. Inside your calculation you
-can access them via `features.filters`:
+FeatureGroups that declare the filter's column as an input. Each matched filter is
+**deep-copied** before delivery. If two FeatureGroups both match the same original
+filter, they each receive independent copies. This means a single `GlobalFilter` can
+be processed differently by different FeatureGroups in the same pipeline: one may use
+it for inline masking while another uses it for row elimination.
+
+Matched filters are attached to the `FeatureSet` before `calculate_feature()` is
+called. Inside your calculation you can access them via `features.filters`:
 
 ```
 @classmethod
@@ -217,6 +222,19 @@ def final_filters(cls) -> bool | None:
 
 This method does **not** affect whether `features.filters` is populated. Filters are
 always available for inline reading.
+
+`final_filters()` is a **semantic** flag that controls *when* in the pipeline the
+filter is applied, not *where* the computation runs physically:
+
+| Framework category | Examples | Physical behavior |
+|-------------------|----------|-------------------|
+| Eager | Pandas, PyArrow | Post-hoc filter in memory after full materialization |
+| Lazy (SQL) | DuckDB, SQLite | `.filter()` adds WHERE to query plan; optimizer may push to scan time |
+| Lazy (dataframe) | Polars, Spark | `.filter()` adds node to lazy plan; optimizer decides physical order |
+| Scan-time | Iceberg | Predicates pushed into scan expressions (`final_filters()=False`) |
+
+All frameworks that return `True` produce the same logical result (non-matching rows
+absent from output), but the physical execution path differs.
 
 ### Usage patterns
 
@@ -353,3 +371,63 @@ return pa.table({
 | Handles everything inline | `False` | Yes | No (elimination skipped) |
 | Uses inline logic + elimination | `True` | Yes | **Yes** |
 | Just forces elimination | `True` | No | Yes |
+
+### Pipeline data flows
+
+The following examples show what happens to data at each stage for the four patterns
+above. All flows use the same input and filter:
+
+```
+Input:
+    region | status   | value
+    A      | active   |  10
+    A      | inactive |  20
+    B      | active   |  30
+    B      | inactive |  40
+
+Filter: status == "active"
+```
+
+#### Eager framework + final filters (Pandas, PyArrow)
+
+| Stage | Data |
+|-------|------|
+| `calculate_feature()` output | `[10, 20, 30, 40]` with `status = [active, inactive, active, inactive]` |
+| `run_final_filter()` | Creates mask `[True, False, True, False]`, applies `table.filter(mask)` |
+| **Final result** | `[10, 30]` with `status = [active, active]` (2 rows) |
+
+#### Lazy framework + final filters (DuckDB, SQLite, Polars, Spark)
+
+| Stage | Data |
+|-------|------|
+| `calculate_feature()` output | Lazy relation: `SELECT value, status FROM source` |
+| `run_final_filter()` | Appends filter: `WHERE "status" = 'active'` |
+| **Materialized result** | `[10, 30]` with `status = [active, active]` (2 rows) |
+
+The result is identical to eager row elimination, but no intermediate full-table
+materialization occurs.
+
+#### Inline masking (all rows preserved)
+
+| Stage | Data |
+|-------|------|
+| Read `features.filters` | Extract: `status == "active"` |
+| Build mask | `[True, False, True, False]` |
+| Apply mask to value column | `masked_value = [10, NULL, 30, NULL]` |
+| Aggregate (sum by region, broadcast) | Region A: 10, Region B: 30 |
+| **Final result** | `[10, 10, 30, 30]` (4 rows, all preserved) |
+
+The framework skips `run_final_filter()` because `final_filters() = False`.
+
+#### Masking and elimination (same filter, two FeatureGroups)
+
+A pipeline may need the same filter for two purposes in separate steps. Because
+filters are deep-copied independently for each FeatureGroup, both steps run
+without interference:
+
+| Stage | Step 1 (inline mask FG) | Step 2 (regular FG) |
+|-------|------------------------|-------------------|
+| `final_filters()` | `False` | `None` (engine default: `True`) |
+| `calculate_feature()` | Reads filters, masks values, aggregates | Computes raw values, ignores filters |
+| `run_final_filter()` | Skipped | Applies row elimination |
+| **Result** | `[10, 10, 30, 30]` (4 rows) | `[10, 30]` (2 rows) |

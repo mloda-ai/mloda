@@ -43,6 +43,11 @@ class PandasDataFrame(ComputeFramework):
     def _extract_column_names(self, data: Any) -> set[str]:
         return set(data.columns)
 
+    def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
+        if column_name in data.columns:
+            return str(data[column_name].dtype)
+        return None
+
     @classmethod
     def pd_dataframe(cls) -> Any:
         if pd is None:

@@ -4,6 +4,9 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
 from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
+from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
+    DtypeExtractionTestMixin,
+)
 
 import logging
 
@@ -109,3 +112,16 @@ class TestPandasDataFrameMerge(DataFrameTestBase):
     def get_connection(self) -> Optional[Any]:
         """Return connection object (None for pandas)."""
         return None
+
+
+@pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
+class TestPandasDtypeExtraction(DtypeExtractionTestMixin):
+    """Test PandasDataFrame._extract_column_dtype using shared mixin."""
+
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return PandasDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+    @pytest.fixture
+    def dtype_sample_data(self) -> Any:
+        return pd.DataFrame({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]})

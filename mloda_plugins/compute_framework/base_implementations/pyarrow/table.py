@@ -50,6 +50,11 @@ class PyArrowTable(ComputeFramework):
     def _extract_column_names(self, data: Any) -> set[str]:
         return set(data.schema.names)
 
+    def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
+        if column_name in data.schema.names:
+            return str(data.schema.field(column_name).type)
+        return None
+
     def transform(
         self,
         data: Any,

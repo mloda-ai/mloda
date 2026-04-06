@@ -238,7 +238,7 @@ class ComputeFramework(ABC):
         return result
 
     def _validate_filter_columns(self, data: Any, features: Any, feature_group: Any) -> None:
-        """Validate that filter columns exist in the output before row elimination.
+        """Validate that filter columns exist and have compatible dtypes before row elimination.
 
         Called on every path where the framework will apply filters, regardless of
         whether the FeatureGroup or the FilterEngine requested elimination.
@@ -261,6 +261,127 @@ class ComputeFramework(ABC):
                     f"This is a bug in the FeatureGroup, not in your filter. "
                     f"Available columns: {sorted(data_columns)}"
                 )
+            self._validate_filter_dtype_compatibility(data, single_filter, fg_name)
+
+    def _validate_filter_dtype_compatibility(self, data: Any, single_filter: Any, fg_name: str) -> None:
+        """Check that the filter column dtype is compatible with the filter value type."""
+        col = single_filter.filter_feature.name
+        col_dtype = self._extract_column_dtype(data, col)
+        if col_dtype is None:
+            return
+
+        filter_values = self._collect_filter_values(single_filter)
+        if not filter_values:
+            return
+
+        col_dtype_str = str(col_dtype).lower()
+        col_is_string = self._is_string_dtype(col_dtype_str)
+        col_is_numeric = self._is_numeric_dtype(col_dtype_str)
+
+        for val in filter_values:
+            if isinstance(val, str) and col_is_numeric:
+                raise ValueError(
+                    f"Filter on '{col}' expects string comparison but column has type {col_dtype}. "
+                    f"This usually means the FeatureGroup '{fg_name}' modified the filter "
+                    f"column's type during calculation."
+                )
+            if isinstance(val, (int, float)) and col_is_string:
+                raise ValueError(
+                    f"Filter on '{col}' expects numeric comparison but column has type {col_dtype}. "
+                    f"This usually means the FeatureGroup '{fg_name}' modified the filter "
+                    f"column's type during calculation."
+                )
+
+    @staticmethod
+    def _collect_filter_values(single_filter: Any) -> list[Any]:
+        """Extract all comparable values from a filter's parameters."""
+        values: list[Any] = []
+        param = single_filter.parameter
+        if param.value is not None:
+            values.append(param.value)
+        if param.values is not None:
+            values.extend(param.values)
+        if param.min_value is not None:
+            values.append(param.min_value)
+        if param.max_value is not None:
+            values.append(param.max_value)
+        return values
+
+    _STRING_TYPES: frozenset[str] = frozenset(
+        {
+            "str",
+            "string",
+            "utf8",
+            "large_utf8",
+            "large_string",
+            "object",
+            "varchar",
+            "nvarchar",
+            "text",
+            "ntext",
+            # Spark
+            "stringtype()",
+        }
+    )
+
+    _NUMERIC_TYPES: frozenset[str] = frozenset(
+        {
+            # Python / generic
+            "int",
+            "float",
+            "double",
+            "long",
+            "short",
+            "byte",
+            # PyArrow / Pandas / Polars sized types
+            "int8",
+            "int16",
+            "int32",
+            "int64",
+            "uint8",
+            "uint16",
+            "uint32",
+            "uint64",
+            "float16",
+            "float32",
+            "float64",
+            # SQL types
+            "integer",
+            "bigint",
+            "smallint",
+            "tinyint",
+            "hugeint",
+            "ubigint",
+            "uinteger",
+            "usmallint",
+            "utinyint",
+            "uhugeint",
+            "real",
+            "numeric",
+            "number",
+            # Spark types
+            "longtype()",
+            "integertype()",
+            "shorttype()",
+            "bytetype()",
+            "floattype()",
+            "doubletype()",
+        }
+    )
+
+    _NUMERIC_PREFIXES: tuple[str, ...] = ("decimal",)
+
+    @staticmethod
+    def _is_string_dtype(dtype_str: str) -> bool:
+        """Classify whether a dtype string represents a string/text type."""
+        return dtype_str in ComputeFramework._STRING_TYPES
+
+    @staticmethod
+    def _is_numeric_dtype(dtype_str: str) -> bool:
+        """Classify whether a dtype string represents a numeric type."""
+        if dtype_str in ComputeFramework._NUMERIC_TYPES:
+            return True
+        return any(dtype_str.startswith(p) for p in ComputeFramework._NUMERIC_PREFIXES)
 
     def _extract_column_names(self, data: Any) -> set[str]:
         """Extract column names from the data.
@@ -268,6 +389,14 @@ class ComputeFramework(ABC):
         Called only with the non-None output of calculate_feature.
         """
         raise NotImplementedError
+
+    def _extract_column_dtype(self, data: Any, column_name: str) -> Optional[str]:
+        """Extract the dtype of a specific column as a human-readable string.
+
+        Returns None when the framework does not support dtype extraction.
+        Subclasses should override to return dtype strings like "int64", "string", etc.
+        """
+        return None
 
     @final
     def set_filter_engine(self, features: Any) -> Any:

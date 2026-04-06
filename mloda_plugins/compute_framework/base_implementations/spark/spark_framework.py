@@ -82,6 +82,11 @@ class SparkFramework(ComputeFramework):
     def _extract_column_names(self, data: Any) -> set[str]:
         return set(data.columns)
 
+    def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
+        if column_name in data.columns:
+            return str(data.schema[column_name].dataType)
+        return None
+
     @classmethod
     def spark_dataframe(cls) -> Any:
         if DataFrame is None:

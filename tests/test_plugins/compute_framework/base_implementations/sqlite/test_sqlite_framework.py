@@ -9,6 +9,9 @@ from mloda.user import ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework, _regexp
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation
 from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
+from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
+    DtypeExtractionTestMixin,
+)
 
 
 class TestSqliteFrameworkBasics:
@@ -150,3 +153,18 @@ class TestSqliteFrameworkMerge(DataFrameTestBase):
                 return merge_engine_class(framework_connection)
 
         return MergeEngineFactory()
+
+
+class TestSqliteDtypeExtraction(DtypeExtractionTestMixin):
+    """Test SqliteFramework._extract_column_dtype using shared mixin."""
+
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return SqliteFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+    @pytest.fixture
+    def dtype_sample_data(self, connection: sqlite3.Connection) -> Any:
+        arrow_table = pa.Table.from_pydict(
+            {"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]}
+        )
+        return SqliteRelation.from_arrow(connection, arrow_table)

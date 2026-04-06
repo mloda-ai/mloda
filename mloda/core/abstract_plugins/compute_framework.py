@@ -315,7 +315,7 @@ class ComputeFramework(ABC):
     @staticmethod
     def _is_numeric_dtype(dtype_str: str) -> bool:
         """Classify whether a dtype string represents a numeric type."""
-        return any(s in dtype_str for s in ("int", "float", "double", "decimal", "uint", "numeric", "real"))
+        return any(s in dtype_str for s in ("int", "float", "double", "decimal", "uint", "numeric", "real", "long"))
 
     def _extract_column_names(self, data: Any) -> set[str]:
         """Extract column names from the data.

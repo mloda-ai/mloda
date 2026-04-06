@@ -8,6 +8,9 @@ from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base impor
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )
+from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
+    DtypeExtractionTestMixin,
+)
 
 import logging
 
@@ -104,3 +107,16 @@ class TestPolarsDataFrameMerge(DataFrameTestBase):
     def get_connection(self) -> Optional[Any]:
         """Return connection object (None for polars)."""
         return None
+
+
+@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
+class TestPolarsDtypeExtraction(DtypeExtractionTestMixin):
+    """Test PolarsDataFrame._extract_column_dtype using shared mixin."""
+
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return PolarsDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+    @pytest.fixture
+    def dtype_sample_data(self) -> Any:
+        return pl.DataFrame({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]})

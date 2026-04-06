@@ -31,6 +31,9 @@ from mloda.user import Index
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )
+from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
+    DtypeExtractionTestMixin,
+)
 
 # Import shared fixtures and availability flags from conftest.py
 from tests.test_plugins.compute_framework.base_implementations.spark.conftest import (
@@ -245,3 +248,21 @@ class TestSparkFrameworkComputeFramework:
         assert isinstance(spark_framework._infer_spark_type(42), IntegerType)
         assert isinstance(spark_framework._infer_spark_type(3.14), DoubleType)
         assert isinstance(spark_framework._infer_spark_type("test"), StringType)
+
+
+@pytest.mark.skipif(not PYSPARK_AVAILABLE, reason=SKIP_REASON or "PySpark is not available")
+class TestSparkDtypeExtraction(DtypeExtractionTestMixin):
+    """Test SparkFramework._extract_column_dtype using shared mixin."""
+
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+    @pytest.fixture
+    def dtype_sample_data(self, spark_session: Any) -> Any:
+        data = [
+            {"int_col": 1, "str_col": "a", "float_col": 1.0},
+            {"int_col": 2, "str_col": "b", "float_col": 2.0},
+            {"int_col": 3, "str_col": "c", "float_col": 3.0},
+        ]
+        return spark_session.createDataFrame(data)

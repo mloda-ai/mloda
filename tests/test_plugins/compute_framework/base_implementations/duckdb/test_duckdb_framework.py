@@ -9,6 +9,9 @@ from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base impor
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )
+from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
+    DtypeExtractionTestMixin,
+)
 
 import logging
 
@@ -145,3 +148,19 @@ class TestDuckDBFrameworkMerge(DataFrameTestBase):
                 return merge_engine_class(framework_connection)
 
         return MergeEngineFactory()
+
+
+@pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed. Skipping this test.")
+class TestDuckDBDtypeExtraction(DtypeExtractionTestMixin):
+    """Test DuckDBFramework._extract_column_dtype using shared mixin."""
+
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return DuckDBFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+    @pytest.fixture
+    def dtype_sample_data(self, connection: Any) -> Any:
+        arrow_table = pa.Table.from_pydict(
+            {"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]}
+        )
+        return DuckdbRelation.from_arrow(connection, arrow_table)

@@ -121,5 +121,25 @@ class FeatureSet:
         FeatureSetValidator.validate_filters_is_set_type(single_filters)
         self.filters = single_filters
 
+    def get_filters_by_column(self, column_name: str) -> list[SingleFilter]:
+        """Return all filters matching the given column name."""
+        if self.filters is None:
+            return []
+        return [sf for sf in self.filters if sf.name == column_name]
+
+    def get_filter(self, column_name: str) -> Optional[SingleFilter]:
+        """Return the first filter matching the given column name, or None."""
+        matches = self.get_filters_by_column(column_name)
+        if matches:
+            return matches[0]
+        return None
+
+    def get_filter_value(self, column_name: str) -> Any:
+        """Return the parameter value of the first filter matching the given column name."""
+        single_filter = self.get_filter(column_name)
+        if single_filter is not None:
+            return single_filter.parameter.value
+        return None
+
     def get_artifact(self, config: Options) -> Any:
         return None

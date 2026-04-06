@@ -188,6 +188,42 @@ def calculate_feature(cls, data, features: FeatureSet):
 
 `features.filters` is **always available**, regardless of any other setting.
 
+### Filter access helpers
+
+`FeatureSet` provides convenience methods that eliminate the null-check and
+name-matching boilerplate when reading filters inline:
+
+| Method | Returns | Purpose |
+|--------|---------|---------|
+| `features.get_filter_value("status")` | `Any \| None` | Parameter value of the first matching filter. Returns `None` if no filter exists or the filter has no `value` key. |
+| `features.get_filter("status")` | `SingleFilter \| None` | First matching `SingleFilter` object, or `None`. |
+| `features.get_filters_by_column("status")` | `list[SingleFilter]` | All filters for the column (empty list if none). |
+
+Before:
+
+```
+if features.filters is not None:
+    for single_filter in features.filters:
+        if single_filter.name == "status":
+            filter_value = single_filter.parameter.value
+```
+
+After:
+
+```
+filter_value = features.get_filter_value("status")
+```
+
+For multiple filters on the same column (e.g. min + max range):
+
+```
+for sf in features.get_filters_by_column("age"):
+    if sf.filter_type == "min":
+        min_val = sf.parameter.value
+    elif sf.filter_type == "max":
+        max_val = sf.parameter.value
+```
+
 ### Two independent concerns
 
 Filters involve two decisions that are **independent** of each other:
@@ -220,9 +256,9 @@ always available for inline reading.
 
 ### Usage patterns
 
-The examples below use pseudocode helpers (`compute_totals`, `build_mask_from_filters`,
-`broadcast_sum`) to keep the focus on the filter interaction pattern. Replace these with
-your framework-specific logic.
+The examples below use pseudocode helpers (`compute_totals`, `broadcast_sum`) to keep
+the focus on the filter interaction pattern. Replace these with your framework-specific
+logic. All examples use the filter access helpers described above.
 
 #### Pattern 1: Let the framework handle everything (default)
 
@@ -254,7 +290,8 @@ class MaskedRegionSum(FeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data, features: FeatureSet):
-        mask = build_mask_from_filters(data, features.filters)
+        status_value = features.get_filter_value("status")
+        mask = pc.equal(data["status"], status_value) if status_value else True
         masked = pc.if_else(mask, data["sales"], None)
         # aggregate masked values, broadcast back to all rows
         return pa.table({cls.get_class_name(): broadcast_sum(masked, data["region"])})
@@ -278,7 +315,8 @@ class MaskedRegionSumActiveOnly(FeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data, features: FeatureSet):
-        mask = build_mask_from_filters(data, features.filters)
+        status_value = features.get_filter_value("status")
+        mask = pc.equal(data["status"], status_value) if status_value else True
         masked = pc.if_else(mask, data["sales"], None)
         sums = broadcast_sum(masked, data["region"])
         # Return all rows; the framework will remove non-matching ones

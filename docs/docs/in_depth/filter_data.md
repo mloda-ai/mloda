@@ -320,7 +320,10 @@ original values in your output**.
 The framework's row elimination works by matching against the filter column in your
 returned data. If your FeatureGroup drops that column, the framework raises a
 `ValueError` with a clear message naming the missing column. If your FeatureGroup
-modifies the column values, the filter may produce wrong results silently.
+changes the column's type (e.g., mapping strings to integers), the framework detects
+the dtype mismatch and raises a `ValueError`. Value-level mutations within the same
+type (e.g., remapping `"active"` to `"yes"`) are not detected and may produce wrong
+results silently.
 
 ```
 # Correct: filter column preserved with original values
@@ -329,10 +332,10 @@ return pa.table({
     "status": original_status_column,   # framework can filter on this
 })
 
-# Wrong: filter column modified
+# Wrong: filter column type changed -- raises ValueError (dtype mismatch)
 return pa.table({
     cls.get_class_name(): computed_values,
-    "status": [1, 0, 1, 0],   # mapped to ints; "equal" filter for "active" matches nothing
+    "status": [1, 0, 1, 0],   # mapped to ints; framework detects string-vs-numeric mismatch
 })
 
 # Wrong: filter column omitted -- raises ValueError at runtime

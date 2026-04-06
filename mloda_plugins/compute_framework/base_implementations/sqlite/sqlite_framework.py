@@ -5,9 +5,10 @@ from typing import Any, Optional
 
 from mloda.provider import BaseMergeEngine
 from mloda.provider import ComputeFramework
-from mloda.provider import BaseFilterEngine
+from mloda.provider import BaseFilterEngine, BaseFilterMaskEngine
 from mloda.user import FeatureName, ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_filter_engine import SqliteFilterEngine
+from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_filter_mask_engine import SqliteFilterMaskEngine
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_merge_engine import SqliteMergeEngine
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
@@ -104,3 +105,7 @@ class SqliteFramework(ComputeFramework):
     @classmethod
     def filter_engine(cls) -> type[BaseFilterEngine]:
         return SqliteFilterEngine
+
+    @classmethod
+    def filter_mask_engine(cls) -> type[BaseFilterMaskEngine]:
+        return SqliteFilterMaskEngine

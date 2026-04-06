@@ -25,7 +25,7 @@ import pytest
 import pyarrow as pa
 import pyarrow.compute as pc
 
-from mloda.provider import BaseFilterEngine, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import BaseFilterEngine, ComputeFramework, DataCreator, FeatureGroup, FeatureSet, FilterMask
 from mloda.provider import BaseInputData
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_filter_engine import PyArrowFilterEngine
 from mloda.user import Feature, Features, GlobalFilter, ParallelizationMode
@@ -75,18 +75,9 @@ class InlineMaskViaFeatureGroup(FeatureGroup):
         status = pa.array(["active", "inactive", "active", "inactive"])
         value = pa.array([10, 20, 30, 40])
 
-        # Read filters from features and apply as inline mask
-        mask = pa.array([True, True, True, True])
-        if features.filters is not None:
-            for single_filter in features.filters:
-                if single_filter.name == "status":
-                    filter_value = single_filter.parameter.value
-                    mask = pc.and_(mask, pc.equal(status, filter_value))
-
-        # Mask non-matching values to null, then sum by region and broadcast back
+        mask = FilterMask.build(pa.table({"status": status}), features, column="status")
         masked_value = pc.if_else(mask, value, None)
 
-        # Group-by sum: for each row, sum all values in the same region
         result = []
         for i in range(len(region)):
             region_i = region[i].as_py()
@@ -247,13 +238,7 @@ class InlineMaskWithFinalElimination(FeatureGroup):
         status = pa.array(["active", "active", "inactive", "active"])
         value = pa.array([10, 5, 20, 30])
 
-        mask = pa.array([True, True, True, True])
-        if features.filters is not None:
-            for single_filter in features.filters:
-                if single_filter.name == "status":
-                    filter_value = single_filter.parameter.value
-                    mask = pc.and_(mask, pc.equal(status, filter_value))
-
+        mask = FilterMask.build(pa.table({"status": status}), features, column="status")
         masked_value = pc.if_else(mask, value, None)
 
         result = []

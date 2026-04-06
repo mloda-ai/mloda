@@ -40,6 +40,12 @@ class PolarsLazyDataFrame(PolarsDataFrame):
     def _extract_column_names(self, data: Any) -> set[str]:
         return set(data.collect_schema().names())
 
+    def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
+        schema = data.collect_schema()
+        if column_name in schema.names():
+            return str(schema[column_name])
+        return None
+
     @classmethod
     def pl_lazy_frame(cls) -> Any:
         if pl is None:

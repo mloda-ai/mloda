@@ -74,6 +74,13 @@ class DuckDBFramework(ComputeFramework):
     def _extract_column_names(self, data: Any) -> set[str]:
         return set(data.columns)
 
+    def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
+        if column_name in data.columns:
+            dtypes = data._relation.dtypes
+            idx = data.columns.index(column_name)
+            return str(dtypes[idx])
+        return None
+
     @classmethod
     def duckdb_relation(cls) -> Any:
         if duckdb is None:

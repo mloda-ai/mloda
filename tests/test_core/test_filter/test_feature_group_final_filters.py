@@ -327,6 +327,118 @@ class DefaultFGDropsFilterColumn(FeatureGroup):
         )
 
 
+class MutatesFilterColumnToInt(FeatureGroup):
+    """FG returns final_filters()=True but changes filter column from string to int.
+
+    The filter expects status=="active" (string comparison), but the FeatureGroup
+    maps the column to integers. The dtype mismatch should be detected.
+    """
+
+    @classmethod
+    def input_data(cls) -> Optional[BaseInputData]:
+        return DataCreator({cls.get_class_name(), "status"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def final_filters(cls) -> bool:
+        return True
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table(
+            {
+                cls.get_class_name(): [10, 20, 30, 40],
+                "status": [1, 0, 1, 0],
+            }
+        )
+
+
+class MutatesFilterColumnToString(FeatureGroup):
+    """FG returns final_filters()=True but changes filter column from numeric to string.
+
+    The filter expects price >= 10 (numeric comparison), but the FeatureGroup
+    maps the column to strings. The dtype mismatch should be detected.
+    """
+
+    @classmethod
+    def input_data(cls) -> Optional[BaseInputData]:
+        return DataCreator({cls.get_class_name(), "price"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def final_filters(cls) -> bool:
+        return True
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table(
+            {
+                cls.get_class_name(): [10, 20, 30, 40],
+                "price": ["ten", "twenty", "thirty", "forty"],
+            }
+        )
+
+
+class DefaultFGMutatesFilterColumnToInt(FeatureGroup):
+    """FG does NOT override final_filters() but mutates filter column dtype.
+
+    The engine fallback path applies row elimination. The dtype mismatch should
+    be caught on this path too.
+    """
+
+    @classmethod
+    def input_data(cls) -> Optional[BaseInputData]:
+        return DataCreator({cls.get_class_name(), "status"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table(
+            {
+                cls.get_class_name(): [10, 20, 30, 40],
+                "status": [1, 0, 1, 0],
+            }
+        )
+
+
+class CompatibleDtypeFeatureGroup(FeatureGroup):
+    """FG returns final_filters()=True with compatible dtypes.
+
+    The filter expects status=="active" (string) and the column is also string.
+    This should pass without error.
+    """
+
+    @classmethod
+    def input_data(cls) -> Optional[BaseInputData]:
+        return DataCreator({cls.get_class_name(), "status"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def final_filters(cls) -> bool:
+        return True
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table(
+            {
+                cls.get_class_name(): [10, 20, 30, 40],
+                "status": ["active", "inactive", "active", "inactive"],
+            }
+        )
+
+
 @PARALLELIZATION_MODES_SYNC_THREADING
 class TestFeatureGroupFinalFilters:
     """Tests that FeatureGroup.final_filters() controls inline vs. final filter application."""
@@ -618,3 +730,102 @@ class TestFeatureGroupFinalFilters:
                 flight_server=flight_server,
                 global_filter=global_filter,
             )
+
+    def test_string_filter_on_int_column_raises_error(
+        self, modes: set[ParallelizationMode], flight_server: Any
+    ) -> None:
+        """FG=True, string filter on int column. Framework must raise ValueError.
+
+        MutatesFilterColumnToInt returns final_filters()=True but maps the
+        "status" column from strings to integers. The filter expects
+        status=="active" (string), so the dtype mismatch should be detected.
+        """
+        feature_name = "MutatesFilterColumnToInt"
+
+        features = Features([Feature(name=feature_name, initial_requested_data=True)])
+
+        global_filter = GlobalFilter()
+        global_filter.add_filter("status", "equal", {"value": "active"})
+
+        with pytest.raises(Exception, match="expects string comparison but column has type"):
+            MlodaTestRunner.run_api(
+                features,
+                compute_frameworks={PyArrowTable},
+                parallelization_modes=modes,
+                flight_server=flight_server,
+                global_filter=global_filter,
+            )
+
+    def test_numeric_filter_on_string_column_raises_error(
+        self, modes: set[ParallelizationMode], flight_server: Any
+    ) -> None:
+        """FG=True, numeric filter on string column. Framework must raise ValueError.
+
+        MutatesFilterColumnToString returns final_filters()=True but maps the
+        "price" column from numbers to strings. The filter expects
+        price >= 10 (numeric), so the dtype mismatch should be detected.
+        """
+        feature_name = "MutatesFilterColumnToString"
+
+        features = Features([Feature(name=feature_name, initial_requested_data=True)])
+
+        global_filter = GlobalFilter()
+        global_filter.add_filter("price", "min", {"min": 10})
+
+        with pytest.raises(Exception, match="expects numeric comparison but column has type"):
+            MlodaTestRunner.run_api(
+                features,
+                compute_frameworks={PyArrowTable},
+                parallelization_modes=modes,
+                flight_server=flight_server,
+                global_filter=global_filter,
+            )
+
+    def test_default_fg_dtype_mismatch_raises_error(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
+        """FG=None (default), Engine=True, dtype mismatch. Framework must raise ValueError.
+
+        DefaultFGMutatesFilterColumnToInt does not override final_filters(),
+        so the engine fallback path applies. The dtype mismatch should be caught
+        on this path too, not only when the FG returns True.
+        """
+        feature_name = "DefaultFGMutatesFilterColumnToInt"
+
+        features = Features([Feature(name=feature_name, initial_requested_data=True)])
+
+        global_filter = GlobalFilter()
+        global_filter.add_filter("status", "equal", {"value": "active"})
+
+        with pytest.raises(Exception, match="expects string comparison but column has type"):
+            MlodaTestRunner.run_api(
+                features,
+                compute_frameworks={PyArrowTable},
+                parallelization_modes=modes,
+                flight_server=flight_server,
+                global_filter=global_filter,
+            )
+
+    def test_compatible_dtype_passes_validation(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
+        """FG=True with compatible dtypes. No error should be raised.
+
+        CompatibleDtypeFeatureGroup returns final_filters()=True and the
+        "status" column is string, matching the filter value type. Row
+        elimination should proceed normally.
+        """
+        feature_name = "CompatibleDtypeFeatureGroup"
+
+        features = Features([Feature(name=feature_name, initial_requested_data=True)])
+
+        global_filter = GlobalFilter()
+        global_filter.add_filter("status", "equal", {"value": "active"})
+
+        result = MlodaTestRunner.run_api(
+            features,
+            compute_frameworks={PyArrowTable},
+            parallelization_modes=modes,
+            flight_server=flight_server,
+            global_filter=global_filter,
+        )
+
+        for res in result.results:
+            data = res.to_pydict()
+            assert data[feature_name] == [10, 30]

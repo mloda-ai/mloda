@@ -10,6 +10,7 @@ from mloda.user import FeatureName, ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_filter_engine import SqliteFilterEngine
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_merge_engine import SqliteMergeEngine
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation
+from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,15 @@ class SqliteFramework(ComputeFramework):
 
     def _extract_column_names(self, data: Any) -> set[str]:
         return set(data.columns)
+
+    def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
+        if not hasattr(data, "connection") or column_name not in data.columns:
+            return None
+        cursor = data.connection.execute(f"PRAGMA table_info({quote_ident(data.table_name)})")
+        for row in cursor.fetchall():
+            if row[1] == column_name:
+                return str(row[2]).lower()
+        return None
 
     def transform(
         self,

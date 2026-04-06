@@ -219,48 +219,6 @@ mloda resolves the full chain - you declare the end result, not the steps.
 
 **Automatic dependency resolution:** You only declare what you need. If `pii_redacted` depends on `retrieved` which depends on `documents`, just ask for `pii_redacted` - mloda traces back and resolves the full chain.
 
-Here is a concrete example. Two small plugins, each handling one transformation step:
-
-```python
-from typing import Any
-from mloda.provider import FeatureChainParserMixin, FeatureGroup, FeatureSet, ApiInputDataFeature
-from mloda.user import PluginCollector, mloda
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-
-# Step 1: Normalize text (lowercase + strip whitespace)
-class NormalizedText(FeatureChainParserMixin, FeatureGroup):
-    PREFIX_PATTERN = r".*__(normalized)$"
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        for feature in features.features:
-            source = cls._extract_source_features(feature)[0]
-            data[feature.name] = data[source].str.lower().str.strip()
-        return data
-
-# Step 2: Count words
-class WordCount(FeatureChainParserMixin, FeatureGroup):
-    PREFIX_PATTERN = r".*__(word_count)$"
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        for feature in features.features:
-            source = cls._extract_source_features(feature)[0]
-            data[feature.name] = data[source].str.split().str.len()
-        return data
-
-# Only request the final feature. mloda resolves: text -> normalized -> word_count
-result = mloda.run_all(
-    features=["text__normalized__word_count"],
-    compute_frameworks={PandasDataFrame},
-    plugin_collector=PluginCollector.enabled_feature_groups(
-        {ApiInputDataFeature, NormalizedText, WordCount}
-    ),
-    api_data={"TextData": {"text": ["  Hello World  ", "FOO BAR BAZ", "Test  "]}},
-)
-# result: [2, 3, 1]  -- normalized then counted, full chain resolved automatically
-```
-
 ---
 
 ## Compute Frameworks

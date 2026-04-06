@@ -1081,28 +1081,26 @@ print(plugin_loader.list_loaded_modules("sql"))</div>
 </clipboard-copy>
 </div>
 <div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># Step 1: We want to load typical order information like order_id, product_id, quantity, and item_price.</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user</span><span class="w"> </span><span class="kn">import</span> <span class="n">Feature</span>
 
-<span class="n">order_features</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Feature</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"order_id"</span><span class="p">,</span> <span class="s2">"product_id"</span><span class="p">,</span> <span class="s2">"quantity"</span><span class="p">,</span> <span class="s2">"item_price"</span><span class="p">]</span>
+<span class="n">order_features</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Feature</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"order_id"</span><span class="p">,</span> <span class="s2">"product_id"</span><span class="p">,</span> <span class="s2">"quantity"</span><span class="p">,</span> <span class="s2">"item_price"</span><span class="p">]</span>
 
-<span class="n">payment_features</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Feature</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"payment_id"</span><span class="p">,</span> <span class="s2">"payment_type"</span><span class="p">,</span> <span class="s2">"payment_status"</span><span class="p">,</span> <span class="s2">"valid_datetime"</span><span class="p">]</span>
+<span class="n">payment_features</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Feature</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"payment_id"</span><span class="p">,</span> <span class="s2">"payment_type"</span><span class="p">,</span> <span class="s2">"payment_status"</span><span class="p">,</span> <span class="s2">"valid_datetime"</span><span class="p">]</span>
 
-<span class="n">location_features</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Feature</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"user_location"</span><span class="p">,</span> <span class="s2">"merchant_location"</span><span class="p">,</span> <span class="s2">"update_date"</span><span class="p">]</span>
+<span class="n">location_features</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Feature</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"user_location"</span><span class="p">,</span> <span class="s2">"merchant_location"</span><span class="p">,</span> <span class="s2">"update_date"</span><span class="p">]</span>
 
-<span class="n">categorical_features</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Feature</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"user_age_group"</span><span class="p">,</span> <span class="s2">"product_category"</span><span class="p">,</span> <span class="s2">"transaction_type"</span><span class="p">]</span>
+<span class="n">categorical_features</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Feature</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"user_age_group"</span><span class="p">,</span> <span class="s2">"product_category"</span><span class="p">,</span> <span class="s2">"transaction_type"</span><span class="p">]</span>
 </pre></div>
 <div class="clipboard-copy-txt" id="cell-3"># Step 1: We want to load typical order information like order_id, product_id, quantity, and item_price.
-from typing import List
 from mloda.user import Feature
 
-order_features: List[str | Feature] = ["order_id", "product_id", "quantity", "item_price"]
+order_features: list[str | Feature] = ["order_id", "product_id", "quantity", "item_price"]
 
-payment_features: List[str | Feature] = ["payment_id", "payment_type", "payment_status", "valid_datetime"]
+payment_features: list[str | Feature] = ["payment_id", "payment_type", "payment_status", "valid_datetime"]
 
-location_features: List[str | Feature] = ["user_location", "merchant_location", "update_date"]
+location_features: list[str | Feature] = ["user_location", "merchant_location", "update_date"]
 
-categorical_features: List[str | Feature] = ["user_age_group", "product_category", "transaction_type"]</div>
+categorical_features: list[str | Feature] = ["user_age_group", "product_category", "transaction_type"]</div>
 </div>
 </div>
 </div>
@@ -1367,7 +1365,7 @@ for data in result:
 <div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># Define features with specific compute frameworks</span>
 <span class="n">order_id</span> <span class="o">=</span> <span class="n">Feature</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"order_id"</span><span class="p">,</span> <span class="n">compute_framework</span><span class="o">=</span><span class="s2">"PandasDataFrame"</span><span class="p">)</span>
 <span class="n">product_id</span> <span class="o">=</span> <span class="n">Feature</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"product_id"</span><span class="p">,</span> <span class="n">compute_framework</span><span class="o">=</span><span class="s2">"PyArrowTable"</span><span class="p">)</span>
-<span class="n">specific_framework_feature_list</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Feature</span> <span class="o">|</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">order_id</span><span class="p">,</span> <span class="n">product_id</span><span class="p">]</span>
+<span class="n">specific_framework_feature_list</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Feature</span> <span class="o">|</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">order_id</span><span class="p">,</span> <span class="n">product_id</span><span class="p">]</span>
 
 <span class="c1"># Request data for the defined features</span>
 <span class="n">result</span> <span class="o">=</span> <span class="n">mloda</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span><span class="n">specific_framework_feature_list</span><span class="p">,</span> <span class="n">data_access_collection</span><span class="o">=</span><span class="n">data_access_collection</span><span class="p">)</span>
@@ -1380,7 +1378,7 @@ for data in result:
 <div class="clipboard-copy-txt" id="cell-7"># Define features with specific compute frameworks
 order_id = Feature(name="order_id", compute_framework="PandasDataFrame")
 product_id = Feature(name="product_id", compute_framework="PyArrowTable")
-specific_framework_feature_list: List[Feature | str] = [order_id, product_id]
+specific_framework_feature_list: list[Feature | str] = [order_id, product_id]
 
 # Request data for the defined features
 result = mloda.run_all(specific_framework_feature_list, data_access_collection=data_access_collection)
@@ -1440,7 +1438,7 @@ product_id: [[282,355,395]] &lt;class 'pyarrow.lib.Table'&gt;
 <div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># Demonstrating mloda's Flexibility with Different Data Technologies</span>
 
 <span class="c1"># Import required modules</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Set</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Optional</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda.provider</span><span class="w"> </span><span class="kn">import</span> <span class="n">FeatureGroup</span><span class="p">,</span> <span class="n">FeatureSet</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user</span><span class="w"> </span><span class="kn">import</span> <span class="n">Feature</span><span class="p">,</span> <span class="n">FeatureName</span><span class="p">,</span> <span class="n">Options</span><span class="p">,</span> <span class="n">Index</span><span class="p">,</span> <span class="n">Link</span><span class="p">,</span> <span class="n">JoinSpec</span>
@@ -1454,7 +1452,7 @@ product_id: [[282,355,395]] &lt;class 'pyarrow.lib.Table'&gt;
 <span class="c1"># Extend ReadFileFeature to provide index columns</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">ReadFileFeatureJoin</span><span class="p">(</span><span class="n">ReadFileFeature</span><span class="p">):</span>
     <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">index_columns</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Index</span><span class="p">]]:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">index_columns</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="n">Index</span><span class="p">]]:</span>
         <span class="k">return</span> <span class="p">[</span><span class="n">index</span><span class="p">]</span>
 
 
@@ -1465,7 +1463,7 @@ product_id: [[282,355,395]] &lt;class 'pyarrow.lib.Table'&gt;
 <span class="c1"># Create an example feature group to demonstrate joining</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">ExampleMlLifeCycleJoin</span><span class="p">(</span><span class="n">FeatureGroup</span><span class="p">):</span>
     <span class="c1"># Define input features with different compute frameworks</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">input_features</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">options</span><span class="p">:</span> <span class="n">Options</span><span class="p">,</span> <span class="n">feature_name</span><span class="p">:</span> <span class="n">FeatureName</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Set</span><span class="p">[</span><span class="n">Feature</span><span class="p">]]:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">input_features</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">options</span><span class="p">:</span> <span class="n">Options</span><span class="p">,</span> <span class="n">feature_name</span><span class="p">:</span> <span class="n">FeatureName</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">set</span><span class="p">[</span><span class="n">Feature</span><span class="p">]]:</span>
         <span class="n">quantity</span> <span class="o">=</span> <span class="n">Feature</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"quantity"</span><span class="p">,</span> <span class="n">compute_framework</span><span class="o">=</span><span class="s2">"PandasDataFrame"</span><span class="p">)</span>
         <span class="n">product_id</span> <span class="o">=</span> <span class="n">Feature</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"product_id"</span><span class="p">,</span> <span class="n">compute_framework</span><span class="o">=</span><span class="s2">"PyArrowTable"</span><span class="p">)</span>
         <span class="k">return</span> <span class="p">{</span><span class="n">product_id</span><span class="p">,</span> <span class="n">quantity</span><span class="p">}</span>
@@ -1499,7 +1497,7 @@ product_id: [[282,355,395]] &lt;class 'pyarrow.lib.Table'&gt;
 <div class="clipboard-copy-txt" id="cell-8"># Demonstrating mloda's Flexibility with Different Data Technologies
 
 # Import required modules
-from typing import Any, List, Optional, Set
+from typing import Any, Optional
 
 from mloda.provider import FeatureGroup, FeatureSet
 from mloda.user import Feature, FeatureName, Options, Index, Link, JoinSpec
@@ -1513,7 +1511,7 @@ index = Index(("order_id",))
 # Extend ReadFileFeature to provide index columns
 class ReadFileFeatureJoin(ReadFileFeature):
     @classmethod
-    def index_columns(cls) -&gt; Optional[List[Index]]:
+    def index_columns(cls) -&gt; Optional[list[Index]]:
         return [index]
 
 
@@ -1524,7 +1522,7 @@ link = Link.inner(JoinSpec(ReadFileFeatureJoin, index), JoinSpec(ReadFileFeature
 # Create an example feature group to demonstrate joining
 class ExampleMlLifeCycleJoin(FeatureGroup):
     # Define input features with different compute frameworks
-    def input_features(self, options: Options, feature_name: FeatureName) -&gt; Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -&gt; Optional[set[Feature]]:
         quantity = Feature(name="quantity", compute_framework="PandasDataFrame")
         product_id = Feature(name="product_id", compute_framework="PyArrowTable")
         return {product_id, quantity}

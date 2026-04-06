@@ -1,7 +1,7 @@
 import sqlite3
 import numpy as np
 
-from typing import Any, List, Optional
+from typing import Any, Optional
 
 import pandas as pd
 
@@ -136,7 +136,7 @@ def create_ml_lifecylce_data() -> None:
 
     options = {"MlLifeCycleDataCreator": True, "num_samples": 100}
 
-    feature_list: List[Feature | str] = []
+    feature_list: list[Feature | str] = []
     for feature in str_feature_list:
         # Transaction_id has a special treatment, as we have it twice with different domains.
         if feature == "transaction_id":

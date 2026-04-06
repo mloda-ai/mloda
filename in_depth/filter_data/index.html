@@ -318,6 +318,377 @@ result[0]
 <p>Although this example is complex, it is noteworthy, that the framework considers filters as features and setup as that in the framework. </p>
 <h3 id="summary">Summary</h3>
 <p>This filtering system improves data preprocessing through GlobalFilter and SingleFilters, allowing flexible, condition-based refinement, including time-based filtering. It maintains consistency using FilterType and supports complex machine learning use cases. If you encounter a commonly used filter not yet included, feel free to open an issue or submit a pull request.</p>
+<hr />
+<h2 id="handling-filters-in-a-featuregroup">Handling Filters in a FeatureGroup</h2>
+<p>The previous sections show how <strong>users</strong> create filters. This section explains how
+<strong>FeatureGroup authors</strong> work with those filters during calculation.</p>
+<h3 id="how-filters-reach-your-featuregroup">How filters reach your FeatureGroup</h3>
+<p>When a user passes a <code>GlobalFilter</code>, the framework matches each <code>SingleFilter</code> to the
+FeatureGroups that declare the filter's column as an input. Each matched filter is
+<strong>deep-copied</strong> before delivery. If two FeatureGroups both match the same original
+filter, they each receive independent copies. This means a single <code>GlobalFilter</code> can
+be processed differently by different FeatureGroups in the same pipeline: one may use
+it for inline masking while another uses it for row elimination.</p>
+<p>Matched filters are attached to the <code>FeatureSet</code> before <code>calculate_feature()</code> is
+called. Inside your calculation you can access them via <code>features.filters</code>:</p>
+<pre><code>@classmethod
+def calculate_feature(cls, data, features: FeatureSet):
+    if features.filters is not None:
+        for single_filter in features.filters:
+            column = single_filter.name             # e.g. &quot;status&quot;
+            value  = single_filter.parameter.value  # e.g. &quot;active&quot;
+            # ... use however you need
+</code></pre>
+<p><code>features.filters</code> is <strong>always available</strong>, regardless of any other setting.</p>
+<h3 id="two-independent-concerns">Two independent concerns</h3>
+<p>Filters involve two decisions that are <strong>independent</strong> of each other:</p>
+<table>
+<thead>
+<tr>
+<th>Concern</th>
+<th>Who decides</th>
+<th>When it happens</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Inline reading</strong> -- should the FeatureGroup read <code>features.filters</code> during calculation?</td>
+<td>The FeatureGroup author (you)</td>
+<td>During <code>calculate_feature()</code></td>
+</tr>
+<tr>
+<td><strong>Row elimination</strong> -- should the framework remove non-matching rows after calculation?</td>
+<td><code>final_filters()</code> return value</td>
+<td>After <code>calculate_feature()</code></td>
+</tr>
+</tbody>
+</table>
+<p>A FeatureGroup can do either, both, or neither. The two concerns are decoupled.</p>
+<h3 id="final_filters-reference"><code>final_filters()</code> reference</h3>
+<p>Override this classmethod on your FeatureGroup to control post-calculation row elimination:</p>
+<pre><code>@classmethod
+def final_filters(cls) -&gt; bool | None:
+    return None  # default
+</code></pre>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">Return value</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;"><code>None</code></td>
+<td>Defer to the FilterEngine tied to the ComputeFramework. Most engines (Pandas, PyArrow, Polars, Spark) default to <code>True</code> (eliminate rows). Iceberg defaults to <code>False</code> (predicate pushdown handles it).</td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>False</code></td>
+<td>Skip row elimination. Use this when your FeatureGroup fully handles the filter itself.</td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>True</code></td>
+<td>Force row elimination, even if the FilterEngine would skip it.</td>
+</tr>
+</tbody>
+</table>
+<p>This method does <strong>not</strong> affect whether <code>features.filters</code> is populated. Filters are
+always available for inline reading.</p>
+<p><code>final_filters()</code> is a <strong>semantic</strong> flag that controls <em>when</em> in the pipeline the
+filter is applied, not <em>where</em> the computation runs physically:</p>
+<table>
+<thead>
+<tr>
+<th>Framework category</th>
+<th>Examples</th>
+<th>Physical behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Eager</td>
+<td>Pandas, PyArrow</td>
+<td>Post-hoc filter in memory after full materialization</td>
+</tr>
+<tr>
+<td>Lazy (SQL)</td>
+<td>DuckDB, SQLite</td>
+<td><code>.filter()</code> adds WHERE to query plan; optimizer may push to scan time</td>
+</tr>
+<tr>
+<td>Lazy (dataframe)</td>
+<td>Polars, Spark</td>
+<td><code>.filter()</code> adds node to lazy plan; optimizer decides physical order</td>
+</tr>
+<tr>
+<td>Scan-time</td>
+<td>Iceberg</td>
+<td>Predicates pushed into scan expressions (<code>final_filters()=False</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>All frameworks that return <code>True</code> produce the same logical result (non-matching rows
+absent from output), but the physical execution path differs.</p>
+<h3 id="usage-patterns">Usage patterns</h3>
+<h4 id="pattern-1-let-the-framework-handle-everything-default">Pattern 1: Let the framework handle everything (default)</h4>
+<p>The most common case. Your FeatureGroup ignores filters entirely, and the framework
+removes non-matching rows after calculation. No override needed.</p>
+<pre><code>class SalesTotal(FeatureGroup):
+    @classmethod
+    def calculate_feature(cls, data, features: FeatureSet):
+        # Just compute; framework handles filtering afterward
+        return pa.table({cls.get_class_name(): compute_totals(data)})
+</code></pre>
+<h4 id="pattern-2-inline-masking-skip-row-elimination">Pattern 2: Inline masking, skip row elimination</h4>
+<p>Use <code>FilterMask.build()</code> to turn <code>features.filters</code> into a boolean mask for a given
+column. This replaces the boilerplate of iterating <code>SingleFilter</code> objects and building
+masks manually. The correct engine is wired automatically by the <code>ComputeFramework</code>.</p>
+<p>Import it from <code>mloda.provider</code>:</p>
+<pre><code class="language-python">from mloda.provider import FilterMask
+</code></pre>
+<p>Example: "Sum of active sales per region, broadcast back to every row."</p>
+<pre><code>class MaskedRegionSum(FeatureGroup):
+    @classmethod
+    def final_filters(cls) -&gt; bool:
+        return False  # skip row elimination
+
+    @classmethod
+    def calculate_feature(cls, data, features: FeatureSet):
+        mask = FilterMask.build(data, features, column=&quot;status&quot;)
+        masked = pc.if_else(mask, data[&quot;sales&quot;], None)
+        # aggregate masked values, broadcast back to all rows
+        return pa.table({cls.get_class_name(): broadcast_sum(masked, data[&quot;region&quot;])})
+</code></pre>
+<p>Result: all rows preserved, but only matching values contributed to the sum.</p>
+<p><code>FilterMask.build()</code> supports <code>equal</code>, <code>min</code>, <code>max</code>, <code>range</code>, and
+<code>categorical_inclusion</code> filter types. When multiple filters target the same column
+they are AND-combined. When no filters match the column, an all-True mask is returned.</p>
+<h4 id="pattern-3-inline-masking-row-elimination">Pattern 3: Inline masking + row elimination</h4>
+<p>Read filters for conditional logic <strong>and</strong> request row elimination afterward. Useful when
+you need filter-aware computation (masking, weighting, branching) but also want
+non-matching rows removed from the final output.</p>
+<p>Example: "Sum of active sales per region, only for active rows."</p>
+<pre><code>class MaskedRegionSumActiveOnly(FeatureGroup):
+    @classmethod
+    def final_filters(cls) -&gt; bool:
+        return True  # also eliminate non-matching rows
+
+    @classmethod
+    def calculate_feature(cls, data, features: FeatureSet):
+        mask = FilterMask.build(data, features, column=&quot;status&quot;)
+        masked = pc.if_else(mask, data[&quot;sales&quot;], None)
+        sums = broadcast_sum(masked, data[&quot;region&quot;])
+        # Return all rows; the framework will remove non-matching ones
+        return pa.table({
+            cls.get_class_name(): sums,
+            &quot;status&quot;: data[&quot;status&quot;],  # preserve the filter column
+        })
+</code></pre>
+<p>Result: only matching rows remain, with aggregated values computed from masked data.</p>
+<h4 id="pattern-4-force-elimination-on-a-non-eliminating-engine">Pattern 4: Force elimination on a non-eliminating engine</h4>
+<p>Some engines skip row elimination by default (e.g. Iceberg, which uses predicate pushdown
+at scan time). If your FeatureGroup computes derived columns that the scan could not
+filter, override <code>final_filters()</code> to force elimination:</p>
+<pre><code>class DerivedIcebergFeature(FeatureGroup):
+    @classmethod
+    def final_filters(cls) -&gt; bool:
+        return True  # override Iceberg's default of False
+</code></pre>
+<h3 id="the-overlap-contract">The overlap contract</h3>
+<p>When a FeatureGroup reads filters inline <strong>and</strong> returns <code>final_filters() = True</code>, the
+same filters are processed twice: once by your code during calculation, and once by the
+framework's FilterEngine afterward.</p>
+<p>This is safe as long as you follow one rule: <strong>preserve the filter column with its
+original values in your output</strong>.</p>
+<p>The framework's row elimination works by matching against the filter column in your
+returned data. If your FeatureGroup drops that column, the framework raises a
+<code>ValueError</code> with a clear message naming the missing column. If your FeatureGroup
+changes the column's type (e.g., mapping strings to integers), the framework detects
+the dtype mismatch and raises a <code>ValueError</code>. Value-level mutations within the same
+type (e.g., remapping <code>"active"</code> to <code>"yes"</code>) are not detected and may produce wrong
+results silently.</p>
+<pre><code># Correct: filter column preserved with original values
+return pa.table({
+    cls.get_class_name(): computed_values,
+    &quot;status&quot;: original_status_column,   # framework can filter on this
+})
+
+# Wrong: filter column type changed -- raises ValueError (dtype mismatch)
+return pa.table({
+    cls.get_class_name(): computed_values,
+    &quot;status&quot;: [1, 0, 1, 0],   # mapped to ints; framework detects string-vs-numeric mismatch
+})
+
+# Wrong: filter column omitted -- raises ValueError at runtime
+return pa.table({
+    cls.get_class_name(): computed_values,
+    # &quot;status&quot; missing; framework raises: &quot;missing filter column 'status'&quot;
+})
+</code></pre>
+<h4 id="quick-reference">Quick reference</h4>
+<table>
+<thead>
+<tr>
+<th>Your FeatureGroup...</th>
+<th style="text-align: center;"><code>final_filters()</code></th>
+<th style="text-align: center;">Reads <code>features.filters</code>?</th>
+<th style="text-align: center;">Must preserve filter column?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Ignores filters</td>
+<td style="text-align: center;"><code>None</code> (default)</td>
+<td style="text-align: center;">No</td>
+<td style="text-align: center;">Yes (it is in <code>input_data</code>)</td>
+</tr>
+<tr>
+<td>Handles everything inline</td>
+<td style="text-align: center;"><code>False</code></td>
+<td style="text-align: center;">Yes</td>
+<td style="text-align: center;">No (elimination skipped)</td>
+</tr>
+<tr>
+<td>Uses inline logic + elimination</td>
+<td style="text-align: center;"><code>True</code></td>
+<td style="text-align: center;">Yes</td>
+<td style="text-align: center;"><strong>Yes</strong></td>
+</tr>
+<tr>
+<td>Just forces elimination</td>
+<td style="text-align: center;"><code>True</code></td>
+<td style="text-align: center;">No</td>
+<td style="text-align: center;">Yes</td>
+</tr>
+</tbody>
+</table>
+<h3 id="pipeline-data-flows">Pipeline data flows</h3>
+<p>The following examples show what happens to data at each stage for the four patterns
+above. All flows use the same input and filter:</p>
+<pre><code>Input:
+    region | status   | value
+    A      | active   |  10
+    A      | inactive |  20
+    B      | active   |  30
+    B      | inactive |  40
+
+Filter: status == &quot;active&quot;
+</code></pre>
+<h4 id="eager-framework-final-filters-pandas-pyarrow">Eager framework + final filters (Pandas, PyArrow)</h4>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>Data</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>calculate_feature()</code> output</td>
+<td><code>[10, 20, 30, 40]</code> with <code>status = [active, inactive, active, inactive]</code></td>
+</tr>
+<tr>
+<td><code>run_final_filter()</code></td>
+<td>Creates mask <code>[True, False, True, False]</code>, applies <code>table.filter(mask)</code></td>
+</tr>
+<tr>
+<td><strong>Final result</strong></td>
+<td><code>[10, 30]</code> with <code>status = [active, active]</code> (2 rows)</td>
+</tr>
+</tbody>
+</table>
+<h4 id="lazy-framework-final-filters-duckdb-sqlite-polars-spark">Lazy framework + final filters (DuckDB, SQLite, Polars, Spark)</h4>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>Data</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>calculate_feature()</code> output</td>
+<td>Lazy relation: <code>SELECT value, status FROM source</code></td>
+</tr>
+<tr>
+<td><code>run_final_filter()</code></td>
+<td>Appends filter: <code>WHERE "status" = 'active'</code></td>
+</tr>
+<tr>
+<td><strong>Materialized result</strong></td>
+<td><code>[10, 30]</code> with <code>status = [active, active]</code> (2 rows)</td>
+</tr>
+</tbody>
+</table>
+<p>The result is identical to eager row elimination, but no intermediate full-table
+materialization occurs.</p>
+<h4 id="inline-masking-all-rows-preserved">Inline masking (all rows preserved)</h4>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>Data</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Read <code>features.filters</code></td>
+<td>Extract: <code>status == "active"</code></td>
+</tr>
+<tr>
+<td>Build mask</td>
+<td><code>[True, False, True, False]</code></td>
+</tr>
+<tr>
+<td>Apply mask to value column</td>
+<td><code>masked_value = [10, NULL, 30, NULL]</code></td>
+</tr>
+<tr>
+<td>Aggregate (sum by region, broadcast)</td>
+<td>Region A: 10, Region B: 30</td>
+</tr>
+<tr>
+<td><strong>Final result</strong></td>
+<td><code>[10, 10, 30, 30]</code> (4 rows, all preserved)</td>
+</tr>
+</tbody>
+</table>
+<p>The framework skips <code>run_final_filter()</code> because <code>final_filters() = False</code>.</p>
+<h4 id="masking-and-elimination-same-filter-two-featuregroups">Masking and elimination (same filter, two FeatureGroups)</h4>
+<p>A pipeline may need the same filter for two purposes in separate steps. Because
+filters are deep-copied independently for each FeatureGroup, both steps run
+without interference:</p>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>Step 1 (inline mask FG)</th>
+<th>Step 2 (regular FG)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>final_filters()</code></td>
+<td><code>False</code></td>
+<td><code>None</code> (engine default: <code>True</code>)</td>
+</tr>
+<tr>
+<td><code>calculate_feature()</code></td>
+<td>Reads filters, masks values, aggregates</td>
+<td>Computes raw values, ignores filters</td>
+</tr>
+<tr>
+<td><code>run_final_filter()</code></td>
+<td>Skipped</td>
+<td>Applies row elimination</td>
+</tr>
+<tr>
+<td><strong>Result</strong></td>
+<td><code>[10, 10, 30, 30]</code> (4 rows)</td>
+<td><code>[10, 30]</code> (2 rows)</td>
+</tr>
+</tbody>
+</table>
               
             </div>
           </div><footer>

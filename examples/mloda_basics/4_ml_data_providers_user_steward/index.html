@@ -1003,7 +1003,6 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># We reuse the data from the first example and just rerun it for the sake of the example, but just in one cell.</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user</span><span class="w"> </span><span class="kn">import</span> <span class="n">mloda</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user</span><span class="w"> </span><span class="kn">import</span> <span class="n">Feature</span><span class="p">,</span> <span class="n">DataAccessCollection</span><span class="p">,</span> <span class="n">PluginLoader</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.feature_group.input_data.read_dbs.sqlite</span><span class="w"> </span><span class="kn">import</span> <span class="n">SQLITEReader</span>
@@ -1028,10 +1027,10 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
     <span class="n">credential_dict</span><span class="o">=</span><span class="p">{</span><span class="n">SQLITEReader</span><span class="o">.</span><span class="n">db_path</span><span class="p">():</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">base_data_path</span><span class="p">,</span> <span class="s2">"example.sqlite"</span><span class="p">)}</span>
 <span class="p">)</span>
 
-<span class="n">order_features</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Feature</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"order_id"</span><span class="p">,</span> <span class="s2">"product_id"</span><span class="p">,</span> <span class="s2">"quantity"</span><span class="p">,</span> <span class="s2">"item_price"</span><span class="p">]</span>
-<span class="n">payment_features</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Feature</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"payment_id"</span><span class="p">,</span> <span class="s2">"payment_type"</span><span class="p">,</span> <span class="s2">"payment_status"</span><span class="p">,</span> <span class="s2">"valid_datetime"</span><span class="p">]</span>
-<span class="n">location_features</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Feature</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"user_location"</span><span class="p">,</span> <span class="s2">"merchant_location"</span><span class="p">,</span> <span class="s2">"update_date"</span><span class="p">]</span>
-<span class="n">categorical_features</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Feature</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"user_age_group"</span><span class="p">,</span> <span class="s2">"product_category"</span><span class="p">,</span> <span class="s2">"transaction_type"</span><span class="p">]</span>
+<span class="n">order_features</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Feature</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"order_id"</span><span class="p">,</span> <span class="s2">"product_id"</span><span class="p">,</span> <span class="s2">"quantity"</span><span class="p">,</span> <span class="s2">"item_price"</span><span class="p">]</span>
+<span class="n">payment_features</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Feature</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"payment_id"</span><span class="p">,</span> <span class="s2">"payment_type"</span><span class="p">,</span> <span class="s2">"payment_status"</span><span class="p">,</span> <span class="s2">"valid_datetime"</span><span class="p">]</span>
+<span class="n">location_features</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Feature</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"user_location"</span><span class="p">,</span> <span class="s2">"merchant_location"</span><span class="p">,</span> <span class="s2">"update_date"</span><span class="p">]</span>
+<span class="n">categorical_features</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Feature</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"user_age_group"</span><span class="p">,</span> <span class="s2">"product_category"</span><span class="p">,</span> <span class="s2">"transaction_type"</span><span class="p">]</span>
 <span class="n">all_features</span> <span class="o">=</span> <span class="n">order_features</span> <span class="o">+</span> <span class="n">payment_features</span> <span class="o">+</span> <span class="n">location_features</span> <span class="o">+</span> <span class="n">categorical_features</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user</span><span class="w"> </span><span class="kn">import</span> <span class="n">PluginCollector</span>
@@ -1047,7 +1046,6 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <div class="clipboard-copy-txt" id="cell-1"># We reuse the data from the first example and just rerun it for the sake of the example, but just in one cell.
 
 import os
-from typing import List
 from mloda.user import mloda
 from mloda.user import Feature, DataAccessCollection, PluginLoader
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
@@ -1072,10 +1070,10 @@ data_access_collection.add_credential_dict(
     credential_dict={SQLITEReader.db_path(): os.path.join(base_data_path, "example.sqlite")}
 )
 
-order_features: List[str | Feature] = ["order_id", "product_id", "quantity", "item_price"]
-payment_features: List[str | Feature] = ["payment_id", "payment_type", "payment_status", "valid_datetime"]
-location_features: List[str | Feature] = ["user_location", "merchant_location", "update_date"]
-categorical_features: List[str | Feature] = ["user_age_group", "product_category", "transaction_type"]
+order_features: list[str | Feature] = ["order_id", "product_id", "quantity", "item_price"]
+payment_features: list[str | Feature] = ["payment_id", "payment_type", "payment_status", "valid_datetime"]
+location_features: list[str | Feature] = ["user_location", "merchant_location", "update_date"]
+categorical_features: list[str | Feature] = ["user_age_group", "product_category", "transaction_type"]
 all_features = order_features + payment_features + location_features + categorical_features
 
 from mloda.user import PluginCollector

@@ -113,10 +113,6 @@ class IcebergFramework(ComputeFramework):
             field = schema.find_field(column_name)
             if field is not None:
                 return str(field.field_type)
-            return None
-        # After transform, data may be a PyArrow table
-        if column_name in data.schema.names:
-            return str(data.schema.field(column_name).type)
         return None
 
     def transform(self, data: Any, feature_names: set[str]) -> Any:

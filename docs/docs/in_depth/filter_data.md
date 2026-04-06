@@ -220,10 +220,6 @@ always available for inline reading.
 
 ### Usage patterns
 
-The examples below use pseudocode helpers (`compute_totals`, `build_mask_from_filters`,
-`broadcast_sum`) to keep the focus on the filter interaction pattern. Replace these with
-your framework-specific logic.
-
 #### Pattern 1: Let the framework handle everything (default)
 
 The most common case. Your FeatureGroup ignores filters entirely, and the framework
@@ -239,10 +235,15 @@ class SalesTotal(FeatureGroup):
 
 #### Pattern 2: Inline masking, skip row elimination
 
-Read filters during calculation to conditionally mask values (e.g. null-out non-matching
-rows before aggregation), then tell the framework not to remove rows. Useful when
-downstream consumers need all rows, but only matching values should contribute to
-aggregated results.
+Use `FilterMask.build()` to turn `features.filters` into a boolean mask for a given
+column. This replaces the boilerplate of iterating `SingleFilter` objects and building
+masks manually. The correct engine is wired automatically by the `ComputeFramework`.
+
+Import it from `mloda.provider`:
+
+```python
+from mloda.provider import FilterMask
+```
 
 Example: "Sum of active sales per region, broadcast back to every row."
 
@@ -254,13 +255,17 @@ class MaskedRegionSum(FeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data, features: FeatureSet):
-        mask = build_mask_from_filters(data, features.filters)
+        mask = FilterMask.build(data, features, column="status")
         masked = pc.if_else(mask, data["sales"], None)
         # aggregate masked values, broadcast back to all rows
         return pa.table({cls.get_class_name(): broadcast_sum(masked, data["region"])})
 ```
 
 Result: all rows preserved, but only matching values contributed to the sum.
+
+`FilterMask.build()` supports `equal`, `min`, `max`, `range`, and
+`categorical_inclusion` filter types. When multiple filters target the same column
+they are AND-combined. When no filters match the column, an all-True mask is returned.
 
 #### Pattern 3: Inline masking + row elimination
 
@@ -278,7 +283,7 @@ class MaskedRegionSumActiveOnly(FeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data, features: FeatureSet):
-        mask = build_mask_from_filters(data, features.filters)
+        mask = FilterMask.build(data, features, column="status")
         masked = pc.if_else(mask, data["sales"], None)
         sums = broadcast_sum(masked, data["region"])
         # Return all rows; the framework will remove non-matching ones

@@ -27,6 +27,10 @@ filters to FeatureGroups in three stages:
 
    ```
    set_filter_engine  ->  calculate_feature()  ->  run_final_filter()
+                                                     |
+                                                     +-> validate columns exist
+                                                     +-> validate dtype compatibility
+                                                     +-> apply_filters()
    ```
 
    The `FeatureSet` attached to each FeatureGroup carries its own set of `SingleFilter`
@@ -35,6 +39,36 @@ filters to FeatureGroups in three stages:
 This means a single `GlobalFilter` with one filter (e.g., `status == "active"`) can be
 processed differently by different FeatureGroups in the same pipeline: one may use it
 for inline masking, another for row elimination, and a third may ignore it entirely.
+
+
+### Validation guardrails inside `run_final_filter()`
+
+Before applying filters, `run_final_filter()` runs two checks on every path where
+row elimination will occur (whether requested by the FeatureGroup or the FilterEngine):
+
+1. **Column existence.** For each filter column that the engine will process, the
+   framework checks that the column exists in the FeatureGroup's output. If a
+   FeatureGroup drops a filter column, a `ValueError` is raised naming the missing
+   column and listing the available columns.
+
+2. **Dtype compatibility.** For each filter column, the framework extracts the column's
+   dtype (via the compute framework's `_extract_column_dtype()`) and compares it against
+   the filter value types. If a string filter targets a numeric column (or vice versa),
+   a `ValueError` is raised:
+
+   ```
+   Filter on 'status' expects string comparison but column has type int64.
+   This usually means the FeatureGroup 'MyFG' modified the filter column's
+   type during calculation.
+   ```
+
+These checks run only on the row-elimination path. When `final_filters()` returns
+`False`, the framework skips `run_final_filter()` entirely and no validation occurs
+(the FeatureGroup is responsible for its own filter handling).
+
+Value-level mutations within the same type (e.g., remapping `"active"` to `"yes"`) are
+not detected by the dtype check. Only type-level mismatches (string vs. numeric) are
+caught. See the overlap contract in [filter_data.md](filter_data.md) for details.
 
 
 ### Concrete pipeline flows
@@ -67,6 +101,8 @@ masking (`pc.equal` + `table.filter` for PyArrow, boolean indexing for Pandas).
 
 Physical behavior: row elimination happens in memory after the full table is materialized.
 The filter engine (`PyArrowFilterEngine`, `PandasFilterEngine`) returns `final_filters() = True`.
+Before applying the mask, the framework validates that the filter column exists and has a
+compatible dtype (see [Validation guardrails](#validation-guardrails-inside-run_final_filter)).
 
 
 #### Flow 2: Lazy framework + final filters (DuckDB, SQLite, Polars, Spark)
@@ -86,7 +122,8 @@ until materialization.
 Physical behavior: the optimizer pushes the filter to scan time. The result is identical
 to eager row elimination, but no intermediate full-table materialization occurs. The filter
 engine (`DuckDBFilterEngine`, `SqliteFilterEngine`, `SparkFilterEngine`, `PolarsFilterEngine`)
-returns `final_filters() = True`.
+returns `final_filters() = True`. The same column existence and dtype validation runs
+before the filter is appended to the query plan.
 
 
 #### Flow 3: Inline masking (conditional aggregation, all rows preserved)

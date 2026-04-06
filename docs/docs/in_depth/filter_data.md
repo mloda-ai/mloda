@@ -162,10 +162,6 @@ Although this example is complex, it is noteworthy, that the framework considers
 
 This filtering system improves data preprocessing through GlobalFilter and SingleFilters, allowing flexible, condition-based refinement, including time-based filtering. It maintains consistency using FilterType and supports complex machine learning use cases. If you encounter a commonly used filter not yet included, feel free to open an issue or submit a pull request.
 
-For a detailed analysis of how filters flow through multi-step feature pipelines,
-including concrete data-flow examples for eager, lazy, inline masking, and combined
-scenarios, see the [Filter Pipeline Analysis](filter_pipeline_analysis.md).
-
 ---
 
 ## Handling Filters in a FeatureGroup

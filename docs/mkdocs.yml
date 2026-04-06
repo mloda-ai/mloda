@@ -22,7 +22,6 @@ nav:
     - (Feature) data: in_depth/access-feature-data.md
     - Join data: in_depth/join_data.md
     - Filter data: in_depth/filter_data.md
-    - Filter Pipeline Analysis: in_depth/filter_pipeline_analysis.md
     - Artifacts: in_depth/artifacts.md
   - In Depth - Advanced:
     - Data quality: in_depth/data-quality.md

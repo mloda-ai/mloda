@@ -219,7 +219,7 @@ mloda resolves the full chain - you declare the end result, not the steps.
 
 **Automatic dependency resolution:** You only declare what you need. If `pii_redacted` depends on `retrieved` which depends on `documents`, just ask for `pii_redacted` - mloda traces back and resolves the full chain.
 
-Each plugin declares its dependencies via `input_features()`. Request the end result, mloda resolves the tree:
+If you prefer explicit control over string-based or configuration-based chaining, you can declare dependencies directly via `input_features()`. Different environments can have different chain lengths: in realtime, `income` might resolve straight to a live data source; in a RAG pipeline, the same feature could go through ETL, validation, and enrichment steps first. Register different plugins per environment, the calling code stays the same:
 
 ```python
 class RiskAssessment(FeatureGroup):

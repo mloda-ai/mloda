@@ -310,7 +310,9 @@ class ComputeFramework(ABC):
     @staticmethod
     def _is_string_dtype(dtype_str: str) -> bool:
         """Classify whether a dtype string represents a string/text type."""
-        return any(s in dtype_str for s in ("str", "string", "utf8", "object", "large_string", "varchar", "text"))
+        if dtype_str == "str":
+            return True
+        return any(s in dtype_str for s in ("string", "utf8", "object", "large_string", "varchar", "text"))
 
     @staticmethod
     def _is_numeric_dtype(dtype_str: str) -> bool:

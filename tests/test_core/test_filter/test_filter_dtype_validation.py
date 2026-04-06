@@ -45,6 +45,12 @@ class TestIsStringDtype:
     def test_float64_is_not_string(self) -> None:
         assert ComputeFramework._is_string_dtype("float64") is False
 
+    def test_python_dict_str(self) -> None:
+        assert ComputeFramework._is_string_dtype("str") is True
+
+    def test_struct_is_not_string(self) -> None:
+        assert ComputeFramework._is_string_dtype("structtype()") is False
+
     def test_bool_is_not_string(self) -> None:
         assert ComputeFramework._is_string_dtype("bool") is False
 

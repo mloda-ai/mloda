@@ -1,9 +1,9 @@
 from typing import Any
 
-from mloda.core.filter.filter_mask_engine import BaseFilterMaskEngine
+from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
 
 
-class PythonDictFilterMaskEngine(BaseFilterMaskEngine):
+class PythonDictMaskEngine(BaseMaskEngine):
     @classmethod
     def supported_data_type(cls) -> type[Any]:
         return list

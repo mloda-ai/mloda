@@ -3,9 +3,9 @@ from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.pandas.pandas_merge_engine import PandasMergeEngine
 from mloda.user import FeatureName
 from mloda.provider import ComputeFramework
-from mloda.provider import BaseFilterEngine, BaseFilterMaskEngine
+from mloda.provider import BaseFilterEngine, BaseMaskEngine
 from mloda_plugins.compute_framework.base_implementations.pandas.pandas_filter_engine import PandasFilterEngine
-from mloda_plugins.compute_framework.base_implementations.pandas.pandas_filter_mask_engine import PandasFilterMaskEngine
+from mloda_plugins.compute_framework.base_implementations.pandas.pandas_mask_engine import PandasMaskEngine
 
 try:
     import pandas as pd
@@ -102,5 +102,5 @@ class PandasDataFrame(ComputeFramework):
         return PandasFilterEngine
 
     @classmethod
-    def filter_mask_engine(cls) -> type[BaseFilterMaskEngine]:
-        return PandasFilterMaskEngine
+    def mask_engine(cls) -> type[BaseMaskEngine]:
+        return PandasMaskEngine

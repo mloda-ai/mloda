@@ -5,12 +5,12 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 )
 from mloda.user import FeatureName
 from mloda.provider import ComputeFramework
-from mloda.provider import BaseFilterEngine, BaseFilterMaskEngine
+from mloda.provider import BaseFilterEngine, BaseMaskEngine
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_filter_engine import (
     PythonDictFilterEngine,
 )
-from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_filter_mask_engine import (
-    PythonDictFilterMaskEngine,
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_mask_engine import (
+    PythonDictMaskEngine,
 )
 
 
@@ -140,5 +140,5 @@ class PythonDictFramework(ComputeFramework):
         return PythonDictFilterEngine
 
     @classmethod
-    def filter_mask_engine(cls) -> type[BaseFilterMaskEngine]:
-        return PythonDictFilterMaskEngine
+    def mask_engine(cls) -> type[BaseMaskEngine]:
+        return PythonDictMaskEngine

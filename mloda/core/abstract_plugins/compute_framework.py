@@ -15,7 +15,7 @@ from mloda.core.abstract_plugins.function_extender import (
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.filter.filter_engine import BaseFilterEngine
-from mloda.core.filter.filter_mask_engine import BaseFilterMaskEngine
+from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
 from mloda.core.runtime.flight.flight_server import FlightServer
 
 
@@ -85,10 +85,10 @@ class ComputeFramework(ABC):
         raise NotImplementedError
 
     @classmethod
-    def filter_mask_engine(cls) -> type[BaseFilterMaskEngine] | None:
+    def mask_engine(cls) -> type[BaseMaskEngine] | None:
         """Return the mask engine for building boolean masks inside calculate_feature().
 
-        Override in framework plugins that support inline filter masking.
+        Override in framework plugins that support masking.
         Returns None by default (mask support is optional).
         """
         return None
@@ -192,6 +192,7 @@ class ComputeFramework(ABC):
 
         # every one does this
         features = self.set_filter_engine(features)
+        features = self.set_mask_engine(features)
         data = self.run_calculate_feature(feature_group, features)
         data = self.run_final_filter(data, features, feature_group)
 
@@ -428,10 +429,19 @@ class ComputeFramework(ABC):
         except NotImplementedError:
             pass
 
-        mask_engine = self.filter_mask_engine()
-        if mask_engine is not None:
-            features.filter_mask_engine = mask_engine
+        return features
 
+    @final
+    def set_mask_engine(self, features: Any) -> Any:
+        """Wire the mask engine onto the FeatureSet.
+
+        The mask engine provides boolean mask primitives for use during
+        calculate_feature(). It is set here so that FeatureGroups can access
+        it via features.mask_engine.
+        """
+        engine = self.mask_engine()
+        if engine is not None:
+            features.mask_engine = engine
         return features
 
     @final

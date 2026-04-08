@@ -2,9 +2,9 @@ from typing import Any
 
 import pytest
 
-from mloda.core.filter.filter_mask_engine import BaseFilterMaskEngine
-from tests.test_plugins.compute_framework.base_implementations.filter_mask_engine_test_mixin import (
-    FilterMaskEngineTestMixin,
+from mloda.provider import BaseMaskEngine
+from tests.test_plugins.compute_framework.base_implementations.mask_engine_test_mixin import (
+    MaskEngineTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.spark.conftest import (
     PYSPARK_AVAILABLE,
@@ -12,16 +12,16 @@ from tests.test_plugins.compute_framework.base_implementations.spark.conftest im
 )
 
 if PYSPARK_AVAILABLE:
-    from mloda_plugins.compute_framework.base_implementations.spark.spark_filter_mask_engine import (
-        SparkFilterMaskEngine,
+    from mloda_plugins.compute_framework.base_implementations.spark.spark_mask_engine import (
+        SparkMaskEngine,
     )
 
 
 @pytest.mark.skipif(not PYSPARK_AVAILABLE, reason=SKIP_REASON or "PySpark not available")
-class TestSparkFilterMaskEngine(FilterMaskEngineTestMixin):
+class TestSparkMaskEngine(MaskEngineTestMixin):
     @pytest.fixture
-    def engine(self) -> type[BaseFilterMaskEngine]:
-        return SparkFilterMaskEngine
+    def engine(self) -> type[BaseMaskEngine]:
+        return SparkMaskEngine
 
     @pytest.fixture
     def sample_data(self, spark_session: Any) -> Any:

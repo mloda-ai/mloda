@@ -2,11 +2,11 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 
-class BaseFilterMaskEngine(ABC):
+class BaseMaskEngine(ABC):
     """Abstract engine for building boolean masks over tabular data.
 
     Each compute framework provides a subclass implementing these primitives
-    and wires it via ComputeFramework.filter_mask_engine().
+    and wires it via ComputeFramework.mask_engine().
     """
 
     @classmethod

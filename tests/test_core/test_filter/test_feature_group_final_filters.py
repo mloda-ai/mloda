@@ -25,7 +25,7 @@ import pytest
 import pyarrow as pa
 import pyarrow.compute as pc
 
-from mloda.provider import BaseFilterEngine, ComputeFramework, DataCreator, FeatureGroup, FeatureSet, FilterMask
+from mloda.provider import BaseFilterEngine, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
 from mloda.provider import BaseInputData
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_filter_engine import PyArrowFilterEngine
 from mloda.user import Feature, Features, GlobalFilter, ParallelizationMode
@@ -75,7 +75,9 @@ class InlineMaskViaFeatureGroup(FeatureGroup):
         status = pa.array(["active", "inactive", "active", "inactive"])
         value = pa.array([10, 20, 30, 40])
 
-        mask = FilterMask.build(pa.table({"status": status}), features, column="status")
+        assert features.mask_engine is not None
+        engine = features.mask_engine
+        mask = engine.equal(pa.table({"status": status}), "status", "active")
         masked_value = pc.if_else(mask, value, None)
 
         result = []
@@ -238,7 +240,9 @@ class InlineMaskWithFinalElimination(FeatureGroup):
         status = pa.array(["active", "active", "inactive", "active"])
         value = pa.array([10, 5, 20, 30])
 
-        mask = FilterMask.build(pa.table({"status": status}), features, column="status")
+        assert features.mask_engine is not None
+        engine = features.mask_engine
+        mask = engine.equal(pa.table({"status": status}), "status", "active")
         masked_value = pc.if_else(mask, value, None)
 
         result = []

@@ -3,10 +3,10 @@ from typing import Any
 import pyarrow as pa
 import pyarrow.compute as pc
 
-from mloda.core.filter.filter_mask_engine import BaseFilterMaskEngine
+from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
 
 
-class PyArrowFilterMaskEngine(BaseFilterMaskEngine):
+class PyArrowMaskEngine(BaseMaskEngine):
     @classmethod
     def supported_data_type(cls) -> type[Any]:
         return pa.Table  # type: ignore[no-any-return]

@@ -176,7 +176,7 @@ FeatureGroups that declare the filter's column as an input. Each matched filter 
 **deep-copied** before delivery. If two FeatureGroups both match the same original
 filter, they each receive independent copies. This means a single `GlobalFilter` can
 be processed differently by different FeatureGroups in the same pipeline: one may use
-it for inline masking while another uses it for row elimination.
+the mask engine for inline masking while another uses filters for row elimination.
 
 Matched filters are attached to the `FeatureSet` before `calculate_feature()` is
 called. Inside your calculation you can access them via `features.filters`:
@@ -253,15 +253,10 @@ class SalesTotal(FeatureGroup):
 
 #### Pattern 2: Inline masking, skip row elimination
 
-Use `FilterMask.build()` to turn `features.filters` into a boolean mask for a given
-column. This replaces the boilerplate of iterating `SingleFilter` objects and building
-masks manually. The correct engine is wired automatically by the `ComputeFramework`.
-
-Import it from `mloda.provider`:
-
-```python
-from mloda.provider import FilterMask
-```
+Use `features.mask_engine` to build boolean masks inside `calculate_feature()`.
+The correct engine is wired automatically by the `ComputeFramework`. The mask engine
+provides primitives like `equal`, `greater_equal`, `less_equal`, `less_than`,
+`is_in`, `combine`, and `all_true`.
 
 Example: "Sum of active sales per region, broadcast back to every row."
 
@@ -273,7 +268,8 @@ class MaskedRegionSum(FeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data, features: FeatureSet):
-        mask = FilterMask.build(data, features, column="status")
+        engine = features.mask_engine
+        mask = engine.equal(data, "status", "active")
         masked = pc.if_else(mask, data["sales"], None)
         # aggregate masked values, broadcast back to all rows
         return pa.table({cls.get_class_name(): broadcast_sum(masked, data["region"])})
@@ -281,9 +277,13 @@ class MaskedRegionSum(FeatureGroup):
 
 Result: all rows preserved, but only matching values contributed to the sum.
 
-`FilterMask.build()` supports `equal`, `min`, `max`, `range`, and
-`categorical_inclusion` filter types. When multiple filters target the same column
-they are AND-combined. When no filters match the column, an all-True mask is returned.
+You can combine multiple masks with `engine.combine()`:
+
+```
+mask_min = engine.greater_equal(data, "value", 10)
+mask_max = engine.less_equal(data, "value", 100)
+mask = engine.combine(mask_min, mask_max)
+```
 
 #### Pattern 3: Inline masking + row elimination
 
@@ -301,7 +301,8 @@ class MaskedRegionSumActiveOnly(FeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data, features: FeatureSet):
-        mask = FilterMask.build(data, features, column="status")
+        engine = features.mask_engine
+        mask = engine.equal(data, "status", "active")
         masked = pc.if_else(mask, data["sales"], None)
         sums = broadcast_sum(masked, data["region"])
         # Return all rows; the framework will remove non-matching ones
@@ -411,7 +412,7 @@ materialization occurs.
 
 | Stage | Data |
 |-------|------|
-| Read `features.filters` | Extract: `status == "active"` |
+| Use `features.mask_engine` | `engine.equal(data, "status", "active")` |
 | Build mask | `[True, False, True, False]` |
 | Apply mask to value column | `masked_value = [10, NULL, 30, NULL]` |
 | Aggregate (sum by region, broadcast) | Region A: 10, Region B: 30 |
@@ -428,6 +429,6 @@ without interference:
 | Stage | Step 1 (inline mask FG) | Step 2 (regular FG) |
 |-------|------------------------|-------------------|
 | `final_filters()` | `False` | `None` (engine default: `True`) |
-| `calculate_feature()` | Reads filters, masks values, aggregates | Computes raw values, ignores filters |
+| `calculate_feature()` | Uses mask engine, masks values, aggregates | Computes raw values, ignores filters |
 | `run_final_filter()` | Skipped | Applies row elimination |
 | **Result** | `[10, 10, 30, 30]` (4 rows) | `[10, 30]` (2 rows) |

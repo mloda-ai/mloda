@@ -1,6 +1,6 @@
 from typing import Any
 
-from mloda.core.filter.filter_mask_engine import BaseFilterMaskEngine
+from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
 
 try:
     import polars as pl
@@ -10,11 +10,11 @@ except ImportError:
 
 def _require_polars() -> Any:
     if pl is None:
-        raise ImportError("polars is required for PolarsFilterMaskEngine")
+        raise ImportError("polars is required for PolarsMaskEngine")
     return pl
 
 
-class PolarsFilterMaskEngine(BaseFilterMaskEngine):
+class PolarsMaskEngine(BaseMaskEngine):
     @classmethod
     def supported_data_type(cls) -> type[Any]:
         return _require_polars().DataFrame  # type: ignore[no-any-return]

@@ -17,7 +17,7 @@ def _require_polars() -> Any:
 class PolarsFilterMaskEngine(BaseFilterMaskEngine):
     @classmethod
     def supported_data_type(cls) -> type[Any]:
-        return _require_polars().DataFrame
+        return _require_polars().DataFrame  # type: ignore[no-any-return]
 
     @classmethod
     def all_true(cls, data: Any) -> Any:

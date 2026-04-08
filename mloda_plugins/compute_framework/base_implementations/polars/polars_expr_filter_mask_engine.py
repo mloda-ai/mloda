@@ -23,7 +23,7 @@ class PolarsExprFilterMaskEngine(BaseFilterMaskEngine):
 
     @classmethod
     def supported_data_type(cls) -> type[Any]:
-        return _require_polars().LazyFrame
+        return _require_polars().LazyFrame  # type: ignore[no-any-return]
 
     @classmethod
     def all_true(cls, data: Any) -> Any:

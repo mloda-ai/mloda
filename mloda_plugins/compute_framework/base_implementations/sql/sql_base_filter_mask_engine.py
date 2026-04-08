@@ -1,3 +1,4 @@
+from abc import abstractmethod
 from typing import Any
 
 from mloda.core.filter.filter_mask_engine import BaseFilterMaskEngine
@@ -10,7 +11,14 @@ class SqlBaseFilterMaskEngine(BaseFilterMaskEngine):
     Instead of fetching data into Python, this engine builds SQL WHERE-clause
     fragments that can be embedded in CASE WHEN expressions or other SQL
     constructs by downstream consumers.
+
+    Subclasses must implement supported_data_type() for their specific relation type.
     """
+
+    @classmethod
+    @abstractmethod
+    def supported_data_type(cls) -> type[Any]:
+        ...
 
     @classmethod
     def all_true(cls, data: Any) -> str:

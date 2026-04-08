@@ -8,14 +8,20 @@ except ImportError:
     pl = None  # type: ignore[assignment]
 
 
+def _require_polars() -> Any:
+    if pl is None:
+        raise ImportError("polars is required for PolarsFilterMaskEngine")
+    return pl
+
+
 class PolarsFilterMaskEngine(BaseFilterMaskEngine):
     @classmethod
     def supported_data_type(cls) -> type[Any]:
-        return pl.DataFrame
+        return _require_polars().DataFrame
 
     @classmethod
     def all_true(cls, data: Any) -> Any:
-        return pl.Series([True] * data.height)
+        return _require_polars().Series([True] * data.height)
 
     @classmethod
     def combine(cls, mask1: Any, mask2: Any) -> Any:

@@ -8,6 +8,12 @@ except ImportError:
     pl = None  # type: ignore[assignment]
 
 
+def _require_polars() -> Any:
+    if pl is None:
+        raise ImportError("polars is required for PolarsExprFilterMaskEngine")
+    return pl
+
+
 class PolarsExprFilterMaskEngine(BaseFilterMaskEngine):
     """Polars filter mask engine that returns pl.Expr boolean expressions.
 
@@ -17,11 +23,12 @@ class PolarsExprFilterMaskEngine(BaseFilterMaskEngine):
 
     @classmethod
     def supported_data_type(cls) -> type[Any]:
-        return pl.LazyFrame
+        return _require_polars().LazyFrame
 
     @classmethod
     def all_true(cls, data: Any) -> Any:
-        return pl.repeat(True, pl.len())
+        _pl = _require_polars()
+        return _pl.repeat(True, _pl.len())
 
     @classmethod
     def combine(cls, mask1: Any, mask2: Any) -> Any:
@@ -29,20 +36,20 @@ class PolarsExprFilterMaskEngine(BaseFilterMaskEngine):
 
     @classmethod
     def equal(cls, data: Any, column: str, value: Any) -> Any:
-        return pl.col(column) == value
+        return _require_polars().col(column) == value
 
     @classmethod
     def greater_equal(cls, data: Any, column: str, value: Any) -> Any:
-        return pl.col(column) >= value
+        return _require_polars().col(column) >= value
 
     @classmethod
     def less_equal(cls, data: Any, column: str, value: Any) -> Any:
-        return pl.col(column) <= value
+        return _require_polars().col(column) <= value
 
     @classmethod
     def less_than(cls, data: Any, column: str, value: Any) -> Any:
-        return pl.col(column) < value
+        return _require_polars().col(column) < value
 
     @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> Any:
-        return pl.col(column).is_in(values)
+        return _require_polars().col(column).is_in(values)

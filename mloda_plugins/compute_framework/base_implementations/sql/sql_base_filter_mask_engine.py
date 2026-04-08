@@ -17,8 +17,7 @@ class SqlBaseFilterMaskEngine(BaseFilterMaskEngine):
 
     @classmethod
     @abstractmethod
-    def supported_data_type(cls) -> type[Any]:
-        ...
+    def supported_data_type(cls) -> type[Any]: ...
 
     @classmethod
     def all_true(cls, data: Any) -> str:

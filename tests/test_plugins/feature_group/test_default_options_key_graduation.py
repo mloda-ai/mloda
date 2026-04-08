@@ -58,5 +58,3 @@ class TestDefaultOptionKeysCoreLocation:
         from mloda.provider import DefaultOptionKeys as Provider
 
         assert Core is Provider
-
-

@@ -130,5 +130,8 @@ extend-select = ["UP006", "UP007"]
 [tool.ruff.lint.per-file-ignores]
 "docs/**/*.ipynb" = ["E402"]
 
+[tool.uv]
+exclude-newer = "7 days"
+
 [project.scripts]
 mloda = "mloda_plugins.feature_group.experimental.llm.cli:main"

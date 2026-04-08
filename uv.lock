@@ -11,6 +11,9 @@ resolution-markers = [
     "python_full_version < '3.11'",
 ]
 
+[options]
+exclude-newer = "2026-04-01T00:00:00Z"
+
 [[package]]
 name = "annotated-types"
 version = "0.7.0"
@@ -1355,7 +1358,7 @@ wheels = [
 
 [[package]]
 name = "mloda"
-version = "0.5.7"
+version = "0.6.0"
 source = { editable = "." }
 dependencies = [
     { name = "pyarrow" },
@@ -1395,6 +1398,7 @@ all = [
     { name = "scikit-learn", version = "1.7.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scikit-learn", version = "1.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "testbook" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
     { name = "types-pyyaml" },
     { name = "types-requests" },
     { name = "types-toml" },
@@ -1410,9 +1414,6 @@ duckdb = [
 ]
 iceberg = [
     { name = "pyiceberg" },
-]
-licence = [
-    { name = "pip-licenses-cli" },
 ]
 otel = [
     { name = "opentelemetry-api" },
@@ -1443,6 +1444,7 @@ test = [
     { name = "mypy" },
     { name = "pandera" },
     { name = "pip-audit" },
+    { name = "pip-licenses-cli" },
     { name = "pyarrow" },
     { name = "pytest" },
     { name = "pytest-order" },
@@ -1452,6 +1454,7 @@ test = [
     { name = "scikit-learn", version = "1.7.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scikit-learn", version = "1.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "testbook" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
     { name = "types-pyyaml" },
     { name = "types-requests" },
     { name = "types-toml" },
@@ -1462,77 +1465,54 @@ text-cleaning = [
 
 [package.metadata]
 requires-dist = [
-    { name = "bandit", marker = "extra == 'all'" },
     { name = "bandit", marker = "extra == 'test'" },
-    { name = "duckdb", marker = "extra == 'all'" },
     { name = "duckdb", marker = "extra == 'duckdb'" },
-    { name = "ipykernel", marker = "extra == 'all'" },
     { name = "ipykernel", marker = "extra == 'test'" },
-    { name = "joblib", marker = "extra == 'all'", specifier = ">=1.0.0" },
     { name = "joblib", marker = "extra == 'sklearn'", specifier = ">=1.0.0" },
-    { name = "mermaid-py", marker = "extra == 'all'" },
     { name = "mermaid-py", marker = "extra == 'docs'" },
-    { name = "mkdocs", marker = "extra == 'all'" },
     { name = "mkdocs", marker = "extra == 'docs'" },
-    { name = "mkdocs-jupyter", marker = "extra == 'all'" },
     { name = "mkdocs-jupyter", marker = "extra == 'docs'" },
-    { name = "mktestdocs", marker = "extra == 'all'" },
     { name = "mktestdocs", marker = "extra == 'test'" },
-    { name = "mypy", marker = "extra == 'all'" },
+    { name = "mloda", extras = ["docs"], marker = "extra == 'all'" },
+    { name = "mloda", extras = ["duckdb"], marker = "extra == 'all'" },
+    { name = "mloda", extras = ["iceberg"], marker = "extra == 'all'" },
+    { name = "mloda", extras = ["otel"], marker = "extra == 'all'" },
+    { name = "mloda", extras = ["pandas"], marker = "extra == 'all'" },
+    { name = "mloda", extras = ["polars"], marker = "extra == 'all'" },
+    { name = "mloda", extras = ["sklearn"], marker = "extra == 'all'" },
+    { name = "mloda", extras = ["test"], marker = "extra == 'all'" },
+    { name = "mloda", extras = ["text-cleaning"], marker = "extra == 'all'" },
     { name = "mypy", marker = "extra == 'test'" },
-    { name = "nltk", marker = "extra == 'all'", specifier = ">=3.8" },
     { name = "nltk", marker = "extra == 'text-cleaning'", specifier = ">=3.8" },
-    { name = "notebook", marker = "extra == 'all'" },
     { name = "notebook", marker = "extra == 'docs'" },
-    { name = "opentelemetry-api", marker = "extra == 'all'" },
     { name = "opentelemetry-api", marker = "extra == 'otel'" },
-    { name = "opentelemetry-instrumentation", marker = "extra == 'all'" },
     { name = "opentelemetry-instrumentation", marker = "extra == 'otel'" },
-    { name = "opentelemetry-instrumentation-logging", marker = "extra == 'all'" },
     { name = "opentelemetry-instrumentation-logging", marker = "extra == 'otel'" },
-    { name = "opentelemetry-instrumentation-requests", marker = "extra == 'all'" },
     { name = "opentelemetry-instrumentation-requests", marker = "extra == 'otel'" },
-    { name = "opentelemetry-sdk", marker = "extra == 'all'" },
     { name = "opentelemetry-sdk", marker = "extra == 'otel'" },
-    { name = "pandas", marker = "extra == 'all'" },
     { name = "pandas", marker = "extra == 'pandas'" },
-    { name = "pandera", marker = "extra == 'all'" },
     { name = "pandera", marker = "extra == 'test'" },
-    { name = "pip-audit", marker = "extra == 'all'", specifier = "<2.11.0" },
     { name = "pip-audit", marker = "extra == 'test'", specifier = "<2.11.0" },
-    { name = "pip-licenses-cli", marker = "extra == 'all'" },
-    { name = "pip-licenses-cli", marker = "extra == 'licence'" },
-    { name = "polars", marker = "extra == 'all'" },
+    { name = "pip-licenses-cli", marker = "extra == 'test'" },
     { name = "polars", marker = "extra == 'polars'" },
     { name = "pyarrow" },
-    { name = "pyarrow", marker = "extra == 'all'" },
     { name = "pyarrow", marker = "extra == 'test'" },
-    { name = "pyiceberg", marker = "extra == 'all'" },
     { name = "pyiceberg", marker = "extra == 'iceberg'" },
     { name = "pyspark", marker = "extra == 'spark'" },
-    { name = "pytest", marker = "extra == 'all'" },
     { name = "pytest", marker = "extra == 'test'" },
-    { name = "pytest-order", marker = "extra == 'all'" },
     { name = "pytest-order", marker = "extra == 'test'" },
-    { name = "pytest-timeout", marker = "extra == 'all'" },
     { name = "pytest-timeout", marker = "extra == 'test'" },
-    { name = "pytest-xdist", marker = "extra == 'all'" },
     { name = "pytest-xdist", marker = "extra == 'test'" },
-    { name = "ruff", marker = "extra == 'all'" },
     { name = "ruff", marker = "extra == 'test'" },
-    { name = "scikit-learn", marker = "extra == 'all'", specifier = ">=1.0.0" },
     { name = "scikit-learn", marker = "extra == 'sklearn'", specifier = ">=1.0.0" },
-    { name = "scikit-learn", marker = "extra == 'test'" },
-    { name = "testbook", marker = "extra == 'all'" },
+    { name = "scikit-learn", marker = "extra == 'test'", specifier = ">=1.0.0" },
     { name = "testbook", marker = "extra == 'test'" },
-    { name = "types-pyyaml", marker = "extra == 'all'" },
+    { name = "tomli", marker = "python_full_version < '3.11' and extra == 'test'", specifier = ">=1.0.0" },
     { name = "types-pyyaml", marker = "extra == 'test'" },
-    { name = "types-requests", marker = "extra == 'all'" },
     { name = "types-requests", marker = "extra == 'test'" },
-    { name = "types-toml", marker = "extra == 'all'" },
     { name = "types-toml", marker = "extra == 'test'" },
 ]
-provides-extras = ["test", "pandas", "polars", "duckdb", "iceberg", "spark", "otel", "sklearn", "text-cleaning", "docs", "licence", "all"]
+provides-extras = ["test", "pandas", "polars", "duckdb", "iceberg", "spark", "otel", "sklearn", "text-cleaning", "docs", "all"]
 
 [[package]]
 name = "mmh3"

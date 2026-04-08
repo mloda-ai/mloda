@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 
 from mloda.core.filter.single_filter import SingleFilter
-from mloda.provider import BaseFilterMaskEngine, FeatureSet, FilterMask
+from mloda.provider import BaseFilterMaskEngine, FilterMask
 from tests.test_plugins.compute_framework.base_implementations.filter_mask_engine_test_mixin import (
     FilterMaskEngineTestMixin,
     _make_features,
@@ -50,58 +50,24 @@ class TestPolarsExprFilterMaskEngine(FilterMaskEngineTestMixin):
         result: list[bool] = data.select(mask.alias("__mask")).collect()["__mask"].to_list()
         return result
 
-    # -- Polars-expr-specific unit tests --
+    # -- Polars-expr-specific tests --
 
     def test_supported_data_type(self, engine: type[BaseFilterMaskEngine]) -> None:
         assert engine.supported_data_type() is pl.LazyFrame
 
-    def test_returns_expr_type(self, engine: type[BaseFilterMaskEngine], sample_data: pl.LazyFrame) -> None:
-        mask = engine.all_true(sample_data)
-        assert isinstance(mask, pl.Expr)
-
-    def test_all_true_returns_expr(self, engine: type[BaseFilterMaskEngine], sample_data: pl.LazyFrame) -> None:
-        mask = engine.all_true(sample_data)
-        assert isinstance(mask, pl.Expr)
-        result = self.evaluate_mask(mask, sample_data)
-        assert result == [True, True, True, True]
-
-    def test_equal_returns_expr(self, engine: type[BaseFilterMaskEngine], sample_data: pl.LazyFrame) -> None:
-        mask = engine.equal(sample_data, "status", "active")
-        assert isinstance(mask, pl.Expr)
-        result = self.evaluate_mask(mask, sample_data)
-        assert result == [True, False, True, False]
-
-    def test_greater_equal_returns_expr(self, engine: type[BaseFilterMaskEngine], sample_data: pl.LazyFrame) -> None:
-        mask = engine.greater_equal(sample_data, "value", 20)
-        assert isinstance(mask, pl.Expr)
-        result = self.evaluate_mask(mask, sample_data)
-        assert result == [False, True, True, True]
-
-    def test_less_equal_returns_expr(self, engine: type[BaseFilterMaskEngine], sample_data: pl.LazyFrame) -> None:
-        mask = engine.less_equal(sample_data, "value", 30)
-        assert isinstance(mask, pl.Expr)
-        result = self.evaluate_mask(mask, sample_data)
-        assert result == [True, True, True, False]
-
-    def test_less_than_returns_expr(self, engine: type[BaseFilterMaskEngine], sample_data: pl.LazyFrame) -> None:
-        mask = engine.less_than(sample_data, "value", 30)
-        assert isinstance(mask, pl.Expr)
-        result = self.evaluate_mask(mask, sample_data)
-        assert result == [True, True, False, False]
-
-    def test_is_in_returns_expr(self, engine: type[BaseFilterMaskEngine], sample_data: pl.LazyFrame) -> None:
-        mask = engine.is_in(sample_data, "status", ("active",))
-        assert isinstance(mask, pl.Expr)
-        result = self.evaluate_mask(mask, sample_data)
-        assert result == [True, False, True, False]
-
-    def test_combine_returns_expr(self, engine: type[BaseFilterMaskEngine], sample_data: pl.LazyFrame) -> None:
-        mask1 = engine.greater_equal(sample_data, "value", 20)
-        mask2 = engine.less_equal(sample_data, "value", 30)
-        combined = engine.combine(mask1, mask2)
+    def test_all_methods_return_expr(self, engine: type[BaseFilterMaskEngine], sample_data: pl.LazyFrame) -> None:
+        """Verify every engine method returns pl.Expr, not pl.Series or list."""
+        assert isinstance(engine.all_true(sample_data), pl.Expr)
+        assert isinstance(engine.equal(sample_data, "status", "active"), pl.Expr)
+        assert isinstance(engine.greater_equal(sample_data, "value", 20), pl.Expr)
+        assert isinstance(engine.less_equal(sample_data, "value", 30), pl.Expr)
+        assert isinstance(engine.less_than(sample_data, "value", 30), pl.Expr)
+        assert isinstance(engine.is_in(sample_data, "status", ("active",)), pl.Expr)
+        combined = engine.combine(
+            engine.greater_equal(sample_data, "value", 20),
+            engine.less_equal(sample_data, "value", 30),
+        )
         assert isinstance(combined, pl.Expr)
-        result = self.evaluate_mask(combined, sample_data)
-        assert result == [False, True, True, False]
 
     def test_works_with_lazy_frame(self, engine: type[BaseFilterMaskEngine]) -> None:
         """Verify end-to-end: build mask from LazyFrame, filter, collect."""

@@ -35,9 +35,10 @@ def _make_features(
     return fs
 
 
-def _eval_mask(mask: Any, data: pl.LazyFrame) -> list[bool]:
+def _eval_mask(mask: Any, data: Any) -> list[bool]:
     """Evaluate a pl.Expr mask against a LazyFrame and return a list of booleans."""
-    return data.select(mask.alias("__mask")).collect()["__mask"].to_list()
+    result: list[bool] = data.select(mask.alias("__mask")).collect()["__mask"].to_list()
+    return result
 
 
 @pytest.mark.skipif(pl is None, reason="polars not installed")

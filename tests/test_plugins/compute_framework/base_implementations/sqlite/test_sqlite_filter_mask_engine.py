@@ -2,19 +2,22 @@ from typing import Any
 
 import pytest
 
-from mloda.core.filter.filter_mask_engine import BaseFilterMaskEngine
-from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation
-from tests.test_plugins.compute_framework.base_implementations.filter_mask_engine_test_mixin import (
-    FilterMaskEngineTestMixin,
+from mloda_plugins.compute_framework.base_implementations.sql.sql_base_filter_mask_engine import (
+    SqlBaseFilterMaskEngine,
 )
+from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_filter_mask_engine import (
     SqliteFilterMaskEngine,
 )
+from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation
+from tests.test_plugins.compute_framework.base_implementations.sql_filter_mask_engine_test_mixin import (
+    SqlFilterMaskEngineTestMixin,
+)
 
 
-class TestSqliteFilterMaskEngine(FilterMaskEngineTestMixin):
+class TestSqliteSqlFilterMaskEngine(SqlFilterMaskEngineTestMixin):
     @pytest.fixture
-    def engine(self) -> type[BaseFilterMaskEngine]:
+    def engine(self) -> type[SqlBaseFilterMaskEngine]:
         return SqliteFilterMaskEngine
 
     @pytest.fixture
@@ -27,5 +30,9 @@ class TestSqliteFilterMaskEngine(FilterMaskEngineTestMixin):
             },
         )
 
-    def mask_to_list(self, mask: Any) -> list[bool]:
-        return list(mask)
+    def evaluate_condition(self, data: SqliteRelation, condition: str) -> list[bool]:
+        conn = data.connection
+        table_name = data.table_name
+        sql = f"SELECT CASE WHEN {condition} THEN 1 ELSE 0 END AS match FROM {quote_ident(table_name)}"  # nosec B608
+        rows = conn.execute(sql).fetchall()
+        return [bool(row[0]) for row in rows]

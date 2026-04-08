@@ -26,5 +26,5 @@ class TestPyArrowFilterMaskEngine(FilterMaskEngineTestMixin):
             }
         )
 
-    def mask_to_list(self, mask: Any) -> list[bool]:
+    def evaluate_mask(self, mask: Any, data: Any) -> list[bool]:
         return mask.to_pylist()  # type: ignore[no-any-return]

@@ -32,5 +32,5 @@ class TestPolarsFilterMaskEngine(FilterMaskEngineTestMixin):
             }
         )
 
-    def mask_to_list(self, mask: Any) -> list[bool]:
+    def evaluate_mask(self, mask: Any, data: Any) -> list[bool]:
         return list(mask)

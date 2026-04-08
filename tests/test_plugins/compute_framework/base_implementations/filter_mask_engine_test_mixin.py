@@ -4,7 +4,7 @@ This mixin provides common test methods that verify the filter mask engine contr
 Each framework-specific test class should inherit from this mixin and provide:
 - engine fixture: Returns the filter mask engine class
 - sample_data fixture: Returns framework-specific test data
-- mask_to_list method: Converts framework-specific mask to a Python list of booleans
+- evaluate_mask method: Converts framework-specific mask to a Python list of booleans
 """
 
 from abc import abstractmethod
@@ -35,7 +35,7 @@ class FilterMaskEngineTestMixin:
     - sample_data fixture returning data with columns:
         status: ["active", "inactive", "active", "inactive"]
         value: [10, 20, 30, 40]
-    - mask_to_list(mask) converting the mask to list[bool]
+    - evaluate_mask(mask, data) converting the mask to list[bool]
     """
 
     @pytest.fixture
@@ -49,76 +49,76 @@ class FilterMaskEngineTestMixin:
         raise NotImplementedError
 
     @abstractmethod
-    def mask_to_list(self, mask: Any) -> list[bool]:
+    def evaluate_mask(self, mask: Any, data: Any) -> list[bool]:
         raise NotImplementedError
 
     def test_equal_filter(self, engine: type[BaseFilterMaskEngine], sample_data: Any) -> None:
         sf = SingleFilter("status", "equal", {"value": "active"})
         features = _make_features({sf}, engine)
         mask = FilterMask.build(sample_data, features, column="status")
-        assert self.mask_to_list(mask) == [True, False, True, False]
+        assert self.evaluate_mask(mask, sample_data) == [True, False, True, False]
 
     def test_min_filter(self, engine: type[BaseFilterMaskEngine], sample_data: Any) -> None:
         sf = SingleFilter("value", "min", {"value": 20})
         features = _make_features({sf}, engine)
         mask = FilterMask.build(sample_data, features, column="value")
-        assert self.mask_to_list(mask) == [False, True, True, True]
+        assert self.evaluate_mask(mask, sample_data) == [False, True, True, True]
 
     def test_max_filter_simple(self, engine: type[BaseFilterMaskEngine], sample_data: Any) -> None:
         sf = SingleFilter("value", "max", {"value": 30})
         features = _make_features({sf}, engine)
         mask = FilterMask.build(sample_data, features, column="value")
-        assert self.mask_to_list(mask) == [True, True, True, False]
+        assert self.evaluate_mask(mask, sample_data) == [True, True, True, False]
 
     def test_max_filter_exclusive(self, engine: type[BaseFilterMaskEngine], sample_data: Any) -> None:
         sf = SingleFilter("value", "max", {"max": 30, "max_exclusive": True})
         features = _make_features({sf}, engine)
         mask = FilterMask.build(sample_data, features, column="value")
-        assert self.mask_to_list(mask) == [True, True, False, False]
+        assert self.evaluate_mask(mask, sample_data) == [True, True, False, False]
 
     def test_max_filter_inclusive(self, engine: type[BaseFilterMaskEngine], sample_data: Any) -> None:
         sf = SingleFilter("value", "max", {"max": 30, "max_exclusive": False})
         features = _make_features({sf}, engine)
         mask = FilterMask.build(sample_data, features, column="value")
-        assert self.mask_to_list(mask) == [True, True, True, False]
+        assert self.evaluate_mask(mask, sample_data) == [True, True, True, False]
 
     def test_range_filter(self, engine: type[BaseFilterMaskEngine], sample_data: Any) -> None:
         sf = SingleFilter("value", "range", {"min": 15, "max": 35})
         features = _make_features({sf}, engine)
         mask = FilterMask.build(sample_data, features, column="value")
-        assert self.mask_to_list(mask) == [False, True, True, False]
+        assert self.evaluate_mask(mask, sample_data) == [False, True, True, False]
 
     def test_range_filter_exclusive(self, engine: type[BaseFilterMaskEngine], sample_data: Any) -> None:
         sf = SingleFilter("value", "range", {"min": 15, "max": 35, "max_exclusive": True})
         features = _make_features({sf}, engine)
         mask = FilterMask.build(sample_data, features, column="value")
-        assert self.mask_to_list(mask) == [False, True, True, False]
+        assert self.evaluate_mask(mask, sample_data) == [False, True, True, False]
 
     def test_categorical_inclusion(self, engine: type[BaseFilterMaskEngine], sample_data: Any) -> None:
         sf = SingleFilter("status", "categorical_inclusion", {"values": ("active",)})
         features = _make_features({sf}, engine)
         mask = FilterMask.build(sample_data, features, column="status")
-        assert self.mask_to_list(mask) == [True, False, True, False]
+        assert self.evaluate_mask(mask, sample_data) == [True, False, True, False]
 
     def test_no_matching_filters(self, engine: type[BaseFilterMaskEngine], sample_data: Any) -> None:
         sf = SingleFilter("other", "equal", {"value": "x"})
         features = _make_features({sf}, engine)
         mask = FilterMask.build(sample_data, features, column="status")
-        assert self.mask_to_list(mask) == [True, True, True, True]
+        assert self.evaluate_mask(mask, sample_data) == [True, True, True, True]
 
     def test_none_filters(self, engine: type[BaseFilterMaskEngine], sample_data: Any) -> None:
         features = _make_features(None, engine)
         mask = FilterMask.build(sample_data, features, column="status")
-        assert self.mask_to_list(mask) == [True, True, True, True]
+        assert self.evaluate_mask(mask, sample_data) == [True, True, True, True]
 
     def test_empty_filters(self, engine: type[BaseFilterMaskEngine], sample_data: Any) -> None:
         features = _make_features(set(), engine)
         mask = FilterMask.build(sample_data, features, column="status")
-        assert self.mask_to_list(mask) == [True, True, True, True]
+        assert self.evaluate_mask(mask, sample_data) == [True, True, True, True]
 
     def test_multiple_filters_same_column(self, engine: type[BaseFilterMaskEngine], sample_data: Any) -> None:
         sf_min = SingleFilter("value", "min", {"value": 20})
         sf_max = SingleFilter("value", "max", {"value": 30})
         features = _make_features({sf_min, sf_max}, engine)
         mask = FilterMask.build(sample_data, features, column="value")
-        assert self.mask_to_list(mask) == [False, True, True, False]
+        assert self.evaluate_mask(mask, sample_data) == [False, True, True, False]

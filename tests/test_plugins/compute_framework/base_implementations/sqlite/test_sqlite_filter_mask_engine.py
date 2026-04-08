@@ -30,9 +30,9 @@ class TestSqliteSqlFilterMaskEngine(SqlFilterMaskEngineTestMixin):
             },
         )
 
-    def evaluate_condition(self, data: SqliteRelation, condition: str) -> list[bool]:
+    def evaluate_mask(self, mask: Any, data: SqliteRelation) -> list[bool]:
         conn = data.connection
         table_name = data.table_name
-        sql = f"SELECT CASE WHEN {condition} THEN 1 ELSE 0 END AS match FROM {quote_ident(table_name)}"  # nosec B608
+        sql = f"SELECT CASE WHEN {mask} THEN 1 ELSE 0 END AS match FROM {quote_ident(table_name)}"  # nosec B608
         rows = conn.execute(sql).fetchall()
         return [bool(row[0]) for row in rows]

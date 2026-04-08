@@ -38,7 +38,7 @@ class TestPolarsExprFilterMaskEngine(FilterMaskEngineTestMixin):
         return PolarsExprFilterMaskEngine
 
     @pytest.fixture
-    def sample_data(self) -> pl.LazyFrame:
+    def sample_data(self) -> Any:
         return pl.LazyFrame(
             {
                 "status": ["active", "inactive", "active", "inactive"],
@@ -55,7 +55,7 @@ class TestPolarsExprFilterMaskEngine(FilterMaskEngineTestMixin):
     def test_supported_data_type(self, engine: type[BaseFilterMaskEngine]) -> None:
         assert engine.supported_data_type() is pl.LazyFrame
 
-    def test_all_methods_return_expr(self, engine: type[BaseFilterMaskEngine], sample_data: pl.LazyFrame) -> None:
+    def test_all_methods_return_expr(self, engine: type[BaseFilterMaskEngine], sample_data: Any) -> None:
         """Verify every engine method returns pl.Expr, not pl.Series or list."""
         assert isinstance(engine.all_true(sample_data), pl.Expr)
         assert isinstance(engine.equal(sample_data, "status", "active"), pl.Expr)

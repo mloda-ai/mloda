@@ -68,10 +68,7 @@ class TestDefaultOptionKeysDeprecatedPaths:
     def test_plugins_path_emits_deprecation(self) -> None:
         import importlib
 
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            mod = importlib.import_module("mloda_plugins.feature_group.default_options_key")
-
+        mod = importlib.import_module("mloda_plugins.feature_group.default_options_key")
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             importlib.reload(mod)
@@ -83,10 +80,7 @@ class TestDefaultOptionKeysDeprecatedPaths:
     def test_experimental_path_emits_deprecation(self) -> None:
         import importlib
 
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            mod = importlib.import_module("mloda_plugins.feature_group.experimental.default_options_key")
-
+        mod = importlib.import_module("mloda_plugins.feature_group.experimental.default_options_key")
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             importlib.reload(mod)

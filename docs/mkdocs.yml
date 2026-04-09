@@ -22,6 +22,7 @@ nav:
     - (Feature) data: in_depth/access-feature-data.md
     - Join data: in_depth/join_data.md
     - Filter data: in_depth/filter_data.md
+    - Mask Engine: in_depth/mask_engine.md
     - Artifacts: in_depth/artifacts.md
   - In Depth - Advanced:
     - Data quality: in_depth/data-quality.md

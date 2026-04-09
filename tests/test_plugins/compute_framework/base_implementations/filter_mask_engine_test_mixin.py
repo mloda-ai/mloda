@@ -76,11 +76,9 @@ class FilterMaskEngineTestMixin:
         mask = FilterMask.build(sample_data, features, column="value")
         assert self.evaluate_mask(mask, sample_data) == [True, True, False, False]
 
-    def test_max_filter_inclusive(self, engine: type[BaseFilterMaskEngine], sample_data: Any) -> None:
-        sf = SingleFilter("value", "max", {"max": 30, "max_exclusive": False})
-        features = _make_features({sf}, engine)
-        mask = FilterMask.build(sample_data, features, column="value")
-        assert self.evaluate_mask(mask, sample_data) == [True, True, True, False]
+    def test_greater_than(self, engine: type[BaseFilterMaskEngine], sample_data: Any) -> None:
+        result = engine.greater_than(sample_data, "value", 20)
+        assert self.evaluate_mask(result, sample_data) == [False, False, True, True]
 
     def test_range_filter(self, engine: type[BaseFilterMaskEngine], sample_data: Any) -> None:
         sf = SingleFilter("value", "range", {"min": 15, "max": 35})

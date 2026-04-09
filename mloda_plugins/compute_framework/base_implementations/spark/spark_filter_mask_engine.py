@@ -42,6 +42,11 @@ class SparkFilterMaskEngine(BaseFilterMaskEngine):
         return [v is not None and v < value for v in values]
 
     @classmethod
+    def greater_than(cls, data: Any, column: str, value: Any) -> list[Any]:
+        values = [row[column] for row in data.collect()]
+        return [v is not None and v > value for v in values]
+
+    @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> list[Any]:
         allowed = set(values) if isinstance(values, (list, tuple)) else {values}
         col_values = [row[column] for row in data.collect()]

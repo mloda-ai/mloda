@@ -36,5 +36,9 @@ class PyArrowFilterMaskEngine(BaseFilterMaskEngine):
         return pc.less(data[column], value)
 
     @classmethod
+    def greater_than(cls, data: Any, column: str, value: Any) -> Any:
+        return pc.greater(data[column], value)
+
+    @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> Any:
         return pc.is_in(data[column], pa.array(values))

@@ -44,6 +44,10 @@ class SqlBaseFilterMaskEngine(BaseFilterMaskEngine):
         return f"{quote_ident(column)} < {quote_value(value)}"
 
     @classmethod
+    def greater_than(cls, data: Any, column: str, value: Any) -> str:
+        return f"{quote_ident(column)} > {quote_value(value)}"
+
+    @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> str:
         value_list = values if isinstance(values, (list, tuple)) else [values]
         quoted = ", ".join(quote_value(v) for v in value_list)

@@ -51,5 +51,9 @@ class PolarsExprFilterMaskEngine(BaseFilterMaskEngine):
         return _require_polars().col(column) < value
 
     @classmethod
+    def greater_than(cls, data: Any, column: str, value: Any) -> Any:
+        return _require_polars().col(column) > value
+
+    @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> Any:
         return _require_polars().col(column).is_in(values)

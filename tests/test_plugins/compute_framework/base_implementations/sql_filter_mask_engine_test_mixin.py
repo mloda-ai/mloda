@@ -70,6 +70,15 @@ class SqlFilterMaskEngineTestMixin(FilterMaskEngineTestMixin):
         assert "<" in result
         assert "30" in result
 
+    def test_greater_than_returns_condition_string(
+        self, engine: type[SqlBaseFilterMaskEngine], sample_data: Any
+    ) -> None:
+        result = engine.greater_than(sample_data, "value", 20)
+        assert isinstance(result, str)
+        assert '"value"' in result
+        assert ">" in result
+        assert "20" in result
+
     def test_is_in_returns_condition_string(self, engine: type[SqlBaseFilterMaskEngine], sample_data: Any) -> None:
         result = engine.is_in(sample_data, "status", ("active", "inactive"))
         assert isinstance(result, str)

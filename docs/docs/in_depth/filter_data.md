@@ -257,7 +257,8 @@ class SalesTotal(FeatureGroup):
 Use `features.mask_engine` to build boolean masks inside `calculate_feature()`.
 The correct engine is wired automatically by the `ComputeFramework`. The mask engine
 provides primitives like `equal`, `greater_equal`, `less_equal`, `less_than`,
-`is_in`, `combine`, and `all_true`.
+`greater_than`, `is_in`, `combine`, and `all_true`, plus convenience methods
+`between` and `all_of`.
 
 Example: "Sum of active sales per region, broadcast back to every row."
 
@@ -278,12 +279,20 @@ class MaskedRegionSum(FeatureGroup):
 
 Result: all rows preserved, but only matching values contributed to the sum.
 
-You can combine multiple masks with `engine.combine()`:
+Use `between()` for range checks and `all_of()` for combining multiple masks:
 
 ```
-mask_min = engine.greater_equal(data, "value", 10)
-mask_max = engine.less_equal(data, "value", 100)
-mask = engine.combine(mask_min, mask_max)
+# Range check: value in [10, 100]
+mask = engine.between(data, "value", 10, 100)
+
+# Exclusive bounds: value in (10, 100)
+mask = engine.between(data, "value", 10, 100, min_exclusive=True, max_exclusive=True)
+
+# AND-combine a list of masks
+mask = engine.all_of(data, [
+    engine.equal(data, "status", "active"),
+    engine.between(data, "value", 10, 100),
+])
 ```
 
 #### Pattern 3: Inline masking + row elimination

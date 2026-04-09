@@ -191,7 +191,8 @@ def calculate_feature(cls, data, features: FeatureSet):
             # ... use however you need
 ```
 
-`features.filters` is **always available**, regardless of any other setting.
+`features.filters` is available whenever a `GlobalFilter` with matching filters is
+provided. It is `None` when no filters match or no `GlobalFilter` is passed.
 
 ### Two independent concerns
 
@@ -199,7 +200,7 @@ Filters involve two decisions that are **independent** of each other:
 
 | Concern | Who decides | When it happens |
 |---------|------------|-----------------|
-| **Inline reading** -- should the FeatureGroup read `features.filters` during calculation? | The FeatureGroup author (you) | During `calculate_feature()` |
+| **Inline masking** -- should the FeatureGroup use `features.mask_engine` (or read `features.filters`) during calculation? | The FeatureGroup author (you) | During `calculate_feature()` |
 | **Row elimination** -- should the framework remove non-matching rows after calculation? | `final_filters()` return value | After `calculate_feature()` |
 
 A FeatureGroup can do either, both, or neither. The two concerns are decoupled.
@@ -220,8 +221,8 @@ def final_filters(cls) -> bool | None:
 | `False` | Skip row elimination. Use this when your FeatureGroup fully handles the filter itself. |
 | `True` | Force row elimination, even if the FilterEngine would skip it. |
 
-This method does **not** affect whether `features.filters` is populated. Filters are
-always available for inline reading.
+This method does **not** affect whether `features.filters` is populated or whether
+`features.mask_engine` is wired. Both are set independently of `final_filters()`.
 
 `final_filters()` is a **semantic** flag that controls *when* in the pipeline the
 filter is applied, not *where* the computation runs physically:
@@ -287,9 +288,9 @@ mask = engine.combine(mask_min, mask_max)
 
 #### Pattern 3: Inline masking + row elimination
 
-Read filters for conditional logic **and** request row elimination afterward. Useful when
-you need filter-aware computation (masking, weighting, branching) but also want
-non-matching rows removed from the final output.
+Use the mask engine for conditional logic **and** request row elimination afterward.
+Useful when you need filter-aware computation (masking, weighting, branching) but also
+want non-matching rows removed from the final output.
 
 Example: "Sum of active sales per region, only for active rows."
 
@@ -329,9 +330,9 @@ class DerivedIcebergFeature(FeatureGroup):
 
 ### The overlap contract
 
-When a FeatureGroup reads filters inline **and** returns `final_filters() = True`, the
-same filters are processed twice: once by your code during calculation, and once by the
-framework's FilterEngine afterward.
+When a FeatureGroup uses the mask engine inline **and** returns `final_filters() = True`,
+filters are processed twice: once by your masking logic during calculation, and once by
+the framework's FilterEngine afterward.
 
 This is safe as long as you follow one rule: **preserve the filter column with its
 original values in your output**.
@@ -366,11 +367,11 @@ return pa.table({
 
 #### Quick reference
 
-| Your FeatureGroup... | `final_filters()` | Reads `features.filters`? | Must preserve filter column? |
+| Your FeatureGroup... | `final_filters()` | Uses inline masking? | Must preserve filter column? |
 |---------------------|:-----------------:|:------------------------:|:---------------------------:|
 | Ignores filters | `None` (default) | No | Yes (it is in `input_data`) |
-| Handles everything inline | `False` | Yes | No (elimination skipped) |
-| Uses inline logic + elimination | `True` | Yes | **Yes** |
+| Handles everything inline | `False` | Yes (via `mask_engine`) | No (elimination skipped) |
+| Uses inline logic + elimination | `True` | Yes (via `mask_engine`) | **Yes** |
 | Just forces elimination | `True` | No | Yes |
 
 ### Pipeline data flows

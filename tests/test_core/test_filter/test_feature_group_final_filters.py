@@ -1,18 +1,18 @@
 """Tests that a FeatureGroup can control whether filters are applied inline vs. final.
 
 ``FeatureGroup.final_filters()`` controls post-calculation row elimination only.
-``features.filters`` is always available inside ``calculate_feature()`` regardless
-of what ``final_filters()`` returns, so inline filter reading and row elimination
-are independent concerns.
+Inline masking uses ``features.mask_engine`` to build boolean masks directly
+inside ``calculate_feature()``. Row elimination and inline masking are
+independent concerns.
 
-The matrix of (FG final_filters, Engine final_filters, reads inline) combinations:
+The matrix of (FG final_filters, Engine final_filters, uses mask_engine) combinations:
 
-  FG=False, Engine=True,  inline=yes -- test_inline_filter_without_custom_compute_framework
-  FG=None,  Engine=True,  inline=no  -- test_regular_feature_group_still_uses_final_filters
-  FG=False, Engine=False, inline=yes -- test_fg_skip_with_inline_engine
-  FG=True,  Engine=False, inline=no  -- test_fg_force_final_overrides_inline_engine
-  FG=True,  Engine=True,  inline=no  -- test_fg_force_final_with_final_engine
-  FG=True,  Engine=True,  inline=yes -- test_inline_mask_with_final_elimination
+  FG=False, Engine=True,  mask=yes -- test_inline_filter_without_custom_compute_framework
+  FG=None,  Engine=True,  mask=no  -- test_regular_feature_group_still_uses_final_filters
+  FG=False, Engine=False, mask=yes -- test_fg_skip_with_inline_engine
+  FG=True,  Engine=False, mask=no  -- test_fg_force_final_overrides_inline_engine
+  FG=True,  Engine=True,  mask=no  -- test_fg_force_final_with_final_engine
+  FG=True,  Engine=True,  mask=yes -- test_inline_mask_with_final_elimination
 
 Validation (filter column must be present when row elimination applies):
   FG=True,  drops filter column       -- test_dropped_filter_column_raises_error
@@ -197,10 +197,10 @@ class ForceFinalOnFinalEngine(FeatureGroup):
 
 
 class InlineMaskWithFinalElimination(FeatureGroup):
-    """FG reads filters inline for masking AND returns True for row elimination.
+    """FG uses mask engine inline for masking AND returns True for row elimination.
 
-    Proves that inline filter reading and final row elimination are independent.
-    The FeatureGroup reads ``features.filters`` during ``calculate_feature()``
+    Proves that inline masking and final row elimination are independent.
+    The FeatureGroup uses ``features.mask_engine`` during ``calculate_feature()``
     to mask non-matching values before aggregation, then returns
     ``final_filters() = True`` so the framework also eliminates non-matching
     rows afterward.
@@ -439,10 +439,10 @@ class TestFeatureGroupFinalFilters:
 
         InlineMaskViaFeatureGroup overrides final_filters() -> False, meaning the
         framework should NOT apply filters as a final step. Instead, the FeatureGroup
-        reads features.filters in calculate_feature() and builds a mask itself.
+        uses features.mask_engine in calculate_feature() to build a mask directly.
 
-        With filter status=="active", the inline mask zeros out inactive rows, sums
-        by region, and broadcasts back: [10, 10, 30, 30].
+        The inline mask zeros out inactive rows, sums by region, and broadcasts
+        back: [10, 10, 30, 30].
 
         The status column should NOT be eliminated by final filtering because the
         FeatureGroup declared final_filters() -> False.
@@ -506,8 +506,8 @@ class TestFeatureGroupFinalFilters:
         RegularFeatureGroupForFilterTest (default final_filters() -> True) together
         with a single GlobalFilter status=="active":
 
-        - InlineMaskViaFeatureGroup handles the filter inline via masking, preserving
-          all 4 rows with masked aggregation: [10, 10, 30, 30].
+        - InlineMaskViaFeatureGroup handles filtering inline via features.mask_engine,
+          preserving all 4 rows with masked aggregation: [10, 10, 30, 30].
         - RegularFeatureGroupForFilterTest relies on the framework's final filtering,
           which eliminates non-matching rows: [10, 30].
 
@@ -634,9 +634,9 @@ class TestFeatureGroupFinalFilters:
             assert data[feature_name] == [10, 30]
 
     def test_inline_mask_with_final_elimination(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
-        """FG=True, Engine=True, reads inline. Masking AND elimination are independent.
+        """FG=True, Engine=True, uses mask engine. Masking AND elimination are independent.
 
-        InlineMaskWithFinalElimination reads features.filters during calculation
+        InlineMaskWithFinalElimination uses features.mask_engine during calculation
         to mask inactive values before aggregation, AND returns final_filters()=True
         so the framework also eliminates non-matching rows afterward.
 

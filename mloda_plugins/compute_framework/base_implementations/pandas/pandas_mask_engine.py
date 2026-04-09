@@ -2,10 +2,10 @@ from typing import Any
 
 import pandas as pd
 
-from mloda.core.filter.filter_mask_engine import BaseFilterMaskEngine
+from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
 
 
-class PandasFilterMaskEngine(BaseFilterMaskEngine):
+class PandasMaskEngine(BaseMaskEngine):
     @classmethod
     def supported_data_type(cls) -> type[Any]:
         return pd.DataFrame  # type: ignore[no-any-return]
@@ -33,6 +33,10 @@ class PandasFilterMaskEngine(BaseFilterMaskEngine):
     @classmethod
     def less_than(cls, data: Any, column: str, value: Any) -> Any:
         return data[column] < value
+
+    @classmethod
+    def greater_than(cls, data: Any, column: str, value: Any) -> Any:
+        return data[column] > value
 
     @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> Any:

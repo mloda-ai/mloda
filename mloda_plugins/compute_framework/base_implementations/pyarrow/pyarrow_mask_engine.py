@@ -3,10 +3,10 @@ from typing import Any
 import pyarrow as pa
 import pyarrow.compute as pc
 
-from mloda.core.filter.filter_mask_engine import BaseFilterMaskEngine
+from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
 
 
-class PyArrowFilterMaskEngine(BaseFilterMaskEngine):
+class PyArrowMaskEngine(BaseMaskEngine):
     @classmethod
     def supported_data_type(cls) -> type[Any]:
         return pa.Table  # type: ignore[no-any-return]
@@ -34,6 +34,10 @@ class PyArrowFilterMaskEngine(BaseFilterMaskEngine):
     @classmethod
     def less_than(cls, data: Any, column: str, value: Any) -> Any:
         return pc.less(data[column], value)
+
+    @classmethod
+    def greater_than(cls, data: Any, column: str, value: Any) -> Any:
+        return pc.greater(data[column], value)
 
     @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> Any:

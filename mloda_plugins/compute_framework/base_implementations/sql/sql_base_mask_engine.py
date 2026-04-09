@@ -1,12 +1,12 @@
 from abc import abstractmethod
 from typing import Any
 
-from mloda.core.filter.filter_mask_engine import BaseFilterMaskEngine
+from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident, quote_value
 
 
-class SqlBaseFilterMaskEngine(BaseFilterMaskEngine):
-    """SQL-native filter mask engine that returns SQL condition strings.
+class SqlBaseMaskEngine(BaseMaskEngine):
+    """SQL-native mask engine that returns SQL condition strings.
 
     Instead of fetching data into Python, this engine builds SQL WHERE-clause
     fragments that can be embedded in CASE WHEN expressions or other SQL
@@ -42,6 +42,10 @@ class SqlBaseFilterMaskEngine(BaseFilterMaskEngine):
     @classmethod
     def less_than(cls, data: Any, column: str, value: Any) -> str:
         return f"{quote_ident(column)} < {quote_value(value)}"
+
+    @classmethod
+    def greater_than(cls, data: Any, column: str, value: Any) -> str:
+        return f"{quote_ident(column)} > {quote_value(value)}"
 
     @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> str:

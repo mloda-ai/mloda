@@ -79,7 +79,8 @@ For more in-depth information about feature groups, check out these advanced top
 - [Compute Framework Integration](../in_depth/compute-framework-integration.md) - How feature groups integrate with compute frameworks
 - [Multiple Result Columns](../in_depth/multiple_result_columns.md) - Working with multi-column features using automatic discovery utilities
 - [Data Type Enforcement](../in_depth/data-type-enforcement.md) - Runtime validation of declared feature data types
-- [Filter Handling in FeatureGroups](../in_depth/filter_data.md#handling-filters-in-a-featuregroup) - Inline filter reading, row elimination, and `final_filters()`
+- [Filter Handling in FeatureGroups](../in_depth/filter_data.md#handling-filters-in-a-featuregroup) - Row elimination and `final_filters()`
+- [Mask Engine](../in_depth/mask_engine.md) - Inline masking with `features.mask_engine`
 
 #### 6. Discovering Feature Groups
 

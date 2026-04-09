@@ -1,9 +1,9 @@
 from typing import Any
 
-from mloda.core.filter.filter_mask_engine import BaseFilterMaskEngine
+from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
 
 
-class PythonDictFilterMaskEngine(BaseFilterMaskEngine):
+class PythonDictMaskEngine(BaseMaskEngine):
     @classmethod
     def supported_data_type(cls) -> type[Any]:
         return list
@@ -31,6 +31,10 @@ class PythonDictFilterMaskEngine(BaseFilterMaskEngine):
     @classmethod
     def less_than(cls, data: Any, column: str, value: Any) -> list[Any]:
         return [row.get(column) is not None and row.get(column) < value for row in data]
+
+    @classmethod
+    def greater_than(cls, data: Any, column: str, value: Any) -> list[Any]:
+        return [row.get(column) is not None and row.get(column) > value for row in data]
 
     @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> list[Any]:

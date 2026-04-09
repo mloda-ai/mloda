@@ -14,21 +14,21 @@ except ImportError:
     DUCKDB_AVAILABLE = False
 
 if DUCKDB_AVAILABLE:
-    from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_filter_mask_engine import (
-        DuckDBFilterMaskEngine,
+    from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_mask_engine import (
+        DuckDBMaskEngine,
     )
-    from mloda_plugins.compute_framework.base_implementations.sql.sql_base_filter_mask_engine import (
-        SqlBaseFilterMaskEngine,
+    from mloda_plugins.compute_framework.base_implementations.sql.sql_base_mask_engine import (
+        SqlBaseMaskEngine,
     )
-    from tests.test_plugins.compute_framework.base_implementations.sql_filter_mask_engine_test_mixin import (
-        SqlFilterMaskEngineTestMixin,
+    from tests.test_plugins.compute_framework.base_implementations.sql_mask_engine_test_mixin import (
+        SqlMaskEngineTestMixin,
     )
 
     @pytest.mark.skipif(not DUCKDB_AVAILABLE, reason="duckdb not installed")
-    class TestDuckDBSqlFilterMaskEngine(SqlFilterMaskEngineTestMixin):
+    class TestDuckDBSqlMaskEngine(SqlMaskEngineTestMixin):
         @pytest.fixture
-        def engine(self) -> type[SqlBaseFilterMaskEngine]:
-            return DuckDBFilterMaskEngine
+        def engine(self) -> type[SqlBaseMaskEngine]:
+            return DuckDBMaskEngine
 
         @pytest.fixture
         def sample_data(self, connection: Any) -> Any:

@@ -1,10 +1,10 @@
 from typing import Any, Optional
 from mloda.user import FeatureName
 from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
-from mloda.provider import BaseMergeEngine, BaseFilterMaskEngine
+from mloda.provider import BaseMergeEngine, BaseMaskEngine
 from mloda_plugins.compute_framework.base_implementations.polars.polars_lazy_merge_engine import PolarsLazyMergeEngine
-from mloda_plugins.compute_framework.base_implementations.polars.polars_expr_filter_mask_engine import (
-    PolarsExprFilterMaskEngine,
+from mloda_plugins.compute_framework.base_implementations.polars.polars_expr_mask_engine import (
+    PolarsExprMaskEngine,
 )
 
 try:
@@ -30,8 +30,8 @@ class PolarsLazyDataFrame(PolarsDataFrame):
         return PolarsLazyMergeEngine
 
     @classmethod
-    def filter_mask_engine(cls) -> type[BaseFilterMaskEngine]:
-        return PolarsExprFilterMaskEngine
+    def mask_engine(cls) -> type[BaseMaskEngine]:
+        return PolarsExprMaskEngine
 
     def select_data_by_column_names(
         self, data: Any, selected_feature_names: set[FeatureName], column_ordering: Optional[str] = None

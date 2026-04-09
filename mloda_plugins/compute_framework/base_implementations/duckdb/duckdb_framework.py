@@ -4,9 +4,9 @@ from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_merge_engine import DuckDBMergeEngine
 from mloda.user import FeatureName, ParallelizationMode
 from mloda.provider import ComputeFramework
-from mloda.provider import BaseFilterEngine, BaseFilterMaskEngine
+from mloda.provider import BaseFilterEngine, BaseMaskEngine
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_filter_engine import DuckDBFilterEngine
-from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_filter_mask_engine import DuckDBFilterMaskEngine
+from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_mask_engine import DuckDBMaskEngine
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
 
 try:
@@ -129,5 +129,5 @@ class DuckDBFramework(ComputeFramework):
         return DuckDBFilterEngine
 
     @classmethod
-    def filter_mask_engine(cls) -> type[BaseFilterMaskEngine]:
-        return DuckDBFilterMaskEngine
+    def mask_engine(cls) -> type[BaseMaskEngine]:
+        return DuckDBMaskEngine

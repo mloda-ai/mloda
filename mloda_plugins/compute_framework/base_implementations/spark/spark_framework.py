@@ -4,9 +4,9 @@ from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.spark.spark_merge_engine import SparkMergeEngine
 from mloda.user import FeatureName
 from mloda.provider import ComputeFramework
-from mloda.provider import BaseFilterEngine, BaseFilterMaskEngine
+from mloda.provider import BaseFilterEngine, BaseMaskEngine
 from mloda_plugins.compute_framework.base_implementations.spark.spark_filter_engine import SparkFilterEngine
-from mloda_plugins.compute_framework.base_implementations.spark.spark_filter_mask_engine import SparkFilterMaskEngine
+from mloda_plugins.compute_framework.base_implementations.spark.spark_mask_engine import SparkMaskEngine
 
 try:
     from pyspark.sql import SparkSession, DataFrame
@@ -209,5 +209,5 @@ class SparkFramework(ComputeFramework):
         return SparkFilterEngine
 
     @classmethod
-    def filter_mask_engine(cls) -> type[BaseFilterMaskEngine]:
-        return SparkFilterMaskEngine
+    def mask_engine(cls) -> type[BaseMaskEngine]:
+        return SparkMaskEngine

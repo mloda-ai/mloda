@@ -176,7 +176,7 @@ FeatureGroups that declare the filter's column as an input. Each matched filter 
 **deep-copied** before delivery. If two FeatureGroups both match the same original
 filter, they each receive independent copies. This means a single `GlobalFilter` can
 be processed differently by different FeatureGroups in the same pipeline: one may use
-it for inline masking while another uses it for row elimination.
+the mask engine for inline masking while another uses filters for row elimination.
 
 Matched filters are attached to the `FeatureSet` before `calculate_feature()` is
 called. Inside your calculation you can access them via `features.filters`:
@@ -191,7 +191,8 @@ def calculate_feature(cls, data, features: FeatureSet):
             # ... use however you need
 ```
 
-`features.filters` is **always available**, regardless of any other setting.
+`features.filters` is available whenever a `GlobalFilter` with matching filters is
+provided. It is `None` when no filters match or no `GlobalFilter` is passed.
 
 ### Two independent concerns
 
@@ -199,10 +200,11 @@ Filters involve two decisions that are **independent** of each other:
 
 | Concern | Who decides | When it happens |
 |---------|------------|-----------------|
-| **Inline reading** -- should the FeatureGroup read `features.filters` during calculation? | The FeatureGroup author (you) | During `calculate_feature()` |
+| **Inline masking** -- should the FeatureGroup use `features.mask_engine` during calculation? | The FeatureGroup author (you) | During `calculate_feature()` |
 | **Row elimination** -- should the framework remove non-matching rows after calculation? | `final_filters()` return value | After `calculate_feature()` |
 
 A FeatureGroup can do either, both, or neither. The two concerns are decoupled.
+For inline masking details, see [Mask Engine](mask_engine.md).
 
 ### `final_filters()` reference
 
@@ -220,8 +222,8 @@ def final_filters(cls) -> bool | None:
 | `False` | Skip row elimination. Use this when your FeatureGroup fully handles the filter itself. |
 | `True` | Force row elimination, even if the FilterEngine would skip it. |
 
-This method does **not** affect whether `features.filters` is populated. Filters are
-always available for inline reading.
+This method does **not** affect whether `features.filters` is populated or whether
+`features.mask_engine` is wired. Both are set independently of `final_filters()`.
 
 `final_filters()` is a **semantic** flag that controls *when* in the pipeline the
 filter is applied, not *where* the computation runs physically:
@@ -251,67 +253,10 @@ class SalesTotal(FeatureGroup):
         return pa.table({cls.get_class_name(): compute_totals(data)})
 ```
 
-#### Pattern 2: Inline masking, skip row elimination
+#### Patterns 2 & 3: Inline masking
 
-Use `FilterMask.build()` to turn `features.filters` into a boolean mask for a given
-column. This replaces the boilerplate of iterating `SingleFilter` objects and building
-masks manually. The correct engine is wired automatically by the `ComputeFramework`.
-
-Import it from `mloda.provider`:
-
-```python
-from mloda.provider import FilterMask
-```
-
-Example: "Sum of active sales per region, broadcast back to every row."
-
-```
-class MaskedRegionSum(FeatureGroup):
-    @classmethod
-    def final_filters(cls) -> bool:
-        return False  # skip row elimination
-
-    @classmethod
-    def calculate_feature(cls, data, features: FeatureSet):
-        mask = FilterMask.build(data, features, column="status")
-        masked = pc.if_else(mask, data["sales"], None)
-        # aggregate masked values, broadcast back to all rows
-        return pa.table({cls.get_class_name(): broadcast_sum(masked, data["region"])})
-```
-
-Result: all rows preserved, but only matching values contributed to the sum.
-
-`FilterMask.build()` supports `equal`, `min`, `max`, `range`, and
-`categorical_inclusion` filter types. When multiple filters target the same column
-they are AND-combined. When no filters match the column, an all-True mask is returned.
-
-#### Pattern 3: Inline masking + row elimination
-
-Read filters for conditional logic **and** request row elimination afterward. Useful when
-you need filter-aware computation (masking, weighting, branching) but also want
-non-matching rows removed from the final output.
-
-Example: "Sum of active sales per region, only for active rows."
-
-```
-class MaskedRegionSumActiveOnly(FeatureGroup):
-    @classmethod
-    def final_filters(cls) -> bool:
-        return True  # also eliminate non-matching rows
-
-    @classmethod
-    def calculate_feature(cls, data, features: FeatureSet):
-        mask = FilterMask.build(data, features, column="status")
-        masked = pc.if_else(mask, data["sales"], None)
-        sums = broadcast_sum(masked, data["region"])
-        # Return all rows; the framework will remove non-matching ones
-        return pa.table({
-            cls.get_class_name(): sums,
-            "status": data["status"],  # preserve the filter column
-        })
-```
-
-Result: only matching rows remain, with aggregated values computed from masked data.
+For patterns that use `features.mask_engine` to build boolean masks inside
+`calculate_feature()`, see [Mask Engine](mask_engine.md).
 
 #### Pattern 4: Force elimination on a non-eliminating engine
 
@@ -328,9 +273,9 @@ class DerivedIcebergFeature(FeatureGroup):
 
 ### The overlap contract
 
-When a FeatureGroup reads filters inline **and** returns `final_filters() = True`, the
-same filters are processed twice: once by your code during calculation, and once by the
-framework's FilterEngine afterward.
+When a FeatureGroup uses the mask engine inline **and** returns `final_filters() = True`,
+filters are processed twice: once by your masking logic during calculation, and once by
+the framework's FilterEngine afterward.
 
 This is safe as long as you follow one rule: **preserve the filter column with its
 original values in your output**.
@@ -365,7 +310,7 @@ return pa.table({
 
 #### Quick reference
 
-| Your FeatureGroup... | `final_filters()` | Reads `features.filters`? | Must preserve filter column? |
+| Your FeatureGroup... | `final_filters()` | Uses [mask engine](mask_engine.md)? | Must preserve filter column? |
 |---------------------|:-----------------:|:------------------------:|:---------------------------:|
 | Ignores filters | `None` (default) | No | Yes (it is in `input_data`) |
 | Handles everything inline | `False` | Yes | No (elimination skipped) |
@@ -409,15 +354,8 @@ materialization occurs.
 
 #### Inline masking (all rows preserved)
 
-| Stage | Data |
-|-------|------|
-| Read `features.filters` | Extract: `status == "active"` |
-| Build mask | `[True, False, True, False]` |
-| Apply mask to value column | `masked_value = [10, NULL, 30, NULL]` |
-| Aggregate (sum by region, broadcast) | Region A: 10, Region B: 30 |
-| **Final result** | `[10, 10, 30, 30]` (4 rows, all preserved) |
-
-The framework skips `run_final_filter()` because `final_filters() = False`.
+See the [Mask Engine pipeline data flow](mask_engine.md#pipeline-data-flow-inline-masking)
+for details on this pattern.
 
 #### Masking and elimination (same filter, two FeatureGroups)
 
@@ -428,6 +366,6 @@ without interference:
 | Stage | Step 1 (inline mask FG) | Step 2 (regular FG) |
 |-------|------------------------|-------------------|
 | `final_filters()` | `False` | `None` (engine default: `True`) |
-| `calculate_feature()` | Reads filters, masks values, aggregates | Computes raw values, ignores filters |
+| `calculate_feature()` | Uses mask engine, masks values, aggregates | Computes raw values, ignores filters |
 | `run_final_filter()` | Skipped | Applies row elimination |
 | **Result** | `[10, 10, 30, 30]` (4 rows) | `[10, 30]` (2 rows) |

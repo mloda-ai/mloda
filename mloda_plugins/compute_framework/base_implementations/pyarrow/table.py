@@ -1,10 +1,10 @@
 from typing import Any, Optional
 from mloda.provider import BaseMergeEngine
-from mloda.provider import BaseFilterEngine, BaseFilterMaskEngine
+from mloda.provider import BaseFilterEngine, BaseMaskEngine
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_merge_engine import PyArrowMergeEngine
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_filter_engine import PyArrowFilterEngine
-from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_filter_mask_engine import (
-    PyArrowFilterMaskEngine,
+from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_mask_engine import (
+    PyArrowMaskEngine,
 )
 import pyarrow as pa
 
@@ -42,8 +42,8 @@ class PyArrowTable(ComputeFramework):
         return PyArrowFilterEngine
 
     @classmethod
-    def filter_mask_engine(cls) -> type[BaseFilterMaskEngine]:
-        return PyArrowFilterMaskEngine
+    def mask_engine(cls) -> type[BaseMaskEngine]:
+        return PyArrowMaskEngine
 
     def select_data_by_column_names(
         self, data: Any, selected_feature_names: set[FeatureName], column_ordering: Optional[str] = None

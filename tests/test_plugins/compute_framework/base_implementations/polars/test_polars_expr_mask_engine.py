@@ -1,6 +1,5 @@
-"""Tests for PolarsExprFilterMaskEngine -- returns pl.Expr for LazyFrame pipelines.
+"""Tests for PolarsExprMaskEngine -- returns pl.Expr for LazyFrame pipelines.
 
-Integration tests (FilterMask.build) are inherited from FilterMaskEngineTestMixin.
 This file adds Polars-expr-specific unit tests that verify pl.Expr return types
 and a LazyFrame end-to-end test.
 """
@@ -9,11 +8,9 @@ from typing import Any
 
 import pytest
 
-from mloda.core.filter.single_filter import SingleFilter
-from mloda.provider import BaseFilterMaskEngine, FilterMask
-from tests.test_plugins.compute_framework.base_implementations.filter_mask_engine_test_mixin import (
-    FilterMaskEngineTestMixin,
-    _make_features,
+from mloda.provider import BaseMaskEngine
+from tests.test_plugins.compute_framework.base_implementations.mask_engine_test_mixin import (
+    MaskEngineTestMixin,
 )
 
 try:
@@ -22,20 +19,20 @@ except ImportError:
     pl = None  # type: ignore[assignment]
 
 try:
-    from mloda_plugins.compute_framework.base_implementations.polars.polars_expr_filter_mask_engine import (
-        PolarsExprFilterMaskEngine,
+    from mloda_plugins.compute_framework.base_implementations.polars.polars_expr_mask_engine import (
+        PolarsExprMaskEngine,
     )
 except ImportError:
-    PolarsExprFilterMaskEngine = None  # type: ignore[assignment, misc]
+    PolarsExprMaskEngine = None  # type: ignore[assignment, misc]
 
 
 @pytest.mark.skipif(pl is None, reason="polars not installed")
-class TestPolarsExprFilterMaskEngine(FilterMaskEngineTestMixin):
-    """Tests for the PolarsExprFilterMaskEngine that returns pl.Expr objects."""
+class TestPolarsExprMaskEngine(MaskEngineTestMixin):
+    """Tests for the PolarsExprMaskEngine that returns pl.Expr objects."""
 
     @pytest.fixture
-    def engine(self) -> type[BaseFilterMaskEngine]:
-        return PolarsExprFilterMaskEngine
+    def engine(self) -> type[BaseMaskEngine]:
+        return PolarsExprMaskEngine
 
     @pytest.fixture
     def sample_data(self) -> Any:
@@ -52,10 +49,10 @@ class TestPolarsExprFilterMaskEngine(FilterMaskEngineTestMixin):
 
     # -- Polars-expr-specific tests --
 
-    def test_supported_data_type(self, engine: type[BaseFilterMaskEngine]) -> None:
+    def test_supported_data_type(self, engine: type[BaseMaskEngine]) -> None:
         assert engine.supported_data_type() is pl.LazyFrame
 
-    def test_all_methods_return_expr(self, engine: type[BaseFilterMaskEngine], sample_data: Any) -> None:
+    def test_all_methods_return_expr(self, engine: type[BaseMaskEngine], sample_data: Any) -> None:
         """Verify every engine method returns pl.Expr, not pl.Series or list."""
         assert isinstance(engine.all_true(sample_data), pl.Expr)
         assert isinstance(engine.equal(sample_data, "status", "active"), pl.Expr)
@@ -69,7 +66,7 @@ class TestPolarsExprFilterMaskEngine(FilterMaskEngineTestMixin):
         )
         assert isinstance(combined, pl.Expr)
 
-    def test_works_with_lazy_frame(self, engine: type[BaseFilterMaskEngine]) -> None:
+    def test_works_with_lazy_frame(self, engine: type[BaseMaskEngine]) -> None:
         """Verify end-to-end: build mask from LazyFrame, filter, collect."""
         lf = pl.LazyFrame(
             {
@@ -77,20 +74,18 @@ class TestPolarsExprFilterMaskEngine(FilterMaskEngineTestMixin):
                 "value": [10, 20, 30, 40],
             }
         )
-        sf = SingleFilter("status", "equal", {"value": "active"})
-        features = _make_features({sf}, engine)
-        mask = FilterMask.build(lf, features, column="status")
+        mask = engine.equal(lf, "status", "active")
         result = lf.filter(mask).collect()
         assert result["status"].to_list() == ["active", "active"]
         assert result["value"].to_list() == [10, 30]
 
 
 @pytest.mark.skipif(pl is None, reason="polars not installed")
-class TestPolarsLazyDataFrameFilterMaskEngine:
-    """Verify that PolarsLazyDataFrame.filter_mask_engine() returns PolarsExprFilterMaskEngine."""
+class TestPolarsLazyDataFrameMaskEngine:
+    """Verify that PolarsLazyDataFrame.mask_engine() returns PolarsExprMaskEngine."""
 
     def test_lazy_dataframe_uses_expr_engine(self) -> None:
         from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame
 
-        engine = PolarsLazyDataFrame.filter_mask_engine()
-        assert engine is PolarsExprFilterMaskEngine
+        engine = PolarsLazyDataFrame.mask_engine()
+        assert engine is PolarsExprMaskEngine

@@ -1,6 +1,6 @@
 from typing import Any
 
-from mloda.core.filter.filter_mask_engine import BaseFilterMaskEngine
+from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
 
 try:
     import polars as pl
@@ -10,12 +10,12 @@ except ImportError:
 
 def _require_polars() -> Any:
     if pl is None:
-        raise ImportError("polars is required for PolarsExprFilterMaskEngine")
+        raise ImportError("polars is required for PolarsExprMaskEngine")
     return pl
 
 
-class PolarsExprFilterMaskEngine(BaseFilterMaskEngine):
-    """Polars filter mask engine that returns pl.Expr boolean expressions.
+class PolarsExprMaskEngine(BaseMaskEngine):
+    """Polars mask engine that returns pl.Expr boolean expressions.
 
     Returns lazy pl.Expr objects instead of materialized pl.Series, enabling
     use with pl.LazyFrame pipelines without forcing collection.
@@ -49,6 +49,10 @@ class PolarsExprFilterMaskEngine(BaseFilterMaskEngine):
     @classmethod
     def less_than(cls, data: Any, column: str, value: Any) -> Any:
         return _require_polars().col(column) < value
+
+    @classmethod
+    def greater_than(cls, data: Any, column: str, value: Any) -> Any:
+        return _require_polars().col(column) > value
 
     @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> Any:

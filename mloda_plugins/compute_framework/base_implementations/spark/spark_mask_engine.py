@@ -1,6 +1,6 @@
 from typing import Any
 
-from mloda.core.filter.filter_mask_engine import BaseFilterMaskEngine
+from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
 
 try:
     from pyspark.sql import DataFrame
@@ -8,7 +8,7 @@ except ImportError:
     DataFrame = None
 
 
-class SparkFilterMaskEngine(BaseFilterMaskEngine):
+class SparkMaskEngine(BaseMaskEngine):
     @classmethod
     def supported_data_type(cls) -> type[Any]:
         return DataFrame  # type: ignore[no-any-return]
@@ -40,6 +40,11 @@ class SparkFilterMaskEngine(BaseFilterMaskEngine):
     def less_than(cls, data: Any, column: str, value: Any) -> list[Any]:
         values = [row[column] for row in data.collect()]
         return [v is not None and v < value for v in values]
+
+    @classmethod
+    def greater_than(cls, data: Any, column: str, value: Any) -> list[Any]:
+        values = [row[column] for row in data.collect()]
+        return [v is not None and v > value for v in values]
 
     @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> list[Any]:

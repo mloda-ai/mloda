@@ -85,3 +85,34 @@ class MaskEngineTestMixin:
         mask_max = engine.less_than(sample_data, "value", 35)
         mask = engine.combine(mask_min, mask_max)
         assert self.evaluate_mask(mask, sample_data) == [False, True, True, False]
+
+    def test_between_inclusive(self, engine: type[BaseMaskEngine], sample_data: Any) -> None:
+        mask = engine.between(sample_data, "value", 20, 30)
+        assert self.evaluate_mask(mask, sample_data) == [False, True, True, False]
+
+    def test_between_min_exclusive(self, engine: type[BaseMaskEngine], sample_data: Any) -> None:
+        mask = engine.between(sample_data, "value", 20, 30, min_exclusive=True)
+        assert self.evaluate_mask(mask, sample_data) == [False, False, True, False]
+
+    def test_between_max_exclusive(self, engine: type[BaseMaskEngine], sample_data: Any) -> None:
+        mask = engine.between(sample_data, "value", 20, 30, max_exclusive=True)
+        assert self.evaluate_mask(mask, sample_data) == [False, True, False, False]
+
+    def test_between_both_exclusive(self, engine: type[BaseMaskEngine], sample_data: Any) -> None:
+        mask = engine.between(sample_data, "value", 20, 40, min_exclusive=True, max_exclusive=True)
+        assert self.evaluate_mask(mask, sample_data) == [False, False, True, False]
+
+    def test_all_of_empty(self, engine: type[BaseMaskEngine], sample_data: Any) -> None:
+        mask = engine.all_of(sample_data, [])
+        assert self.evaluate_mask(mask, sample_data) == [True, True, True, True]
+
+    def test_all_of_single(self, engine: type[BaseMaskEngine], sample_data: Any) -> None:
+        m = engine.greater_equal(sample_data, "value", 20)
+        mask = engine.all_of(sample_data, [m])
+        assert self.evaluate_mask(mask, sample_data) == [False, True, True, True]
+
+    def test_all_of_multi(self, engine: type[BaseMaskEngine], sample_data: Any) -> None:
+        m1 = engine.greater_equal(sample_data, "value", 20)
+        m2 = engine.less_equal(sample_data, "value", 30)
+        mask = engine.all_of(sample_data, [m1, m2])
+        assert self.evaluate_mask(mask, sample_data) == [False, True, True, False]

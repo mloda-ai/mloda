@@ -324,6 +324,98 @@ class MaskEngineMultiMaskFeatureGroup(FeatureGroup):
         return pa.table({cls.get_class_name(): result, "value": value})
 
 
+class MaskEngineBetweenFeatureGroup(FeatureGroup):
+    """Mask engine with between() convenience method.
+
+    Data: region=[A,A,B,B], value=[10,20,30,40], weight=[1,2,3,4].
+    With between(value, 15, 35): mask=[F,T,T,F], masked weights=[None,2,3,None].
+    Region A: 2, Region B: 3. Result: [2, 2, 3, 3].
+    """
+
+    @classmethod
+    def input_data(cls) -> Optional[BaseInputData]:
+        return DataCreator({cls.get_class_name(), "value"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def final_filters(cls) -> bool:
+        return False
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        region = pa.array(["A", "A", "B", "B"])
+        value = pa.array([10, 20, 30, 40])
+        weight = pa.array([1, 2, 3, 4])
+
+        assert features.mask_engine is not None
+        engine = features.mask_engine
+        mask = engine.between(pa.table({"value": value}), "value", 15, 35)
+        masked_weight = pc.if_else(mask, weight, None)
+
+        result = []
+        for i in range(len(region)):
+            region_i = region[i].as_py()
+            total = 0
+            for j in range(len(region)):
+                if region[j].as_py() == region_i and masked_weight[j].is_valid:
+                    total += masked_weight[j].as_py()
+            result.append(total)
+
+        return pa.table({cls.get_class_name(): result, "value": value})
+
+
+class MaskEngineAllOfFeatureGroup(FeatureGroup):
+    """Mask engine with all_of() convenience method.
+
+    Data: region=[A,A,B,B,B], value=[5,15,25,35,45], weight=[1,2,3,4,5].
+    With all_of([value >= 10, value <= 35]): mask=[F,T,T,T,F],
+    masked weights=[None,2,3,4,None]. Region A: 2, Region B: 7.
+    Result: [2, 2, 7, 7, 7].
+    """
+
+    @classmethod
+    def input_data(cls) -> Optional[BaseInputData]:
+        return DataCreator({cls.get_class_name(), "value"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def final_filters(cls) -> bool:
+        return False
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        region = pa.array(["A", "A", "B", "B", "B"])
+        value = pa.array([5, 15, 25, 35, 45])
+        weight = pa.array([1, 2, 3, 4, 5])
+
+        assert features.mask_engine is not None
+        engine = features.mask_engine
+        table = pa.table({"value": value})
+        masks = [
+            engine.greater_equal(table, "value", 10),
+            engine.less_equal(table, "value", 35),
+        ]
+        mask = engine.all_of(table, masks)
+        masked_weight = pc.if_else(mask, weight, None)
+
+        result = []
+        for i in range(len(region)):
+            region_i = region[i].as_py()
+            total = 0
+            for j in range(len(region)):
+                if region[j].as_py() == region_i and masked_weight[j].is_valid:
+                    total += masked_weight[j].as_py()
+            result.append(total)
+
+        return pa.table({cls.get_class_name(): result, "value": value})
+
+
 @PARALLELIZATION_MODES_SYNC_THREADING
 class TestMaskEngineIntegration:
     def test_mask_engine_equal_produces_correct_result(
@@ -415,6 +507,40 @@ class TestMaskEngineIntegration:
     def test_mask_engine_multi_mask_combined(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         """AND-combined masks. Result: [2, 2, 7, 7, 7]."""
         feature_name = "MaskEngineMultiMaskFeatureGroup"
+        features = Features([Feature(name=feature_name, initial_requested_data=True)])
+
+        result = MlodaTestRunner.run_api(
+            features,
+            compute_frameworks={PyArrowTable},
+            parallelization_modes=modes,
+            flight_server=flight_server,
+        )
+
+        for res in result.results:
+            data = res.to_pydict()
+            assert data[feature_name] == [2, 2, 7, 7, 7]
+            assert len(data[feature_name]) == 5
+
+    def test_mask_engine_between(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
+        """between() convenience method. Result: [2, 2, 3, 3]."""
+        feature_name = "MaskEngineBetweenFeatureGroup"
+        features = Features([Feature(name=feature_name, initial_requested_data=True)])
+
+        result = MlodaTestRunner.run_api(
+            features,
+            compute_frameworks={PyArrowTable},
+            parallelization_modes=modes,
+            flight_server=flight_server,
+        )
+
+        for res in result.results:
+            data = res.to_pydict()
+            assert data[feature_name] == [2, 2, 3, 3]
+            assert len(data[feature_name]) == 4
+
+    def test_mask_engine_all_of(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
+        """all_of() convenience method. Result: [2, 2, 7, 7, 7]."""
+        feature_name = "MaskEngineAllOfFeatureGroup"
         features = Features([Feature(name=feature_name, initial_requested_data=True)])
 
         result = MlodaTestRunner.run_api(

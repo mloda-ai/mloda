@@ -90,3 +90,23 @@ class SqlMaskEngineTestMixin(MaskEngineTestMixin):
         assert "AND" in combined
         assert cond1 in combined or "20" in combined
         assert cond2 in combined or "30" in combined
+
+    def test_between_returns_condition_string(self, engine: type[SqlBaseMaskEngine], sample_data: Any) -> None:
+        result = engine.between(sample_data, "value", 20, 30)
+        assert isinstance(result, str)
+        assert "AND" in result
+        assert ">=" in result
+        assert "<=" in result
+        assert "20" in result
+        assert "30" in result
+
+    def test_all_of_returns_condition_string(self, engine: type[SqlBaseMaskEngine], sample_data: Any) -> None:
+        m1 = engine.greater_equal(sample_data, "value", 20)
+        m2 = engine.less_equal(sample_data, "value", 30)
+        result = engine.all_of(sample_data, [m1, m2])
+        assert isinstance(result, str)
+        assert "AND" in result
+
+    def test_all_of_empty_returns_all_true(self, engine: type[SqlBaseMaskEngine], sample_data: Any) -> None:
+        result = engine.all_of(sample_data, [])
+        assert result == "1 = 1"

@@ -53,6 +53,12 @@ class BaseMaskEngine(ABC):
 
     @classmethod
     @abstractmethod
+    def greater_than(cls, data: Any, column: str, value: Any) -> Any:
+        """Return a boolean mask where data[column] > value."""
+        ...
+
+    @classmethod
+    @abstractmethod
     def is_in(cls, data: Any, column: str, values: Any) -> Any:
         """Return a boolean mask where data[column] is in the values collection."""
         ...

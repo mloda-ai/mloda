@@ -35,5 +35,9 @@ class PandasMaskEngine(BaseMaskEngine):
         return data[column] < value
 
     @classmethod
+    def greater_than(cls, data: Any, column: str, value: Any) -> Any:
+        return data[column] > value
+
+    @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> Any:
         return data[column].isin(values)

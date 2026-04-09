@@ -33,6 +33,10 @@ class PythonDictMaskEngine(BaseMaskEngine):
         return [row.get(column) is not None and row.get(column) < value for row in data]
 
     @classmethod
+    def greater_than(cls, data: Any, column: str, value: Any) -> list[Any]:
+        return [row.get(column) is not None and row.get(column) > value for row in data]
+
+    @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> list[Any]:
         allowed = set(values) if isinstance(values, (list, tuple)) else {values}
         return [row.get(column) in allowed for row in data]

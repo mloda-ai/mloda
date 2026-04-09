@@ -56,9 +56,9 @@ class MaskEngineTestMixin:
         mask = engine.less_than(sample_data, "value", 30)
         assert self.evaluate_mask(mask, sample_data) == [True, True, False, False]
 
-    def test_less_equal_inclusive(self, engine: type[BaseMaskEngine], sample_data: Any) -> None:
-        mask = engine.less_equal(sample_data, "value", 30)
-        assert self.evaluate_mask(mask, sample_data) == [True, True, True, False]
+    def test_greater_than(self, engine: type[BaseMaskEngine], sample_data: Any) -> None:
+        mask = engine.greater_than(sample_data, "value", 20)
+        assert self.evaluate_mask(mask, sample_data) == [False, False, True, True]
 
     def test_is_in(self, engine: type[BaseMaskEngine], sample_data: Any) -> None:
         mask = engine.is_in(sample_data, "status", ("active",))

@@ -34,7 +34,6 @@ def create_feature_group_class(name: str, domain: Domain) -> type:
             return None
 
     DynamicFeatureGroup.__name__ = name
-    DynamicFeatureGroup.__qualname__ = name
     return DynamicFeatureGroup
 
 

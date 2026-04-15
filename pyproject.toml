@@ -22,7 +22,7 @@ classifiers = [
 
 [project.optional-dependencies]
 test = [
-    "pytest",
+    "pytest>=9.0.3",
     "pytest-xdist",
     "pytest-order",
     "pytest-timeout",

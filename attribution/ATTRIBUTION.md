@@ -39,7 +39,7 @@
 | matplotlib-inline                      | 0.2.1           | UNKNOWN                                            |
 | mdurl                                  | 0.1.2           | MIT License                                        |
 | mktestdocs                             | 0.2.5           | MIT                                                |
-| mloda                                  | 0.6.0           | Apache-2.0                                         |
+| mloda                                  | 0.6.1           | Apache-2.0                                         |
 | mmh3                                   | 5.2.1           | MIT License                                        |
 | msgpack                                | 1.1.2           | Apache-2.0                                         |
 | mypy                                   | 1.20.0          | MIT                                                |
@@ -109,9 +109,9 @@
 | tqdm                                   | 4.67.3          | MPL-2.0 AND MIT                                    |
 | traitlets                              | 5.14.3          | BSD License                                        |
 | typeguard                              | 4.5.1           | MIT                                                |
-| types-PyYAML                           | 6.0.12.20250915 | Apache-2.0                                         |
-| types-requests                         | 2.33.0.20260402 | Apache-2.0                                         |
-| types-toml                             | 0.10.8.20240310 | Apache Software License                            |
+| types-PyYAML                           | 6.0.12.20260408 | Apache-2.0                                         |
+| types-requests                         | 2.33.0.20260408 | Apache-2.0                                         |
+| types-toml                             | 0.10.8.20260408 | Apache-2.0                                         |
 | typing-inspect                         | 0.9.0           | MIT License                                        |
 | typing-inspection                      | 0.4.2           | MIT                                                |
 | typing_extensions                      | 4.15.0          | PSF-2.0                                            |

@@ -78,10 +78,10 @@ source .venv/bin/activate
 - **Python**: supported range is `>=3.10,<3.14`; CI matrixes 3.10, 3.11, 3.12, 3.13.
 - **Type hints**: use modern forms (`list[str]`, `dict[str, int]`, `X | None`). Ruff enforces this via `UP006` and `UP007`.
 - **Formatting**: ruff format with line length 120.
-- **Tests**: must be parallel-safe (pytest-xdist) and finish under the 10-second timeout. The default tox env asserts `EXPECTED_SKIP_COUNT=147`; if a test you add is skipped, update the count or unskip it.
+- **Tests**: every new feature or bug fix must come with tests; follow the patterns in the existing `tests/` tree. Tests must be parallel-safe (pytest-xdist) and finish under the 10-second timeout. The default tox env asserts `EXPECTED_SKIP_COUNT=147`; if a test you add is skipped, update the count or unskip it.
 - **Supply chain**: `[tool.uv] exclude-newer = "7 days"` in `pyproject.toml` defers new dependency releases by 7 days. Do not edit this without a reason.
 - **Licenses**: dependencies must satisfy the allowlist in `tox.ini` (Apache-2.0, BSD, MIT, MPL-2.0, PSF, ISC, LGPLv2+). Adding a dependency with a non-listed license fails tox.
-- **Commits**: use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `chore:`, `docs:`, `test:`, `refactor:`). semantic-release reads these to compute the next version.
+- **Commits**: use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `chore:`, `docs:`, `test:`, `refactor:`, `minor:`). semantic-release computes the next version. This project deviates from the standard: the minor version (middle number) bumps only on `minor:` commits; `feat:` is treated as a patch bump.
 
 ## Issue Creation
 

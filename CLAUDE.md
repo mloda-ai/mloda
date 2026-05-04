@@ -71,6 +71,29 @@ source .venv/bin/activate
 - Avoid try/except blocks
 - Never mention agents in commit messages, PR descriptions, or any user-facing text (no `Co-Authored-By` agent lines, no agent names)
 
+## Project Practices
+
+`tox` is the gate. It runs `pytest -n 8 --timeout=10`, then `ruff format --check`, `ruff check`, a `pip-licenses` allowlist check, `mypy --strict --ignore-missing-imports`, and `bandit`. All of these must pass before a PR is mergeable.
+
+- **Python**: supported range is `>=3.10,<3.14`; CI matrixes 3.10, 3.11, 3.12, 3.13.
+- **Type hints**: use modern forms (`list[str]`, `dict[str, int]`, `X | None`). Ruff enforces this via `UP006` and `UP007`.
+- **Formatting**: ruff format with line length 120.
+- **Tests**: every new feature or bug fix must come with tests; follow the patterns in the existing `tests/` tree. Tests must be parallel-safe (pytest-xdist) and finish under the 10-second timeout. The default tox env asserts `EXPECTED_SKIP_COUNT=147`; if a test you add is skipped, update the count or unskip it.
+- **Supply chain**: `[tool.uv] exclude-newer = "7 days"` in `pyproject.toml` defers new dependency releases by 7 days. Do not edit this without a reason.
+- **Licenses**: dependencies must satisfy the allowlist in `tox.ini` (Apache-2.0, BSD, MIT, MPL-2.0, PSF, ISC, LGPLv2+). Adding a dependency with a non-listed license fails tox.
+- **Commits**: use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `chore:`, `docs:`, `test:`, `refactor:`, `minor:`). semantic-release computes the next version. This project deviates from the standard: the minor version (middle number) bumps only on `minor:` commits; `feat:` is treated as a patch bump.
+
+## Issue Creation
+
+When filing a GitHub issue (via `gh issue create` or otherwise), follow the structure in `.github/ISSUE_TEMPLATE/issue.yml`:
+
+- Summary in one sentence
+- Reproduction (for bugs) or motivation (for features)
+- Code pointers if relevant (`file:line`)
+- Definition of done if scoped (what counts as complete)
+
+Issues that meet this bar are eligible for the `good first issue` label without further sharpening.
+
 ## Memory Bank
 
 The `memory-bank/` directory contains project context documentation. Read relevant files at the start of tasks to understand the project.

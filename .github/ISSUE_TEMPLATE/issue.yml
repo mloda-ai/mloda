@@ -1,0 +1,48 @@
+name: Issue
+description: Report a bug, request a feature, or propose a small task.
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One-sentence description of the bug, request, or task.
+      placeholder: e.g. "DuckdbRelation.aggregate raises TypeError when called with a single column."
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Reproduction or motivation
+      description: |
+        For bugs: minimal reproduction steps, then expected vs. actual behavior.
+        For features and tasks: motivation, current workaround if any, and desired behavior.
+      placeholder: |
+        Steps to reproduce:
+        1.
+        2.
+
+        Expected:
+        Actual:
+    validations:
+      required: true
+  - type: textarea
+    id: pointers
+    attributes:
+      label: Code pointers (optional)
+      description: Files and line numbers where the work happens or where the bug originates. Helps newcomers find their starting point quickly.
+      placeholder: e.g. mloda/core/foo.py:42
+  - type: textarea
+    id: dod
+    attributes:
+      label: Definition of done (optional)
+      description: What counts as complete. Behavior, tests, docs.
+      placeholder: |
+        - [ ] Function returns X for input Y
+        - [ ] Test added in tests/...
+        - [ ] tox passes
+  - type: input
+    id: environment
+    attributes:
+      label: Environment (optional, bugs only)
+      description: Python version, OS, mloda version.
+      placeholder: Python 3.12, Linux, mloda 0.6.1

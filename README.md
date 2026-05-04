@@ -317,7 +317,21 @@ Most plugins currently live in `mloda_plugins/` within this repository. The goal
 
 ## Contributing
 
-We welcome contributions! Build plugins, improve docs, or add features.
+We welcome contributions.
 
-- **[GitHub Issues](https://github.com/mloda-ai/mloda/issues/)** - Report bugs or request features
-- **[Development Guide](https://mloda-ai.github.io/mloda/development/)** - How to contribute
+**Plugin development:** see the [mloda-registry guides](https://github.com/mloda-ai/mloda-registry/tree/main/docs/guides) (40+ step-by-step), or scaffold a new package with the [mloda-plugin-template](https://github.com/mloda-ai/mloda-plugin-template).
+
+**Core framework:** start with [`good first issue`](https://github.com/mloda-ai/mloda/labels/good%20first%20issue) or [`help wanted`](https://github.com/mloda-ai/mloda/labels/help%20wanted), then:
+
+```bash
+git clone https://github.com/mloda-ai/mloda.git
+cd mloda
+uv sync --all-extras
+source .venv/bin/activate
+tox  # full test, lint, type-check, and security suite
+```
+
+If `tox` passes, you're set. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full PR workflow and code style, and the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+- [GitHub Issues](https://github.com/mloda-ai/mloda/issues/) - report bugs or request features
+- [Development Guide](https://mloda-ai.github.io/mloda/development/) - in-depth contributor docs

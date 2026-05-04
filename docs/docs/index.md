@@ -62,7 +62,7 @@ mloda addresses common challenges in data and feature engineering by leveraging 
 
 ## Contributing to mloda
 
-We welcome contributions from the community to help us improve and expand mloda. Whether you're interested in developing plugins or adding new features, your input is invaluable. [Learn more here.](development.md)
+We welcome contributions, whether you are developing plugins or working on the core framework. See [CONTRIBUTING.md](https://github.com/mloda-ai/mloda/blob/main/CONTRIBUTING.md), our [Code of Conduct](https://github.com/mloda-ai/mloda/blob/main/CODE_OF_CONDUCT.md), and the [contributor page](development.md) for details.
 
 
 ## Frequently Asked Questions (FAQ)

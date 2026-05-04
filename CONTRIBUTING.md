@@ -90,7 +90,7 @@ For contributions to the mloda core framework, see our [Documentation](https://m
 
 ### Report Issues
 
-Found a bug or have a feature request? [Open an issue](https://github.com/mloda-ai/mloda/issues/).
+Found a bug or have a feature request? [Open an issue](https://github.com/mloda-ai/mloda/issues/). The issue template will prompt you for a summary, reproduction or motivation, optional code pointers, and an optional definition of done.
 
 ## Pull Request Workflow
 

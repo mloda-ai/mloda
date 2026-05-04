@@ -71,6 +71,17 @@ source .venv/bin/activate
 - Avoid try/except blocks
 - Never mention agents in commit messages, PR descriptions, or any user-facing text (no `Co-Authored-By` agent lines, no agent names)
 
+## Issue Creation
+
+When filing a GitHub issue (via `gh issue create` or otherwise), follow the structure in `.github/ISSUE_TEMPLATE/issue.yml`:
+
+- Summary in one sentence
+- Reproduction (for bugs) or motivation (for features)
+- Code pointers if relevant (`file:line`)
+- Definition of done if scoped (what counts as complete)
+
+Issues that meet this bar are eligible for the `good first issue` label without further sharpening.
+
 ## Memory Bank
 
 The `memory-bank/` directory contains project context documentation. Read relevant files at the start of tasks to understand the project.

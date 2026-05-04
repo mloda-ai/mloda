@@ -71,13 +71,9 @@ pytest -n auto --timeout=10
 
 ## Ways to Contribute
 
-### Core Development
-
-For contributions to the mloda core framework, see our [Documentation](https://mloda-ai.github.io/mloda/).
-
 ### Plugin Development
 
-The easiest way to extend mloda is by creating plugins. The [mloda-registry](https://github.com/mloda-ai/mloda-registry) contains 40+ guides organized as a step-by-step journey:
+The easiest way to extend mloda is by creating plugins. The [mloda-registry](https://github.com/mloda-ai/mloda-registry) hosts 40+ guides under [`docs/guides/`](https://github.com/mloda-ai/mloda-registry/tree/main/docs/guides), organized as a step-by-step journey:
 
 1. **Using plugins**: Learn to use and discover existing plugins.
 2. **Creating plugins**: Build a plugin in your project, then package it.
@@ -87,6 +83,10 @@ The easiest way to extend mloda is by creating plugins. The [mloda-registry](htt
 Start with the [Plugin Journey overview](https://github.com/mloda-ai/mloda-registry/blob/main/docs/guides/index.md) to find the right guide for your level.
 
 To scaffold a new standalone plugin package with pre-configured CI/CD, use the [mloda-plugin-template](https://github.com/mloda-ai/mloda-plugin-template).
+
+### Core Development
+
+For contributions to the mloda core framework, see our [Documentation](https://mloda-ai.github.io/mloda/).
 
 ### Report Issues
 

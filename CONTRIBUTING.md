@@ -2,6 +2,8 @@
 
 We welcome contributions from the community. Whether you are fixing bugs, adding features, or developing plugins, your input is invaluable.
 
+By participating in this project, you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## Getting Started
 
 ### Prerequisites

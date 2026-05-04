@@ -11,7 +11,7 @@ except ImportError:
 try:
     import pyarrow as pa
 except ImportError:
-    pa = None
+    pa = None  # type: ignore[assignment]
 
 
 class SparkPyArrowTransformer(BaseTransformer):

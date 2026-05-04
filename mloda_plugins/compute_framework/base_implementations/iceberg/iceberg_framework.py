@@ -12,7 +12,7 @@ try:
 except ImportError:
     Catalog = None  # type: ignore[assignment,misc]
     IcebergTable = None  # type: ignore[assignment,misc]
-    pa = None
+    pa = None  # type: ignore[assignment]
 
 
 class IcebergFramework(ComputeFramework):

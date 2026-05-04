@@ -52,7 +52,7 @@ try:
     PYARROW_AVAILABLE = True
 except ImportError:
     logger.warning("PyArrow is not installed. Some tests will be skipped.")
-    pa = None
+    pa = None  # type: ignore[assignment]
     PYARROW_AVAILABLE = False
 
 

@@ -6,7 +6,7 @@ from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 try:
     import pyarrow as pa
 except ImportError:
-    pa = None
+    pa = None  # type: ignore[assignment]
 
 
 class ComputeFrameworkTransformer:

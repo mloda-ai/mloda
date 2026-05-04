@@ -5,7 +5,7 @@ from mloda.provider import BaseTransformer
 try:
     import pyarrow as pa
 except ImportError:
-    pa = None
+    pa = None  # type: ignore[assignment]
 
 
 class SqlBasePyArrowTransformer(BaseTransformer):

@@ -6,7 +6,7 @@ try:
     import pyarrow as pa
 except ImportError:
     IcebergTable = None  # type: ignore[assignment,misc]
-    pa = None
+    pa = None  # type: ignore[assignment]
 
 
 class IcebergPyArrowTransformer(BaseTransformer):

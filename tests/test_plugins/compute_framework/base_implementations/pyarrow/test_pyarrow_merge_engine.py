@@ -10,7 +10,7 @@ from tests.test_plugins.compute_framework.test_tooling.multi_index.multi_index_t
 try:
     import pyarrow as pa
 except ImportError:
-    pa = None
+    pa = None  # type: ignore[assignment]
 
 
 class TestPyArrowMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):

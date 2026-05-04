@@ -11,7 +11,7 @@ except ImportError:
 try:
     import pyarrow as pa
 except ImportError:
-    pa = None
+    pa = None  # type: ignore[assignment]
 
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import inline_params, quote_ident
 

@@ -31,7 +31,7 @@ try:
     import pyarrow as pa
 except ImportError:
     logger.warning("PyArrow is not installed. Some tests will be skipped.")
-    pa = None
+    pa = None  # type: ignore[assignment]
 
 
 @pytest.fixture

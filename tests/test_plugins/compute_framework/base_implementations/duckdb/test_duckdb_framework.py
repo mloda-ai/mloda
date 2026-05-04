@@ -23,7 +23,7 @@ try:
 except ImportError:
     logger.warning("DuckDB is not installed. Some tests will be skipped.")
     duckdb = None  # type: ignore[assignment]
-    pa = None
+    pa = None  # type: ignore[assignment]
 
 
 class TestDuckDBFrameworkAvailability:

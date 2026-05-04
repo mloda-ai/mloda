@@ -121,6 +121,18 @@ namespace_packages = true
 module = "mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_filter_engine"
 disable_error_code = ["misc", "call-arg", "arg-type"]
 
+[[tool.mypy.overrides]]
+module = [
+    "pyarrow.compute",
+    "pyarrow.csv",
+    "pyarrow.feather",
+    "pyarrow.flight",
+    "pyarrow.json",
+    "pyarrow.orc",
+    "pyarrow.parquet",
+]
+follow_imports = "skip"
+
 [tool.ruff]
 line-length = 120
 

@@ -19,7 +19,7 @@ try:
     import pyarrow as pa
 except ImportError:
     logger.warning("PyArrow is not installed. Some tests will be skipped.")
-    pa = None
+    pa = None  # type: ignore[assignment]
 
 
 @pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB or PyArrow is not installed. Skipping this test.")

@@ -25,7 +25,3 @@ This applies in all project spaces (GitHub issues, pull requests, discussions, c
 ## Enforcement
 
 If you experience or witness behavior that violates this code, report it to **conduct@mloda.ai**. Reports are reviewed confidentially. Maintainers may warn, temporarily ban, or permanently remove anyone whose behavior is judged to violate this code.
-
-## Attribution
-
-Inspired by the [Contributor Covenant](https://www.contributor-covenant.org/), simplified for readability.

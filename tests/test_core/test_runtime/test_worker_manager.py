@@ -4,12 +4,24 @@ import multiprocessing
 import queue
 import threading
 import time
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock
 from uuid import UUID, uuid4
 
 import pytest
 
 from mloda.core.runtime.worker_manager import WorkerManager
+
+
+@pytest.fixture(autouse=True)
+def multiprocessing_context(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
+    """Use a mocked spawn context so unit tests do not launch real processes."""
+    context = MagicMock()
+    context.Queue.side_effect = MagicMock
+    context.Process.side_effect = lambda *_args, **_kwargs: Mock(spec=multiprocessing.Process)
+    get_context = MagicMock(return_value=context)
+    context.get_context_mock = get_context
+    monkeypatch.setattr("mloda.core.runtime.worker_manager.multiprocessing.get_context", get_context)
+    return context
 
 
 class TestWorkerManagerInit:
@@ -23,6 +35,12 @@ class TestWorkerManagerInit:
         assert manager.process_register == {}
         assert manager.result_queues_collection == set()
         assert manager.result_uuids_collection == set()
+
+    def test_init_uses_spawn_multiprocessing_context(self, multiprocessing_context: MagicMock) -> None:
+        """WorkerManager should use spawn instead of the platform default start method."""
+        WorkerManager()
+
+        multiprocessing_context.get_context_mock.assert_called_once_with("spawn")
 
 
 class TestWorkerManagerThreadTasks:
@@ -122,13 +140,25 @@ class TestWorkerManagerProcessCreation:
         target_func = Mock()
         args = ("arg1", "arg2")
 
-        with patch("multiprocessing.Process") as mock_process_class:
-            mock_process = Mock()
-            mock_process_class.return_value = mock_process
+        process, _, _ = manager.create_worker_process(cfw_uuid, target_func, args)
 
-            manager.create_worker_process(cfw_uuid, target_func, args)
+        process.start.assert_called_once()
 
-            mock_process.start.assert_called_once()
+    def test_create_worker_process_uses_multiprocessing_context(self, multiprocessing_context: MagicMock) -> None:
+        """create_worker_process should use the configured context for queues and processes."""
+        manager = WorkerManager()
+        cfw_uuid = uuid4()
+        target_func = Mock()
+        args = ("arg1", "arg2")
+
+        process, cmd_queue, result_queue = manager.create_worker_process(cfw_uuid, target_func, args)
+
+        process.start.assert_called_once()
+        assert multiprocessing_context.Queue.call_count == 2
+        multiprocessing_context.Process.assert_called_once_with(
+            target=target_func,
+            args=(cmd_queue, result_queue, *args),
+        )
 
 
 class TestWorkerManagerProcessRetrieval:

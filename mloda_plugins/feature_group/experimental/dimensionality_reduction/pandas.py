@@ -310,7 +310,7 @@ class PandasDimensionalityReductionFeatureGroup(DimensionalityReductionFeatureGr
 
         # LDA requires a target variable
         # We'll try to find a categorical column in the DataFrame
-        categorical_columns = df.select_dtypes(include=["object","string" ,"category"]).columns
+        categorical_columns = df.select_dtypes(include=["object", "string", "category"]).columns
 
         if len(categorical_columns) == 0:
             raise ValueError("LDA requires a categorical target variable, but none was found in the data")

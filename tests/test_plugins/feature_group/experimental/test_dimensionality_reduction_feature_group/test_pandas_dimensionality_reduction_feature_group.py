@@ -132,10 +132,9 @@ class TestPandasDimensionalityReductionFeatureGroup:
 
     def test_perform_lda_reduction(self, sample_data: pd.DataFrame) -> None:
         """Test the _perform_lda_reduction method."""
-        
-        if "target" in sample_data.columns:
-            sample_data["target"] = pd.array(sample_data["target"], dtype="string")
-        
+
+        sample_data["category"] = pd.array(sample_data["category"], dtype="string")
+
         # Extract features
         X = sample_data[["feature0", "feature1", "feature2"]].values
 

@@ -61,6 +61,36 @@ class DuckdbRelation:
             new_rel = self._relation.project(projection)
         return DuckdbRelation(self._connection, new_rel)
 
+    def project(self, expression: str) -> "DuckdbRelation":
+        """Project columns using a raw SQL projection string.
+
+        Public, underscore-free equivalent of ``select(_raw_sql=expression)``.
+        Bypasses identifier quoting; never pass user-controlled input.
+        """
+        new_rel = self._relation.project(expression)
+        return DuckdbRelation(self._connection, new_rel)
+
+    def aggregate(self, agg_expr: str, group_by: str = "") -> "DuckdbRelation":
+        """GROUP BY aggregation. Thin wrapper around ``DuckDBPyRelation.aggregate``.
+
+        Both arguments are SQL fragments inlined verbatim; never pass
+        user-controlled input.
+        """
+        if group_by:
+            new_rel = self._relation.aggregate(agg_expr, group_by)
+        else:
+            new_rel = self._relation.aggregate(agg_expr)
+        return DuckdbRelation(self._connection, new_rel)
+
+    def query(self, alias: str, sql: str) -> "DuckdbRelation":
+        """Execute a full SELECT statement against this relation under ``alias``.
+
+        Thin wrapper around ``DuckDBPyRelation.query``. The SQL is inlined
+        verbatim; never pass user-controlled input.
+        """
+        new_rel = self._relation.query(alias, sql)
+        return DuckdbRelation(self._connection, new_rel)
+
     def set_alias(self, alias: str) -> "DuckdbRelation":
         new_rel = DuckdbRelation(self._connection, self._relation.set_alias(alias))
         new_rel._alias = alias

@@ -129,11 +129,11 @@ class DuckDBSimpleTransformFeatureGroup(ATestDuckDBFeatureGroup):
 
             if feature_name == "doubled_value":
                 # Add doubled_value column using DuckDB SQL
-                result_data = result_data.select(_raw_sql="*, value * 2 AS doubled_value")
+                result_data = result_data.project("*, value * 2 AS doubled_value")
 
             elif feature_name == "score_plus_ten":
                 # Add score_plus_ten column using DuckDB SQL
-                result_data = result_data.select(_raw_sql="*, score + 10 AS score_plus_ten")
+                result_data = result_data.project("*, score + 10 AS score_plus_ten")
 
         return result_data
 
@@ -157,7 +157,7 @@ class DuckDBSecondTransformFeatureGroup(ATestDuckDBFeatureGroup):
 
             if feature_name == "quadrupled_value":
                 # Add quadrupled_value column using DuckDB SQL
-                result_data = result_data.select(_raw_sql="*, doubled_value * 2 AS quadrupled_value")
+                result_data = result_data.project("*, doubled_value * 2 AS quadrupled_value")
 
         return result_data
 
@@ -187,15 +187,11 @@ class DuckDBAggregationFeatureGroup(ATestDuckDBFeatureGroup):
 
             if feature_name == "avg_value_by_category":
                 # Calculate average value by category
-                result_data = result_data.select(
-                    _raw_sql="*, AVG(value) OVER (PARTITION BY category) AS avg_value_by_category"
-                )
+                result_data = result_data.project("*, AVG(value) OVER (PARTITION BY category) AS avg_value_by_category")
 
             elif feature_name == "count_by_category":
                 # Count records by category
-                result_data = result_data.select(
-                    _raw_sql="*, COUNT(*) OVER (PARTITION BY category) AS count_by_category"
-                )
+                result_data = result_data.project("*, COUNT(*) OVER (PARTITION BY category) AS count_by_category")
 
         return result_data
 

@@ -27,8 +27,6 @@ class DuckdbRelation:
     - DuckDB's Relational API does not support PEP 249 parameterized queries,
       so ``filter()`` falls back to ``inline_params`` / ``quote_value`` for
       literal values. See ``sql_utils`` module docstring for details.
-    - ``_raw_sql`` on ``select()`` bypasses quoting; callers must not pass
-      user-controlled input.
     """
 
     def __init__(self, connection: duckdb.DuckDBPyConnection, relation: duckdb.DuckDBPyRelation) -> None:
@@ -52,19 +50,15 @@ class DuckdbRelation:
         new_rel = self._relation.filter(condition)
         return DuckdbRelation(self._connection, new_rel)
 
-    def select(self, *columns: str, _raw_sql: Optional[str] = None) -> "DuckdbRelation":
-        """Project columns. _raw_sql bypasses quoting: never pass user-controlled input."""
-        if _raw_sql is not None:
-            new_rel = self._relation.project(_raw_sql)
-        else:
-            projection = ", ".join(quote_ident(c) for c in columns)
-            new_rel = self._relation.project(projection)
+    def select(self, *columns: str) -> "DuckdbRelation":
+        """Project named columns, quoting each identifier."""
+        projection = ", ".join(quote_ident(c) for c in columns)
+        new_rel = self._relation.project(projection)
         return DuckdbRelation(self._connection, new_rel)
 
     def project(self, expression: str) -> "DuckdbRelation":
         """Project columns using a raw SQL projection string.
 
-        Public, underscore-free equivalent of ``select(_raw_sql=expression)``.
         Bypasses identifier quoting; never pass user-controlled input.
         """
         new_rel = self._relation.project(expression)
@@ -76,19 +70,16 @@ class DuckdbRelation:
         Both arguments are SQL fragments inlined verbatim; never pass
         user-controlled input.
         """
-        if group_by:
-            new_rel = self._relation.aggregate(agg_expr, group_by)
-        else:
-            new_rel = self._relation.aggregate(agg_expr)
+        new_rel = self._relation.aggregate(agg_expr, group_by) if group_by else self._relation.aggregate(agg_expr)
         return DuckdbRelation(self._connection, new_rel)
 
-    def query(self, alias: str, sql: str) -> "DuckdbRelation":
-        """Execute a full SELECT statement against this relation under ``alias``.
+    def query(self, view_name: str, sql: str) -> "DuckdbRelation":
+        """Execute a full SELECT statement against this relation under ``view_name``.
 
-        Thin wrapper around ``DuckDBPyRelation.query``. The SQL is inlined
-        verbatim; never pass user-controlled input.
+        Thin wrapper around ``DuckDBPyRelation.query``. SQL is inlined verbatim;
+        never pass user-controlled input.
         """
-        new_rel = self._relation.query(alias, sql)
+        new_rel = self._relation.query(view_name, sql)
         return DuckdbRelation(self._connection, new_rel)
 
     def set_alias(self, alias: str) -> "DuckdbRelation":

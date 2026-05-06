@@ -123,3 +123,54 @@ class TestDuckdbRelation(RelationTestMixin):
     def test_order_returns_duckdb_relation(self, sample_relation: "DuckdbRelation") -> None:
         ordered = sample_relation.order("age")
         assert isinstance(ordered, DuckdbRelation)
+
+    # --- Project (public raw projection) ---
+
+    def test_project_basic_expression(self, sample_relation: "DuckdbRelation") -> None:
+        result = sample_relation.project("id, age * 2 AS double_age")
+        ages = self.get_column_values(result, "double_age")
+        assert ages == [50, 60, 70, 80, 90]
+
+    def test_project_returns_duckdb_relation(self, sample_relation: "DuckdbRelation") -> None:
+        result = sample_relation.project("id")
+        assert isinstance(result, DuckdbRelation)
+
+    def test_project_preserves_row_count(self, sample_relation: "DuckdbRelation") -> None:
+        result = sample_relation.project("id, age")
+        assert len(result) == 5
+
+    # --- Aggregate ---
+
+    def test_aggregate_with_group_by(self, sample_relation: "DuckdbRelation") -> None:
+        result = sample_relation.aggregate("category, COUNT(*) AS n", "category").order("category")
+        cats = self.get_column_values(result, "category")
+        counts = self.get_column_values(result, "n")
+        assert cats == ["A", "B", "C"]
+        assert counts == [2, 2, 1]
+
+    def test_aggregate_without_group_by(self, sample_relation: "DuckdbRelation") -> None:
+        result = sample_relation.aggregate("COUNT(*) AS total")
+        assert self.get_column_values(result, "total") == [5]
+
+    def test_aggregate_returns_duckdb_relation(self, sample_relation: "DuckdbRelation") -> None:
+        result = sample_relation.aggregate("COUNT(*) AS total")
+        assert isinstance(result, DuckdbRelation)
+
+    # --- Query ---
+
+    def test_query_basic(self, sample_relation: "DuckdbRelation") -> None:
+        result = sample_relation.query("data", "SELECT id, age FROM data WHERE age >= 35 ORDER BY id")
+        ids = self.get_column_values(result, "id")
+        assert ids == [3, 4, 5]
+
+    def test_query_with_window_function(self, sample_relation: "DuckdbRelation") -> None:
+        result = sample_relation.query(
+            "data",
+            "SELECT id, ROW_NUMBER() OVER (PARTITION BY category ORDER BY age) AS rn FROM data ORDER BY id",
+        )
+        rns = self.get_column_values(result, "rn")
+        assert rns == [1, 1, 2, 1, 2]
+
+    def test_query_returns_duckdb_relation(self, sample_relation: "DuckdbRelation") -> None:
+        result = sample_relation.query("data", "SELECT * FROM data LIMIT 1")
+        assert isinstance(result, DuckdbRelation)

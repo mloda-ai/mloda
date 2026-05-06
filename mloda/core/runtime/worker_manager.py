@@ -5,7 +5,6 @@ import queue
 import threading
 import time
 import logging
-from multiprocessing.process import BaseProcess
 from typing import Any, Callable, Optional
 from uuid import UUID
 
@@ -15,11 +14,10 @@ logger = logging.getLogger(__name__)
 class WorkerManager:
     """Manages thread/process lifecycle for parallel execution."""
 
-    def __init__(self, multiprocessing_context: Any = None) -> None:
+    def __init__(self) -> None:
         """Initialize empty state."""
-        self.multiprocessing_context = multiprocessing_context or multiprocessing.get_context("spawn")
-        self.tasks: list[threading.Thread | BaseProcess] = []
-        self.process_register: dict[UUID, tuple[BaseProcess, Any, Any]] = {}
+        self.tasks: list[threading.Thread | multiprocessing.Process] = []
+        self.process_register: dict[UUID, tuple[Any, Any, Any]] = {}
         self.result_queues_collection: set[Any] = set()
         self.result_uuids_collection: set[UUID] = set()
 
@@ -32,10 +30,10 @@ class WorkerManager:
         self, cfw_uuid: UUID, target: Callable[..., None], args: tuple[Any, ...]
     ) -> tuple[Any, Any, Any]:
         """Create worker process with command and result queues."""
-        command_queue = self.multiprocessing_context.Queue()
-        result_queue = self.multiprocessing_context.Queue()
+        command_queue: multiprocessing.Queue[Any] = multiprocessing.Queue()
+        result_queue: multiprocessing.Queue[Any] = multiprocessing.Queue()
 
-        process = self.multiprocessing_context.Process(target=target, args=(command_queue, result_queue, *args))
+        process = multiprocessing.Process(target=target, args=(command_queue, result_queue, *args))
 
         self.process_register[cfw_uuid] = (process, command_queue, result_queue)
         self.result_queues_collection.add(result_queue)
@@ -87,7 +85,7 @@ class WorkerManager:
         failed = False
         for task in self.tasks:
             try:
-                if isinstance(task, BaseProcess):
+                if isinstance(task, multiprocessing.Process):
                     task.terminate()
                 task.join()
             except Exception as e:

@@ -42,6 +42,18 @@ class TestDuckdbRelation(RelationTestMixin):
     def get_column_values(self, result: Any, column: str) -> list[Any]:
         return result.df()[column].tolist()  # type: ignore[no-any-return]
 
+    # --- Select ---
+
+    def test_select_raw_sql_expression(self, sample_relation: "DuckdbRelation") -> None:
+        result = sample_relation.project("*, age * 2 AS doubled_age")
+        assert "doubled_age" in result.columns
+        assert len(result) == 5
+
+    def test_select_raw_sql_window_function(self, sample_relation: "DuckdbRelation") -> None:
+        result = sample_relation.project("*, AVG(age) OVER () AS avg_age")
+        assert "avg_age" in result.columns
+        assert len(result) == 5
+
     # DuckDB-specific tests
 
     def test_stores_connection_and_relation(self, connection: Any) -> None:
@@ -174,3 +186,20 @@ class TestDuckdbRelation(RelationTestMixin):
     def test_query_returns_duckdb_relation(self, sample_relation: "DuckdbRelation") -> None:
         result = sample_relation.query("data", "SELECT * FROM data LIMIT 1")
         assert isinstance(result, DuckdbRelation)
+
+    # --- Injection-contract (verbatim passthrough) ---
+
+    def test_project_passes_expression_verbatim(self, sample_relation: "DuckdbRelation") -> None:
+        """project() must pass the caller's expression unchanged; quoting would turn function calls into string literals."""
+        result = sample_relation.project("UPPER(name) AS upper_name")
+        assert self.get_column_values(result, "upper_name") == ["ALICE", "BOB", "CHARLIE", "DAVID", "EVE"]
+
+    def test_aggregate_passes_expression_verbatim(self, sample_relation: "DuckdbRelation") -> None:
+        """aggregate() must pass the caller's SQL fragment unchanged; quoting would break FILTER (WHERE ...) syntax."""
+        result = sample_relation.aggregate("COUNT(*) FILTER (WHERE age > 30) AS over_30")
+        assert self.get_column_values(result, "over_30") == [3]
+
+    def test_query_passes_sql_verbatim(self, sample_relation: "DuckdbRelation") -> None:
+        """query() must pass the caller's SQL string unchanged; quoting would prevent execution of the SELECT statement."""
+        result = sample_relation.query("t", "SELECT UPPER(name) AS upper_name FROM t ORDER BY upper_name")
+        assert self.get_column_values(result, "upper_name") == ["ALICE", "BOB", "CHARLIE", "DAVID", "EVE"]

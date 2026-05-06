@@ -42,6 +42,6 @@ if DUCKDB_AVAILABLE:
 
         def evaluate_mask(self, mask: Any, data: DuckdbRelation) -> list[bool]:
             bool_expr = f"CASE WHEN {mask} THEN 1 ELSE 0 END AS __match__"
-            projected = data.select(_raw_sql=bool_expr)
+            projected = data.project(bool_expr)
             arrow = projected.to_arrow_table()
             return [bool(arrow.column("__match__")[i].as_py()) for i in range(arrow.num_rows)]

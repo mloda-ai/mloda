@@ -482,3 +482,46 @@ def test_class_source_hash_is_stable_across_unrelated_cell_edits() -> None:
         "Identical class bodies must produce equal source hashes regardless of "
         f"unrelated cell content (got {h1[:16]}... vs {h2[:16]}...)"
     )
+
+
+# ---------------------------------------------------------------------------
+# Case 11: resolve_feature(plugin_collector=...) accepts the override flag
+# ---------------------------------------------------------------------------
+def test_resolve_feature_with_allow_redefinition_collector_succeeds() -> None:
+    """``resolve_feature`` must accept a ``plugin_collector`` parameter so a user
+    facing a different-source redefinition conflict can pass
+    ``PluginCollector().set_allow_redefinition()`` and get the live class back,
+    matching the troubleshooting doc claim that this collector flows through to
+    ``resolve_feature``.
+
+    Today this test fails with
+    ``TypeError: resolve_feature() got an unexpected keyword argument 'plugin_collector'``
+    because the signature is ``resolve_feature(feature_name: str)``. After the
+    green phase adds the parameter, this test must pass: dedup keeps the live
+    class when ``allow_redefinition=True``, and the resolved feature_group is v2.
+    """
+    qualname = "MyFG_Test10"
+    feature_name = "case10_feature_unique_xyz"
+    src_v1 = _make_fg_source(qualname, feature_name)
+    src_v2 = _make_fg_source(
+        qualname,
+        feature_name,
+        extra_body="    def extra_method(self):\n        return 7\n",
+    )
+
+    v1 = _exec_fg_in_main(qualname, src_v1, "cell-test10-v1")
+    v2 = _exec_fg_in_main(qualname, src_v2, "cell-test10-v2")
+    _REF_STORE.extend([v1, v2])
+
+    plugin_collector = PluginCollector().set_allow_redefinition()
+    result = resolve_feature(feature_name, plugin_collector=plugin_collector)
+
+    assert result.error is None, (
+        f"resolve_feature with allow_redefinition collector must succeed, got error: {result.error!r}"
+    )
+    assert result.feature_group is not None, "resolve_feature should return a feature_group"
+
+    live = getattr(sys.modules["__main__"], qualname)
+    assert result.feature_group is live, "Expected resolved feature_group to be the live class in __main__"
+    assert result.feature_group is v2, "Expected v2 (the newer redefinition) to be the resolved class"
+    assert result.feature_group.__qualname__ == qualname

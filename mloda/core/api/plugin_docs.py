@@ -235,7 +235,7 @@ def get_extender_docs(
     return sorted(results, key=lambda x: x.name)
 
 
-def resolve_feature(feature_name: str) -> ResolvedFeature:
+def resolve_feature(feature_name: str, plugin_collector: Optional[PluginCollector] = None) -> ResolvedFeature:
     """
     Resolve a feature name to its matching FeatureGroup class.
 
@@ -245,13 +245,19 @@ def resolve_feature(feature_name: str) -> ResolvedFeature:
 
     Args:
         feature_name: The name of the feature to resolve.
+        plugin_collector: Optional PluginCollector. When provided, its
+            ``allow_redefinition`` flag is threaded into deduplication so that
+            redefined FeatureGroup classes (e.g. via reload) do not raise.
 
     Returns:
         ResolvedFeature containing the resolved FeatureGroup (if found),
         all matching candidates, and any error message.
     """
+    allow_redefinition = plugin_collector.allow_redefinition if plugin_collector is not None else False
     try:
-        all_fgs = list(dedup_feature_group_subclasses(get_all_subclasses(FeatureGroup)))
+        all_fgs = list(
+            dedup_feature_group_subclasses(get_all_subclasses(FeatureGroup), allow_redefinition=allow_redefinition)
+        )
     except ValueError as exc:
         return ResolvedFeature(
             feature_name=feature_name,

@@ -25,6 +25,7 @@ from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.api.plugin_docs import resolve_feature
+from mloda.core.api.plugin_info import ResolvedFeature
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins, dedup_feature_group_subclasses
 
 
@@ -385,3 +386,36 @@ def test_resolve_feature_after_jupyter_redefinition_succeeds() -> None:
         f"resolved feature_group qualname must be {qualname!r}, got {result.feature_group.__qualname__!r}"
     )
     assert result.feature_group.__module__ == "__main__"
+
+
+# ---------------------------------------------------------------------------
+# Case 9: resolve_feature must not raise on redefinition conflict
+# ---------------------------------------------------------------------------
+def test_resolve_feature_returns_error_for_redef_conflict_does_not_raise() -> None:
+    """``resolve_feature`` is a non-throwing debug API: when ``dedup_feature_group_subclasses``
+    detects a different-content redefinition conflict, the error must surface in
+    ``ResolvedFeature.error`` rather than as an unhandled ``ValueError``.
+    """
+    qualname = "MyFG_Test9"
+    feature_name = "case9_feature_unique_xyz"
+    src_v1 = _make_fg_source(qualname, feature_name)
+    src_v2 = _make_fg_source(
+        qualname,
+        feature_name,
+        extra_body="    def extra_method(self):\n        return 42\n",
+    )
+
+    v1 = _exec_fg_in_main(qualname, src_v1, "cell-test9-v1")
+    v2 = _exec_fg_in_main(qualname, src_v2, "cell-test9-v2")
+    _REF_STORE.extend([v1, v2])
+
+    result = resolve_feature(feature_name)
+
+    assert isinstance(result, ResolvedFeature), f"Expected ResolvedFeature, got {type(result).__name__}"
+    assert result.feature_group is None, (
+        f"feature_group must be None when redefinition conflict prevents resolution, got {result.feature_group!r}"
+    )
+    assert result.error is not None, "error must be populated when resolution cannot proceed"
+    assert any(token in result.error for token in (qualname, "redefined", "set_allow_redefinition")), (
+        f"error must mention the qualname, 'redefined', or 'set_allow_redefinition'; got: {result.error!r}"
+    )

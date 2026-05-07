@@ -250,7 +250,15 @@ def resolve_feature(feature_name: str) -> ResolvedFeature:
         ResolvedFeature containing the resolved FeatureGroup (if found),
         all matching candidates, and any error message.
     """
-    all_fgs = list(dedup_feature_group_subclasses(get_all_subclasses(FeatureGroup)))
+    try:
+        all_fgs = list(dedup_feature_group_subclasses(get_all_subclasses(FeatureGroup)))
+    except ValueError as exc:
+        return ResolvedFeature(
+            feature_name=feature_name,
+            feature_group=None,
+            candidates=[],
+            error=str(exc),
+        )
     candidates: list[type[FeatureGroup]] = []
     feature_name_obj = FeatureName(feature_name)
 

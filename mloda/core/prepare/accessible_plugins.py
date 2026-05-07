@@ -28,7 +28,7 @@ def _running_in_zmq_shell() -> bool:
     ipython_instance = get_ipython()  # type: ignore[no-untyped-call]
     if ipython_instance is None:
         return False
-    return ipython_instance.__class__.__name__ == "ZMQInteractiveShell"
+    return bool(ipython_instance.__class__.__name__ == "ZMQInteractiveShell")
 
 
 def _safe_class_source_hash(cls: type[FeatureGroup]) -> Optional[str]:

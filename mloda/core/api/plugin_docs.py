@@ -25,6 +25,7 @@ from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.api.plugin_info import ComputeFrameworkInfo, ExtenderInfo, FeatureGroupInfo, ResolvedFeature
+from mloda.core.prepare.accessible_plugins import dedup_feature_group_subclasses
 
 
 def get_feature_group_docs(
@@ -50,7 +51,11 @@ def get_feature_group_docs(
     Returns:
         List of FeatureGroupInfo objects sorted by name.
     """
-    all_feature_groups = get_all_subclasses(FeatureGroup)
+    allow_redefinition = plugin_collector.allow_redefinition if plugin_collector is not None else False
+    all_feature_groups: set[type[FeatureGroup]] = get_all_subclasses(FeatureGroup)
+    if plugin_collector is not None:
+        all_feature_groups = {fg for fg in all_feature_groups if plugin_collector.applicable_feature_group_class(fg)}
+    all_feature_groups = dedup_feature_group_subclasses(all_feature_groups, allow_redefinition=allow_redefinition)
     results = []
 
     for fg_class in all_feature_groups:
@@ -77,9 +82,6 @@ def get_feature_group_docs(
                 continue
 
         if version_contains is not None and version_contains not in version:
-            continue
-
-        if plugin_collector is not None and not plugin_collector.applicable_feature_group_class(fg_class):
             continue
 
         results.append(
@@ -231,7 +233,7 @@ def get_extender_docs(
     return sorted(results, key=lambda x: x.name)
 
 
-def resolve_feature(feature_name: str) -> ResolvedFeature:
+def resolve_feature(feature_name: str, plugin_collector: Optional[PluginCollector] = None) -> ResolvedFeature:
     """
     Resolve a feature name to its matching FeatureGroup class.
 
@@ -241,12 +243,32 @@ def resolve_feature(feature_name: str) -> ResolvedFeature:
 
     Args:
         feature_name: The name of the feature to resolve.
+        plugin_collector: Optional PluginCollector. When provided, its
+            ``allow_redefinition`` flag is threaded into deduplication so that
+            redefined FeatureGroup classes (e.g. via reload) do not raise.
 
     Returns:
         ResolvedFeature containing the resolved FeatureGroup (if found),
         all matching candidates, and any error message.
     """
-    all_fgs = list(get_all_subclasses(FeatureGroup))
+    allow_redefinition = plugin_collector.allow_redefinition if plugin_collector is not None else False
+    fg_classes: set[type[FeatureGroup]] = get_all_subclasses(FeatureGroup)
+    if plugin_collector is not None:
+        fg_classes = {fg for fg in fg_classes if plugin_collector.applicable_feature_group_class(fg)}
+    try:
+        all_fgs = list(dedup_feature_group_subclasses(fg_classes, allow_redefinition=allow_redefinition))
+    except ValueError as exc:
+        raw_conflicts = list(getattr(exc, "conflicts", []))
+        feature_name_obj = FeatureName(feature_name)
+        matching_conflicts = [
+            fg for fg in raw_conflicts if fg.match_feature_group_criteria(feature_name_obj, Options(), None)
+        ]
+        return ResolvedFeature(
+            feature_name=feature_name,
+            feature_group=None,
+            candidates=matching_conflicts,
+            error=str(exc),
+        )
     candidates: list[type[FeatureGroup]] = []
     feature_name_obj = FeatureName(feature_name)
 

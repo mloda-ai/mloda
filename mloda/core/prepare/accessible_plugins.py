@@ -1,13 +1,212 @@
+from __future__ import annotations
+
+import logging
+import sys
 from copy import deepcopy
-from typing import Optional
+from typing import Optional, cast
+
+from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 
 
+logger = logging.getLogger(__name__)
+
+
 FeatureGroupEnvironmentMapping = dict[type[FeatureGroup], set[type[ComputeFramework]]]
+
+
+class RedefinitionConflictError(ValueError):
+    """Raised by dedup when same-key FG classes differ in source.
+
+    Carries the full list of conflicting classes via ``.conflicts`` so callers
+    (e.g. ``resolve_feature``) can populate ``ResolvedFeature.candidates``
+    instead of leaving it empty. Subclasses ``ValueError`` so existing
+    ``except ValueError:`` callers stay compatible.
+    """
+
+    def __init__(self, message: str, conflicts: list[type[FeatureGroup]]) -> None:
+        super().__init__(message)
+        self.conflicts = conflicts
+
+
+def _running_in_zmq_shell() -> bool:
+    """Detect IPython kernel (Jupyter) environment for the kernel-restart hint."""
+    try:
+        from IPython import get_ipython  # type: ignore[attr-defined]
+    except ImportError:
+        return False
+
+    ipython_instance = get_ipython()  # type: ignore[no-untyped-call]
+    if ipython_instance is None:
+        return False
+    return bool(ipython_instance.__class__.__name__ == "ZMQInteractiveShell")
+
+
+def _safe_class_source_hash(cls: type[FeatureGroup]) -> Optional[str]:
+    """Return source hash for a FeatureGroup subclass or None if unavailable.
+
+    ``inspect.getsource`` raises ``OSError`` (no source backing) or ``TypeError``
+    (built-in class) for classes built dynamically via ``type()``. Both leave the
+    class without a stable source hash, so we return ``None``.
+    """
+    try:
+        return BaseFeatureGroupVersion.class_source_hash(cls)
+    except (OSError, TypeError):
+        return None
+
+
+def dedup_feature_group_subclasses(
+    classes: set[type[FeatureGroup]],
+    allow_redefinition: bool = False,
+) -> set[type[FeatureGroup]]:
+    """Deduplicate FeatureGroup subclasses sharing the same ``(module, qualname)``.
+
+    Long-lived namespaces (Jupyter notebooks, ``importlib.reload``) accumulate stale
+    class objects in ``FeatureGroup.__subclasses__()``. This helper collapses
+    identical-content duplicates silently and raises a clear ``ValueError`` when
+    duplicates differ in source (override via ``allow_redefinition=True``).
+    """
+    grouped: dict[tuple[str, str], list[type[FeatureGroup]]] = {}
+    for cls in classes:
+        key = (cls.__module__, cls.__qualname__)
+        grouped.setdefault(key, []).append(cls)
+
+    survivors: set[type[FeatureGroup]] = set()
+    conflicts: list[tuple[tuple[str, str], list[tuple[type[FeatureGroup], str]]]] = []
+
+    for key, members in grouped.items():
+        if len(members) == 1:
+            survivors.add(members[0])
+            continue
+
+        # Factory pattern: groups whose members are not bound under their name in
+        # any module namespace are produced by factories or held only via
+        # closures. They are intentionally distinct objects, so preserve all.
+        if not _any_live_in_module(members):
+            logger.debug(
+                "dedup_feature_group_subclasses: preserving group %s (no member bound in its module)",
+                key,
+            )
+            survivors.update(members)
+            continue
+
+        # Live-descendants check: preserve the whole group if any member has
+        # subclasses already alive in the FG tree.
+        has_live_descendants = any(len(get_all_subclasses(member)) > 0 for member in members)
+        if has_live_descendants:
+            logger.debug("dedup_feature_group_subclasses: preserving group %s due to live descendants", key)
+            survivors.update(members)
+            continue
+
+        hashes = [_safe_class_source_hash(m) for m in members]
+        if any(h is None for h in hashes):
+            logger.debug("dedup_feature_group_subclasses: preserving group %s (source unavailable)", key)
+            survivors.update(members)
+            continue
+
+        hashes_str: list[str] = cast(list[str], hashes)
+        unique_hashes = set(hashes_str)
+        if len(unique_hashes) == 1:
+            survivor = _pick_survivor(members)
+            logger.debug(
+                "dedup_feature_group_subclasses: collapsed %d identical members of %s",
+                len(members),
+                key,
+            )
+            survivors.add(survivor)
+            continue
+
+        if allow_redefinition:
+            survivor = _pick_survivor(members)
+            logger.debug(
+                "dedup_feature_group_subclasses: kept newest of %d differing members of %s (allow_redefinition=True)",
+                len(members),
+                key,
+            )
+            survivors.add(survivor)
+            continue
+
+        conflicts.append((key, list(zip(members, hashes_str))))
+
+    if conflicts:
+        all_conflicting_classes = [_cls for _, hashed in conflicts for _cls, _ in hashed]
+        raise RedefinitionConflictError(_build_conflict_error(conflicts), all_conflicting_classes)
+
+    return survivors
+
+
+def _pick_survivor(members: list[type[FeatureGroup]]) -> type[FeatureGroup]:
+    """Pick the live-in-module class.
+
+    Invariant: ``_pick_survivor`` is only called after ``_any_live_in_module(members)``
+    returned True at the dedup call site, so at least one member satisfies
+    ``_is_live_in_module``. And ``_is_live_in_module`` checks
+    ``getattr(module, cls.__name__, None) is cls``, which is single-valued: at most
+    one member can match because the module attribute resolves to exactly one
+    class object. The for-loop is therefore fully deterministic — set-iteration
+    order does not affect which class is returned.
+
+    The ``return members[-1]`` fallback is only theoretically reachable in
+    pathological multi-thread states where ``sys.modules`` is mutated between
+    ``_any_live_in_module`` and this call.
+    """
+    for cls in members:
+        if _is_live_in_module(cls):
+            return cls
+    return members[-1]
+
+
+def _is_live_in_module(cls: type[FeatureGroup]) -> bool:
+    """True if ``cls`` is currently bound under its name in its own module."""
+    module = sys.modules.get(cls.__module__)
+    if module is None:
+        return False
+    return getattr(module, cls.__name__, None) is cls
+
+
+def _any_live_in_module(members: list[type[FeatureGroup]]) -> bool:
+    """True if any class is currently bound under its name in its module."""
+    return any(_is_live_in_module(cls) for cls in members)
+
+
+def _cell_label(cls: type[FeatureGroup]) -> Optional[str]:
+    """Return the first synthetic ``<...>`` filename a class's methods live in.
+
+    Returns ``None`` for classes whose methods all live in real source files.
+    Mirrors the synthetic-filename detection in ``_linecache_source_for_class``
+    but stops at the first match — sufficient for "where was this class defined"
+    in the redef-conflict error message.
+    """
+    for value in cls.__dict__.values():
+        func = value.__func__ if hasattr(value, "__func__") else value
+        code = getattr(func, "__code__", None)
+        if code is None:
+            continue
+        co_filename = code.co_filename
+        if co_filename.startswith("<") and co_filename.endswith(">"):
+            return str(co_filename)
+    return None
+
+
+def _build_conflict_error(
+    conflicts: list[tuple[tuple[str, str], list[tuple[type[FeatureGroup], str]]]],
+) -> str:
+    lines = ["FeatureGroup redefined with different source code:"]
+    for (module, qualname), hashed in conflicts:
+        for _cls, source_hash in hashed:
+            cell = _cell_label(_cls)
+            location = f"{module} {cell}" if cell else module
+            lines.append(f"  - {qualname} ({location}) source hash {source_hash[:8]}")
+    lines.append(
+        "Set PluginCollector(...).set_allow_redefinition() to keep only the most "
+        "recently defined version of each class."
+    )
+    if _running_in_zmq_shell():
+        lines.append("If you are running this in a notebook, restart the kernel to clear stale class definitions.")
+    return "\n".join(lines)
 
 
 class PreFilterPlugins:
@@ -33,6 +232,11 @@ class PreFilterPlugins:
             for accessible_fg in deepcopy(accessible_feature_groups):
                 if not plugin_collector.applicable_feature_group_class(accessible_fg):
                     accessible_feature_groups.remove(accessible_fg)
+
+        allow_redefinition = plugin_collector.allow_redefinition if plugin_collector is not None else False
+        accessible_feature_groups = dedup_feature_group_subclasses(
+            accessible_feature_groups, allow_redefinition=allow_redefinition
+        )
 
         if len(accessible_feature_groups) == 0:
             raise ValueError("No feature groups are loaded. Did you call PluginLoader.all()?")

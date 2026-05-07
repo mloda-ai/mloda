@@ -111,7 +111,6 @@ class IdentifyFeatureGroupClass:
             raise ValueError(
                 f"Multiple feature groups found for feature '{feature.name}':\n"
                 f"{format_feature_group_classes(feature_group.keys(), include_domain=True)}\n"
-                f"{self._adjust_error_message__by_notebook_env()}\n"
                 "For troubleshooting guide, see: https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/"
             )
 
@@ -175,27 +174,3 @@ class IdentifyFeatureGroupClass:
             _identified_feature_groups.pop(fg)
 
         return _identified_feature_groups
-
-    def _adjust_error_message__by_notebook_env(self) -> str:
-        """
-        Check if the code is running in a notebook environment.
-        """
-        try:
-            from IPython import get_ipython  # type: ignore[attr-defined]
-
-            ipython_instance = get_ipython()  # type: ignore[no-untyped-call]
-            if ipython_instance is None:
-                return ""
-            shell: str = ipython_instance.__class__.__name__
-            if shell == "ZMQInteractiveShell":
-                return """If you are running this in a notebook, please restart the kernel to clear any cached plugins.
-                          If you experience this multiple times, please open an issue or contact the maintainers for prioritization.
-                          https://github.com/mloda-ai/mloda/issues
-                """
-        except ImportError:
-            # IPython not installed
-            pass
-        except Exception:
-            # An exception here means we are not in a notebook environment.
-            pass  # nosec B110
-        return ""

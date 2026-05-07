@@ -10,11 +10,22 @@ class PluginCollector:
 
     Further, this class is useful for testing, where you want to test the behavior of the system with different
     feature groups enabled or disabled.
+
+    Use ``set_allow_redefinition()`` to keep only the most recently defined version of each FeatureGroup
+    class when duplicates differ in source — useful when iterating on a FeatureGroup definition in a
+    Jupyter cell or via ``importlib.reload``, where the old class object survives in
+    ``FeatureGroup.__subclasses__()`` and would otherwise raise a "FeatureGroup redefined" error.
     """
 
     def __init__(self) -> None:
         self.disabled_feature_group_classes: set[type[FeatureGroup]] = set()
         self.enabled_feature_group_classes: set[type[FeatureGroup]] = set()
+        self.allow_redefinition: bool = False
+
+    def set_allow_redefinition(self, allow: bool = True) -> "PluginCollector":
+        """Allow keeping the most recently defined class when duplicates differ in source."""
+        self.allow_redefinition = allow
+        return self
 
     def add_disabled_feature_group_classes(self, feature_group_cls: set[type[FeatureGroup]]) -> None:
         self.disabled_feature_group_classes.update(feature_group_cls)

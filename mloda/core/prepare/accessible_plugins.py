@@ -187,7 +187,7 @@ def _cell_label(cls: type[FeatureGroup]) -> Optional[str]:
             continue
         co_filename = code.co_filename
         if co_filename.startswith("<") and co_filename.endswith(">"):
-            return co_filename
+            return str(co_filename)
     return None
 
 

@@ -73,6 +73,8 @@ If both versions of the class have **identical** source code (e.g., re-running a
 
 For rapid iteration in notebooks, opt in to "newest wins" using the builder method on `PluginCollector`:
 
+**Option A** — set the override flag on a fresh collector:
+
 ```python
 from mloda.provider import FeatureGroup
 from mloda.user import PluginCollector
@@ -83,7 +85,11 @@ class SomeFG(FeatureGroup):
 
 
 plugin_collector = PluginCollector().set_allow_redefinition()
-# Compose with disable/enable filters as needed:
+```
+
+**Option B** — compose with disable/enable filters:
+
+```python
 plugin_collector = (
     PluginCollector.disabled_feature_groups({SomeFG})
     .set_allow_redefinition()

@@ -24,7 +24,7 @@ from mloda.core.abstract_plugins.components.plugin_option.plugin_collector impor
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.core.api.plugin_docs import resolve_feature
+from mloda.core.api.plugin_docs import get_feature_group_docs, resolve_feature
 from mloda.core.api.plugin_info import ResolvedFeature
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins, dedup_feature_group_subclasses
 
@@ -32,6 +32,11 @@ from mloda.core.prepare.accessible_plugins import PreFilterPlugins, dedup_featur
 # Module-level reference store. This simulates IPython's ``_oh``/``Out[N]`` history,
 # which keeps strong refs to all cell-evaluated objects. It MUST be module-scoped so
 # the references survive across all assertions inside a single test.
+#
+# IMPORTANT: Tests MUST use a unique qualname (e.g., ``MyFG_TestN``) per test —
+# ``_REF_STORE`` is never cleared during the session, so any class registered here
+# survives in ``FeatureGroup.__subclasses__()`` and would interfere with later
+# tests that share the same qualname. Filter by ``__qualname__`` when asserting.
 _REF_STORE: list[Any] = []
 
 
@@ -268,8 +273,13 @@ def test_type_built_classes_preserved_without_source() -> None:
     feature_name = "case5_feature_unique_xyz"
 
     def _make_dyn(suffix: str) -> type[FeatureGroup]:
+        # __module__ = "__main__" mirrors a Jupyter factory pattern (the realistic
+        # source-unavailable shape) and prevents these classes from leaking into
+        # downstream tests that iterate FeatureGroup.__subclasses__() and call
+        # version() — get_feature_group_docs filters out __main__ classes.
         body: dict[str, Any] = {
             "feature_names_supported": classmethod(lambda cls: {feature_name + suffix}),
+            "__module__": "__main__",
         }
         return type(qualname, (FeatureGroup,), body)
 
@@ -525,3 +535,64 @@ def test_resolve_feature_with_allow_redefinition_collector_succeeds() -> None:
     assert result.feature_group is live, "Expected resolved feature_group to be the live class in __main__"
     assert result.feature_group is v2, "Expected v2 (the newer redefinition) to be the resolved class"
     assert result.feature_group.__qualname__ == qualname
+
+
+# ---------------------------------------------------------------------------
+# Case 12: get_feature_group_docs runs dedup, does not raise with allow flag
+# ---------------------------------------------------------------------------
+def test_get_feature_group_docs_with_allow_redefinition_does_not_raise() -> None:
+    """``get_feature_group_docs`` must route through dedup so that a Jupyter-style
+    different-source redefinition does not surface as an unhandled ``ValueError``
+    when the user passes ``PluginCollector().set_allow_redefinition()``.
+
+    Result list will not include the test class (``plugin_docs.py`` filters out
+    ``__module__ == "__main__"``); the contract under test is that the dedup code
+    path runs to completion without raising.
+    """
+    qualname = "MyFG_Test12_Docs"
+    feature_name = "case12_feature_unique_xyz"
+    src_v1 = _make_fg_source(qualname, feature_name)
+    src_v2 = _make_fg_source(
+        qualname,
+        feature_name,
+        extra_body="    def extra_method(self):\n        return 12\n",
+    )
+
+    v1 = _exec_fg_in_main(qualname, src_v1, "cell-test12-v1")
+    v2 = _exec_fg_in_main(qualname, src_v2, "cell-test12-v2")
+    _REF_STORE.extend([v1, v2])
+
+    plugin_collector = PluginCollector().set_allow_redefinition()
+    result = get_feature_group_docs(plugin_collector=plugin_collector)
+
+    assert isinstance(result, list)
+
+
+# ---------------------------------------------------------------------------
+# Case 13: get_feature_group_docs raises ValueError on conflict without flag
+# ---------------------------------------------------------------------------
+def test_get_feature_group_docs_raises_on_redef_conflict_without_flag() -> None:
+    """Without the ``allow_redefinition`` flag, ``get_feature_group_docs`` must
+    propagate the dedup ``ValueError`` so users see the same diagnostic they get
+    from the other call sites. This is the discriminating test that locks in the
+    dedup wiring at ``plugin_docs.py`` — removing the call would make this fail.
+    """
+    qualname = "MyFG_Test13_Docs"
+    feature_name = "case13_feature_unique_xyz"
+    src_v1 = _make_fg_source(qualname, feature_name)
+    src_v2 = _make_fg_source(
+        qualname,
+        feature_name,
+        extra_body="    def extra_method(self):\n        return 13\n",
+    )
+
+    v1 = _exec_fg_in_main(qualname, src_v1, "cell-test13-v1")
+    v2 = _exec_fg_in_main(qualname, src_v2, "cell-test13-v2")
+    _REF_STORE.extend([v1, v2])
+
+    with pytest.raises(ValueError) as exc_info:
+        get_feature_group_docs()
+
+    msg = str(exc_info.value)
+    assert "FeatureGroup redefined" in msg, f"Expected 'FeatureGroup redefined' in error, got: {msg}"
+    assert "set_allow_redefinition" in msg, f"Expected 'set_allow_redefinition' in error, got: {msg}"

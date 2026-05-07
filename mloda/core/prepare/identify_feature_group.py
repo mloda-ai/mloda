@@ -111,7 +111,6 @@ class IdentifyFeatureGroupClass:
             raise ValueError(
                 f"Multiple feature groups found for feature '{feature.name}':\n"
                 f"{format_feature_group_classes(feature_group.keys(), include_domain=True)}\n"
-                f"{self._adjust_error_message__by_notebook_env()}\n"
                 "For troubleshooting guide, see: https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/"
             )
 
@@ -175,11 +174,3 @@ class IdentifyFeatureGroupClass:
             _identified_feature_groups.pop(fg)
 
         return _identified_feature_groups
-
-    def _adjust_error_message__by_notebook_env(self) -> str:
-        """
-        After dedup, distinct-class conflicts are real ambiguities that kernel restart
-        will not fix. The kernel-restart hint now lives in the dedup-conflict error
-        raised from accessible_plugins.py. Kept as a no-op for call-site compatibility.
-        """
-        return ""

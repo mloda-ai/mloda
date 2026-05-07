@@ -22,27 +22,26 @@ def _running_in_zmq_shell() -> bool:
     """Detect IPython kernel (Jupyter) environment for the kernel-restart hint."""
     try:
         from IPython import get_ipython  # type: ignore[attr-defined]
-
-        ipython_instance = get_ipython()  # type: ignore[no-untyped-call]
-        if ipython_instance is None:
-            return False
-        return bool(ipython_instance.__class__.__name__ == "ZMQInteractiveShell")
     except ImportError:
         return False
-    except Exception:  # nosec B110
+
+    ipython_instance = get_ipython()  # type: ignore[no-untyped-call]
+    if ipython_instance is None:
         return False
+    return ipython_instance.__class__.__name__ == "ZMQInteractiveShell"
 
 
 def _safe_class_source_hash(cls: type[FeatureGroup]) -> Optional[str]:
     """Return source hash for a FeatureGroup subclass or None if unavailable.
 
-    Catches a broad ``Exception`` because ``inspect.getsource`` raises a variety of
-    errors (``OSError``, ``TypeError``, ``IndentationError``, ``ValueError``) for
-    classes built dynamically via ``type()`` or otherwise lacking source backing.
+    ``inspect.getsource`` raises ``OSError``/``TypeError`` for classes built
+    dynamically via ``type()``, and may raise ``IndentationError``/``ValueError``
+    on malformed source backings. All four leave the class without a stable
+    source hash, so we return ``None``.
     """
     try:
         return BaseFeatureGroupVersion.class_source_hash(cls)
-    except Exception:
+    except (OSError, TypeError, IndentationError, ValueError):
         return None
 
 

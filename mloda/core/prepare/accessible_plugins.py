@@ -18,6 +18,20 @@ logger = logging.getLogger(__name__)
 FeatureGroupEnvironmentMapping = dict[type[FeatureGroup], set[type[ComputeFramework]]]
 
 
+class RedefinitionConflictError(ValueError):
+    """Raised by dedup when same-key FG classes differ in source.
+
+    Carries the full list of conflicting classes via ``.conflicts`` so callers
+    (e.g. ``resolve_feature``) can populate ``ResolvedFeature.candidates``
+    instead of leaving it empty. Subclasses ``ValueError`` so existing
+    ``except ValueError:`` callers stay compatible.
+    """
+
+    def __init__(self, message: str, conflicts: list[type[FeatureGroup]]) -> None:
+        super().__init__(message)
+        self.conflicts = conflicts
+
+
 def _running_in_zmq_shell() -> bool:
     """Detect IPython kernel (Jupyter) environment for the kernel-restart hint."""
     try:
@@ -118,13 +132,27 @@ def dedup_feature_group_subclasses(
         conflicts.append((key, list(zip(members, hashes))))  # type: ignore[arg-type]
 
     if conflicts:
-        raise ValueError(_build_conflict_error(conflicts))
+        all_conflicting_classes = [_cls for _, hashed in conflicts for _cls, _ in hashed]
+        raise RedefinitionConflictError(_build_conflict_error(conflicts), all_conflicting_classes)
 
     return survivors
 
 
 def _pick_survivor(members: list[type[FeatureGroup]]) -> type[FeatureGroup]:
-    """Pick the live-in-module class, falling back to the last entry."""
+    """Pick the live-in-module class.
+
+    Invariant: ``_pick_survivor`` is only called after ``_any_live_in_module(members)``
+    returned True at the dedup call site, so at least one member satisfies
+    ``_is_live_in_module``. And ``_is_live_in_module`` checks
+    ``getattr(module, cls.__name__, None) is cls``, which is single-valued: at most
+    one member can match because the module attribute resolves to exactly one
+    class object. The for-loop is therefore fully deterministic — set-iteration
+    order does not affect which class is returned.
+
+    The ``return members[-1]`` fallback is only theoretically reachable in
+    pathological multi-thread states where ``sys.modules`` is mutated between
+    ``_any_live_in_module`` and this call.
+    """
     for cls in members:
         if _is_live_in_module(cls):
             return cls
@@ -144,13 +172,34 @@ def _any_live_in_module(members: list[type[FeatureGroup]]) -> bool:
     return any(_is_live_in_module(cls) for cls in members)
 
 
+def _cell_label(cls: type[FeatureGroup]) -> Optional[str]:
+    """Return the first synthetic ``<...>`` filename a class's methods live in.
+
+    Returns ``None`` for classes whose methods all live in real source files.
+    Mirrors the synthetic-filename detection in ``_linecache_source_for_class``
+    but stops at the first match — sufficient for "where was this class defined"
+    in the redef-conflict error message.
+    """
+    for value in cls.__dict__.values():
+        func = value.__func__ if hasattr(value, "__func__") else value
+        code = getattr(func, "__code__", None)
+        if code is None:
+            continue
+        co_filename = code.co_filename
+        if co_filename.startswith("<") and co_filename.endswith(">"):
+            return co_filename
+    return None
+
+
 def _build_conflict_error(
     conflicts: list[tuple[tuple[str, str], list[tuple[type[FeatureGroup], str]]]],
 ) -> str:
     lines = ["FeatureGroup redefined with different source code:"]
     for (module, qualname), hashed in conflicts:
         for _cls, source_hash in hashed:
-            lines.append(f"  - {qualname} ({module}) source hash {source_hash[:8]}")
+            cell = _cell_label(_cls)
+            location = f"{module} {cell}" if cell else module
+            lines.append(f"  - {qualname} ({location}) source hash {source_hash[:8]}")
     lines.append(
         "Set PluginCollector(...).set_allow_redefinition() to keep only the most "
         "recently defined version of each class."

@@ -259,10 +259,11 @@ def resolve_feature(feature_name: str, plugin_collector: Optional[PluginCollecto
             dedup_feature_group_subclasses(get_all_subclasses(FeatureGroup), allow_redefinition=allow_redefinition)
         )
     except ValueError as exc:
+        candidates = list(getattr(exc, "conflicts", []))
         return ResolvedFeature(
             feature_name=feature_name,
             feature_group=None,
-            candidates=[],
+            candidates=candidates,
             error=str(exc),
         )
     candidates: list[type[FeatureGroup]] = []

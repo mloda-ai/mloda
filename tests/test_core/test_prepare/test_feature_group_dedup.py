@@ -138,8 +138,9 @@ def test_different_content_double_define_raises_value_error() -> None:
     """Two different-source FG defs (same qualname/module) should raise ValueError.
 
     The error message must contain both module paths, two truncated source hashes,
-    and the literal string ``set_allow_redefinition`` to guide the user toward
-    the override flag.
+    the synthetic cell labels (so users can locate the redef'd cell), and the
+    literal string ``set_allow_redefinition`` to guide the user toward the
+    override flag.
     """
     qualname = "MyFG_Test2"
     feature_name = "case2_feature_unique_xyz"
@@ -163,6 +164,10 @@ def test_different_content_double_define_raises_value_error() -> None:
 
     # Module path appears (both versions live in __main__)
     assert "__main__" in msg, f"Expected '__main__' in error, got: {msg}"
+
+    # Synthetic cell labels appear so users can locate the redef'd cell.
+    assert "<cell-test2-v1>" in msg, f"Expected '<cell-test2-v1>' in error, got: {msg}"
+    assert "<cell-test2-v2>" in msg, f"Expected '<cell-test2-v2>' in error, got: {msg}"
 
     # Truncated source hashes (8-char hex prefixes are sufficient indicators).
     # Compute expected hashes deterministically.
@@ -429,6 +434,10 @@ def test_resolve_feature_returns_error_for_redef_conflict_does_not_raise() -> No
     assert any(token in result.error for token in (qualname, "redefined", "set_allow_redefinition")), (
         f"error must mention the qualname, 'redefined', or 'set_allow_redefinition'; got: {result.error!r}"
     )
+
+    # candidates must surface the conflicting classes so callers can inspect them programmatically.
+    assert v1 in result.candidates, f"v1 must be in candidates on conflict, got: {result.candidates}"
+    assert v2 in result.candidates, f"v2 must be in candidates on conflict, got: {result.candidates}"
 
 
 # ---------------------------------------------------------------------------

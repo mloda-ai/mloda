@@ -596,3 +596,96 @@ def test_get_feature_group_docs_raises_on_redef_conflict_without_flag() -> None:
     msg = str(exc_info.value)
     assert "FeatureGroup redefined" in msg, f"Expected 'FeatureGroup redefined' in error, got: {msg}"
     assert "set_allow_redefinition" in msg, f"Expected 'set_allow_redefinition' in error, got: {msg}"
+
+
+# ---------------------------------------------------------------------------
+# Case 14 + 15: linecache AST fallback in class_source_hash
+# ---------------------------------------------------------------------------
+def test_class_source_hash_fallback_fires_when_inspect_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When ``inspect.getsource`` raises ``OSError``, ``class_source_hash`` must
+    fall back to ``_linecache_source_for_class`` and produce a valid SHA-256
+    hash from the AST-extracted class-local source segment.
+
+    Note: under pytest, ``__main__.__file__`` points to the pytest entry point,
+    so ``inspect.getsource`` already fails naturally for ``_exec_fg_in_main``
+    classes (it tries to read pytest's binary and cannot find the class
+    definition). Forcing the failure with ``monkeypatch`` here makes the test
+    robust against future ``inspect.getsource`` changes that might start
+    succeeding for these classes.
+    """
+    import inspect
+
+    from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
+
+    qualname = "MyFG_FallbackFires"
+    feature_name = "fallback_fires_feature_unique_xyz"
+    src = _make_fg_source(qualname, feature_name)
+
+    cls = _exec_fg_in_main(qualname, src, "cell-fallback-fires-v1")
+    _REF_STORE.append(cls)
+
+    def failing_getsource(obj: Any) -> str:
+        raise OSError("forced failure for fallback test")
+
+    monkeypatch.setattr(inspect, "getsource", failing_getsource)
+
+    h = BaseFeatureGroupVersion.class_source_hash(cls)
+
+    assert isinstance(h, str)
+    assert len(h) == 64, f"SHA-256 hash should be 64 hex chars, got {len(h)}: {h!r}"
+    assert all(c in "0123456789abcdef" for c in h), f"Hash should be all-hex, got {h!r}"
+
+
+def test_class_source_hash_fallback_extracts_class_local_segment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When the fallback fires, it must extract ONLY the class-local source
+    region from the cell, so identical class bodies produce identical hashes
+    even when surrounding (non-class) cell content differs.
+
+    This is the intent that drove the fallback (commit b6af301 "hash only
+    class-local source in linecache fallback"). Existing happy-path test
+    ``test_class_source_hash_is_stable_across_unrelated_cell_edits`` may
+    pass via ``inspect.getsource`` directly; this test forces the fallback
+    so the invariant is verified for that branch specifically.
+    """
+    import inspect
+
+    from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
+
+    qualname = "MyFG_FallbackStable"
+
+    class_body = textwrap.dedent(
+        f"""
+        class {qualname}(_FG_):
+            @classmethod
+            def feature_names_supported(cls):
+                return {{"fallback_stable_feature_unique_xyz"}}
+        """
+    )
+
+    cell_v1 = (
+        f"from mloda.core.abstract_plugins.feature_group import FeatureGroup as _FG_\n\nunrelated_var = 1\n{class_body}"
+    )
+    cell_v2 = (
+        "from mloda.core.abstract_plugins.feature_group import FeatureGroup as _FG_\n"
+        "\n"
+        "unrelated_var = 99\n"
+        f"{class_body}"
+    )
+
+    v1 = _exec_fg_in_main(qualname, cell_v1, "ipython-input-fallback-stable-v1")
+    _REF_STORE.append(v1)
+    v2 = _exec_fg_in_main(qualname, cell_v2, "ipython-input-fallback-stable-v2")
+    _REF_STORE.append(v2)
+
+    def failing_getsource(obj: Any) -> str:
+        raise OSError("forced failure for fallback test")
+
+    monkeypatch.setattr(inspect, "getsource", failing_getsource)
+
+    h1 = BaseFeatureGroupVersion.class_source_hash(v1)
+    h2 = BaseFeatureGroupVersion.class_source_hash(v2)
+
+    assert h1 == h2, (
+        "Fallback must extract only the class-local source segment so "
+        f"identical class bodies hash identically; got {h1[:16]}... vs {h2[:16]}..."
+    )

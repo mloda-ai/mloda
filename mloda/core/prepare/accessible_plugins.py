@@ -127,24 +127,22 @@ def dedup_feature_group_subclasses(
 def _pick_survivor(members: list[type[FeatureGroup]]) -> type[FeatureGroup]:
     """Pick the live-in-module class, falling back to the last entry."""
     for cls in members:
-        module = sys.modules.get(cls.__module__)
-        if module is None:
-            continue
-        bound = getattr(module, cls.__name__, None)
-        if bound is cls:
+        if _is_live_in_module(cls):
             return cls
     return members[-1]
 
 
+def _is_live_in_module(cls: type[FeatureGroup]) -> bool:
+    """True if ``cls`` is currently bound under its name in its own module."""
+    module = sys.modules.get(cls.__module__)
+    if module is None:
+        return False
+    return getattr(module, cls.__name__, None) is cls
+
+
 def _any_live_in_module(members: list[type[FeatureGroup]]) -> bool:
     """True if any class is currently bound under its name in its module."""
-    for cls in members:
-        module = sys.modules.get(cls.__module__)
-        if module is None:
-            continue
-        if getattr(module, cls.__name__, None) is cls:
-            return True
-    return False
+    return any(_is_live_in_module(cls) for cls in members)
 
 
 def _build_conflict_error(

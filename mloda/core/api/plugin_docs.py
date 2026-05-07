@@ -25,6 +25,7 @@ from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.api.plugin_info import ComputeFrameworkInfo, ExtenderInfo, FeatureGroupInfo, ResolvedFeature
+from mloda.core.prepare.accessible_plugins import dedup_feature_group_subclasses
 
 
 def get_feature_group_docs(
@@ -50,7 +51,10 @@ def get_feature_group_docs(
     Returns:
         List of FeatureGroupInfo objects sorted by name.
     """
-    all_feature_groups = get_all_subclasses(FeatureGroup)
+    allow_redefinition = plugin_collector.allow_redefinition if plugin_collector is not None else False
+    all_feature_groups = dedup_feature_group_subclasses(
+        get_all_subclasses(FeatureGroup), allow_redefinition=allow_redefinition
+    )
     results = []
 
     for fg_class in all_feature_groups:
@@ -246,7 +250,7 @@ def resolve_feature(feature_name: str) -> ResolvedFeature:
         ResolvedFeature containing the resolved FeatureGroup (if found),
         all matching candidates, and any error message.
     """
-    all_fgs = list(get_all_subclasses(FeatureGroup))
+    all_fgs = list(dedup_feature_group_subclasses(get_all_subclasses(FeatureGroup)))
     candidates: list[type[FeatureGroup]] = []
     feature_name_obj = FeatureName(feature_name)
 

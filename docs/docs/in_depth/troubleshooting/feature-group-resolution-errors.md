@@ -74,7 +74,13 @@ If both versions of the class have **identical** source code (e.g., re-running a
 For rapid iteration in notebooks, opt in to "newest wins" using the builder method on `PluginCollector`:
 
 ```python
+from mloda.provider import FeatureGroup
 from mloda.user import PluginCollector
+
+
+class SomeFG(FeatureGroup):
+    pass
+
 
 plugin_collector = PluginCollector().set_allow_redefinition()
 # Compose with disable/enable filters as needed:

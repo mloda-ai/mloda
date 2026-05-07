@@ -143,7 +143,7 @@ extend-select = ["UP006", "UP007"]
 "docs/**/*.ipynb" = ["E402"]
 
 [tool.uv]
-exclude-newer = "7 days"
+exclude-newer = "2026-05-04T00:00:00Z"  # was "7 days"; pinned to cover mistune 3.2.1 (CVE-2026-33079). Revert to "7 days" once 3.2.1 ages past the rolling window (~2026-05-10).
 
 [project.scripts]
 mloda = "mloda_plugins.feature_group.experimental.llm.cli:main"

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import importlib.metadata
 import inspect
 import linecache
@@ -74,7 +75,9 @@ class BaseFeatureGroupVersion(ABC):
 
 
 def _linecache_source_for_class(target_class: type[Any]) -> str | None:
-    """Recover source text via ``linecache`` using the class's methods' ``co_filename``.
+    """Returns the source for the target class's ``ClassDef`` AST node from the linecache, not the whole file.
+
+    This keeps the hash stable when unrelated content in the same Jupyter cell changes.
 
     Only consults linecache for synthetic filenames of the form ``<...>`` (e.g.,
     Jupyter cells: ``<ipython-input-N-...>``). Real source files are skipped
@@ -92,10 +95,19 @@ def _linecache_source_for_class(target_class: type[Any]) -> str | None:
             filenames.add(co_filename)
     if not filenames:
         return None
-    parts: list[str] = []
+
+    target_name = target_class.__name__
     for filename in sorted(filenames):
         text = "".join(linecache.getlines(filename))
         if not text:
-            return None
-        parts.append(text)
-    return "".join(parts)
+            continue
+        try:
+            tree = ast.parse(text)
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef) and node.name == target_name:
+                segment = ast.get_source_segment(text, node)
+                if segment is not None:
+                    return segment
+    return None

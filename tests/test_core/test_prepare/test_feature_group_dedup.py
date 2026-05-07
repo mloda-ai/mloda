@@ -419,3 +419,66 @@ def test_resolve_feature_returns_error_for_redef_conflict_does_not_raise() -> No
     assert any(token in result.error for token in (qualname, "redefined", "set_allow_redefinition")), (
         f"error must mention the qualname, 'redefined', or 'set_allow_redefinition'; got: {result.error!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Case 10: class_source_hash must be stable across unrelated cell edits
+# ---------------------------------------------------------------------------
+def test_class_source_hash_is_stable_across_unrelated_cell_edits() -> None:
+    """``class_source_hash`` must be stable when the FG class body is unchanged but
+    surrounding (non-class) cell content differs.
+
+    In Jupyter, each cell maps to a single synthetic linecache filename whose entry
+    contains the WHOLE cell text. The current ``_linecache_source_for_class``
+    fallback hashes the entire cell, so editing an unrelated comment or variable
+    in the same cell flips the hash for an unchanged FeatureGroup class. That
+    triggers a false "FeatureGroup redefined with different source code" conflict
+    and forces users into ``set_allow_redefinition()`` or kernel restart.
+
+    This test asserts the invariant: identical class body => identical hash,
+    regardless of unrelated cell content. It will FAIL today because the hashes
+    differ, and PASS once the fallback extracts only the class-local source region.
+    """
+    qualname = "MyFG_BugA1"
+
+    # Define the class body ONCE so v1 and v2 are byte-for-byte identical for the
+    # class region. Any drift here would invalidate the test.
+    class_body = textwrap.dedent(
+        f"""
+        class {qualname}(_FG_):
+            @classmethod
+            def feature_names_supported(cls):
+                return {{"bug_a1_feature_unique_xyz"}}
+        """
+    )
+
+    cell_v1 = (
+        "from mloda.core.abstract_plugins.feature_group import FeatureGroup as _FG_\n"
+        "\n"
+        "# A comment that changes between cell runs\n"
+        "unrelated_var = 1\n"
+        f"{class_body}"
+    )
+    cell_v2 = (
+        "from mloda.core.abstract_plugins.feature_group import FeatureGroup as _FG_\n"
+        "\n"
+        "# A different comment\n"
+        "unrelated_var = 99\n"
+        f"{class_body}"
+    )
+
+    v1 = _exec_fg_in_main(qualname, cell_v1, "ipython-input-bug-v1")
+    # Hold v1 BEFORE the second exec rebinds __main__.MyFG_BugA1 to a new class.
+    _REF_STORE.append(v1)
+    v2 = _exec_fg_in_main(qualname, cell_v2, "ipython-input-bug-v2")
+    _REF_STORE.append(v2)
+
+    from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
+
+    h1 = BaseFeatureGroupVersion.class_source_hash(v1)
+    h2 = BaseFeatureGroupVersion.class_source_hash(v2)
+
+    assert h1 == h2, (
+        "Identical class bodies must produce equal source hashes regardless of "
+        f"unrelated cell content (got {h1[:16]}... vs {h2[:16]}...)"
+    )

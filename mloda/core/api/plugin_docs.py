@@ -52,9 +52,10 @@ def get_feature_group_docs(
         List of FeatureGroupInfo objects sorted by name.
     """
     allow_redefinition = plugin_collector.allow_redefinition if plugin_collector is not None else False
-    all_feature_groups = dedup_feature_group_subclasses(
-        get_all_subclasses(FeatureGroup), allow_redefinition=allow_redefinition
-    )
+    all_feature_groups: set[type[FeatureGroup]] = get_all_subclasses(FeatureGroup)
+    if plugin_collector is not None:
+        all_feature_groups = {fg for fg in all_feature_groups if plugin_collector.applicable_feature_group_class(fg)}
+    all_feature_groups = dedup_feature_group_subclasses(all_feature_groups, allow_redefinition=allow_redefinition)
     results = []
 
     for fg_class in all_feature_groups:
@@ -83,8 +84,8 @@ def get_feature_group_docs(
         if version_contains is not None and version_contains not in version:
             continue
 
-        if plugin_collector is not None and not plugin_collector.applicable_feature_group_class(fg_class):
-            continue
+        # NOTE: plugin_collector applicability is now enforced before dedup; the in-loop
+        # check that used to live here was removed.
 
         results.append(
             FeatureGroupInfo(
@@ -254,16 +255,21 @@ def resolve_feature(feature_name: str, plugin_collector: Optional[PluginCollecto
         all matching candidates, and any error message.
     """
     allow_redefinition = plugin_collector.allow_redefinition if plugin_collector is not None else False
+    fg_classes: set[type[FeatureGroup]] = get_all_subclasses(FeatureGroup)
+    if plugin_collector is not None:
+        fg_classes = {fg for fg in fg_classes if plugin_collector.applicable_feature_group_class(fg)}
     try:
-        all_fgs = list(
-            dedup_feature_group_subclasses(get_all_subclasses(FeatureGroup), allow_redefinition=allow_redefinition)
-        )
+        all_fgs = list(dedup_feature_group_subclasses(fg_classes, allow_redefinition=allow_redefinition))
     except ValueError as exc:
-        conflict_candidates = list(getattr(exc, "conflicts", []))
+        raw_conflicts = list(getattr(exc, "conflicts", []))
+        feature_name_obj = FeatureName(feature_name)
+        matching_conflicts = [
+            fg for fg in raw_conflicts if fg.match_feature_group_criteria(feature_name_obj, Options(), None)
+        ]
         return ResolvedFeature(
             feature_name=feature_name,
             feature_group=None,
-            candidates=conflict_candidates,
+            candidates=matching_conflicts,
             error=str(exc),
         )
     candidates: list[type[FeatureGroup]] = []

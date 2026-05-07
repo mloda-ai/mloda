@@ -547,6 +547,42 @@ def test_resolve_feature_with_allow_redefinition_collector_succeeds() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Case 16: resolve_feature filters unrelated conflicts from candidates
+# ---------------------------------------------------------------------------
+def test_resolve_feature_filters_unrelated_conflicts_from_candidates() -> None:
+    """When dedup raises on a redef whose classes don't match the requested feature,
+    candidates must not include those unrelated classes — candidates is documented
+    as 'all matching candidates', not 'all conflicts seen during dedup'.
+    """
+    qualname = "BarFG_Test16"
+    unrelated_feature = "test16_unrelated_unique_xyz"
+    requested_feature = "test16_requested_unique_xyz"  # not supported by BarFG_Test16
+
+    src_v1 = _make_fg_source(qualname, unrelated_feature)
+    src_v2 = _make_fg_source(
+        qualname,
+        unrelated_feature,
+        extra_body="    def extra_method(self):\n        return 16\n",
+    )
+    v1 = _exec_fg_in_main(qualname, src_v1, "cell-test16-v1")
+    v2 = _exec_fg_in_main(qualname, src_v2, "cell-test16-v2")
+    _REF_STORE.extend([v1, v2])
+
+    result = resolve_feature(requested_feature)
+
+    # Dedup raises because BarFG_Test16 has a redef conflict.
+    assert result.error is not None, "redef conflict must surface as error"
+
+    # Critical: v1/v2 don't match requested_feature, so they must NOT appear in candidates.
+    assert v1 not in result.candidates, (
+        f"v1 must not appear in candidates (does not match {requested_feature!r}); got: {result.candidates}"
+    )
+    assert v2 not in result.candidates, (
+        f"v2 must not appear in candidates (does not match {requested_feature!r}); got: {result.candidates}"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Case 12: get_feature_group_docs runs dedup, does not raise with allow flag
 # ---------------------------------------------------------------------------
 def test_get_feature_group_docs_with_allow_redefinition_does_not_raise() -> None:
@@ -575,6 +611,13 @@ def test_get_feature_group_docs_with_allow_redefinition_does_not_raise() -> None
     result = get_feature_group_docs(plugin_collector=plugin_collector)
 
     assert isinstance(result, list)
+    from mloda.core.api.plugin_info import FeatureGroupInfo
+
+    assert all(isinstance(item, FeatureGroupInfo) for item in result), (
+        f"all items must be FeatureGroupInfo, got: {[type(i).__name__ for i in result]}"
+    )
+    # plugin_docs filters out __module__ == "__main__" — verify the test class did not leak in.
+    assert all(item.module != "__main__" for item in result), "no __main__-bound classes should appear in the result"
 
 
 # ---------------------------------------------------------------------------
@@ -605,6 +648,66 @@ def test_get_feature_group_docs_raises_on_redef_conflict_without_flag() -> None:
     msg = str(exc_info.value)
     assert "FeatureGroup redefined" in msg, f"Expected 'FeatureGroup redefined' in error, got: {msg}"
     assert "set_allow_redefinition" in msg, f"Expected 'set_allow_redefinition' in error, got: {msg}"
+
+
+# ---------------------------------------------------------------------------
+# Case 17: get_feature_group_docs filter→dedup ordering
+# ---------------------------------------------------------------------------
+def test_get_feature_group_docs_filter_runs_before_dedup() -> None:
+    """The plugin_collector identity filter must run BEFORE dedup so that a stale
+    class ref passed via disabled_feature_groups({stale}) eliminates the conflict
+    before dedup sees it. Mirrors test_disabled_feature_groups_filter_runs_before_dedup
+    (for PreFilterPlugins) at the plugin_docs entry point.
+    """
+    qualname = "MyFG_Test17_Docs"
+    feature_name = "case17_feature_unique_xyz"
+    src_v1 = _make_fg_source(qualname, feature_name)
+    src_v2 = _make_fg_source(
+        qualname,
+        feature_name,
+        extra_body="    def extra_method(self):\n        return 17\n",
+    )
+    v1 = _exec_fg_in_main(qualname, src_v1, "cell-test17-v1")
+    v2 = _exec_fg_in_main(qualname, src_v2, "cell-test17-v2")
+    _REF_STORE.extend([v1, v2])
+
+    plugin_collector = PluginCollector.disabled_feature_groups({v1})
+
+    # With v1 filtered before dedup, only v2 remains — no conflict, must not raise.
+    result = get_feature_group_docs(plugin_collector=plugin_collector)
+    assert isinstance(result, list)
+
+
+# ---------------------------------------------------------------------------
+# Case 18: resolve_feature filter→dedup ordering
+# ---------------------------------------------------------------------------
+def test_resolve_feature_filter_runs_before_dedup() -> None:
+    """resolve_feature must filter via plugin_collector BEFORE dedup so a stale class
+    ref passed via disabled_feature_groups({stale}) eliminates the conflict before
+    dedup sees it.
+    """
+    qualname = "MyFG_Test18"
+    feature_name = "case18_feature_unique_xyz"
+    src_v1 = _make_fg_source(qualname, feature_name)
+    src_v2 = _make_fg_source(
+        qualname,
+        feature_name,
+        extra_body="    def extra_method(self):\n        return 18\n",
+    )
+    v1 = _exec_fg_in_main(qualname, src_v1, "cell-test18-v1")
+    v2 = _exec_fg_in_main(qualname, src_v2, "cell-test18-v2")
+    _REF_STORE.extend([v1, v2])
+
+    plugin_collector = PluginCollector.disabled_feature_groups({v1})
+
+    result = resolve_feature(feature_name, plugin_collector=plugin_collector)
+
+    assert result.error is None, (
+        f"resolve_feature should succeed when stale class is filtered before dedup, got error: {result.error!r}"
+    )
+    assert result.feature_group is v2, (
+        f"resolved feature_group must be v2 (v1 was disabled), got: {result.feature_group}"
+    )
 
 
 # ---------------------------------------------------------------------------

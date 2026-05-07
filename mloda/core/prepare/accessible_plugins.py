@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import sys
 from copy import deepcopy
-from typing import Optional
+from typing import Optional, cast
 
 from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
@@ -48,14 +48,13 @@ def _running_in_zmq_shell() -> bool:
 def _safe_class_source_hash(cls: type[FeatureGroup]) -> Optional[str]:
     """Return source hash for a FeatureGroup subclass or None if unavailable.
 
-    ``inspect.getsource`` raises ``OSError``/``TypeError`` for classes built
-    dynamically via ``type()``, and may raise ``IndentationError``/``ValueError``
-    on malformed source backings. All four leave the class without a stable
-    source hash, so we return ``None``.
+    ``inspect.getsource`` raises ``OSError`` (no source backing) or ``TypeError``
+    (built-in class) for classes built dynamically via ``type()``. Both leave the
+    class without a stable source hash, so we return ``None``.
     """
     try:
         return BaseFeatureGroupVersion.class_source_hash(cls)
-    except (OSError, TypeError, IndentationError, ValueError):
+    except (OSError, TypeError):
         return None
 
 
@@ -108,7 +107,8 @@ def dedup_feature_group_subclasses(
             survivors.update(members)
             continue
 
-        unique_hashes = set(hashes)
+        hashes_str: list[str] = cast(list[str], hashes)
+        unique_hashes = set(hashes_str)
         if len(unique_hashes) == 1:
             survivor = _pick_survivor(members)
             logger.debug(
@@ -129,7 +129,7 @@ def dedup_feature_group_subclasses(
             survivors.add(survivor)
             continue
 
-        conflicts.append((key, list(zip(members, hashes))))  # type: ignore[arg-type]
+        conflicts.append((key, list(zip(members, hashes_str))))
 
     if conflicts:
         all_conflicting_classes = [_cls for _, hashed in conflicts for _cls, _ in hashed]

@@ -84,9 +84,6 @@ def get_feature_group_docs(
         if version_contains is not None and version_contains not in version:
             continue
 
-        # NOTE: plugin_collector applicability is now enforced before dedup; the in-loop
-        # check that used to live here was removed.
-
         results.append(
             FeatureGroupInfo(
                 name=fg_name,

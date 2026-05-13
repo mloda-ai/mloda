@@ -33,6 +33,6 @@ class TestSqliteSqlMaskEngine(SqlMaskEngineTestMixin):
     def evaluate_mask(self, mask: Any, data: SqliteRelation) -> list[bool]:
         conn = data.connection
         table_name = data.table_name
-        sql = f"SELECT CASE WHEN {mask} THEN 1 ELSE 0 END AS match FROM {quote_ident(table_name)}"  # nosec B608
+        sql = f"SELECT CASE WHEN {mask} THEN 1 ELSE 0 END AS match FROM {quote_ident(table_name)}"  # nosec
         rows = conn.execute(sql).fetchall()
         return [bool(row[0]) for row in rows]

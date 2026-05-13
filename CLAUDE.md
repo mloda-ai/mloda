@@ -75,7 +75,7 @@ source .venv/bin/activate
 
 `tox` is the gate. It runs `pytest -n 8 --timeout=10`, then `ruff format --check`, `ruff check`, a `pip-licenses` allowlist check, `mypy --strict --ignore-missing-imports`, and `bandit`. All of these must pass before a PR is mergeable.
 
-- **Python**: supported range is `>=3.10,<3.14`; CI matrixes 3.10, 3.11, 3.12, 3.13.
+- **Python**: supported range is `>=3.10,<3.15`; CI matrixes 3.10, 3.11, 3.12, 3.13, 3.14.
 - **Type hints**: use modern forms (`list[str]`, `dict[str, int]`, `X | None`). Ruff enforces this via `UP006` and `UP007`.
 - **Formatting**: ruff format with line length 120.
 - **Tests**: every new feature or bug fix must come with tests; follow the patterns in the existing `tests/` tree. Tests must be parallel-safe (pytest-xdist) and finish under the 10-second timeout. The default tox env asserts `EXPECTED_SKIP_COUNT=147`; if a test you add is skipped, update the count or unskip it.

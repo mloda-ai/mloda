@@ -4,12 +4,18 @@ import multiprocessing
 import queue
 import threading
 import time
+from typing import Any
 from unittest.mock import MagicMock, Mock, patch
 from uuid import UUID, uuid4
 
 import pytest
 
 from mloda.core.runtime.worker_manager import WorkerManager
+
+
+def _noop_target(*args: Any, **kwargs: Any) -> None:
+    """Picklable no-op target for forkserver multiprocessing (Python 3.14+ default on Linux)."""
+    return None
 
 
 class TestWorkerManagerInit:
@@ -68,7 +74,7 @@ class TestWorkerManagerProcessCreation:
         """create_worker_process should create a new Process."""
         manager = WorkerManager()
         cfw_uuid = uuid4()
-        target_func = Mock()
+        target_func = _noop_target
         args = ("arg1", "arg2")
 
         process, cmd_queue, result_queue = manager.create_worker_process(cfw_uuid, target_func, args)
@@ -82,7 +88,7 @@ class TestWorkerManagerProcessCreation:
         """create_worker_process should register process with CFW UUID."""
         manager = WorkerManager()
         cfw_uuid = uuid4()
-        target_func = Mock()
+        target_func = _noop_target
         args = ("arg1", "arg2")
 
         process, cmd_queue, result_queue = manager.create_worker_process(cfw_uuid, target_func, args)
@@ -97,7 +103,7 @@ class TestWorkerManagerProcessCreation:
         """create_worker_process should add result queue to collection."""
         manager = WorkerManager()
         cfw_uuid = uuid4()
-        target_func = Mock()
+        target_func = _noop_target
         args = ("arg1", "arg2")
 
         process, cmd_queue, result_queue = manager.create_worker_process(cfw_uuid, target_func, args)
@@ -108,7 +114,7 @@ class TestWorkerManagerProcessCreation:
         """create_worker_process should add process to tasks list."""
         manager = WorkerManager()
         cfw_uuid = uuid4()
-        target_func = Mock()
+        target_func = _noop_target
         args = ("arg1", "arg2")
 
         process, cmd_queue, result_queue = manager.create_worker_process(cfw_uuid, target_func, args)
@@ -138,7 +144,7 @@ class TestWorkerManagerProcessRetrieval:
         """get_process_queues should return existing process/queues."""
         manager = WorkerManager()
         cfw_uuid = uuid4()
-        target_func = Mock()
+        target_func = _noop_target
         args = ()
 
         original_process, original_cmd_queue, original_result_queue = manager.create_worker_process(
@@ -428,7 +434,7 @@ class TestWorkerManagerIntegration:
         cfw_uuid = uuid4()
 
         # Create a mock worker process
-        target_func = Mock()
+        target_func = _noop_target
         process, cmd_queue, result_queue = manager.create_worker_process(cfw_uuid, target_func, ())
 
         # Verify process is registered and started
@@ -461,7 +467,7 @@ class TestWorkerManagerIntegration:
         cfw_uuid1 = uuid4()
         cfw_uuid2 = uuid4()
 
-        target_func = Mock()
+        target_func = _noop_target
 
         # Create two processes
         process1, cmd_queue1, result_queue1 = manager.create_worker_process(cfw_uuid1, target_func, ())
@@ -493,7 +499,7 @@ class TestWorkerManagerIntegration:
 
         # Add process
         cfw_uuid = uuid4()
-        target_func = Mock()
+        target_func = _noop_target
         process, cmd_queue, result_queue = manager.create_worker_process(cfw_uuid, target_func, ())
 
         # Verify all are tracked

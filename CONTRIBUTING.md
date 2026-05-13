@@ -8,7 +8,7 @@ By participating in this project, you agree to abide by our [Code of Conduct](CO
 
 ### Prerequisites
 
-- Python 3.10 or higher (tested on 3.10, 3.11, 3.12, 3.13)
+- Python 3.10 or higher (tested on 3.10, 3.11, 3.12, 3.13, 3.14)
 - [uv](https://docs.astral.sh/uv/) for dependency management
 - [tox](https://tox.wiki/) as the test runner (installed via uv)
 
@@ -110,7 +110,7 @@ git checkout -b fix/short-description
 3. Make your changes and ensure `tox` passes locally.
 4. Commit using [Conventional Commits](https://www.conventionalcommits.org/) format.
 5. Push your branch to your fork and open a pull request targeting `main`.
-6. CI runs the full tox suite on Python 3.10, 3.11, 3.12, and 3.13. All checks must pass before merge.
+6. CI runs the full tox suite on Python 3.10, 3.11, 3.12, 3.13, and 3.14. All checks must pass before merge.
 
 ## License
 

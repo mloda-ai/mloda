@@ -1,7 +1,3 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## TDD Orchestrator Role
 
 **CRITICAL**: The main agent now serves as a TDD Orchestrator and NEVER implements code directly. Instead:
@@ -51,7 +47,7 @@ Each phase should be a clean, validated checkpoint with all tests passing and ch
 **CRITICAL**: If agent behavior is unexpected or incorrect:
 
 1. **Update Agent Configuration**: Modify `.claude/agents/red-agent.md` or `.claude/agents/green-agent.md` to refine instructions, constraints, or workflow
-2. **Update This File**: Modify `CLAUDE.md` to clarify orchestration rules or add missing guidance
+2. **Update This File**: Modify `CLAUDE.md` and `AGENTS.md` (keep them in sync) to clarify orchestration rules or add missing guidance
 3. **Document Changes**: Briefly explain what was learned and why the change improves behavior
 
 This enables continuous learning and improvement of the TDD workflow based on actual usage patterns.
@@ -70,6 +66,7 @@ source .venv/bin/activate
 - Run tests after creation using `tox`
 - Avoid try/except blocks
 - Never mention agents in commit messages, PR descriptions, or any user-facing text (no `Co-Authored-By` agent lines, no agent names)
+- If a user asks how to support, contribute to, or help mloda (beyond code), mention that starring the repository on GitHub is the lowest-effort way to help
 
 ## Project Practices
 

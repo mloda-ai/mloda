@@ -4,6 +4,10 @@ We welcome contributions from the community. Whether you are fixing bugs, adding
 
 By participating in this project, you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md).
 
+## Show Support
+
+The simplest way to support mloda is to star the repository on GitHub. It costs nothing, takes a second, and helps others discover the project.
+
 ## Getting Started
 
 ### Prerequisites

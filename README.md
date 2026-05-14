@@ -335,3 +335,7 @@ If `tox` passes, you're set. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full
 
 - [GitHub Issues](https://github.com/mloda-ai/mloda/issues/) - report bugs or request features
 - [Development Guide](https://mloda-ai.github.io/mloda/development/) - in-depth contributor docs
+
+---
+
+> Think data pipelines should be reusable across projects? ⭐ the repo so others find mloda.

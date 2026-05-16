@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 import pyarrow as pa
 import pyarrow.flight as flight
-from mloda.core.runtime.flight.flight_server import FlightServer
+from mloda.core.runtime.flight.flight_server import FlightServer, create_location
 
 
 class TestFlightServerUnit:
@@ -56,6 +56,11 @@ class TestFlightServerUnit:
         non_existent_ticket = flight.Ticket(b"non_existent_table")
         with pytest.raises(KeyError):
             self.server.do_get(self.context, non_existent_ticket)
+
+    def test_create_location_uses_loopback_host_by_default(self) -> None:
+        location = create_location()
+
+        assert location.startswith("grpc://127.0.0.1:")
 
 
 class TestFlightServerIntegration:

@@ -10,7 +10,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def create_location(host: str = "0.0.0.0") -> str:
+def create_location(host: str = "127.0.0.1") -> str:
     sock = socket.socket()
     sock.bind(("", 0))
     port = sock.getsockname()[1]

@@ -14,10 +14,15 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 from tests.test_plugins.compute_framework.base_implementations.filter_engine_test_mixin import (
     FilterEngineTestMixin,
 )
+from tests.test_plugins.compute_framework.base_implementations.time_range_filter_engine_test_mixin import (
+    SAMPLE_IDS,
+    SAMPLE_TIMESTAMPS,
+    TimeRangeFilterEngineTestMixin,
+)
 
 
-class TestPythonDictFilterEngine(FilterEngineTestMixin):
-    """Unit tests for the PythonDictFilterEngine class using shared mixin."""
+class TestPythonDictFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMixin):
+    """Unit tests for the PythonDictFilterEngine class using shared mixins."""
 
     @pytest.fixture
     def filter_engine(self) -> Any:
@@ -38,6 +43,13 @@ class TestPythonDictFilterEngine(FilterEngineTestMixin):
     def get_column_values(self, result: Any, column: str) -> list[Any]:
         """Extract column values from list of dicts."""
         return [row[column] for row in result]
+
+    @pytest.fixture
+    def sample_time_data(self) -> Any:
+        return [{"id": SAMPLE_IDS[i], "ts": SAMPLE_TIMESTAMPS[i]} for i in range(len(SAMPLE_IDS))]
+
+    def get_id_column_values(self, result: Any) -> list[int]:
+        return [row["id"] for row in result]
 
     # Framework-specific tests below
 

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -186,20 +186,26 @@ class TestGlobalFilterTimeTravel:
         with pytest.raises(ValueError):
             self.global_filter.add_time_and_time_travel_filters(event_from, event_to, valid_from)
 
-    def test_check_and_convert_time_info(self) -> None:
-        """Test the _check_and_convert_time_info method."""
+    def test_normalize_to_utc(self) -> None:
+        """Test the _normalize_to_utc method returns a UTC-normalized datetime (not a string)."""
+        # Identity case: already-UTC input passes through unchanged.
         time_with_tz = datetime(2023, 1, 1, tzinfo=timezone.utc)
-        converted_time = self.global_filter._check_and_convert_time_info(time_with_tz)
+        converted_time = self.global_filter._normalize_to_utc(time_with_tz)
+        assert converted_time == datetime(2023, 1, 1, tzinfo=timezone.utc)
+        assert converted_time.tzinfo == timezone.utc
 
-        # Assert that the time is correctly converted to ISO 8601 format in UTC
-        assert converted_time == "2023-01-01T00:00:00+00:00"
+        # Conversion case: a non-UTC tz must shift to UTC.
+        time_offset = datetime(2023, 1, 1, 12, tzinfo=timezone(timedelta(hours=5)))
+        converted_offset = self.global_filter._normalize_to_utc(time_offset)
+        assert converted_offset == datetime(2023, 1, 1, 7, tzinfo=timezone.utc)
+        assert converted_offset.tzinfo == timezone.utc
 
-    def test_check_and_convert_time_info_without_tz(self) -> None:
-        """Test the _check_and_convert_time_info method with missing timezone info."""
+    def test_normalize_to_utc_without_tz(self) -> None:
+        """Test the _normalize_to_utc method with missing timezone info."""
         time_without_tz = datetime(2023, 1, 1)
 
         with pytest.raises(ValueError):
-            self.global_filter._check_and_convert_time_info(time_without_tz)
+            self.global_filter._normalize_to_utc(time_without_tz)
 
     def test_add_time_filters_with_event_time_column(self) -> None:
         """Test adding time filters with the new event_time_column parameter name."""

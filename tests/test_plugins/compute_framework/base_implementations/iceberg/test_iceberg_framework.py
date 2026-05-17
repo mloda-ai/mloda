@@ -10,6 +10,9 @@ from tests.test_plugins.compute_framework.base_implementations.datatype_validato
     ColumnSpec,
     DataTypeValidatorFrameworkTestMixin,
 )
+from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
+    DtypeExtractionTestMixin,
+)
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )
@@ -244,3 +247,29 @@ class TestIcebergDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
 
     def test_timestamp_us_column_strict_ms_raises(self, framework_instance: Any, precision_sample_data: Any) -> None:
         pytest.skip("Iceberg has only one TimestampType (microseconds per spec); millisecond cannot be expressed")
+
+
+@pytest.mark.skipif(
+    pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
+)
+class TestIcebergDtypeExtraction(DtypeExtractionTestMixin):
+    """Test IcebergFramework._extract_column_dtype using shared mixin.
+
+    Iceberg tables need catalog context to construct, so the fixture wraps a real
+    ``pyiceberg.schema.Schema`` (carrying real ``LongType``/``StringType``/``DoubleType``
+    field types) inside a ``Mock`` IcebergTable, reusing TestIcebergDataTypeValidator's
+    ``_wrap_schema`` helper.
+    """
+
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return IcebergFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+    @pytest.fixture
+    def dtype_sample_data(self) -> Any:
+        schema = Schema(
+            NestedField(1, "int_col", LongType()),
+            NestedField(2, "str_col", StringType()),
+            NestedField(3, "float_col", DoubleType()),
+        )
+        return TestIcebergDataTypeValidator._wrap_schema(schema)

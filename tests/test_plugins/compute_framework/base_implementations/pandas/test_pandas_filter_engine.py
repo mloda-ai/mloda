@@ -10,10 +10,15 @@ from mloda_plugins.compute_framework.base_implementations.pandas.pandas_filter_e
 from tests.test_plugins.compute_framework.base_implementations.filter_engine_test_mixin import (
     FilterEngineTestMixin,
 )
+from tests.test_plugins.compute_framework.base_implementations.time_range_filter_engine_test_mixin import (
+    SAMPLE_IDS,
+    SAMPLE_TIMESTAMPS,
+    TimeRangeFilterEngineTestMixin,
+)
 
 
-class TestPandasFilterEngine(FilterEngineTestMixin):
-    """Unit tests for the PandasFilterEngine class using shared mixin."""
+class TestPandasFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMixin):
+    """Unit tests for the PandasFilterEngine class using shared mixins."""
 
     @pytest.fixture
     def filter_engine(self) -> Any:
@@ -35,3 +40,14 @@ class TestPandasFilterEngine(FilterEngineTestMixin):
     def get_column_values(self, result: Any, column: str) -> list[Any]:
         """Extract column values from pandas DataFrame."""
         return result[column].tolist()  # type: ignore[no-any-return]
+
+    @pytest.fixture
+    def time_filter_engine(self) -> Any:
+        return PandasFilterEngine
+
+    @pytest.fixture
+    def sample_time_data(self) -> Any:
+        return pd.DataFrame({"id": SAMPLE_IDS, "ts": pd.to_datetime(SAMPLE_TIMESTAMPS, utc=True)})
+
+    def get_id_column_values(self, result: Any) -> list[int]:
+        return list(result["id"].tolist())

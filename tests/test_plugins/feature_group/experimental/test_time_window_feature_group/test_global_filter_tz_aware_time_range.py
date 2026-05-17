@@ -46,22 +46,9 @@ except ImportError:
     pl = None  # type: ignore[assignment]
 
 
-# Indices 4..9 (timestamps Jan 5..Jan 10) are the only rows that must survive
-# the [Jan 5, Jan 11) window with max_exclusive=True.
-TIMESTAMPS_ISO: list[str] = [
-    "2023-01-01T00:00:00+00:00",
-    "2023-01-02T00:00:00+00:00",
-    "2023-01-03T00:00:00+00:00",
-    "2023-01-04T00:00:00+00:00",
-    "2023-01-05T00:00:00+00:00",  # in window
-    "2023-01-06T00:00:00+00:00",  # in window
-    "2023-01-07T00:00:00+00:00",  # in window
-    "2023-01-08T00:00:00+00:00",  # in window
-    "2023-01-09T00:00:00+00:00",  # in window
-    "2023-01-10T00:00:00+00:00",  # in window
-    "2023-01-11T00:00:00+00:00",  # boundary, excluded (max_exclusive=True)
-    "2023-01-12T00:00:00+00:00",
-]
+# Timestamps Jan 1..Jan 12 at midnight UTC. Indices 4..9 (Jan 5..Jan 10) are the
+# only rows that must survive the [Jan 5, Jan 11) window with max_exclusive=True.
+TIMESTAMPS_UTC: list[datetime] = [datetime(2023, 1, day, tzinfo=timezone.utc) for day in range(1, 13)]
 TEMPERATURES: list[int] = [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
 
 EVENT_FROM = datetime(2023, 1, 5, tzinfo=timezone.utc)
@@ -69,14 +56,6 @@ EVENT_TO = datetime(2023, 1, 11, tzinfo=timezone.utc)
 
 EXPECTED_TEMPERATURES: list[int] = [14, 15, 16, 17, 18, 19]
 EXPECTED_ROW_COUNT: int = len(EXPECTED_TEMPERATURES)
-
-
-def _naive_timestamps() -> list[datetime]:
-    return [datetime.fromisoformat(ts).replace(tzinfo=None) for ts in TIMESTAMPS_ISO]
-
-
-def _tz_aware_timestamps() -> list[datetime]:
-    return [datetime.fromisoformat(ts) for ts in TIMESTAMPS_ISO]
 
 
 def test_pyarrow_tz_aware_time_range_filter() -> None:
@@ -89,7 +68,10 @@ def test_pyarrow_tz_aware_time_range_filter() -> None:
 
         @classmethod
         def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-            ts_array = pa.array(_naive_timestamps(), type=pa.timestamp("us", tz="UTC"))
+            # pa.array with a tz-typed timestamp interprets naive datetimes as already in that tz;
+            # tz-aware datetimes are rejected on some PyArrow versions.
+            naive_ts = [ts.replace(tzinfo=None) for ts in TIMESTAMPS_UTC]
+            ts_array = pa.array(naive_ts, type=pa.timestamp("us", tz="UTC"))
             return pa.table(
                 {
                     "temperature": pa.array(TEMPERATURES),
@@ -113,8 +95,6 @@ def test_pyarrow_tz_aware_time_range_filter() -> None:
         global_filter=global_filter,
     )
 
-    assert len(result) > 0, "No results returned from mloda.run_all"
-
     temperature_table = None
     for table in result:
         if "temperature" in table.schema.names:
@@ -132,7 +112,6 @@ def test_pyarrow_tz_aware_time_range_filter() -> None:
 
 def test_python_dict_tz_aware_time_range_filter() -> None:
     """Regression guard for #435 on the python_dict filter engine."""
-    timestamps = _tz_aware_timestamps()
 
     class PythonDictTzAwareSource(FeatureGroup):
         @classmethod
@@ -144,9 +123,9 @@ def test_python_dict_tz_aware_time_range_filter() -> None:
             return [
                 {
                     "temperature": TEMPERATURES[i],
-                    DefaultOptionKeys.reference_time: timestamps[i],
+                    DefaultOptionKeys.reference_time: TIMESTAMPS_UTC[i],
                 }
-                for i in range(len(timestamps))
+                for i in range(len(TIMESTAMPS_UTC))
             ]
 
         @classmethod
@@ -165,8 +144,6 @@ def test_python_dict_tz_aware_time_range_filter() -> None:
         global_filter=global_filter,
     )
 
-    assert len(result) > 0, "No results returned from mloda.run_all"
-
     rows = None
     for candidate in result:
         if candidate and isinstance(candidate, list) and "temperature" in candidate[0]:
@@ -183,7 +160,6 @@ def test_python_dict_tz_aware_time_range_filter() -> None:
 @pytest.mark.skipif(pl is None, reason="Polars is not installed")
 def test_polars_tz_aware_time_range_filter() -> None:
     """Regression guard for #435 on the Polars filter engine."""
-    timestamps = _tz_aware_timestamps()
 
     class PolarsTzAwareSource(FeatureGroup):
         @classmethod
@@ -195,7 +171,7 @@ def test_polars_tz_aware_time_range_filter() -> None:
             return pl.DataFrame(
                 {
                     "temperature": TEMPERATURES,
-                    DefaultOptionKeys.reference_time: timestamps,
+                    DefaultOptionKeys.reference_time: TIMESTAMPS_UTC,
                 },
                 schema={
                     "temperature": pl.Int64,
@@ -218,8 +194,6 @@ def test_polars_tz_aware_time_range_filter() -> None:
         plugin_collector=plugin_collector,
         global_filter=global_filter,
     )
-
-    assert len(result) > 0, "No results returned from mloda.run_all"
 
     temperature_df = None
     for df in result:

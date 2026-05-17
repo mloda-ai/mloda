@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -188,14 +188,17 @@ class TestGlobalFilterTimeTravel:
 
     def test_normalize_to_utc(self) -> None:
         """Test the _normalize_to_utc method returns a UTC-normalized datetime (not a string)."""
+        # Identity case: already-UTC input passes through unchanged.
         time_with_tz = datetime(2023, 1, 1, tzinfo=timezone.utc)
         converted_time = self.global_filter._normalize_to_utc(time_with_tz)
-
-        # The bound must be a native datetime (not a stringified ISO 8601 value) so that
-        # filter engines can compare it against tz-aware timestamp columns directly.
-        assert isinstance(converted_time, datetime)
         assert converted_time == datetime(2023, 1, 1, tzinfo=timezone.utc)
         assert converted_time.tzinfo == timezone.utc
+
+        # Conversion case: a non-UTC tz must shift to UTC.
+        time_offset = datetime(2023, 1, 1, 12, tzinfo=timezone(timedelta(hours=5)))
+        converted_offset = self.global_filter._normalize_to_utc(time_offset)
+        assert converted_offset == datetime(2023, 1, 1, 7, tzinfo=timezone.utc)
+        assert converted_offset.tzinfo == timezone.utc
 
     def test_normalize_to_utc_without_tz(self) -> None:
         """Test the _normalize_to_utc method with missing timezone info."""

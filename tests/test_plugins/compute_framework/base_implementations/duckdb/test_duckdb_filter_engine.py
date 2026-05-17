@@ -14,6 +14,11 @@ from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation
 from tests.test_plugins.compute_framework.base_implementations.filter_engine_test_mixin import (
     FilterEngineTestMixin,
 )
+from tests.test_plugins.compute_framework.base_implementations.time_range_filter_engine_test_mixin import (
+    SAMPLE_IDS,
+    SAMPLE_TIMESTAMPS,
+    TimeRangeFilterEngineTestMixin,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +32,8 @@ except ImportError:
 
 
 @pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB or PyArrow is not installed. Skipping this test.")
-class TestDuckDBFilterEngine(FilterEngineTestMixin):
-    """Unit tests for the DuckDBFilterEngine class using shared mixin."""
+class TestDuckDBFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMixin):
+    """Unit tests for the DuckDBFilterEngine class using shared mixins."""
 
     @pytest.fixture
     def filter_engine(self) -> Any:
@@ -51,6 +56,23 @@ class TestDuckDBFilterEngine(FilterEngineTestMixin):
     def get_column_values(self, result: Any, column: str) -> list[Any]:
         """Extract column values from DuckDB relation via pandas DataFrame."""
         return result.df()[column].tolist()  # type: ignore[no-any-return]
+
+    @pytest.fixture
+    def time_filter_engine(self) -> Any:
+        return DuckDBFilterEngine
+
+    @pytest.fixture
+    def sample_time_data(self, connection: Any) -> Any:
+        # pa.array with a tz-typed timestamp interprets naive datetimes as already in that tz;
+        # tz-aware datetimes are rejected on some PyArrow versions.
+        naive_ts = [ts.replace(tzinfo=None) for ts in SAMPLE_TIMESTAMPS]
+        arrow_table = pa.table(
+            {"id": pa.array(SAMPLE_IDS), "ts": pa.array(naive_ts, type=pa.timestamp("us", tz="UTC"))}
+        )
+        return DuckdbRelation.from_arrow(connection, arrow_table)
+
+    def get_id_column_values(self, result: Any) -> list[int]:
+        return list(result.df()["id"].tolist())
 
     # Framework-specific tests below
 

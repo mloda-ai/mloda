@@ -13,6 +13,11 @@ from mloda_plugins.compute_framework.base_implementations.polars.polars_filter_e
 from tests.test_plugins.compute_framework.base_implementations.filter_engine_test_mixin import (
     FilterEngineTestMixin,
 )
+from tests.test_plugins.compute_framework.base_implementations.time_range_filter_engine_test_mixin import (
+    SAMPLE_IDS,
+    SAMPLE_TIMESTAMPS,
+    TimeRangeFilterEngineTestMixin,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +29,8 @@ except ImportError:
 
 
 @pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
-class TestPolarsFilterEngine(FilterEngineTestMixin):
-    """Unit tests for the PolarsFilterEngine class using shared mixin."""
+class TestPolarsFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMixin):
+    """Unit tests for the PolarsFilterEngine class using shared mixins."""
 
     @pytest.fixture
     def filter_engine(self) -> Any:
@@ -47,6 +52,20 @@ class TestPolarsFilterEngine(FilterEngineTestMixin):
     def get_column_values(self, result: Any, column: str) -> list[Any]:
         """Extract column values from Polars DataFrame."""
         return result[column].to_list()  # type: ignore[no-any-return]
+
+    @pytest.fixture
+    def time_filter_engine(self) -> Any:
+        return PolarsFilterEngine
+
+    @pytest.fixture
+    def sample_time_data(self) -> Any:
+        return pl.DataFrame(
+            {"id": SAMPLE_IDS, "ts": SAMPLE_TIMESTAMPS},
+            schema={"id": pl.Int64, "ts": pl.Datetime(time_unit="us", time_zone="UTC")},
+        )
+
+    def get_id_column_values(self, result: Any) -> list[int]:
+        return list(result["id"].to_list())
 
     # Framework-specific tests below
 

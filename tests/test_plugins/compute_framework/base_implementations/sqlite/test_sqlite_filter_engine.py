@@ -13,9 +13,14 @@ from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation
 from tests.test_plugins.compute_framework.base_implementations.filter_engine_test_mixin import (
     FilterEngineTestMixin,
 )
+from tests.test_plugins.compute_framework.base_implementations.time_range_filter_engine_test_mixin import (
+    SAMPLE_IDS,
+    SAMPLE_TIMESTAMPS,
+    TimeRangeFilterEngineTestMixin,
+)
 
 
-class TestSqliteFilterEngine(FilterEngineTestMixin):
+class TestSqliteFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMixin):
     @pytest.fixture
     def filter_engine(self) -> Any:
         return SqliteFilterEngine
@@ -35,6 +40,23 @@ class TestSqliteFilterEngine(FilterEngineTestMixin):
     def get_column_values(self, result: Any, column: str) -> list[Any]:
         values: list[Any] = result.df()[column].tolist()
         return values
+
+    @pytest.fixture
+    def time_filter_engine(self) -> Any:
+        return SqliteFilterEngine
+
+    @pytest.fixture
+    def sample_time_data(self, connection: sqlite3.Connection) -> Any:
+        # pa.array with a tz-typed timestamp interprets naive datetimes as already in that tz;
+        # tz-aware datetimes are rejected on some PyArrow versions.
+        naive_ts = [ts.replace(tzinfo=None) for ts in SAMPLE_TIMESTAMPS]
+        arrow_table = pa.table(
+            {"id": pa.array(SAMPLE_IDS), "ts": pa.array(naive_ts, type=pa.timestamp("us", tz="UTC"))}
+        )
+        return SqliteRelation.from_arrow(connection, arrow_table)
+
+    def get_id_column_values(self, result: Any) -> list[int]:
+        return list(result.df()["id"].tolist())
 
     def test_filter_with_null_values(self, connection: sqlite3.Connection) -> None:
         arrow_table = pa.Table.from_pydict(

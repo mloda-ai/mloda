@@ -219,7 +219,8 @@ class GlobalFilter:
             filter_feature, FilterType.RANGE, {"min": _time_from, "max": _time_to, "max_exclusive": max_exclusive}
         )
 
-    def _normalize_to_utc(self, time_with_tz: datetime) -> datetime:
+    @staticmethod
+    def _normalize_to_utc(time_with_tz: datetime) -> datetime:
         """Validate tz-aware datetime and normalize to UTC for filtering."""
         if time_with_tz.tzinfo is None:
             raise ValueError(f"Timezone information is missing in {time_with_tz}")

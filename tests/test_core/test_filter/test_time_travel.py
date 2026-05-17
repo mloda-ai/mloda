@@ -43,6 +43,8 @@ class TimeTravelPositiveFilterTest(FeatureGroup):
 
         # Snapshot `now` once so the three row timestamps are mutually consistent.
         now_utc = datetime.now(tz=timezone.utc)
+        # pa.array with a tz-typed timestamp interprets naive datetimes as already in that tz;
+        # tz-aware datetimes are rejected on some PyArrow versions, hence the .replace(tzinfo=None).
         ts_array = pa.array(
             [
                 (now_utc - timedelta(days=10)).replace(tzinfo=None),  # 10 days ago - within range

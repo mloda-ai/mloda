@@ -41,14 +41,19 @@ class TimeTravelPositiveFilterTest(FeatureGroup):
         if len(features.filters) != 1:  # type: ignore
             raise ValueError("Test Filter not found")
 
+        now_utc = datetime.now(tz=timezone.utc)
+        ts_array = pa.array(
+            [
+                (now_utc - timedelta(days=10)).replace(tzinfo=None),  # 10 days ago - within range
+                (now_utc - timedelta(days=30)).replace(tzinfo=None),  # 30 days ago - outside range
+                (now_utc - timedelta(days=30)).replace(tzinfo=None),  # 30 days ago - outside range
+            ],
+            type=pa.timestamp("us", tz="UTC"),
+        )
         return pa.table(
             {
                 cls.get_class_name(): [1, 2, 3],
-                "reference_time": [
-                    (datetime.now(tz=timezone.utc) - timedelta(days=10)).isoformat(),  # 10 days ago - within range
-                    (datetime.now(tz=timezone.utc) - timedelta(days=30)).isoformat(),  # 30 days ago - outside range
-                    (datetime.now(tz=timezone.utc) - timedelta(days=30)).isoformat(),  # 30 days ago - outside range
-                ],
+                "reference_time": ts_array,
             }
         )
 

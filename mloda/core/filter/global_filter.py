@@ -212,23 +212,15 @@ class GlobalFilter:
     def _add_range_filter(
         self, filter_feature: str | Feature, time_from: datetime, time_to: datetime, max_exclusive: bool
     ) -> None:
-        _time_from = self._check_and_convert_time_info(time_from)
-        _time_to = self._check_and_convert_time_info(time_to)
+        _time_from = self._normalize_to_utc(time_from)
+        _time_to = self._normalize_to_utc(time_to)
         self.add_filter(
             filter_feature, FilterType.RANGE, {"min": _time_from, "max": _time_to, "max_exclusive": max_exclusive}
         )
 
-    def _check_and_convert_time_info(self, time_with_tz: datetime) -> str:
-        """
-        Checks that the provided datetime has timezone information and converts it to ISO 8601 format
-        in UTC for filtering.
-
-        We are working with tzinfo, as this is since python 3.9 included in the standard library.
-        Most libraries can handle it or at least use pandas for transformations.
-        """
-
+    def _normalize_to_utc(self, time_with_tz: datetime) -> datetime:
+        """Validate tz-aware datetime and normalize to UTC for filtering."""
         if time_with_tz.tzinfo is None:
             raise ValueError(f"Timezone information is missing in {time_with_tz}")
 
-        # Convert to UTC and return the ISO 8601 formatted string
-        return time_with_tz.astimezone(timezone.utc).isoformat()
+        return time_with_tz.astimezone(timezone.utc)

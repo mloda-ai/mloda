@@ -188,6 +188,10 @@ class DataType(Enum):
         return cls.to_arrow_type(data_type)
 
 
+# Future-framework footguns (widening bias): "int"/"integer" -> INT64 but Postgres INTEGER
+# is 32-bit, and "float" -> DOUBLE but PyArrow's float is 32-bit. Frameworks where these
+# literals mean the narrow type should override _extract_column_data_type to avoid silent
+# widening past strict mode (PyArrow already does — it bypasses the string path entirely).
 _DTYPE_STRING_EXACT_MAP: dict[str, DataType] = {
     # INT64 (widest int wins; collapsed-type frameworks lean here)
     "int64": DataType.INT64,
@@ -246,4 +250,5 @@ _DTYPE_STRING_PREFIX_MAP: tuple[tuple[str, DataType], ...] = (
     ("datetime64[", DataType.TIMESTAMP_MICROS),
     ("datetime(", DataType.TIMESTAMP_MICROS),
     ("timestamp[", DataType.TIMESTAMP_MICROS),
+    ("date64[", DataType.DATE),
 )

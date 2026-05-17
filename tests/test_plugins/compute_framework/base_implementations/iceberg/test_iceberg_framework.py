@@ -163,6 +163,11 @@ class TestIcebergDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
     Iceberg tables require catalog context to construct; we mock the schema lookup that
     IcebergFramework._extract_column_dtype actually consumes (schema().find_field(name) ->
     NestedField with .field_type whose str() the existing dtype map recognises).
+
+    Note: real ``pyiceberg.Schema.find_field`` raises ``ValueError`` on a missing column;
+    ``IcebergFramework._extract_column_dtype`` currently assumes it returns ``None``. The
+    mock here matches that assumption, so ``test_missing_column_skipped`` exercises the
+    validator contract but not the iceberg integration. Tracked as a follow-up.
     """
 
     @pytest.fixture

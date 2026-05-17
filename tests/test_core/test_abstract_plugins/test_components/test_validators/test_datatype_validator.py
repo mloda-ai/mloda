@@ -296,8 +296,9 @@ class TestValidateEnforcesOnPandas:
                 return {PandasDataFrame}
 
         pc = PluginCollector.enabled_feature_groups({_Src, _TypedMismatch})
-        # mlodaAPI wraps the DataTypeMismatchError in a generic Exception — match that.
-        with _pytest.raises(Exception) as exc_info:
+        # mlodaAPI wraps the DataTypeMismatchError in a generic Exception; match on the
+        # mismatch substring so unrelated exception bugs don't satisfy the assertion.
+        with _pytest.raises(Exception, match="STRING") as exc_info:
             mloda.run_all(
                 [UFeature("price_typed_mismatch")],
                 compute_frameworks={PandasDataFrame},

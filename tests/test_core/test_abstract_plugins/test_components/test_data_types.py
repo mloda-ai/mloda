@@ -216,6 +216,7 @@ class TestFromDtypeString:
             pytest.param("DATE", DataType.DATE, id="DATE_duckdb"),
             pytest.param("DateType()", DataType.DATE, id="DateType_spark"),
             pytest.param("date32[day]", DataType.DATE, id="date32_day_arrow_style"),
+            pytest.param("date64[ms]", DataType.DATE, id="date64_ms_arrow_style"),
             # TIMESTAMP_MICROS (widest ts wins)
             pytest.param("datetime", DataType.TIMESTAMP_MICROS, id="datetime_lower"),
             pytest.param("timestamp", DataType.TIMESTAMP_MICROS, id="timestamp_lower"),
@@ -229,6 +230,11 @@ class TestFromDtypeString:
             ),
             pytest.param(
                 "Datetime(time_unit='ms', time_zone=None)", DataType.TIMESTAMP_MICROS, id="Datetime_ms_polars"
+            ),
+            pytest.param(
+                "Datetime(time_unit='ns', time_zone='UTC')",
+                DataType.TIMESTAMP_MICROS,
+                id="Datetime_ns_utc_polars",
             ),
             pytest.param("datetime64[ns]", DataType.TIMESTAMP_MICROS, id="datetime64_ns_pandas"),
             pytest.param("datetime64[ms]", DataType.TIMESTAMP_MICROS, id="datetime64_ms_pandas"),

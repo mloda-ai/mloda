@@ -53,6 +53,21 @@ feature = Feature.int32_of(
 
 In strict mode, only exact type matches or standard widening conversions are allowed.
 
+## Per-Framework Precision Support
+
+Not every backend's native type system can distinguish every precision mloda declares. The table below shows which precisions each bundled framework can extract from data. For the rest, the framework's `_extract_column_data_type` returns the widest type in the family (still correct under lenient mode), and strict-mode tests for the affected precision are skipped with a clear reason.
+
+| Framework | INT32 / INT64 | FLOAT / DOUBLE | TIMESTAMP_MILLIS / MICROS |
+|---|---|---|---|
+| Pandas | yes | yes | yes |
+| Polars (eager / lazy) | yes | yes | yes |
+| PyArrow | yes | yes | yes |
+| DuckDB | yes | yes | yes |
+| Spark | yes | yes | no (only `TimestampType` exists) |
+| Iceberg | yes | yes | no (only `TimestampType` exists) |
+| SQLite | no (INTEGER affinity) | no (REAL affinity) | no (stored as TEXT) |
+| PythonDict | no (`type.__name__` is "int") | no (Python float is 64-bit) | no (`datetime.datetime` is microsecond) |
+
 ## Execution Plan Grouping
 
 Features with different explicit data types are separated into different execution groups at plan time. This allows type-specific processing paths.

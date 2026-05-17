@@ -46,6 +46,14 @@ class SqliteFramework(ComputeFramework):
         framework_connection_object.create_function("REGEXP", 2, _regexp, deterministic=True)
         self.framework_connection_object = framework_connection_object
 
+    def init_connection_from_data_access(self, data_access_collection: Any) -> None:
+        if data_access_collection is None or self.framework_connection_object is not None:
+            return
+        for conn in data_access_collection.initialized_connection_objects:
+            if isinstance(conn, sqlite3.Connection):
+                self.set_framework_connection_object(conn)
+                return
+
     @staticmethod
     def is_available() -> bool:
         return True

@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
@@ -28,7 +29,12 @@ class ComputeFrameworkExecutor:
     Extracted from Runner class to handle CFW lifecycle and step execution logic.
     """
 
-    def __init__(self, cfw_register: CfwManager, worker_manager: WorkerManager) -> None:
+    def __init__(
+        self,
+        cfw_register: CfwManager,
+        worker_manager: WorkerManager,
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> None:
         """
         Initialize the executor with dependencies.
 
@@ -39,6 +45,7 @@ class ComputeFrameworkExecutor:
         self.cfw_collection: dict[UUID, ComputeFramework] = {}
         self.cfw_register = cfw_register
         self.worker_manager = worker_manager
+        self.data_access_collection = data_access_collection
         self._cfw_lock = threading.Lock()
 
     def init_compute_framework(
@@ -230,6 +237,9 @@ class ComputeFrameworkExecutor:
         """
         cfw_uuid = self.prepare_execute_step(step, ParallelizationMode.SYNC)
 
+        if isinstance(step, TransformFrameworkStep):
+            self.cfw_collection[cfw_uuid].init_connection_from_data_access(self.data_access_collection)
+
         try:
             from_cfw = self.prepare_tfs_and_joinstep(step) or None
             step.execute(self.cfw_register, self.cfw_collection[cfw_uuid], from_cfw=from_cfw)
@@ -247,6 +257,10 @@ class ComputeFrameworkExecutor:
         Executes a step in a separate thread.
         """
         cfw_uuid = self.prepare_execute_step(step, ParallelizationMode.THREADING)
+
+        if isinstance(step, TransformFrameworkStep):
+            self.cfw_collection[cfw_uuid].init_connection_from_data_access(self.data_access_collection)
+
         from_cfw = self.prepare_tfs_and_joinstep(step) or None
 
         task = threading.Thread(

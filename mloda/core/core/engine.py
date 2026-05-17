@@ -70,7 +70,12 @@ class Engine:
 
     def compute(self, flight_server: Optional[ParallelRunnerFlightServer] = None) -> ExecutionOrchestrator:
         execution_plan_copy = deepcopy(self.execution_planner)
-        orchestrator = ExecutionOrchestrator(execution_plan_copy, flight_server, column_ordering=self.column_ordering)
+        orchestrator = ExecutionOrchestrator(
+            execution_plan_copy,
+            flight_server,
+            column_ordering=self.column_ordering,
+            data_access_collection=self.data_access_collection,
+        )
         if isinstance(orchestrator, ExecutionOrchestrator):
             return orchestrator
         raise ValueError("ExecutionOrchestrator setup failed.")

@@ -157,6 +157,9 @@ class ComputeFramework(ABC):
         """
         self.framework_connection_object = None
 
+    def init_connection_from_data_access(self, data_access_collection: Any) -> None:
+        pass
+
     @final
     def get_framework_connection_object(self) -> Any:
         """This method retrieves the connection object set by `set_framework_connection_object`."""

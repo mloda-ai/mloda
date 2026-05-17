@@ -184,3 +184,19 @@ class TestDuckDBDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
     @pytest.fixture
     def precision_sample_data(self, connection: Any) -> Any:
         return DuckdbRelation.from_arrow(connection, self._arrow_table(self.PRECISION_COLUMNS))
+
+
+from tests.test_plugins.compute_framework.base_implementations.tfs_connection_test_mixin import TfsConnectionInitMixin  # noqa: E402
+
+
+@pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed.")
+class TestDuckDBTfsConnectionInit(TfsConnectionInitMixin):
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return DuckDBFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+    @pytest.fixture
+    def valid_connection(self) -> Any:
+        conn = duckdb.connect()
+        yield conn
+        conn.close()

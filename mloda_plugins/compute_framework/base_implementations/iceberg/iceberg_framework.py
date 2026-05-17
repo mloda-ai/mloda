@@ -74,6 +74,14 @@ class IcebergFramework(ComputeFramework):
                 else:
                     raise ValueError(f"Expected an Iceberg catalog or table, got {type(framework_connection_object)}")
 
+    def init_connection_from_data_access(self, data_access_collection: Any) -> None:
+        if Catalog is None or data_access_collection is None or self.framework_connection_object is not None:
+            return
+        for conn in data_access_collection.initialized_connection_objects:
+            if hasattr(conn, "load_table") or (IcebergTable is not None and isinstance(conn, IcebergTable)):
+                self.set_framework_connection_object(conn)
+                return
+
     @staticmethod
     def is_available() -> bool:
         """Check if PyIceberg is installed and available."""

@@ -25,15 +25,15 @@ from typing import Any, Optional
 import pyarrow as pa
 import pytest
 
-from mloda.provider import BaseInputData
-from mloda.provider import ComputeFramework
-from mloda.provider import DataCreator
-from mloda.provider import DefaultOptionKeys
-from mloda.provider import FeatureGroup
-from mloda.provider import FeatureSet
-from mloda.user import GlobalFilter
-from mloda.user import PluginCollector
-from mloda.user import mloda
+from mloda.provider import (
+    BaseInputData,
+    ComputeFramework,
+    DataCreator,
+    DefaultOptionKeys,
+    FeatureGroup,
+    FeatureSet,
+)
+from mloda.user import GlobalFilter, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
@@ -79,161 +79,156 @@ def _tz_aware_timestamps() -> list[datetime]:
     return [datetime.fromisoformat(ts) for ts in TIMESTAMPS_ISO]
 
 
-class TestGlobalFilterTimeRangePyArrow:
+def test_pyarrow_tz_aware_time_range_filter() -> None:
     """Regression guard for #435 on the PyArrow filter engine."""
 
-    def test_pyarrow_tz_aware_time_range_filter(self) -> None:
-        class PyArrowTzAwareSource(FeatureGroup):
-            @classmethod
-            def input_data(cls) -> Optional[BaseInputData]:
-                return DataCreator({"temperature", DefaultOptionKeys.reference_time})
+    class PyArrowTzAwareSource(FeatureGroup):
+        @classmethod
+        def input_data(cls) -> Optional[BaseInputData]:
+            return DataCreator({"temperature", DefaultOptionKeys.reference_time})
 
-            @classmethod
-            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-                ts_array = pa.array(_naive_timestamps(), type=pa.timestamp("us", tz="UTC"))
-                return pa.table(
-                    {
-                        "temperature": pa.array(TEMPERATURES),
-                        DefaultOptionKeys.reference_time: ts_array,
-                    }
-                )
+        @classmethod
+        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+            ts_array = pa.array(_naive_timestamps(), type=pa.timestamp("us", tz="UTC"))
+            return pa.table(
+                {
+                    "temperature": pa.array(TEMPERATURES),
+                    DefaultOptionKeys.reference_time: ts_array,
+                }
+            )
 
-            @classmethod
-            def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-                return {PyArrowTable}
+        @classmethod
+        def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+            return {PyArrowTable}
 
-        global_filter = GlobalFilter()
-        global_filter.add_time_and_time_travel_filters(event_from=EVENT_FROM, event_to=EVENT_TO)
+    global_filter = GlobalFilter()
+    global_filter.add_time_and_time_travel_filters(event_from=EVENT_FROM, event_to=EVENT_TO)
 
-        plugin_collector = PluginCollector.enabled_feature_groups({PyArrowTzAwareSource})
+    plugin_collector = PluginCollector.enabled_feature_groups({PyArrowTzAwareSource})
 
-        result = mloda.run_all(
-            ["temperature", DefaultOptionKeys.reference_time],
-            compute_frameworks={PyArrowTable},
-            plugin_collector=plugin_collector,
-            global_filter=global_filter,
-        )
+    result = mloda.run_all(
+        ["temperature", DefaultOptionKeys.reference_time],
+        compute_frameworks={PyArrowTable},
+        plugin_collector=plugin_collector,
+        global_filter=global_filter,
+    )
 
-        assert len(result) > 0, "No results returned from mloda.run_all"
+    assert len(result) > 0, "No results returned from mloda.run_all"
 
-        temperature_table = None
-        for table in result:
-            if "temperature" in table.schema.names:
-                temperature_table = table
-                break
+    temperature_table = None
+    for table in result:
+        if "temperature" in table.schema.names:
+            temperature_table = table
+            break
 
-        assert temperature_table is not None, "PyArrow Table with temperature column not found"
+    assert temperature_table is not None, "PyArrow Table with temperature column not found"
 
-        actual_temps = sorted(temperature_table.column("temperature").to_pylist())
-        assert actual_temps == EXPECTED_TEMPERATURES, (
-            f"Expected only in-window temperatures {EXPECTED_TEMPERATURES}, got {actual_temps}"
-        )
-        assert temperature_table.num_rows == EXPECTED_ROW_COUNT
+    actual_temps = sorted(temperature_table.column("temperature").to_pylist())
+    assert actual_temps == EXPECTED_TEMPERATURES, (
+        f"Expected only in-window temperatures {EXPECTED_TEMPERATURES}, got {actual_temps}"
+    )
+    assert temperature_table.num_rows == EXPECTED_ROW_COUNT
 
 
-class TestGlobalFilterTimeRangePythonDict:
+def test_python_dict_tz_aware_time_range_filter() -> None:
     """Regression guard for #435 on the python_dict filter engine."""
+    timestamps = _tz_aware_timestamps()
 
-    def test_python_dict_tz_aware_time_range_filter(self) -> None:
-        timestamps = _tz_aware_timestamps()
+    class PythonDictTzAwareSource(FeatureGroup):
+        @classmethod
+        def input_data(cls) -> Optional[BaseInputData]:
+            return DataCreator({"temperature", DefaultOptionKeys.reference_time})
 
-        class PythonDictTzAwareSource(FeatureGroup):
-            @classmethod
-            def input_data(cls) -> Optional[BaseInputData]:
-                return DataCreator({"temperature", DefaultOptionKeys.reference_time})
+        @classmethod
+        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+            return [
+                {
+                    "temperature": TEMPERATURES[i],
+                    DefaultOptionKeys.reference_time: timestamps[i],
+                }
+                for i in range(len(timestamps))
+            ]
 
-            @classmethod
-            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-                return [
-                    {
-                        "temperature": TEMPERATURES[i],
-                        DefaultOptionKeys.reference_time: timestamps[i],
-                    }
-                    for i in range(len(timestamps))
-                ]
+        @classmethod
+        def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+            return {PythonDictFramework}
 
-            @classmethod
-            def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-                return {PythonDictFramework}
+    global_filter = GlobalFilter()
+    global_filter.add_time_and_time_travel_filters(event_from=EVENT_FROM, event_to=EVENT_TO)
 
-        global_filter = GlobalFilter()
-        global_filter.add_time_and_time_travel_filters(event_from=EVENT_FROM, event_to=EVENT_TO)
+    plugin_collector = PluginCollector.enabled_feature_groups({PythonDictTzAwareSource})
 
-        plugin_collector = PluginCollector.enabled_feature_groups({PythonDictTzAwareSource})
+    result = mloda.run_all(
+        ["temperature", DefaultOptionKeys.reference_time],
+        compute_frameworks={PythonDictFramework},
+        plugin_collector=plugin_collector,
+        global_filter=global_filter,
+    )
 
-        result = mloda.run_all(
-            ["temperature", DefaultOptionKeys.reference_time],
-            compute_frameworks={PythonDictFramework},
-            plugin_collector=plugin_collector,
-            global_filter=global_filter,
-        )
+    assert len(result) > 0, "No results returned from mloda.run_all"
 
-        assert len(result) > 0, "No results returned from mloda.run_all"
+    rows = None
+    for candidate in result:
+        if candidate and isinstance(candidate, list) and "temperature" in candidate[0]:
+            rows = candidate
+            break
 
-        rows = None
-        for candidate in result:
-            if candidate and isinstance(candidate, list) and "temperature" in candidate[0]:
-                rows = candidate
-                break
+    assert rows is not None, "python_dict result with temperature column not found"
 
-        assert rows is not None, "python_dict result with temperature column not found"
-
-        actual_temps = sorted(row["temperature"] for row in rows)
-        assert actual_temps == EXPECTED_TEMPERATURES
-        assert len(rows) == EXPECTED_ROW_COUNT
+    actual_temps = sorted(row["temperature"] for row in rows)
+    assert actual_temps == EXPECTED_TEMPERATURES
+    assert len(rows) == EXPECTED_ROW_COUNT
 
 
 @pytest.mark.skipif(pl is None, reason="Polars is not installed")
-class TestGlobalFilterTimeRangePolars:
+def test_polars_tz_aware_time_range_filter() -> None:
     """Regression guard for #435 on the Polars filter engine."""
+    timestamps = _tz_aware_timestamps()
 
-    def test_polars_tz_aware_time_range_filter(self) -> None:
-        timestamps = _tz_aware_timestamps()
+    class PolarsTzAwareSource(FeatureGroup):
+        @classmethod
+        def input_data(cls) -> Optional[BaseInputData]:
+            return DataCreator({"temperature", DefaultOptionKeys.reference_time})
 
-        class PolarsTzAwareSource(FeatureGroup):
-            @classmethod
-            def input_data(cls) -> Optional[BaseInputData]:
-                return DataCreator({"temperature", DefaultOptionKeys.reference_time})
+        @classmethod
+        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+            return pl.DataFrame(
+                {
+                    "temperature": TEMPERATURES,
+                    DefaultOptionKeys.reference_time: timestamps,
+                },
+                schema={
+                    "temperature": pl.Int64,
+                    DefaultOptionKeys.reference_time: pl.Datetime(time_unit="us", time_zone="UTC"),
+                },
+            )
 
-            @classmethod
-            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-                return pl.DataFrame(
-                    {
-                        "temperature": TEMPERATURES,
-                        DefaultOptionKeys.reference_time: timestamps,
-                    },
-                    schema={
-                        "temperature": pl.Int64,
-                        DefaultOptionKeys.reference_time: pl.Datetime(time_unit="us", time_zone="UTC"),
-                    },
-                )
+        @classmethod
+        def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+            return {PolarsDataFrame}
 
-            @classmethod
-            def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-                return {PolarsDataFrame}
+    global_filter = GlobalFilter()
+    global_filter.add_time_and_time_travel_filters(event_from=EVENT_FROM, event_to=EVENT_TO)
 
-        global_filter = GlobalFilter()
-        global_filter.add_time_and_time_travel_filters(event_from=EVENT_FROM, event_to=EVENT_TO)
+    plugin_collector = PluginCollector.enabled_feature_groups({PolarsTzAwareSource})
 
-        plugin_collector = PluginCollector.enabled_feature_groups({PolarsTzAwareSource})
+    result = mloda.run_all(
+        ["temperature", DefaultOptionKeys.reference_time],
+        compute_frameworks={PolarsDataFrame},
+        plugin_collector=plugin_collector,
+        global_filter=global_filter,
+    )
 
-        result = mloda.run_all(
-            ["temperature", DefaultOptionKeys.reference_time],
-            compute_frameworks={PolarsDataFrame},
-            plugin_collector=plugin_collector,
-            global_filter=global_filter,
-        )
+    assert len(result) > 0, "No results returned from mloda.run_all"
 
-        assert len(result) > 0, "No results returned from mloda.run_all"
+    temperature_df = None
+    for df in result:
+        if "temperature" in df.columns:
+            temperature_df = df
+            break
 
-        temperature_df = None
-        for df in result:
-            if "temperature" in df.columns:
-                temperature_df = df
-                break
+    assert temperature_df is not None, "Polars DataFrame with temperature column not found"
 
-        assert temperature_df is not None, "Polars DataFrame with temperature column not found"
-
-        actual_temps = sorted(temperature_df["temperature"].to_list())
-        assert actual_temps == EXPECTED_TEMPERATURES
-        assert temperature_df.height == EXPECTED_ROW_COUNT
+    actual_temps = sorted(temperature_df["temperature"].to_list())
+    assert actual_temps == EXPECTED_TEMPERATURES
+    assert temperature_df.height == EXPECTED_ROW_COUNT

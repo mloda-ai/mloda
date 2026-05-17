@@ -194,7 +194,6 @@ class TestGlobalFilterTimeTravel:
         # The bound must be a native datetime (not a stringified ISO 8601 value) so that
         # filter engines can compare it against tz-aware timestamp columns directly.
         assert isinstance(converted_time, datetime)
-        assert not isinstance(converted_time, str)
         assert converted_time == datetime(2023, 1, 1, tzinfo=timezone.utc)
         assert converted_time.tzinfo == timezone.utc
 

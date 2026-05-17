@@ -22,6 +22,7 @@ ensure proper resource management across all test methods.
 
 import os
 from typing import Any
+from mloda.user import DataType
 from mloda.user import JoinType
 import pytest
 from mloda_plugins.compute_framework.base_implementations.spark.spark_framework import SparkFramework
@@ -30,6 +31,10 @@ from mloda.user import ParallelizationMode
 from mloda.user import Index
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
+)
+from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
+    ColumnSpec,
+    DataTypeValidatorFrameworkTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
     DtypeExtractionTestMixin,
@@ -48,7 +53,16 @@ logger = logging.getLogger(__name__)
 # Import PySpark types for type checking (only if available)
 if PYSPARK_AVAILABLE:
     from pyspark.sql import SparkSession
-    from pyspark.sql.types import StructType, StructField, StringType, IntegerType
+    from pyspark.sql.types import (
+        StructType,
+        StructField,
+        StringType,
+        IntegerType,
+        LongType,
+        FloatType,
+        DoubleType,
+        TimestampType,
+    )
     import pyspark
 else:
     SparkSession = None
@@ -56,7 +70,25 @@ else:
     StructField = None
     StringType = None
     IntegerType = None
+    LongType = None
+    FloatType = None
+    DoubleType = None
+    TimestampType = None
     pyspark = None
+
+
+_SPARK_TYPE_MAP: dict[DataType, Any] = (
+    {
+        DataType.INT32: IntegerType(),
+        DataType.INT64: LongType(),
+        DataType.FLOAT: FloatType(),
+        DataType.DOUBLE: DoubleType(),
+        DataType.STRING: StringType(),
+        DataType.TIMESTAMP_MICROS: TimestampType(),
+    }
+    if PYSPARK_AVAILABLE
+    else {}
+)
 
 
 class TestSparkFrameworkAvailability:
@@ -266,3 +298,38 @@ class TestSparkDtypeExtraction(DtypeExtractionTestMixin):
             {"int_col": 3, "str_col": "c", "float_col": 3.0},
         ]
         return spark_session.createDataFrame(data)
+
+
+@pytest.mark.skipif(not PYSPARK_AVAILABLE, reason=SKIP_REASON or "PySpark is not available")
+class TestSparkDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
+    """Test DataTypeValidator enforcement on SparkFramework using shared mixin.
+
+    Spark exposes only one TimestampType (microsecond precision). The millisecond-
+    precision tests inherited from the mixin are skipped here because Spark cannot
+    express a TIMESTAMP_MILLIS column in its native schema.
+    """
+
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+    @pytest.fixture
+    def validator_sample_data(self, spark_session: Any) -> Any:
+        return self._build_spark(self.VALIDATOR_COLUMNS, spark_session)
+
+    @pytest.fixture
+    def precision_sample_data(self, spark_session: Any) -> Any:
+        return self._build_spark(self.PRECISION_COLUMNS, spark_session)
+
+    def _build_spark(self, columns: tuple[ColumnSpec, ...], spark_session: Any) -> Any:
+        # Spark needs an explicit StructType, so the schema is built per-column from
+        # _SPARK_TYPE_MAP. Values flow via the mixin's arrow table -> pylist.
+        usable = tuple(c for c in columns if c.data_type in _SPARK_TYPE_MAP)
+        schema = StructType([StructField(c.name, _SPARK_TYPE_MAP[c.data_type]) for c in usable])
+        return spark_session.createDataFrame(self._arrow_table(usable).to_pylist(), schema=schema)
+
+    def test_timestamp_ms_column_strict_ms_passes(self, framework_instance: Any, precision_sample_data: Any) -> None:
+        pytest.skip("Spark has only one TimestampType (microseconds); millisecond cannot be expressed")
+
+    def test_timestamp_us_column_strict_ms_raises(self, framework_instance: Any, precision_sample_data: Any) -> None:
+        pytest.skip("Spark has only one TimestampType (microseconds); millisecond cannot be expressed")

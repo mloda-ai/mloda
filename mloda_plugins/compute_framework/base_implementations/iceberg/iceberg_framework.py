@@ -1,4 +1,5 @@
 from typing import Any, Optional
+from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.provider import BaseMergeEngine
 from mloda.user import FeatureName
 from mloda.provider import ComputeFramework
@@ -8,10 +9,34 @@ from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_filter
 try:
     from pyiceberg.catalog import Catalog
     from pyiceberg.table import Table as IcebergTable
+    from pyiceberg.types import (
+        BinaryType,
+        BooleanType,
+        DateType,
+        DecimalType,
+        DoubleType,
+        FloatType,
+        IntegerType,
+        LongType,
+        StringType,
+        TimestampType,
+        TimestamptzType,
+    )
     import pyarrow as pa
 except ImportError:
     Catalog = None  # type: ignore[assignment,misc]
     IcebergTable = None  # type: ignore[assignment,misc]
+    BinaryType = None  # type: ignore[assignment,misc]
+    BooleanType = None  # type: ignore[assignment,misc]
+    DateType = None  # type: ignore[assignment,misc]
+    DecimalType = None  # type: ignore[assignment,misc]
+    DoubleType = None  # type: ignore[assignment,misc]
+    FloatType = None  # type: ignore[assignment,misc]
+    IntegerType = None  # type: ignore[assignment,misc]
+    LongType = None  # type: ignore[assignment,misc]
+    StringType = None  # type: ignore[assignment,misc]
+    TimestampType = None  # type: ignore[assignment,misc]
+    TimestamptzType = None  # type: ignore[assignment,misc]
     pa = None  # type: ignore[assignment]
 
 
@@ -108,11 +133,46 @@ class IcebergFramework(ComputeFramework):
         return set(data.schema.names)
 
     def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
-        if IcebergTable is not None and isinstance(data, IcebergTable):
-            schema = data.schema()
-            field = schema.find_field(column_name)
-            if field is not None:
-                return str(field.field_type)
+        if IcebergTable is None or not isinstance(data, IcebergTable):
+            return None
+        schema = data.schema()
+        if column_name not in set(schema.column_names):
+            return None
+        field = schema.find_field(column_name)
+        if field is None:
+            return None
+        return str(field.field_type)
+
+    def _extract_column_data_type(self, data: Any, column_name: str) -> Optional[DataType]:
+        if IcebergTable is None or not isinstance(data, IcebergTable):
+            return None
+        schema = data.schema()
+        if column_name not in set(schema.column_names):
+            return None
+        field = schema.find_field(column_name)
+        if field is None:
+            return None
+        field_type = field.field_type
+        if isinstance(field_type, IntegerType):
+            return DataType.INT32
+        if isinstance(field_type, LongType):
+            return DataType.INT64
+        if isinstance(field_type, FloatType):
+            return DataType.FLOAT
+        if isinstance(field_type, DoubleType):
+            return DataType.DOUBLE
+        if isinstance(field_type, BooleanType):
+            return DataType.BOOLEAN
+        if isinstance(field_type, StringType):
+            return DataType.STRING
+        if isinstance(field_type, BinaryType):
+            return DataType.BINARY
+        if isinstance(field_type, DateType):
+            return DataType.DATE
+        if isinstance(field_type, (TimestampType, TimestamptzType)):
+            return DataType.TIMESTAMP_MICROS
+        if isinstance(field_type, DecimalType):
+            return DataType.DECIMAL
         return None
 
     def transform(self, data: Any, feature_names: set[str]) -> Any:

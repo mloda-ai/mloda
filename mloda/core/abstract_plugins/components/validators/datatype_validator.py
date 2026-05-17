@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Callable, Optional
 
 
 from mloda.core.abstract_plugins.components.data_types import DataType
@@ -57,41 +57,28 @@ class DataTypeValidator:
         return False
 
     @classmethod
-    def validate(cls, data: Any, features: Any, strict_only: bool = False) -> None:
+    def validate(
+        cls,
+        features: Any,
+        get_column_data_type: Callable[[str], Optional[DataType]],
+    ) -> None:
         """Validate that data columns match declared feature types.
 
         Args:
-            data: PyArrow table or similar with column data
-            features: FeatureSet containing features to validate
-            strict_only: If True, only validate when strict_type_enforcement is enabled.
-                        This maintains backward compatibility with existing code.
+            features: FeatureSet containing features to validate.
+            get_column_data_type: Resolver that maps a column name to its actual DataType
+                or None (column missing / unknown dtype). The caller (typically
+                ComputeFramework.run_validate_output_features) binds this per-call so the
+                validator stays decoupled from any specific data model.
         """
         from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
-
-        # Type validation currently relies on the Arrow data model: it reads
-        # ``data.column_names`` and ``data.schema.field(...)``. Other compute
-        # frameworks (e.g. a pandas ``DataFrame``) do not expose those, so
-        # without this guard a feature that declares ``return_data_type_rule``
-        # makes ``mlodaAPI.run_all()`` crash with
-        # ``AttributeError: 'DataFrame' object has no attribute 'column_names'``.
-        # Skip gracefully instead of crashing until per-framework type
-        # extraction is added (see follow-up note in the PR).
-        if not (hasattr(data, "column_names") and hasattr(data, "schema")):
-            return
 
         for feature in features.features:
             if feature.data_type is None:
                 continue
 
-            col_name = feature.name
-            if col_name not in data.column_names:
-                continue
-
-            arrow_type = data.schema.field(col_name).type
-
-            try:
-                actual_type = DataType.from_arrow_type(arrow_type)
-            except ValueError:
+            actual_type = get_column_data_type(feature.name)
+            if actual_type is None:
                 continue
 
             strict_mode = False
@@ -101,7 +88,7 @@ class DataTypeValidator:
 
             if strict_mode:
                 if not cls._types_compatible(feature.data_type, actual_type):
-                    raise DataTypeMismatchError(col_name, feature.data_type, actual_type)
+                    raise DataTypeMismatchError(feature.name, feature.data_type, actual_type)
             else:
                 if not cls._types_loosely_compatible(feature.data_type, actual_type):
-                    raise DataTypeMismatchError(col_name, feature.data_type, actual_type)
+                    raise DataTypeMismatchError(feature.name, feature.data_type, actual_type)

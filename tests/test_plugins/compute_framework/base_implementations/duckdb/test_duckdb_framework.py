@@ -9,6 +9,9 @@ from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base impor
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )
+from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
+    DataTypeValidatorFrameworkTestMixin,
+)
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
     DtypeExtractionTestMixin,
 )
@@ -164,3 +167,20 @@ class TestDuckDBDtypeExtraction(DtypeExtractionTestMixin):
             {"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]}
         )
         return DuckdbRelation.from_arrow(connection, arrow_table)
+
+
+@pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed. Skipping this test.")
+class TestDuckDBDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
+    """Test DataTypeValidator enforcement on DuckDBFramework using shared mixin."""
+
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return DuckDBFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+    @pytest.fixture
+    def validator_sample_data(self, connection: Any) -> Any:
+        return DuckdbRelation.from_arrow(connection, self._arrow_table(self.VALIDATOR_COLUMNS))
+
+    @pytest.fixture
+    def precision_sample_data(self, connection: Any) -> Any:
+        return DuckdbRelation.from_arrow(connection, self._arrow_table(self.PRECISION_COLUMNS))

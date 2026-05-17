@@ -1,6 +1,7 @@
 from abc import ABC
 from typing import Any, Optional, final
 from uuid import UUID, uuid4
+from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import (
     ComputeFrameworkTransformer,
 )
@@ -409,6 +410,16 @@ class ComputeFramework(ABC):
         """
         return None
 
+    def _extract_column_data_type(self, data: Any, column_name: str) -> Optional[DataType]:
+        """Resolve a column's native dtype to the unified DataType enum.
+
+        Default: return None. Frameworks must override to convert their native
+        type system (pa.DataType, pd.api.types, polars.DataType, pyiceberg types,
+        pyspark types, duckdb types) directly to DataType, no string round-trip.
+        Returning None means the validator skips that column (graceful no-op).
+        """
+        return None
+
     @final
     def set_filter_engine(self, features: Any) -> Any:
         """We set the filter engine of the feature set here.
@@ -462,7 +473,10 @@ class ComputeFramework(ABC):
 
         from mloda.core.abstract_plugins.components.validators.datatype_validator import DataTypeValidator
 
-        DataTypeValidator.validate(self.data, features, strict_only=True)
+        DataTypeValidator.validate(
+            features,
+            lambda col_name: self._extract_column_data_type(self.data, col_name),
+        )
 
         extender = self.get_function_extender(ExtenderHook.VALIDATE_OUTPUT_FEATURE)
         if extender is None:

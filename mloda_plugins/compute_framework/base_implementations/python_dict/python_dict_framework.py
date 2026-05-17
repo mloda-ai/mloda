@@ -1,4 +1,7 @@
+import datetime
+import decimal
 from typing import Any, Optional
+from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_merge_engine import (
     PythonDictMergeEngine,
@@ -71,6 +74,30 @@ class PythonDictFramework(ComputeFramework):
         for row in data:
             if isinstance(row, dict) and column_name in row and row[column_name] is not None:
                 return type(row[column_name]).__name__
+        return None
+
+    def _extract_column_data_type(self, data: Any, column_name: str) -> Optional[DataType]:
+        for row in data:
+            if not isinstance(row, dict) or column_name not in row or row[column_name] is None:
+                continue
+            val = row[column_name]
+            if isinstance(val, bool):
+                return DataType.BOOLEAN
+            if isinstance(val, int):
+                return DataType.INT64
+            if isinstance(val, float):
+                return DataType.DOUBLE
+            if isinstance(val, str):
+                return DataType.STRING
+            if isinstance(val, bytes):
+                return DataType.BINARY
+            if isinstance(val, datetime.datetime):
+                return DataType.TIMESTAMP_MICROS
+            if isinstance(val, datetime.date):
+                return DataType.DATE
+            if isinstance(val, decimal.Decimal):
+                return DataType.DECIMAL
+            return None
         return None
 
     def transform(self, data: Any, feature_names: set[str]) -> list[dict[str, Any]]:

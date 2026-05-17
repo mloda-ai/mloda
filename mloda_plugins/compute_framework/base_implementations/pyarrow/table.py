@@ -1,4 +1,5 @@
 from typing import Any, Optional
+from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.provider import BaseMergeEngine
 from mloda.provider import BaseFilterEngine, BaseMaskEngine
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_merge_engine import PyArrowMergeEngine
@@ -61,6 +62,11 @@ class PyArrowTable(ComputeFramework):
         if column_name in data.schema.names:
             return str(data.schema.field(column_name).type)
         return None
+
+    def _extract_column_data_type(self, data: Any, column_name: str) -> Optional[DataType]:
+        if column_name not in data.schema.names:
+            return None
+        return DataType.from_arrow_type_safe(data.schema.field(column_name).type)
 
     def transform(
         self,

@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 import pyarrow as pa
 import pytest
 from mloda.provider import BaseInputData
@@ -18,6 +18,15 @@ from mloda.core.abstract_plugins.components.validators.datatype_validator import
 )
 from mloda.provider import DefaultOptionKeys
 from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_SYNC_THREADING
+
+
+def _arrow_resolver(table: pa.Table) -> Callable[[str], Optional[DataType]]:
+    def resolve(col: str) -> Optional[DataType]:
+        if col not in table.schema.names:
+            return None
+        return DataType.from_arrow_type_safe(table.schema.field(col).type)
+
+    return resolve
 
 
 class TypedFeatureSource(FeatureGroup):
@@ -122,7 +131,7 @@ class TestStrictTypeEnforcement:
         feature_set = FeatureSet([feature])
 
         with pytest.raises(DataTypeMismatchError) as exc_info:
-            DataTypeValidator.validate(table, feature_set)
+            DataTypeValidator.validate(feature_set, _arrow_resolver(table))
 
         assert "age" in str(exc_info.value)
         assert "INT32" in str(exc_info.value)
@@ -138,7 +147,7 @@ class TestStrictTypeEnforcement:
         feature_set = FeatureSet([feature])
 
         # Should NOT raise
-        DataTypeValidator.validate(table, feature_set)
+        DataTypeValidator.validate(feature_set, _arrow_resolver(table))
 
     def test_validator_allows_widening_int32_to_int64(self) -> None:
         """Validator should allow safe type widening (INT32 -> INT64)."""
@@ -150,7 +159,7 @@ class TestStrictTypeEnforcement:
         feature_set = FeatureSet([feature])
 
         # Should NOT raise - INT32 can widen to INT64
-        DataTypeValidator.validate(table, feature_set)
+        DataTypeValidator.validate(feature_set, _arrow_resolver(table))
 
     def test_validator_allows_widening_float_to_double(self) -> None:
         """Validator should allow safe type widening (FLOAT -> DOUBLE)."""
@@ -163,7 +172,7 @@ class TestStrictTypeEnforcement:
         feature_set.add(feature)
 
         # Should NOT raise - FLOAT can widen to DOUBLE
-        DataTypeValidator.validate(table, feature_set)
+        DataTypeValidator.validate(feature_set, _arrow_resolver(table))
 
 
 class TestTypeChainPropagation:
@@ -206,7 +215,7 @@ class TestIncompatibleTypeCoercion:
         feature_set.add(feature)
 
         with pytest.raises(DataTypeMismatchError) as exc_info:
-            DataTypeValidator.validate(table, feature_set)
+            DataTypeValidator.validate(feature_set, _arrow_resolver(table))
 
         assert "STRING" in str(exc_info.value)
         assert "INT32" in str(exc_info.value)
@@ -221,7 +230,7 @@ class TestIncompatibleTypeCoercion:
         feature_set.add(feature)
 
         with pytest.raises(DataTypeMismatchError):
-            DataTypeValidator.validate(table, feature_set)
+            DataTypeValidator.validate(feature_set, _arrow_resolver(table))
 
     def test_narrowing_double_to_float_fails(self) -> None:
         """DOUBLE -> FLOAT (narrowing) should fail in strict mode."""
@@ -234,7 +243,7 @@ class TestIncompatibleTypeCoercion:
         feature_set.add(feature)
 
         with pytest.raises(DataTypeMismatchError):
-            DataTypeValidator.validate(table, feature_set)
+            DataTypeValidator.validate(feature_set, _arrow_resolver(table))
 
     def test_boolean_to_int_fails(self) -> None:
         """BOOLEAN -> INT should fail."""
@@ -245,7 +254,7 @@ class TestIncompatibleTypeCoercion:
         feature_set.add(feature)
 
         with pytest.raises(DataTypeMismatchError):
-            DataTypeValidator.validate(table, feature_set)
+            DataTypeValidator.validate(feature_set, _arrow_resolver(table))
 
 
 class TestUntypedFeatures:
@@ -260,7 +269,7 @@ class TestUntypedFeatures:
         feature_set.add(feature)
 
         # Should NOT raise - untyped features skip validation
-        DataTypeValidator.validate(table, feature_set)
+        DataTypeValidator.validate(feature_set, _arrow_resolver(table))
 
     def test_mixed_typed_and_untyped_validation(self) -> None:
         """Validation should only check typed features, skip untyped."""
@@ -279,7 +288,7 @@ class TestUntypedFeatures:
         feature_set.add(feature_untyped)
 
         # Should NOT raise - typed field matches, untyped skipped
-        DataTypeValidator.validate(table, feature_set)
+        DataTypeValidator.validate(feature_set, _arrow_resolver(table))
 
     def test_untyped_feature_allows_any_type(self) -> None:
         """Untyped features should work with any data type."""
@@ -297,7 +306,7 @@ class TestUntypedFeatures:
 
         for table in tables:
             # Should NOT raise for any type
-            DataTypeValidator.validate(table, feature_set)
+            DataTypeValidator.validate(feature_set, _arrow_resolver(table))
 
 
 @PARALLELIZATION_MODES_SYNC_THREADING
@@ -398,7 +407,7 @@ class TestValidatorEdgeCases:
         feature_set.add(feature_missing)
 
         # Should NOT raise - missing columns are skipped
-        DataTypeValidator.validate(table, feature_set)
+        DataTypeValidator.validate(feature_set, _arrow_resolver(table))
 
     def test_validation_with_empty_feature_set(self) -> None:
         """Validator should handle empty feature set."""
@@ -406,7 +415,7 @@ class TestValidatorEdgeCases:
         feature_set = FeatureSet()
 
         # Should NOT raise
-        DataTypeValidator.validate(table, feature_set)
+        DataTypeValidator.validate(feature_set, _arrow_resolver(table))
 
     def test_validation_with_null_values(self) -> None:
         """Validator should handle null values correctly."""
@@ -417,7 +426,7 @@ class TestValidatorEdgeCases:
         feature_set.add(feature)
 
         # Should NOT raise - nulls are allowed
-        DataTypeValidator.validate(table, feature_set)
+        DataTypeValidator.validate(feature_set, _arrow_resolver(table))
 
     def test_multiple_features_one_mismatch(self) -> None:
         """If one feature mismatches, validation should fail."""
@@ -435,7 +444,7 @@ class TestValidatorEdgeCases:
         feature_set.add(feature_bad)
 
         with pytest.raises(DataTypeMismatchError) as exc_info:
-            DataTypeValidator.validate(table, feature_set)
+            DataTypeValidator.validate(feature_set, _arrow_resolver(table))
 
         # Should complain about the bad field
         assert "bad" in str(exc_info.value)

@@ -9,6 +9,9 @@ from mloda.user import ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework, _regexp
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation
 from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
+from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
+    DataTypeValidatorFrameworkTestMixin,
+)
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
     DtypeExtractionTestMixin,
 )
@@ -168,3 +171,43 @@ class TestSqliteDtypeExtraction(DtypeExtractionTestMixin):
             {"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]}
         )
         return SqliteRelation.from_arrow(connection, arrow_table)
+
+
+class TestSqliteDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
+    """Test DataTypeValidator enforcement on SqliteFramework using shared mixin.
+
+    SQLite uses type affinity, not strict types: INTEGER covers all int widths,
+    REAL covers all float widths, and timestamps are stored as TEXT. Precision-
+    narrowing tests that rely on per-width distinctions are skipped because they
+    are statically un-enforceable from PRAGMA table_info.
+    """
+
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return SqliteFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+    @pytest.fixture
+    def validator_sample_data(self, connection: sqlite3.Connection) -> Any:
+        return SqliteRelation.from_arrow(connection, self._arrow_table(self.VALIDATOR_COLUMNS))
+
+    @pytest.fixture
+    def precision_sample_data(self, connection: sqlite3.Connection) -> Any:
+        return SqliteRelation.from_arrow(connection, self._arrow_table(self.PRECISION_COLUMNS))
+
+    def test_int32_column_strict_int32_passes(self, framework_instance: Any, precision_sample_data: Any) -> None:
+        pytest.skip("SQLite collapses INTEGER affinity; the int32 column reports INT64, not INT32")
+
+    def test_int64_column_strict_int32_raises(self, framework_instance: Any, precision_sample_data: Any) -> None:
+        pytest.skip("SQLite collapses INTEGER affinity; INT32 vs INT64 cannot be distinguished from PRAGMA")
+
+    def test_float32_column_strict_float_passes(self, framework_instance: Any, precision_sample_data: Any) -> None:
+        pytest.skip("SQLite collapses REAL affinity; the float32 column reports DOUBLE, not FLOAT")
+
+    def test_float64_column_strict_float_raises(self, framework_instance: Any, precision_sample_data: Any) -> None:
+        pytest.skip("SQLite collapses REAL affinity; FLOAT vs DOUBLE cannot be distinguished from PRAGMA")
+
+    def test_timestamp_ms_column_strict_ms_passes(self, framework_instance: Any, precision_sample_data: Any) -> None:
+        pytest.skip("SQLite stores timestamps as TEXT; TIMESTAMP_MILLIS cannot be expressed in PRAGMA")
+
+    def test_timestamp_us_column_strict_ms_raises(self, framework_instance: Any, precision_sample_data: Any) -> None:
+        pytest.skip("SQLite stores timestamps as TEXT; TIMESTAMP precision cannot be distinguished")

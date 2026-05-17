@@ -1,4 +1,5 @@
 from typing import Any, Optional
+from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.pandas.pandas_merge_engine import PandasMergeEngine
 from mloda.user import FeatureName
@@ -47,6 +48,28 @@ class PandasDataFrame(ComputeFramework):
     def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
         if column_name in data.columns:
             return str(data[column_name].dtype)
+        return None
+
+    def _extract_column_data_type(self, data: Any, column_name: str) -> Optional[DataType]:
+        if column_name not in data.columns:
+            return None
+        dtype = data[column_name].dtype
+        if isinstance(dtype, pd.StringDtype):
+            return DataType.STRING
+        if isinstance(dtype, pd.BooleanDtype):
+            return DataType.BOOLEAN
+        if isinstance(dtype, pd.api.types.DatetimeTZDtype):
+            return DataType.TIMESTAMP_MICROS
+        if pd.api.types.is_bool_dtype(dtype):
+            return DataType.BOOLEAN
+        if pd.api.types.is_integer_dtype(dtype):
+            return DataType.INT32 if dtype.itemsize <= 4 else DataType.INT64
+        if pd.api.types.is_float_dtype(dtype):
+            return DataType.FLOAT if dtype.itemsize <= 4 else DataType.DOUBLE
+        if pd.api.types.is_datetime64_dtype(dtype):
+            dtype_str = str(dtype)
+            unit = dtype_str[len("datetime64[") : -1] if "[" in dtype_str else "ns"
+            return DataType.TIMESTAMP_MILLIS if unit == "ms" else DataType.TIMESTAMP_MICROS
         return None
 
     @classmethod

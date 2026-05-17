@@ -1,6 +1,7 @@
 from typing import Any
 
 from mloda.user import JoinType
+import pyarrow as pa
 import pytest
 from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame
 from mloda.user import FeatureName
@@ -8,6 +9,9 @@ from mloda.user import ParallelizationMode
 from mloda.user import Index
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
+)
+from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
+    DataTypeValidatorFrameworkTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
     DtypeExtractionTestMixin,
@@ -207,3 +211,15 @@ class TestPolarsLazyDtypeExtraction(DtypeExtractionTestMixin):
     @pytest.fixture
     def dtype_sample_data(self) -> Any:
         return pl.DataFrame({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]}).lazy()
+
+
+@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
+class TestPolarsLazyDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
+    """Test DataTypeValidator enforcement on PolarsLazyDataFrame using shared mixin."""
+
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return PolarsLazyDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+    def from_arrow(self, table: pa.Table) -> Any:
+        return pl.from_arrow(table).lazy()  # type: ignore[union-attr]

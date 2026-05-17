@@ -1,8 +1,15 @@
+from typing import Any
+
 import pytest
 from unittest.mock import Mock, patch
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework import IcebergFramework
+from mloda.user import DataType
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
+from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
+    ColumnSpec,
+    DataTypeValidatorFrameworkTestMixin,
+)
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )
@@ -16,12 +23,44 @@ try:
     import pyarrow as pa
     from pyiceberg.table import Table as IcebergTable
     from pyiceberg.catalog import Catalog
+    from pyiceberg.schema import Schema
+    from pyiceberg.types import (
+        DoubleType,
+        FloatType,
+        IntegerType,
+        LongType,
+        NestedField,
+        StringType,
+        TimestampType,
+    )
 except ImportError:
     logger.warning("PyIceberg or PyArrow is not installed. Some tests will be skipped.")
     pyiceberg = None  # type: ignore
     pa = None  # type: ignore[assignment]
     IcebergTable = None  # type: ignore
     Catalog = None  # type: ignore
+    Schema = None  # type: ignore
+    DoubleType = None  # type: ignore
+    FloatType = None  # type: ignore
+    IntegerType = None  # type: ignore
+    LongType = None  # type: ignore
+    NestedField = None  # type: ignore
+    StringType = None  # type: ignore
+    TimestampType = None  # type: ignore
+
+
+_ICEBERG_TYPE_MAP: dict[DataType, Any] = (
+    {
+        DataType.INT32: IntegerType(),
+        DataType.INT64: LongType(),
+        DataType.FLOAT: FloatType(),
+        DataType.DOUBLE: DoubleType(),
+        DataType.STRING: StringType(),
+        DataType.TIMESTAMP_MICROS: TimestampType(),
+    }
+    if pyiceberg is not None
+    else {}
+)
 
 
 @pytest.mark.skipif(
@@ -142,3 +181,66 @@ class TestIcebergFrameworkUnavailable:
         with patch("mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework.Catalog", None):
             with pytest.raises(ImportError, match="PyIceberg is not installed"):
                 framework.set_framework_connection_object(Mock())
+
+
+@pytest.mark.skipif(
+    pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
+)
+class TestIcebergDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
+    """Test DataTypeValidator enforcement on IcebergFramework using shared mixin.
+
+    Iceberg tables require catalog context to construct, so the fixture wraps a real
+    ``pyiceberg.schema.Schema`` (carrying real ``IntegerType``/``LongType``/... field
+    types) inside a ``Mock`` IcebergTable. The mock's ``schema()`` returns a wrapper
+    that adapts ``find_field`` to return ``None`` for missing columns (real pyiceberg
+    raises ``ValueError`` here; the framework code assumes ``None``).
+
+    Iceberg has only one TimestampType (microsecond precision per spec), so the
+    millisecond-precision tests are skipped on this subclass.
+    """
+
+    @staticmethod
+    def _wrap_schema(schema: Any) -> Any:
+        """Wrap a real pyiceberg Schema so that find_field returns None on missing."""
+        wrapper = Mock()
+        wrapper.column_names = list(schema.column_names)
+
+        def _find_field_safe(name: str) -> Any:
+            for field in schema.fields:
+                if field.name == name:
+                    return field
+            return None
+
+        wrapper.find_field = _find_field_safe
+        mock_table = Mock(spec=IcebergTable)
+        mock_table.schema.return_value = wrapper
+        return mock_table
+
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return IcebergFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+    @pytest.fixture
+    def validator_sample_data(self) -> Any:
+        return self._build_iceberg(self.VALIDATOR_COLUMNS)
+
+    @pytest.fixture
+    def precision_sample_data(self) -> Any:
+        return self._build_iceberg(self.PRECISION_COLUMNS)
+
+    def _build_iceberg(self, columns: tuple[ColumnSpec, ...]) -> Any:
+        # Iceberg needs explicit NestedField/IcebergType per column; the schema carries no
+        # values. _ICEBERG_TYPE_MAP omits TIMESTAMP_MILLIS, so unsupported columns are
+        # filtered out (the MILLIS test methods skip explicitly).
+        fields = [
+            NestedField(i + 1, c.name, _ICEBERG_TYPE_MAP[c.data_type])
+            for i, c in enumerate(columns)
+            if c.data_type in _ICEBERG_TYPE_MAP
+        ]
+        return self._wrap_schema(Schema(*fields))
+
+    def test_timestamp_ms_column_strict_ms_passes(self, framework_instance: Any, precision_sample_data: Any) -> None:
+        pytest.skip("Iceberg has only one TimestampType (microseconds per spec); millisecond cannot be expressed")
+
+    def test_timestamp_us_column_strict_ms_raises(self, framework_instance: Any, precision_sample_data: Any) -> None:
+        pytest.skip("Iceberg has only one TimestampType (microseconds per spec); millisecond cannot be expressed")

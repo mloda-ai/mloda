@@ -1,4 +1,5 @@
 from typing import Any, Optional
+from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.polars.polars_merge_engine import PolarsMergeEngine
 from mloda.user import FeatureName
@@ -47,6 +48,37 @@ class PolarsDataFrame(ComputeFramework):
     def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
         if column_name in data.columns:
             return str(data[column_name].dtype)
+        return None
+
+    def _extract_column_data_type(self, data: Any, column_name: str) -> Optional[DataType]:
+        if column_name not in data.columns:
+            return None
+        return self._polars_type_to_data_type(data[column_name].dtype)
+
+    @staticmethod
+    def _polars_type_to_data_type(dtype: Any) -> Optional[DataType]:
+        if pl is None:
+            return None
+        if dtype == pl.Int32:
+            return DataType.INT32
+        if dtype == pl.Int64:
+            return DataType.INT64
+        if dtype == pl.Float32:
+            return DataType.FLOAT
+        if dtype == pl.Float64:
+            return DataType.DOUBLE
+        if dtype == pl.Boolean:
+            return DataType.BOOLEAN
+        if dtype == pl.String:
+            return DataType.STRING
+        if dtype == pl.Binary:
+            return DataType.BINARY
+        if dtype == pl.Date:
+            return DataType.DATE
+        if isinstance(dtype, pl.Datetime):
+            return DataType.TIMESTAMP_MILLIS if dtype.time_unit == "ms" else DataType.TIMESTAMP_MICROS
+        if isinstance(dtype, pl.Decimal):
+            return DataType.DECIMAL
         return None
 
     @classmethod

@@ -1,7 +1,7 @@
 import datetime
 import decimal
 from enum import Enum
-from typing import Any
+from typing import Any, Optional
 import pyarrow as pa
 
 
@@ -103,19 +103,7 @@ class DataType(Enum):
             raise ValueError(f"Unsupported DataType: {data_type}")
 
     @classmethod
-    def from_arrow_type(cls, arrow_type: pa.DataType) -> "DataType":
-        """
-        Converts a PyArrow DataType to the custom DataType enum.
-
-        Args:
-            arrow_type (pa.DataType): The PyArrow DataType to convert.
-
-        Returns:
-            DataType: The corresponding DataType enum member.
-
-        Raises:
-            ValueError: If the arrow_type is not supported.
-        """
+    def _arrow_type_to_dtype_or_none(cls, arrow_type: pa.DataType) -> Optional["DataType"]:
         if pa.types.is_int32(arrow_type):
             return cls.INT32
         elif pa.types.is_int64(arrow_type):
@@ -139,7 +127,31 @@ class DataType(Enum):
                 return cls.TIMESTAMP_MICROS
         elif pa.types.is_decimal(arrow_type):
             return cls.DECIMAL
-        raise ValueError(f"Unsupported PyArrow type: {arrow_type}")
+        return None
+
+    @classmethod
+    def from_arrow_type(cls, arrow_type: pa.DataType) -> "DataType":
+        """
+        Converts a PyArrow DataType to the custom DataType enum.
+
+        Args:
+            arrow_type (pa.DataType): The PyArrow DataType to convert.
+
+        Returns:
+            DataType: The corresponding DataType enum member.
+
+        Raises:
+            ValueError: If the arrow_type is not supported.
+        """
+        result = cls._arrow_type_to_dtype_or_none(arrow_type)
+        if result is None:
+            raise ValueError(f"Unsupported PyArrow type: {arrow_type}")
+        return result
+
+    @classmethod
+    def from_arrow_type_safe(cls, arrow_type: pa.DataType) -> Optional["DataType"]:
+        """Non-raising counterpart of from_arrow_type: returns None for unsupported types."""
+        return cls._arrow_type_to_dtype_or_none(arrow_type)
 
     @classmethod
     def infer_arrow_type(cls, value: Any) -> pa.DataType:

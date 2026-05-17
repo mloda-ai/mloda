@@ -1,9 +1,13 @@
 import pytest
+import pyarrow as pa
 from typing import Any, Optional
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
 from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
+from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
+    DataTypeValidatorFrameworkTestMixin,
+)
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
     DtypeExtractionTestMixin,
 )
@@ -125,3 +129,24 @@ class TestPandasDtypeExtraction(DtypeExtractionTestMixin):
     @pytest.fixture
     def dtype_sample_data(self) -> Any:
         return pd.DataFrame({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]})
+
+
+@pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
+class TestPandasDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
+    """Test DataTypeValidator enforcement on PandasDataFrame using shared mixin.
+
+    str_col uses explicit ``pd.StringDtype()`` (via the type map) so the resolver returns
+    STRING; plain object dtype would be ambiguous and resolve to None.
+    """
+
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return PandasDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+    def from_arrow(self, table: pa.Table) -> Any:
+        # Option A: arrow -> pandas via to_pandas. types_mapper preserves pd.StringDtype()
+        # for STRING columns; coerce_temporal_nanoseconds=False keeps ms/us timestamp units.
+        return table.to_pandas(
+            types_mapper={pa.string(): pd.StringDtype()}.get,
+            coerce_temporal_nanoseconds=False,
+        )

@@ -196,8 +196,9 @@ class GlobalFilter:
         - event_time_column: the column name for the event time filter. Default is DefaultOptionKeys.reference_time.
         - validity_time_column: the column name for the validity time filter. Default is DefaultOptionKeys.time_travel.
 
-        The `single_filters` created will be converted to UTC as ISO 8601 formatted strings to ensure consistency
-        across time zones and avoid ambiguity when comparing or processing time-based data.
+        The bounds stored on the created `single_filters` are tz-aware `datetime` objects normalized to UTC,
+        so each filter engine can compare them directly against the framework's native temporal column type
+        without re-parsing. Breaking change since 0.6.x: previously these bounds were ISO 8601 strings.
         """
 
         self._add_range_filter(event_time_column, event_from, event_to, max_exclusive)

@@ -1,32 +1,29 @@
 """
-Integration tests for GlobalFilter time range filtering against tz-aware
-timestamp columns across compute frameworks.
+Regression guard for #435: GlobalFilter time-range bounds must be comparable against
+tz-aware temporal columns at each compute framework's filter engine.
 
-These tests verify that ``GlobalFilter.add_time_and_time_travel_filters`` produces
-filter bounds that filter engines can compare against tz-aware (UTC) temporal
-columns. On the current implementation the bounds are stringified ISO 8601
-values which the PyArrow and python_dict filter engines cannot compare to a
-real timestamp/datetime column:
+Before the fix, ``GlobalFilter.add_time_and_time_travel_filters`` stringified bounds
+via ``datetime.isoformat()``. The PyArrow filter engine then raised
+``ArrowNotImplementedError: Function 'greater_equal' has no kernel matching input
+types (timestamp[us, tz=UTC], string)``, and the python_dict engine raised
+``TypeError: '<=' not supported between instances of 'str' and 'datetime.datetime'``.
 
-* PyArrow raises ``ArrowNotImplementedError`` from
-  ``pc.greater_equal(timestamp[us, tz=UTC], string)``.
-* python_dict raises ``TypeError: '<=' not supported between instances of 'str'
-  and 'datetime.datetime'``.
+These tests pin the contract that bounds reach engines as tz-aware ``datetime``
+objects and survive the round trip end-to-end through ``mloda.run_all`` for the
+three engines that previously broke under tz-aware columns: PyArrow, python_dict,
+and Polars.
 
-The tests are designed to fail on current main and pass once the bounds are
-returned as UTC-normalized ``datetime`` objects.
-
-Note on pandas: empirically the pandas filter engine silently coerces the
-stringified bound back into a tz-aware Timestamp via ``Series.__ge__``, so it
-does not raise on current main. A pandas regression guard can be added as a
-follow-up but is not part of this Red phase, since it would pass both before
-and after the fix.
+Note on pandas: the pandas filter engine silently coerced the stringified bound
+back into a tz-aware Timestamp via ``Series.__ge__`` even before the fix, so a
+dedicated pandas regression test would pass both before and after #435 and is
+omitted as redundant.
 """
 
 from datetime import datetime, timezone
 from typing import Any, Optional
 
 import pyarrow as pa
+import pytest
 
 from mloda.provider import BaseInputData
 from mloda.provider import ComputeFramework
@@ -37,22 +34,20 @@ from mloda.provider import FeatureSet
 from mloda.user import GlobalFilter
 from mloda.user import PluginCollector
 from mloda.user import mloda
+from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
     PythonDictFramework,
 )
 
-
-# TODO(#435): Polars is not covered in this integration test. The shared
-# ``ATestDataCreator`` only maps Pandas/PyArrow conversions and there is no
-# polars time-window plugin to reuse; wiring a polars-native source FG is
-# scope creep for the Red phase. PyArrow + python_dict already exercise the
-# GlobalFilter -> tz-aware-column code path. A polars regression test can be
-# added in a follow-up after the Green-phase fix lands.
+try:
+    import polars as pl
+except ImportError:
+    pl = None  # type: ignore[assignment]
 
 
-# Test data covering rows inside and outside the filter window [Jan 5, Jan 11).
-# Indices 4..9 (timestamps Jan 5..Jan 10) are the only rows that must survive.
+# Indices 4..9 (timestamps Jan 5..Jan 10) are the only rows that must survive
+# the [Jan 5, Jan 11) window with max_exclusive=True.
 TIMESTAMPS_ISO: list[str] = [
     "2023-01-01T00:00:00+00:00",
     "2023-01-02T00:00:00+00:00",
@@ -72,17 +67,22 @@ TEMPERATURES: list[int] = [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
 EVENT_FROM = datetime(2023, 1, 5, tzinfo=timezone.utc)
 EVENT_TO = datetime(2023, 1, 11, tzinfo=timezone.utc)
 
-# Rows that must survive the filter (Jan 5..Jan 10, inclusive of start, exclusive of end).
 EXPECTED_TEMPERATURES: list[int] = [14, 15, 16, 17, 18, 19]
 EXPECTED_ROW_COUNT: int = len(EXPECTED_TEMPERATURES)
 
 
+def _naive_timestamps() -> list[datetime]:
+    return [datetime.fromisoformat(ts).replace(tzinfo=None) for ts in TIMESTAMPS_ISO]
+
+
+def _tz_aware_timestamps() -> list[datetime]:
+    return [datetime.fromisoformat(ts) for ts in TIMESTAMPS_ISO]
+
+
 class TestGlobalFilterTimeRangePyArrow:
-    """GlobalFilter time range filtering on a tz-aware PyArrow timestamp column."""
+    """Regression guard for #435 on the PyArrow filter engine."""
 
     def test_pyarrow_tz_aware_time_range_filter(self) -> None:
-        """The PyArrow filter engine must accept the GlobalFilter bound against a tz-aware timestamp column."""
-
         class PyArrowTzAwareSource(FeatureGroup):
             @classmethod
             def input_data(cls) -> Optional[BaseInputData]:
@@ -90,11 +90,7 @@ class TestGlobalFilterTimeRangePyArrow:
 
             @classmethod
             def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-                # Build a tz-aware UTC timestamp column natively in PyArrow so the
-                # filter engine has to compare timestamp[us, tz=UTC] against the
-                # GlobalFilter bound directly.
-                timestamps_naive = [datetime.fromisoformat(ts).replace(tzinfo=None) for ts in TIMESTAMPS_ISO]
-                ts_array = pa.array(timestamps_naive, type=pa.timestamp("us", tz="UTC"))
+                ts_array = pa.array(_naive_timestamps(), type=pa.timestamp("us", tz="UTC"))
                 return pa.table(
                     {
                         "temperature": pa.array(TEMPERATURES),
@@ -111,10 +107,6 @@ class TestGlobalFilterTimeRangePyArrow:
 
         plugin_collector = PluginCollector.enabled_feature_groups({PyArrowTzAwareSource})
 
-        # On current main this call raises because the PyArrow filter engine cannot
-        # compare timestamp[us, tz=UTC] to the stringified bound produced by
-        # _check_and_convert_time_info. After the Green-phase fix the call succeeds
-        # and we verify the surviving rows.
         result = mloda.run_all(
             ["temperature", DefaultOptionKeys.reference_time],
             compute_frameworks={PyArrowTable},
@@ -136,16 +128,14 @@ class TestGlobalFilterTimeRangePyArrow:
         assert actual_temps == EXPECTED_TEMPERATURES, (
             f"Expected only in-window temperatures {EXPECTED_TEMPERATURES}, got {actual_temps}"
         )
-        assert temperature_table.num_rows == EXPECTED_ROW_COUNT, (
-            f"Expected {EXPECTED_ROW_COUNT} rows after tz-aware filtering, got {temperature_table.num_rows}"
-        )
+        assert temperature_table.num_rows == EXPECTED_ROW_COUNT
 
 
 class TestGlobalFilterTimeRangePythonDict:
-    """GlobalFilter time range filtering on a python_dict list of tz-aware datetimes."""
+    """Regression guard for #435 on the python_dict filter engine."""
 
     def test_python_dict_tz_aware_time_range_filter(self) -> None:
-        """The python_dict filter engine must accept the GlobalFilter bound against tz-aware datetime values."""
+        timestamps = _tz_aware_timestamps()
 
         class PythonDictTzAwareSource(FeatureGroup):
             @classmethod
@@ -154,14 +144,12 @@ class TestGlobalFilterTimeRangePythonDict:
 
             @classmethod
             def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-                # Emit native tz-aware datetime values inside the row dicts so the
-                # filter engine compares datetime <-> bound directly.
                 return [
                     {
                         "temperature": TEMPERATURES[i],
-                        DefaultOptionKeys.reference_time: datetime.fromisoformat(TIMESTAMPS_ISO[i]),
+                        DefaultOptionKeys.reference_time: timestamps[i],
                     }
-                    for i in range(len(TIMESTAMPS_ISO))
+                    for i in range(len(timestamps))
                 ]
 
             @classmethod
@@ -173,10 +161,6 @@ class TestGlobalFilterTimeRangePythonDict:
 
         plugin_collector = PluginCollector.enabled_feature_groups({PythonDictTzAwareSource})
 
-        # On current main this raises ``TypeError: '<=' not supported between
-        # instances of 'str' and 'datetime.datetime'`` because the GlobalFilter
-        # bound is an ISO 8601 string. After the Green-phase fix the bound is a
-        # ``datetime`` and the filter returns the in-window rows.
         result = mloda.run_all(
             ["temperature", DefaultOptionKeys.reference_time],
             compute_frameworks={PythonDictFramework},
@@ -195,9 +179,61 @@ class TestGlobalFilterTimeRangePythonDict:
         assert rows is not None, "python_dict result with temperature column not found"
 
         actual_temps = sorted(row["temperature"] for row in rows)
-        assert actual_temps == EXPECTED_TEMPERATURES, (
-            f"Expected only in-window temperatures {EXPECTED_TEMPERATURES}, got {actual_temps}"
+        assert actual_temps == EXPECTED_TEMPERATURES
+        assert len(rows) == EXPECTED_ROW_COUNT
+
+
+@pytest.mark.skipif(pl is None, reason="Polars is not installed")
+class TestGlobalFilterTimeRangePolars:
+    """Regression guard for #435 on the Polars filter engine."""
+
+    def test_polars_tz_aware_time_range_filter(self) -> None:
+        timestamps = _tz_aware_timestamps()
+
+        class PolarsTzAwareSource(FeatureGroup):
+            @classmethod
+            def input_data(cls) -> Optional[BaseInputData]:
+                return DataCreator({"temperature", DefaultOptionKeys.reference_time})
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                return pl.DataFrame(
+                    {
+                        "temperature": TEMPERATURES,
+                        DefaultOptionKeys.reference_time: timestamps,
+                    },
+                    schema={
+                        "temperature": pl.Int64,
+                        DefaultOptionKeys.reference_time: pl.Datetime(time_unit="us", time_zone="UTC"),
+                    },
+                )
+
+            @classmethod
+            def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+                return {PolarsDataFrame}
+
+        global_filter = GlobalFilter()
+        global_filter.add_time_and_time_travel_filters(event_from=EVENT_FROM, event_to=EVENT_TO)
+
+        plugin_collector = PluginCollector.enabled_feature_groups({PolarsTzAwareSource})
+
+        result = mloda.run_all(
+            ["temperature", DefaultOptionKeys.reference_time],
+            compute_frameworks={PolarsDataFrame},
+            plugin_collector=plugin_collector,
+            global_filter=global_filter,
         )
-        assert len(rows) == EXPECTED_ROW_COUNT, (
-            f"Expected {EXPECTED_ROW_COUNT} rows after tz-aware filtering, got {len(rows)}"
-        )
+
+        assert len(result) > 0, "No results returned from mloda.run_all"
+
+        temperature_df = None
+        for df in result:
+            if "temperature" in df.columns:
+                temperature_df = df
+                break
+
+        assert temperature_df is not None, "Polars DataFrame with temperature column not found"
+
+        actual_temps = sorted(temperature_df["temperature"].to_list())
+        assert actual_temps == EXPECTED_TEMPERATURES
+        assert temperature_df.height == EXPECTED_ROW_COUNT

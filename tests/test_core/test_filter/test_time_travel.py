@@ -41,6 +41,7 @@ class TimeTravelPositiveFilterTest(FeatureGroup):
         if len(features.filters) != 1:  # type: ignore
             raise ValueError("Test Filter not found")
 
+        # Snapshot `now` once so the three row timestamps are mutually consistent.
         now_utc = datetime.now(tz=timezone.utc)
         ts_array = pa.array(
             [

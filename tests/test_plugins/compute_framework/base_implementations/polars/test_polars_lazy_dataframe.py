@@ -10,11 +10,13 @@ from tests.test_plugins.compute_framework.test_tooling.availability_test_helper 
     assert_unavailable_when_import_blocked,
 )
 from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
+    ColumnSpec,
     DataTypeValidatorFrameworkTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
     DtypeExtractionTestMixin,
 )
+from tests.test_plugins.compute_framework.base_implementations.polars.test_polars_dataframe import _POLARS_TYPE_MAP
 
 import logging
 
@@ -220,22 +222,7 @@ class TestPolarsLazyDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
     def framework_instance(self) -> Any:
         return PolarsLazyDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
-    @pytest.fixture
-    def validator_sample_data(self) -> Any:
-        return pl.DataFrame({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]}).lazy()
-
-    @pytest.fixture
-    def precision_sample_data(self) -> Any:
-        from datetime import datetime
-
-        ts = [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)]
+    def build_data(self, columns: tuple[ColumnSpec, ...]) -> Any:
         return pl.DataFrame(
-            {
-                "int32_col": pl.Series("int32_col", [1, 2, 3], dtype=pl.Int32),
-                "int64_col": pl.Series("int64_col", [1, 2, 3], dtype=pl.Int64),
-                "float32_col": pl.Series("float32_col", [1.0, 2.0, 3.0], dtype=pl.Float32),
-                "float64_col": pl.Series("float64_col", [1.0, 2.0, 3.0], dtype=pl.Float64),
-                "timestamp_ms_col": pl.Series("timestamp_ms_col", ts, dtype=pl.Datetime("ms")),
-                "timestamp_us_col": pl.Series("timestamp_us_col", ts, dtype=pl.Datetime("us")),
-            }
+            {c.name: pl.Series(c.name, list(c.values), dtype=_POLARS_TYPE_MAP[c.data_type]) for c in columns}
         ).lazy()

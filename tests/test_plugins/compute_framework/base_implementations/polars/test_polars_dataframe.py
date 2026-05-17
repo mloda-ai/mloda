@@ -2,6 +2,7 @@ import os
 from typing import Any, Optional
 import pytest
 from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
+from mloda.user import DataType
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
 from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
@@ -9,6 +10,7 @@ from tests.test_plugins.compute_framework.test_tooling.availability_test_helper 
     assert_unavailable_when_import_blocked,
 )
 from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
+    ColumnSpec,
     DataTypeValidatorFrameworkTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
@@ -24,6 +26,21 @@ try:
 except ImportError:
     logger.warning("Polars is not installed. Some tests will be skipped.")
     pl = None  # type: ignore
+
+
+_POLARS_TYPE_MAP: dict[DataType, Any] = (
+    {
+        DataType.INT32: pl.Int32,
+        DataType.INT64: pl.Int64,
+        DataType.FLOAT: pl.Float32,
+        DataType.DOUBLE: pl.Float64,
+        DataType.STRING: pl.String,
+        DataType.TIMESTAMP_MILLIS: pl.Datetime("ms"),
+        DataType.TIMESTAMP_MICROS: pl.Datetime("us"),
+    }
+    if pl is not None
+    else {}
+)
 
 
 class TestPolarsDataFrameAvailability:
@@ -133,22 +150,7 @@ class TestPolarsDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
     def framework_instance(self) -> Any:
         return PolarsDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
-    @pytest.fixture
-    def validator_sample_data(self) -> Any:
-        return pl.DataFrame({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]})
-
-    @pytest.fixture
-    def precision_sample_data(self) -> Any:
-        from datetime import datetime
-
-        ts = [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)]
+    def build_data(self, columns: tuple[ColumnSpec, ...]) -> Any:
         return pl.DataFrame(
-            {
-                "int32_col": pl.Series("int32_col", [1, 2, 3], dtype=pl.Int32),
-                "int64_col": pl.Series("int64_col", [1, 2, 3], dtype=pl.Int64),
-                "float32_col": pl.Series("float32_col", [1.0, 2.0, 3.0], dtype=pl.Float32),
-                "float64_col": pl.Series("float64_col", [1.0, 2.0, 3.0], dtype=pl.Float64),
-                "timestamp_ms_col": pl.Series("timestamp_ms_col", ts, dtype=pl.Datetime("ms")),
-                "timestamp_us_col": pl.Series("timestamp_us_col", ts, dtype=pl.Datetime("us")),
-            }
+            {c.name: pl.Series(c.name, list(c.values), dtype=_POLARS_TYPE_MAP[c.data_type]) for c in columns}
         )

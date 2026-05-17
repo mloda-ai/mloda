@@ -3,9 +3,11 @@ from typing import Any
 import pytest
 from unittest.mock import Mock, patch
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework import IcebergFramework
+from mloda.user import DataType
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
 from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
+    ColumnSpec,
     DataTypeValidatorFrameworkTestMixin,
 )
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
@@ -45,6 +47,20 @@ except ImportError:
     NestedField = None  # type: ignore
     StringType = None  # type: ignore
     TimestampType = None  # type: ignore
+
+
+_ICEBERG_TYPE_MAP: dict[DataType, Any] = (
+    {
+        DataType.INT32: IntegerType(),
+        DataType.INT64: LongType(),
+        DataType.FLOAT: FloatType(),
+        DataType.DOUBLE: DoubleType(),
+        DataType.STRING: StringType(),
+        DataType.TIMESTAMP_MICROS: TimestampType(),
+    }
+    if pyiceberg is not None
+    else {}
+)
 
 
 @pytest.mark.skipif(
@@ -204,27 +220,13 @@ class TestIcebergDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
     def framework_instance(self) -> Any:
         return IcebergFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
-    @pytest.fixture
-    def validator_sample_data(self) -> Any:
-        schema = Schema(
-            NestedField(1, "int_col", LongType()),
-            NestedField(2, "str_col", StringType()),
-            NestedField(3, "float_col", DoubleType()),
-        )
-        return self._wrap_schema(schema)
-
-    @pytest.fixture
-    def precision_sample_data(self) -> Any:
-        schema = Schema(
-            NestedField(1, "int32_col", IntegerType()),
-            NestedField(2, "int64_col", LongType()),
-            NestedField(3, "float32_col", FloatType()),
-            NestedField(4, "float64_col", DoubleType()),
-            # Iceberg only has TimestampType (microsecond precision per spec); no
-            # separate MILLIS variant, so we expose only the us-precision column.
-            NestedField(5, "timestamp_us_col", TimestampType()),
-        )
-        return self._wrap_schema(schema)
+    def build_data(self, columns: tuple[ColumnSpec, ...]) -> Any:
+        fields = [
+            NestedField(i + 1, c.name, _ICEBERG_TYPE_MAP[c.data_type])
+            for i, c in enumerate(columns)
+            if c.data_type in _ICEBERG_TYPE_MAP
+        ]
+        return self._wrap_schema(Schema(*fields))
 
     def test_timestamp_ms_column_strict_ms_passes(self, framework_instance: Any, precision_sample_data: Any) -> None:
         pytest.skip("Iceberg has only one TimestampType (microseconds per spec); millisecond cannot be expressed")

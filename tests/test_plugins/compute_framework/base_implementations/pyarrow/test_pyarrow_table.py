@@ -2,6 +2,7 @@ from typing import Any, Optional
 import pytest
 import pyarrow as pa
 
+from mloda.user import DataType
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -10,11 +11,23 @@ from tests.test_plugins.compute_framework.test_tooling.availability_test_helper 
     assert_unavailable_when_import_blocked,
 )
 from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
+    ColumnSpec,
     DataTypeValidatorFrameworkTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
     DtypeExtractionTestMixin,
 )
+
+
+_PYARROW_TYPE_MAP: dict[DataType, Any] = {
+    DataType.INT32: pa.int32(),
+    DataType.INT64: pa.int64(),
+    DataType.FLOAT: pa.float32(),
+    DataType.DOUBLE: pa.float64(),
+    DataType.STRING: pa.string(),
+    DataType.TIMESTAMP_MILLIS: pa.timestamp("ms"),
+    DataType.TIMESTAMP_MICROS: pa.timestamp("us"),
+}
 
 
 class TestPyArrowTableAvailability:
@@ -113,22 +126,5 @@ class TestPyArrowDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
     def framework_instance(self) -> Any:
         return PyArrowTable(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
-    @pytest.fixture
-    def validator_sample_data(self) -> Any:
-        return pa.table({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]})
-
-    @pytest.fixture
-    def precision_sample_data(self) -> Any:
-        from datetime import datetime
-
-        ts = [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)]
-        return pa.table(
-            {
-                "int32_col": pa.array([1, 2, 3], type=pa.int32()),
-                "int64_col": pa.array([1, 2, 3], type=pa.int64()),
-                "float32_col": pa.array([1.0, 2.0, 3.0], type=pa.float32()),
-                "float64_col": pa.array([1.0, 2.0, 3.0], type=pa.float64()),
-                "timestamp_ms_col": pa.array(ts, type=pa.timestamp("ms")),
-                "timestamp_us_col": pa.array(ts, type=pa.timestamp("us")),
-            }
-        )
+    def build_data(self, columns: tuple[ColumnSpec, ...]) -> Any:
+        return pa.table({c.name: pa.array(list(c.values), type=_PYARROW_TYPE_MAP[c.data_type]) for c in columns})

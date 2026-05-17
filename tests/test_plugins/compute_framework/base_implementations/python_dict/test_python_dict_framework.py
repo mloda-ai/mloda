@@ -5,6 +5,7 @@ import pytest
 from mloda.user import FeatureName
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
+    ColumnSpec,
     DataTypeValidatorFrameworkTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
@@ -154,49 +155,8 @@ class TestPythonDictDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
     def framework_instance(self) -> Any:
         return PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
-    @pytest.fixture
-    def validator_sample_data(self) -> Any:
-        return [
-            {"int_col": 1, "str_col": "a", "float_col": 1.0},
-            {"int_col": 2, "str_col": "b", "float_col": 2.0},
-            {"int_col": 3, "str_col": "c", "float_col": 3.0},
-        ]
-
-    @pytest.fixture
-    def precision_sample_data(self) -> Any:
-        from datetime import datetime
-
-        ts = datetime(2024, 1, 1)
-        # Python int has no width; float is always 64-bit; datetime is always microseconds.
-        # The fixture is structured so the test-method skips align with the columns that
-        # could not be honestly distinguished, even though all values look identical at
-        # the Python level.
-        return [
-            {
-                "int32_col": 1,
-                "int64_col": 1,
-                "float32_col": 1.0,
-                "float64_col": 1.0,
-                "timestamp_ms_col": ts,
-                "timestamp_us_col": ts,
-            },
-            {
-                "int32_col": 2,
-                "int64_col": 2,
-                "float32_col": 2.0,
-                "float64_col": 2.0,
-                "timestamp_ms_col": ts,
-                "timestamp_us_col": ts,
-            },
-            {
-                "int32_col": 3,
-                "int64_col": 3,
-                "float32_col": 3.0,
-                "float64_col": 3.0,
-                "timestamp_ms_col": ts,
-                "timestamp_us_col": ts,
-            },
-        ]
+    def build_data(self, columns: tuple[ColumnSpec, ...]) -> Any:
+        return [{c.name: c.values[i] for c in columns} for i in range(len(columns[0].values))]
 
     def test_int32_column_strict_int32_passes(self, framework_instance: Any, precision_sample_data: Any) -> None:
         pytest.skip("Python type.__name__ collapses int widths; the int32 column reports INT64, not INT32")

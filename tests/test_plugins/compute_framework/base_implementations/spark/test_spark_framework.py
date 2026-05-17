@@ -22,6 +22,7 @@ ensure proper resource management across all test methods.
 
 import os
 from typing import Any
+from mloda.user import DataType
 from mloda.user import JoinType
 import pytest
 from mloda_plugins.compute_framework.base_implementations.spark.spark_framework import SparkFramework
@@ -32,6 +33,7 @@ from tests.test_plugins.compute_framework.test_tooling.availability_test_helper 
     assert_unavailable_when_import_blocked,
 )
 from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
+    ColumnSpec,
     DataTypeValidatorFrameworkTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
@@ -73,6 +75,20 @@ else:
     DoubleType = None
     TimestampType = None
     pyspark = None
+
+
+_SPARK_TYPE_MAP: dict[DataType, Any] = (
+    {
+        DataType.INT32: IntegerType(),
+        DataType.INT64: LongType(),
+        DataType.FLOAT: FloatType(),
+        DataType.DOUBLE: DoubleType(),
+        DataType.STRING: StringType(),
+        DataType.TIMESTAMP_MICROS: TimestampType(),
+    }
+    if PYSPARK_AVAILABLE
+    else {}
+)
 
 
 class TestSparkFrameworkAvailability:
@@ -299,30 +315,16 @@ class TestSparkDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
 
     @pytest.fixture
     def validator_sample_data(self, spark_session: Any) -> Any:
-        data = [
-            {"int_col": 1, "str_col": "a", "float_col": 1.0},
-            {"int_col": 2, "str_col": "b", "float_col": 2.0},
-            {"int_col": 3, "str_col": "c", "float_col": 3.0},
-        ]
-        return spark_session.createDataFrame(data)
+        return self._build(self.VALIDATOR_COLUMNS, spark_session)
 
     @pytest.fixture
     def precision_sample_data(self, spark_session: Any) -> Any:
-        from datetime import datetime
+        return self._build(self.PRECISION_COLUMNS, spark_session)
 
-        ts = datetime(2024, 1, 1)
-        schema = StructType(
-            [
-                StructField("int32_col", IntegerType()),
-                StructField("int64_col", LongType()),
-                StructField("float32_col", FloatType()),
-                StructField("float64_col", DoubleType()),
-                # Spark only has TimestampType (microsecond precision); no separate
-                # MILLIS variant is constructible, so we expose only the us-precision column.
-                StructField("timestamp_us_col", TimestampType()),
-            ]
-        )
-        rows = [(i, i, float(i), float(i), ts) for i in (1, 2, 3)]
+    def _build(self, columns: tuple[ColumnSpec, ...], spark_session: Any) -> Any:
+        usable = [c for c in columns if c.data_type in _SPARK_TYPE_MAP]
+        schema = StructType([StructField(c.name, _SPARK_TYPE_MAP[c.data_type]) for c in usable])
+        rows = list(zip(*[c.values for c in usable]))
         return spark_session.createDataFrame(rows, schema=schema)
 
     def test_timestamp_ms_column_strict_ms_passes(self, framework_instance: Any, precision_sample_data: Any) -> None:

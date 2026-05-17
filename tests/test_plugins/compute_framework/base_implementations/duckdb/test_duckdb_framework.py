@@ -10,11 +10,13 @@ from tests.test_plugins.compute_framework.test_tooling.availability_test_helper 
     assert_unavailable_when_import_blocked,
 )
 from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
+    ColumnSpec,
     DataTypeValidatorFrameworkTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
     DtypeExtractionTestMixin,
 )
+from tests.test_plugins.compute_framework.base_implementations.pyarrow.test_pyarrow_table import _PYARROW_TYPE_MAP
 
 import logging
 
@@ -179,24 +181,12 @@ class TestDuckDBDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
 
     @pytest.fixture
     def validator_sample_data(self, connection: Any) -> Any:
-        arrow_table = pa.Table.from_pydict(
-            {"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]}
-        )
-        return DuckdbRelation.from_arrow(connection, arrow_table)
+        return self._build(self.VALIDATOR_COLUMNS, connection)
 
     @pytest.fixture
     def precision_sample_data(self, connection: Any) -> Any:
-        from datetime import datetime
+        return self._build(self.PRECISION_COLUMNS, connection)
 
-        ts = [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)]
-        arrow_table = pa.table(
-            {
-                "int32_col": pa.array([1, 2, 3], type=pa.int32()),
-                "int64_col": pa.array([1, 2, 3], type=pa.int64()),
-                "float32_col": pa.array([1.0, 2.0, 3.0], type=pa.float32()),
-                "float64_col": pa.array([1.0, 2.0, 3.0], type=pa.float64()),
-                "timestamp_ms_col": pa.array(ts, type=pa.timestamp("ms")),
-                "timestamp_us_col": pa.array(ts, type=pa.timestamp("us")),
-            }
-        )
+    def _build(self, columns: tuple[ColumnSpec, ...], connection: Any) -> Any:
+        arrow_table = pa.table({c.name: pa.array(list(c.values), type=_PYARROW_TYPE_MAP[c.data_type]) for c in columns})
         return DuckdbRelation.from_arrow(connection, arrow_table)

@@ -1,10 +1,12 @@
 import pytest
 from typing import Any, Optional
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda.user import DataType
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
 from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
 from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
+    ColumnSpec,
     DataTypeValidatorFrameworkTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
@@ -20,6 +22,21 @@ try:
 except ImportError:
     logger.warning("Pandas is not installed. Some tests will be skipped.")
     pd = None
+
+
+_PANDAS_TYPE_MAP: dict[DataType, Any] = (
+    {
+        DataType.INT32: "int32",
+        DataType.INT64: "int64",
+        DataType.FLOAT: "float32",
+        DataType.DOUBLE: "float64",
+        DataType.STRING: pd.StringDtype(),
+        DataType.TIMESTAMP_MILLIS: "datetime64[ms]",
+        DataType.TIMESTAMP_MICROS: "datetime64[us]",
+    }
+    if pd is not None
+    else {}
+)
 
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
@@ -132,34 +149,15 @@ class TestPandasDtypeExtraction(DtypeExtractionTestMixin):
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
 class TestPandasDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
-    """Test DataTypeValidator enforcement on PandasDataFrame using shared mixin."""
+    """Test DataTypeValidator enforcement on PandasDataFrame using shared mixin.
+
+    str_col uses explicit ``pd.StringDtype()`` (via the type map) so the resolver returns
+    STRING; plain object dtype would be ambiguous and resolve to None.
+    """
 
     @pytest.fixture
     def framework_instance(self) -> Any:
         return PandasDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
-    @pytest.fixture
-    def validator_sample_data(self) -> Any:
-        # str_col uses explicit pd.StringDtype() so the green-phase removal of the
-        # object-value-sniff still resolves it as STRING (object dtype is genuinely
-        # ambiguous and will return None once the sniff is gone).
-        return pd.DataFrame(
-            {
-                "int_col": [1, 2, 3],
-                "str_col": pd.array(["a", "b", "c"], dtype=pd.StringDtype()),
-                "float_col": [1.0, 2.0, 3.0],
-            }
-        )
-
-    @pytest.fixture
-    def precision_sample_data(self) -> Any:
-        return pd.DataFrame(
-            {
-                "int32_col": pd.Series([1, 2, 3], dtype="int32"),
-                "int64_col": pd.Series([1, 2, 3], dtype="int64"),
-                "float32_col": pd.Series([1.0, 2.0, 3.0], dtype="float32"),
-                "float64_col": pd.Series([1.0, 2.0, 3.0], dtype="float64"),
-                "timestamp_ms_col": pd.Series(["2024-01-01", "2024-01-02", "2024-01-03"], dtype="datetime64[ms]"),
-                "timestamp_us_col": pd.Series(["2024-01-01", "2024-01-02", "2024-01-03"], dtype="datetime64[us]"),
-            }
-        )
+    def build_data(self, columns: tuple[ColumnSpec, ...]) -> Any:
+        return pd.DataFrame({c.name: pd.Series(list(c.values), dtype=_PANDAS_TYPE_MAP[c.data_type]) for c in columns})

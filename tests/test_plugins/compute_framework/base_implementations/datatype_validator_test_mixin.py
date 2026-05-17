@@ -6,23 +6,14 @@ to a unified DataType via ComputeFramework._extract_column_data_type, and that
 DataTypeValidator.validate, given a resolver closure, enforces feature data_type declarations
 on framework-native data (not just PyArrow).
 
-Each framework-specific test class should inherit from this mixin and provide:
-
-- framework_instance fixture: Returns a compute framework instance
-- validator_sample_data fixture: Returns framework-native data with columns
-    int_col: integer values [1, 2, 3]
-    str_col: string values ["a", "b", "c"]
-    float_col: float values [1.0, 2.0, 3.0]
-- precision_sample_data fixture: Returns framework-native data with precision-typed columns
-    int32_col: INT32-typed [1, 2, 3]
-    int64_col: INT64-typed [1, 2, 3]
-    float32_col: FLOAT (32-bit) [1.0, 2.0, 3.0]
-    float64_col: DOUBLE (64-bit) [1.0, 2.0, 3.0]
-    timestamp_ms_col: TIMESTAMP_MILLIS sample timestamps
-    timestamp_us_col: TIMESTAMP_MICROS sample timestamps
+The canonical test data lives here as class-level ``VALIDATOR_COLUMNS`` / ``PRECISION_COLUMNS``
+``ColumnSpec`` tuples. Framework subclasses implement ``build_data(columns)`` to materialise
+that spec into the framework-native container (and override the data fixtures only when they
+need an additional fixture such as ``connection`` or ``spark_session``).
 """
 
-from abc import abstractmethod
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Callable
 
 import pytest
@@ -37,6 +28,20 @@ from mloda.user import DataType
 from mloda.user import Feature
 
 
+@dataclass(frozen=True)
+class ColumnSpec:
+    name: str
+    data_type: DataType
+    values: tuple[Any, ...]
+
+
+_TS_VALUES: tuple[datetime, ...] = (
+    datetime(2024, 1, 1),
+    datetime(2024, 1, 2),
+    datetime(2024, 1, 3),
+)
+
+
 class DataTypeValidatorFrameworkTestMixin:
     """Shared tests for DataTypeValidator enforcement across all compute frameworks.
 
@@ -44,8 +49,22 @@ class DataTypeValidatorFrameworkTestMixin:
     standalone. Framework subclasses pick up the test methods by inheritance.
     """
 
+    VALIDATOR_COLUMNS: tuple[ColumnSpec, ...] = (
+        ColumnSpec("int_col", DataType.INT64, (1, 2, 3)),
+        ColumnSpec("str_col", DataType.STRING, ("a", "b", "c")),
+        ColumnSpec("float_col", DataType.DOUBLE, (1.0, 2.0, 3.0)),
+    )
+
+    PRECISION_COLUMNS: tuple[ColumnSpec, ...] = (
+        ColumnSpec("int32_col", DataType.INT32, (1, 2, 3)),
+        ColumnSpec("int64_col", DataType.INT64, (1, 2, 3)),
+        ColumnSpec("float32_col", DataType.FLOAT, (1.0, 2.0, 3.0)),
+        ColumnSpec("float64_col", DataType.DOUBLE, (1.0, 2.0, 3.0)),
+        ColumnSpec("timestamp_ms_col", DataType.TIMESTAMP_MILLIS, _TS_VALUES),
+        ColumnSpec("timestamp_us_col", DataType.TIMESTAMP_MICROS, _TS_VALUES),
+    )
+
     @pytest.fixture
-    @abstractmethod
     def framework_instance(self) -> Any:
         """Return a compute framework instance.
 
@@ -53,36 +72,22 @@ class DataTypeValidatorFrameworkTestMixin:
         """
         raise NotImplementedError
 
+    def build_data(self, columns: tuple[ColumnSpec, ...]) -> Any:
+        """Build framework-native data from a canonical column spec.
+
+        Override in framework-specific test class. Frameworks needing extra fixtures
+        (connection, spark_session) override the ``validator_sample_data`` /
+        ``precision_sample_data`` fixtures themselves to pass the fixture through.
+        """
+        raise NotImplementedError
+
     @pytest.fixture
-    @abstractmethod
     def validator_sample_data(self) -> Any:
-        """Return framework-specific sample data.
-
-        Override in framework-specific test class.
-        Data should contain columns:
-            int_col: integer values [1, 2, 3]
-            str_col: string values ["a", "b", "c"]
-            float_col: float values [1.0, 2.0, 3.0]
-        """
-        raise NotImplementedError
+        return self.build_data(self.VALIDATOR_COLUMNS)
 
     @pytest.fixture
-    @abstractmethod
     def precision_sample_data(self) -> Any:
-        """Return framework-specific precision-typed sample data.
-
-        Override in framework-specific test class.
-        Data should contain columns:
-            int32_col: INT32-typed [1, 2, 3]
-            int64_col: INT64-typed [1, 2, 3]
-            float32_col: FLOAT (32-bit) [1.0, 2.0, 3.0]
-            float64_col: DOUBLE (64-bit) [1.0, 2.0, 3.0]
-            timestamp_ms_col: TIMESTAMP_MILLIS sample timestamps (may be omitted on
-                frameworks that only support microsecond timestamps; see per-framework
-                skip overrides for Spark/Iceberg)
-            timestamp_us_col: TIMESTAMP_MICROS sample timestamps
-        """
-        raise NotImplementedError
+        return self.build_data(self.PRECISION_COLUMNS)
 
     def _resolver(self, fw: Any, data: Any) -> Callable[[str], DataType | None]:
         """Build the resolver closure DataTypeValidator.validate now expects.

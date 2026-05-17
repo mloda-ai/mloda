@@ -140,7 +140,10 @@ class TestPandasObjectColumnNullSentinels:
     """
 
     def test_object_column_with_leading_pd_na_returns_string(self) -> None:
-        df = pd.DataFrame({"s_col": [pd.NA, "hello", "world"]})
+        # Force object dtype: newer pandas infers [pd.NA, str, str] as StringDtype and would
+        # bypass the sniff branch entirely, defeating the regression.
+        series = pd.Series([pd.NA, "hello", "world"], dtype=object)
+        df = pd.DataFrame({"s_col": series})
         assert df["s_col"].dtype == object
         fw = PandasDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         from mloda.user import DataType
@@ -148,8 +151,8 @@ class TestPandasObjectColumnNullSentinels:
         assert fw._extract_column_data_type(df, "s_col") == DataType.STRING
 
     def test_object_column_with_leading_pd_nat_returns_string(self) -> None:
-        # Force object dtype so the sniff branch is exercised; pandas would otherwise coerce
-        # a [pd.NaT, ...] series to datetime64[ns] and bypass the buggy code path.
+        # Force object dtype: pandas would otherwise coerce [pd.NaT, ...] to datetime64[ns]
+        # and bypass the buggy code path.
         series = pd.Series([pd.NaT, "hello", "world"], dtype=object)
         df = pd.DataFrame({"s_col": series})
         assert df["s_col"].dtype == object

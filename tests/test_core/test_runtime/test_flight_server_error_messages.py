@@ -40,6 +40,44 @@ class TestFlightServerProcessLocation:
 
         assert server.location == published_location
 
+    def test_start_flight_server_process_reaps_child_when_location_not_published(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        class DeadProcess:
+            def __init__(self, target: Any, args: tuple[Any, ...]) -> None:
+                self.target = target
+                self.args = args
+                self.exitcode: int | None = None
+                self.join_called = False
+                self.terminate_called = False
+
+            def start(self) -> None:
+                self.exitcode = 1
+
+            def is_alive(self) -> bool:
+                return False
+
+            def join(self, timeout: float | None = None) -> None:
+                self.join_called = True
+
+            def terminate(self) -> None:
+                self.terminate_called = True
+
+        monkeypatch.setattr(
+            "mloda.core.runtime.flight.runner_flight_server.create_location", lambda: "grpc://127.0.0.1:0"
+        )
+        monkeypatch.setattr("mloda.core.runtime.flight.runner_flight_server.multiprocessing.Process", DeadProcess)
+
+        server = ParallelRunnerFlightServer()
+
+        with pytest.raises(RuntimeError, match="did not publish its Flight location") as exc_info:
+            server.start_flight_server_process()
+
+        assert "exitcode" in str(exc_info.value)
+        assert "1" in str(exc_info.value)
+        assert server.flight_server_process is None
+        assert server.location is None
+
 
 class TestFlightServerLocationNoneError:
     """Tests that get_location() with None location produces an actionable error."""

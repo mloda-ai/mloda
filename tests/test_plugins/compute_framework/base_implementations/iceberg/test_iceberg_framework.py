@@ -1,8 +1,13 @@
+from typing import Any
+
 import pytest
 from unittest.mock import Mock, patch
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework import IcebergFramework
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
+from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
+    DataTypeValidatorFrameworkTestMixin,
+)
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )
@@ -16,12 +21,17 @@ try:
     import pyarrow as pa
     from pyiceberg.table import Table as IcebergTable
     from pyiceberg.catalog import Catalog
+    from pyiceberg.types import DoubleType, LongType, NestedField, StringType
 except ImportError:
     logger.warning("PyIceberg or PyArrow is not installed. Some tests will be skipped.")
     pyiceberg = None  # type: ignore
     pa = None  # type: ignore[assignment]
     IcebergTable = None  # type: ignore
     Catalog = None  # type: ignore
+    DoubleType = None  # type: ignore
+    LongType = None  # type: ignore
+    NestedField = None  # type: ignore
+    StringType = None  # type: ignore
 
 
 @pytest.mark.skipif(
@@ -142,3 +152,32 @@ class TestIcebergFrameworkUnavailable:
         with patch("mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework.Catalog", None):
             with pytest.raises(ImportError, match="PyIceberg is not installed"):
                 framework.set_framework_connection_object(Mock())
+
+
+@pytest.mark.skipif(
+    pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
+)
+class TestIcebergDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
+    """Test DataTypeValidator enforcement on IcebergFramework using shared mixin.
+
+    Iceberg tables require catalog context to construct; we mock the schema lookup that
+    IcebergFramework._extract_column_dtype actually consumes (schema().find_field(name) ->
+    NestedField with .field_type whose str() the existing dtype map recognises).
+    """
+
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return IcebergFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+    @pytest.fixture
+    def validator_sample_data(self) -> Any:
+        field_map = {
+            "int_col": NestedField(1, "int_col", LongType()),
+            "str_col": NestedField(2, "str_col", StringType()),
+            "float_col": NestedField(3, "float_col", DoubleType()),
+        }
+        mock_schema = Mock()
+        mock_schema.find_field = lambda name: field_map.get(name)
+        mock_table = Mock(spec=IcebergTable)
+        mock_table.schema.return_value = mock_schema
+        return mock_table

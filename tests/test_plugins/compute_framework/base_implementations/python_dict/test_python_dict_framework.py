@@ -4,6 +4,9 @@ from mloda.user import ParallelizationMode
 import pytest
 from mloda.user import FeatureName
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
+    DataTypeValidatorFrameworkTestMixin,
+)
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
     DtypeExtractionTestMixin,
 )
@@ -130,6 +133,22 @@ class TestPythonDictDtypeExtraction(DtypeExtractionTestMixin):
 
     @pytest.fixture
     def dtype_sample_data(self) -> Any:
+        return [
+            {"int_col": 1, "str_col": "a", "float_col": 1.0},
+            {"int_col": 2, "str_col": "b", "float_col": 2.0},
+            {"int_col": 3, "str_col": "c", "float_col": 3.0},
+        ]
+
+
+class TestPythonDictDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
+    """Test DataTypeValidator enforcement on PythonDictFramework using shared mixin."""
+
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+    @pytest.fixture
+    def validator_sample_data(self) -> Any:
         return [
             {"int_col": 1, "str_col": "a", "float_col": 1.0},
             {"int_col": 2, "str_col": "b", "float_col": 2.0},

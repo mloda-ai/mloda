@@ -1,3 +1,5 @@
+from typing import Callable, Optional
+
 import pytest
 import pyarrow as pa
 
@@ -8,6 +10,15 @@ from mloda.core.abstract_plugins.components.validators.datatype_validator import
 from mloda.user import DataType
 from mloda.user import Feature
 from mloda.provider import FeatureSet
+
+
+def _arrow_resolver(table: pa.Table) -> Callable[[str], Optional[DataType]]:
+    def resolve(col: str) -> Optional[DataType]:
+        if col not in table.schema.names:
+            return None
+        return DataType.from_arrow_type_safe(table.schema.field(col).type)
+
+    return resolve
 
 
 class TestDataTypeMismatchError:
@@ -66,7 +77,7 @@ class TestValidate:
         feature_set = FeatureSet([feature])
 
         # Should not raise
-        DataTypeValidator.validate(table, feature_set)
+        DataTypeValidator.validate(feature_set, _arrow_resolver(table))
 
     def test_validate_raises_on_mismatch(self) -> None:
         """Test validation raises DataTypeMismatchError on type mismatch."""
@@ -77,7 +88,7 @@ class TestValidate:
         feature_set = FeatureSet([feature])
 
         with pytest.raises(DataTypeMismatchError):
-            DataTypeValidator.validate(table, feature_set)
+            DataTypeValidator.validate(feature_set, _arrow_resolver(table))
 
     def test_validate_skips_untyped_features(self) -> None:
         """Test validation skips features without declared data_type."""
@@ -88,7 +99,7 @@ class TestValidate:
         feature_set.add(feature)
 
         # Should not raise - untyped features are skipped
-        DataTypeValidator.validate(table, feature_set)
+        DataTypeValidator.validate(feature_set, _arrow_resolver(table))
 
     def test_validate_passes_with_widening(self) -> None:
         """Test validation passes when actual type can be widened to declared type."""
@@ -100,7 +111,7 @@ class TestValidate:
         feature_set.add(feature)
 
         # Should not raise - INT32 can be widened to INT64
-        DataTypeValidator.validate(table, feature_set)
+        DataTypeValidator.validate(feature_set, _arrow_resolver(table))
 
     def test_validate_multiple_features(self) -> None:
         """Test validation works with multiple features."""
@@ -121,7 +132,7 @@ class TestValidate:
         )
 
         # Should not raise - all types match
-        DataTypeValidator.validate(table, feature_set)
+        DataTypeValidator.validate(feature_set, _arrow_resolver(table))
 
     def test_validate_raises_on_first_mismatch(self) -> None:
         """Test validation raises on first type mismatch."""
@@ -137,30 +148,48 @@ class TestValidate:
         feature_set.add(Feature.str_of("name"))  # Expects STRING
 
         with pytest.raises(DataTypeMismatchError):
-            DataTypeValidator.validate(table, feature_set)
+            DataTypeValidator.validate(feature_set, _arrow_resolver(table))
 
 
-class TestNonArrowDataModel:
-    """Regression: a FeatureGroup that declares return_data_type_rule must not
-    crash mlodaAPI.run_all() on a non-Arrow compute framework (e.g. pandas).
+class TestValidateEnforcesOnPandas:
+    """DataTypeValidator must enforce declared types against pandas-backed data.
 
-    Before the fix, validate() unconditionally read ``data.column_names`` /
-    ``data.schema``; on a pandas DataFrame that raised
-    ``AttributeError: 'DataFrame' object has no attribute 'column_names'`` and
-    failed the whole run.
+    Before issue #432 was fixed, the validator silently no-op'd on any non-Arrow data,
+    so declaring ``return_data_type_rule`` on a pandas FeatureGroup got no enforcement.
     """
 
-    def test_validate_skips_non_arrow_data_without_crashing(self) -> None:
+    def test_validate_enforces_on_pandas_matching_type_passes(self) -> None:
         import pandas as pd
 
+        from mloda.user import ParallelizationMode
+        from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import (
+            PandasDataFrame,
+        )
+
         df = pd.DataFrame({"age": [25, 30]})
-        feature_set = FeatureSet()
-        feature_set.add(Feature.int32_of("age"))
+        fw = PandasDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+        feature_set = FeatureSet([Feature.int64_of("age")])
 
-        # Must not raise AttributeError; non-Arrow data is skipped.
-        DataTypeValidator.validate(df, feature_set)
+        # int64 column declared as INT64 — must not raise.
+        DataTypeValidator.validate(feature_set, lambda col: fw._extract_column_data_type(df, col))
 
-    def test_typed_feature_group_runs_through_run_all_on_pandas(self) -> None:
+    def test_validate_enforces_on_pandas_mismatch_raises(self) -> None:
+        import pandas as pd
+
+        from mloda.user import ParallelizationMode
+        from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import (
+            PandasDataFrame,
+        )
+
+        df = pd.DataFrame({"name": ["alice", "bob"]})
+        fw = PandasDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+        feature_set = FeatureSet([Feature.int64_of("name")])
+
+        # String column declared as INT64 — must raise even in lenient mode.
+        with pytest.raises(DataTypeMismatchError):
+            DataTypeValidator.validate(feature_set, lambda col: fw._extract_column_data_type(df, col))
+
+    def test_typed_feature_group_runs_through_run_all_on_pandas_matching_passes(self) -> None:
         from typing import Any, Optional
 
         import pandas as pd
@@ -185,12 +214,10 @@ class TestNonArrowDataModel:
             def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
                 return {PandasDataFrame}
 
-        class _Typed(FeatureGroup):
-            """Declares a fixed return type — this is what used to crash."""
-
+        class _TypedMatch(FeatureGroup):
             @classmethod
             def feature_names_supported(cls) -> set[str]:
-                return {"price_typed"}
+                return {"price_typed_match"}
 
             @classmethod
             def input_features(cls, options: Any, feature_name: Any) -> Any:
@@ -202,18 +229,79 @@ class TestNonArrowDataModel:
 
             @classmethod
             def calculate_feature(cls, data: Any, features: Any) -> Any:
-                data["price_typed"] = data["price"] * 2.0
+                data["price_typed_match"] = data["price"] * 2.0
                 return data
 
             @classmethod
             def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
                 return {PandasDataFrame}
 
-        pc = PluginCollector.enabled_feature_groups({_Src, _Typed})
+        pc = PluginCollector.enabled_feature_groups({_Src, _TypedMatch})
         results = mloda.run_all(
-            [UFeature("price_typed")],
+            [UFeature("price_typed_match")],
             compute_frameworks={PandasDataFrame},
             plugin_collector=pc,
         )
-        df = next(d for d in results if "price_typed" in d.columns)
-        assert df["price_typed"].tolist() == [2.0, 4.0, 6.0]
+        df = next(d for d in results if "price_typed_match" in d.columns)
+        assert df["price_typed_match"].tolist() == [2.0, 4.0, 6.0]
+
+    def test_typed_feature_group_runs_through_run_all_on_pandas_mismatch_raises(self) -> None:
+        from typing import Any, Optional
+
+        import pandas as pd
+        import pytest as _pytest
+
+        from mloda.provider import ComputeFramework, DataCreator, FeatureGroup
+        from mloda.user import Feature as UFeature
+        from mloda.user import PluginCollector, mloda
+        from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import (
+            PandasDataFrame,
+        )
+
+        class _Src(FeatureGroup):
+            @classmethod
+            def input_data(cls) -> Optional[Any]:
+                return DataCreator({"price"})
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: Any) -> Any:
+                return pd.DataFrame({"price": [1.0, 2.0, 3.0]})
+
+            @classmethod
+            def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+                return {PandasDataFrame}
+
+        class _TypedMismatch(FeatureGroup):
+            """Declares STRING but returns float — enforcement must fire."""
+
+            @classmethod
+            def feature_names_supported(cls) -> set[str]:
+                return {"price_typed_mismatch"}
+
+            @classmethod
+            def input_features(cls, options: Any, feature_name: Any) -> Any:
+                return {UFeature("price")}
+
+            @classmethod
+            def return_data_type_rule(cls, feature: Any) -> Any:
+                return DataType.STRING
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: Any) -> Any:
+                data["price_typed_mismatch"] = data["price"] * 2.0
+                return data
+
+            @classmethod
+            def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+                return {PandasDataFrame}
+
+        pc = PluginCollector.enabled_feature_groups({_Src, _TypedMismatch})
+        # mlodaAPI wraps the DataTypeMismatchError in a generic Exception — match that.
+        with _pytest.raises(Exception) as exc_info:
+            mloda.run_all(
+                [UFeature("price_typed_mismatch")],
+                compute_frameworks={PandasDataFrame},
+                plugin_collector=pc,
+            )
+        assert "STRING" in str(exc_info.value)
+        assert "DOUBLE" in str(exc_info.value)

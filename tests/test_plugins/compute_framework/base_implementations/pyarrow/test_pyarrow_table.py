@@ -9,6 +9,9 @@ from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base impor
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )
+from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
+    DataTypeValidatorFrameworkTestMixin,
+)
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
     DtypeExtractionTestMixin,
 )
@@ -100,4 +103,16 @@ class TestPyArrowDtypeExtraction(DtypeExtractionTestMixin):
 
     @pytest.fixture
     def dtype_sample_data(self) -> Any:
+        return pa.table({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]})
+
+
+class TestPyArrowDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
+    """Test DataTypeValidator enforcement on PyArrowTable using shared mixin."""
+
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return PyArrowTable(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+    @pytest.fixture
+    def validator_sample_data(self) -> Any:
         return pa.table({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]})

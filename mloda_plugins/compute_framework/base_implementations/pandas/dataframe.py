@@ -1,4 +1,5 @@
 from typing import Any, Optional
+from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.pandas.pandas_merge_engine import PandasMergeEngine
 from mloda.user import FeatureName
@@ -48,6 +49,27 @@ class PandasDataFrame(ComputeFramework):
         if column_name in data.columns:
             return str(data[column_name].dtype)
         return None
+
+    def _extract_column_data_type(self, data: Any, column_name: str) -> Optional[DataType]:
+        # Pandas' default `object` dtype overloads strings, bytes, dates, decimals, and
+        # arbitrary Python objects. from_dtype_string maps "object" to None to avoid
+        # false positives for non-pandas callers; here we value-sniff a non-null sample
+        # so STRING/BINARY enforcement still works on the most common cases.
+        if column_name not in data.columns:
+            return None
+        series = data[column_name]
+        dtype_str = str(series.dtype)
+        if dtype_str == "object":
+            for val in series:
+                if val is None or (isinstance(val, float) and val != val):
+                    continue
+                if isinstance(val, str):
+                    return DataType.STRING
+                if isinstance(val, bytes):
+                    return DataType.BINARY
+                return None
+            return None
+        return DataType.from_dtype_string(dtype_str)
 
     @classmethod
     def pd_dataframe(cls) -> Any:

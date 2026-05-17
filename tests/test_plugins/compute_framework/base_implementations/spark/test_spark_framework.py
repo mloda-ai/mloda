@@ -31,6 +31,9 @@ from mloda.user import Index
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )
+from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
+    DataTypeValidatorFrameworkTestMixin,
+)
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
     DtypeExtractionTestMixin,
 )
@@ -260,6 +263,24 @@ class TestSparkDtypeExtraction(DtypeExtractionTestMixin):
 
     @pytest.fixture
     def dtype_sample_data(self, spark_session: Any) -> Any:
+        data = [
+            {"int_col": 1, "str_col": "a", "float_col": 1.0},
+            {"int_col": 2, "str_col": "b", "float_col": 2.0},
+            {"int_col": 3, "str_col": "c", "float_col": 3.0},
+        ]
+        return spark_session.createDataFrame(data)
+
+
+@pytest.mark.skipif(not PYSPARK_AVAILABLE, reason=SKIP_REASON or "PySpark is not available")
+class TestSparkDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
+    """Test DataTypeValidator enforcement on SparkFramework using shared mixin."""
+
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+    @pytest.fixture
+    def validator_sample_data(self, spark_session: Any) -> Any:
         data = [
             {"int_col": 1, "str_col": "a", "float_col": 1.0},
             {"int_col": 2, "str_col": "b", "float_col": 2.0},

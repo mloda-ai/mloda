@@ -138,3 +138,82 @@ class TestValidate:
 
         with pytest.raises(DataTypeMismatchError):
             DataTypeValidator.validate(table, feature_set)
+
+
+class TestNonArrowDataModel:
+    """Regression: a FeatureGroup that declares return_data_type_rule must not
+    crash mlodaAPI.run_all() on a non-Arrow compute framework (e.g. pandas).
+
+    Before the fix, validate() unconditionally read ``data.column_names`` /
+    ``data.schema``; on a pandas DataFrame that raised
+    ``AttributeError: 'DataFrame' object has no attribute 'column_names'`` and
+    failed the whole run.
+    """
+
+    def test_validate_skips_non_arrow_data_without_crashing(self) -> None:
+        import pandas as pd
+
+        df = pd.DataFrame({"age": [25, 30]})
+        feature_set = FeatureSet()
+        feature_set.add(Feature.int32_of("age"))
+
+        # Must not raise AttributeError; non-Arrow data is skipped.
+        DataTypeValidator.validate(df, feature_set)
+
+    def test_typed_feature_group_runs_through_run_all_on_pandas(self) -> None:
+        from typing import Any, Optional
+
+        import pandas as pd
+
+        from mloda.provider import ComputeFramework, DataCreator, FeatureGroup
+        from mloda.user import Feature as UFeature
+        from mloda.user import PluginCollector, mloda
+        from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import (
+            PandasDataFrame,
+        )
+
+        class _Src(FeatureGroup):
+            @classmethod
+            def input_data(cls) -> Optional[Any]:
+                return DataCreator({"price"})
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: Any) -> Any:
+                return pd.DataFrame({"price": [1.0, 2.0, 3.0]})
+
+            @classmethod
+            def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+                return {PandasDataFrame}
+
+        class _Typed(FeatureGroup):
+            """Declares a fixed return type — this is what used to crash."""
+
+            @classmethod
+            def feature_names_supported(cls) -> set[str]:
+                return {"price_typed"}
+
+            @classmethod
+            def input_features(cls, options: Any, feature_name: Any) -> Any:
+                return {UFeature("price")}
+
+            @classmethod
+            def return_data_type_rule(cls, feature: Any) -> Any:
+                return DataType.DOUBLE
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: Any) -> Any:
+                data["price_typed"] = data["price"] * 2.0
+                return data
+
+            @classmethod
+            def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+                return {PandasDataFrame}
+
+        pc = PluginCollector.enabled_feature_groups({_Src, _Typed})
+        results = mloda.run_all(
+            [UFeature("price_typed")],
+            compute_frameworks={PandasDataFrame},
+            plugin_collector=pc,
+        )
+        df = next(d for d in results if "price_typed" in d.columns)
+        assert df["price_typed"].tolist() == [2.0, 4.0, 6.0]

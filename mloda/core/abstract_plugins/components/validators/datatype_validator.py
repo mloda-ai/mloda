@@ -68,6 +68,17 @@ class DataTypeValidator:
         """
         from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 
+        # Type validation currently relies on the Arrow data model: it reads
+        # ``data.column_names`` and ``data.schema.field(...)``. Other compute
+        # frameworks (e.g. a pandas ``DataFrame``) do not expose those, so
+        # without this guard a feature that declares ``return_data_type_rule``
+        # makes ``mlodaAPI.run_all()`` crash with
+        # ``AttributeError: 'DataFrame' object has no attribute 'column_names'``.
+        # Skip gracefully instead of crashing until per-framework type
+        # extraction is added (see follow-up note in the PR).
+        if not (hasattr(data, "column_names") and hasattr(data, "schema")):
+            return
+
         for feature in features.features:
             if feature.data_type is None:
                 continue

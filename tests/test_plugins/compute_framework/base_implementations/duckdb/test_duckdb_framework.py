@@ -10,13 +10,11 @@ from tests.test_plugins.compute_framework.test_tooling.availability_test_helper 
     assert_unavailable_when_import_blocked,
 )
 from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
-    ColumnSpec,
     DataTypeValidatorFrameworkTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
     DtypeExtractionTestMixin,
 )
-from tests.test_plugins.compute_framework.base_implementations.pyarrow.test_pyarrow_table import _PYARROW_TYPE_MAP
 
 import logging
 
@@ -181,12 +179,8 @@ class TestDuckDBDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
 
     @pytest.fixture
     def validator_sample_data(self, connection: Any) -> Any:
-        return self._build(self.VALIDATOR_COLUMNS, connection)
+        return DuckdbRelation.from_arrow(connection, self._arrow_table(self.VALIDATOR_COLUMNS))
 
     @pytest.fixture
     def precision_sample_data(self, connection: Any) -> Any:
-        return self._build(self.PRECISION_COLUMNS, connection)
-
-    def _build(self, columns: tuple[ColumnSpec, ...], connection: Any) -> Any:
-        arrow_table = pa.table({c.name: pa.array(list(c.values), type=_PYARROW_TYPE_MAP[c.data_type]) for c in columns})
-        return DuckdbRelation.from_arrow(connection, arrow_table)
+        return DuckdbRelation.from_arrow(connection, self._arrow_table(self.PRECISION_COLUMNS))

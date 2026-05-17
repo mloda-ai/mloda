@@ -1,6 +1,7 @@
 from typing import Any
 
 from mloda.user import JoinType
+import pyarrow as pa
 import pytest
 from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame
 from mloda.user import FeatureName
@@ -10,13 +11,11 @@ from tests.test_plugins.compute_framework.test_tooling.availability_test_helper 
     assert_unavailable_when_import_blocked,
 )
 from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
-    ColumnSpec,
     DataTypeValidatorFrameworkTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
     DtypeExtractionTestMixin,
 )
-from tests.test_plugins.compute_framework.base_implementations.polars.test_polars_dataframe import _POLARS_TYPE_MAP
 
 import logging
 
@@ -222,7 +221,5 @@ class TestPolarsLazyDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
     def framework_instance(self) -> Any:
         return PolarsLazyDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
-    def build_data(self, columns: tuple[ColumnSpec, ...]) -> Any:
-        return pl.DataFrame(
-            {c.name: pl.Series(c.name, list(c.values), dtype=_POLARS_TYPE_MAP[c.data_type]) for c in columns}
-        ).lazy()
+    def from_arrow(self, table: pa.Table) -> Any:
+        return pl.from_arrow(table).lazy()  # type: ignore[union-attr]

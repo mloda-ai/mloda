@@ -1,8 +1,8 @@
 import os
 from typing import Any, Optional
 import pytest
+import pyarrow as pa
 from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
-from mloda.user import DataType
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
 from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
@@ -10,7 +10,6 @@ from tests.test_plugins.compute_framework.test_tooling.availability_test_helper 
     assert_unavailable_when_import_blocked,
 )
 from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
-    ColumnSpec,
     DataTypeValidatorFrameworkTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
@@ -26,21 +25,6 @@ try:
 except ImportError:
     logger.warning("Polars is not installed. Some tests will be skipped.")
     pl = None  # type: ignore
-
-
-_POLARS_TYPE_MAP: dict[DataType, Any] = (
-    {
-        DataType.INT32: pl.Int32,
-        DataType.INT64: pl.Int64,
-        DataType.FLOAT: pl.Float32,
-        DataType.DOUBLE: pl.Float64,
-        DataType.STRING: pl.String,
-        DataType.TIMESTAMP_MILLIS: pl.Datetime("ms"),
-        DataType.TIMESTAMP_MICROS: pl.Datetime("us"),
-    }
-    if pl is not None
-    else {}
-)
 
 
 class TestPolarsDataFrameAvailability:
@@ -150,7 +134,5 @@ class TestPolarsDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
     def framework_instance(self) -> Any:
         return PolarsDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
-    def build_data(self, columns: tuple[ColumnSpec, ...]) -> Any:
-        return pl.DataFrame(
-            {c.name: pl.Series(c.name, list(c.values), dtype=_POLARS_TYPE_MAP[c.data_type]) for c in columns}
-        )
+    def from_arrow(self, table: pa.Table) -> Any:
+        return pl.from_arrow(table)

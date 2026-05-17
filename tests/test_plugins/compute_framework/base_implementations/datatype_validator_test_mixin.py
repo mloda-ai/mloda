@@ -7,15 +7,18 @@ DataTypeValidator.validate, given a resolver closure, enforces feature data_type
 on framework-native data (not just PyArrow).
 
 The canonical test data lives here as class-level ``VALIDATOR_COLUMNS`` / ``PRECISION_COLUMNS``
-``ColumnSpec`` tuples. Framework subclasses implement ``build_data(columns)`` to materialise
-that spec into the framework-native container (and override the data fixtures only when they
-need an additional fixture such as ``connection`` or ``spark_session``).
+``ColumnSpec`` tuples. The mixin materialises that spec into a canonical, typed ``pa.Table``
+via ``_arrow_table`` (the only place ``c.values`` is read). Framework subclasses implement
+``from_arrow(table)`` to convert that table into the framework-native container, and only
+override the data fixtures when they need an additional fixture such as ``connection`` or
+``spark_session``.
 """
 
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable
 
+import pyarrow as pa
 import pytest
 
 from mloda.core.abstract_plugins.components.validators.datatype_validator import (
@@ -40,6 +43,18 @@ _TS_VALUES: tuple[datetime, ...] = (
     datetime(2024, 1, 2),
     datetime(2024, 1, 3),
 )
+
+
+_PYARROW_TYPE_MAP: dict[DataType, pa.DataType] = {
+    DataType.INT32: pa.int32(),
+    DataType.INT64: pa.int64(),
+    DataType.FLOAT: pa.float32(),
+    DataType.DOUBLE: pa.float64(),
+    DataType.STRING: pa.string(),
+    DataType.BOOLEAN: pa.bool_(),
+    DataType.TIMESTAMP_MILLIS: pa.timestamp("ms"),
+    DataType.TIMESTAMP_MICROS: pa.timestamp("us"),
+}
 
 
 class DataTypeValidatorFrameworkTestMixin:
@@ -72,22 +87,31 @@ class DataTypeValidatorFrameworkTestMixin:
         """
         raise NotImplementedError
 
-    def build_data(self, columns: tuple[ColumnSpec, ...]) -> Any:
-        """Build framework-native data from a canonical column spec.
+    def _arrow_table(self, columns: tuple[ColumnSpec, ...]) -> pa.Table:
+        """Build a canonical typed pa.Table from the ColumnSpec tuple.
 
-        Override in framework-specific test class. Frameworks needing extra fixtures
-        (connection, spark_session) override the ``validator_sample_data`` /
-        ``precision_sample_data`` fixtures themselves to pass the fixture through.
+        Reads ``c.values`` exactly once, here. Subclasses convert the resulting
+        table into their framework-native container via ``from_arrow(...)``.
+        """
+        return pa.table({c.name: pa.array(list(c.values), type=_PYARROW_TYPE_MAP[c.data_type]) for c in columns})
+
+    def from_arrow(self, table: pa.Table) -> Any:
+        """Convert a canonical pa.Table to framework-native data.
+
+        Override in framework-specific test class. Frameworks needing extra
+        fixtures (connection, spark_session) or non-Arrow construction (iceberg)
+        override the ``validator_sample_data`` / ``precision_sample_data`` fixtures
+        themselves and use ``self._arrow_table(...)`` as the typed-values source.
         """
         raise NotImplementedError
 
     @pytest.fixture
     def validator_sample_data(self) -> Any:
-        return self.build_data(self.VALIDATOR_COLUMNS)
+        return self.from_arrow(self._arrow_table(self.VALIDATOR_COLUMNS))
 
     @pytest.fixture
     def precision_sample_data(self) -> Any:
-        return self.build_data(self.PRECISION_COLUMNS)
+        return self.from_arrow(self._arrow_table(self.PRECISION_COLUMNS))
 
     def _resolver(self, fw: Any, data: Any) -> Callable[[str], DataType | None]:
         """Build the resolver closure DataTypeValidator.validate now expects.

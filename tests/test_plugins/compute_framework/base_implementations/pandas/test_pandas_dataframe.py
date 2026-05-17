@@ -1,12 +1,11 @@
 import pytest
+import pyarrow as pa
 from typing import Any, Optional
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda.user import DataType
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
 from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
 from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
-    ColumnSpec,
     DataTypeValidatorFrameworkTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
@@ -22,21 +21,6 @@ try:
 except ImportError:
     logger.warning("Pandas is not installed. Some tests will be skipped.")
     pd = None
-
-
-_PANDAS_TYPE_MAP: dict[DataType, Any] = (
-    {
-        DataType.INT32: "int32",
-        DataType.INT64: "int64",
-        DataType.FLOAT: "float32",
-        DataType.DOUBLE: "float64",
-        DataType.STRING: pd.StringDtype(),
-        DataType.TIMESTAMP_MILLIS: "datetime64[ms]",
-        DataType.TIMESTAMP_MICROS: "datetime64[us]",
-    }
-    if pd is not None
-    else {}
-)
 
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
@@ -159,5 +143,10 @@ class TestPandasDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
     def framework_instance(self) -> Any:
         return PandasDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
-    def build_data(self, columns: tuple[ColumnSpec, ...]) -> Any:
-        return pd.DataFrame({c.name: pd.Series(list(c.values), dtype=_PANDAS_TYPE_MAP[c.data_type]) for c in columns})
+    def from_arrow(self, table: pa.Table) -> Any:
+        # Option A: arrow -> pandas via to_pandas. types_mapper preserves pd.StringDtype()
+        # for STRING columns; coerce_temporal_nanoseconds=False keeps ms/us timestamp units.
+        return table.to_pandas(
+            types_mapper={pa.string(): pd.StringDtype()}.get,
+            coerce_temporal_nanoseconds=False,
+        )

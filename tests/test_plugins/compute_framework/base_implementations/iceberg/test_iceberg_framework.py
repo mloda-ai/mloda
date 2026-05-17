@@ -220,7 +220,18 @@ class TestIcebergDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
     def framework_instance(self) -> Any:
         return IcebergFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
-    def build_data(self, columns: tuple[ColumnSpec, ...]) -> Any:
+    @pytest.fixture
+    def validator_sample_data(self) -> Any:
+        return self._build_iceberg(self.VALIDATOR_COLUMNS)
+
+    @pytest.fixture
+    def precision_sample_data(self) -> Any:
+        return self._build_iceberg(self.PRECISION_COLUMNS)
+
+    def _build_iceberg(self, columns: tuple[ColumnSpec, ...]) -> Any:
+        # Iceberg needs explicit NestedField/IcebergType per column; the schema carries no
+        # values. _ICEBERG_TYPE_MAP omits TIMESTAMP_MILLIS, so unsupported columns are
+        # filtered out (the MILLIS test methods skip explicitly).
         fields = [
             NestedField(i + 1, c.name, _ICEBERG_TYPE_MAP[c.data_type])
             for i, c in enumerate(columns)

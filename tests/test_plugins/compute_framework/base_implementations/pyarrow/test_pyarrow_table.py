@@ -2,7 +2,6 @@ from typing import Any, Optional
 import pytest
 import pyarrow as pa
 
-from mloda.user import DataType
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -11,23 +10,11 @@ from tests.test_plugins.compute_framework.test_tooling.availability_test_helper 
     assert_unavailable_when_import_blocked,
 )
 from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
-    ColumnSpec,
     DataTypeValidatorFrameworkTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
     DtypeExtractionTestMixin,
 )
-
-
-_PYARROW_TYPE_MAP: dict[DataType, Any] = {
-    DataType.INT32: pa.int32(),
-    DataType.INT64: pa.int64(),
-    DataType.FLOAT: pa.float32(),
-    DataType.DOUBLE: pa.float64(),
-    DataType.STRING: pa.string(),
-    DataType.TIMESTAMP_MILLIS: pa.timestamp("ms"),
-    DataType.TIMESTAMP_MICROS: pa.timestamp("us"),
-}
 
 
 class TestPyArrowTableAvailability:
@@ -126,5 +113,5 @@ class TestPyArrowDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
     def framework_instance(self) -> Any:
         return PyArrowTable(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
-    def build_data(self, columns: tuple[ColumnSpec, ...]) -> Any:
-        return pa.table({c.name: pa.array(list(c.values), type=_PYARROW_TYPE_MAP[c.data_type]) for c in columns})
+    def from_arrow(self, table: pa.Table) -> pa.Table:
+        return table

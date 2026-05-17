@@ -315,17 +315,18 @@ class TestSparkDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
 
     @pytest.fixture
     def validator_sample_data(self, spark_session: Any) -> Any:
-        return self._build(self.VALIDATOR_COLUMNS, spark_session)
+        return self._build_spark(self.VALIDATOR_COLUMNS, spark_session)
 
     @pytest.fixture
     def precision_sample_data(self, spark_session: Any) -> Any:
-        return self._build(self.PRECISION_COLUMNS, spark_session)
+        return self._build_spark(self.PRECISION_COLUMNS, spark_session)
 
-    def _build(self, columns: tuple[ColumnSpec, ...], spark_session: Any) -> Any:
-        usable = [c for c in columns if c.data_type in _SPARK_TYPE_MAP]
+    def _build_spark(self, columns: tuple[ColumnSpec, ...], spark_session: Any) -> Any:
+        # Spark needs an explicit StructType, so the schema is built per-column from
+        # _SPARK_TYPE_MAP. Values flow via the mixin's arrow table -> pylist.
+        usable = tuple(c for c in columns if c.data_type in _SPARK_TYPE_MAP)
         schema = StructType([StructField(c.name, _SPARK_TYPE_MAP[c.data_type]) for c in usable])
-        rows = list(zip(*[c.values for c in usable]))
-        return spark_session.createDataFrame(rows, schema=schema)
+        return spark_session.createDataFrame(self._arrow_table(usable).to_pylist(), schema=schema)
 
     def test_timestamp_ms_column_strict_ms_passes(self, framework_instance: Any, precision_sample_data: Any) -> None:
         pytest.skip("Spark has only one TimestampType (microseconds); millisecond cannot be expressed")

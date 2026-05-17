@@ -1,11 +1,11 @@
 from typing import Any
 
 from mloda.user import ParallelizationMode
+import pyarrow as pa
 import pytest
 from mloda.user import FeatureName
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
-    ColumnSpec,
     DataTypeValidatorFrameworkTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
@@ -155,8 +155,8 @@ class TestPythonDictDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
     def framework_instance(self) -> Any:
         return PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
-    def build_data(self, columns: tuple[ColumnSpec, ...]) -> Any:
-        return [{c.name: c.values[i] for c in columns} for i in range(len(columns[0].values))]
+    def from_arrow(self, table: pa.Table) -> Any:
+        return table.to_pylist()
 
     def test_int32_column_strict_int32_passes(self, framework_instance: Any, precision_sample_data: Any) -> None:
         pytest.skip("Python type.__name__ collapses int widths; the int32 column reports INT64, not INT32")

@@ -10,13 +10,11 @@ from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framewor
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation
 from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
 from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
-    ColumnSpec,
     DataTypeValidatorFrameworkTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
     DtypeExtractionTestMixin,
 )
-from tests.test_plugins.compute_framework.base_implementations.pyarrow.test_pyarrow_table import _PYARROW_TYPE_MAP
 
 
 class TestSqliteFrameworkBasics:
@@ -190,15 +188,11 @@ class TestSqliteDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
 
     @pytest.fixture
     def validator_sample_data(self, connection: sqlite3.Connection) -> Any:
-        return self._build(self.VALIDATOR_COLUMNS, connection)
+        return SqliteRelation.from_arrow(connection, self._arrow_table(self.VALIDATOR_COLUMNS))
 
     @pytest.fixture
     def precision_sample_data(self, connection: sqlite3.Connection) -> Any:
-        return self._build(self.PRECISION_COLUMNS, connection)
-
-    def _build(self, columns: tuple[ColumnSpec, ...], connection: sqlite3.Connection) -> Any:
-        arrow_table = pa.table({c.name: pa.array(list(c.values), type=_PYARROW_TYPE_MAP[c.data_type]) for c in columns})
-        return SqliteRelation.from_arrow(connection, arrow_table)
+        return SqliteRelation.from_arrow(connection, self._arrow_table(self.PRECISION_COLUMNS))
 
     def test_int32_column_strict_int32_passes(self, framework_instance: Any, precision_sample_data: Any) -> None:
         pytest.skip("SQLite collapses INTEGER affinity; the int32 column reports INT64, not INT32")

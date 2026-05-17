@@ -1,3 +1,4 @@
+from contextlib import closing
 from typing import Any
 from uuid import uuid4
 from pyarrow import flight
@@ -11,10 +12,9 @@ logger = logging.getLogger(__name__)
 
 
 def create_location(host: str = "127.0.0.1") -> str:
-    sock = socket.socket()
-    sock.bind(("", 0))
-    port = sock.getsockname()[1]
-    sock.close()
+    with closing(socket.socket()) as sock:
+        sock.bind(("", 0))
+        port = sock.getsockname()[1]
     return f"grpc://{host}:{port}"
 
 

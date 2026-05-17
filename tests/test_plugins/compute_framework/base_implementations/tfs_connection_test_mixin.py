@@ -3,7 +3,7 @@ from typing import Any
 
 import pytest
 
-from mloda.user import DataAccessCollection, ParallelizationMode
+from mloda.user import DataAccessCollection
 
 
 class TfsConnectionInitMixin:

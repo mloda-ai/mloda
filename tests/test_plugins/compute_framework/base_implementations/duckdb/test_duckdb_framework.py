@@ -187,6 +187,9 @@ class TestDuckDBDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
 
 
 from tests.test_plugins.compute_framework.base_implementations.tfs_connection_test_mixin import TfsConnectionInitMixin  # noqa: E402
+from unittest.mock import patch  # noqa: E402
+from mloda.user import DataAccessCollection  # noqa: E402
+import mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework as duckdb_framework_module  # noqa: E402
 
 
 @pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed.")
@@ -200,3 +203,11 @@ class TestDuckDBTfsConnectionInit(TfsConnectionInitMixin):
         conn = duckdb.connect()
         yield conn
         conn.close()
+
+    def test_no_op_when_duckdb_module_missing(self, framework_instance: Any) -> None:
+        """When the duckdb module symbol is None (optional dep missing), the method
+        must return silently without raising AttributeError, matching Spark/Iceberg."""
+        dac = DataAccessCollection(initialized_connection_objects={object()})
+        with patch.object(duckdb_framework_module, "duckdb", None):
+            framework_instance.init_connection_from_data_access(dac)
+        assert framework_instance.framework_connection_object is None

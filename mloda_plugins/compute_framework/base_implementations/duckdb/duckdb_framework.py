@@ -61,7 +61,7 @@ class DuckDBFramework(ComputeFramework):
         self.framework_connection_object = framework_connection_object
 
     def init_connection_from_data_access(self, data_access_collection: Any) -> None:
-        if data_access_collection is None or self.framework_connection_object is not None:
+        if duckdb is None or data_access_collection is None or self.framework_connection_object is not None:
             return
         for conn in data_access_collection.initialized_connection_objects:
             if isinstance(conn, duckdb.DuckDBPyConnection):

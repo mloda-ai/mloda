@@ -41,6 +41,10 @@ class ComputeFrameworkExecutor:
         Args:
             cfw_register: The CFW manager for registering compute frameworks.
             worker_manager: The worker manager for handling parallel execution.
+            data_access_collection: Optional DataAccessCollection threaded from Engine; used to
+                bind a connection on the destination CFW of a TransformFrameworkStep before
+                execution. Required when transforming into a SQL framework (DuckDB, SQLite,
+                Spark, Iceberg) whose transformer needs a live connection.
         """
         self.cfw_collection: dict[UUID, ComputeFramework] = {}
         self.cfw_register = cfw_register

@@ -1,10 +1,8 @@
 """Reproducer for issue #440: PyArrow -> DuckDB TFS connection propagation."""
-import logging
+
 from typing import Any, Optional
 
 import pytest
-
-logger = logging.getLogger(__name__)
 
 try:
     import duckdb
@@ -94,9 +92,7 @@ class TestPyArrowToDuckDBTfsConnection:
         framework_connection_object is None inside the transformer.
         """
         conn = duckdb.connect()
-        plugin_collector = PluginCollector.enabled_feature_groups(
-            {TfsIssue440DataCreator, TfsIssue440DuckDBFG}
-        )
+        plugin_collector = PluginCollector.enabled_feature_groups({TfsIssue440DataCreator, TfsIssue440DuckDBFG})
         data_access_collection = DataAccessCollection(initialized_connection_objects={conn})
         result = mloda.run_all(
             [Feature("tfs_doubled")],

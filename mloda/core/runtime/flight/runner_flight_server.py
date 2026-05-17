@@ -17,18 +17,21 @@ class ParallelRunnerFlightServer:
         self.final_tasks: list[Any] = []
         self.queue: Any
 
-    def start_flight_server(self, location: Any) -> None:
+    def start_flight_server(self, location: Any, location_queue: Any) -> None:
         flight_server = FlightServer(location=location)
+        location_queue.put(flight_server.location)
         flight_server.serve()
 
     def start_flight_server_process(self) -> None:
         if not self.flight_server_process:
-            self.location = create_location()
+            location = create_location()
+            location_queue: multiprocessing.Queue[Any] = multiprocessing.Queue()
             self.flight_server_process = multiprocessing.Process(
                 target=self.start_flight_server,
-                args=(self.location,),
+                args=(location, location_queue),
             )
             self.flight_server_process.start()
+            self.location = location_queue.get(timeout=10)
 
     def end_flight_server_process(self) -> None:
         if self.flight_server_process:

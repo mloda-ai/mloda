@@ -1,9 +1,7 @@
-from contextlib import closing
 from typing import Any
 from uuid import uuid4
 from pyarrow import flight
 import pyarrow as pa
-import socket
 import os
 
 import logging
@@ -12,10 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 def create_location(host: str = "127.0.0.1") -> str:
-    with closing(socket.socket()) as sock:
-        sock.bind(("", 0))
-        port = sock.getsockname()[1]
-    return f"grpc://{host}:{port}"
+    return f"grpc://{host}:0"
 
 
 class FlightServer(flight.FlightServerBase):  # type: ignore[misc]
@@ -30,6 +25,8 @@ class FlightServer(flight.FlightServerBase):  # type: ignore[misc]
         super().__init__(
             self.location,
         )
+        location_prefix = str(self.location).rsplit(":", 1)[0]
+        self.location = f"{location_prefix}:{self.port}"
 
         self.uuid = uuid4()
 

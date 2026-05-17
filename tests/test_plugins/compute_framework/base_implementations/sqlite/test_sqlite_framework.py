@@ -130,8 +130,8 @@ from tests.test_plugins.compute_framework.base_implementations.tfs_connection_te
 
 class TestSqliteTfsConnectionInit(TfsConnectionInitMixin):
     @pytest.fixture
-    def framework_instance(self) -> Any:
-        return SqliteFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+    def framework_class(self) -> Any:
+        return SqliteFramework
 
     @pytest.fixture
     def valid_connection(self) -> Any:

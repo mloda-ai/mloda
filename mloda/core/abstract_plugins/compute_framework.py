@@ -157,8 +157,14 @@ class ComputeFramework(ABC):
         """
         self.framework_connection_object = None
 
-    def init_connection_from_data_access(self, data_access_collection: Any) -> None:
-        pass
+    @classmethod
+    def pick_connection_from_dac(cls, data_access_collection: Any) -> Optional[Any]:
+        """Pick a matching connection for this framework from the DataAccessCollection.
+
+        Called at Engine setup (once per session), not on the per-request run path.
+        Default returns None; SQL frameworks override to do the isinstance scan.
+        """
+        return None
 
     @final
     def get_framework_connection_object(self) -> Any:

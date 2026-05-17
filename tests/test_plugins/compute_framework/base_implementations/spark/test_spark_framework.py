@@ -341,8 +341,8 @@ from tests.test_plugins.compute_framework.base_implementations.tfs_connection_te
 @pytest.mark.skipif(not PYSPARK_AVAILABLE, reason=SKIP_REASON or "PySpark is not available")
 class TestSparkTfsConnectionInit(TfsConnectionInitMixin):
     @pytest.fixture
-    def framework_instance(self) -> Any:
-        return SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+    def framework_class(self) -> Any:
+        return SparkFramework
 
     @pytest.fixture
     def valid_connection(self, spark_session: Any) -> Any:

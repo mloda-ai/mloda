@@ -283,8 +283,8 @@ from tests.test_plugins.compute_framework.base_implementations.tfs_connection_te
 )
 class TestIcebergTfsConnectionInit(TfsConnectionInitMixin):
     @pytest.fixture
-    def framework_instance(self) -> Any:
-        return IcebergFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+    def framework_class(self) -> Any:
+        return IcebergFramework
 
     @pytest.fixture
     def valid_connection(self) -> Any:

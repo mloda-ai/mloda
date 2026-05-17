@@ -10,7 +10,6 @@ import logging
 from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.runtime.worker_manager import WorkerManager
 from mloda.core.runtime.data_lifecycle_manager import DataLifecycleManager
@@ -41,7 +40,7 @@ class ExecutionOrchestrator:
         execution_planner: ExecutionPlan,
         flight_server: Optional[ParallelRunnerFlightServer] = None,
         column_ordering: Optional[str] = None,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        tfs_connection_map: Optional[dict[type[ComputeFramework], Any]] = None,
     ) -> None:
         """
         Initializes the ExecutionOrchestrator with an execution plan and optional flight server.
@@ -68,7 +67,7 @@ class ExecutionOrchestrator:
         if flight_server:
             self.flight_server = flight_server
 
-        self.data_access_collection = data_access_collection
+        self.tfs_connection_map: dict[type[ComputeFramework], Any] = tfs_connection_map or {}
 
     def _is_step_done(self, step_uuids: set[UUID], finished_ids: set[UUID]) -> bool:
         """
@@ -98,7 +97,7 @@ class ExecutionOrchestrator:
             )
 
         self.executor = ComputeFrameworkExecutor(
-            self.cfw_register, self.worker_manager, data_access_collection=self.data_access_collection
+            self.cfw_register, self.worker_manager, tfs_connection_map=self.tfs_connection_map
         )
 
         finished_ids: set[UUID] = set()
@@ -157,7 +156,7 @@ class ExecutionOrchestrator:
             )
 
         self.executor = ComputeFrameworkExecutor(
-            self.cfw_register, self.worker_manager, data_access_collection=self.data_access_collection
+            self.cfw_register, self.worker_manager, tfs_connection_map=self.tfs_connection_map
         )
 
         finished_ids: set[UUID] = set()

@@ -195,8 +195,8 @@ import mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framew
 @pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed.")
 class TestDuckDBTfsConnectionInit(TfsConnectionInitMixin):
     @pytest.fixture
-    def framework_instance(self) -> Any:
-        return DuckDBFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+    def framework_class(self) -> Any:
+        return DuckDBFramework
 
     @pytest.fixture
     def valid_connection(self) -> Any:
@@ -204,10 +204,9 @@ class TestDuckDBTfsConnectionInit(TfsConnectionInitMixin):
         yield conn
         conn.close()
 
-    def test_no_op_when_duckdb_module_missing(self, framework_instance: Any) -> None:
-        """When the duckdb module symbol is None (optional dep missing), the method
-        must return silently without raising AttributeError, matching Spark/Iceberg."""
+    def test_returns_none_when_duckdb_module_missing(self, framework_class: Any) -> None:
+        """When the duckdb module symbol is None (optional dep missing), the classmethod
+        must return None without raising AttributeError, matching Spark/Iceberg."""
         dac = DataAccessCollection(initialized_connection_objects={object()})
         with patch.object(duckdb_framework_module, "duckdb", None):
-            framework_instance.init_connection_from_data_access(dac)
-        assert framework_instance.framework_connection_object is None
+            assert framework_class.pick_connection_from_dac(dac) is None

@@ -62,26 +62,11 @@ class TestFlightServerUnit:
 
         assert location.startswith("grpc://127.0.0.1:")
 
-    def test_create_location_closes_socket_when_bind_fails(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        class FailingBindSocket:
-            closed = False
+    def test_create_location_requests_system_assigned_port_by_default(self) -> None:
+        assert create_location() == "grpc://127.0.0.1:0"
 
-            def bind(self, _address: tuple[str, int]) -> None:
-                raise OSError("bind failed")
-
-            def getsockname(self) -> tuple[str, int]:
-                raise AssertionError("getsockname should not be called after bind fails")
-
-            def close(self) -> None:
-                self.closed = True
-
-        failing_socket = FailingBindSocket()
-        monkeypatch.setattr("mloda.core.runtime.flight.flight_server.socket.socket", lambda: failing_socket)
-
-        with pytest.raises(OSError, match="bind failed"):
-            create_location()
-
-        assert failing_socket.closed
+    def test_create_location_requests_system_assigned_port_for_custom_host(self) -> None:
+        assert create_location("0.0.0.0") == "grpc://0.0.0.0:0"
 
 
 class TestFlightServerIntegration:

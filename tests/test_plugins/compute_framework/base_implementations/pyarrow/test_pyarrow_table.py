@@ -116,3 +116,19 @@ class TestPyArrowDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
     @pytest.fixture
     def validator_sample_data(self) -> Any:
         return pa.table({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]})
+
+    @pytest.fixture
+    def precision_sample_data(self) -> Any:
+        from datetime import datetime
+
+        ts = [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)]
+        return pa.table(
+            {
+                "int32_col": pa.array([1, 2, 3], type=pa.int32()),
+                "int64_col": pa.array([1, 2, 3], type=pa.int64()),
+                "float32_col": pa.array([1.0, 2.0, 3.0], type=pa.float32()),
+                "float64_col": pa.array([1.0, 2.0, 3.0], type=pa.float64()),
+                "timestamp_ms_col": pa.array(ts, type=pa.timestamp("ms")),
+                "timestamp_us_col": pa.array(ts, type=pa.timestamp("us")),
+            }
+        )

@@ -1,5 +1,6 @@
 import logging
 from typing import Any, Optional
+from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_merge_engine import DuckDBMergeEngine
 from mloda.user import FeatureName, ParallelizationMode
@@ -15,6 +16,28 @@ except ImportError:
     duckdb = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
+
+
+_DUCKDB_TYPE_MAP: dict[str, DataType] = {
+    "INTEGER": DataType.INT32,
+    "BIGINT": DataType.INT64,
+    "SMALLINT": DataType.INT32,
+    "TINYINT": DataType.INT32,
+    "HUGEINT": DataType.INT64,
+    "FLOAT": DataType.FLOAT,
+    "DOUBLE": DataType.DOUBLE,
+    "REAL": DataType.FLOAT,
+    "BOOLEAN": DataType.BOOLEAN,
+    "VARCHAR": DataType.STRING,
+    "BLOB": DataType.BINARY,
+    "DATE": DataType.DATE,
+    "TIMESTAMP": DataType.TIMESTAMP_MICROS,
+    "TIMESTAMP_MS": DataType.TIMESTAMP_MILLIS,
+    "TIMESTAMP_S": DataType.TIMESTAMP_MICROS,
+    "TIMESTAMP_NS": DataType.TIMESTAMP_MICROS,
+    "TIMESTAMP WITH TIME ZONE": DataType.TIMESTAMP_MICROS,
+    "TIMESTAMPTZ": DataType.TIMESTAMP_MICROS,
+}
 
 
 class DuckDBFramework(ComputeFramework):
@@ -80,6 +103,18 @@ class DuckDBFramework(ComputeFramework):
             dtypes = data._relation.dtypes
             idx = data.columns.index(column_name)
             return str(dtypes[idx])
+        return None
+
+    def _extract_column_data_type(self, data: Any, column_name: str) -> Optional[DataType]:
+        if column_name not in data.columns:
+            return None
+        idx = data.columns.index(column_name)
+        duckdb_type = data._relation.dtypes[idx]
+        type_str = str(duckdb_type).upper()
+        if type_str in _DUCKDB_TYPE_MAP:
+            return _DUCKDB_TYPE_MAP[type_str]
+        if type_str.startswith("DECIMAL"):
+            return DataType.DECIMAL
         return None
 
     @classmethod

@@ -131,38 +131,6 @@ class TestPandasDtypeExtraction(DtypeExtractionTestMixin):
 
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
-class TestPandasObjectColumnNullSentinels:
-    """Object-dtype sniff must skip pandas null sentinels (pd.NA, pd.NaT), not just None/nan.
-
-    Regression: the original implementation only skipped ``None`` and ``float('nan')``, so a
-    column whose first non-skipped value was ``pd.NA`` or ``pd.NaT`` returned ``None`` from
-    the sniff and silently un-enforced STRING / BINARY declarations.
-    """
-
-    def test_object_column_with_leading_pd_na_returns_string(self) -> None:
-        # Force object dtype: newer pandas infers [pd.NA, str, str] as StringDtype and would
-        # bypass the sniff branch entirely, defeating the regression.
-        series = pd.Series([pd.NA, "hello", "world"], dtype=object)
-        df = pd.DataFrame({"s_col": series})
-        assert df["s_col"].dtype == object
-        fw = PandasDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
-        from mloda.user import DataType
-
-        assert fw._extract_column_data_type(df, "s_col") == DataType.STRING
-
-    def test_object_column_with_leading_pd_nat_returns_string(self) -> None:
-        # Force object dtype: pandas would otherwise coerce [pd.NaT, ...] to datetime64[ns]
-        # and bypass the buggy code path.
-        series = pd.Series([pd.NaT, "hello", "world"], dtype=object)
-        df = pd.DataFrame({"s_col": series})
-        assert df["s_col"].dtype == object
-        fw = PandasDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
-        from mloda.user import DataType
-
-        assert fw._extract_column_data_type(df, "s_col") == DataType.STRING
-
-
-@pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
 class TestPandasDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
     """Test DataTypeValidator enforcement on PandasDataFrame using shared mixin."""
 
@@ -172,4 +140,26 @@ class TestPandasDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
 
     @pytest.fixture
     def validator_sample_data(self) -> Any:
-        return pd.DataFrame({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]})
+        # str_col uses explicit pd.StringDtype() so the green-phase removal of the
+        # object-value-sniff still resolves it as STRING (object dtype is genuinely
+        # ambiguous and will return None once the sniff is gone).
+        return pd.DataFrame(
+            {
+                "int_col": [1, 2, 3],
+                "str_col": pd.array(["a", "b", "c"], dtype=pd.StringDtype()),
+                "float_col": [1.0, 2.0, 3.0],
+            }
+        )
+
+    @pytest.fixture
+    def precision_sample_data(self) -> Any:
+        return pd.DataFrame(
+            {
+                "int32_col": pd.Series([1, 2, 3], dtype="int32"),
+                "int64_col": pd.Series([1, 2, 3], dtype="int64"),
+                "float32_col": pd.Series([1.0, 2.0, 3.0], dtype="float32"),
+                "float64_col": pd.Series([1.0, 2.0, 3.0], dtype="float64"),
+                "timestamp_ms_col": pd.Series(["2024-01-01", "2024-01-02", "2024-01-03"], dtype="datetime64[ms]"),
+                "timestamp_us_col": pd.Series(["2024-01-01", "2024-01-02", "2024-01-03"], dtype="datetime64[us]"),
+            }
+        )

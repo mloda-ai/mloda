@@ -3,6 +3,7 @@ import re
 import sqlite3
 from typing import Any, Optional
 
+from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.provider import BaseMergeEngine
 from mloda.provider import ComputeFramework
 from mloda.provider import BaseFilterEngine, BaseMaskEngine
@@ -14,6 +15,14 @@ from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
 
 logger = logging.getLogger(__name__)
+
+
+_SQLITE_TYPE_MAP: dict[str, DataType] = {
+    "integer": DataType.INT64,
+    "real": DataType.DOUBLE,
+    "text": DataType.STRING,
+    "blob": DataType.BINARY,
+}
 
 
 def _regexp(pattern: str, string: Optional[str]) -> bool:
@@ -70,6 +79,16 @@ class SqliteFramework(ComputeFramework):
         for row in cursor.fetchall():
             if row[1] == column_name:
                 return str(row[2]).lower()
+        return None
+
+    def _extract_column_data_type(self, data: Any, column_name: str) -> Optional[DataType]:
+        if not hasattr(data, "connection") or column_name not in data.columns:
+            return None
+        cursor = data.connection.execute(f"PRAGMA table_info({quote_ident(data.table_name)})")
+        for row in cursor.fetchall():
+            if row[1] == column_name:
+                type_str = str(row[2]).lower()
+                return _SQLITE_TYPE_MAP.get(type_str)
         return None
 
     def transform(

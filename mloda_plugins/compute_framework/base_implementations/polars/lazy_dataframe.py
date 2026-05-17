@@ -1,4 +1,5 @@
 from typing import Any, Optional
+from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.user import FeatureName
 from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
 from mloda.provider import BaseMergeEngine, BaseMaskEngine
@@ -52,6 +53,12 @@ class PolarsLazyDataFrame(PolarsDataFrame):
         if column_name in schema.names():
             return str(schema[column_name])
         return None
+
+    def _extract_column_data_type(self, data: Any, column_name: str) -> Optional[DataType]:
+        schema = data.collect_schema()
+        if column_name not in schema.names():
+            return None
+        return PolarsDataFrame._polars_type_to_data_type(schema[column_name])
 
     @classmethod
     def pl_lazy_frame(cls) -> Any:

@@ -154,26 +154,6 @@ class DataType(Enum):
         return cls._arrow_type_to_dtype_or_none(arrow_type)
 
     @classmethod
-    def from_dtype_string(cls, dtype_string: str) -> Optional["DataType"]:
-        """Map a native dtype string from any compute framework to a DataType.
-
-        The mapping is biased toward the widest type in each numeric / timestamp family so
-        the existing loose-compat widening rules keep strict mode quiet on frameworks that
-        collapse types (e.g. SQLite's `TEXT` for everything, PythonDict's `type.__name__`).
-
-        Returns None for unmapped strings, including pandas `"object"` which is genuinely
-        ambiguous (overloads STRING, BINARY, DATE, DECIMAL, arbitrary Python objects).
-        """
-        s_lower = dtype_string.lower()
-        exact = _DTYPE_STRING_EXACT_MAP.get(s_lower)
-        if exact is not None:
-            return exact
-        for prefix, data_type in _DTYPE_STRING_PREFIX_MAP:
-            if s_lower.startswith(prefix):
-                return data_type
-        return None
-
-    @classmethod
     def infer_arrow_type(cls, value: Any) -> pa.DataType:
         """
         Infers the PyArrow DataType directly from a Python value.
@@ -186,69 +166,3 @@ class DataType(Enum):
         """
         data_type = cls.infer_type_from_py_type(value)
         return cls.to_arrow_type(data_type)
-
-
-# Future-framework footguns (widening bias): "int"/"integer" -> INT64 but Postgres INTEGER
-# is 32-bit, and "float" -> DOUBLE but PyArrow's float is 32-bit. Frameworks where these
-# literals mean the narrow type should override _extract_column_data_type to avoid silent
-# widening past strict mode (PyArrow already does — it bypasses the string path entirely).
-_DTYPE_STRING_EXACT_MAP: dict[str, DataType] = {
-    # INT64 (widest int wins; collapsed-type frameworks lean here)
-    "int64": DataType.INT64,
-    "bigint": DataType.INT64,
-    "longtype()": DataType.INT64,
-    "long": DataType.INT64,
-    "int": DataType.INT64,
-    "integer": DataType.INT64,
-    # INT32
-    "int32": DataType.INT32,
-    "integertype()": DataType.INT32,
-    # DOUBLE (widest float wins)
-    "float64": DataType.DOUBLE,
-    "double": DataType.DOUBLE,
-    "doubletype()": DataType.DOUBLE,
-    "real": DataType.DOUBLE,
-    "float": DataType.DOUBLE,
-    # FLOAT
-    "float32": DataType.FLOAT,
-    "floattype()": DataType.FLOAT,
-    # BOOLEAN
-    "bool": DataType.BOOLEAN,
-    "boolean": DataType.BOOLEAN,
-    "booleantype()": DataType.BOOLEAN,
-    # STRING
-    "str": DataType.STRING,
-    "string": DataType.STRING,
-    "varchar": DataType.STRING,
-    "text": DataType.STRING,
-    "stringtype()": DataType.STRING,
-    "utf8": DataType.STRING,
-    "large_string": DataType.STRING,
-    "large_utf8": DataType.STRING,
-    # BINARY
-    "bytes": DataType.BINARY,
-    "binary": DataType.BINARY,
-    "blob": DataType.BINARY,
-    "binarytype()": DataType.BINARY,
-    "large_binary": DataType.BINARY,
-    # DATE
-    "date": DataType.DATE,
-    "datetype()": DataType.DATE,
-    "date32[day]": DataType.DATE,
-    # TIMESTAMP_MICROS (widest ts wins)
-    "datetime": DataType.TIMESTAMP_MICROS,
-    "timestamp": DataType.TIMESTAMP_MICROS,
-    "timestamptz": DataType.TIMESTAMP_MICROS,
-    "timestamptype()": DataType.TIMESTAMP_MICROS,
-    "timestampntztype()": DataType.TIMESTAMP_MICROS,
-}
-
-_DTYPE_STRING_PREFIX_MAP: tuple[tuple[str, DataType], ...] = (
-    ("decimal128(", DataType.DECIMAL),
-    ("decimaltype(", DataType.DECIMAL),
-    ("decimal(", DataType.DECIMAL),
-    ("datetime64[", DataType.TIMESTAMP_MICROS),
-    ("datetime(", DataType.TIMESTAMP_MICROS),
-    ("timestamp[", DataType.TIMESTAMP_MICROS),
-    ("date64[", DataType.DATE),
-)

@@ -1,5 +1,6 @@
 import logging
 from typing import Any, Optional
+from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.spark.spark_merge_engine import SparkMergeEngine
 from mloda.user import FeatureName
@@ -86,6 +87,47 @@ class SparkFramework(ComputeFramework):
     def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
         if column_name in data.columns:
             return str(data.schema[column_name].dataType)
+        return None
+
+    def _extract_column_data_type(self, data: Any, column_name: str) -> Optional[DataType]:
+        if column_name not in data.columns:
+            return None
+        spark_type = data.schema[column_name].dataType
+        from pyspark.sql.types import (
+            BinaryType,
+            BooleanType,
+            ByteType,
+            DateType,
+            DecimalType,
+            DoubleType,
+            FloatType,
+            IntegerType,
+            LongType,
+            ShortType,
+            StringType,
+            TimestampType,
+        )
+
+        if isinstance(spark_type, (IntegerType, ShortType, ByteType)):
+            return DataType.INT32
+        if isinstance(spark_type, LongType):
+            return DataType.INT64
+        if isinstance(spark_type, FloatType):
+            return DataType.FLOAT
+        if isinstance(spark_type, DoubleType):
+            return DataType.DOUBLE
+        if isinstance(spark_type, BooleanType):
+            return DataType.BOOLEAN
+        if isinstance(spark_type, StringType):
+            return DataType.STRING
+        if isinstance(spark_type, BinaryType):
+            return DataType.BINARY
+        if isinstance(spark_type, DateType):
+            return DataType.DATE
+        if isinstance(spark_type, TimestampType):
+            return DataType.TIMESTAMP_MICROS
+        if isinstance(spark_type, DecimalType):
+            return DataType.DECIMAL
         return None
 
     @classmethod

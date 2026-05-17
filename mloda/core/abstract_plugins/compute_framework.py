@@ -413,14 +413,12 @@ class ComputeFramework(ABC):
     def _extract_column_data_type(self, data: Any, column_name: str) -> Optional[DataType]:
         """Resolve a column's native dtype to the unified DataType enum.
 
-        Default implementation composes _extract_column_dtype with
-        DataType.from_dtype_string. Subclasses with richer type objects
-        (e.g. PyArrow) should override.
+        Default: return None. Frameworks must override to convert their native
+        type system (pa.DataType, pd.api.types, polars.DataType, pyiceberg types,
+        pyspark types, duckdb types) directly to DataType, no string round-trip.
+        Returning None means the validator skips that column (graceful no-op).
         """
-        dtype_str = self._extract_column_dtype(data, column_name)
-        if dtype_str is None:
-            return None
-        return DataType.from_dtype_string(dtype_str)
+        return None
 
     @final
     def set_filter_engine(self, features: Any) -> Any:

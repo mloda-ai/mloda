@@ -181,11 +181,13 @@ class TestValidateEnforcesOnPandas:
             PandasDataFrame,
         )
 
-        df = pd.DataFrame({"name": ["alice", "bob"]})
+        # Use pd.StringDtype() so the column resolves as STRING; with the per-framework
+        # native-dispatch path, plain object dtype returns None (ambiguous) and the
+        # validator skips it, which would defeat the mismatch assertion.
+        df = pd.DataFrame({"name": pd.array(["alice", "bob"], dtype=pd.StringDtype())})
         fw = PandasDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         feature_set = FeatureSet([Feature.int64_of("name")])
 
-        # String column declared as INT64 — must raise even in lenient mode.
         with pytest.raises(DataTypeMismatchError):
             DataTypeValidator.validate(feature_set, lambda col: fw._extract_column_data_type(df, col))
 

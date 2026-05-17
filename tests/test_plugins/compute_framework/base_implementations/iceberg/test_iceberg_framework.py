@@ -21,17 +21,30 @@ try:
     import pyarrow as pa
     from pyiceberg.table import Table as IcebergTable
     from pyiceberg.catalog import Catalog
-    from pyiceberg.types import DoubleType, LongType, NestedField, StringType
+    from pyiceberg.schema import Schema
+    from pyiceberg.types import (
+        DoubleType,
+        FloatType,
+        IntegerType,
+        LongType,
+        NestedField,
+        StringType,
+        TimestampType,
+    )
 except ImportError:
     logger.warning("PyIceberg or PyArrow is not installed. Some tests will be skipped.")
     pyiceberg = None  # type: ignore
     pa = None  # type: ignore[assignment]
     IcebergTable = None  # type: ignore
     Catalog = None  # type: ignore
+    Schema = None  # type: ignore
     DoubleType = None  # type: ignore
+    FloatType = None  # type: ignore
+    IntegerType = None  # type: ignore
     LongType = None  # type: ignore
     NestedField = None  # type: ignore
     StringType = None  # type: ignore
+    TimestampType = None  # type: ignore
 
 
 @pytest.mark.skipif(
@@ -160,15 +173,32 @@ class TestIcebergFrameworkUnavailable:
 class TestIcebergDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
     """Test DataTypeValidator enforcement on IcebergFramework using shared mixin.
 
-    Iceberg tables require catalog context to construct; we mock the schema lookup that
-    IcebergFramework._extract_column_dtype actually consumes (schema().find_field(name) ->
-    NestedField with .field_type whose str() the existing dtype map recognises).
+    Iceberg tables require catalog context to construct, so the fixture wraps a real
+    ``pyiceberg.schema.Schema`` (carrying real ``IntegerType``/``LongType``/... field
+    types) inside a ``Mock`` IcebergTable. The mock's ``schema()`` returns a wrapper
+    that adapts ``find_field`` to return ``None`` for missing columns (real pyiceberg
+    raises ``ValueError`` here; the framework code assumes ``None``).
 
-    Note: real ``pyiceberg.Schema.find_field`` raises ``ValueError`` on a missing column;
-    ``IcebergFramework._extract_column_dtype`` currently assumes it returns ``None``. The
-    mock here matches that assumption, so ``test_missing_column_skipped`` exercises the
-    validator contract but not the iceberg integration. Tracked as a follow-up.
+    Iceberg has only one TimestampType (microsecond precision per spec), so the
+    millisecond-precision tests are skipped on this subclass.
     """
+
+    @staticmethod
+    def _wrap_schema(schema: Any) -> Any:
+        """Wrap a real pyiceberg Schema so that find_field returns None on missing."""
+        wrapper = Mock()
+        wrapper.column_names = list(schema.column_names)
+
+        def _find_field_safe(name: str) -> Any:
+            for field in schema.fields:
+                if field.name == name:
+                    return field
+            return None
+
+        wrapper.find_field = _find_field_safe
+        mock_table = Mock(spec=IcebergTable)
+        mock_table.schema.return_value = wrapper
+        return mock_table
 
     @pytest.fixture
     def framework_instance(self) -> Any:
@@ -176,13 +206,28 @@ class TestIcebergDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
 
     @pytest.fixture
     def validator_sample_data(self) -> Any:
-        field_map = {
-            "int_col": NestedField(1, "int_col", LongType()),
-            "str_col": NestedField(2, "str_col", StringType()),
-            "float_col": NestedField(3, "float_col", DoubleType()),
-        }
-        mock_schema = Mock()
-        mock_schema.find_field = lambda name: field_map.get(name)
-        mock_table = Mock(spec=IcebergTable)
-        mock_table.schema.return_value = mock_schema
-        return mock_table
+        schema = Schema(
+            NestedField(1, "int_col", LongType()),
+            NestedField(2, "str_col", StringType()),
+            NestedField(3, "float_col", DoubleType()),
+        )
+        return self._wrap_schema(schema)
+
+    @pytest.fixture
+    def precision_sample_data(self) -> Any:
+        schema = Schema(
+            NestedField(1, "int32_col", IntegerType()),
+            NestedField(2, "int64_col", LongType()),
+            NestedField(3, "float32_col", FloatType()),
+            NestedField(4, "float64_col", DoubleType()),
+            # Iceberg only has TimestampType (microsecond precision per spec); no
+            # separate MILLIS variant, so we expose only the us-precision column.
+            NestedField(5, "timestamp_us_col", TimestampType()),
+        )
+        return self._wrap_schema(schema)
+
+    def test_timestamp_ms_column_strict_ms_passes(self, framework_instance: Any, precision_sample_data: Any) -> None:
+        pytest.skip("Iceberg has only one TimestampType (microseconds per spec); millisecond cannot be expressed")
+
+    def test_timestamp_us_column_strict_ms_raises(self, framework_instance: Any, precision_sample_data: Any) -> None:
+        pytest.skip("Iceberg has only one TimestampType (microseconds per spec); millisecond cannot be expressed")

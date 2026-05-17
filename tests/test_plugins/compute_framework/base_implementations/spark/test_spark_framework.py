@@ -51,7 +51,16 @@ logger = logging.getLogger(__name__)
 # Import PySpark types for type checking (only if available)
 if PYSPARK_AVAILABLE:
     from pyspark.sql import SparkSession
-    from pyspark.sql.types import StructType, StructField, StringType, IntegerType
+    from pyspark.sql.types import (
+        StructType,
+        StructField,
+        StringType,
+        IntegerType,
+        LongType,
+        FloatType,
+        DoubleType,
+        TimestampType,
+    )
     import pyspark
 else:
     SparkSession = None
@@ -59,6 +68,10 @@ else:
     StructField = None
     StringType = None
     IntegerType = None
+    LongType = None
+    FloatType = None
+    DoubleType = None
+    TimestampType = None
     pyspark = None
 
 
@@ -273,7 +286,12 @@ class TestSparkDtypeExtraction(DtypeExtractionTestMixin):
 
 @pytest.mark.skipif(not PYSPARK_AVAILABLE, reason=SKIP_REASON or "PySpark is not available")
 class TestSparkDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
-    """Test DataTypeValidator enforcement on SparkFramework using shared mixin."""
+    """Test DataTypeValidator enforcement on SparkFramework using shared mixin.
+
+    Spark exposes only one TimestampType (microsecond precision). The millisecond-
+    precision tests inherited from the mixin are skipped here because Spark cannot
+    express a TIMESTAMP_MILLIS column in its native schema.
+    """
 
     @pytest.fixture
     def framework_instance(self) -> Any:
@@ -287,3 +305,28 @@ class TestSparkDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
             {"int_col": 3, "str_col": "c", "float_col": 3.0},
         ]
         return spark_session.createDataFrame(data)
+
+    @pytest.fixture
+    def precision_sample_data(self, spark_session: Any) -> Any:
+        from datetime import datetime
+
+        ts = datetime(2024, 1, 1)
+        schema = StructType(
+            [
+                StructField("int32_col", IntegerType()),
+                StructField("int64_col", LongType()),
+                StructField("float32_col", FloatType()),
+                StructField("float64_col", DoubleType()),
+                # Spark only has TimestampType (microsecond precision); no separate
+                # MILLIS variant is constructible, so we expose only the us-precision column.
+                StructField("timestamp_us_col", TimestampType()),
+            ]
+        )
+        rows = [(i, i, float(i), float(i), ts) for i in (1, 2, 3)]
+        return spark_session.createDataFrame(rows, schema=schema)
+
+    def test_timestamp_ms_column_strict_ms_passes(self, framework_instance: Any, precision_sample_data: Any) -> None:
+        pytest.skip("Spark has only one TimestampType (microseconds); millisecond cannot be expressed")
+
+    def test_timestamp_us_column_strict_ms_raises(self, framework_instance: Any, precision_sample_data: Any) -> None:
+        pytest.skip("Spark has only one TimestampType (microseconds); millisecond cannot be expressed")

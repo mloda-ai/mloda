@@ -51,28 +51,26 @@ class PandasDataFrame(ComputeFramework):
         return None
 
     def _extract_column_data_type(self, data: Any, column_name: str) -> Optional[DataType]:
-        # Pandas' default `object` dtype overloads strings, bytes, dates, decimals, and
-        # arbitrary Python objects. from_dtype_string maps "object" to None to avoid
-        # false positives for non-pandas callers; here we value-sniff a non-null sample
-        # so STRING/BINARY enforcement still works on the most common cases.
-        # Note: only the first non-null value is inspected; mixed-content object columns
-        # like [None, "a", 42] are reported as STRING and may yield false positives.
         if column_name not in data.columns:
             return None
-        series = data[column_name]
-        dtype_str = str(series.dtype)
-        if dtype_str == "object":
-            # dropna() handles None, float('nan'), pd.NA, pd.NaT, np.nan uniformly in C.
-            non_null = series.dropna()
-            if len(non_null) == 0:
-                return None
-            val = non_null.iloc[0]
-            if isinstance(val, str):
-                return DataType.STRING
-            if isinstance(val, bytes):
-                return DataType.BINARY
-            return None
-        return DataType.from_dtype_string(dtype_str)
+        dtype = data[column_name].dtype
+        if isinstance(dtype, pd.StringDtype):
+            return DataType.STRING
+        if isinstance(dtype, pd.BooleanDtype):
+            return DataType.BOOLEAN
+        if isinstance(dtype, pd.api.types.DatetimeTZDtype):
+            return DataType.TIMESTAMP_MICROS
+        if pd.api.types.is_bool_dtype(dtype):
+            return DataType.BOOLEAN
+        if pd.api.types.is_integer_dtype(dtype):
+            return DataType.INT32 if dtype.itemsize <= 4 else DataType.INT64
+        if pd.api.types.is_float_dtype(dtype):
+            return DataType.FLOAT if dtype.itemsize <= 4 else DataType.DOUBLE
+        if pd.api.types.is_datetime64_dtype(dtype):
+            dtype_str = str(dtype)
+            unit = dtype_str[len("datetime64[") : -1] if "[" in dtype_str else "ns"
+            return DataType.TIMESTAMP_MILLIS if unit == "ms" else DataType.TIMESTAMP_MICROS
+        return None
 
     @classmethod
     def pd_dataframe(cls) -> Any:

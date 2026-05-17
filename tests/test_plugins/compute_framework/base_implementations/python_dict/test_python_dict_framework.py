@@ -141,7 +141,14 @@ class TestPythonDictDtypeExtraction(DtypeExtractionTestMixin):
 
 
 class TestPythonDictDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
-    """Test DataTypeValidator enforcement on PythonDictFramework using shared mixin."""
+    """Test DataTypeValidator enforcement on PythonDictFramework using shared mixin.
+
+    Python types do not carry width information: ``type(int_val).__name__`` is just
+    ``"int"`` regardless of value, and ``type(float_val).__name__`` is just ``"float"``
+    (always 64-bit). ``datetime.datetime`` is always microsecond precision. Precision-
+    narrowing tests that need per-width distinctions are skipped because they are
+    statically un-enforceable from Python runtime types.
+    """
 
     @pytest.fixture
     def framework_instance(self) -> Any:
@@ -154,3 +161,60 @@ class TestPythonDictDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
             {"int_col": 2, "str_col": "b", "float_col": 2.0},
             {"int_col": 3, "str_col": "c", "float_col": 3.0},
         ]
+
+    @pytest.fixture
+    def precision_sample_data(self) -> Any:
+        from datetime import datetime
+
+        ts = datetime(2024, 1, 1)
+        # Python int has no width; float is always 64-bit; datetime is always microseconds.
+        # The fixture is structured so the test-method skips align with the columns that
+        # could not be honestly distinguished, even though all values look identical at
+        # the Python level.
+        return [
+            {
+                "int32_col": 1,
+                "int64_col": 1,
+                "float32_col": 1.0,
+                "float64_col": 1.0,
+                "timestamp_ms_col": ts,
+                "timestamp_us_col": ts,
+            },
+            {
+                "int32_col": 2,
+                "int64_col": 2,
+                "float32_col": 2.0,
+                "float64_col": 2.0,
+                "timestamp_ms_col": ts,
+                "timestamp_us_col": ts,
+            },
+            {
+                "int32_col": 3,
+                "int64_col": 3,
+                "float32_col": 3.0,
+                "float64_col": 3.0,
+                "timestamp_ms_col": ts,
+                "timestamp_us_col": ts,
+            },
+        ]
+
+    def test_int32_column_strict_int32_passes(self, framework_instance: Any, precision_sample_data: Any) -> None:
+        pytest.skip("Python type.__name__ collapses int widths; the int32 column reports INT64, not INT32")
+
+    def test_int64_column_strict_int32_raises(self, framework_instance: Any, precision_sample_data: Any) -> None:
+        pytest.skip("Python type.__name__ collapses int widths; INT32 vs INT64 cannot be distinguished")
+
+    def test_float64_column_strict_float_raises(self, framework_instance: Any, precision_sample_data: Any) -> None:
+        pytest.skip("Python float is always 64-bit; FLOAT vs DOUBLE cannot be distinguished")
+
+    def test_float32_column_strict_float_passes(self, framework_instance: Any, precision_sample_data: Any) -> None:
+        pytest.skip("Python float is always 64-bit; the column reports DOUBLE, not FLOAT")
+
+    def test_float32_column_strict_double_passes(self, framework_instance: Any, precision_sample_data: Any) -> None:
+        pytest.skip("Python float is always 64-bit; the column would already be DOUBLE-typed")
+
+    def test_timestamp_ms_column_strict_ms_passes(self, framework_instance: Any, precision_sample_data: Any) -> None:
+        pytest.skip("Python datetime is always microsecond precision; TIMESTAMP_MILLIS cannot be expressed")
+
+    def test_timestamp_us_column_strict_ms_raises(self, framework_instance: Any, precision_sample_data: Any) -> None:
+        pytest.skip("Python datetime is always microsecond precision; TIMESTAMP precision uniform")

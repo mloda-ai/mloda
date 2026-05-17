@@ -136,3 +136,19 @@ class TestPolarsDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
     @pytest.fixture
     def validator_sample_data(self) -> Any:
         return pl.DataFrame({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]})
+
+    @pytest.fixture
+    def precision_sample_data(self) -> Any:
+        from datetime import datetime
+
+        ts = [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)]
+        return pl.DataFrame(
+            {
+                "int32_col": pl.Series("int32_col", [1, 2, 3], dtype=pl.Int32),
+                "int64_col": pl.Series("int64_col", [1, 2, 3], dtype=pl.Int64),
+                "float32_col": pl.Series("float32_col", [1.0, 2.0, 3.0], dtype=pl.Float32),
+                "float64_col": pl.Series("float64_col", [1.0, 2.0, 3.0], dtype=pl.Float64),
+                "timestamp_ms_col": pl.Series("timestamp_ms_col", ts, dtype=pl.Datetime("ms")),
+                "timestamp_us_col": pl.Series("timestamp_us_col", ts, dtype=pl.Datetime("us")),
+            }
+        )

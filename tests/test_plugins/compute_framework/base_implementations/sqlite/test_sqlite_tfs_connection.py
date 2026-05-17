@@ -1,16 +1,9 @@
-"""End-to-end TFS connection-propagation test for DuckDB.
+"""End-to-end TFS connection-propagation test for SQLite."""
 
-Reproducer for issue #440. PyArrow -> DuckDB TFS path; without the fix the
-destination DuckDBFramework has no connection and `data.project(...)` raises."""
-
+import sqlite3
 from typing import Any, Optional
 
 import pytest
-
-try:
-    import duckdb
-except ImportError:
-    duckdb = None  # type: ignore[assignment]
 
 try:
     import pyarrow as pa
@@ -20,14 +13,14 @@ except ImportError:
 from mloda.user import Feature, DataAccessCollection
 from mloda.provider import FeatureGroup, ComputeFramework, FeatureSet, MatchData
 from mloda.user import FeatureName, Options
-from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
+from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
 from tests.test_plugins.compute_framework.base_implementations.tfs_connection_e2e_mixin import (
     TfsConnectionEndToEndMixin,
 )
 
 
-class TfsDoubledDuckDBFG(FeatureGroup, MatchData):
-    """Doubles raw_val using a DuckDB SQL projection that REQUIRES the connection."""
+class TfsDoubledSqliteFG(FeatureGroup, MatchData):
+    """Doubles raw_val via a SQLite SELECT that REQUIRES the connection."""
 
     @classmethod
     def match_data_access(
@@ -37,16 +30,14 @@ class TfsDoubledDuckDBFG(FeatureGroup, MatchData):
         data_access_collection: Optional[DataAccessCollection] = None,
         framework_connection_object: Optional[Any] = None,
     ) -> Any:
-        if duckdb is None or not DuckDBFramework.is_available():
-            return None
         if feature_name not in cls.feature_names_supported():
             return None
-        if isinstance(framework_connection_object, duckdb.DuckDBPyConnection):
+        if isinstance(framework_connection_object, sqlite3.Connection):
             return framework_connection_object
         if data_access_collection is None:
             return None
         for conn in data_access_collection.initialized_connection_objects:
-            if isinstance(conn, duckdb.DuckDBPyConnection):
+            if isinstance(conn, sqlite3.Connection):
                 return conn
         return None
 
@@ -55,29 +46,29 @@ class TfsDoubledDuckDBFG(FeatureGroup, MatchData):
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {DuckDBFramework}
+        return {SqliteFramework}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return data.project("*, raw_val * 2 AS tfs_doubled")
+        return data.select(_raw_sql="*, raw_val * 2 AS tfs_doubled")
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"tfs_doubled"}
 
 
-@pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB or PyArrow not installed.")
-class TestDuckDBTfsConnectionE2E(TfsConnectionEndToEndMixin):
-    destination_framework_class = DuckDBFramework
-    destination_fg_class = TfsDoubledDuckDBFG
+@pytest.mark.skipif(pa is None, reason="PyArrow not installed (needed for the source FG).")
+class TestSqliteTfsConnectionE2E(TfsConnectionEndToEndMixin):
+    destination_framework_class = SqliteFramework
+    destination_fg_class = TfsDoubledSqliteFG
 
     @pytest.fixture
     def live_connection(self) -> Any:
-        conn = duckdb.connect()
+        conn = sqlite3.connect(":memory:")
         yield conn
         conn.close()
 
     def extract_doubled(self, final: Any) -> list[int]:
-        assert isinstance(final, pa.Table)
-        assert "tfs_doubled" in final.column_names
-        return list(final.column("tfs_doubled").to_pylist())
+        arrow_table = final.to_arrow_table()
+        assert "tfs_doubled" in arrow_table.column_names
+        return list(arrow_table.column("tfs_doubled").to_pylist())

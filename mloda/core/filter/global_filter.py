@@ -198,7 +198,7 @@ class GlobalFilter:
 
         The bounds stored on the created `single_filters` are tz-aware `datetime` objects normalized to UTC,
         so each filter engine can compare them directly against the framework's native temporal column type
-        without re-parsing. Breaking change since 0.6.x: previously these bounds were ISO 8601 strings.
+        without re-parsing.
         """
 
         self._add_range_filter(event_time_column, event_from, event_to, max_exclusive)

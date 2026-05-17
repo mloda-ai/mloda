@@ -42,10 +42,6 @@ class TestPandasFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMix
         return result[column].tolist()  # type: ignore[no-any-return]
 
     @pytest.fixture
-    def time_filter_engine(self) -> Any:
-        return PandasFilterEngine
-
-    @pytest.fixture
     def sample_time_data(self) -> Any:
         return pd.DataFrame({"id": SAMPLE_IDS, "ts": pd.to_datetime(SAMPLE_TIMESTAMPS, utc=True)})
 

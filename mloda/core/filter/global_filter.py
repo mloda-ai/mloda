@@ -213,8 +213,8 @@ class GlobalFilter:
     def _add_range_filter(
         self, filter_feature: str | Feature, time_from: datetime, time_to: datetime, max_exclusive: bool
     ) -> None:
-        _time_from = self._normalize_to_utc(time_from)
-        _time_to = self._normalize_to_utc(time_to)
+        _time_from = GlobalFilter._normalize_to_utc(time_from)
+        _time_to = GlobalFilter._normalize_to_utc(time_to)
         self.add_filter(
             filter_feature, FilterType.RANGE, {"min": _time_from, "max": _time_to, "max_exclusive": max_exclusive}
         )

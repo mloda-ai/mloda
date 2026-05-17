@@ -7,7 +7,8 @@ SQL injection prevention follows two layers:
 - Literal values should use PEP 249 (DB-API 2.0) parameterized queries
   whenever the backend supports them. ``quote_value`` and ``inline_params``
   exist as a fallback for backends whose API lacks PEP 249 parameter binding.
-  They accept only (None, bool, int, float, str); unsupported types raise.
+  They accept primitive scalars (None, bool, int, float, str) and datetime;
+  unsupported types raise.
 """
 
 import math

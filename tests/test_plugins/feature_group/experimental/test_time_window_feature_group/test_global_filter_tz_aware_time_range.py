@@ -110,6 +110,66 @@ def test_pyarrow_tz_aware_time_range_filter() -> None:
     assert temperature_table.num_rows == EXPECTED_ROW_COUNT
 
 
+def test_pyarrow_tz_aware_time_range_filter_with_validity_window() -> None:
+    """Regression guard for #435 on the time-travel (validity_from / validity_to) path.
+
+    The fix sits in the shared ``_add_range_filter`` helper, so both the event-time
+    and validity-time bounds go through the same normalization. This case pins the
+    second invocation explicitly.
+    """
+
+    class PyArrowTzAwareValiditySource(FeatureGroup):
+        @classmethod
+        def input_data(cls) -> Optional[BaseInputData]:
+            return DataCreator({"temperature", DefaultOptionKeys.reference_time, "valid_time"})
+
+        @classmethod
+        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+            naive_ts = [ts.replace(tzinfo=None) for ts in TIMESTAMPS_UTC]
+            ts_array = pa.array(naive_ts, type=pa.timestamp("us", tz="UTC"))
+            return pa.table(
+                {
+                    "temperature": pa.array(TEMPERATURES),
+                    DefaultOptionKeys.reference_time: ts_array,
+                    "valid_time": ts_array,
+                }
+            )
+
+        @classmethod
+        def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+            return {PyArrowTable}
+
+    global_filter = GlobalFilter()
+    global_filter.add_time_and_time_travel_filters(
+        event_from=EVENT_FROM,
+        event_to=EVENT_TO,
+        valid_from=EVENT_FROM,
+        valid_to=EVENT_TO,
+        validity_time_column="valid_time",
+    )
+
+    plugin_collector = PluginCollector.enabled_feature_groups({PyArrowTzAwareValiditySource})
+
+    result = mloda.run_all(
+        ["temperature", DefaultOptionKeys.reference_time, "valid_time"],
+        compute_frameworks={PyArrowTable},
+        plugin_collector=plugin_collector,
+        global_filter=global_filter,
+    )
+
+    temperature_table = None
+    for table in result:
+        if "temperature" in table.schema.names:
+            temperature_table = table
+            break
+
+    assert temperature_table is not None, "PyArrow Table with temperature column not found"
+
+    actual_temps = sorted(temperature_table.column("temperature").to_pylist())
+    assert actual_temps == EXPECTED_TEMPERATURES
+    assert temperature_table.num_rows == EXPECTED_ROW_COUNT
+
+
 def test_python_dict_tz_aware_time_range_filter() -> None:
     """Regression guard for #435 on the python_dict filter engine."""
 

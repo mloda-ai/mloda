@@ -45,10 +45,6 @@ class TestPythonDictFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTes
         return [row[column] for row in result]
 
     @pytest.fixture
-    def time_filter_engine(self) -> Any:
-        return PythonDictFilterEngine
-
-    @pytest.fixture
     def sample_time_data(self) -> Any:
         return [{"id": SAMPLE_IDS[i], "ts": SAMPLE_TIMESTAMPS[i]} for i in range(len(SAMPLE_IDS))]
 

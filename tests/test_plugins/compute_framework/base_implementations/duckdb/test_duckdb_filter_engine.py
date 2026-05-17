@@ -58,10 +58,6 @@ class TestDuckDBFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMix
         return result.df()[column].tolist()  # type: ignore[no-any-return]
 
     @pytest.fixture
-    def time_filter_engine(self) -> Any:
-        return DuckDBFilterEngine
-
-    @pytest.fixture
     def sample_time_data(self, connection: Any) -> Any:
         # pa.array with a tz-typed timestamp interprets naive datetimes as already in that tz;
         # tz-aware datetimes are rejected on some PyArrow versions.

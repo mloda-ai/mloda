@@ -42,10 +42,6 @@ class TestSqliteFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMix
         return values
 
     @pytest.fixture
-    def time_filter_engine(self) -> Any:
-        return SqliteFilterEngine
-
-    @pytest.fixture
     def sample_time_data(self, connection: sqlite3.Connection) -> Any:
         # pa.array with a tz-typed timestamp interprets naive datetimes as already in that tz;
         # tz-aware datetimes are rejected on some PyArrow versions.

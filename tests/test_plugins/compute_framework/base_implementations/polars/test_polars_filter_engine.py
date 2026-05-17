@@ -54,10 +54,6 @@ class TestPolarsFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMix
         return result[column].to_list()  # type: ignore[no-any-return]
 
     @pytest.fixture
-    def time_filter_engine(self) -> Any:
-        return PolarsFilterEngine
-
-    @pytest.fixture
     def sample_time_data(self) -> Any:
         return pl.DataFrame(
             {"id": SAMPLE_IDS, "ts": SAMPLE_TIMESTAMPS},

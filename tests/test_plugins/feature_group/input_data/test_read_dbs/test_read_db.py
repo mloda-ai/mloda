@@ -21,10 +21,12 @@ from tests.test_core.test_integration.test_core.test_runner_one_compute_framewor
 class TestInputDataDB:
     def setup_method(self) -> None:
         # Create a temporary file to act as the SQLite database
-        self.db_fd, self.db_path = tempfile.mkstemp(suffix=".sqlite")
+        db_fd, self.db_path = tempfile.mkstemp(suffix=".sqlite")
+        self.db_fd: int | None = db_fd
         # Initialize the SQLite database with a sample table
-        self.conn = sqlite3.connect(self.db_path)
-        self.cursor = self.conn.cursor()
+        conn = sqlite3.connect(self.db_path)
+        self.conn: sqlite3.Connection | None = conn
+        self.cursor = conn.cursor()
         self.cursor.execute("CREATE TABLE test_table (id INTEGER PRIMARY KEY, name TEXT)")
         self.cursor.execute('INSERT INTO test_table (name) VALUES ("Alice")')
         self.cursor.execute('INSERT INTO test_table (name) VALUES ("Bob")')
@@ -34,9 +36,12 @@ class TestInputDataDB:
         self.conn.commit()
 
     def teardown_method(self) -> None:
-        self.conn.close()
-        os.close(self.db_fd)
-        os.remove(self.db_path)
+        if self.conn is not None:
+            self.conn.close()
+        if self.db_fd is not None:
+            os.close(self.db_fd)
+        if os.path.exists(self.db_path):
+            os.remove(self.db_path)
 
     def test_load_csv_local_feature_scope_data_access_with_a_concrete_file(self) -> Any:
         f = Feature(
@@ -61,6 +66,15 @@ class TestInputDataDB:
             plugin_collector=PluginCollector.enabled_feature_groups({DBInputDataTestFeatureGroup}),
         )
         assert "name" in result[0].to_pydict()
+
+        assert self.conn is not None
+        self.conn.close()
+        self.conn = None
+        assert self.db_fd is not None
+        os.close(self.db_fd)
+        self.db_fd = None
+        os.remove(self.db_path)
+        assert not os.path.exists(self.db_path)
 
     def test_aggr_load_sqlite_found_in_data_access_collection(self) -> Any:
         f = Feature(

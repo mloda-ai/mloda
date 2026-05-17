@@ -1,4 +1,6 @@
+import sqlite3
 from typing import Any, Optional
+
 from mloda.user import DataAccessCollection
 from mloda.provider import FeatureSet, HashableDict, BaseInputData
 from mloda.user import Options
@@ -143,18 +145,23 @@ class ReadDB(BaseInputData):
 
     @classmethod
     def read_db(cls, credentials: dict[str, Any] | str, query: str) -> tuple[Any, Any]:
-        with cls.get_connection(credentials) as conn:
-            cursor = None
-            cursor = conn.cursor()
-            try:
-                cursor.execute(query)
-                result = cursor.fetchall()
-                column_names = [description[0] for description in cursor.description]
-            finally:
+        connection = cls.get_connection(credentials)
+        try:
+            with connection as conn:
+                cursor = None
+                cursor = conn.cursor()
                 try:
-                    cursor.close()
-                except AttributeError:
-                    pass
+                    cursor.execute(query)
+                    result = cursor.fetchall()
+                    column_names = [description[0] for description in cursor.description]
+                finally:
+                    try:
+                        cursor.close()
+                    except AttributeError:
+                        pass
+        finally:
+            if isinstance(connection, sqlite3.Connection):
+                connection.close()
 
         if result is None:
             raise ValueError(f"No data was returned from the query: {query}.")

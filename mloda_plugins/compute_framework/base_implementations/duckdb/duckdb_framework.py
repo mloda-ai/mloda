@@ -61,13 +61,8 @@ class DuckDBFramework(ComputeFramework):
         self.framework_connection_object = framework_connection_object
 
     @classmethod
-    def pick_connection_from_dac(cls, data_access_collection: Any) -> Optional[Any]:
-        if duckdb is None or data_access_collection is None:
-            return None
-        for conn in data_access_collection.initialized_connection_objects:
-            if isinstance(conn, duckdb.DuckDBPyConnection):
-                return conn
-        return None
+    def _connection_matches(cls, conn: Any) -> bool:
+        return duckdb is not None and isinstance(conn, duckdb.DuckDBPyConnection)
 
     @staticmethod
     def is_available() -> bool:

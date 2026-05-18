@@ -55,13 +55,8 @@ class SparkFramework(ComputeFramework):
                 )
 
     @classmethod
-    def pick_connection_from_dac(cls, data_access_collection: Any) -> Optional[Any]:
-        if SparkSession is None or data_access_collection is None:
-            return None
-        for conn in data_access_collection.initialized_connection_objects:
-            if isinstance(conn, SparkSession):
-                return conn
-        return None
+    def _connection_matches(cls, conn: Any) -> bool:
+        return SparkSession is not None and isinstance(conn, SparkSession)
 
     @staticmethod
     def is_available() -> bool:

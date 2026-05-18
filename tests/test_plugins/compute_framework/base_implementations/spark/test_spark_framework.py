@@ -347,3 +347,9 @@ class TestSparkTfsConnectionInit(TfsConnectionInitMixin):
     @pytest.fixture
     def valid_connection(self, spark_session: Any) -> Any:
         return spark_session
+
+    @pytest.fixture
+    def second_valid_connection(self) -> Any:
+        from unittest.mock import Mock
+
+        return Mock(spec=SparkSession)

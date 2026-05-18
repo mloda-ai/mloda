@@ -75,13 +75,10 @@ class IcebergFramework(ComputeFramework):
                     raise ValueError(f"Expected an Iceberg catalog or table, got {type(framework_connection_object)}")
 
     @classmethod
-    def pick_connection_from_dac(cls, data_access_collection: Any) -> Optional[Any]:
-        if Catalog is None or data_access_collection is None:
-            return None
-        for conn in data_access_collection.initialized_connection_objects:
-            if hasattr(conn, "load_table") or (IcebergTable is not None and isinstance(conn, IcebergTable)):
-                return conn
-        return None
+    def _connection_matches(cls, conn: Any) -> bool:
+        if Catalog is None:
+            return False
+        return hasattr(conn, "load_table") or (IcebergTable is not None and isinstance(conn, IcebergTable))
 
     @staticmethod
     def is_available() -> bool:

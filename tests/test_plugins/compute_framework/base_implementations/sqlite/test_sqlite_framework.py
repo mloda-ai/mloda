@@ -139,6 +139,12 @@ class TestSqliteTfsConnectionInit(TfsConnectionInitMixin):
         yield conn
         conn.close()
 
+    @pytest.fixture
+    def second_valid_connection(self) -> Any:
+        conn = sqlite3.connect(":memory:")
+        yield conn
+        conn.close()
+
 
 class TestSqliteFrameworkMerge(DataFrameTestBase):
     @classmethod

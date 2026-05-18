@@ -47,13 +47,8 @@ class SqliteFramework(ComputeFramework):
         self.framework_connection_object = framework_connection_object
 
     @classmethod
-    def pick_connection_from_dac(cls, data_access_collection: Any) -> Optional[Any]:
-        if data_access_collection is None:
-            return None
-        for conn in data_access_collection.initialized_connection_objects:
-            if isinstance(conn, sqlite3.Connection):
-                return conn
-        return None
+    def _connection_matches(cls, conn: Any) -> bool:
+        return isinstance(conn, sqlite3.Connection)
 
     @staticmethod
     def is_available() -> bool:

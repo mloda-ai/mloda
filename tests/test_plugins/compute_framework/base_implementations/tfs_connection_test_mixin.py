@@ -22,6 +22,17 @@ class TfsConnectionInitMixin:
     def valid_connection(self) -> Any:
         raise NotImplementedError
 
+    @pytest.fixture
+    @abstractmethod
+    def second_valid_connection(self) -> Any:
+        """A second, distinct connection of the same framework type.
+
+        Used to exercise the multi-match disambiguation policy. Subclasses must
+        ensure this is *not* the same object as `valid_connection` so both end
+        up in the DAC set.
+        """
+        raise NotImplementedError
+
     def wrong_type_connection(self) -> Any:
         return object()
 
@@ -46,3 +57,11 @@ class TfsConnectionInitMixin:
         second = framework_class.pick_connection_from_dac(dac)
         assert first is valid_connection
         assert second is valid_connection
+
+    def test_raises_on_multiple_matches(
+        self, framework_class: Any, valid_connection: Any, second_valid_connection: Any
+    ) -> None:
+        assert valid_connection is not second_valid_connection
+        dac = DataAccessCollection(initialized_connection_objects={valid_connection, second_valid_connection})
+        with pytest.raises(ValueError, match="connections matching this framework"):
+            framework_class.pick_connection_from_dac(dac)

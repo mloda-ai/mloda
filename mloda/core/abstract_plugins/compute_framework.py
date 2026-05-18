@@ -158,13 +158,36 @@ class ComputeFramework(ABC):
         self.framework_connection_object = None
 
     @classmethod
+    def _connection_matches(cls, conn: Any) -> bool:
+        """Return True if `conn` is a connection this framework can adopt.
+
+        Default returns False. SQL frameworks override with a single isinstance check;
+        the surrounding fail-fast policy lives in `pick_connection_from_dac`.
+        """
+        return False
+
+    @classmethod
     def pick_connection_from_dac(cls, data_access_collection: Any) -> Optional[Any]:
-        """Pick a matching connection for this framework from the DataAccessCollection.
+        """Pick the matching connection for this framework from the DataAccessCollection.
 
         Called at Engine setup (once per session), not on the per-request run path.
-        Default returns None; SQL frameworks override to do the isinstance scan.
+        Returns None if no connection matches, the single match if exactly one does,
+        and raises ValueError if multiple connections match - the caller has to
+        disambiguate explicitly rather than let a non-deterministic set iteration decide.
         """
-        return None
+        if data_access_collection is None:
+            return None
+        matches = [
+            conn for conn in data_access_collection.initialized_connection_objects if cls._connection_matches(conn)
+        ]
+        if not matches:
+            return None
+        if len(matches) > 1:
+            raise ValueError(
+                f"{cls.__name__}.pick_connection_from_dac: DataAccessCollection contains "
+                f"{len(matches)} connections matching this framework; expected at most one."
+            )
+        return matches[0]
 
     @final
     def get_framework_connection_object(self) -> Any:

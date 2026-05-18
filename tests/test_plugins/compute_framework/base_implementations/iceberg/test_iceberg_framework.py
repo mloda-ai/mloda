@@ -291,3 +291,9 @@ class TestIcebergTfsConnectionInit(TfsConnectionInitMixin):
         mock_catalog = Mock(spec=Catalog)
         mock_catalog.load_table = Mock()
         return mock_catalog
+
+    @pytest.fixture
+    def second_valid_connection(self) -> Any:
+        mock_catalog = Mock(spec=Catalog)
+        mock_catalog.load_table = Mock()
+        return mock_catalog

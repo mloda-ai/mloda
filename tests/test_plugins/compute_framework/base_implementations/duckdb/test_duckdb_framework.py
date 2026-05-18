@@ -204,6 +204,12 @@ class TestDuckDBTfsConnectionInit(TfsConnectionInitMixin):
         yield conn
         conn.close()
 
+    @pytest.fixture
+    def second_valid_connection(self) -> Any:
+        conn = duckdb.connect()
+        yield conn
+        conn.close()
+
     def test_returns_none_when_duckdb_module_missing(self, framework_class: Any) -> None:
         """When the duckdb module symbol is None (optional dep missing), the classmethod
         must return None without raising AttributeError, matching Spark/Iceberg."""

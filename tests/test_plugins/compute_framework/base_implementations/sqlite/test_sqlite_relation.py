@@ -1,4 +1,6 @@
+import datetime
 import sqlite3
+import warnings
 from typing import Any
 
 import pyarrow as pa
@@ -135,3 +137,19 @@ class TestInferSqliteType:
         """TEXT dominates: a string before a float must not be overridden by the float."""
         result = _infer_sqlite_type_from_values(["hello", 1.5])
         assert result == "TEXT", f"Expected TEXT but got {result}"
+
+
+class TestSqliteDatetimeAdapter:
+    def test_inserting_datetime_does_not_emit_default_adapter_warning(self, connection: sqlite3.Connection) -> None:
+        """Inserting datetime/date values must not trigger Python 3.12's default-adapter DeprecationWarning."""
+        data: dict[str, list[Any]] = {
+            "ts": [datetime.datetime(2024, 1, 1, 12, 0), datetime.datetime(2024, 1, 2, 12, 0)],
+            "d": [datetime.date(2024, 1, 1), datetime.date(2024, 1, 2)],
+        }
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            SqliteRelation.from_dict(connection, data)
+        adapter_warnings = [w for w in caught if "default" in str(w.message) and "adapter" in str(w.message)]
+        assert adapter_warnings == [], (
+            f"Unexpected default-adapter warnings: {[str(w.message) for w in adapter_warnings]}"
+        )

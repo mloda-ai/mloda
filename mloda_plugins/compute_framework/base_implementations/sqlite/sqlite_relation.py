@@ -1,3 +1,4 @@
+import datetime
 import re
 import sqlite3
 import uuid
@@ -6,6 +7,13 @@ from typing import Any, Optional
 import pyarrow as pa
 
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
+
+
+# Python 3.12 deprecates the default sqlite3 datetime adapters. Register explicit
+# ISO-format adapters so datetime values inserted via executemany() no longer emit
+# DeprecationWarning on every row. Adapters are module-global in sqlite3.
+sqlite3.register_adapter(datetime.date, lambda d: d.isoformat())
+sqlite3.register_adapter(datetime.datetime, lambda d: d.isoformat())
 
 
 def _next_table_name() -> str:

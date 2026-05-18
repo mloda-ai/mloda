@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from typing import Any, Literal, Optional, cast
 
 try:
@@ -168,6 +169,24 @@ class DuckdbRelation:
             raise RuntimeError("count_star() returned no rows")
         result: int = row[0]
         return result
+
+    def with_row_number(
+        self,
+        alias: str,
+        partition_by: Sequence[str] = (),
+        order_by: Sequence[str] = (),
+    ) -> "DuckdbRelation":
+        """Append a ROW_NUMBER() window column named ``alias``.
+
+        All identifiers are quoted via ``quote_ident``; safe to pass column names verbatim.
+        """
+        clauses: list[str] = []
+        if partition_by:
+            clauses.append("PARTITION BY " + ", ".join(quote_ident(c) for c in partition_by))
+        if order_by:
+            clauses.append("ORDER BY " + ", ".join(quote_ident(c) for c in order_by))
+        over = " ".join(clauses)
+        return self.project(f'*, ROW_NUMBER() OVER ({over}) AS {quote_ident(alias)}')
 
     def append_column(self, name: str, values: list[Any]) -> "DuckdbRelation":
         """Return a new relation with an additional column appended positionally."""

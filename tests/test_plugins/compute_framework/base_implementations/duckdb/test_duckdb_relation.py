@@ -203,3 +203,81 @@ class TestDuckdbRelation(RelationTestMixin):
         """query() must pass the caller's SQL string unchanged; quoting would prevent execution of the SELECT statement."""
         result = sample_relation.query("t", "SELECT UPPER(name) AS upper_name FROM t ORDER BY upper_name")
         assert self.get_column_values(result, "upper_name") == ["ALICE", "BOB", "CHARLIE", "DAVID", "EVE"]
+
+    # --- with_row_number ---
+
+    def test_with_row_number_bare_over(self, sample_relation: "DuckdbRelation") -> None:
+        """Empty partition_by and order_by produce a bare ROW_NUMBER() OVER () clause."""
+        result = sample_relation.with_row_number("rn")
+        assert "rn" in result.columns
+        assert len(result) == 5
+        rns = self.get_column_values(result, "rn")
+        # DuckDB does not guarantee assignment order with bare OVER (), so test set equality
+        assert sorted(rns) == [1, 2, 3, 4, 5]
+
+    def test_with_row_number_partition_by_only(self, sample_relation: "DuckdbRelation") -> None:
+        """partition_by without order_by: each row's rn is within partition size; sum is deterministic."""
+        result = sample_relation.with_row_number("rn", partition_by=("category",))
+        assert "rn" in result.columns
+        assert len(result) == 5
+        rns = self.get_column_values(result, "rn")
+        # Categories: A,A,B,B,C -> partition sizes 2,2,1 -> rns are permutations of [1,2],[1,2],[1]
+        # Sum is 1+2+1+2+1 = 7
+        assert sum(rns) == 7
+        # Each rn must be between 1 and its partition size (max partition size is 2)
+        for rn in rns:
+            assert 1 <= rn <= 2
+
+    def test_with_row_number_order_by_only(self, sample_relation: "DuckdbRelation") -> None:
+        """order_by without partition_by: rows ordered by age get rn 1..5."""
+        result = sample_relation.with_row_number("rn", order_by=("age",))
+        assert "rn" in result.columns
+        # Order the result by age and verify rn == [1,2,3,4,5]
+        ordered = result.order("age")
+        rns = self.get_column_values(ordered, "rn")
+        assert rns == [1, 2, 3, 4, 5]
+
+    def test_with_row_number_partition_and_order(self, sample_relation: "DuckdbRelation") -> None:
+        """partition_by=('category',), order_by=('age',). Verify expected rn per row by id."""
+        result = sample_relation.with_row_number("rn", partition_by=("category",), order_by=("age",))
+        ordered = result.order("id")
+        ids = self.get_column_values(ordered, "id")
+        rns = self.get_column_values(ordered, "rn")
+        assert ids == [1, 2, 3, 4, 5]
+        # id=1 (A,25)->1, id=2 (B,30)->1, id=3 (A,35)->2, id=4 (C,40)->1, id=5 (B,45)->2
+        assert rns == [1, 1, 2, 1, 2]
+
+    def test_with_row_number_returns_new_relation(self, sample_relation: "DuckdbRelation") -> None:
+        """Original relation is not mutated; returned object is a DuckdbRelation instance."""
+        original_columns = list(sample_relation.columns)
+        result = sample_relation.with_row_number("rn", order_by=("age",))
+        assert isinstance(result, DuckdbRelation)
+        assert sample_relation.columns == original_columns
+        assert "rn" not in sample_relation.columns
+
+    def test_with_row_number_alias_with_special_chars(self, sample_relation: "DuckdbRelation") -> None:
+        """The method must quote the alias; an alias containing a double quote must round-trip verbatim."""
+        weird = 'weird"name'
+        result = sample_relation.with_row_number(weird, order_by=("age",))
+        assert weird in result.columns
+        assert len(result) == 5
+
+    def test_with_row_number_partition_column_with_special_chars(self, connection: Any) -> None:
+        """The method must quote partition_by columns; a column literally named 'odd col' must work."""
+        rel = DuckdbRelation.from_dict(
+            connection,
+            {
+                "odd col": ["x", "x", "y"],
+                "v": [1, 2, 3],
+            },
+        )
+        result = rel.with_row_number("rn", partition_by=("odd col",))
+        assert "rn" in result.columns
+        assert len(result) == 3
+
+    def test_with_row_number_preserves_original_columns(self, sample_relation: "DuckdbRelation") -> None:
+        """Original columns appear first (in original order); the new column appears last."""
+        original_columns = list(sample_relation.columns)
+        result = sample_relation.with_row_number("rn", order_by=("age",))
+        assert result.columns[: len(original_columns)] == original_columns
+        assert result.columns[-1] == "rn"

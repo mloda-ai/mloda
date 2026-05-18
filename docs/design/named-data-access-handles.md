@@ -100,32 +100,40 @@ The scenarios where today's pattern silently fails have one shape on different f
 
 Named handles reduce all five to one invariant: *if the registry has more than one entry of the requested type and the consumer did not pass a handle, raise and list the candidates*. Same rule, same error shape, regardless of field.
 
-## Migration plan
+## Implementation plan
 
-Three landing waves so no consumer breaks in a single PR.
+**No backwards compatibility.** The legacy `set`/single-dict params are removed in the same PR as the registry. This is a breaking change to `DataAccessCollection`'s constructor signature and to the `add_*` mutator surface. mloda is pre-1.0; the cost of a one-time codemod across callers is smaller than the cost of carrying back-compat shims that obscure the contract.
 
-### Wave 1: introduce the keyed fields, normalize sets to synthetic keys
+The work lands in one PR, with these concrete edits:
 
-`DataAccessCollection.__init__` accepts both the legacy set/dict params and the new keyed params. Internally everything is stored as `dict[str, T]`:
+### `DataAccessCollection` itself
+- Constructor accepts `connections: dict[str, Any] | None`, `files: dict[str, str] | None`, `folders: dict[str, str] | None`, `credentials: dict[str, dict[str, Any]] | None`. Internal storage uses the same dicts directly. No sets, no `HashableDict` single field.
+- `column_to_file` stays as a file-specific override. Its values must reference a key in `files` (not a path); this also makes the existing validation tighter.
+- `uninitialized_connection_objects` is **removed** (dead field per the inventory in comment 1 of #443).
+- Mutators rewritten: `add_connection(handle, conn)`, `add_file(handle, path)`, `add_folder(handle, path)`, `add_credentials(handle, dict)`. Each raises on duplicate handle so silent overwrite is impossible.
+- New `handles() -> dict[str, str]` returns `{handle: kind}`.
+- New `resolve(kind: str, predicate: Callable[[Any], bool] | None = None, hint: str | None = None) -> Any | None` implements the resolution rule once for every consumer.
 
-- Each entry passed via a legacy `set` is assigned a synthetic key (e.g. `"_auto_<n>"` or a hash-stable derivative). Synthetic keys are reserved (prefix-locked) so they do not collide with user keys.
-- `add_initialized_connection_object` and friends keep working; they append with the next synthetic key.
-- When a synthetic-keyed entry is involved in an ambiguity, the resolver still raises, but the error message includes a `DeprecationWarning` pointer: "anonymous entries cannot be referenced by `data_access_handle`; pass `connections={...}` instead."
-- `add_credential_dict` keeps its old single-dict shape but emits a `DeprecationWarning` on the second call (today: silent overwrite). The dict it sets is normalized into the keyed registry under a synthetic key.
+### Resolver rule (shared)
+1. If `hint` is set, return `registry[hint]` if it exists and matches `predicate` (when given); otherwise raise with `"handle 'X' not found for kind=K; available: [..]"` or `"handle 'X' is wrong kind/type"`.
+2. Else, filter the kind's registry by `predicate` (or take all entries of that kind if no predicate). One match → bind. Zero → return `None`. More than one → raise with `"ambiguous: candidates are [..]; set data_access_handle"`.
 
-This wave changes no public type signatures. Existing tests pass. The bug class is still latent for set-built DACs; users who opt into keyed registries get the fail-fast contract for free.
+This is the same contract `ComputeFramework.pick_connection_from_dac` ships in #442, generalized.
 
-### Wave 2: roll the resolution rule into every consumer
+### Consumer rewrites
+- `ComputeFramework.pick_connection_from_dac` (`compute_framework.py:170`) calls `dac.resolve("connection", predicate=cls._connection_matches, hint=options.get("data_access_handle"))`. Same error shape as today.
+- `read_file.py:122` (`match_subclass_data_access`) calls `dac.resolve("file", predicate=lambda p: p.endswith(cls.suffix()), hint=...)` then handles the folder-traversal layer with a sub-resolver over file entries inside the folder. `column_to_file` short-circuits before resolver invocation.
+- `read_document.py:77` mirrors `read_file.py:122`.
+- `read_db.py:92` calls `dac.resolve("credentials", hint=...)`. Single-credentials DACs behave identically; multi-credentials DACs raise unless hinted.
 
-- `ComputeFramework.pick_connection_from_dac` already implements the rule (#442). Generalize the same loop into a shared helper that operates on any field of the registry, parametrized by the type predicate.
-- `read_file.py:122` and `read_document.py:77` switch from `set | set` first-match-wins to the shared resolver. Behavior change: ambiguity raises (matching #442's connection contract) unless `data_access_handle` or `column_to_file` resolves it. `column_to_file` keeps working as a file-specific hint that takes precedence over `data_access_handle` for the column it pins.
-- `read_db.py:92` switches from "just take the one credential dict" to the shared resolver over `credentials`. If only one credential is registered, behavior is identical; if more than one, the resolver disambiguates by handle or raises.
+### Plumbing the hint
+- `data_access_handle` is read from the same `Options` instance the consumer already has in hand:
+  - CFW path: `options.get("data_access_handle")` at the existing `compute_framework.py:236` call site, passed into `pick_connection_from_dac`.
+  - Read* path: `options.get("data_access_handle")` inside each `match_subclass_data_access`.
+- No new plumbing through `Engine` or `FeatureSet`. The hint travels with the feature options that already reach these call sites.
 
-This wave is a behavior change: code that today silently picks one of N resources now raises unless the user disambiguates. The user pain (an error at planning time, with a list of available handles) is strictly smaller than the pain it replaces (wrong data at runtime, no signal). Release notes call this out.
-
-### Wave 3: deprecate the set/dict params
-
-Once consumers are on the shared resolver and at least one minor release has shipped, the legacy `set`/single-dict params emit `DeprecationWarning` at construction time, with a suggested keyed-dict rewrite. Removal is a later major.
+### Caller codemod
+Every existing DAC construction site uses sets; all of them get rewritten to keyed dicts in this PR. Test fixtures are the bulk of the work; production examples and demos under `code/demo/` are out of repo so not part of this PR.
 
 ## Test matrix
 
@@ -141,14 +149,13 @@ One row per DAC field, two scenarios per row.
 | `folders` | resolves the folder | raises with handle list | binds the hinted folder |
 | `credentials` | binds the dict | raises with handle list | binds the hinted dict |
 
-Connection rows (A, B for all four frameworks) already exist as `TfsConnectionInitMixin.test_raises_on_multiple_matches` (#442). Wave 2 adds the other rows.
+Connection rows (A, B for all four frameworks) already exist as `TfsConnectionInitMixin.test_raises_on_multiple_matches` (#442). The remaining rows are added in this PR.
 
 ## Out of scope (flagged here, deferred to follow-up PRs)
 
-- **`uninitialized_connection_objects`**: declared, settable, read by no production code. Either wire up the missing consumer or remove the field. Independent of the registry change.
 - **`multi_execute_step` wiring**: `compute_framework_executor.py` calls `init_connection_from_data_access` for `sync_execute_step` and `thread_execute_step` but not `multi_execute_step`. Latent because no current SQL CFW allows MULTIPROCESSING. Flag with an inline comment so the next CFW that loosens this does not rediscover it.
-- **Iceberg catalog-vs-table ambiguity**: `iceberg_framework.py` `_connection_matches` accepts both a catalog and a `Table`. With named handles, two entries of compatible-but-different shape can be registered under different handles, so users can pin one. Worth a regression test row when Wave 2 lands.
-- **Per-FG-class hint (Issue #443 Option B)**: deliberately deferred. The universal `data_access_handle` key is the new convention; the FG-class-keyed convention at `compute_framework.py:203` stays as a back-compat alias. If a per-FG-class hint is needed later, it layers on top of the registry without changing the resolver rule.
+- **Iceberg catalog-vs-table ambiguity**: `iceberg_framework.py` `_connection_matches` accepts both a catalog and a `Table`. With named handles, two entries of compatible-but-different shape can be registered under different handles, so users can pin one. Worth a regression test row in this PR.
+- **Per-FG-class hint (Issue #443 Option B)**: deliberately deferred. The universal `data_access_handle` key is the new convention.
 - **Tagged resources** (`{"role": "warehouse", "env": "prod"}`): more expressive than names but adds policy questions (which tag axes are queryable?) that named handles dodge. Reconsider only if handles become limiting.
 - **FG-owned connection declarations** (`class FraudFG: data_access_handle = "warehouse"`): can layer on as a supplement to the registry. Out of scope for the registry PR; revisit once handle adoption is high enough to warrant it.
 
@@ -160,6 +167,6 @@ Connection rows (A, B for all four frameworks) already exist as `TfsConnectionIn
 
 ## Open questions
 
-1. Reserved synthetic-key prefix: `"_auto_"` collides cheaply with hand-written keys. A less-likely prefix (`"__mloda_auto_"` or a per-field UUID) is safer; the error path is the only place users ever see them.
-2. Whether `column_to_file` stays as a file-specific hint (precedence over `data_access_handle` for the pinned column) or is folded into the universal hint key with a `kind=file` qualifier. Smaller blast radius to leave it alone in Wave 2 and revisit during Wave 3.
-3. Whether `credentials` becomes `dict[str, dict]` from the outset or stays as a single `HashableDict` field with a deprecation path. The asymmetry is real (today's failure mode is second-write-wins, not first-match-wins), but the resolver rule treats both uniformly, so collapsing the field is the cleaner end state.
+1. Whether `column_to_file` stays as a file-specific override (current decision: yes, but its values now reference file handles instead of paths, which tightens validation).
+2. Naming of the field: `connections` vs `initialized_connection_objects`. The doc uses `connections`; the codemod settles on this if no objection.
+3. Mutator naming: `add_connection(handle, conn)` vs `register_connection(handle, conn)`. `add_*` mirrors today's surface; `register_*` reads more like a registry. Pick one consistently.

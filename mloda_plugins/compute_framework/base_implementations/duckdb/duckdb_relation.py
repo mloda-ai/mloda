@@ -188,10 +188,17 @@ class DuckdbRelation:
         over = " ".join(clauses)
         return self.project(f'*, ROW_NUMBER() OVER ({over}) AS {quote_ident(alias)}')
 
+    def _pick_helper_column_name(self, *, taken: set[str]) -> str:
+        """Return the lowest ``__mloda_rn{n}__`` name not present in ``taken``."""
+        n = 0
+        while f"__mloda_rn{n}__" in taken:
+            n += 1
+        return f"__mloda_rn{n}__"
+
     def append_column(self, name: str, values: list[Any]) -> "DuckdbRelation":
         """Return a new relation with an additional column appended positionally."""
         new_col_rel = DuckdbRelation.from_dict(self._connection, {name: values})
-        rn = "__mloda_rn__"
+        rn = self._pick_helper_column_name(taken=set(self.columns) | {name})
         qrn = quote_ident(rn)
         left = self._relation.project(f"*, ROW_NUMBER() OVER () AS {qrn}")
         right = new_col_rel._relation.project(f"*, ROW_NUMBER() OVER () AS {qrn}")

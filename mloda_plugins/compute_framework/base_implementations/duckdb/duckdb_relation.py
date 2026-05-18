@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
+from dataclasses import dataclass, field
 from typing import Any, Literal, Optional, cast
 
 try:
@@ -14,6 +16,78 @@ except ImportError:
     pa = None  # type: ignore[assignment]
 
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import inline_params, quote_ident
+
+
+@dataclass(frozen=True)
+class CurrentRow:
+    """Frame bound: the current row."""
+
+
+@dataclass(frozen=True)
+class Unbounded:
+    """Frame bound: unbounded (preceding on the start side, following on the end side)."""
+
+
+@dataclass(frozen=True)
+class Preceding:
+    """Frame bound: ``offset`` rows/range/groups before the current row."""
+
+    offset: int
+
+
+@dataclass(frozen=True)
+class Following:
+    """Frame bound: ``offset`` rows/range/groups after the current row."""
+
+    offset: int
+
+
+FrameBound = CurrentRow | Unbounded | Preceding | Following
+
+
+@dataclass(frozen=True)
+class WindowFrame:
+    """A window frame clause (``ROWS|RANGE|GROUPS BETWEEN <start> AND <end>``)."""
+
+    kind: Literal["rows", "range", "groups"]
+    start: FrameBound
+    end: FrameBound
+
+
+@dataclass(frozen=True)
+class WindowSpec:
+    """Structured OVER (...) specification used by :meth:`DuckdbRelation.window`."""
+
+    partition_by: Sequence[str] = field(default_factory=tuple)
+    order_by: Sequence[str] = field(default_factory=tuple)
+    frame: WindowFrame | None = None
+
+
+def _render_frame_bound(bound: FrameBound, side: Literal["start", "end"]) -> str:
+    """Render a single frame bound for the given ``side`` of a BETWEEN clause."""
+    if isinstance(bound, Unbounded):
+        return "UNBOUNDED PRECEDING" if side == "start" else "UNBOUNDED FOLLOWING"
+    if isinstance(bound, CurrentRow):
+        return "CURRENT ROW"
+    if isinstance(bound, Preceding):
+        return f"{bound.offset} PRECEDING"
+    if isinstance(bound, Following):
+        return f"{bound.offset} FOLLOWING"
+    raise TypeError(f"Unsupported frame bound: {type(bound).__name__}")
+
+
+def _render_window_spec(over: WindowSpec) -> str:
+    """Render a :class:`WindowSpec` into the body of an ``OVER (...)`` clause."""
+    parts: list[str] = []
+    if over.partition_by:
+        parts.append("PARTITION BY " + ", ".join(quote_ident(c) for c in over.partition_by))
+    if over.order_by:
+        parts.append("ORDER BY " + ", ".join(quote_ident(c) for c in over.order_by))
+    if over.frame is not None:
+        start_sql = _render_frame_bound(over.frame.start, "start")
+        end_sql = _render_frame_bound(over.frame.end, "end")
+        parts.append(f"{over.frame.kind.upper()} BETWEEN {start_sql} AND {end_sql}")
+    return " ".join(parts)
 
 
 class DuckdbRelation:
@@ -169,10 +243,45 @@ class DuckdbRelation:
         result: int = row[0]
         return result
 
+    def with_row_number(
+        self,
+        alias: str,
+        partition_by: Sequence[str] = (),
+        order_by: Sequence[str] = (),
+    ) -> "DuckdbRelation":
+        """Append a ROW_NUMBER() window column named ``alias``.
+
+        All identifiers are quoted via ``quote_ident``; safe to pass column names verbatim.
+        """
+        clauses: list[str] = []
+        if partition_by:
+            clauses.append("PARTITION BY " + ", ".join(quote_ident(c) for c in partition_by))
+        if order_by:
+            clauses.append("ORDER BY " + ", ".join(quote_ident(c) for c in order_by))
+        over = " ".join(clauses)
+        return self.project(f"*, ROW_NUMBER() OVER ({over}) AS {quote_ident(alias)}")
+
+    def window(self, func: str, over: WindowSpec, alias: str) -> "DuckdbRelation":
+        """Append a window-function column ``alias`` computed by ``func`` OVER ``over``.
+
+        ``func`` is a raw SQL fragment inlined verbatim; never pass user-controlled input.
+        The ``alias`` and every identifier in ``over.partition_by`` / ``over.order_by``
+        are quoted via ``quote_ident``.
+        """
+        over_sql = _render_window_spec(over)
+        return self.project(f"*, {func} OVER ({over_sql}) AS {quote_ident(alias)}")
+
+    def _pick_helper_column_name(self, *, taken: set[str]) -> str:
+        """Return the lowest ``__mloda_rn{n}__`` name not present in ``taken``."""
+        n = 0
+        while f"__mloda_rn{n}__" in taken:
+            n += 1
+        return f"__mloda_rn{n}__"
+
     def append_column(self, name: str, values: list[Any]) -> "DuckdbRelation":
         """Return a new relation with an additional column appended positionally."""
         new_col_rel = DuckdbRelation.from_dict(self._connection, {name: values})
-        rn = "__mloda_rn__"
+        rn = self._pick_helper_column_name(taken=set(self.columns) | {name})
         qrn = quote_ident(rn)
         left = self._relation.project(f"*, ROW_NUMBER() OVER () AS {qrn}")
         right = new_col_rel._relation.project(f"*, ROW_NUMBER() OVER () AS {qrn}")

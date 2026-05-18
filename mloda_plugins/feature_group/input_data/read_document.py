@@ -74,8 +74,16 @@ class ReadDocument(BaseInputData):
                 if pinned is not None:
                     return pinned
             document_suffixes = options.get("document_suffixes") or frozenset()
-            data_accesses = list(data_access.files | data_access.folders)
-            return cls.match_document_data_access(data_accesses, feature_names, document_suffixes)
+            hint = options.get("data_access_handle")
+            file_match = data_access.resolve(
+                "file",
+                predicate=lambda p: cls._document_file_matches(p, document_suffixes),
+                hint=hint,
+            )
+            if file_match is not None:
+                return file_match
+            folder_paths = list(data_access.folders.values())
+            return cls.match_document_data_access(folder_paths, feature_names, document_suffixes)
         if isinstance(data_access, (str, Path)):
             path_str = str(data_access)
             result = cls.match_document_data_access([path_str], feature_names)
@@ -107,6 +115,16 @@ class ReadDocument(BaseInputData):
                             continue
                         return os.path.join(da, file)
         return None
+
+    @classmethod
+    def _document_file_matches(cls, path: str, document_suffixes: "frozenset[str]") -> bool:
+        if not cls._has_suffix():
+            return False
+        if not path.endswith(cls.suffix()):
+            return False
+        if document_suffixes is not None and cls._is_structured_suffix(path, document_suffixes):
+            return False
+        return True
 
     @classmethod
     def _is_structured_suffix(cls, filename: str, document_suffixes: "frozenset[str]") -> bool:

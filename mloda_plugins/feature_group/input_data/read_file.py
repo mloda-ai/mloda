@@ -114,12 +114,23 @@ class ReadFile(BaseInputData):
 
     @classmethod
     def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
+        document_suffixes: "frozenset[str]" = options.get("document_suffixes") or frozenset()
+
         if isinstance(data_access, DataAccessCollection):
             if data_access.column_to_file is not None:
                 pinned = cls._resolve_pinned_file(data_access, feature_names)
                 if pinned is not None:
                     return pinned
-            data_accesses = list(data_access.files | data_access.folders)
+            hint = options.get("data_access_handle")
+            file_match = data_access.resolve(
+                "file",
+                predicate=lambda p: cls._file_matches(p, feature_names, document_suffixes),
+                hint=hint,
+            )
+            if file_match is not None:
+                return file_match
+            folder_paths = list(data_access.folders.values())
+            return cls.match_read_file_data_access(folder_paths, feature_names, document_suffixes)
         elif isinstance(data_access, str):
             data_accesses = [data_access]
         elif isinstance(data_access, Path):
@@ -127,12 +138,18 @@ class ReadFile(BaseInputData):
         else:
             return None
 
-        document_suffixes: "frozenset[str]" = options.get("document_suffixes") or frozenset()
-
         matched_data_access = cls.match_read_file_data_access(data_accesses, feature_names, document_suffixes)
         if matched_data_access is None:
             return None
         return matched_data_access
+
+    @classmethod
+    def _file_matches(cls, path: str, feature_names: list[str], document_suffixes: "frozenset[str]") -> bool:
+        if not path.endswith(cls.suffix()):
+            return False
+        if document_suffixes and any(path.endswith(s) for s in document_suffixes):
+            return False
+        return cls.validate_columns(path, feature_names) is not False
 
     @classmethod
     def match_read_file_data_access(

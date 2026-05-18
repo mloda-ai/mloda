@@ -36,7 +36,7 @@ class TfsDoubledSqliteFG(FeatureGroup, MatchData):
             return framework_connection_object
         if data_access_collection is None:
             return None
-        for conn in data_access_collection.initialized_connection_objects:
+        for conn in data_access_collection.connections.values():
             if isinstance(conn, sqlite3.Connection):
                 return conn
         return None

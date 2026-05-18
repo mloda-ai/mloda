@@ -53,32 +53,32 @@ class TestResolvePinnedFile:
     def test_base_class_resolves_pinned_csv(self) -> None:
         """Base class (no suffix) should resolve pinned files without suffix check."""
         dac = DataAccessCollection(
-            files={"/data/customers.csv"},
-            column_to_file={"customer_id": "/data/customers.csv"},
+            files={"customers": "/data/customers.csv"},
+            column_to_file={"customer_id": "customers"},
         )
         result = ConcreteNoSuffix._resolve_pinned_file(dac, ["customer_id"])
         assert result == "/data/customers.csv"
 
     def test_concrete_resolves_matching_suffix(self) -> None:
         dac = DataAccessCollection(
-            files={"/data/customers.csv"},
-            column_to_file={"customer_id": "/data/customers.csv"},
+            files={"customers": "/data/customers.csv"},
+            column_to_file={"customer_id": "customers"},
         )
         result = ConcreteWithSuffix._resolve_pinned_file(dac, ["customer_id"])
         assert result == "/data/customers.csv"
 
     def test_concrete_rejects_wrong_suffix(self) -> None:
         dac = DataAccessCollection(
-            files={"/data/customers.parquet"},
-            column_to_file={"customer_id": "/data/customers.parquet"},
+            files={"customers": "/data/customers.parquet"},
+            column_to_file={"customer_id": "customers"},
         )
         result = ConcreteWithSuffix._resolve_pinned_file(dac, ["customer_id"])
         assert result is None
 
     def test_no_pinned_columns_returns_none(self) -> None:
         dac = DataAccessCollection(
-            files={"/data/customers.csv"},
-            column_to_file={"other_col": "/data/customers.csv"},
+            files={"customers": "/data/customers.csv"},
+            column_to_file={"other_col": "customers"},
         )
         result = ConcreteWithSuffix._resolve_pinned_file(dac, ["customer_id"])
         assert result is None

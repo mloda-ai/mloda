@@ -46,13 +46,13 @@ class TestDefaultSuffixOwnership:
     """Without document_suffixes option, ReadFile owns .json, ReadDocument skips it."""
 
     def test_readfile_matches_json_by_default(self) -> None:
-        dac = DataAccessCollection(files={"data.json"})
+        dac = DataAccessCollection(files={"f1": "data.json"})
         options = Options()
         result = StubJsonReader.match_subclass_data_access(dac, ["id"], options=options)
         assert result == "data.json"
 
     def test_readdocument_skips_json_by_default(self) -> None:
-        dac = DataAccessCollection(files={"data.json"})
+        dac = DataAccessCollection(files={"f1": "data.json"})
         options = Options()
         result = StubJsonDocReader.match_subclass_data_access(dac, ["content"], options=options)
         assert result is None
@@ -69,7 +69,7 @@ class TestDefaultSuffixOwnership:
             def load_data(cls, data_access: Any, features: Any) -> Any:
                 return None
 
-        dac = DataAccessCollection(files={"readme.md"})
+        dac = DataAccessCollection(files={"f1": "readme.md"})
         options = Options()
         result = StubMdReader.match_subclass_data_access(dac, ["content"], options=options)
         assert result == "readme.md"
@@ -79,13 +79,13 @@ class TestDocumentSuffixesOverride:
     """With document_suffixes option, ReadDocument claims the suffix, ReadFile auto-excludes."""
 
     def test_readdocument_matches_json_with_override(self) -> None:
-        dac = DataAccessCollection(files={"data.json"})
+        dac = DataAccessCollection(files={"f1": "data.json"})
         options = Options({"document_suffixes": frozenset({".json"})})
         result = StubJsonDocReader.match_subclass_data_access(dac, ["content"], options=options)
         assert result == "data.json"
 
     def test_readfile_excludes_json_with_override(self) -> None:
-        dac = DataAccessCollection(files={"data.json"})
+        dac = DataAccessCollection(files={"f1": "data.json"})
         options = Options({"document_suffixes": frozenset({".json"})})
         result = StubJsonReader.match_subclass_data_access(dac, ["id"], options=options)
         assert result is None
@@ -106,7 +106,7 @@ class TestDocumentSuffixesOverride:
             def load_data(cls, data_access: Any, features: Any) -> Any:
                 return None
 
-        dac = DataAccessCollection(files={"data.csv"})
+        dac = DataAccessCollection(files={"f1": "data.csv"})
         options = Options({"document_suffixes": frozenset({".json"})})
         result = StubCsvReader.match_subclass_data_access(dac, ["col"], options=options)
         assert result == "data.csv"
@@ -128,12 +128,12 @@ class TestNoOptionsBackwardCompatible:
     """Calling without options (as existing tests do) should preserve old behavior."""
 
     def test_readfile_no_options(self) -> None:
-        dac = DataAccessCollection(files={"data.json"})
+        dac = DataAccessCollection(files={"f1": "data.json"})
         result = StubJsonReader.match_subclass_data_access(dac, ["id"], options=Options({}))
         assert result == "data.json"
 
     def test_readdocument_no_options(self) -> None:
-        dac = DataAccessCollection(files={"data.json"})
+        dac = DataAccessCollection(files={"f1": "data.json"})
         result = StubJsonDocReader.match_subclass_data_access(dac, ["content"], options=Options({}))
         assert result is None
 
@@ -148,7 +148,7 @@ class TestFolderTraversal:
             f.write("{}")
 
         try:
-            dac = DataAccessCollection(folders={tmp_dir})
+            dac = DataAccessCollection(folders={"d1": tmp_dir})
             options = Options()
             result = StubJsonDocReader.match_subclass_data_access(dac, ["content"], options=options)
             assert result is None
@@ -163,7 +163,7 @@ class TestFolderTraversal:
             f.write("{}")
 
         try:
-            dac = DataAccessCollection(folders={tmp_dir})
+            dac = DataAccessCollection(folders={"d1": tmp_dir})
             options = Options({"document_suffixes": frozenset({".json"})})
             result = StubJsonDocReader.match_subclass_data_access(dac, ["content"], options=options)
             assert result == json_path

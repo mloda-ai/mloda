@@ -43,8 +43,8 @@ class ConnectionRecordingIcebergFramework(IcebergFramework):
         _observed_catalogs.append(self.framework_connection_object)
 
     @classmethod
-    def pick_connection_from_dac(cls, data_access_collection: Any) -> Optional[Any]:
-        return IcebergFramework.pick_connection_from_dac(data_access_collection)
+    def pick_connection_from_dac(cls, data_access_collection: Any, options: Optional[Any] = None) -> Optional[Any]:
+        return IcebergFramework.pick_connection_from_dac(data_access_collection, options)
 
 
 class TfsDoubledIcebergFG(FeatureGroup, MatchData):
@@ -68,7 +68,7 @@ class TfsDoubledIcebergFG(FeatureGroup, MatchData):
             return framework_connection_object
         if data_access_collection is None:
             return None
-        for conn in data_access_collection.initialized_connection_objects:
+        for conn in data_access_collection.connections.values():
             if hasattr(conn, "load_table") or isinstance(conn, Mock):
                 return conn
         return None

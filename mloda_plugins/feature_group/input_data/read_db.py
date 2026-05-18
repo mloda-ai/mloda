@@ -89,8 +89,10 @@ class ReadDB(BaseInputData):
         data_accesses: list[Any] = []
 
         if isinstance(data_access, DataAccessCollection):
-            if data_access.credential_dicts:
-                data_accesses.append(data_access.credential_dicts)
+            hint = options.get("data_access_handle") if options is not None else None
+            creds = data_access.resolve("credentials", hint=hint)
+            if creds:
+                data_accesses.append(creds)
         elif isinstance(data_access, HashableDict):
             data_accesses.append(data_access)
 

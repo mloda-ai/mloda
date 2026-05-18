@@ -17,7 +17,7 @@ from mloda.user import DataAccessCollection
 Next, we define the data source by specifying the file path and creating a **DataAccessCollection** object:
 ```python
 file_path = "tests/test_plugins/feature_group/src/dataset/creditcard_2023_short.csv"
-data_access_collection = DataAccessCollection(files={file_path})
+data_access_collection = DataAccessCollection(files={"creditcard": file_path})
 ``` 
 
 #### 3. Define the features

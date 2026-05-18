@@ -4,6 +4,7 @@
 | PyYAML                                 | 6.0.3           | MIT License                                        |
 | Pygments                               | 2.20.0          | BSD-2-Clause                                       |
 | annotated-types                        | 0.7.0           | MIT License                                        |
+| ast_serialize                          | 0.3.0           | MIT                                                |
 | asttokens                              | 3.0.1           | Apache 2.0                                         |
 | attrs                                  | 26.1.0          | MIT                                                |
 | bandit                                 | 1.9.4           | Apache-2.0                                         |
@@ -39,7 +40,7 @@
 | matplotlib-inline                      | 0.2.1           | UNKNOWN                                            |
 | mdurl                                  | 0.1.2           | MIT License                                        |
 | mktestdocs                             | 0.2.5           | MIT                                                |
-| mloda                                  | 0.6.2           | Apache-2.0                                         |
+| mloda                                  | 0.6.3           | Apache-2.0                                         |
 | mmh3                                   | 5.2.1           | MIT License                                        |
 | msgpack                                | 1.1.2           | Apache-2.0                                         |
 | mypy                                   | 1.20.2          | MIT                                                |

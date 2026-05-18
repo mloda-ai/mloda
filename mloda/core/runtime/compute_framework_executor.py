@@ -234,17 +234,26 @@ class ComputeFrameworkExecutor:
             from_cfw = self.cfw_collection[from_cfw_uuid]
         return from_cfw
 
+    def _bind_tfs_connection(self, step: Any, cfw_uuid: UUID) -> None:
+        """Bind the setup-resolved connection to a TFS destination CFW, if any.
+
+        No-op for non-TFS steps and for destinations whose framework has no entry
+        in `tfs_connection_map` (i.e. no connection was resolved at Engine setup).
+        """
+        if not isinstance(step, TransformFrameworkStep):
+            return
+        cfw = self.cfw_collection[cfw_uuid]
+        conn = self.tfs_connection_map.get(type(cfw))
+        if conn is not None and cfw.framework_connection_object is None:
+            cfw.set_framework_connection_object(conn)
+
     def sync_execute_step(self, step: Any) -> None:
         """
         Executes a step synchronously.
         """
         cfw_uuid = self.prepare_execute_step(step, ParallelizationMode.SYNC)
 
-        if isinstance(step, TransformFrameworkStep):
-            cfw = self.cfw_collection[cfw_uuid]
-            conn = self.tfs_connection_map.get(type(cfw))
-            if conn is not None and cfw.framework_connection_object is None:
-                cfw.set_framework_connection_object(conn)
+        self._bind_tfs_connection(step, cfw_uuid)
 
         try:
             from_cfw = self.prepare_tfs_and_joinstep(step) or None
@@ -264,11 +273,7 @@ class ComputeFrameworkExecutor:
         """
         cfw_uuid = self.prepare_execute_step(step, ParallelizationMode.THREADING)
 
-        if isinstance(step, TransformFrameworkStep):
-            cfw = self.cfw_collection[cfw_uuid]
-            conn = self.tfs_connection_map.get(type(cfw))
-            if conn is not None and cfw.framework_connection_object is None:
-                cfw.set_framework_connection_object(conn)
+        self._bind_tfs_connection(step, cfw_uuid)
 
         from_cfw = self.prepare_tfs_and_joinstep(step) or None
 

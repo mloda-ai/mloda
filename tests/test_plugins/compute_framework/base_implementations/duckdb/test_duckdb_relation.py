@@ -351,3 +351,46 @@ class TestDuckdbRelation(RelationTestMixin):
         result = sample_relation.with_row_number("rn", order_by=("age",))
         assert result.columns[: len(original_columns)] == original_columns
         assert result.columns[-1] == "rn"
+
+    # --- append_column: helper-name collision (issue #405 subtask 2) ---
+
+    def test_append_column_when_existing_column_named_mloda_rn_zero(self, connection: Any) -> None:
+        """Helper picker must skip __mloda_rn0__ if already present and use __mloda_rn1__."""
+        rel = DuckdbRelation.from_dict(connection, {"__mloda_rn0__": [1, 2, 3], "b": [4, 5, 6]})
+        result = rel.append_column("c", [7, 8, 9])
+        assert set(result.columns) == {"__mloda_rn0__", "b", "c"}
+        arrow = result.to_arrow_table()
+        assert arrow.column("__mloda_rn0__").to_pylist() == [1, 2, 3]
+        assert arrow.column("c").to_pylist() == [7, 8, 9]
+
+    def test_append_column_when_existing_column_named_mloda_rn_legacy(self, connection: Any) -> None:
+        """Helper picker must not collide with a pre-existing __mloda_rn__ column (the OLD hardcoded name)."""
+        rel = DuckdbRelation.from_dict(connection, {"__mloda_rn__": ["x", "y", "z"], "b": [4, 5, 6]})
+        result = rel.append_column("c", [7, 8, 9])
+        assert set(result.columns) == {"__mloda_rn__", "b", "c"}
+        arrow = result.to_arrow_table()
+        assert arrow.column("__mloda_rn__").to_pylist() == ["x", "y", "z"]
+        assert arrow.column("c").to_pylist() == [7, 8, 9]
+
+    def test_append_column_when_name_param_collides_with_helper_candidate(self, connection: Any) -> None:
+        """Helper picker must consider both self.columns AND the incoming name parameter."""
+        rel = DuckdbRelation.from_dict(connection, {"a": [1, 2, 3]})
+        result = rel.append_column("__mloda_rn0__", [7, 8, 9])
+        assert set(result.columns) == {"a", "__mloda_rn0__"}
+        assert len(result) == 3
+        arrow = result.to_arrow_table()
+        assert arrow.column("__mloda_rn0__").to_pylist() == [7, 8, 9]
+
+    def test_append_column_when_multiple_helper_candidates_exist(self, connection: Any) -> None:
+        """Helper picker must scan upward and pick the lowest free __mloda_rn{n}__."""
+        rel = DuckdbRelation.from_dict(
+            connection,
+            {"__mloda_rn0__": [1, 2], "__mloda_rn1__": [3, 4], "x": [5, 6]},
+        )
+        result = rel.append_column("y", [7, 8])
+        assert set(result.columns) == {"__mloda_rn0__", "__mloda_rn1__", "x", "y"}
+        arrow = result.to_arrow_table()
+        assert arrow.column("__mloda_rn0__").to_pylist() == [1, 2]
+        assert arrow.column("__mloda_rn1__").to_pylist() == [3, 4]
+        assert arrow.column("x").to_pylist() == [5, 6]
+        assert arrow.column("y").to_pylist() == [7, 8]

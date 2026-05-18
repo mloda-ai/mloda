@@ -60,6 +60,10 @@ class DuckDBFramework(ComputeFramework):
             return
         self.framework_connection_object = framework_connection_object
 
+    @classmethod
+    def _connection_matches(cls, conn: Any) -> bool:
+        return duckdb is not None and isinstance(conn, duckdb.DuckDBPyConnection)
+
     @staticmethod
     def is_available() -> bool:
         """Check if DuckDB is installed and available."""

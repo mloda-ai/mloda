@@ -54,6 +54,10 @@ class SparkFramework(ComputeFramework):
                     .getOrCreate()
                 )
 
+    @classmethod
+    def _connection_matches(cls, conn: Any) -> bool:
+        return SparkSession is not None and isinstance(conn, SparkSession)
+
     @staticmethod
     def is_available() -> bool:
         """Check if PySpark is installed and available."""

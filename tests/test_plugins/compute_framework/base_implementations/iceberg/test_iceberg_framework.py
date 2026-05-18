@@ -273,3 +273,27 @@ class TestIcebergDtypeExtraction(DtypeExtractionTestMixin):
             NestedField(3, "float_col", DoubleType()),
         )
         return TestIcebergDataTypeValidator._wrap_schema(schema)
+
+
+from tests.test_plugins.compute_framework.base_implementations.tfs_connection_test_mixin import TfsConnectionInitMixin  # noqa: E402
+
+
+@pytest.mark.skipif(
+    pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
+)
+class TestIcebergTfsConnectionInit(TfsConnectionInitMixin):
+    @pytest.fixture
+    def framework_class(self) -> Any:
+        return IcebergFramework
+
+    @pytest.fixture
+    def valid_connection(self) -> Any:
+        mock_catalog = Mock(spec=Catalog)
+        mock_catalog.load_table = Mock()
+        return mock_catalog
+
+    @pytest.fixture
+    def second_valid_connection(self) -> Any:
+        mock_catalog = Mock(spec=Catalog)
+        mock_catalog.load_table = Mock()
+        return mock_catalog

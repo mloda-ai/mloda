@@ -1,6 +1,6 @@
 from collections import defaultdict
 from copy import deepcopy
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 import uuid
 
@@ -67,10 +67,35 @@ class Engine:
         self.data_access_collection = data_access_collection
         self.column_ordering = column_ordering
         self.execution_planner = self.create_setup_execution_plan(features)
+        self.tfs_connection_map = self._resolve_tfs_connection_map()
+
+    def _resolve_tfs_connection_map(self) -> dict[type[ComputeFramework], Any]:
+        """Resolve a connection per TFS destination framework at setup time.
+
+        Walks the planned TFS steps once and asks each destination framework class to pick
+        a matching connection from the DataAccessCollection. The resulting dict is consumed
+        on the run path by ComputeFrameworkExecutor without any further DAC scanning.
+        """
+        connection_map: dict[type[ComputeFramework], Any] = {}
+        if self.data_access_collection is None:
+            return connection_map
+        for tfs in self.execution_planner.tfs_collecion:
+            cfw_class = tfs.to_framework
+            if cfw_class in connection_map:
+                continue
+            conn = cfw_class.pick_connection_from_dac(self.data_access_collection)
+            if conn is not None:
+                connection_map[cfw_class] = conn
+        return connection_map
 
     def compute(self, flight_server: Optional[ParallelRunnerFlightServer] = None) -> ExecutionOrchestrator:
         execution_plan_copy = deepcopy(self.execution_planner)
-        orchestrator = ExecutionOrchestrator(execution_plan_copy, flight_server, column_ordering=self.column_ordering)
+        orchestrator = ExecutionOrchestrator(
+            execution_plan_copy,
+            flight_server,
+            column_ordering=self.column_ordering,
+            tfs_connection_map=self.tfs_connection_map,
+        )
         if isinstance(orchestrator, ExecutionOrchestrator):
             return orchestrator
         raise ValueError("ExecutionOrchestrator setup failed.")

@@ -40,6 +40,7 @@ class ExecutionOrchestrator:
         execution_planner: ExecutionPlan,
         flight_server: Optional[ParallelRunnerFlightServer] = None,
         column_ordering: Optional[str] = None,
+        tfs_connection_map: Optional[dict[type[ComputeFramework], Any]] = None,
     ) -> None:
         """
         Initializes the ExecutionOrchestrator with an execution plan and optional flight server.
@@ -65,6 +66,8 @@ class ExecutionOrchestrator:
         self.flight_server = None
         if flight_server:
             self.flight_server = flight_server
+
+        self.tfs_connection_map: dict[type[ComputeFramework], Any] = tfs_connection_map or {}
 
     def _is_step_done(self, step_uuids: set[UUID], finished_ids: set[UUID]) -> bool:
         """
@@ -93,7 +96,9 @@ class ExecutionOrchestrator:
                 "Internal error: compute framework manager not initialized. This is likely a bug in mloda."
             )
 
-        self.executor = ComputeFrameworkExecutor(self.cfw_register, self.worker_manager)
+        self.executor = ComputeFrameworkExecutor(
+            self.cfw_register, self.worker_manager, tfs_connection_map=self.tfs_connection_map
+        )
 
         finished_ids: set[UUID] = set()
         to_finish_ids: set[UUID] = set()
@@ -150,7 +155,9 @@ class ExecutionOrchestrator:
                 "Internal error: compute framework manager not initialized. This is likely a bug in mloda."
             )
 
-        self.executor = ComputeFrameworkExecutor(self.cfw_register, self.worker_manager)
+        self.executor = ComputeFrameworkExecutor(
+            self.cfw_register, self.worker_manager, tfs_connection_map=self.tfs_connection_map
+        )
 
         finished_ids: set[UUID] = set()
         to_finish_ids: set[UUID] = set()

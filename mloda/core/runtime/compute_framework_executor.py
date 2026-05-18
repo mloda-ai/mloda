@@ -28,17 +28,27 @@ class ComputeFrameworkExecutor:
     Extracted from Runner class to handle CFW lifecycle and step execution logic.
     """
 
-    def __init__(self, cfw_register: CfwManager, worker_manager: WorkerManager) -> None:
+    def __init__(
+        self,
+        cfw_register: CfwManager,
+        worker_manager: WorkerManager,
+        tfs_connection_map: Optional[dict[type[ComputeFramework], Any]] = None,
+    ) -> None:
         """
         Initialize the executor with dependencies.
 
         Args:
             cfw_register: The CFW manager for registering compute frameworks.
             worker_manager: The worker manager for handling parallel execution.
+            tfs_connection_map: Setup-resolved map of destination CFW class to its
+                framework connection (e.g. duckdb.DuckDBPyConnection, sqlite3.Connection).
+                Engine builds this once from the DataAccessCollection at setup; the
+                executor only does a dict lookup per TFS step on the run path.
         """
         self.cfw_collection: dict[UUID, ComputeFramework] = {}
         self.cfw_register = cfw_register
         self.worker_manager = worker_manager
+        self.tfs_connection_map: dict[type[ComputeFramework], Any] = tfs_connection_map or {}
         self._cfw_lock = threading.Lock()
 
     def init_compute_framework(
@@ -224,11 +234,26 @@ class ComputeFrameworkExecutor:
             from_cfw = self.cfw_collection[from_cfw_uuid]
         return from_cfw
 
+    def _bind_tfs_connection(self, step: Any, cfw_uuid: UUID) -> None:
+        """Bind the setup-resolved connection to a TFS destination CFW, if any.
+
+        No-op for non-TFS steps and for destinations whose framework has no entry
+        in `tfs_connection_map` (i.e. no connection was resolved at Engine setup).
+        """
+        if not isinstance(step, TransformFrameworkStep):
+            return
+        cfw = self.cfw_collection[cfw_uuid]
+        conn = self.tfs_connection_map.get(type(cfw))
+        if conn is not None and cfw.framework_connection_object is None:
+            cfw.set_framework_connection_object(conn)
+
     def sync_execute_step(self, step: Any) -> None:
         """
         Executes a step synchronously.
         """
         cfw_uuid = self.prepare_execute_step(step, ParallelizationMode.SYNC)
+
+        self._bind_tfs_connection(step, cfw_uuid)
 
         try:
             from_cfw = self.prepare_tfs_and_joinstep(step) or None
@@ -247,6 +272,9 @@ class ComputeFrameworkExecutor:
         Executes a step in a separate thread.
         """
         cfw_uuid = self.prepare_execute_step(step, ParallelizationMode.THREADING)
+
+        self._bind_tfs_connection(step, cfw_uuid)
+
         from_cfw = self.prepare_tfs_and_joinstep(step) or None
 
         task = threading.Thread(

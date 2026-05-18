@@ -333,3 +333,23 @@ class TestSparkDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
 
     def test_timestamp_us_column_strict_ms_raises(self, framework_instance: Any, precision_sample_data: Any) -> None:
         pytest.skip("Spark has only one TimestampType (microseconds); millisecond cannot be expressed")
+
+
+from tests.test_plugins.compute_framework.base_implementations.tfs_connection_test_mixin import TfsConnectionInitMixin  # noqa: E402
+
+
+@pytest.mark.skipif(not PYSPARK_AVAILABLE, reason=SKIP_REASON or "PySpark is not available")
+class TestSparkTfsConnectionInit(TfsConnectionInitMixin):
+    @pytest.fixture
+    def framework_class(self) -> Any:
+        return SparkFramework
+
+    @pytest.fixture
+    def valid_connection(self, spark_session: Any) -> Any:
+        return spark_session
+
+    @pytest.fixture
+    def second_valid_connection(self) -> Any:
+        from unittest.mock import Mock
+
+        return Mock(spec=SparkSession)

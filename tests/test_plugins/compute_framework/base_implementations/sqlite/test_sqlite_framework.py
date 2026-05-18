@@ -125,6 +125,27 @@ class TestSqliteFrameworkBasics:
             SqliteRelation.from_dict(connection, {"a": [1, 2, 3], "b": [4, 5]})
 
 
+from tests.test_plugins.compute_framework.base_implementations.tfs_connection_test_mixin import TfsConnectionInitMixin  # noqa: E402
+
+
+class TestSqliteTfsConnectionInit(TfsConnectionInitMixin):
+    @pytest.fixture
+    def framework_class(self) -> Any:
+        return SqliteFramework
+
+    @pytest.fixture
+    def valid_connection(self) -> Any:
+        conn = sqlite3.connect(":memory:")
+        yield conn
+        conn.close()
+
+    @pytest.fixture
+    def second_valid_connection(self) -> Any:
+        conn = sqlite3.connect(":memory:")
+        yield conn
+        conn.close()
+
+
 class TestSqliteFrameworkMerge(DataFrameTestBase):
     @classmethod
     def framework_class(cls) -> type[Any]:

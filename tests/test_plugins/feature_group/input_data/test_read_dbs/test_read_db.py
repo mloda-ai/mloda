@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from typing import Any
 
 import tempfile
@@ -21,12 +22,10 @@ from tests.test_core.test_integration.test_core.test_runner_one_compute_framewor
 class TestInputDataDB:
     def setup_method(self) -> None:
         # Create a temporary file to act as the SQLite database
-        db_fd, self.db_path = tempfile.mkstemp(suffix=".sqlite")
-        self.db_fd: int | None = db_fd
+        self.db_fd, self.db_path = tempfile.mkstemp(suffix=".sqlite")
         # Initialize the SQLite database with a sample table
-        conn = sqlite3.connect(self.db_path)
-        self.conn: sqlite3.Connection | None = conn
-        self.cursor = conn.cursor()
+        self.conn = sqlite3.connect(self.db_path)
+        self.cursor = self.conn.cursor()
         self.cursor.execute("CREATE TABLE test_table (id INTEGER PRIMARY KEY, name TEXT)")
         self.cursor.execute('INSERT INTO test_table (name) VALUES ("Alice")')
         self.cursor.execute('INSERT INTO test_table (name) VALUES ("Bob")')
@@ -36,12 +35,9 @@ class TestInputDataDB:
         self.conn.commit()
 
     def teardown_method(self) -> None:
-        if self.conn is not None:
-            self.conn.close()
-        if self.db_fd is not None:
-            os.close(self.db_fd)
-        if os.path.exists(self.db_path):
-            os.remove(self.db_path)
+        self.conn.close()
+        os.close(self.db_fd)
+        os.remove(self.db_path)
 
     def test_load_csv_local_feature_scope_data_access_with_a_concrete_file(self) -> Any:
         f = Feature(
@@ -67,15 +63,6 @@ class TestInputDataDB:
         )
         assert "name" in result[0].to_pydict()
 
-        assert self.conn is not None
-        self.conn.close()
-        self.conn = None
-        assert self.db_fd is not None
-        os.close(self.db_fd)
-        self.db_fd = None
-        os.remove(self.db_path)
-        assert not os.path.exists(self.db_path)
-
     def test_aggr_load_sqlite_found_in_data_access_collection(self) -> Any:
         f = Feature(
             name="sum_of_",
@@ -89,6 +76,47 @@ class TestInputDataDB:
             plugin_collector=PluginCollector.enabled_feature_groups({DBInputDataTestFeatureGroup, SumFeature}),
         )
         assert "SumFeature_idid" in result[0].to_pydict()
+
+
+class TestSqliteConnectionLifecycle:
+    """Regression coverage for #424: ReadDB.read_db must close every
+    connection returned by get_connection. Otherwise on Windows the
+    underlying SQLite file stays locked until the process exits.
+    """
+
+    def test_run_all_closes_every_sqlite_connection(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        db_path = tmp_path / "lifecycle.sqlite"
+        seed = sqlite3.connect(db_path)
+        seed.execute("CREATE TABLE test_table (id INTEGER PRIMARY KEY, name TEXT)")
+        seed.execute('INSERT INTO test_table (name) VALUES ("Alice")')
+        seed.commit()
+        seed.close()
+
+        opened: list[sqlite3.Connection] = []
+        original_connect = SQLITEReader.connect
+
+        def tracking_connect(credentials: Any) -> Any:
+            conn = original_connect(credentials)
+            opened.append(conn)
+            return conn
+
+        monkeypatch.setattr(SQLITEReader, "connect", tracking_connect)
+
+        try:
+            mloda.run_all(
+                ["name", "id"],
+                compute_frameworks=["PyArrowTable"],
+                data_access_collection=DataAccessCollection(credential_dicts={SQLITEReader.db_path(): str(db_path)}),
+                plugin_collector=PluginCollector.enabled_feature_groups({DBInputDataTestFeatureGroup}),
+            )
+
+            assert opened, "expected SQLITEReader.connect to be invoked at least once"
+            for conn in opened:
+                with pytest.raises(sqlite3.ProgrammingError):
+                    conn.execute("SELECT 1")
+        finally:
+            for conn in opened:
+                conn.close()
 
 
 class TestReadDB:

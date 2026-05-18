@@ -1,6 +1,4 @@
-import sqlite3
 from typing import Any, Optional
-
 from mloda.user import DataAccessCollection
 from mloda.provider import FeatureSet, HashableDict, BaseInputData
 from mloda.user import Options
@@ -144,24 +142,24 @@ class ReadDB(BaseInputData):
         return connection
 
     @classmethod
+    def close_connection(cls, connection: Any) -> None:
+        """Releases a connection returned by get_connection; override for non-PEP-249 drivers."""
+        connection.close()
+
+    @classmethod
     def read_db(cls, credentials: dict[str, Any] | str, query: str) -> tuple[Any, Any]:
         connection = cls.get_connection(credentials)
         try:
             with connection as conn:
-                cursor = None
                 cursor = conn.cursor()
                 try:
                     cursor.execute(query)
                     result = cursor.fetchall()
                     column_names = [description[0] for description in cursor.description]
                 finally:
-                    try:
-                        cursor.close()
-                    except AttributeError:
-                        pass
+                    cursor.close()
         finally:
-            if isinstance(connection, sqlite3.Connection):
-                connection.close()
+            cls.close_connection(connection)
 
         if result is None:
             raise ValueError(f"No data was returned from the query: {query}.")

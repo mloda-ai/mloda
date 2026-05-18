@@ -36,7 +36,7 @@ from mloda.user import mloda
 from mloda.user import DataAccessCollection
 
 file_path = "tests/test_plugins/feature_group/src/dataset/creditcard_2023_short.csv"
-data_access_collection = DataAccessCollection(files={file_path})
+data_access_collection = DataAccessCollection(files={"creditcard": file_path})
 
 feature_list = ["id","V1","V2","V3"]
 

@@ -84,42 +84,35 @@ class TestDataAccessCollectionNoSharedMutableDefaults:
     def test_files_not_shared(self) -> None:
         d1 = DataAccessCollection()
         d2 = DataAccessCollection()
-        d1.add_file("x.csv")
-        assert "x.csv" not in d2.files
+        d1.add_file("f1", "x.csv")
+        assert "f1" not in d2.files
 
     def test_folders_not_shared(self) -> None:
         d1 = DataAccessCollection()
         d2 = DataAccessCollection()
-        d1.add_folder("/data/folder")
-        assert "/data/folder" not in d2.folders
+        d1.add_folder("d1", "/data/folder")
+        assert "d1" not in d2.folders
 
     def test_initialized_connections_not_shared(self) -> None:
         d1 = DataAccessCollection()
         d2 = DataAccessCollection()
-        d1.add_initialized_connection_object("conn1")
-        assert "conn1" not in d2.initialized_connection_objects
-
-    def test_uninitialized_connections_not_shared(self) -> None:
-        d1 = DataAccessCollection()
-        d2 = DataAccessCollection()
-        d1.add_uninitialized_connection_object("conn1")
-        assert "conn1" not in d2.uninitialized_connection_objects
+        d1.add_connection("conn1", "conn1")
+        assert "conn1" not in d2.connections
 
     def test_credential_dicts_not_shared(self) -> None:
         d1 = DataAccessCollection()
         d2 = DataAccessCollection()
-        d1.add_credential_dict({"user": "admin"})
-        assert d2.credential_dicts != d1.credential_dicts
+        d1.add_credentials("c1", {"user": "admin"})
+        assert d2.credentials != d1.credentials
 
     def test_explicit_values_still_work(self) -> None:
         d = DataAccessCollection(
-            files={"a.csv"},
-            folders={"/data"},
-            credential_dicts={"key": "val"},
-            initialized_connection_objects={"conn"},
-            uninitialized_connection_objects=["obj"],
+            files={"f1": "a.csv"},
+            folders={"d1": "/data"},
+            credentials={"c1": {"key": "val"}},
+            connections={"conn": "conn"},
         )
-        assert "a.csv" in d.files
-        assert "/data" in d.folders
-        assert "conn" in d.initialized_connection_objects
-        assert "obj" in d.uninitialized_connection_objects
+        assert "f1" in d.files
+        assert "d1" in d.folders
+        assert "conn" in d.connections
+        assert "c1" in d.credentials

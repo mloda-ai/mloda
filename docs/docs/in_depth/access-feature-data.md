@@ -38,11 +38,10 @@ You can apply these options like so:
 data_access = DataAccessCollection()
 
 # Add file paths, folder paths, credentials, and connection objects
-data_access.add_file('path/to/folder/text.txt')
-data_access.add_folder('path/to/folder/')
-data_access.add_credential_dict({'host': 'example.com', 'password': 'example'})
-data_access.add_initialized_connection_object('InitializedDBConnection')
-data_access.add_uninitialized_connection_object('UninitializedDBConnection')
+data_access.add_file('text', 'path/to/folder/text.txt')
+data_access.add_folder('folder', 'path/to/folder/')
+data_access.add_credentials('db', {'host': 'example.com', 'password': 'example'})
+data_access.add_connection('initialized', 'InitializedDBConnection')
 
 mloda.run_all(
     feature_list,
@@ -64,7 +63,7 @@ from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFea
 file_path = os.getcwd()
 file_path += "/docs/docs/in_depth"
 
-data_access_collection = DataAccessCollection(folders={str(file_path)})
+data_access_collection = DataAccessCollection(folders={"docs_dir": str(file_path)})
 
 result = mloda.run_all(
             ["AExample", "BExample"],
@@ -109,11 +108,11 @@ Use `column_to_file` to pin each column to its canonical file:
 from mloda.user import DataAccessCollection, mloda
 
 data_access = DataAccessCollection(
-    files={"application_train.csv", "bureau.csv"},
+    files={"train": "application_train.csv", "bureau": "bureau.csv"},
     column_to_file={
-        "SK_ID_CURR": "application_train.csv",
-        "TARGET":     "application_train.csv",
-        "AMT_CREDIT_SUM": "bureau.csv",
+        "SK_ID_CURR": "train",
+        "TARGET":     "train",
+        "AMT_CREDIT_SUM": "bureau",
     },
 )
 
@@ -126,9 +125,9 @@ result = mloda.run_all(
 
 Rules:
 - `column_to_file` only applies to global-scope resolution. Per-feature `options` always take precedence.
-- All values must be present in the `files` set -- construction raises `ValueError` otherwise.
+- Values must be **file handles** (keys of the `files` dict), not paths. Construction raises `ValueError` otherwise.
 - If a batch of features has some columns pinned and others not, a `ValueError` is raised (use `column_to_file` for all columns or none in a batch).
-- Columns not listed in the map fall through to normal first-match-wins resolution.
+- For columns not listed in the map, the consumer falls back to the shared resolver: a single matching file binds, multiple matching files raise `ValueError` listing the candidates. Set `data_access_handle` on the feature's `Options` to disambiguate without `column_to_file`. See [Named Data Access Handles](named-data-access-handles.md).
 
 The existing per-feature alternative still works for one-off pinning:
 

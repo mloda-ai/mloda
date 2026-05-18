@@ -120,7 +120,7 @@ class SQLITEReader(ReadDB):
 
     # Configure database access at the collection level
     data_access = DataAccessCollection(
-        credential_dicts=HashableDict({"sqlite": "/data/analytics.db"})
+        credentials={"sqlite": {"sqlite": "/data/analytics.db"}}
     )
 
     # Features will automatically use the configured database

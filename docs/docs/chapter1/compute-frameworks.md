@@ -24,7 +24,7 @@ from mloda.user import mloda
 from mloda.user import DataAccessCollection
 
 file_path = "tests/test_plugins/feature_group/src/dataset/creditcard_2023_short.csv"
-data_access_collection = DataAccessCollection(files={file_path})
+data_access_collection = DataAccessCollection(files={"creditcard": file_path})
 
 feature_list = ["id","V1","V2","V3"]
 ```
@@ -188,7 +188,7 @@ connection = duckdb.connect()
 
 # Set up data access with connection
 data_access_collection = DataAccessCollection(
-    initialized_connection_objects={connection}
+    connections={"duckdb": connection}
 )
 
 feature = Feature("id", options={"compute_framework": "DuckDBFramework"})
@@ -218,7 +218,7 @@ catalog = load_catalog("default", **{
 
 # Set up data access with catalog
 data_access_collection = DataAccessCollection(
-    initialized_connection_objects={catalog}
+    connections={"catalog": catalog}
 )
 
 feature = Feature("id", options={"compute_framework": "IcebergFramework"})
@@ -246,7 +246,7 @@ spark = SparkSession.builder \
 
 # Set up data access with SparkSession
 data_access_collection = DataAccessCollection(
-    initialized_connection_objects={spark}
+    connections={"spark": spark}
 )
 
 feature = Feature("id", options={"compute_framework": "SparkFramework"})

@@ -167,27 +167,18 @@ class ComputeFramework(ABC):
         return False
 
     @classmethod
-    def pick_connection_from_dac(cls, data_access_collection: Any) -> Optional[Any]:
+    def pick_connection_from_dac(cls, data_access_collection: Any, options: Optional[Any] = None) -> Optional[Any]:
         """Pick the matching connection for this framework from the DataAccessCollection.
 
         Called at Engine setup (once per session), not on the per-request run path.
-        Returns None if no connection matches, the single match if exactly one does,
-        and raises ValueError if multiple connections match - the caller has to
-        disambiguate explicitly rather than let a non-deterministic set iteration decide.
+        Delegates to ``DataAccessCollection.resolve('connection', ...)``: the resolver
+        returns the single match, returns None if none match, and raises ValueError
+        if multiple connections match without a disambiguating ``data_access_handle``.
         """
         if data_access_collection is None:
             return None
-        matches = [
-            conn for conn in data_access_collection.initialized_connection_objects if cls._connection_matches(conn)
-        ]
-        if not matches:
-            return None
-        if len(matches) > 1:
-            raise ValueError(
-                f"{cls.__name__}.pick_connection_from_dac: DataAccessCollection contains "
-                f"{len(matches)} connections matching this framework; expected at most one."
-            )
-        return matches[0]
+        hint = options.get("data_access_handle") if options is not None else None
+        return data_access_collection.resolve("connection", predicate=cls._connection_matches, hint=hint)
 
     @final
     def get_framework_connection_object(self) -> Any:

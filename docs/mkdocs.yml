@@ -28,6 +28,7 @@ nav:
     - Data quality: in_depth/data-quality.md
     - Domain concept: in_depth/domain.md
     - Data Access Patterns: in_depth/data-access-patterns.md
+    - Named Data Access Handles: in_depth/named-data-access-handles.md
     - Compute Frameworks:
       - Framework Transformers: in_depth/framework-transformers.md
       - Compute Framework Integration: in_depth/compute-framework-integration.md

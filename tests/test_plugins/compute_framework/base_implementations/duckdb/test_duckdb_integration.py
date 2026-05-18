@@ -90,11 +90,8 @@ class ATestDuckDBFeatureGroup(FeatureGroup, MatchData):
         if data_access_collection is None:
             return None
 
-        if data_access_collection.initialized_connection_objects is None:
-            return None
-
-        if data_access_collection.initialized_connection_objects:
-            for conn in data_access_collection.initialized_connection_objects:
+        if data_access_collection.connections:
+            for conn in data_access_collection.connections.values():
                 if isinstance(conn, duckdb.DuckDBPyConnection):
                     return conn
         return None
@@ -250,7 +247,7 @@ class TestDuckDBIntegrationWithMlodaAPI:
             Feature(name="score_plus_ten", options={"DuckDBTestDataCreator": duckdb_conn}),
         ]
 
-        data_access_collection = DataAccessCollection(initialized_connection_objects={duckdb_conn})
+        data_access_collection = DataAccessCollection(connections={"primary": duckdb_conn})
 
         # Run with DuckDB framework
         result = mloda.run_all(

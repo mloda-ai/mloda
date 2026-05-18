@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from mloda.user import PluginCollector
 from testbook import testbook
 
@@ -34,10 +36,12 @@ class TestMlodaBasicsNotebooks:
     def atest_notebook_1_mloda_basics(self, tb: Any) -> None:
         pass
 
+    @pytest.mark.timeout(60)
     @testbook(lifecycle_path_2, execute=True)  # type: ignore
     def test_notebook_2_mloda_basics(self, tb: Any) -> None:
         pass
 
+    @pytest.mark.timeout(60)
     @testbook(lifecycle_path_4, execute=True)  # type: ignore
     def test_notebook_4_mloda_basics(self, tb: Any) -> None:
         pass

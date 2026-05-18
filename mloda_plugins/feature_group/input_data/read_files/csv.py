@@ -111,7 +111,7 @@ class CsvReader(ReadFile):
     from mloda.user import DataAccessCollection
 
     # Configure file access at the collection level
-    data_access = DataAccessCollection(files=["/data/sales.csv"])
+    data_access = DataAccessCollection(files={"sales": "/data/sales.csv"})
 
     # Features will automatically use the configured file
     feature = Feature(name="revenue")

@@ -5,7 +5,15 @@ import logging
 
 import pytest
 
-from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
+from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import (
+    CurrentRow,
+    DuckdbRelation,
+    Following,
+    Preceding,
+    Unbounded,
+    WindowFrame,
+    WindowSpec,
+)
 from tests.test_plugins.compute_framework.base_implementations.relation_test_mixin import (
     RelationTestMixin,
 )
@@ -394,3 +402,117 @@ class TestDuckdbRelation(RelationTestMixin):
         assert arrow.column("__mloda_rn1__").to_pylist() == [3, 4]
         assert arrow.column("x").to_pylist() == [5, 6]
         assert arrow.column("y").to_pylist() == [7, 8]
+
+    # --- window() ---
+
+    def test_window_partition_only(self, sample_relation: "DuckdbRelation") -> None:
+        """SUM(age) partitioned by category, no order, no frame: each row gets its category total."""
+        result = sample_relation.window("SUM(age)", WindowSpec(partition_by=("category",)), "cat_sum")
+        assert "cat_sum" in result.columns
+        ordered = result.order("id")
+        sums = self.get_column_values(ordered, "cat_sum")
+        # Categories per id (1..5): A,B,A,C,B; sums: A=25+35=60, B=30+45=75, C=40
+        assert sums == [60, 75, 60, 40, 75]
+
+    def test_window_partition_and_order_running_sum(self, sample_relation: "DuckdbRelation") -> None:
+        """SUM(age) partitioned by category, ordered by id, default RANGE UNBOUNDED PRECEDING..CURRENT ROW."""
+        result = sample_relation.window("SUM(age)", WindowSpec(partition_by=("category",), order_by=("id",)), "rs")
+        ordered = result.order("id")
+        rs = self.get_column_values(ordered, "rs")
+        assert rs == [25, 30, 60, 40, 75]
+
+    def test_window_no_partition_no_order(self, sample_relation: "DuckdbRelation") -> None:
+        """COUNT(*) over bare empty WindowSpec returns total row count for every row."""
+        result = sample_relation.window("COUNT(*)", WindowSpec(), "n")
+        ns = self.get_column_values(result, "n")
+        assert ns == [5, 5, 5, 5, 5]
+
+    def test_window_returns_new_relation_and_preserves_columns(self, sample_relation: "DuckdbRelation") -> None:
+        """window() returns a new DuckdbRelation with original columns plus alias; original is untouched."""
+        original_columns = list(sample_relation.columns)
+        result = sample_relation.window("COUNT(*)", WindowSpec(), "n")
+        assert isinstance(result, DuckdbRelation)
+        for col in original_columns:
+            assert col in result.columns
+        assert "n" in result.columns
+        # Original relation untouched
+        assert sample_relation.columns == original_columns
+        assert "n" not in sample_relation.columns
+
+    def test_window_rows_frame_unbounded_to_current(self, sample_relation: "DuckdbRelation") -> None:
+        """ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW: cumulative sum ordered by id."""
+        result = sample_relation.window(
+            "SUM(age)",
+            WindowSpec(order_by=("id",), frame=WindowFrame(kind="rows", start=Unbounded(), end=CurrentRow())),
+            "cum",
+        )
+        ordered = result.order("id")
+        cum = self.get_column_values(ordered, "cum")
+        assert cum == [25, 55, 90, 130, 175]
+
+    def test_window_range_frame_unbounded_to_unbounded(self, sample_relation: "DuckdbRelation") -> None:
+        """RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING: grand total per row."""
+        result = sample_relation.window(
+            "SUM(age)",
+            WindowSpec(order_by=("id",), frame=WindowFrame(kind="range", start=Unbounded(), end=Unbounded())),
+            "total",
+        )
+        ordered = result.order("id")
+        totals = self.get_column_values(ordered, "total")
+        assert totals == [175, 175, 175, 175, 175]
+
+    def test_window_groups_frame_preceding_to_current(self, sample_relation: "DuckdbRelation") -> None:
+        """GROUPS BETWEEN 1 PRECEDING AND CURRENT ROW: just verify the frame variant compiles and produces a column."""
+        result = sample_relation.window(
+            "SUM(age)",
+            WindowSpec(
+                order_by=("category",),
+                frame=WindowFrame(kind="groups", start=Preceding(1), end=CurrentRow()),
+            ),
+            "g",
+        )
+        assert "g" in result.columns
+        assert len(result) == 5
+
+    def test_window_rows_frame_preceding_and_following(self, sample_relation: "DuckdbRelation") -> None:
+        """ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING ordered by id: sliding 3-row window sum."""
+        result = sample_relation.window(
+            "SUM(age)",
+            WindowSpec(
+                order_by=("id",),
+                frame=WindowFrame(kind="rows", start=Preceding(1), end=Following(1)),
+            ),
+            "win",
+        )
+        ordered = result.order("id")
+        win = self.get_column_values(ordered, "win")
+        # ages by id: 25, 30, 35, 40, 45
+        # id=1: 25+30=55; id=2: 25+30+35=90; id=3: 30+35+40=105; id=4: 35+40+45=120; id=5: 40+45=85
+        assert win == [55, 90, 105, 120, 85]
+
+    def test_window_alias_quoted(self, sample_relation: "DuckdbRelation") -> None:
+        """alias must be quoted via quote_ident; an alias with a double quote must round-trip verbatim."""
+        weird = 'weird"alias'
+        result = sample_relation.window("COUNT(*)", WindowSpec(), weird)
+        assert weird in result.columns
+        assert len(result) == 5
+
+    def test_window_partition_column_quoted(self, connection: Any) -> None:
+        """partition_by column names must be quoted; a column literally named 'odd col' must work."""
+        rel = DuckdbRelation.from_dict(
+            connection,
+            {
+                "odd col": ["x", "x", "y"],
+                "v": [1, 2, 3],
+            },
+        )
+        result = rel.window("COUNT(*)", WindowSpec(partition_by=("odd col",)), "n")
+        assert isinstance(result, DuckdbRelation)
+        assert "n" in result.columns
+
+    def test_window_func_passed_verbatim(self, sample_relation: "DuckdbRelation") -> None:
+        """func is a raw SQL fragment passed verbatim; LEAD(age, 1) must execute as a function call, not be quoted."""
+        result = sample_relation.window("LEAD(age, 1)", WindowSpec(order_by=("id",)), "next_age")
+        ordered = result.order("id")
+        next_ages = ordered.to_arrow_table().column("next_age").to_pylist()
+        assert next_ages == [30, 35, 40, 45, None]

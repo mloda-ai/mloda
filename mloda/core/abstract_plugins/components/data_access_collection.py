@@ -15,7 +15,7 @@ class DataAccessCollection:
     Consumers bind one resource via ``resolve(...)``, which raises on ambiguity
     rather than letting non-deterministic iteration decide.
 
-    See ``docs/design/named-data-access-handles.md``.
+    See ``docs/docs/in_depth/named-data-access-handles.md``.
     """
 
     def __init__(

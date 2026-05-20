@@ -1,21 +1,9 @@
-"""Red-phase tests for the ``data_access_handle`` Options key flowing through
+"""Contract tests for the ``data_access_handle`` Options key flowing through
 the file, document, and DB consumers of ``DataAccessCollection``.
 
-Per ``docs/design/named-data-access-handles.md``:
-
-  * ``read_file.match_subclass_data_access`` reads ``options.get('data_access_handle')``
-    and forwards it to ``dac.resolve('file', predicate=..., hint=...)``.
-  * ``read_document.match_subclass_data_access`` mirrors the above.
-  * ``read_db.match_subclass_data_access`` reads ``options.get('data_access_handle')``
-    and forwards it to ``dac.resolve('credentials', hint=...)``.
-
-In each case, the multi-entry-no-hint situation must raise ``ValueError`` listing
-the candidate handles, and the ``data_access_handle`` hint must disambiguate.
-The single-entry behavior is preserved (no error).
-
-These tests MUST fail in the current tree: the new keyed-dict DAC API does not
-exist yet, ``resolve`` is not implemented, and the consumers do not read the
-``data_access_handle`` hint.
+In each case, multi-entry without a hint must raise ``ValueError`` listing the
+candidate handles, the hint must disambiguate, and single-entry behavior is
+preserved. See ``docs/docs/in_depth/named-data-access-handles.md``.
 """
 
 from __future__ import annotations

@@ -1,35 +1,6 @@
-"""Red-phase tests for the named-handle DataAccessCollection API.
+"""Contract tests for the named-handle DataAccessCollection API.
 
-These tests are written against the API proposed in
-``docs/design/named-data-access-handles.md`` (branch ``docs/named-data-access-handles``)
-and they MUST fail in the current tree because the API does not yet exist.
-
-The new API at a glance:
-
-    DataAccessCollection(
-        connections: dict[str, Any] | None = None,
-        files: dict[str, str] | None = None,
-        folders: dict[str, str] | None = None,
-        credentials: dict[str, dict[str, Any]] | None = None,
-        column_to_file: dict[str, str] | None = None,
-    )
-
-    dac.add_connection(handle, conn)   # raise on duplicate handle
-    dac.add_file(handle, path)         # raise on duplicate handle
-    dac.add_folder(handle, path)       # raise on duplicate handle
-    dac.add_credentials(handle, dict)  # raise on duplicate handle
-
-    dac.handles() -> dict[str, str]    # {handle: 'connection' | 'file' | 'folder' | 'credentials'}
-
-    dac.resolve(
-        kind: str,
-        predicate: Callable[[Any], bool] | None = None,
-        hint: str | None = None,
-    ) -> Any | None
-
-``uninitialized_connection_objects`` is REMOVED entirely. The legacy set / single-dict
-constructor parameters are also gone (no back-compat). ``column_to_file`` values must
-reference a key in ``files`` (not a path).
+See ``docs/docs/in_depth/named-data-access-handles.md`` for the user-facing guide.
 """
 
 from typing import Any

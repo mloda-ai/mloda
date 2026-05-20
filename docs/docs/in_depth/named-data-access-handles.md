@@ -2,7 +2,7 @@
 
 `DataAccessCollection` (DAC) is a registry of data resources keyed by stable string handles. Every consumer that needs to bind one resource uses a single resolution rule that raises on ambiguity rather than letting iteration order decide.
 
-This page is the user-facing guide. For background and design rationale, see the design doc that accompanied [issue #443](https://github.com/mloda-ai/mloda/issues/443) in PR #446.
+For background, see [issue #443](https://github.com/mloda-ai/mloda/issues/443).
 
 ## The four kinds of resources
 
@@ -93,18 +93,21 @@ When more than one resource of the same kind matches a feature's requirements, y
 from mloda.user import DataAccessCollection, Options, Feature, mloda
 
 dac = DataAccessCollection(
-    connections={"warehouse": warehouse_conn, "analytics": analytics_conn},
+    files={"transactions": "/data/tx.csv", "users": "/data/users.csv"},
 )
 
 features = [
-    Feature("revenue",  options=Options(context={"data_access_handle": "warehouse"})),
-    Feature("clicks",   options=Options(context={"data_access_handle": "analytics"})),
+    Feature("amount",   options=Options(context={"data_access_handle": "transactions"})),
+    Feature("email",    options=Options(context={"data_access_handle": "users"})),
 ]
 
-mloda.run_all(features, compute_frameworks=["DuckDB"], data_access_collection=dac)
+mloda.run_all(features, compute_frameworks=["PyArrowTable"], data_access_collection=dac)
 ```
 
-The key works uniformly across all four kinds and across every CFW that consumes connections (DuckDB, SQLite, Spark, Iceberg today) plus `read_file`, `read_document`, and `read_db`.
+The key works across `read_file`, `read_document`, and `read_db` on a per-feature basis, and across every CFW that consumes connections (DuckDB, SQLite, Spark, Iceberg today) on an engine-wide basis.
+
+!!! note "Connections are resolved once per engine, not per feature"
+    `ComputeFramework.pick_connection_from_dac` runs at engine setup, not on the per-request path. A single CFW therefore binds a single connection per session. If you need two features in the same session to bind different connections of the same CFW, that is currently out of scope (tracked separately); use a single `data_access_handle` on the DAC's matching connections, or split the run.
 
 ## Introspection: `handles()`
 

@@ -4,17 +4,18 @@
 | PyYAML                                 | 6.0.3           | MIT License                                        |
 | Pygments                               | 2.20.0          | BSD-2-Clause                                       |
 | annotated-types                        | 0.7.0           | MIT License                                        |
+| ast_serialize                          | 0.5.0           | MIT                                                |
 | asttokens                              | 3.0.1           | Apache 2.0                                         |
 | attrs                                  | 26.1.0          | MIT                                                |
 | bandit                                 | 1.9.4           | Apache-2.0                                         |
 | cachetools                             | 6.2.6           | MIT                                                |
 | certifi                                | 2026.4.22       | Mozilla Public License 2.0 (MPL 2.0)               |
 | charset-normalizer                     | 3.4.7           | MIT                                                |
-| click                                  | 8.3.3           | BSD-3-Clause                                       |
+| click                                  | 8.4.0           | BSD-3-Clause                                       |
 | comm                                   | 0.2.3           | BSD License                                        |
 | cyclonedx-python-lib                   | 11.7.0          | Apache Software License                            |
 | debugpy                                | 1.8.20          | MIT License                                        |
-| decorator                              | 5.2.1           | BSD License                                        |
+| decorator                              | 5.3.1           | BSD-2-Clause                                       |
 | defusedxml                             | 0.7.1           | Python Software Foundation License                 |
 | duckdb                                 | 1.5.2           | MIT License                                        |
 | execnet                                | 2.1.2           | MIT License                                        |
@@ -22,7 +23,7 @@
 | fastjsonschema                         | 2.21.2          | BSD License                                        |
 | filelock                               | 3.29.0          | MIT License                                        |
 | fsspec                                 | 2026.4.0        | BSD-3-Clause                                       |
-| idna                                   | 3.13            | BSD-3-Clause                                       |
+| idna                                   | 3.15            | BSD-3-Clause                                       |
 | importlib_metadata                     | 8.7.1           | Apache-2.0                                         |
 | iniconfig                              | 2.3.0           | MIT                                                |
 | ipykernel                              | 7.2.0           | BSD-3-Clause                                       |
@@ -34,31 +35,31 @@
 | jsonschema-specifications              | 2025.9.1        | MIT                                                |
 | jupyter_client                         | 8.8.0           | BSD License                                        |
 | jupyter_core                           | 5.9.1           | BSD-3-Clause                                       |
-| librt                                  | 0.9.0           | MIT                                                |
-| markdown-it-py                         | 4.0.0           | MIT License                                        |
-| matplotlib-inline                      | 0.2.1           | UNKNOWN                                            |
+| librt                                  | 0.11.0          | MIT                                                |
+| markdown-it-py                         | 4.2.0           | MIT License                                        |
+| matplotlib-inline                      | 0.2.2           | BSD-3-Clause                                       |
 | mdurl                                  | 0.1.2           | MIT License                                        |
 | mktestdocs                             | 0.2.5           | MIT                                                |
-| mloda                                  | 0.6.2           | Apache-2.0                                         |
+| mloda                                  | 0.6.3           | Apache-2.0                                         |
 | mmh3                                   | 5.2.1           | MIT License                                        |
 | msgpack                                | 1.1.2           | Apache-2.0                                         |
-| mypy                                   | 1.20.2          | MIT                                                |
+| mypy                                   | 2.1.0           | MIT                                                |
 | mypy_extensions                        | 1.1.0           | MIT                                                |
 | nbclient                               | 0.10.4          | BSD License                                        |
 | nbformat                               | 5.10.4          | BSD License                                        |
 | nest-asyncio                           | 1.6.0           | BSD License                                        |
 | nltk                                   | 3.9.4           | Apache Software License                            |
-| numpy                                  | 2.4.4           | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 |
-| opentelemetry-api                      | 1.41.1          | Apache-2.0                                         |
-| opentelemetry-instrumentation          | 0.62b1          | Apache Software License                            |
-| opentelemetry-instrumentation-logging  | 0.62b1          | Apache Software License                            |
-| opentelemetry-instrumentation-requests | 0.62b1          | Apache Software License                            |
-| opentelemetry-sdk                      | 1.41.1          | Apache-2.0                                         |
-| opentelemetry-semantic-conventions     | 0.62b1          | Apache-2.0                                         |
-| opentelemetry-util-http                | 0.62b1          | Apache Software License                            |
+| numpy                                  | 2.4.6           | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 |
+| opentelemetry-api                      | 1.42.0          | Apache-2.0                                         |
+| opentelemetry-instrumentation          | 0.63b0          | Apache Software License                            |
+| opentelemetry-instrumentation-logging  | 0.63b0          | Apache Software License                            |
+| opentelemetry-instrumentation-requests | 0.63b0          | Apache Software License                            |
+| opentelemetry-sdk                      | 1.42.0          | Apache-2.0                                         |
+| opentelemetry-semantic-conventions     | 0.63b0          | Apache-2.0                                         |
+| opentelemetry-util-http                | 0.63b0          | Apache Software License                            |
 | packageurl-python                      | 0.17.6          | MIT License                                        |
 | packaging                              | 26.2            | Apache-2.0 OR BSD-2-Clause                         |
-| pandas                                 | 3.0.2           | BSD License                                        |
+| pandas                                 | 3.0.3           | BSD License                                        |
 | pandera                                | 0.31.1          | MIT License                                        |
 | parso                                  | 0.8.7           | MIT License                                        |
 | pathspec                               | 1.1.1           | Mozilla Public License 2.0 (MPL 2.0)               |
@@ -76,8 +77,8 @@
 | pure_eval                              | 0.2.3           | MIT License                                        |
 | py-serializable                        | 2.1.0           | Apache Software License                            |
 | pyarrow                                | 24.0.0          | Apache-2.0                                         |
-| pydantic                               | 2.13.3          | MIT                                                |
-| pydantic_core                          | 2.46.3          | MIT                                                |
+| pydantic                               | 2.13.4          | MIT                                                |
+| pydantic_core                          | 2.46.4          | MIT                                                |
 | pyiceberg                              | 0.11.1          | Apache-2.0                                         |
 | pyparsing                              | 3.3.2           | MIT                                                |
 | pyroaring                              | 1.1.0           | MIT License                                        |
@@ -88,17 +89,17 @@
 | python-dateutil                        | 2.9.0.post0     | Apache Software License; BSD License               |
 | pyzmq                                  | 27.1.0          | BSD License                                        |
 | referencing                            | 0.37.0          | MIT                                                |
-| regex                                  | 2026.4.4        | Apache-2.0 AND CNRI-Python                         |
-| requests                               | 2.33.1          | Apache Software License                            |
+| regex                                  | 2026.5.9        | Apache-2.0 AND CNRI-Python                         |
+| requests                               | 2.34.2          | Apache Software License                            |
 | rich                                   | 14.3.4          | MIT License                                        |
 | rpds-py                                | 0.30.0          | MIT                                                |
-| ruff                                   | 0.15.12         | MIT                                                |
+| ruff                                   | 0.15.13         | MIT                                                |
 | scikit-learn                           | 1.8.0           | BSD-3-Clause                                       |
 | scipy                                  | 1.17.1          | BSD License                                        |
 | six                                    | 1.17.0          | MIT License                                        |
 | sortedcontainers                       | 2.4.0           | Apache Software License                            |
 | stack-data                             | 0.6.3           | MIT License                                        |
-| stevedore                              | 5.7.0           | Apache Software License                            |
+| stevedore                              | 5.8.0           | Apache-2.0                                         |
 | strictyaml                             | 1.7.3           | MIT License                                        |
 | tenacity                               | 9.1.4           | Apache Software License                            |
 | testbook                               | 0.4.2           | BSD License                                        |
@@ -107,15 +108,15 @@
 | tomli_w                                | 1.2.0           | MIT License                                        |
 | tornado                                | 6.5.5           | Apache Software License                            |
 | tqdm                                   | 4.67.3          | MPL-2.0 AND MIT                                    |
-| traitlets                              | 5.14.3          | BSD License                                        |
-| typeguard                              | 4.5.1           | MIT                                                |
-| types-PyYAML                           | 6.0.12.20260408 | Apache-2.0                                         |
-| types-requests                         | 2.33.0.20260503 | Apache-2.0                                         |
-| types-toml                             | 0.10.8.20260408 | Apache-2.0                                         |
+| traitlets                              | 5.15.0          | BSD License                                        |
+| typeguard                              | 4.5.2           | MIT                                                |
+| types-PyYAML                           | 6.0.12.20260518 | Apache-2.0                                         |
+| types-requests                         | 2.33.0.20260518 | Apache-2.0                                         |
+| types-toml                             | 0.10.8.20260518 | Apache-2.0                                         |
 | typing-inspect                         | 0.9.0           | MIT License                                        |
 | typing-inspection                      | 0.4.2           | MIT                                                |
 | typing_extensions                      | 4.15.0          | PSF-2.0                                            |
-| urllib3                                | 2.6.3           | MIT                                                |
+| urllib3                                | 2.7.0           | MIT                                                |
 | wrapt                                  | 2.1.2           | BSD-2-Clause                                       |
 | zipp                                   | 3.23.1          | MIT                                                |
 | zstandard                              | 0.25.0          | BSD-3-Clause                                       |

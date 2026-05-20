@@ -143,7 +143,18 @@ extend-select = ["UP006", "UP007"]
 "docs/**/*.ipynb" = ["E402"]
 
 [tool.uv]
-exclude-newer = "2026-05-04T00:00:00Z"  # was "7 days"; pinned to cover mistune 3.2.1 (CVE-2026-33079). Revert to "7 days" once 3.2.1 ages past the rolling window (~2026-05-10).
+exclude-newer = "2026-05-20T00:00:00Z"  # was "7 days"; pinned to cover security patches: urllib3 2.7.0 (2026-05-07), idna 3.15 (2026-05-12), mistune 3.2.1 (2026-05-03), nbconvert 7.17.1 (2026-04-08). Revert to "7 days" once idna 3.15 ages past the rolling window (~2026-05-19).
+# Constraints applied only to transitive dependencies to remediate Dependabot security alerts.
+# - urllib3 >= 2.7.0: GHSA decompression-bomb bypass + sensitive headers across origins
+# - idna   >= 3.15:   idna.encode() bypass of CVE-2024-3651 fix
+# - mistune >= 3.2.1: Heading ID injection XSS (CVE-2026-33079). Note: figclass/figwidth and Math Plugin XSS (GHSA #26, #27) currently have no upstream patch.
+# - nbconvert >= 7.17.1: arbitrary file read/write via path traversal; uncontrolled search path on Windows
+constraint-dependencies = [
+    "urllib3>=2.7.0",
+    "idna>=3.15",
+    "mistune>=3.2.1",
+    "nbconvert>=7.17.1",
+]
 
 [project.scripts]
 mloda = "mloda_plugins.feature_group.experimental.llm.cli:main"

@@ -34,12 +34,20 @@ class Preceding:
 
     offset: int
 
+    def __post_init__(self) -> None:
+        if isinstance(self.offset, bool) or not isinstance(self.offset, int):
+            raise TypeError(f"Preceding offset must be int; got {type(self.offset).__name__}")
+
 
 @dataclass(frozen=True)
 class Following:
     """Frame bound: ``offset`` rows/range/groups after the current row."""
 
     offset: int
+
+    def __post_init__(self) -> None:
+        if isinstance(self.offset, bool) or not isinstance(self.offset, int):
+            raise TypeError(f"Following offset must be int; got {type(self.offset).__name__}")
 
 
 FrameBound = CurrentRow | Unbounded | Preceding | Following
@@ -52,6 +60,10 @@ class WindowFrame:
     kind: Literal["rows", "range", "groups"]
     start: FrameBound
     end: FrameBound
+
+    def __post_init__(self) -> None:
+        if self.kind not in ("rows", "range", "groups"):
+            raise ValueError(f"WindowFrame kind must be one of 'rows', 'range', 'groups'; got {self.kind!r}")
 
 
 def _render_frame_bound(bound: FrameBound, side: Literal["start", "end"]) -> str:

@@ -513,3 +513,67 @@ class TestDuckdbRelation(RelationTestMixin):
         ordered = result.order("id")
         next_ages = ordered.to_arrow_table().column("next_age").to_pylist()
         assert next_ages == [30, 35, 40, 45, None]
+
+    # --- runtime validation on frame dataclasses ---
+
+    def test_window_frame_kind_invalid_string_raises(self) -> None:
+        """WindowFrame must reject any kind outside the Literal alphabet at construction time."""
+        with pytest.raises(ValueError, match="kind"):
+            WindowFrame(kind="invalid", start=Unbounded(), end=Unbounded())  # type: ignore[arg-type]
+
+    def test_window_frame_kind_uppercase_rejected(self) -> None:
+        """WindowFrame must reject 'ROWS' even though .upper() would render it harmlessly — the Literal alphabet is lowercase."""
+        with pytest.raises(ValueError, match="kind"):
+            WindowFrame(kind="ROWS", start=Unbounded(), end=Unbounded())  # type: ignore[arg-type]
+
+    def test_window_frame_kind_sql_injection_attempt_raises(self) -> None:
+        """Construction-time validation must block the canonical injection payload before it can reach the SQL renderer."""
+        with pytest.raises(ValueError, match="kind"):
+            WindowFrame(
+                kind="ROWS) AS x; DROP TABLE y; --",  # type: ignore[arg-type]
+                start=Unbounded(),
+                end=Unbounded(),
+            )
+
+    def test_window_frame_accepts_each_valid_kind(self) -> None:
+        """The three valid kinds — rows, range, groups — must all construct without error."""
+        for kind in ("rows", "range", "groups"):
+            WindowFrame(kind=kind, start=Unbounded(), end=Unbounded())
+
+    def test_preceding_offset_string_raises(self) -> None:
+        """Preceding must reject a non-int offset; otherwise a string payload would land verbatim in the f-string."""
+        with pytest.raises(TypeError, match="offset"):
+            Preceding(offset="1; DROP TABLE x; --")  # type: ignore[arg-type]
+
+    def test_preceding_offset_float_raises(self) -> None:
+        """Preceding must reject a float offset; the Literal-equivalent contract is int only."""
+        with pytest.raises(TypeError, match="offset"):
+            Preceding(offset=1.5)  # type: ignore[arg-type]
+
+    def test_preceding_offset_bool_raises(self) -> None:
+        """Preceding must reject bool — isinstance(True, int) is True in Python but bool violates the int contract."""
+        with pytest.raises(TypeError, match="offset"):
+            Preceding(offset=True)
+
+    def test_preceding_offset_int_accepted(self) -> None:
+        """Preceding(offset=1) must construct cleanly."""
+        Preceding(offset=1)
+
+    def test_following_offset_string_raises(self) -> None:
+        """Following must reject a non-int offset (parallel to Preceding)."""
+        with pytest.raises(TypeError, match="offset"):
+            Following(offset="1; DROP TABLE x; --")  # type: ignore[arg-type]
+
+    def test_following_offset_float_raises(self) -> None:
+        """Following must reject a float offset."""
+        with pytest.raises(TypeError, match="offset"):
+            Following(offset=2.0)  # type: ignore[arg-type]
+
+    def test_following_offset_bool_raises(self) -> None:
+        """Following must reject bool — same reason as Preceding."""
+        with pytest.raises(TypeError, match="offset"):
+            Following(offset=False)
+
+    def test_following_offset_int_accepted(self) -> None:
+        """Following(offset=2) must construct cleanly."""
+        Following(offset=2)

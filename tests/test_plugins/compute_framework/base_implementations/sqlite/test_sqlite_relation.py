@@ -146,10 +146,35 @@ class TestSqliteDatetimeAdapter:
             "ts": [datetime.datetime(2024, 1, 1, 12, 0), datetime.datetime(2024, 1, 2, 12, 0)],
             "d": [datetime.date(2024, 1, 1), datetime.date(2024, 1, 2)],
         }
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
             SqliteRelation.from_dict(connection, data)
-        adapter_warnings = [w for w in caught if "default" in str(w.message) and "adapter" in str(w.message)]
-        assert adapter_warnings == [], (
-            f"Unexpected default-adapter warnings: {[str(w.message) for w in adapter_warnings]}"
+
+    def test_inserting_datetime_via_from_arrow_does_not_emit_default_adapter_warning(
+        self, connection: sqlite3.Connection
+    ) -> None:
+        """from_arrow's executemany path must also be free of the default-adapter DeprecationWarning."""
+        arrow_table = pa.table(
+            {
+                "ts": pa.array(
+                    [datetime.datetime(2024, 1, 1, 12, 0), datetime.datetime(2024, 1, 2, 12, 0)],
+                    type=pa.timestamp("us"),
+                ),
+                "d": pa.array([datetime.date(2024, 1, 1), datetime.date(2024, 1, 2)], type=pa.date32()),
+            }
         )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            SqliteRelation.from_arrow(connection, arrow_table)
+
+    def test_direct_executemany_with_datetime_does_not_emit_default_adapter_warning(self) -> None:
+        """Module-global adapter registration must cover any sqlite3 connection, not only SqliteRelation."""
+        conn = sqlite3.connect(":memory:")
+        conn.execute("CREATE TABLE t (ts TEXT)")
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            conn.executemany(
+                "INSERT INTO t VALUES (?)",
+                [(datetime.datetime(2024, 1, 1, 12, 0),), (datetime.datetime(2024, 1, 2, 12, 0),)],
+            )
+        conn.close()

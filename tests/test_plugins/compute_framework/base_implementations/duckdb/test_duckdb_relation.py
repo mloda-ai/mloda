@@ -12,7 +12,6 @@ from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation
     Preceding,
     Unbounded,
     WindowFrame,
-    WindowSpec,
 )
 from tests.test_plugins.compute_framework.base_implementations.relation_test_mixin import (
     RelationTestMixin,
@@ -407,7 +406,7 @@ class TestDuckdbRelation(RelationTestMixin):
 
     def test_window_partition_only(self, sample_relation: "DuckdbRelation") -> None:
         """SUM(age) partitioned by category, no order, no frame: each row gets its category total."""
-        result = sample_relation.window("SUM(age)", WindowSpec(partition_by=("category",)), "cat_sum")
+        result = sample_relation.window("SUM(age)", "cat_sum", partition_by=("category",))
         assert "cat_sum" in result.columns
         ordered = result.order("id")
         sums = self.get_column_values(ordered, "cat_sum")
@@ -416,21 +415,21 @@ class TestDuckdbRelation(RelationTestMixin):
 
     def test_window_partition_and_order_running_sum(self, sample_relation: "DuckdbRelation") -> None:
         """SUM(age) partitioned by category, ordered by id, default RANGE UNBOUNDED PRECEDING..CURRENT ROW."""
-        result = sample_relation.window("SUM(age)", WindowSpec(partition_by=("category",), order_by=("id",)), "rs")
+        result = sample_relation.window("SUM(age)", "rs", partition_by=("category",), order_by=("id",))
         ordered = result.order("id")
         rs = self.get_column_values(ordered, "rs")
         assert rs == [25, 30, 60, 40, 75]
 
     def test_window_no_partition_no_order(self, sample_relation: "DuckdbRelation") -> None:
-        """COUNT(*) over bare empty WindowSpec returns total row count for every row."""
-        result = sample_relation.window("COUNT(*)", WindowSpec(), "n")
+        """COUNT(*) with no partition / order / frame returns total row count for every row."""
+        result = sample_relation.window("COUNT(*)", "n")
         ns = self.get_column_values(result, "n")
         assert ns == [5, 5, 5, 5, 5]
 
     def test_window_returns_new_relation_and_preserves_columns(self, sample_relation: "DuckdbRelation") -> None:
         """window() returns a new DuckdbRelation with original columns plus alias; original is untouched."""
         original_columns = list(sample_relation.columns)
-        result = sample_relation.window("COUNT(*)", WindowSpec(), "n")
+        result = sample_relation.window("COUNT(*)", "n")
         assert isinstance(result, DuckdbRelation)
         for col in original_columns:
             assert col in result.columns
@@ -443,8 +442,9 @@ class TestDuckdbRelation(RelationTestMixin):
         """ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW: cumulative sum ordered by id."""
         result = sample_relation.window(
             "SUM(age)",
-            WindowSpec(order_by=("id",), frame=WindowFrame(kind="rows", start=Unbounded(), end=CurrentRow())),
             "cum",
+            order_by=("id",),
+            frame=WindowFrame(kind="rows", start=Unbounded(), end=CurrentRow()),
         )
         ordered = result.order("id")
         cum = self.get_column_values(ordered, "cum")
@@ -454,8 +454,9 @@ class TestDuckdbRelation(RelationTestMixin):
         """RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING: grand total per row."""
         result = sample_relation.window(
             "SUM(age)",
-            WindowSpec(order_by=("id",), frame=WindowFrame(kind="range", start=Unbounded(), end=Unbounded())),
             "total",
+            order_by=("id",),
+            frame=WindowFrame(kind="range", start=Unbounded(), end=Unbounded()),
         )
         ordered = result.order("id")
         totals = self.get_column_values(ordered, "total")
@@ -465,11 +466,9 @@ class TestDuckdbRelation(RelationTestMixin):
         """GROUPS BETWEEN 1 PRECEDING AND CURRENT ROW: just verify the frame variant compiles and produces a column."""
         result = sample_relation.window(
             "SUM(age)",
-            WindowSpec(
-                order_by=("category",),
-                frame=WindowFrame(kind="groups", start=Preceding(1), end=CurrentRow()),
-            ),
             "g",
+            order_by=("category",),
+            frame=WindowFrame(kind="groups", start=Preceding(1), end=CurrentRow()),
         )
         assert "g" in result.columns
         assert len(result) == 5
@@ -478,11 +477,9 @@ class TestDuckdbRelation(RelationTestMixin):
         """ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING ordered by id: sliding 3-row window sum."""
         result = sample_relation.window(
             "SUM(age)",
-            WindowSpec(
-                order_by=("id",),
-                frame=WindowFrame(kind="rows", start=Preceding(1), end=Following(1)),
-            ),
             "win",
+            order_by=("id",),
+            frame=WindowFrame(kind="rows", start=Preceding(1), end=Following(1)),
         )
         ordered = result.order("id")
         win = self.get_column_values(ordered, "win")
@@ -493,7 +490,7 @@ class TestDuckdbRelation(RelationTestMixin):
     def test_window_alias_quoted(self, sample_relation: "DuckdbRelation") -> None:
         """alias must be quoted via quote_ident; an alias with a double quote must round-trip verbatim."""
         weird = 'weird"alias'
-        result = sample_relation.window("COUNT(*)", WindowSpec(), weird)
+        result = sample_relation.window("COUNT(*)", weird)
         assert weird in result.columns
         assert len(result) == 5
 
@@ -506,13 +503,13 @@ class TestDuckdbRelation(RelationTestMixin):
                 "v": [1, 2, 3],
             },
         )
-        result = rel.window("COUNT(*)", WindowSpec(partition_by=("odd col",)), "n")
+        result = rel.window("COUNT(*)", "n", partition_by=("odd col",))
         assert isinstance(result, DuckdbRelation)
         assert "n" in result.columns
 
     def test_window_func_passed_verbatim(self, sample_relation: "DuckdbRelation") -> None:
         """func is a raw SQL fragment passed verbatim; LEAD(age, 1) must execute as a function call, not be quoted."""
-        result = sample_relation.window("LEAD(age, 1)", WindowSpec(order_by=("id",)), "next_age")
+        result = sample_relation.window("LEAD(age, 1)", "next_age", order_by=("id",))
         ordered = result.order("id")
         next_ages = ordered.to_arrow_table().column("next_age").to_pylist()
         assert next_ages == [30, 35, 40, 45, None]

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Literal, Optional, cast
 
 try:
@@ -54,15 +54,6 @@ class WindowFrame:
     end: FrameBound
 
 
-@dataclass(frozen=True)
-class WindowSpec:
-    """Structured OVER (...) specification used by :meth:`DuckdbRelation.window`."""
-
-    partition_by: Sequence[str] = field(default_factory=tuple)
-    order_by: Sequence[str] = field(default_factory=tuple)
-    frame: WindowFrame | None = None
-
-
 def _render_frame_bound(bound: FrameBound, side: Literal["start", "end"]) -> str:
     """Render a single frame bound for the given ``side`` of a BETWEEN clause."""
     if isinstance(bound, Unbounded):
@@ -76,17 +67,21 @@ def _render_frame_bound(bound: FrameBound, side: Literal["start", "end"]) -> str
     raise TypeError(f"Unsupported frame bound: {type(bound).__name__}")
 
 
-def _render_window_spec(over: WindowSpec) -> str:
-    """Render a :class:`WindowSpec` into the body of an ``OVER (...)`` clause."""
+def _render_over_clause(
+    partition_by: Sequence[str],
+    order_by: Sequence[str],
+    frame: WindowFrame | None,
+) -> str:
+    """Render the body of an ``OVER (...)`` clause."""
     parts: list[str] = []
-    if over.partition_by:
-        parts.append("PARTITION BY " + ", ".join(quote_ident(c) for c in over.partition_by))
-    if over.order_by:
-        parts.append("ORDER BY " + ", ".join(quote_ident(c) for c in over.order_by))
-    if over.frame is not None:
-        start_sql = _render_frame_bound(over.frame.start, "start")
-        end_sql = _render_frame_bound(over.frame.end, "end")
-        parts.append(f"{over.frame.kind.upper()} BETWEEN {start_sql} AND {end_sql}")
+    if partition_by:
+        parts.append("PARTITION BY " + ", ".join(quote_ident(c) for c in partition_by))
+    if order_by:
+        parts.append("ORDER BY " + ", ".join(quote_ident(c) for c in order_by))
+    if frame is not None:
+        start_sql = _render_frame_bound(frame.start, "start")
+        end_sql = _render_frame_bound(frame.end, "end")
+        parts.append(f"{frame.kind.upper()} BETWEEN {start_sql} AND {end_sql}")
     return " ".join(parts)
 
 
@@ -265,14 +260,22 @@ class DuckdbRelation:
         over = " ".join(clauses)
         return self.project(f"*, ROW_NUMBER() OVER ({over}) AS {quote_ident(alias)}")
 
-    def window(self, func: str, over: WindowSpec, alias: str) -> "DuckdbRelation":
-        """Append a window-function column ``alias`` computed by ``func`` OVER ``over``.
+    def window(
+        self,
+        func: str,
+        alias: str,
+        *,
+        partition_by: Sequence[str] = (),
+        order_by: Sequence[str] = (),
+        frame: WindowFrame | None = None,
+    ) -> "DuckdbRelation":
+        """Append a window-function column ``alias`` computed by ``func`` over the OVER clause.
 
         ``func`` is a raw SQL fragment inlined verbatim; never pass user-controlled input.
-        The ``alias`` and every identifier in ``over.partition_by`` / ``over.order_by``
-        are quoted via ``quote_ident``.
+        The ``alias`` and every identifier in ``partition_by`` / ``order_by`` are quoted
+        via ``quote_ident``.
         """
-        over_sql = _render_window_spec(over)
+        over_sql = _render_over_clause(partition_by, order_by, frame)
         return self.project(f"*, {func} OVER ({over_sql}) AS {quote_ident(alias)}")
 
     def _pick_helper_column_name(self, *, taken: set[str]) -> str:

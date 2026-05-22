@@ -73,6 +73,8 @@ For quick iteration during development, you can run only the tests. Note that th
 pytest -n auto --timeout=10
 ```
 
+When multiple processes run `tox` on the same host (e.g., parallel agents), they serialize on `$TOX_LOCK_PATH` (default `/tmp/mloda-tox.lock`). Override the path if `/tmp` is not appropriate for your setup.
+
 ## Ways to Contribute
 
 ### Plugin Development

@@ -16,7 +16,7 @@ x-agent-common: &agent-common
     - SETUID
     - KILL
   environment:
-    - USE_TOX_LOCK=1
+    - TOX_LOCK_PATH=/shared/tox.lock
   depends_on:
     mloda-base:
       condition: service_completed_successfully

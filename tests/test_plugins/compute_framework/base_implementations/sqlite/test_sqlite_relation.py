@@ -1,4 +1,6 @@
+import datetime
 import sqlite3
+import warnings
 from typing import Any
 
 import pyarrow as pa
@@ -135,3 +137,44 @@ class TestInferSqliteType:
         """TEXT dominates: a string before a float must not be overridden by the float."""
         result = _infer_sqlite_type_from_values(["hello", 1.5])
         assert result == "TEXT", f"Expected TEXT but got {result}"
+
+
+class TestSqliteDatetimeAdapter:
+    def test_inserting_datetime_does_not_emit_default_adapter_warning(self, connection: sqlite3.Connection) -> None:
+        """Inserting datetime/date values must not trigger Python 3.12's default-adapter DeprecationWarning."""
+        data: dict[str, list[Any]] = {
+            "ts": [datetime.datetime(2024, 1, 1, 12, 0), datetime.datetime(2024, 1, 2, 12, 0)],
+            "d": [datetime.date(2024, 1, 1), datetime.date(2024, 1, 2)],
+        }
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            SqliteRelation.from_dict(connection, data)
+
+    def test_inserting_datetime_via_from_arrow_does_not_emit_default_adapter_warning(
+        self, connection: sqlite3.Connection
+    ) -> None:
+        """from_arrow's executemany path must also be free of the default-adapter DeprecationWarning."""
+        arrow_table = pa.table(
+            {
+                "ts": pa.array(
+                    [datetime.datetime(2024, 1, 1, 12, 0), datetime.datetime(2024, 1, 2, 12, 0)],
+                    type=pa.timestamp("us"),
+                ),
+                "d": pa.array([datetime.date(2024, 1, 1), datetime.date(2024, 1, 2)], type=pa.date32()),
+            }
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            SqliteRelation.from_arrow(connection, arrow_table)
+
+    def test_direct_executemany_with_datetime_does_not_emit_default_adapter_warning(self) -> None:
+        """Module-global adapter registration must cover any sqlite3 connection, not only SqliteRelation."""
+        conn = sqlite3.connect(":memory:")
+        conn.execute("CREATE TABLE t (ts TEXT)")
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            conn.executemany(
+                "INSERT INTO t VALUES (?)",
+                [(datetime.datetime(2024, 1, 1, 12, 0),), (datetime.datetime(2024, 1, 2, 12, 0),)],
+            )
+        conn.close()

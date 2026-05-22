@@ -1,3 +1,4 @@
+import datetime
 import re
 import sqlite3
 import uuid
@@ -6,6 +7,17 @@ from typing import Any, Optional
 import pyarrow as pa
 
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
+
+
+# Python 3.12 deprecated the built-in sqlite3 datetime adapters; explicit ISO-format
+# registration silences the per-row DeprecationWarning emitted by executemany().
+# Side effect: sqlite3.register_adapter is module-global, so every sqlite3.Connection
+# in the process (including ones not created via SqliteRelation) picks these up.
+# Adapter-only, no converter: mloda reads sqlite data back through Arrow as text and
+# never sets detect_types, so the read path is unaffected. The T-separator output
+# matches the existing literal-SQL pipeline in sql_utils.quote_value (value.isoformat()).
+sqlite3.register_adapter(datetime.date, datetime.date.isoformat)
+sqlite3.register_adapter(datetime.datetime, datetime.datetime.isoformat)
 
 
 def _next_table_name() -> str:

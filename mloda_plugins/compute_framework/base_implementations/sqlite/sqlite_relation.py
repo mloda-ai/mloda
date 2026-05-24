@@ -458,7 +458,7 @@ class SqliteRelation:
 
     def append_column(self, name: str, values: list[Any]) -> "SqliteRelation":
         """Return a new relation with an additional column appended positionally."""
-        if name in self.columns:
+        if name.casefold() in {c.casefold() for c in self.columns}:
             raise ValueError(f"Column {name!r} already exists in the relation")
         current_types = self._types_for_current_columns()
         new_col_rel = SqliteRelation.from_dict(self._connection, {name: values})

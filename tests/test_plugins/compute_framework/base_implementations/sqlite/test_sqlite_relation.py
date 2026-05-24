@@ -282,6 +282,12 @@ class TestSqliteRelation(RelationTestMixin):
         with pytest.raises(ValueError, match="b"):
             rel.append_column("b", [10, 20, 30])
 
+    def test_append_column_raises_on_case_only_collision(self, connection: sqlite3.Connection) -> None:
+        """append_column must reject ``name`` that case-insensitively collides with an existing column, since SQLite treats quoted identifiers as case-insensitive in resolution."""
+        rel = SqliteRelation.from_dict(connection, {"Foo": [1, 2, 3], "b": [4, 5, 6]})
+        with pytest.raises(ValueError, match="foo"):
+            rel.append_column("foo", [10, 20, 30])
+
     def test_join_with_sql_injection_alias(self, connection: sqlite3.Connection) -> None:
         """A crafted alias must not be interpreted as SQL."""
         left = SqliteRelation.from_dict(connection, {"idx": [1, 2], "val": ["a", "b"]})

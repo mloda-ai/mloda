@@ -9,6 +9,7 @@ from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation
     CurrentRow,
     DuckdbRelation,
     Following,
+    OrderBy,
     Preceding,
     Unbounded,
     WindowFrame,
@@ -531,6 +532,70 @@ class TestDuckdbRelation(RelationTestMixin):
         ordered = result.order("id")
         next_ages = ordered.to_arrow_table().column("next_age").to_pylist()
         assert next_ages == [30, 35, 40, 45, None]
+
+    # --- OrderBy ---
+
+    def test_orderby_bare_column_constructs(self) -> None:
+        """OrderBy('age') must construct cleanly."""
+        OrderBy("age")
+
+    def test_orderby_descending_true_constructs(self) -> None:
+        """OrderBy('age', descending=True) must construct cleanly."""
+        OrderBy("age", descending=True)
+
+    def test_orderby_nulls_first_constructs(self) -> None:
+        """OrderBy('age', nulls='first') must construct cleanly."""
+        OrderBy("age", nulls="first")
+
+    def test_orderby_nulls_last_constructs(self) -> None:
+        """OrderBy('age', nulls='last') must construct cleanly."""
+        OrderBy("age", nulls="last")
+
+    def test_orderby_invalid_nulls_raises(self) -> None:
+        """OrderBy must reject a nulls value outside {'first','last'} at construction time."""
+        with pytest.raises(ValueError, match="nulls"):
+            OrderBy("age", nulls="middle")  # type: ignore[arg-type]
+
+    def test_window_order_by_orderby_descending(self, sample_relation: "DuckdbRelation") -> None:
+        """ROW_NUMBER assigned descending by id must give id=5->rn=1, id=4->rn=2, ..., id=1->rn=5."""
+        result = sample_relation.window(
+            "ROW_NUMBER()", "rn", order_by=(OrderBy("id", descending=True),)
+        )
+        ordered = result.order("id")
+        assert self.get_column_values(ordered, "rn") == [5, 4, 3, 2, 1]
+
+    def test_with_row_number_order_by_orderby_descending(self, sample_relation: "DuckdbRelation") -> None:
+        """with_row_number must honor OrderBy(descending=True) and produce the descending row numbers."""
+        result = sample_relation.with_row_number("rn", order_by=(OrderBy("id", descending=True),))
+        ordered = result.order("id")
+        assert self.get_column_values(ordered, "rn") == [5, 4, 3, 2, 1]
+
+    def test_window_order_by_mixed_string_and_orderby(self, sample_relation: "DuckdbRelation") -> None:
+        """Mixed string + OrderBy entries must be honored: partition by category, order by category, id DESC."""
+        result = sample_relation.window(
+            "ROW_NUMBER()",
+            "rn",
+            partition_by=("category",),
+            order_by=("category", OrderBy("id", descending=True)),
+        )
+        ordered = result.order("id")
+        # cats per id: A,B,A,C,B; per-category rn descending by id:
+        # A: id 3 (rn 1), id 1 (rn 2); B: id 5 (rn 1), id 2 (rn 2); C: id 4 (rn 1)
+        # so for ids 1..5: 2, 2, 1, 1, 1
+        assert self.get_column_values(ordered, "rn") == [2, 2, 1, 1, 1]
+
+    def test_window_order_by_nulls_last_runs(self, sample_relation: "DuckdbRelation") -> None:
+        """NULLS LAST must render and DuckDB must accept it without error."""
+        result = sample_relation.window("ROW_NUMBER()", "rn", order_by=(OrderBy("age", nulls="last"),))
+        assert "rn" in result.columns
+        assert len(result) == 5
+
+    def test_window_order_by_bare_string_with_space_in_column_name(self, connection: Any) -> None:
+        """Backward-compat: a bare string must still be treated as a single column name (quoted whole)."""
+        rel = DuckdbRelation.from_dict(connection, {"odd col": [3, 1, 2], "v": ["a", "b", "c"]})
+        result = rel.window("ROW_NUMBER()", "rn", order_by=("odd col",))
+        ordered = result.order("rn")
+        assert ordered.to_arrow_table().column("odd col").to_pylist() == [1, 2, 3]
 
     # --- runtime validation on frame dataclasses ---
 

@@ -58,6 +58,23 @@ class Following:
             raise ValueError(f"Following offset must be >= 0; got {self.offset}")
 
 
+@dataclass(frozen=True)
+class OrderBy:
+    """An order_by item with optional direction and NULLS placement.
+
+    Bare strings in order_by lists are quoted as plain column names; use
+    OrderBy to express direction or NULLS handling.
+    """
+
+    column: str
+    descending: bool = False
+    nulls: Literal["first", "last"] | None = None
+
+    def __post_init__(self) -> None:
+        if self.nulls is not None and self.nulls not in ("first", "last"):
+            raise ValueError(f"OrderBy nulls must be 'first', 'last', or None; got {self.nulls!r}")
+
+
 FrameBound = CurrentRow | Unbounded | Preceding | Following
 
 
@@ -89,6 +106,17 @@ def _render_frame_bound(bound: FrameBound, side: Literal["start", "end"]) -> str
     raise TypeError(f"Unsupported frame bound: {type(bound).__name__}")
 
 
+def _render_order_by_item(item: str | OrderBy) -> str:
+    if isinstance(item, str):
+        return quote_ident(item)
+    parts = [quote_ident(item.column)]
+    if item.descending:
+        parts.append("DESC")
+    if item.nulls is not None:
+        parts.append(f"NULLS {item.nulls.upper()}")
+    return " ".join(parts)
+
+
 def _bound_rank(bound: FrameBound, side: Literal["start", "end"]) -> float:
     if isinstance(bound, Unbounded):
         return float("-inf") if side == "start" else float("inf")
@@ -103,7 +131,7 @@ def _bound_rank(bound: FrameBound, side: Literal["start", "end"]) -> float:
 
 def _render_over_clause(
     partition_by: Sequence[str],
-    order_by: Sequence[str],
+    order_by: Sequence[str | OrderBy],
     frame: WindowFrame | None,
 ) -> str:
     """Render the body of an ``OVER (...)`` clause."""
@@ -111,7 +139,7 @@ def _render_over_clause(
     if partition_by:
         parts.append("PARTITION BY " + ", ".join(quote_ident(c) for c in partition_by))
     if order_by:
-        parts.append("ORDER BY " + ", ".join(quote_ident(c) for c in order_by))
+        parts.append("ORDER BY " + ", ".join(_render_order_by_item(c) for c in order_by))
     if frame is not None:
         start_sql = _render_frame_bound(frame.start, "start")
         end_sql = _render_frame_bound(frame.end, "end")
@@ -280,7 +308,7 @@ class DuckdbRelation:
         self,
         alias: str,
         partition_by: Sequence[str] = (),
-        order_by: Sequence[str] = (),
+        order_by: Sequence[str | OrderBy] = (),
     ) -> "DuckdbRelation":
         """Append a ROW_NUMBER() window column named ``alias``.
 
@@ -292,7 +320,7 @@ class DuckdbRelation:
         if partition_by:
             clauses.append("PARTITION BY " + ", ".join(quote_ident(c) for c in partition_by))
         if order_by:
-            clauses.append("ORDER BY " + ", ".join(quote_ident(c) for c in order_by))
+            clauses.append("ORDER BY " + ", ".join(_render_order_by_item(c) for c in order_by))
         over = " ".join(clauses)
         return self.project(f"*, ROW_NUMBER() OVER ({over}) AS {quote_ident(alias)}")
 
@@ -302,7 +330,7 @@ class DuckdbRelation:
         alias: str,
         *,
         partition_by: Sequence[str] = (),
-        order_by: Sequence[str] = (),
+        order_by: Sequence[str | OrderBy] = (),
         frame: WindowFrame | None = None,
     ) -> "DuckdbRelation":
         """Append a window-function column ``alias`` computed by ``func`` over the OVER clause.

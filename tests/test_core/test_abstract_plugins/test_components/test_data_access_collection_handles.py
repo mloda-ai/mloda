@@ -534,12 +534,12 @@ class TestMutatorsAcceptOmittedHandle:
     def test_add_file_zero_args_raises(self) -> None:
         dac = DataAccessCollection()
         with pytest.raises((TypeError, ValueError)):
-            dac.add_file()  # type: ignore[call-arg]
+            dac.add_file()
 
     def test_add_file_three_args_raises(self) -> None:
         dac = DataAccessCollection()
         with pytest.raises((TypeError, ValueError)):
-            dac.add_file("h", "/p", "extra")  # type: ignore[call-arg]
+            dac.add_file("h", "/p", "extra")
 
     # --- Requirement 7: duplicate detection still works on two-arg form -------
 

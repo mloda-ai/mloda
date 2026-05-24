@@ -8,7 +8,11 @@ from typing import Any, Optional
 import pyarrow as pa
 
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import pick_helper_column_name, quote_ident
-from mloda_plugins.compute_framework.base_implementations.sql.sql_window import OrderBy, _render_over_clause
+from mloda_plugins.compute_framework.base_implementations.sql.sql_window import (
+    OrderBy,
+    WindowFrame,
+    _render_over_clause,
+)
 
 
 # Python 3.12 deprecated the built-in sqlite3 datetime adapters; explicit ISO-format
@@ -490,6 +494,34 @@ class SqliteRelation:
         sql = (
             f"CREATE TEMP VIEW {quote_ident(new_name)} AS "  # nosec
             f"SELECT *, ROW_NUMBER() OVER ({over_sql}) AS {quote_ident(alias)} "
+            f"FROM {quote_ident(self._table_name)}"
+        )
+        self._connection.execute(sql)
+        return SqliteRelation(self._connection, new_name, _is_view=True)
+
+    def window(
+        self,
+        func: str,
+        alias: str,
+        *,
+        partition_by: Sequence[str] = (),
+        order_by: Sequence[str | OrderBy] = (),
+        frame: WindowFrame | None = None,
+    ) -> "SqliteRelation":
+        """Append a window-function column ``alias`` computed by ``func`` over the OVER clause.
+
+        ``func`` is a raw SQL fragment inlined verbatim; never pass user-controlled input.
+        The ``alias`` and every identifier in ``partition_by`` / ``order_by`` are quoted
+        via ``quote_ident``.
+        Raises ``ValueError`` if ``alias`` collides with an existing column (comparison is case-insensitive).
+        """
+        if alias.casefold() in {c.casefold() for c in self.columns}:
+            raise ValueError(f"Column {alias!r} already exists in the relation")
+        over_sql = _render_over_clause(partition_by, order_by, frame)
+        new_name = _next_table_name()
+        sql = (
+            f"CREATE TEMP VIEW {quote_ident(new_name)} AS "  # nosec
+            f"SELECT *, {func} OVER ({over_sql}) AS {quote_ident(alias)} "
             f"FROM {quote_ident(self._table_name)}"
         )
         self._connection.execute(sql)

@@ -21,7 +21,20 @@ from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
     quote_ident,
 )
 
+__all__ = [
+    "CurrentRow",
+    "Unbounded",
+    "Preceding",
+    "Following",
+    "FrameBound",
+    "WindowFrame",
+    "OrderBy",
+    "DuckdbRelation",
+]
 
+
+# Frame bound and order-by helper types. The window renderer dispatches via
+# isinstance, so subclassing or shadowing these from other modules is not supported.
 @dataclass(frozen=True)
 class CurrentRow:
     """Frame bound: the current row."""
@@ -315,6 +328,8 @@ class DuckdbRelation:
 
         All identifiers in ``partition_by`` / ``order_by`` and the ``alias`` are quoted
         via ``quote_ident``. Raises ``ValueError`` if ``alias`` collides with an existing column.
+        With no partition_by/order_by, row-number assignment order is
+        implementation-defined; pass order_by for a deterministic numbering.
         """
         if alias in self.columns:
             raise ValueError(f"Column {alias!r} already exists in the relation")

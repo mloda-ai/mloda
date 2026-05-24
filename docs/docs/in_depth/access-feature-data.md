@@ -38,10 +38,10 @@ You can apply these options like so:
 data_access = DataAccessCollection()
 
 # Add file paths, folder paths, credentials, and connection objects
-data_access.add_file('text', 'path/to/folder/text.txt')
-data_access.add_folder('folder', 'path/to/folder/')
-data_access.add_credentials('db', {'host': 'example.com', 'password': 'example'})
-data_access.add_connection('initialized', 'InitializedDBConnection')
+data_access.add_file('path/to/folder/text.txt')
+data_access.add_folder('path/to/folder/')
+data_access.add_credentials({'host': 'example.com', 'password': 'example'})
+data_access.add_connection('InitializedDBConnection')
 
 mloda.run_all(
     feature_list,

@@ -416,3 +416,134 @@ class TestAmbiguityMessageShape:
         # Auto-only: guide the user to name them.
         assert "data_access_handle" in msg
         assert "Name them" in msg
+
+
+class TestMutatorsAcceptOmittedHandle:
+    """Mutators may be called with the handle omitted; arity decides the shape."""
+
+    # --- Requirement 1: single-arg form auto-names and registers --------------
+
+    def test_add_file_single_arg_auto_names(self) -> None:
+        dac = DataAccessCollection()
+        dac.add_file("/data/tx.csv")
+        assert len(dac.files) == 1
+        (only_handle,) = dac.files.keys()
+        assert only_handle.startswith("_auto_file_")
+        assert dac.files[only_handle] == "/data/tx.csv"
+        assert dac.handles()[only_handle] == "file"
+        assert only_handle in dac._auto_handles
+
+    def test_add_folder_single_arg_auto_names(self) -> None:
+        dac = DataAccessCollection()
+        dac.add_folder("/data/raw")
+        assert len(dac.folders) == 1
+        (only_handle,) = dac.folders.keys()
+        assert only_handle.startswith("_auto_folder_")
+        assert dac.folders[only_handle] == "/data/raw"
+        assert dac.handles()[only_handle] == "folder"
+        assert only_handle in dac._auto_handles
+
+    def test_add_connection_single_arg_auto_names(self) -> None:
+        dac = DataAccessCollection()
+        conn = object()
+        dac.add_connection(conn)
+        assert len(dac.connections) == 1
+        (only_handle,) = dac.connections.keys()
+        assert only_handle.startswith("_auto_connection_")
+        assert dac.connections[only_handle] is conn
+        assert dac.handles()[only_handle] == "connection"
+        assert only_handle in dac._auto_handles
+
+    def test_add_credentials_single_arg_auto_names(self) -> None:
+        dac = DataAccessCollection()
+        creds: dict[str, Any] = {"host": "h"}
+        dac.add_credentials(creds)
+        assert len(dac.credentials) == 1
+        (only_handle,) = dac.credentials.keys()
+        assert only_handle.startswith("_auto_credentials_")
+        assert dac.credentials[only_handle] == creds
+        assert dac.handles()[only_handle] == "credentials"
+        assert only_handle in dac._auto_handles
+
+    # --- Requirement 2: two-arg form preserves the named handle ---------------
+
+    def test_add_file_two_arg_preserves_named_handle(self) -> None:
+        dac = DataAccessCollection()
+        dac.add_file("tx", "/data/tx.csv")
+        assert dac.files == {"tx": "/data/tx.csv"}
+        assert "tx" not in dac._auto_handles
+
+    def test_add_folder_two_arg_preserves_named_handle(self) -> None:
+        dac = DataAccessCollection()
+        dac.add_folder("raw", "/data/raw")
+        assert dac.folders == {"raw": "/data/raw"}
+        assert "raw" not in dac._auto_handles
+
+    def test_add_connection_two_arg_preserves_named_handle(self) -> None:
+        dac = DataAccessCollection()
+        conn = object()
+        dac.add_connection("warehouse", conn)
+        assert dac.connections == {"warehouse": conn}
+        assert "warehouse" not in dac._auto_handles
+
+    def test_add_credentials_two_arg_preserves_named_handle(self) -> None:
+        dac = DataAccessCollection()
+        dac.add_credentials("pg", {"host": "h"})
+        assert dac.credentials == {"pg": {"host": "h"}}
+        assert "pg" not in dac._auto_handles
+
+    # --- Requirement 3: mix of named-from-constructor and unnamed-from-mutator -
+
+    def test_named_from_constructor_then_unnamed_mutator_both_registered(self) -> None:
+        dac = DataAccessCollection(files={"tx": "/data/tx.csv"})
+        dac.add_file("/data/users.csv")
+        assert "tx" in dac.files
+        assert dac.files["tx"] == "/data/tx.csv"
+        assert len(dac.files) == 2
+        # The auto-added one resolves via predicate.
+        assert dac.resolve("file", predicate=lambda p: p.endswith("users.csv")) == "/data/users.csv"
+
+    # --- Requirement 4: ambiguity message in pure-auto state ------------------
+
+    def test_resolver_ambiguity_after_two_auto_mutator_adds_uses_auto_shape(self) -> None:
+        dac = DataAccessCollection()
+        dac.add_file("/a.csv")
+        dac.add_file("/b.csv")
+        with pytest.raises(ValueError) as excinfo:
+            dac.resolve("file")
+        msg = str(excinfo.value)
+        assert "/a.csv" in msg
+        assert "/b.csv" in msg
+        assert "data_access_handle" in msg
+        assert "Name them" in msg
+
+    # --- Requirement 5: auto numbering survives constructor + mutator ---------
+
+    def test_auto_numbering_does_not_collide_across_constructor_and_mutator(self) -> None:
+        dac = DataAccessCollection(files=["/a.csv"])
+        dac.add_file("/b.csv")
+        assert len(dac.files) == 2
+        for handle in dac.files:
+            assert handle.startswith("_auto_file_")
+        handles = list(dac.files.keys())
+        assert handles[0] != handles[1]
+        assert set(dac.files.values()) == {"/a.csv", "/b.csv"}
+
+    # --- Requirement 6: wrong arity raises a clear error ----------------------
+
+    def test_add_file_zero_args_raises(self) -> None:
+        dac = DataAccessCollection()
+        with pytest.raises((TypeError, ValueError)):
+            dac.add_file()  # type: ignore[call-arg]
+
+    def test_add_file_three_args_raises(self) -> None:
+        dac = DataAccessCollection()
+        with pytest.raises((TypeError, ValueError)):
+            dac.add_file("h", "/p", "extra")  # type: ignore[call-arg]
+
+    # --- Requirement 7: duplicate detection still works on two-arg form -------
+
+    def test_two_arg_duplicate_handle_still_raises(self) -> None:
+        dac = DataAccessCollection(files={"tx": "/a.csv"})
+        with pytest.raises(ValueError, match="tx"):
+            dac.add_file("tx", "/b.csv")

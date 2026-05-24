@@ -53,15 +53,18 @@ class DataAccessCollection:
     def _assign_auto_handles(self, kind: str, registry: dict[str, Any], raw: Any) -> None:
         if raw is None or isinstance(raw, dict):
             return
-        counter = 0
         for entry in raw:
-            handle = f"_auto_{kind}_{counter}"
-            while self._handle_taken(handle):
-                counter += 1
-                handle = f"_auto_{kind}_{counter}"
+            handle = self._next_auto_handle(kind)
             registry[handle] = entry
             self._auto_handles.add(handle)
+
+    def _next_auto_handle(self, kind: str) -> str:
+        counter = 0
+        handle = f"_auto_{kind}_{counter}"
+        while self._handle_taken(handle):
             counter += 1
+            handle = f"_auto_{kind}_{counter}"
+        return handle
 
     def _handle_taken(self, handle: str) -> bool:
         for attr in _KIND_TO_ATTR.values():
@@ -103,21 +106,34 @@ class DataAccessCollection:
                     )
                 seen[handle] = kind
 
-    def add_connection(self, handle: str, conn: Any) -> None:
+    def add_connection(self, *args: Any) -> None:
+        handle, value = self._resolve_mutator_args("connection", args)
         self._reject_duplicate(handle)
-        self.connections[handle] = conn
+        self.connections[handle] = value
 
-    def add_file(self, handle: str, path: str) -> None:
+    def add_file(self, *args: Any) -> None:
+        handle, value = self._resolve_mutator_args("file", args)
         self._reject_duplicate(handle)
-        self.files[handle] = path
+        self.files[handle] = value
 
-    def add_folder(self, handle: str, path: str) -> None:
+    def add_folder(self, *args: Any) -> None:
+        handle, value = self._resolve_mutator_args("folder", args)
         self._reject_duplicate(handle)
-        self.folders[handle] = path
+        self.folders[handle] = value
 
-    def add_credentials(self, handle: str, creds: Any) -> None:
+    def add_credentials(self, *args: Any) -> None:
+        handle, value = self._resolve_mutator_args("credentials", args)
         self._reject_duplicate(handle)
-        self.credentials[handle] = creds
+        self.credentials[handle] = value
+
+    def _resolve_mutator_args(self, kind: str, args: tuple[Any, ...]) -> tuple[str, Any]:
+        if len(args) == 1:
+            handle = self._next_auto_handle(kind)
+            self._auto_handles.add(handle)
+            return handle, args[0]
+        if len(args) == 2:
+            return args[0], args[1]
+        raise TypeError(f"add_{kind}() takes 1 (value) or 2 (handle, value) positional arguments, got {len(args)}.")
 
     def _reject_duplicate(self, handle: str) -> None:
         for kind, attr in _KIND_TO_ATTR.items():

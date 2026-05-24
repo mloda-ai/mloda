@@ -7,6 +7,7 @@ import pyarrow as pa
 import pytest
 
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
+from mloda_plugins.compute_framework.base_implementations.sql.sql_window import OrderBy
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import (
     SqliteRelation,
     _infer_sqlite_type_from_values,
@@ -287,6 +288,77 @@ class TestSqliteRelation(RelationTestMixin):
         rel = SqliteRelation.from_dict(connection, {"Foo": [1, 2, 3], "b": [4, 5, 6]})
         with pytest.raises(ValueError, match="foo"):
             rel.append_column("foo", [10, 20, 30])
+
+    # --- with_row_number ---
+
+    def test_with_row_number_no_partition_no_order_assigns_unique_numbers(
+        self, connection: sqlite3.Connection
+    ) -> None:
+        """Bare ROW_NUMBER() OVER () must yield row numbers that are a permutation of [1, 2]."""
+        rel = SqliteRelation.from_dict(connection, {"x": [10, 20]})
+        result = rel.with_row_number("rn")
+        assert "rn" in result.columns
+        rns = sorted(result.to_arrow_table().column("rn").to_pylist())
+        assert rns == [1, 2]
+
+    def test_with_row_number_order_by_string(self, sample_relation: SqliteRelation) -> None:
+        """with_row_number('rn', order_by=('id',)) must produce row numbers matching id ascending."""
+        result = sample_relation.with_row_number("rn", order_by=("id",))
+        ordered = result.order("id")
+        assert self.get_column_values(ordered, "rn") == [1, 2, 3, 4, 5]
+
+    def test_with_row_number_partition_and_order(self, sample_relation: SqliteRelation) -> None:
+        """Within each category, row numbers must restart at 1 ordered by id ascending."""
+        result = sample_relation.with_row_number("rn", partition_by=("category",), order_by=("id",))
+        ordered = result.order("id")
+        # category per id: A,B,A,C,B -> per-category rn ascending by id:
+        # A: id 1 (rn 1), id 3 (rn 2); B: id 2 (rn 1), id 5 (rn 2); C: id 4 (rn 1)
+        # so for ids 1..5: 1, 1, 2, 1, 2
+        assert self.get_column_values(ordered, "rn") == [1, 1, 2, 1, 2]
+
+    def test_with_row_number_alias_quoted(self, sample_relation: SqliteRelation) -> None:
+        """An alias with a space must be quoted and land verbatim in the result columns."""
+        result = sample_relation.with_row_number("row num", order_by=("id",))
+        assert "row num" in result.columns
+        assert len(result) == 5
+
+    def test_with_row_number_raises_when_alias_already_exists(self, sample_relation: SqliteRelation) -> None:
+        """with_row_number must reject an alias colliding with an existing column."""
+        with pytest.raises(ValueError, match="id"):
+            sample_relation.with_row_number("id")
+
+    def test_with_row_number_raises_on_case_only_collision(self, connection: sqlite3.Connection) -> None:
+        """SQLite identifiers are case-insensitive in resolution: alias 'category' must collide with existing 'Category'."""
+        rel = SqliteRelation.from_dict(
+            connection,
+            {
+                "id": [1, 2, 3, 4, 5],
+                "Category": ["A", "B", "A", "C", "B"],
+            },
+        )
+        with pytest.raises(ValueError, match="category"):
+            rel.with_row_number("category")
+
+    def test_with_row_number_order_by_descending(self, sample_relation: SqliteRelation) -> None:
+        """with_row_number must honor OrderBy(descending=True) and produce descending row numbers by id."""
+        result = sample_relation.with_row_number("rn", order_by=(OrderBy("id", descending=True),))
+        ordered = result.order("id")
+        assert self.get_column_values(ordered, "rn") == [5, 4, 3, 2, 1]
+
+    def test_with_row_number_order_by_nulls_last(self, connection: sqlite3.Connection) -> None:
+        """OrderBy('age', nulls='last') must place the NULL row at the highest row number."""
+        rel = SqliteRelation.from_dict(
+            connection,
+            {
+                "id": [1, 2, 3],
+                "age": [30, None, 25],
+            },
+        )
+        result = rel.with_row_number("rn", order_by=(OrderBy("age", nulls="last"),))
+        ordered = result.order("id")
+        rns = self.get_column_values(ordered, "rn")
+        # id=1 age=30 -> rn=2; id=2 age=NULL -> rn=3 (NULL last gets highest rn); id=3 age=25 -> rn=1
+        assert rns == [2, 3, 1]
 
     def test_join_with_sql_injection_alias(self, connection: sqlite3.Connection) -> None:
         """A crafted alias must not be interpreted as SQL."""

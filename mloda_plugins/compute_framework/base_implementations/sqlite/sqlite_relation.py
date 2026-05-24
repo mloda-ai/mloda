@@ -8,6 +8,7 @@ from typing import Any, Optional
 import pyarrow as pa
 
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import pick_helper_column_name, quote_ident
+from mloda_plugins.compute_framework.base_implementations.sql.sql_window import OrderBy, _render_over_clause
 
 
 # Python 3.12 deprecated the built-in sqlite3 datetime adapters; explicit ISO-format
@@ -313,6 +314,17 @@ class SqliteRelation:
             _types=types,
         )
 
+    def order(self, *columns: str) -> "SqliteRelation":
+        """Return a new relation sorted by the given columns."""
+        new_name = _next_table_name()
+        order_clause = ", ".join(quote_ident(c) for c in columns)
+        sql = (
+            f"CREATE TEMP VIEW {quote_ident(new_name)} AS "  # nosec
+            f"SELECT * FROM {quote_ident(self._table_name)} ORDER BY {order_clause}"
+        )
+        self._connection.execute(sql)
+        return SqliteRelation(self._connection, new_name, _is_view=True)
+
     def drop(self) -> None:
         """Drop the underlying temp table or view."""
         if self._is_view:
@@ -455,6 +467,33 @@ class SqliteRelation:
                 qc = quote_ident(c)
                 select_parts.append(f"{qr}.{qc} AS {qc}")
         return ", ".join(select_parts)
+
+    def with_row_number(
+        self,
+        alias: str,
+        *,
+        partition_by: Sequence[str] = (),
+        order_by: Sequence[str | OrderBy] = (),
+    ) -> "SqliteRelation":
+        """Append a ROW_NUMBER() window column named ``alias``.
+
+        All identifiers in ``partition_by`` / ``order_by`` and the ``alias`` are quoted
+        via ``quote_ident``. Raises ``ValueError`` if ``alias`` collides with an existing
+        column (comparison is case-insensitive).
+        With no partition_by/order_by, row-number assignment order is
+        implementation-defined; pass order_by for a deterministic numbering.
+        """
+        if alias.casefold() in {c.casefold() for c in self.columns}:
+            raise ValueError(f"Column {alias!r} already exists in the relation")
+        over_sql = _render_over_clause(partition_by, order_by, None)
+        new_name = _next_table_name()
+        sql = (
+            f"CREATE TEMP VIEW {quote_ident(new_name)} AS "  # nosec
+            f"SELECT *, ROW_NUMBER() OVER ({over_sql}) AS {quote_ident(alias)} "
+            f"FROM {quote_ident(self._table_name)}"
+        )
+        self._connection.execute(sql)
+        return SqliteRelation(self._connection, new_name, _is_view=True)
 
     def append_column(self, name: str, values: list[Any]) -> "SqliteRelation":
         """Return a new relation with an additional column appended positionally."""

@@ -51,22 +51,28 @@ assert dac.handles() == {
 
 ## Naming is optional
 
-You only need to name resources when there are multiple sources of the same kind that the resolver cannot tell apart. In the simple single-source case, pass a set or list of bare values:
+You only need to name resources when there are multiple sources of the same kind that the resolver cannot tell apart. In the simple single-source case, pass bare values:
 
 ``` py
-DataAccessCollection(files={"/data/tx.parquet"})              # set
-DataAccessCollection(files=["/data/tx.parquet"])              # list
-DataAccessCollection(connections={duckdb_conn})               # set
-DataAccessCollection(folders={"/data/raw"})                   # set
-DataAccessCollection(credentials=[{"host": "h"}])             # list (dicts are unhashable)
+DataAccessCollection(files={"/data/tx.parquet"})       # set or list
+DataAccessCollection(connections={duckdb_conn})        # set
+DataAccessCollection(folders={"/data/raw"})            # set
+DataAccessCollection(credentials=[{"host": "h"}])      # list (dicts are unhashable)
 ```
 
-Unnamed entries get internal auto-handles (`_auto_file_0`, `_auto_connection_0`, etc.). You will never need to reference these — they exist only so the resolver still has a unique key per entry. If you later hit ambiguity, the error message will tell you to switch to the named form and pick a `data_access_handle`.
+The same shape applies to the mutators:
+
+``` py
+dac.add_file("/data/tx.parquet")                       # auto-named
+dac.add_file("tx", "/data/tx.parquet")                 # named (when you need a handle)
+```
+
+Unnamed entries get internal auto-handles (`_auto_file_0`, `_auto_connection_0`, etc.) that you never need to reference. They exist only so the resolver has a unique key per entry. If you later hit ambiguity, the error message will tell you to switch to the named form and pick a `data_access_handle`.
 
 Naming is only required when:
 
 - Two or more resources of the same kind match the same consumer (then you must set `data_access_handle` to pick one), or
-- You use `column_to_file` and prefer to reference files by name rather than path (both work — see below).
+- You use `column_to_file` and prefer to reference files by name rather than path (both work, see below).
 
 ## Resolution rule
 

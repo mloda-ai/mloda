@@ -360,6 +360,16 @@ class TestDuckdbRelation(RelationTestMixin):
         assert result.columns[: len(original_columns)] == original_columns
         assert result.columns[-1] == "rn"
 
+    def test_with_row_number_partition_by_keyword_only(self, sample_relation: "DuckdbRelation") -> None:
+        """partition_by must be keyword-only to match the sibling window() API."""
+        with pytest.raises(TypeError):
+            sample_relation.with_row_number("rn", ("category",))  # type: ignore[misc]
+
+    def test_with_row_number_order_by_keyword_only(self, sample_relation: "DuckdbRelation") -> None:
+        """order_by must be keyword-only to match the sibling window() API."""
+        with pytest.raises(TypeError):
+            sample_relation.with_row_number("rn", (), ("age",))  # type: ignore[misc]
+
     # --- append_column: helper-name collision (issue #405 subtask 2) ---
 
     def test_append_column_when_existing_column_named_mloda_rn_zero(self, connection: Any) -> None:

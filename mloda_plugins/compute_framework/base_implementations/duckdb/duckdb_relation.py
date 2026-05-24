@@ -307,22 +307,19 @@ class DuckdbRelation:
     def with_row_number(
         self,
         alias: str,
+        *,
         partition_by: Sequence[str] = (),
         order_by: Sequence[str | OrderBy] = (),
     ) -> "DuckdbRelation":
         """Append a ROW_NUMBER() window column named ``alias``.
 
-        All identifiers are quoted via ``quote_ident``; safe to pass column names verbatim.
+        All identifiers in ``partition_by`` / ``order_by`` and the ``alias`` are quoted
+        via ``quote_ident``. Raises ``ValueError`` if ``alias`` collides with an existing column.
         """
         if alias in self.columns:
             raise ValueError(f"Column {alias!r} already exists in the relation")
-        clauses: list[str] = []
-        if partition_by:
-            clauses.append("PARTITION BY " + ", ".join(quote_ident(c) for c in partition_by))
-        if order_by:
-            clauses.append("ORDER BY " + ", ".join(_render_order_by_item(c) for c in order_by))
-        over = " ".join(clauses)
-        return self.project(f"*, ROW_NUMBER() OVER ({over}) AS {quote_ident(alias)}")
+        over_sql = _render_over_clause(partition_by, order_by, None)
+        return self.project(f"*, ROW_NUMBER() OVER ({over_sql}) AS {quote_ident(alias)}")
 
     def window(
         self,

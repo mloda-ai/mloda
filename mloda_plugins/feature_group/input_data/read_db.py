@@ -90,6 +90,8 @@ class ReadDB(BaseInputData):
 
         if isinstance(data_access, DataAccessCollection):
             hint = options.get("data_access_handle") if options is not None else None
+            if hint is not None and data_access.handles().get(hint) not in (None, "credentials"):
+                hint = None
             creds = data_access.resolve("credentials", hint=hint)
             if creds:
                 data_accesses.append(creds)

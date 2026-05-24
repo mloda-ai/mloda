@@ -122,6 +122,14 @@ class ReadFile(BaseInputData):
                 if pinned is not None:
                     return pinned
             hint = options.get("data_access_handle")
+            if hint is not None:
+                handle_kind = data_access.handles().get(hint)
+                if handle_kind not in (None, "file"):
+                    hint = None
+                elif handle_kind == "file" and not cls._file_matches(
+                    data_access.files[hint], feature_names, document_suffixes
+                ):
+                    hint = None
             file_match = data_access.resolve(
                 "file",
                 predicate=lambda p: cls._file_matches(p, feature_names, document_suffixes),

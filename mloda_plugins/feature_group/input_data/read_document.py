@@ -75,6 +75,14 @@ class ReadDocument(BaseInputData):
                     return pinned
             document_suffixes = options.get("document_suffixes") or frozenset()
             hint = options.get("data_access_handle")
+            if hint is not None:
+                handle_kind = data_access.handles().get(hint)
+                if handle_kind not in (None, "file"):
+                    hint = None
+                elif handle_kind == "file" and not cls._document_file_matches(
+                    data_access.files[hint], document_suffixes
+                ):
+                    hint = None
             file_match = data_access.resolve(
                 "file",
                 predicate=lambda p: cls._document_file_matches(p, document_suffixes),

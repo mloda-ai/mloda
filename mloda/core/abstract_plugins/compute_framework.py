@@ -178,6 +178,12 @@ class ComputeFramework(ABC):
         if data_access_collection is None:
             return None
         hint = options.get("data_access_handle") if options is not None else None
+        if hint is not None:
+            handle_kind = data_access_collection.handles().get(hint)
+            if handle_kind not in (None, "connection"):
+                hint = None
+            elif handle_kind == "connection" and not cls._connection_matches(data_access_collection.connections[hint]):
+                hint = None
         return data_access_collection.resolve("connection", predicate=cls._connection_matches, hint=hint)
 
     @final

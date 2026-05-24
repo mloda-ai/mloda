@@ -7,7 +7,7 @@ from typing import Any, Optional
 
 import pyarrow as pa
 
-from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
+from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import pick_helper_column_name, quote_ident
 
 
 # Python 3.12 deprecated the built-in sqlite3 datetime adapters; explicit ISO-format
@@ -458,10 +458,12 @@ class SqliteRelation:
 
     def append_column(self, name: str, values: list[Any]) -> "SqliteRelation":
         """Return a new relation with an additional column appended positionally."""
+        if name in self.columns:
+            raise ValueError(f"Column {name!r} already exists in the relation")
         current_types = self._types_for_current_columns()
         new_col_rel = SqliteRelation.from_dict(self._connection, {name: values})
         new_col_types = new_col_rel._types_for_current_columns()
-        rn = "__mloda_rn__"
+        rn = pick_helper_column_name(taken=set(self.columns) | {name})
         qrn = quote_ident(rn)
         left_name = _next_table_name()
         right_name = _next_table_name()

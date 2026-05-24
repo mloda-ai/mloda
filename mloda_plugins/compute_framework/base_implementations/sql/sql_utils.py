@@ -41,6 +41,14 @@ def quote_value(value: Any) -> str:
     raise TypeError(f"Unsupported type for SQL literal: {type(value).__name__}")
 
 
+def pick_helper_column_name(taken: set[str], prefix: str = "__mloda_rn") -> str:
+    """Return the lowest ``{prefix}{n}__`` name not present in ``taken``."""
+    n = 0
+    while f"{prefix}{n}__" in taken:
+        n += 1
+    return f"{prefix}{n}__"
+
+
 def inline_params(condition: str, params: tuple[Any, ...]) -> str:
     """Replace ``?`` placeholders with ``quote_value`` output.
 

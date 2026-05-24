@@ -252,6 +252,36 @@ class TestSqliteRelation(RelationTestMixin):
             "idx_values": [1, right_only_idx],
         }
 
+    def test_append_column_when_existing_column_named_mloda_rn_legacy(
+        self, connection: sqlite3.Connection
+    ) -> None:
+        """Helper picker must not collide with a pre-existing __mloda_rn__ column (the OLD hardcoded name)."""
+        rel = SqliteRelation.from_dict(connection, {"__mloda_rn__": ["x", "y", "z"], "b": [4, 5, 6]})
+        result = rel.append_column("c", [7, 8, 9])
+        assert set(result.columns) == {"__mloda_rn__", "b", "c"}
+        arrow = result.to_arrow_table()
+        assert arrow.column("__mloda_rn__").to_pylist() == ["x", "y", "z"]
+        assert arrow.column("b").to_pylist() == [4, 5, 6]
+        assert arrow.column("c").to_pylist() == [7, 8, 9]
+
+    def test_append_column_when_existing_column_named_mloda_rn_zero(
+        self, connection: sqlite3.Connection
+    ) -> None:
+        """Helper picker must skip __mloda_rn0__ if already present and use a free __mloda_rn{n}__ name."""
+        rel = SqliteRelation.from_dict(connection, {"__mloda_rn0__": [1, 2, 3], "b": [4, 5, 6]})
+        result = rel.append_column("c", [7, 8, 9])
+        assert set(result.columns) == {"__mloda_rn0__", "b", "c"}
+        arrow = result.to_arrow_table()
+        assert arrow.column("__mloda_rn0__").to_pylist() == [1, 2, 3]
+        assert arrow.column("b").to_pylist() == [4, 5, 6]
+        assert arrow.column("c").to_pylist() == [7, 8, 9]
+
+    def test_append_column_raises_when_name_already_exists(self, connection: sqlite3.Connection) -> None:
+        """append_column must reject ``name`` colliding with an existing column instead of silently corrupting the schema."""
+        rel = SqliteRelation.from_dict(connection, {"a": [1, 2, 3], "b": [4, 5, 6]})
+        with pytest.raises(ValueError, match="b"):
+            rel.append_column("b", [10, 20, 30])
+
     def test_join_with_sql_injection_alias(self, connection: sqlite3.Connection) -> None:
         """A crafted alias must not be interpreted as SQL."""
         left = SqliteRelation.from_dict(connection, {"idx": [1, 2], "val": ["a", "b"]})

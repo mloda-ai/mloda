@@ -128,7 +128,7 @@ class TestJsonDocumentReaderClassMethods:
         """match_subclass_data_access resolves file path from DataAccessCollection by suffix."""
         from mloda.user import DataAccessCollection
 
-        dac = DataAccessCollection(files={"f1": "some_path.json"})
+        dac = DataAccessCollection(files={"some_path.json"})
         options = Options({"document_suffixes": frozenset({".json"})})
         result = JsonDocumentReader.match_subclass_data_access(dac, ["feature1"], options=options)
         assert result == "some_path.json"

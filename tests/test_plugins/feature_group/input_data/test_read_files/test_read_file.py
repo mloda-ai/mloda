@@ -96,7 +96,7 @@ class TestInputData:
         result = mloda.run_all(
             self.feature_list,  # type: ignore
             compute_frameworks=["PyArrowTable"],
-            data_access_collection=DataAccessCollection(files={"f1": self.file_path}),
+            data_access_collection=DataAccessCollection(files={self.file_path}),
         )
         assert "V2" in result[0].to_pydict()
 
@@ -134,7 +134,7 @@ class TestInputData:
         result = mloda.run_all(
             features,
             compute_frameworks=["PyArrowTable"],
-            data_access_collection=DataAccessCollection(files={"f1": self.file_path}),
+            data_access_collection=DataAccessCollection(files={self.file_path}),
         )
         assert "V2" in result[0].to_pydict()
         for k, v in result[0].to_pydict().items():
@@ -290,7 +290,7 @@ class TestReadFile:
             def suffix(cls) -> tuple[str, ...]:
                 return (".csv",)
 
-        data_access = DataAccessCollection(files={"f1": "dummy.csv"})
+        data_access = DataAccessCollection(files={"dummy.csv"})
         feature_names = ["id", "V1"]
         assert TestReadFile.match_subclass_data_access(data_access, feature_names, options=Options({})) == "dummy.csv"
 

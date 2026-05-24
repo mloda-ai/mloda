@@ -143,6 +143,6 @@ class TestMatchSubclassDataAccess:
         """TextFileReader resolves file path from DataAccessCollection by suffix."""
         from mloda.user import DataAccessCollection, Options
 
-        dac = DataAccessCollection(files={"f1": "some_path.text"})
+        dac = DataAccessCollection(files={"some_path.text"})
         result = TextFileReader.match_subclass_data_access(dac, ["TextFileReader"], options=Options({}))
         assert result == "some_path.text"

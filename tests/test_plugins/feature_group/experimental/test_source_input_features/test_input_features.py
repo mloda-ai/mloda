@@ -178,7 +178,7 @@ class TestInputFeatures:
     def test_input_feature_global_scope(self) -> None:
         file_path = Path(__file__).resolve().parent
         file_path = file_path.joinpath("example.csv")
-        data_access_collection = DataAccessCollection(files={"f1": str(file_path)})
+        data_access_collection = DataAccessCollection(files={str(file_path)})
 
         feature_list: list[Feature | str] = []
         feature_list.append(
@@ -205,7 +205,7 @@ class TestInputFeatures:
     def test_input_feature_all(self) -> None:
         file_path = Path(__file__).resolve().parent
         other_path = file_path.joinpath("example.csv")
-        data_access_collection = DataAccessCollection(files={"other": str(other_path)})
+        data_access_collection = DataAccessCollection(files={str(other_path)})
         # global scope
         feature_list: list[Feature | str] = []
         feature_list.append(
@@ -275,7 +275,7 @@ class TestInputFeatures:
 
         file_path = Path(__file__).resolve().parent
         file_path = file_path.joinpath("example.csv")
-        data_access_collection = DataAccessCollection(files={"f1": str(file_path)})
+        data_access_collection = DataAccessCollection(files={str(file_path)})
 
         # global scope, feature
         feature_list: list[Feature | str] = []
@@ -330,7 +330,7 @@ class TestInputFeatures:
 
         file_path = Path(__file__).resolve().parent
         file_path = file_path.joinpath("example.csv")
-        data_access_collection = DataAccessCollection(files={"f1": str(file_path)})
+        data_access_collection = DataAccessCollection(files={str(file_path)})
 
         # global scope, feature
         feature_list: list[Feature | str] = []

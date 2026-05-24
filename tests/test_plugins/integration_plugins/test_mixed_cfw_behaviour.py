@@ -96,7 +96,7 @@ class TestMixComputeFramework:
         result_data = mloda.run_all(
             [feature],
             links=links,
-            data_access_collection=DataAccessCollection(files={"f1": self.file_path}),
+            data_access_collection=DataAccessCollection(files={self.file_path}),
             parallelization_modes=modes,
             flight_server=flight_server,
             plugin_collector=PluginCollector.enabled_feature_groups({MixedCfwFeature, ReadFileFeature}),
@@ -146,7 +146,7 @@ class TestMixComputeFramework:
         result_data = mloda.run_all(
             [feature],
             links=links,
-            data_access_collection=DataAccessCollection(files={"f1": self.file_path}),
+            data_access_collection=DataAccessCollection(files={self.file_path}),
             parallelization_modes=modes,
             flight_server=flight_server,
             plugin_collector=PluginCollector.enabled_feature_groups({DuplicateFeatureSetup, ReadFileFeature}),

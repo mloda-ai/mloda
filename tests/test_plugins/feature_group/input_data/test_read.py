@@ -109,7 +109,7 @@ class TestTwoReader:
             mloda.run_all(
                 feature_list,  # type: ignore
                 compute_frameworks=["PyArrowTable"],
-                data_access_collection=DataAccessCollection(files={"f1": self.file_path}),
+                data_access_collection=DataAccessCollection(files={self.file_path}),
             )
         assert "BaseInputData already set with different values" in str(excinfo.value)
 

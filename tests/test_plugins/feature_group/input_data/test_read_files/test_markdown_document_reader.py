@@ -138,6 +138,6 @@ class TestMarkdownDocumentReaderClassMethods:
         """match_subclass_data_access resolves file path from DataAccessCollection by suffix."""
         from mloda.user import DataAccessCollection, Options
 
-        dac = DataAccessCollection(files={"f1": "readme.md"})
+        dac = DataAccessCollection(files={"readme.md"})
         result = MarkdownDocumentReader.match_subclass_data_access(dac, ["feature1"], options=Options({}))
         assert result == "readme.md"

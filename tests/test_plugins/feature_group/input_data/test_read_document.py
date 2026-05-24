@@ -27,7 +27,7 @@ class TestReadDocumentInheritance:
 
 class TestReadDocumentMatchSubclass:
     def test_match_subclass_data_access_returns_none_with_data_access_collection(self) -> None:
-        data_access = DataAccessCollection(files={"f1": "doc.json"})
+        data_access = DataAccessCollection(files={"doc.json"})
         result = ReadDocument.match_subclass_data_access(data_access, ["content"], options=Options({}))
         assert result is None
 

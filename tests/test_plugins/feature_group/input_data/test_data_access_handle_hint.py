@@ -109,6 +109,13 @@ class TestReadFileHint:
         resolved = _CsvLikeReader.match_subclass_data_access(dac, feature_names=["id"], options=Options())
         assert resolved == path_a
 
+    def test_single_file_set_form_no_handle_needed(self, two_csv_files: tuple[str, str]) -> None:
+        """Bare set form with a single file resolves cleanly without a hint."""
+        path_a, _ = two_csv_files
+        dac = DataAccessCollection(files={path_a})
+        resolved = _CsvLikeReader.match_subclass_data_access(dac, feature_names=["id"], options=Options())
+        assert resolved == path_a
+
 
 # ----------------------------------------------------------------------------
 # ReadDocument: multi-file ambiguity raises, data_access_handle disambiguates
@@ -188,6 +195,14 @@ class TestReadDBHint:
     def test_single_credentials_no_hint_resolves(self, two_sqlite_dbs: tuple[Path, Path]) -> None:
         db_a, _ = two_sqlite_dbs
         dac = DataAccessCollection(credentials={"warehouse": {"db_path": str(db_a)}})
+        resolved = _AlwaysValidCredsDB.match_subclass_data_access(dac, feature_names=["any"], options=Options())
+        assert isinstance(resolved, dict)
+        assert resolved.get("db_path") == str(db_a)
+
+    def test_single_credentials_list_form_no_handle_needed(self, two_sqlite_dbs: tuple[Path, Path]) -> None:
+        """Bare list form with a single credentials entry resolves without a hint."""
+        db_a, _ = two_sqlite_dbs
+        dac = DataAccessCollection(credentials=[{"db_path": str(db_a)}])
         resolved = _AlwaysValidCredsDB.match_subclass_data_access(dac, feature_names=["any"], options=Options())
         assert isinstance(resolved, dict)
         assert resolved.get("db_path") == str(db_a)

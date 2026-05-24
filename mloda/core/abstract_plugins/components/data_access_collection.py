@@ -1,4 +1,4 @@
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 
 _KIND_TO_ATTR: dict[str, str] = {
@@ -20,27 +20,76 @@ class DataAccessCollection:
 
     def __init__(
         self,
-        connections: Optional[dict[str, Any]] = None,
-        files: Optional[dict[str, str]] = None,
-        folders: Optional[dict[str, str]] = None,
-        credentials: Optional[dict[str, Any]] = None,
-        column_to_file: Optional[dict[str, str]] = None,
+        connections: dict[str, Any] | set[Any] | list[Any] | None = None,
+        files: dict[str, str] | set[str] | list[str] | None = None,
+        folders: dict[str, str] | set[str] | list[str] | None = None,
+        credentials: dict[str, Any] | list[Any] | None = None,
+        column_to_file: dict[str, str] | None = None,
     ) -> None:
-        self.connections: dict[str, Any] = dict(connections) if connections is not None else {}
-        self.files: dict[str, str] = dict(files) if files is not None else {}
-        self.folders: dict[str, str] = dict(folders) if folders is not None else {}
-        self.credentials: dict[str, Any] = dict(credentials) if credentials is not None else {}
+        self._auto_handles: set[str] = set()
+
+        # Start with user-supplied dict entries; collect non-dict inputs for a second pass
+        # so that auto-handle numbering can dodge every user-supplied handle (across all kinds).
+        self.connections: dict[str, Any] = self._copy_if_dict(connections)
+        self.files: dict[str, str] = self._copy_if_dict(files)
+        self.folders: dict[str, str] = self._copy_if_dict(folders)
+        self.credentials: dict[str, Any] = self._copy_if_dict(credentials)
 
         self._check_cross_kind_handle_uniqueness()
 
-        if column_to_file is not None:
-            for col, handle in column_to_file.items():
-                if handle not in self.files:
-                    raise ValueError(
-                        f"column_to_file value '{handle}' for column '{col}' is not a file handle. "
-                        f"Available file handles: {sorted(self.files.keys())}"
-                    )
-        self.column_to_file: Optional[dict[str, str]] = column_to_file
+        self._assign_auto_handles("connection", self.connections, connections)
+        self._assign_auto_handles("file", self.files, files)
+        self._assign_auto_handles("folder", self.folders, folders)
+        self._assign_auto_handles("credentials", self.credentials, credentials)
+
+        self.column_to_file: dict[str, str] | None = self._normalize_column_to_file(column_to_file)
+
+    @staticmethod
+    def _copy_if_dict(value: Any) -> dict[str, Any]:
+        if isinstance(value, dict):
+            return dict(value)
+        return {}
+
+    def _assign_auto_handles(self, kind: str, registry: dict[str, Any], raw: Any) -> None:
+        if raw is None or isinstance(raw, dict):
+            return
+        counter = 0
+        for entry in raw:
+            handle = f"_auto_{kind}_{counter}"
+            while self._handle_taken(handle):
+                counter += 1
+                handle = f"_auto_{kind}_{counter}"
+            registry[handle] = entry
+            self._auto_handles.add(handle)
+            counter += 1
+
+    def _handle_taken(self, handle: str) -> bool:
+        for attr in _KIND_TO_ATTR.values():
+            registry: dict[str, Any] = getattr(self, attr)
+            if handle in registry:
+                return True
+        return False
+
+    def _normalize_column_to_file(self, column_to_file: dict[str, str] | None) -> dict[str, str] | None:
+        if column_to_file is None:
+            return None
+        path_to_handle: dict[str, str] = {}
+        for handle, path in self.files.items():
+            if path not in path_to_handle:
+                path_to_handle[path] = handle
+        normalized: dict[str, str] = {}
+        for col, value in column_to_file.items():
+            if value in self.files:
+                normalized[col] = value
+            elif value in path_to_handle:
+                normalized[col] = path_to_handle[value]
+            else:
+                raise ValueError(
+                    f"column_to_file value '{value}' for column '{col}' is not a known file handle or path. "
+                    f"Available file handles: {sorted(self.files.keys())}. "
+                    f"Available file paths: {sorted(self.files.values())}."
+                )
+        return normalized
 
     def _check_cross_kind_handle_uniqueness(self) -> None:
         seen: dict[str, str] = {}
@@ -88,8 +137,8 @@ class DataAccessCollection:
     def resolve(
         self,
         kind: str,
-        predicate: Optional[Callable[[Any], bool]] = None,
-        hint: Optional[str] = None,
+        predicate: Callable[[Any], bool] | None = None,
+        hint: str | None = None,
     ) -> Any:
         """Resolve a single resource of ``kind``, optionally narrowed by ``predicate``.
 
@@ -134,7 +183,17 @@ class DataAccessCollection:
             return None
         if len(matches) == 1:
             return matches[0][1]
+
         candidate_handles = [h for h, _ in matches]
+        all_auto = all(h in self._auto_handles for h in candidate_handles)
+        if all_auto:
+            bullets = "\n".join(f"  - {v}" for _, v in matches)
+            raise ValueError(
+                f"Ambiguous resolve for kind '{kind}': {len(matches)} matches:\n"
+                f"{bullets}\n"
+                f"Name them and set Options(data_access_handle=...) to pick one, "
+                f"or remove one from the collection."
+            )
         raise ValueError(
             f"Ambiguous resolve for kind '{kind}': {len(matches)} candidates {candidate_handles}; "
             f"set 'data_access_handle' in Options to disambiguate."

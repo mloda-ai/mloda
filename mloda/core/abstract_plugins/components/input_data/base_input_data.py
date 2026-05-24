@@ -169,7 +169,7 @@ class BaseInputData(ABC):
         try:
             cls.suffix()  # type: ignore[attr-defined]
             return True
-        except NotImplementedError:
+        except (NotImplementedError, AttributeError):
             return False
 
     @classmethod

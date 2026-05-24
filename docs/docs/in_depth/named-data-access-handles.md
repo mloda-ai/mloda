@@ -49,6 +49,25 @@ assert dac.handles() == {
 }
 ```
 
+## Naming is optional
+
+You only need to name resources when there are multiple sources of the same kind that the resolver cannot tell apart. In the simple single-source case, pass a set or list of bare values:
+
+``` py
+DataAccessCollection(files={"/data/tx.parquet"})              # set
+DataAccessCollection(files=["/data/tx.parquet"])              # list
+DataAccessCollection(connections={duckdb_conn})               # set
+DataAccessCollection(folders={"/data/raw"})                   # set
+DataAccessCollection(credentials=[{"host": "h"}])             # list (dicts are unhashable)
+```
+
+Unnamed entries get internal auto-handles (`_auto_file_0`, `_auto_connection_0`, etc.). You will never need to reference these — they exist only so the resolver still has a unique key per entry. If you later hit ambiguity, the error message will tell you to switch to the named form and pick a `data_access_handle`.
+
+Naming is only required when:
+
+- Two or more resources of the same kind match the same consumer (then you must set `data_access_handle` to pick one), or
+- You use `column_to_file` and prefer to reference files by name rather than path (both work — see below).
+
 ## Resolution rule
 
 When a feature group asks the DAC for a resource of a given kind, the resolver applies one rule:
@@ -122,7 +141,7 @@ dac.handles()
 
 ## Interaction with `column_to_file`
 
-`column_to_file` is a file-specific override that takes precedence over the resolver. Its values are **file handles** (keys of the `files` dict), not paths:
+`column_to_file` is a file-specific override that takes precedence over the resolver. Its values may be either a **file handle** (key of the `files` dict) or a **file path** (value of the `files` dict); both are accepted and normalized to handles internally:
 
 ``` py
 DataAccessCollection(

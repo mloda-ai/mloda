@@ -148,7 +148,7 @@ class TestFolderTraversal:
             f.write("{}")
 
         try:
-            dac = DataAccessCollection(folders={"d1": tmp_dir})
+            dac = DataAccessCollection(folders={tmp_dir})
             options = Options()
             result = StubJsonDocReader.match_subclass_data_access(dac, ["content"], options=options)
             assert result is None
@@ -163,7 +163,7 @@ class TestFolderTraversal:
             f.write("{}")
 
         try:
-            dac = DataAccessCollection(folders={"d1": tmp_dir})
+            dac = DataAccessCollection(folders={tmp_dir})
             options = Options({"document_suffixes": frozenset({".json"})})
             result = StubJsonDocReader.match_subclass_data_access(dac, ["content"], options=options)
             assert result == json_path

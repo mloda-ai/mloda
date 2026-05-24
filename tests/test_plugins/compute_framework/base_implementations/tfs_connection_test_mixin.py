@@ -44,15 +44,15 @@ class TfsConnectionInitMixin:
         assert framework_class.pick_connection_from_dac(dac) is None
 
     def test_returns_none_with_wrong_type(self, framework_class: Any) -> None:
-        dac = DataAccessCollection(connections={"wrong": self.wrong_type_connection()})
+        dac = DataAccessCollection(connections={self.wrong_type_connection()})
         assert framework_class.pick_connection_from_dac(dac) is None
 
     def test_returns_matching_connection(self, framework_class: Any, valid_connection: Any) -> None:
-        dac = DataAccessCollection(connections={"primary": valid_connection})
+        dac = DataAccessCollection(connections={valid_connection})
         assert framework_class.pick_connection_from_dac(dac) is valid_connection
 
     def test_classmethod_is_pure(self, framework_class: Any, valid_connection: Any) -> None:
-        dac = DataAccessCollection(connections={"primary": valid_connection})
+        dac = DataAccessCollection(connections={valid_connection})
         first = framework_class.pick_connection_from_dac(dac)
         second = framework_class.pick_connection_from_dac(dac)
         assert first is valid_connection
@@ -62,7 +62,7 @@ class TfsConnectionInitMixin:
         self, framework_class: Any, valid_connection: Any, second_valid_connection: Any
     ) -> None:
         assert valid_connection is not second_valid_connection
-        dac = DataAccessCollection(connections={"primary": valid_connection, "secondary": second_valid_connection})
+        dac = DataAccessCollection(connections={valid_connection, second_valid_connection})
         with pytest.raises(ValueError, match="Ambiguous resolve"):
             framework_class.pick_connection_from_dac(dac)
 

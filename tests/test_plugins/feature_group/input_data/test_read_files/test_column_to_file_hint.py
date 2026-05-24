@@ -23,7 +23,7 @@ class TestColumnToFileHint:
             def suffix(cls) -> tuple[str, ...]:
                 return (".csv",)
 
-        dac = DataAccessCollection(files={"a": "a.csv", "b": "b.csv"}, column_to_file={"id": "a", "val": "a"})
+        dac = DataAccessCollection(files={"a.csv", "b.csv"}, column_to_file={"id": "a.csv", "val": "a.csv"})
         result = TestRF.match_subclass_data_access(dac, ["id", "val"], options=Options({}))
         assert result == "a.csv"
 
@@ -69,7 +69,7 @@ class TestColumnToFileHint:
             def suffix(cls) -> tuple[str, ...]:
                 return (".csv",)
 
-        dac = DataAccessCollection(files={"a": "a.csv"})
+        dac = DataAccessCollection(files={"a.csv"})
         result = TestRF.match_subclass_data_access(dac, ["id"], options=Options({}))
         assert result == "a.csv"
 
@@ -84,8 +84,8 @@ class TestColumnToFileHint:
                 return (".csv",)
 
         dac = DataAccessCollection(
-            files={"a": "a.csv", "b": "b.csv"},
-            column_to_file={"id": "a", "val": "b"},
+            files={"a.csv", "b.csv"},
+            column_to_file={"id": "a.csv", "val": "b.csv"},
         )
         with pytest.raises(ValueError):
             TestRF.match_subclass_data_access(dac, ["id", "val"], options=Options({}))
@@ -101,8 +101,8 @@ class TestColumnToFileHint:
                 return (".csv",)
 
         dac = DataAccessCollection(
-            files={"a": "a.csv", "b": "b.csv"},
-            column_to_file={"id": "a"},
+            files={"a.csv", "b.csv"},
+            column_to_file={"id": "a.csv"},
         )
         with pytest.raises(ValueError):
             TestRF.match_subclass_data_access(dac, ["id", "unpinned_col"], options=Options({}))
@@ -119,15 +119,15 @@ class TestColumnToFileHint:
 
         # column_to_file points to parquet files, but this reader only handles .csv
         dac = DataAccessCollection(
-            files={"a": "a.parquet", "b": "b.parquet"},
-            column_to_file={"id": "a", "val": "a"},
+            files={"a.parquet", "b.parquet"},
+            column_to_file={"id": "a.parquet", "val": "a.parquet"},
         )
         result = TestRFCsv.match_subclass_data_access(dac, ["id", "val"], options=Options({}))
         assert result is None
 
     def test_construction_rejects_unknown_file(self) -> None:
         with pytest.raises(ValueError):
-            DataAccessCollection(files={"a": "a.csv"}, column_to_file={"col": "b"})
+            DataAccessCollection(files={"a.csv"}, column_to_file={"col": "b"})
 
     def test_integration_two_csvs_sharing_id_column(self) -> None:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, newline="") as f1:
@@ -146,11 +146,11 @@ class TestColumnToFileHint:
 
         try:
             dac = DataAccessCollection(
-                files={"train": train_path, "bureau": bureau_path},
+                files={train_path, bureau_path},
                 column_to_file={
-                    "id": "train",
-                    "target": "train",
-                    "amount": "bureau",
+                    "id": train_path,
+                    "target": train_path,
+                    "amount": bureau_path,
                 },
             )
 
@@ -176,8 +176,8 @@ class TestColumnToFileHintReadDocument:
                 return None
 
         dac = DataAccessCollection(
-            files={"a": "a.txt", "b": "b.txt"},
-            column_to_file={"feature_a": "a"},
+            files={"a.txt", "b.txt"},
+            column_to_file={"feature_a": "a.txt"},
         )
         result = TestRD.match_subclass_data_access(dac, ["feature_a"], options=Options({}))
         assert result == "a.txt"
@@ -192,7 +192,7 @@ class TestColumnToFileHintReadDocument:
             def load_data(cls, data_access: Any, features: Any) -> Any:
                 return None
 
-        dac = DataAccessCollection(files={"a": "a.txt", "b": "b.txt"})
+        dac = DataAccessCollection(files={"a.txt", "b.txt"})
         with pytest.raises(ValueError) as excinfo:
             TestRD.match_subclass_data_access(dac, ["any_feature"], options=Options({}))
         assert "data_access_handle" in str(excinfo.value)
@@ -224,8 +224,8 @@ class TestColumnToFileHintReadDocument:
                 return None
 
         dac = DataAccessCollection(
-            files={"a": "a.txt", "b": "b.txt"},
-            column_to_file={"feature_a": "a"},
+            files={"a.txt", "b.txt"},
+            column_to_file={"feature_a": "a.txt"},
         )
         with pytest.raises(ValueError):
             TestRD.match_subclass_data_access(dac, ["feature_a", "unpinned"], options=Options({}))
@@ -244,7 +244,7 @@ class TestColumnToFileHintReadDocument:
         try:
             with tempfile.NamedTemporaryFile(suffix=".txt", dir=tmp_dir, delete=False) as f:
                 _ = f.name
-            dac = DataAccessCollection(folders={"d1": tmp_dir})
+            dac = DataAccessCollection(folders={tmp_dir})
             result = TestRD.match_subclass_data_access(dac, ["any_feature"], options=Options({}))
             assert result is not None
             assert result.endswith(".txt")

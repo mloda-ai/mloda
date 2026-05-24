@@ -105,7 +105,7 @@ class TestInputData:
         result = mloda.run_all(
             self.feature_list,  # type: ignore
             compute_frameworks=["PyArrowTable"],
-            data_access_collection=DataAccessCollection(folders={"d1": file_path}),
+            data_access_collection=DataAccessCollection(folders={file_path}),
         )
         assert "V2" in result[0].to_pydict()
 
@@ -169,7 +169,7 @@ class TestInputData:
         result = mloda.run_all(
             [f],
             compute_frameworks=["PyArrowTable"],
-            data_access_collection=DataAccessCollection(folders={"d1": file_path}),
+            data_access_collection=DataAccessCollection(folders={file_path}),
         )
         assert "SumFeature_V1V2" in result[0].to_pydict()
         for k, v in result[0].to_pydict().items():

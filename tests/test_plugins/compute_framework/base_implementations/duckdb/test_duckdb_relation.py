@@ -595,3 +595,48 @@ class TestDuckdbRelation(RelationTestMixin):
     def test_following_offset_int_accepted(self) -> None:
         """Following(offset=2) must construct cleanly."""
         Following(offset=2)
+
+    def test_preceding_offset_negative_raises(self) -> None:
+        """Preceding must reject a negative offset; SQL n PRECEDING requires n >= 0."""
+        with pytest.raises(ValueError, match="offset|negative"):
+            Preceding(offset=-1)
+
+    def test_following_offset_negative_raises(self) -> None:
+        """Following must reject a negative offset; SQL n FOLLOWING requires n >= 0."""
+        with pytest.raises(ValueError, match="offset|negative"):
+            Following(offset=-1)
+
+    def test_preceding_offset_zero_accepted(self) -> None:
+        """Preceding(offset=0) must construct cleanly; 0 PRECEDING is valid SQL equivalent to CURRENT ROW."""
+        Preceding(offset=0)
+
+    def test_following_offset_zero_accepted(self) -> None:
+        """Following(offset=0) must construct cleanly; 0 FOLLOWING is valid SQL equivalent to CURRENT ROW."""
+        Following(offset=0)
+
+    def test_window_frame_following_then_preceding_raises(self) -> None:
+        """WindowFrame must reject start=Following(2), end=Preceding(1); start must not be after end on the row axis."""
+        with pytest.raises(ValueError, match="start|end|order"):
+            WindowFrame(kind="rows", start=Following(2), end=Preceding(1))
+
+    def test_window_frame_preceding_descending_raises(self) -> None:
+        """WindowFrame must reject Preceding(1) -> Preceding(3); -1 > -3 on the row axis."""
+        with pytest.raises(ValueError, match="start|end|order"):
+            WindowFrame(kind="rows", start=Preceding(1), end=Preceding(3))
+
+    def test_window_frame_following_descending_raises(self) -> None:
+        """WindowFrame must reject Following(3) -> Following(1); 3 > 1 on the row axis."""
+        with pytest.raises(ValueError, match="start|end|order"):
+            WindowFrame(kind="rows", start=Following(3), end=Following(1))
+
+    def test_window_frame_current_row_to_current_row_accepted(self) -> None:
+        """WindowFrame(CurrentRow, CurrentRow) must construct cleanly; equality on the row axis is allowed."""
+        WindowFrame(kind="rows", start=CurrentRow(), end=CurrentRow())
+
+    def test_window_frame_unbounded_both_sides_accepted(self) -> None:
+        """WindowFrame(Unbounded, Unbounded) must construct cleanly; -inf < +inf."""
+        WindowFrame(kind="rows", start=Unbounded(), end=Unbounded())
+
+    def test_window_frame_preceding_to_following_accepted(self) -> None:
+        """WindowFrame(Preceding(2), Following(3)) must construct cleanly; -2 < 3."""
+        WindowFrame(kind="rows", start=Preceding(2), end=Following(3))

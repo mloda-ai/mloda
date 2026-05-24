@@ -41,6 +41,8 @@ class Preceding:
     def __post_init__(self) -> None:
         if isinstance(self.offset, bool) or not isinstance(self.offset, int):
             raise TypeError(f"Preceding offset must be int; got {type(self.offset).__name__}")
+        if self.offset < 0:
+            raise ValueError(f"Preceding offset must be >= 0; got {self.offset}")
 
 
 @dataclass(frozen=True)
@@ -52,6 +54,8 @@ class Following:
     def __post_init__(self) -> None:
         if isinstance(self.offset, bool) or not isinstance(self.offset, int):
             raise TypeError(f"Following offset must be int; got {type(self.offset).__name__}")
+        if self.offset < 0:
+            raise ValueError(f"Following offset must be >= 0; got {self.offset}")
 
 
 FrameBound = CurrentRow | Unbounded | Preceding | Following
@@ -68,6 +72,8 @@ class WindowFrame:
     def __post_init__(self) -> None:
         if self.kind not in ("rows", "range", "groups"):
             raise ValueError(f"WindowFrame kind must be one of 'rows', 'range', 'groups'; got {self.kind!r}")
+        if _bound_rank(self.start, "start") > _bound_rank(self.end, "end"):
+            raise ValueError(f"WindowFrame start must not come after end; got start={self.start!r}, end={self.end!r}")
 
 
 def _render_frame_bound(bound: FrameBound, side: Literal["start", "end"]) -> str:
@@ -80,6 +86,18 @@ def _render_frame_bound(bound: FrameBound, side: Literal["start", "end"]) -> str
         return f"{bound.offset} PRECEDING"
     if isinstance(bound, Following):
         return f"{bound.offset} FOLLOWING"
+    raise TypeError(f"Unsupported frame bound: {type(bound).__name__}")
+
+
+def _bound_rank(bound: FrameBound, side: Literal["start", "end"]) -> float:
+    if isinstance(bound, Unbounded):
+        return float("-inf") if side == "start" else float("inf")
+    if isinstance(bound, Preceding):
+        return -bound.offset
+    if isinstance(bound, CurrentRow):
+        return 0.0
+    if isinstance(bound, Following):
+        return float(bound.offset)
     raise TypeError(f"Unsupported frame bound: {type(bound).__name__}")
 
 

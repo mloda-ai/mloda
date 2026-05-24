@@ -402,6 +402,24 @@ class TestDuckdbRelation(RelationTestMixin):
         assert arrow.column("x").to_pylist() == [5, 6]
         assert arrow.column("y").to_pylist() == [7, 8]
 
+    # --- append_column / with_row_number / window: alias collision with existing column ---
+
+    def test_append_column_raises_when_name_already_exists(self, connection: Any) -> None:
+        """append_column must reject ``name`` colliding with an existing column instead of silently corrupting the schema."""
+        rel = DuckdbRelation.from_dict(connection, {"a": [1, 2, 3], "b": [4, 5, 6]})
+        with pytest.raises(ValueError, match="b"):
+            rel.append_column("b", [10, 20, 30])
+
+    def test_with_row_number_raises_when_alias_already_exists(self, sample_relation: "DuckdbRelation") -> None:
+        """with_row_number must reject an alias colliding with an existing column instead of producing a duplicated name."""
+        with pytest.raises(ValueError, match="category"):
+            sample_relation.with_row_number("category")
+
+    def test_window_raises_when_alias_already_exists(self, sample_relation: "DuckdbRelation") -> None:
+        """window must reject an alias colliding with an existing column instead of producing a duplicated name."""
+        with pytest.raises(ValueError, match="age"):
+            sample_relation.window("COUNT(*)", "age")
+
     # --- window() ---
 
     def test_window_partition_only(self, sample_relation: "DuckdbRelation") -> None:

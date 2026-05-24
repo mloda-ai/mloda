@@ -15,7 +15,11 @@ try:
 except ImportError:
     pa = None  # type: ignore[assignment]
 
-from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import inline_params, quote_ident
+from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
+    inline_params,
+    pick_helper_column_name,
+    quote_ident,
+)
 
 
 @dataclass(frozen=True)
@@ -264,6 +268,8 @@ class DuckdbRelation:
 
         All identifiers are quoted via ``quote_ident``; safe to pass column names verbatim.
         """
+        if alias in self.columns:
+            raise ValueError(f"Column {alias!r} already exists in the relation")
         clauses: list[str] = []
         if partition_by:
             clauses.append("PARTITION BY " + ", ".join(quote_ident(c) for c in partition_by))
@@ -287,20 +293,17 @@ class DuckdbRelation:
         The ``alias`` and every identifier in ``partition_by`` / ``order_by`` are quoted
         via ``quote_ident``.
         """
+        if alias in self.columns:
+            raise ValueError(f"Column {alias!r} already exists in the relation")
         over_sql = _render_over_clause(partition_by, order_by, frame)
         return self.project(f"*, {func} OVER ({over_sql}) AS {quote_ident(alias)}")
 
-    def _pick_helper_column_name(self, *, taken: set[str]) -> str:
-        """Return the lowest ``__mloda_rn{n}__`` name not present in ``taken``."""
-        n = 0
-        while f"__mloda_rn{n}__" in taken:
-            n += 1
-        return f"__mloda_rn{n}__"
-
     def append_column(self, name: str, values: list[Any]) -> "DuckdbRelation":
         """Return a new relation with an additional column appended positionally."""
+        if name in self.columns:
+            raise ValueError(f"Column {name!r} already exists in the relation")
         new_col_rel = DuckdbRelation.from_dict(self._connection, {name: values})
-        rn = self._pick_helper_column_name(taken=set(self.columns) | {name})
+        rn = pick_helper_column_name(taken=set(self.columns) | {name})
         qrn = quote_ident(rn)
         left = self._relation.project(f"*, ROW_NUMBER() OVER () AS {qrn}")
         right = new_col_rel._relation.project(f"*, ROW_NUMBER() OVER () AS {qrn}")

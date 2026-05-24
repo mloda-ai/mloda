@@ -18,18 +18,14 @@ The DataAccessCollection is designed to control the access to data of any kind. 
 
 The DataAccessCollection can only be added via **mlodaAPI**.
 
-List options:
+A DAC holds resources of four kinds:
 
-1.  **Files:** Specifies the exact location of files: path/folder/text.txt
+1.  **Files:** the exact location of files, e.g. `path/folder/text.txt`.
+2.  **Folders:** directories where files are located, e.g. `path/folder/`.
+3.  **Credentials:** dicts with the information needed to reach a data source, e.g. `{host: example.com, password: example}`.
+4.  **Connections:** already-initialized connection objects (database connections, Spark sessions, Iceberg catalogs, etc.).
 
-2.  **Folders:** Points to directories where files are located: path/folder/
-
-3.  **Credential dicts:** Contains the necessary credentials to access data:  
- {host: example.com, password: example}
-
-4.  **Initialized connection object:** Stores connection objects that are already initialized: (DBConnectionObject)
-
-5.  **Uninitialized connection object:** Stores not initialized connection objects: (UninitializedDBConnection)
+When the collection holds more than one resource of the same kind, you can name them with stable handles and disambiguate per feature via `Options(context={"data_access_handle": "..."})`. See [Named Data Access Handles](named-data-access-handles.md) for the full naming model, the resolution rule, and the available error shapes; for the simple single-source cases below, naming is optional.
 
 You can apply these options like so:
 

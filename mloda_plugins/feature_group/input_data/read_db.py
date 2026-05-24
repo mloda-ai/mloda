@@ -61,7 +61,7 @@ class ReadDB(BaseInputData):
         if reader_data_access is None:
             raise ValueError(
                 f"'BaseInputData' key is missing or None in the provided Options for {self.__class__.__name__}. "
-                f"Set options with Options(group={{'BaseInputData': (ReaderClass, credentials_dict)}})."
+                f"Set options with Options(group={{'BaseInputData': (ReaderClass, HashableDict({{...}}))}})."
             )
 
         reader, data_access = reader_data_access

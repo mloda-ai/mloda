@@ -91,8 +91,12 @@ class DuckDBFeatureGroup(FeatureGroup, MatchData):
         # Logic to determine if this matcher handles DuckDB connections
         if framework_connection_object and isinstance(framework_connection_object, duckdb.DuckDBPyConnection):
             return framework_connection_object
-        if data_access_collection and data_access_collection.has_duckdb_connections():
-            return data_access_collection.get_duckdb_connection()
+        if data_access_collection is not None:
+            return data_access_collection.resolve(
+                "connection",
+                predicate=lambda c: isinstance(c, duckdb.DuckDBPyConnection),
+                hint=options.get("data_access_handle"),
+            )
         return None
 ```
 

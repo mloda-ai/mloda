@@ -202,7 +202,7 @@ class TestResolveContract:
         msg = str(excinfo.value)
         assert "warehouse" in msg
         assert "analytics" in msg
-        # Same error shape as ComputeFramework.pick_connection_from_dac ships today.
+        # Error shape matches ComputeFramework.pick_connection_from_dac.
         assert "data_access_handle" in msg
 
     def test_case_7_files_multi_match_raises_with_candidates(self) -> None:

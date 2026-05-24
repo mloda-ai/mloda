@@ -69,20 +69,8 @@ class TfsConnectionInitMixin:
     def test_hint_resolves_ambiguity(
         self, framework_class: Any, valid_connection: Any, second_valid_connection: Any
     ) -> None:
-        """With the named-handle DAC API, a ``data_access_handle`` hint disambiguates
-        multiple framework-matching connections. The hint is supplied as an Options
-        context key and is plumbed through ``pick_connection_from_dac``.
-
-        Red-phase target shape (post-green):
-            dac = DataAccessCollection(
-                connections={"primary": valid_connection, "secondary": second_valid_connection}
-            )
-            options = Options(context={"data_access_handle": "secondary"})
-            framework_class.pick_connection_from_dac(dac, options=options) is second_valid_connection
-
-        This test must fail in the current tree because:
-          * The ``connections=`` keyword does not exist on DataAccessCollection yet.
-          * ``pick_connection_from_dac`` does not accept an ``options`` argument yet.
+        """A ``data_access_handle`` hint on Options disambiguates between
+        multiple framework-matching connections in the DAC.
         """
         from mloda.user import Options
 

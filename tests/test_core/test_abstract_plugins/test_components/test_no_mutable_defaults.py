@@ -93,13 +93,13 @@ class TestDataAccessCollectionNoSharedMutableDefaults:
         d1.add_folder("d1", "/data/folder")
         assert "d1" not in d2.folders
 
-    def test_initialized_connections_not_shared(self) -> None:
+    def test_connections_not_shared(self) -> None:
         d1 = DataAccessCollection()
         d2 = DataAccessCollection()
         d1.add_connection("conn1", "conn1")
         assert "conn1" not in d2.connections
 
-    def test_credential_dicts_not_shared(self) -> None:
+    def test_credentials_not_shared(self) -> None:
         d1 = DataAccessCollection()
         d2 = DataAccessCollection()
         d1.add_credentials("c1", {"user": "admin"})

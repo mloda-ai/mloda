@@ -117,10 +117,12 @@ class SQLITEReader(ReadDB):
 
     ```python
     from mloda.user import DataAccessCollection
+    from mloda.provider import HashableDict
 
-    # Configure database access at the collection level
+    # SQLITEReader requires credentials wrapped in HashableDict (the reader's
+    # connect() and is_valid_credentials() both isinstance-check for it).
     data_access = DataAccessCollection(
-        credentials=[{"sqlite": "/data/analytics.db"}]
+        credentials=[HashableDict({"sqlite": "/data/analytics.db"})]
     )
 
     # Features will automatically use the configured database

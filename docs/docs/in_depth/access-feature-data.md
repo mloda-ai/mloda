@@ -96,7 +96,7 @@ for that feature.
 
 #### Disambiguating columns shared across multiple files
 
-When a `DataAccessCollection` holds multiple files that share the same column name (e.g. `id` appears in both `application_train.csv` and `bureau.csv`), global-scope resolution is non-deterministic: the engine iterates an unordered set and returns the first file that contains the requested columns. Two features intended to come from the same file can end up in different `FeatureGroup` nodes, producing a misleading "missing Links" error.
+When a `DataAccessCollection` holds multiple files that share the same column name (e.g. `id` appears in both `application_train.csv` and `bureau.csv`), the resolver refuses to guess: it raises `ValueError` listing the candidate files and asks for `data_access_handle`. `column_to_file` is a per-column shortcut that binds columns to files at construction so you don't have to set `data_access_handle` on every feature.
 
 Use `column_to_file` to pin each column to its canonical file:
 

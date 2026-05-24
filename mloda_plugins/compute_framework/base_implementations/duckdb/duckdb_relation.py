@@ -327,7 +327,8 @@ class DuckdbRelation:
         """Append a ROW_NUMBER() window column named ``alias``.
 
         All identifiers in ``partition_by`` / ``order_by`` and the ``alias`` are quoted
-        via ``quote_ident``. Raises ``ValueError`` if ``alias`` collides with an existing column.
+        via ``quote_ident``. Raises ``ValueError`` if ``alias`` collides with an existing
+        column (comparison is case-insensitive).
         With no partition_by/order_by, row-number assignment order is
         implementation-defined; pass order_by for a deterministic numbering.
         """
@@ -350,6 +351,7 @@ class DuckdbRelation:
         ``func`` is a raw SQL fragment inlined verbatim; never pass user-controlled input.
         The ``alias`` and every identifier in ``partition_by`` / ``order_by`` are quoted
         via ``quote_ident``.
+        Raises ``ValueError`` if ``alias`` collides with an existing column (comparison is case-insensitive).
         """
         if alias.casefold() in {c.casefold() for c in self.columns}:
             raise ValueError(f"Column {alias!r} already exists in the relation")
@@ -357,7 +359,10 @@ class DuckdbRelation:
         return self.project(f"*, {func} OVER ({over_sql}) AS {quote_ident(alias)}")
 
     def append_column(self, name: str, values: list[Any]) -> "DuckdbRelation":
-        """Return a new relation with an additional column appended positionally."""
+        """Return a new relation with an additional column appended positionally.
+
+        Raises ``ValueError`` if ``name`` collides with an existing column (comparison is case-insensitive).
+        """
         if name.casefold() in {c.casefold() for c in self.columns}:
             raise ValueError(f"Column {name!r} already exists in the relation")
         new_col_rel = DuckdbRelation.from_dict(self._connection, {name: values})

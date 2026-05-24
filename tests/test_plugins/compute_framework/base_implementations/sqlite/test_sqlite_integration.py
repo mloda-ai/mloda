@@ -197,7 +197,7 @@ class TestSqliteIntegrationWithMlodaAPI:
             Feature(name="score_plus_ten", options={"SqliteTestDataCreator": sqlite_conn}),
         ]
 
-        data_access_collection = DataAccessCollection(connections={"primary": sqlite_conn})
+        data_access_collection = DataAccessCollection(connections={sqlite_conn})
 
         result = mloda.run_all(
             feature_list,

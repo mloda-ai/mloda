@@ -261,7 +261,7 @@ class TestIcebergIntegrationWithMlodaAPI:
             Feature(name="score_plus_ten", options={"IcebergTestDataCreator": mock_iceberg_catalog}),
         ]
 
-        data_access_collection = DataAccessCollection(connections={"catalog": mock_iceberg_catalog})
+        data_access_collection = DataAccessCollection(connections={mock_iceberg_catalog})
 
         # Run with Iceberg framework
         result = mloda.run_all(
@@ -301,7 +301,7 @@ class TestIcebergIntegrationWithMlodaAPI:
             Feature(name="arrow_doubled_value", options={"IcebergTestDataCreator": mock_iceberg_catalog})
         ]
 
-        data_access_collection = DataAccessCollection(connections={"catalog": mock_iceberg_catalog})
+        data_access_collection = DataAccessCollection(connections={mock_iceberg_catalog})
 
         # Run with both Iceberg and PyArrow frameworks
         result = mloda.run_all(
@@ -339,7 +339,7 @@ class TestIcebergIntegrationWithMlodaAPI:
             Feature(name="category", options={"IcebergTestDataCreator": mock_iceberg_catalog}),
         ]
 
-        data_access_collection = DataAccessCollection(connections={"catalog": mock_iceberg_catalog})
+        data_access_collection = DataAccessCollection(connections={mock_iceberg_catalog})
 
         # Run with Iceberg framework
         result = mloda.run_all(

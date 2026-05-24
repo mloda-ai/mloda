@@ -63,7 +63,7 @@ class TfsConnectionEndToEndMixin:
 
     def test_tfs_connection_reaches_destination_framework(self, live_connection: Any) -> None:
         plugin_collector = PluginCollector.enabled_feature_groups({self.source_fg_class, self.destination_fg_class})
-        dac = DataAccessCollection(connections={"live": live_connection})
+        dac = DataAccessCollection(connections={live_connection})
         result = mloda.run_all(
             [Feature(self.destination_feature_name)],
             compute_frameworks={self.source_framework_class, self.destination_framework_class},

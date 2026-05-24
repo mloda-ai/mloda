@@ -247,7 +247,7 @@ class TestDuckDBIntegrationWithMlodaAPI:
             Feature(name="score_plus_ten", options={"DuckDBTestDataCreator": duckdb_conn}),
         ]
 
-        data_access_collection = DataAccessCollection(connections={"primary": duckdb_conn})
+        data_access_collection = DataAccessCollection(connections={duckdb_conn})
 
         # Run with DuckDB framework
         result = mloda.run_all(

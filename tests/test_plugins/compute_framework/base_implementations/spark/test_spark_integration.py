@@ -278,7 +278,7 @@ class TestSparkIntegrationWithMlodaAPI:
             Feature(name="score_plus_ten", options={"SparkTestDataCreator": spark_session}),
         ]
 
-        data_access_collection = DataAccessCollection(connections={"primary": spark_session})
+        data_access_collection = DataAccessCollection(connections={spark_session})
 
         # Run with Spark framework
         result = mloda.run_all(

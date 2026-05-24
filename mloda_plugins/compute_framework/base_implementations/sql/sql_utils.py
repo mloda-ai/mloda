@@ -42,9 +42,10 @@ def quote_value(value: Any) -> str:
 
 
 def pick_helper_column_name(taken: set[str], prefix: str = "__mloda_rn") -> str:
-    """Return the lowest ``{prefix}{n}__`` name not present in ``taken``."""
+    """Return the lowest ``{prefix}{n}__`` name not present in ``taken`` (case-insensitive)."""
+    taken_cf = {t.casefold() for t in taken}
     n = 0
-    while f"{prefix}{n}__" in taken:
+    while f"{prefix}{n}__" in taken_cf:
         n += 1
     return f"{prefix}{n}__"
 

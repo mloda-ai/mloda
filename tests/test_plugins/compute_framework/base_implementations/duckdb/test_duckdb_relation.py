@@ -431,6 +431,36 @@ class TestDuckdbRelation(RelationTestMixin):
         with pytest.raises(ValueError, match="age"):
             sample_relation.window("COUNT(*)", "age")
 
+    def test_append_column_raises_on_case_only_collision(self, connection: Any) -> None:
+        """DuckDB identifiers are case-insensitive: 'foo' must collide with existing 'Foo'."""
+        rel = DuckdbRelation.from_dict(connection, {"Foo": [1, 2, 3], "b": [4, 5, 6]})
+        with pytest.raises(ValueError, match="foo"):
+            rel.append_column("foo", [10, 20, 30])
+
+    def test_with_row_number_raises_on_case_only_collision(self, connection: Any) -> None:
+        """DuckDB identifiers are case-insensitive: alias 'category' must collide with existing 'Category'."""
+        rel = DuckdbRelation.from_dict(
+            connection,
+            {
+                "id": [1, 2, 3, 4, 5],
+                "Category": ["A", "B", "A", "C", "B"],
+            },
+        )
+        with pytest.raises(ValueError, match="category"):
+            rel.with_row_number("category")
+
+    def test_window_raises_on_case_only_collision(self, connection: Any) -> None:
+        """DuckDB identifiers are case-insensitive: alias 'age' must collide with existing 'Age'."""
+        rel = DuckdbRelation.from_dict(
+            connection,
+            {
+                "id": [1, 2, 3, 4, 5],
+                "Age": [25, 30, 35, 40, 45],
+            },
+        )
+        with pytest.raises(ValueError, match="age"):
+            rel.window("COUNT(*)", "age")
+
     # --- window() ---
 
     def test_window_partition_only(self, sample_relation: "DuckdbRelation") -> None:

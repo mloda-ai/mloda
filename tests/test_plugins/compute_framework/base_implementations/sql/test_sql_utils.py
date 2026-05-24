@@ -2,6 +2,7 @@ import pytest
 
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
     inline_params,
+    pick_helper_column_name,
     quote_ident,
     quote_value,
 )
@@ -106,3 +107,11 @@ class TestInlineParams:
     def test_placeholder_count_mismatch_raises(self) -> None:
         with pytest.raises(ValueError, match="Placeholder count"):
             inline_params("a = ? AND b = ?", (1,))
+
+
+class TestPickHelperColumnName:
+    def test_pick_helper_column_name_skips_case_variant_taken(self) -> None:
+        """SQL identifiers are case-insensitive: taken={'__MLODA_RN0__'} must skip index 0."""
+        result = pick_helper_column_name(taken={"__MLODA_RN0__"})
+        assert result != "__mloda_rn0__"
+        assert result == "__mloda_rn1__"

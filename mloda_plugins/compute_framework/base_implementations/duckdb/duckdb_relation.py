@@ -331,7 +331,7 @@ class DuckdbRelation:
         With no partition_by/order_by, row-number assignment order is
         implementation-defined; pass order_by for a deterministic numbering.
         """
-        if alias in self.columns:
+        if alias.casefold() in {c.casefold() for c in self.columns}:
             raise ValueError(f"Column {alias!r} already exists in the relation")
         over_sql = _render_over_clause(partition_by, order_by, None)
         return self.project(f"*, ROW_NUMBER() OVER ({over_sql}) AS {quote_ident(alias)}")
@@ -351,14 +351,14 @@ class DuckdbRelation:
         The ``alias`` and every identifier in ``partition_by`` / ``order_by`` are quoted
         via ``quote_ident``.
         """
-        if alias in self.columns:
+        if alias.casefold() in {c.casefold() for c in self.columns}:
             raise ValueError(f"Column {alias!r} already exists in the relation")
         over_sql = _render_over_clause(partition_by, order_by, frame)
         return self.project(f"*, {func} OVER ({over_sql}) AS {quote_ident(alias)}")
 
     def append_column(self, name: str, values: list[Any]) -> "DuckdbRelation":
         """Return a new relation with an additional column appended positionally."""
-        if name in self.columns:
+        if name.casefold() in {c.casefold() for c in self.columns}:
             raise ValueError(f"Column {name!r} already exists in the relation")
         new_col_rel = DuckdbRelation.from_dict(self._connection, {name: values})
         rn = pick_helper_column_name(taken=set(self.columns) | {name})

@@ -41,6 +41,21 @@ def quote_value(value: Any) -> str:
     raise TypeError(f"Unsupported type for SQL literal: {type(value).__name__}")
 
 
+def pick_helper_column_name(taken: set[str], prefix: str = "__mloda_rn") -> str:
+    """Return the lowest ``{prefix}{n}__`` name not present in ``taken`` (case-insensitive).
+
+    The returned name is always lowercase (the ``prefix`` is casefolded), so a
+    mixed-case ``prefix`` cannot return a name that collides case-insensitively
+    with an entry in ``taken``.
+    """
+    prefix_cf = prefix.casefold()
+    taken_cf = {t.casefold() for t in taken}
+    n = 0
+    while f"{prefix_cf}{n}__" in taken_cf:
+        n += 1
+    return f"{prefix_cf}{n}__"
+
+
 def inline_params(condition: str, params: tuple[Any, ...]) -> str:
     """Replace ``?`` placeholders with ``quote_value`` output.
 

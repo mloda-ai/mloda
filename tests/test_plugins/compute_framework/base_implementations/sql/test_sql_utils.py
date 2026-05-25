@@ -2,6 +2,7 @@ import pytest
 
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
     inline_params,
+    pick_helper_column_name,
     quote_ident,
     quote_value,
 )
@@ -106,3 +107,21 @@ class TestInlineParams:
     def test_placeholder_count_mismatch_raises(self) -> None:
         with pytest.raises(ValueError, match="Placeholder count"):
             inline_params("a = ? AND b = ?", (1,))
+
+
+class TestPickHelperColumnName:
+    def test_pick_helper_column_name_skips_case_variant_taken(self) -> None:
+        """SQL identifiers are case-insensitive: taken={'__MLODA_RN0__'} must skip index 0."""
+        result = pick_helper_column_name(taken={"__MLODA_RN0__"})
+        assert result != "__mloda_rn0__"
+        assert result == "__mloda_rn1__"
+
+    def test_pick_helper_column_name_lowercases_uppercase_prefix(self) -> None:
+        """An uppercase prefix must be casefolded before building the candidate name."""
+        result = pick_helper_column_name(taken=set(), prefix="__MLODA_RN")
+        assert result == "__mloda_rn0__"
+
+    def test_pick_helper_column_name_uppercase_prefix_skips_case_variant(self) -> None:
+        """A mixed-case prefix must not collide case-insensitively with taken."""
+        result = pick_helper_column_name(taken={"__mloda_rn0__"}, prefix="__MLODA_RN")
+        assert result == "__mloda_rn1__"

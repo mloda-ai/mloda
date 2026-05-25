@@ -2,6 +2,7 @@
 
 import multiprocessing
 import queue
+import sys
 import threading
 import time
 from typing import Any
@@ -79,7 +80,7 @@ class TestWorkerManagerProcessCreation:
 
         process, cmd_queue, result_queue = manager.create_worker_process(cfw_uuid, target_func, args)
 
-        assert isinstance(process, multiprocessing.Process)
+        assert isinstance(process, multiprocessing.process.BaseProcess)
         # Queues have put/get methods - verify interface
         assert hasattr(cmd_queue, "put") and hasattr(cmd_queue, "get")
         assert hasattr(result_queue, "put") and hasattr(result_queue, "get")
@@ -128,13 +129,18 @@ class TestWorkerManagerProcessCreation:
         target_func = Mock()
         args = ("arg1", "arg2")
 
-        with patch("multiprocessing.Process") as mock_process_class:
-            mock_process = Mock()
-            mock_process_class.return_value = mock_process
+        mock_process = Mock()
+        mock_ctx = Mock()
+        mock_ctx.Process.return_value = mock_process
+        mock_ctx.Queue.return_value = Mock()
 
+        with patch(
+            "mloda.core.runtime.worker_manager.mp_spawn_context",
+            return_value=mock_ctx,
+        ):
             manager.create_worker_process(cfw_uuid, target_func, args)
 
-            mock_process.start.assert_called_once()
+        mock_process.start.assert_called_once()
 
 
 class TestWorkerManagerProcessRetrieval:
@@ -331,8 +337,12 @@ class TestWorkerManagerDropCompletion:
         manager.wait_for_drop_completion(mock_queue, cfw_uuid, timeout=0.1)
         elapsed = time.time() - start_time
 
-        # Should timeout after approximately 0.1 seconds
-        assert 0.09 < elapsed < 0.2
+        # Should timeout after approximately 0.1 seconds. On Python 3.14 the
+        # spawn-context teardown of unrelated workers can stretch time.sleep(0.001)
+        # ticks on loaded CI, so widen the upper bound there only; the assertion
+        # exists to guard against an infinite loop, not to verify wall-clock precision.
+        upper = 1.0 if sys.version_info >= (3, 14) else 0.2
+        assert 0.09 < elapsed < upper
 
     def test_wait_for_drop_completion_uses_non_blocking_get(self) -> None:
         """wait_for_drop_completion should use non-blocking queue get."""

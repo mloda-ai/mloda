@@ -17,6 +17,7 @@ from mloda.core.runtime.compute_framework_executor import ComputeFrameworkExecut
 from mloda.core.core.cfw_manager import CfwManager, MyManager
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
+from mloda.core.runtime.mp_context import mp_spawn_context
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
@@ -327,7 +328,7 @@ class ExecutionOrchestrator:
             self.manager = None
         else:
             MyManager.register("CfwManager", CfwManager)
-            self.manager = MyManager().__enter__()
+            self.manager = MyManager(ctx=mp_spawn_context()).__enter__()
             self.cfw_register = self.manager.CfwManager(parallelization_modes, function_extender)
 
         if self.flight_server:

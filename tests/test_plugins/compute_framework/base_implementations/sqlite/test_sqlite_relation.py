@@ -14,9 +14,12 @@ from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation
 from tests.test_plugins.compute_framework.base_implementations.relation_test_mixin import (
     RelationTestMixin,
 )
+from tests.test_plugins.compute_framework.base_implementations.sql_relation_window_test_mixin import (
+    SqlRelationWindowTestMixin,
+)
 
 
-class TestSqliteRelation(RelationTestMixin):
+class TestSqliteRelation(SqlRelationWindowTestMixin, RelationTestMixin):
     @pytest.fixture
     def sample_relation(self, connection: sqlite3.Connection) -> SqliteRelation:
         arrow = pa.Table.from_pydict(
@@ -251,6 +254,38 @@ class TestSqliteRelation(RelationTestMixin):
             "arrow_idx_type": pa.int64(),
             "idx_values": [1, right_only_idx],
         }
+
+    def test_append_column_when_existing_column_named_mloda_rn_legacy(self, connection: sqlite3.Connection) -> None:
+        """Helper picker must not collide with a pre-existing __mloda_rn__ column (the OLD hardcoded name)."""
+        rel = SqliteRelation.from_dict(connection, {"__mloda_rn__": ["x", "y", "z"], "b": [4, 5, 6]})
+        result = rel.append_column("c", [7, 8, 9])
+        assert set(result.columns) == {"__mloda_rn__", "b", "c"}
+        arrow = result.to_arrow_table()
+        assert arrow.column("__mloda_rn__").to_pylist() == ["x", "y", "z"]
+        assert arrow.column("b").to_pylist() == [4, 5, 6]
+        assert arrow.column("c").to_pylist() == [7, 8, 9]
+
+    def test_append_column_when_existing_column_named_mloda_rn_zero(self, connection: sqlite3.Connection) -> None:
+        """Helper picker must skip __mloda_rn0__ if already present and use a free __mloda_rn{n}__ name."""
+        rel = SqliteRelation.from_dict(connection, {"__mloda_rn0__": [1, 2, 3], "b": [4, 5, 6]})
+        result = rel.append_column("c", [7, 8, 9])
+        assert set(result.columns) == {"__mloda_rn0__", "b", "c"}
+        arrow = result.to_arrow_table()
+        assert arrow.column("__mloda_rn0__").to_pylist() == [1, 2, 3]
+        assert arrow.column("b").to_pylist() == [4, 5, 6]
+        assert arrow.column("c").to_pylist() == [7, 8, 9]
+
+    def test_append_column_raises_when_name_already_exists(self, connection: sqlite3.Connection) -> None:
+        """append_column must reject ``name`` colliding with an existing column instead of silently corrupting the schema."""
+        rel = SqliteRelation.from_dict(connection, {"a": [1, 2, 3], "b": [4, 5, 6]})
+        with pytest.raises(ValueError, match="b"):
+            rel.append_column("b", [10, 20, 30])
+
+    def test_append_column_raises_on_case_only_collision(self, connection: sqlite3.Connection) -> None:
+        """append_column must reject ``name`` that case-insensitively collides with an existing column, since SQLite treats quoted identifiers as case-insensitive in resolution."""
+        rel = SqliteRelation.from_dict(connection, {"Foo": [1, 2, 3], "b": [4, 5, 6]})
+        with pytest.raises(ValueError, match="foo"):
+            rel.append_column("foo", [10, 20, 30])
 
     def test_join_with_sql_injection_alias(self, connection: sqlite3.Connection) -> None:
         """A crafted alias must not be interpreted as SQL."""

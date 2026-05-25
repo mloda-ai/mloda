@@ -5,9 +5,14 @@ import logging
 
 import pytest
 
-from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
+from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import (
+    DuckdbRelation,
+)
 from tests.test_plugins.compute_framework.base_implementations.relation_test_mixin import (
     RelationTestMixin,
+)
+from tests.test_plugins.compute_framework.base_implementations.sql_relation_window_test_mixin import (
+    SqlRelationWindowTestMixin,
 )
 
 logger = logging.getLogger(__name__)
@@ -22,7 +27,7 @@ except ImportError:
 
 
 @pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB or PyArrow is not installed.")
-class TestDuckdbRelation(RelationTestMixin):
+class TestDuckdbRelation(SqlRelationWindowTestMixin, RelationTestMixin):
     @pytest.fixture
     def sample_relation(self, connection: Any) -> "DuckdbRelation":
         return DuckdbRelation.from_dict(
@@ -273,3 +278,60 @@ class TestDuckdbRelation(RelationTestMixin):
         """query() must pass the caller's SQL string unchanged; quoting would prevent execution of the SELECT statement."""
         result = sample_relation.query("t", "SELECT UPPER(name) AS upper_name FROM t ORDER BY upper_name")
         assert self.get_column_values(result, "upper_name") == ["ALICE", "BOB", "CHARLIE", "DAVID", "EVE"]
+
+    # --- append_column: helper-name collision (issue #405 subtask 2) ---
+
+    def test_append_column_when_existing_column_named_mloda_rn_zero(self, connection: Any) -> None:
+        """Helper picker must skip __mloda_rn0__ if already present and use __mloda_rn1__."""
+        rel = DuckdbRelation.from_dict(connection, {"__mloda_rn0__": [1, 2, 3], "b": [4, 5, 6]})
+        result = rel.append_column("c", [7, 8, 9])
+        assert set(result.columns) == {"__mloda_rn0__", "b", "c"}
+        arrow = result.to_arrow_table()
+        assert arrow.column("__mloda_rn0__").to_pylist() == [1, 2, 3]
+        assert arrow.column("c").to_pylist() == [7, 8, 9]
+
+    def test_append_column_when_existing_column_named_mloda_rn_legacy(self, connection: Any) -> None:
+        """Helper picker must not collide with a pre-existing __mloda_rn__ column (the OLD hardcoded name)."""
+        rel = DuckdbRelation.from_dict(connection, {"__mloda_rn__": ["x", "y", "z"], "b": [4, 5, 6]})
+        result = rel.append_column("c", [7, 8, 9])
+        assert set(result.columns) == {"__mloda_rn__", "b", "c"}
+        arrow = result.to_arrow_table()
+        assert arrow.column("__mloda_rn__").to_pylist() == ["x", "y", "z"]
+        assert arrow.column("c").to_pylist() == [7, 8, 9]
+
+    def test_append_column_when_name_param_collides_with_helper_candidate(self, connection: Any) -> None:
+        """Helper picker must consider both self.columns AND the incoming name parameter."""
+        rel = DuckdbRelation.from_dict(connection, {"a": [1, 2, 3]})
+        result = rel.append_column("__mloda_rn0__", [7, 8, 9])
+        assert set(result.columns) == {"a", "__mloda_rn0__"}
+        assert len(result) == 3
+        arrow = result.to_arrow_table()
+        assert arrow.column("__mloda_rn0__").to_pylist() == [7, 8, 9]
+
+    def test_append_column_when_multiple_helper_candidates_exist(self, connection: Any) -> None:
+        """Helper picker must scan upward and pick the lowest free __mloda_rn{n}__."""
+        rel = DuckdbRelation.from_dict(
+            connection,
+            {"__mloda_rn0__": [1, 2], "__mloda_rn1__": [3, 4], "x": [5, 6]},
+        )
+        result = rel.append_column("y", [7, 8])
+        assert set(result.columns) == {"__mloda_rn0__", "__mloda_rn1__", "x", "y"}
+        arrow = result.to_arrow_table()
+        assert arrow.column("__mloda_rn0__").to_pylist() == [1, 2]
+        assert arrow.column("__mloda_rn1__").to_pylist() == [3, 4]
+        assert arrow.column("x").to_pylist() == [5, 6]
+        assert arrow.column("y").to_pylist() == [7, 8]
+
+    # --- append_column / with_row_number / window: alias collision with existing column ---
+
+    def test_append_column_raises_when_name_already_exists(self, connection: Any) -> None:
+        """append_column must reject ``name`` colliding with an existing column instead of silently corrupting the schema."""
+        rel = DuckdbRelation.from_dict(connection, {"a": [1, 2, 3], "b": [4, 5, 6]})
+        with pytest.raises(ValueError, match="b"):
+            rel.append_column("b", [10, 20, 30])
+
+    def test_append_column_raises_on_case_only_collision(self, connection: Any) -> None:
+        """DuckDB identifiers are case-insensitive: 'foo' must collide with existing 'Foo'."""
+        rel = DuckdbRelation.from_dict(connection, {"Foo": [1, 2, 3], "b": [4, 5, 6]})
+        with pytest.raises(ValueError, match="foo"):
+            rel.append_column("foo", [10, 20, 30])

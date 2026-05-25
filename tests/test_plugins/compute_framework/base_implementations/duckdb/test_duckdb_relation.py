@@ -60,6 +60,58 @@ class TestDuckdbRelation(RelationTestMixin):
             ("flag", "BOOLEAN"),
         ]
 
+    def test_types_aligned_with_columns_after_filter(self, sample_relation: "DuckdbRelation") -> None:
+        filtered = sample_relation.filter("age >= ?", (35,))
+
+        assert list(zip(filtered.columns, (str(dtype) for dtype in filtered.types), strict=True)) == [
+            ("id", "BIGINT"),
+            ("age", "BIGINT"),
+            ("name", "VARCHAR"),
+            ("category", "VARCHAR"),
+        ]
+
+    def test_types_reordered_after_select_projection(self, connection: Any) -> None:
+        arrow = pa.table(
+            {
+                "id": pa.array([1, 2], type=pa.int64()),
+                "score": pa.array([1.5, 2.5], type=pa.float64()),
+                "name": pa.array(["Alice", "Bob"], type=pa.string()),
+            }
+        )
+        rel = DuckdbRelation.from_arrow(connection, arrow)
+
+        projected = rel.select("score", "id")
+
+        assert list(zip(projected.columns, (str(dtype) for dtype in projected.types), strict=True)) == [
+            ("score", "DOUBLE"),
+            ("id", "BIGINT"),
+        ]
+
+    def test_types_after_append_column(self, connection: Any) -> None:
+        base = DuckdbRelation.from_arrow(connection, pa.table({"id": pa.array([1, 2], type=pa.int64())}))
+
+        result = base.append_column("flag", [True, False])
+
+        assert list(zip(result.columns, (str(dtype) for dtype in result.types), strict=True)) == [
+            ("id", "BIGINT"),
+            ("flag", "BOOLEAN"),
+        ]
+
+    def test_types_after_inner_join(self, connection: Any) -> None:
+        left = DuckdbRelation.from_dict(connection, {"idx": [1, 2, 3], "val": ["a", "b", "c"]})
+        right = DuckdbRelation.from_dict(connection, {"idx": [2, 3, 4], "score": [10, 20, 30]})
+
+        left_aliased = left.set_alias("left_rel")
+        right_aliased = right.set_alias("right_rel")
+
+        joined = left_aliased.join(right_aliased, "left_rel.idx = right_rel.idx", how="inner")
+
+        assert list(zip(joined.columns, (str(dtype) for dtype in joined.types), strict=True)) == [
+            ("idx", "BIGINT"),
+            ("val", "VARCHAR"),
+            ("score", "BIGINT"),
+        ]
+
     # --- Select ---
 
     def test_select_raw_sql_expression(self, sample_relation: "DuckdbRelation") -> None:

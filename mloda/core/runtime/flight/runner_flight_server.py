@@ -10,6 +10,7 @@ import logging
 
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.runtime.flight.flight_server import FlightServer, create_location
+from mloda.core.runtime.mp_context import mp_spawn_context
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +33,9 @@ class ParallelRunnerFlightServer:
     def start_flight_server_process(self) -> None:
         if not self.flight_server_process:
             location = create_location()
-            location_queue: multiprocessing.Queue[Any] = multiprocessing.Queue()
-            self.flight_server_process = multiprocessing.Process(
+            ctx = mp_spawn_context()
+            location_queue: multiprocessing.Queue[Any] = ctx.Queue()
+            self.flight_server_process = ctx.Process(
                 target=self.start_flight_server,
                 args=(location, location_queue),
             )

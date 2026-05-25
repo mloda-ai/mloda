@@ -8,6 +8,8 @@ import logging
 from typing import Any, Callable, Optional
 from uuid import UUID
 
+from mloda.core.runtime.mp_context import mp_spawn_context
+
 logger = logging.getLogger(__name__)
 
 
@@ -30,10 +32,11 @@ class WorkerManager:
         self, cfw_uuid: UUID, target: Callable[..., None], args: tuple[Any, ...]
     ) -> tuple[Any, Any, Any]:
         """Create worker process with command and result queues."""
-        command_queue: multiprocessing.Queue[Any] = multiprocessing.Queue()
-        result_queue: multiprocessing.Queue[Any] = multiprocessing.Queue()
+        ctx = mp_spawn_context()
+        command_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        result_queue: multiprocessing.Queue[Any] = ctx.Queue()
 
-        process = multiprocessing.Process(target=target, args=(command_queue, result_queue, *args))
+        process = ctx.Process(target=target, args=(command_queue, result_queue, *args))
 
         self.process_register[cfw_uuid] = (process, command_queue, result_queue)
         self.result_queues_collection.add(result_queue)

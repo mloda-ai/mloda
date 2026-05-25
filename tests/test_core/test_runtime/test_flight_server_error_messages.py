@@ -1,5 +1,6 @@
 """Tests for improved error messages in ParallelRunnerFlightServer."""
 
+import multiprocessing
 from typing import Any
 
 import pytest
@@ -33,7 +34,15 @@ class TestFlightServerProcessLocation:
             "mloda.core.runtime.flight.runner_flight_server.create_location", lambda: "grpc://127.0.0.1:0"
         )
         monkeypatch.setattr("mloda.core.runtime.flight.runner_flight_server.FlightServer", BoundFlightServer)
-        monkeypatch.setattr("mloda.core.runtime.flight.runner_flight_server.multiprocessing.Process", InlineProcess)
+
+        class FakeCtx:
+            Process = InlineProcess
+            Queue = staticmethod(multiprocessing.Queue)
+
+        monkeypatch.setattr(
+            "mloda.core.runtime.flight.runner_flight_server.mp_spawn_context",
+            lambda: FakeCtx(),
+        )
 
         server = ParallelRunnerFlightServer()
         server.start_flight_server_process()
@@ -66,7 +75,14 @@ class TestFlightServerProcessLocation:
         monkeypatch.setattr(
             "mloda.core.runtime.flight.runner_flight_server.create_location", lambda: "grpc://127.0.0.1:0"
         )
-        monkeypatch.setattr("mloda.core.runtime.flight.runner_flight_server.multiprocessing.Process", DeadProcess)
+        class FakeCtx:
+            Process = DeadProcess
+            Queue = staticmethod(multiprocessing.Queue)
+
+        monkeypatch.setattr(
+            "mloda.core.runtime.flight.runner_flight_server.mp_spawn_context",
+            lambda: FakeCtx(),
+        )
 
         server = ParallelRunnerFlightServer()
 

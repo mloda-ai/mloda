@@ -79,7 +79,7 @@ class TestWorkerManagerProcessCreation:
 
         process, cmd_queue, result_queue = manager.create_worker_process(cfw_uuid, target_func, args)
 
-        assert isinstance(process, multiprocessing.Process)
+        assert isinstance(process, multiprocessing.process.BaseProcess)
         # Queues have put/get methods - verify interface
         assert hasattr(cmd_queue, "put") and hasattr(cmd_queue, "get")
         assert hasattr(result_queue, "put") and hasattr(result_queue, "get")
@@ -128,13 +128,18 @@ class TestWorkerManagerProcessCreation:
         target_func = Mock()
         args = ("arg1", "arg2")
 
-        with patch("multiprocessing.Process") as mock_process_class:
-            mock_process = Mock()
-            mock_process_class.return_value = mock_process
+        mock_process = Mock()
+        mock_ctx = Mock()
+        mock_ctx.Process.return_value = mock_process
+        mock_ctx.Queue.return_value = Mock()
 
+        with patch(
+            "mloda.core.runtime.worker_manager.mp_spawn_context",
+            return_value=mock_ctx,
+        ):
             manager.create_worker_process(cfw_uuid, target_func, args)
 
-            mock_process.start.assert_called_once()
+        mock_process.start.assert_called_once()
 
 
 class TestWorkerManagerProcessRetrieval:

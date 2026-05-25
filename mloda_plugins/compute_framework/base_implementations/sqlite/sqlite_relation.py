@@ -64,6 +64,11 @@ def _assert_nulls_supported(order_by: Sequence[str | OrderBy]) -> None:
         raise ValueError(f"NULLS FIRST/LAST in ORDER BY requires SQLite >= 3.30.0; runtime is {sqlite3.sqlite_version}")
 
 
+def _assert_window_supported() -> None:
+    if sqlite3.sqlite_version_info < (3, 28, 0):
+        raise ValueError(f"SQL window functions require SQLite >= 3.28.0; runtime is {sqlite3.sqlite_version}")
+
+
 def _sqlite_affinity_to_arrow_type(affinity: str) -> pa.DataType:
     upper = affinity.upper()
     if "INT" in upper:
@@ -497,6 +502,7 @@ class SqliteRelation:
         """
         if alias.casefold() in {c.casefold() for c in self.columns}:
             raise ValueError(f"Column {alias!r} already exists in the relation")
+        _assert_window_supported()
         _assert_nulls_supported(order_by)
         over_sql = render_over_clause(partition_by, order_by, None)
         new_name = _next_table_name()
@@ -526,6 +532,7 @@ class SqliteRelation:
         """
         if alias.casefold() in {c.casefold() for c in self.columns}:
             raise ValueError(f"Column {alias!r} already exists in the relation")
+        _assert_window_supported()
         _assert_nulls_supported(order_by)
         validate_window(order_by, frame)
         over_sql = render_over_clause(partition_by, order_by, frame)

@@ -97,6 +97,15 @@ class SqliteRelation:
             self._cached_columns = [desc[0] for desc in cursor.description]
         return self._cached_columns
 
+    @property
+    def types(self) -> dict[str, str]:
+        """Return column type affinities via PRAGMA table_info.
+        This is a best-effort fallback since from_arrow does not
+        retain the source Arrow schema as a private field.
+        """
+        cursor = self._connection.execute(f"PRAGMA table_info({quote_ident(self._table_name)})")
+        return {row[1]: row[2].lower() for row in cursor.fetchall()}
+
     def filter(self, condition: str, params: tuple[Any, ...] = ()) -> "SqliteRelation":
         """Apply a filter condition using PEP 249 parameterized queries."""
         new_name = _next_table_name()

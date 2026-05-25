@@ -42,6 +42,10 @@ class DuckdbRelation:
     def columns(self) -> list[str]:
         return self._relation.columns
 
+    @property
+    def types(self) -> list[str]:
+        return self._relation.types
+
     def filter(self, condition: str, params: tuple[Any, ...] = ()) -> "DuckdbRelation":
         """Apply a filter condition. Params are inlined via ``quote_value``
         because DuckDB's Relational API lacks PEP 249 parameter binding."""

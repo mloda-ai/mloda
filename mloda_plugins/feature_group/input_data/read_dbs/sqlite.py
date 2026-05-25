@@ -47,7 +47,6 @@ class SQLITEReader(ReadDB):
     ```python
     from mloda.user import Feature
     from mloda.user import Options
-    from mloda.core.abstract_plugins.components.hashable_dict import HashableDict
 
     feature = Feature(
         name="customer_name",
@@ -55,7 +54,7 @@ class SQLITEReader(ReadDB):
             context={
                 "BaseInputData": (
                     SQLITEReader,
-                    HashableDict({"sqlite": "/path/to/database.db"})
+                    {"sqlite": "/path/to/database.db"}
                 )
             }
         )
@@ -68,7 +67,6 @@ class SQLITEReader(ReadDB):
 
     ```python
     from mloda.user import Feature
-    from mloda.core.abstract_plugins.components.hashable_dict import HashableDict
 
     # Simple column reference from SQLite database
     feature = Feature(
@@ -77,7 +75,7 @@ class SQLITEReader(ReadDB):
             context={
                 "BaseInputData": (
                     SQLITEReader,
-                    HashableDict({"sqlite": "users.db"})
+                    {"sqlite": "users.db"}
                 )
             }
         )
@@ -94,7 +92,7 @@ class SQLITEReader(ReadDB):
             context={
                 "BaseInputData": (
                     SQLITEReader,
-                    HashableDict({"sqlite": "sales.db"})
+                    {"sqlite": "sales.db"}
                 )
             }
         )
@@ -106,7 +104,7 @@ class SQLITEReader(ReadDB):
             context={
                 "BaseInputData": (
                     SQLITEReader,
-                    HashableDict({"sqlite": "sales.db"})
+                    {"sqlite": "sales.db"}
                 )
             }
         )
@@ -117,12 +115,10 @@ class SQLITEReader(ReadDB):
 
     ```python
     from mloda.user import DataAccessCollection
-    from mloda.provider import HashableDict
 
-    # SQLITEReader requires credentials wrapped in HashableDict (the reader's
-    # connect() and is_valid_credentials() both isinstance-check for it).
+    # Plain dicts are accepted; HashableDict is also accepted for backwards compatibility.
     data_access = DataAccessCollection(
-        credentials=[HashableDict({"sqlite": "/data/analytics.db"})]
+        credentials=[{"sqlite": "/data/analytics.db"}]
     )
 
     # Features will automatically use the configured database
@@ -164,10 +160,14 @@ class SQLITEReader(ReadDB):
     @classmethod
     def connect(cls, credentials: Any) -> Any:
         if isinstance(credentials, HashableDict):
-            credential = credentials.data[cls.db_path()]
-            return sqlite3.connect(credential)
+            data = credentials.data
+        elif isinstance(credentials, dict):
+            data = credentials
         else:
-            raise ValueError("Credentials must be an HashableDict.")
+            raise ValueError(
+                f"Credentials for {cls.__name__} must be a dict (or HashableDict). Got {type(credentials).__name__}."
+            )
+        return sqlite3.connect(data[cls.db_path()])
 
     @classmethod
     def build_query(cls, features: FeatureSet) -> str:
@@ -201,6 +201,8 @@ class SQLITEReader(ReadDB):
 
         if isinstance(credentials, HashableDict):
             db_path = credentials.data.get(cls.db_path(), None)
+        elif isinstance(credentials, dict):
+            db_path = credentials.get(cls.db_path(), None)
         else:
             db_path = None
 
@@ -251,16 +253,25 @@ class SQLITEReader(ReadDB):
         return False
 
     @classmethod
+    def _credentials_data(cls, data_access: Any) -> dict[str, Any]:
+        if isinstance(data_access, HashableDict):
+            inner: dict[str, Any] = data_access.data
+            return inner
+        plain: dict[str, Any] = data_access
+        return plain
+
+    @classmethod
     def set_table_name(cls, data_access: Any, table_name: str) -> None:
-        if data_access.data.get("table_name"):
-            if data_access.data["table_name"] != table_name:
-                raise ValueError(f"Table name is already set to {data_access.data['table_name']} and not {table_name}.")
+        data = cls._credentials_data(data_access)
+        if data.get("table_name"):
+            if data["table_name"] != table_name:
+                raise ValueError(f"Table name is already set to {data['table_name']} and not {table_name}.")
             return
 
-        data_access.data["table_name"] = table_name
+        data["table_name"] = table_name
 
     @classmethod
     def get_table(cls, options: Options | None) -> Any:
         if options is None:
             raise ValueError("Options were not set.")
-        return options.get("BaseInputData")[1].data["table_name"]
+        return cls._credentials_data(options.get("BaseInputData")[1])["table_name"]

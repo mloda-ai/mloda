@@ -17,7 +17,7 @@ from mloda.provider import FeatureGroup
 from mloda.user import DataAccessCollection
 from mloda.user import Feature
 from mloda.user import FeatureName
-from mloda.provider import FeatureSet, HashableDict
+from mloda.provider import FeatureSet
 from mloda.user import Index
 from mloda.user import Link, JoinSpec
 from mloda.user import Options
@@ -129,7 +129,7 @@ class TestAddIndex:
             name="TestAddIndexFeature",
             options={
                 CsvReader.__name__: self.file_path,
-                SQLITEReader.__name__: HashableDict({SQLITEReader.db_path(): self.db_path, "table_name": "test_table"}),
+                SQLITEReader.__name__: {SQLITEReader.db_path(): self.db_path, "table_name": "test_table"},
                 "test_add_index_simple": True,
             },
         )

@@ -95,7 +95,7 @@ class ReadDB(BaseInputData):
             creds = data_access.resolve("credentials", hint=hint)
             if creds:
                 data_accesses.append(creds)
-        elif isinstance(data_access, HashableDict):
+        elif isinstance(data_access, (HashableDict, dict)):
             data_accesses.append(data_access)
 
         if not data_accesses:

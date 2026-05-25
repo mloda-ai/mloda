@@ -69,11 +69,8 @@ class ATestSqliteFeatureGroup(FeatureGroup, MatchData):
         if data_access_collection is None:
             return None
 
-        if data_access_collection.initialized_connection_objects is None:
-            return None
-
-        if data_access_collection.initialized_connection_objects:
-            for conn in data_access_collection.initialized_connection_objects:
+        if data_access_collection.connections:
+            for conn in data_access_collection.connections.values():
                 if isinstance(conn, sqlite3.Connection):
                     return conn
         return None
@@ -200,7 +197,7 @@ class TestSqliteIntegrationWithMlodaAPI:
             Feature(name="score_plus_ten", options={"SqliteTestDataCreator": sqlite_conn}),
         ]
 
-        data_access_collection = DataAccessCollection(initialized_connection_objects={sqlite_conn})
+        data_access_collection = DataAccessCollection(connections={sqlite_conn})
 
         result = mloda.run_all(
             feature_list,

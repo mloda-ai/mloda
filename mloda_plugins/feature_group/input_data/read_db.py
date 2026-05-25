@@ -61,7 +61,7 @@ class ReadDB(BaseInputData):
         if reader_data_access is None:
             raise ValueError(
                 f"'BaseInputData' key is missing or None in the provided Options for {self.__class__.__name__}. "
-                f"Set options with Options(group={{'BaseInputData': (ReaderClass, credentials_dict)}})."
+                f"Set options with Options(group={{'BaseInputData': (ReaderClass, HashableDict({{...}}))}})."
             )
 
         reader, data_access = reader_data_access
@@ -89,9 +89,13 @@ class ReadDB(BaseInputData):
         data_accesses: list[Any] = []
 
         if isinstance(data_access, DataAccessCollection):
-            if data_access.credential_dicts:
-                data_accesses.append(data_access.credential_dicts)
-        elif isinstance(data_access, HashableDict):
+            hint = options.get("data_access_handle") if options is not None else None
+            if hint is not None and data_access.handles().get(hint) not in (None, "credentials"):
+                hint = None
+            creds = data_access.resolve("credentials", hint=hint)
+            if creds:
+                data_accesses.append(creds)
+        elif isinstance(data_access, (HashableDict, dict)):
             data_accesses.append(data_access)
 
         if not data_accesses:

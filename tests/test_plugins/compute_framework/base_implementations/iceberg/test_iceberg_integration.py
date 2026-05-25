@@ -136,11 +136,8 @@ class ATestIcebergFeatureGroup(FeatureGroup, MatchData):
         if data_access_collection is None:
             return None
 
-        if data_access_collection.initialized_connection_objects is None:
-            return None
-
-        if data_access_collection.initialized_connection_objects:
-            for conn in data_access_collection.initialized_connection_objects:
+        if data_access_collection.connections:
+            for conn in data_access_collection.connections.values():
                 if isinstance(conn, (Mock, IcebergTable)) or hasattr(conn, "load_table"):
                     return conn
         return None
@@ -264,7 +261,7 @@ class TestIcebergIntegrationWithMlodaAPI:
             Feature(name="score_plus_ten", options={"IcebergTestDataCreator": mock_iceberg_catalog}),
         ]
 
-        data_access_collection = DataAccessCollection(initialized_connection_objects={mock_iceberg_catalog})
+        data_access_collection = DataAccessCollection(connections={mock_iceberg_catalog})
 
         # Run with Iceberg framework
         result = mloda.run_all(
@@ -304,7 +301,7 @@ class TestIcebergIntegrationWithMlodaAPI:
             Feature(name="arrow_doubled_value", options={"IcebergTestDataCreator": mock_iceberg_catalog})
         ]
 
-        data_access_collection = DataAccessCollection(initialized_connection_objects={mock_iceberg_catalog})
+        data_access_collection = DataAccessCollection(connections={mock_iceberg_catalog})
 
         # Run with both Iceberg and PyArrow frameworks
         result = mloda.run_all(
@@ -342,7 +339,7 @@ class TestIcebergIntegrationWithMlodaAPI:
             Feature(name="category", options={"IcebergTestDataCreator": mock_iceberg_catalog}),
         ]
 
-        data_access_collection = DataAccessCollection(initialized_connection_objects={mock_iceberg_catalog})
+        data_access_collection = DataAccessCollection(connections={mock_iceberg_catalog})
 
         # Run with Iceberg framework
         result = mloda.run_all(

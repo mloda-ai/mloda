@@ -169,7 +169,7 @@ class BaseInputData(ABC):
         try:
             cls.suffix()  # type: ignore[attr-defined]
             return True
-        except NotImplementedError:
+        except (NotImplementedError, AttributeError):
             return False
 
     @classmethod
@@ -182,12 +182,14 @@ class BaseInputData(ABC):
     @classmethod
     def _resolve_pinned_file(cls, data_access: Any, feature_names: list[str]) -> Optional[str]:
         column_map: dict[str, str] = data_access.column_to_file
-        pinned_paths: set[str] = {column_map[name] for name in feature_names if name in column_map}
-        if not pinned_paths:
+        files_registry: dict[str, str] = data_access.files
+        pinned_handles: set[str] = {column_map[name] for name in feature_names if name in column_map}
+        if not pinned_handles:
             return None
         for name in feature_names:
             if name not in column_map:
                 raise ValueError(f"Mixed batch: some features pinned, others not: {feature_names}")
+        pinned_paths: set[str] = {files_registry[h] for h in pinned_handles}
         if len(pinned_paths) == 1:
             pinned_path: str = next(iter(pinned_paths))
             if not cls._matches_suffix(pinned_path):

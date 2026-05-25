@@ -9,7 +9,6 @@ import pytest
 
 from mloda.user import DataAccessCollection
 from mloda.user import Feature
-from mloda.provider import HashableDict
 from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda.user import mloda
@@ -42,9 +41,7 @@ class TestInputDataDB:
     def test_load_csv_local_feature_scope_data_access_with_a_concrete_file(self) -> Any:
         f = Feature(
             name="id",
-            options={
-                SQLITEReader.__name__: HashableDict({SQLITEReader.db_path(): self.db_path, "table_name": "test_table"})
-            },
+            options={SQLITEReader.__name__: {SQLITEReader.db_path(): self.db_path, "table_name": "test_table"}},
         )
 
         result = mloda.run_all(
@@ -58,7 +55,7 @@ class TestInputDataDB:
         result = mloda.run_all(
             ["name", "id"],
             compute_frameworks=["PyArrowTable"],
-            data_access_collection=DataAccessCollection(credential_dicts={SQLITEReader.db_path(): self.db_path}),
+            data_access_collection=DataAccessCollection(credentials=[{SQLITEReader.db_path(): self.db_path}]),
             plugin_collector=PluginCollector.enabled_feature_groups({DBInputDataTestFeatureGroup}),
         )
         assert "name" in result[0].to_pydict()
@@ -72,7 +69,7 @@ class TestInputDataDB:
         result = mloda.run_all(
             [f],
             compute_frameworks=["PyArrowTable"],
-            data_access_collection=DataAccessCollection(credential_dicts={SQLITEReader.db_path(): self.db_path}),
+            data_access_collection=DataAccessCollection(credentials=[{SQLITEReader.db_path(): self.db_path}]),
             plugin_collector=PluginCollector.enabled_feature_groups({DBInputDataTestFeatureGroup, SumFeature}),
         )
         assert "SumFeature_idid" in result[0].to_pydict()
@@ -106,7 +103,7 @@ class TestSqliteConnectionLifecycle:
             mloda.run_all(
                 ["name", "id"],
                 compute_frameworks=["PyArrowTable"],
-                data_access_collection=DataAccessCollection(credential_dicts={SQLITEReader.db_path(): str(db_path)}),
+                data_access_collection=DataAccessCollection(credentials=[{SQLITEReader.db_path(): str(db_path)}]),
                 plugin_collector=PluginCollector.enabled_feature_groups({DBInputDataTestFeatureGroup}),
             )
 
@@ -168,7 +165,7 @@ class TestReadDB:
             read_db.init_reader(options)
 
     def test_match_subclass_data_access(self) -> None:
-        data_access = DataAccessCollection(credential_dicts={SQLITEReader.db_path(): self.db_path})
+        data_access = DataAccessCollection(credentials=[{SQLITEReader.db_path(): self.db_path}])
         feature_names = ["name"]
         result = ReadDB.match_subclass_data_access(data_access, feature_names, options=Options({}))
         assert not result

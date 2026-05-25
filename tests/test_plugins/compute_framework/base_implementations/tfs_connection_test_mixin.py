@@ -40,19 +40,19 @@ class TfsConnectionInitMixin:
         assert framework_class.pick_connection_from_dac(None) is None
 
     def test_returns_none_with_empty_collection(self, framework_class: Any) -> None:
-        dac = DataAccessCollection(initialized_connection_objects=set())
+        dac = DataAccessCollection(connections={})
         assert framework_class.pick_connection_from_dac(dac) is None
 
     def test_returns_none_with_wrong_type(self, framework_class: Any) -> None:
-        dac = DataAccessCollection(initialized_connection_objects={self.wrong_type_connection()})
+        dac = DataAccessCollection(connections={self.wrong_type_connection()})
         assert framework_class.pick_connection_from_dac(dac) is None
 
     def test_returns_matching_connection(self, framework_class: Any, valid_connection: Any) -> None:
-        dac = DataAccessCollection(initialized_connection_objects={valid_connection})
+        dac = DataAccessCollection(connections={valid_connection})
         assert framework_class.pick_connection_from_dac(dac) is valid_connection
 
     def test_classmethod_is_pure(self, framework_class: Any, valid_connection: Any) -> None:
-        dac = DataAccessCollection(initialized_connection_objects={valid_connection})
+        dac = DataAccessCollection(connections={valid_connection})
         first = framework_class.pick_connection_from_dac(dac)
         second = framework_class.pick_connection_from_dac(dac)
         assert first is valid_connection
@@ -62,6 +62,22 @@ class TfsConnectionInitMixin:
         self, framework_class: Any, valid_connection: Any, second_valid_connection: Any
     ) -> None:
         assert valid_connection is not second_valid_connection
-        dac = DataAccessCollection(initialized_connection_objects={valid_connection, second_valid_connection})
-        with pytest.raises(ValueError, match="connections matching this framework"):
+        dac = DataAccessCollection(connections={valid_connection, second_valid_connection})
+        with pytest.raises(ValueError, match="Ambiguous resolve"):
             framework_class.pick_connection_from_dac(dac)
+
+    def test_hint_resolves_ambiguity(
+        self, framework_class: Any, valid_connection: Any, second_valid_connection: Any
+    ) -> None:
+        """A ``data_access_handle`` hint on Options disambiguates between
+        multiple framework-matching connections in the DAC.
+        """
+        from mloda.user import Options
+
+        assert valid_connection is not second_valid_connection
+        dac = DataAccessCollection(
+            connections={"primary": valid_connection, "secondary": second_valid_connection},
+        )
+        options = Options(context={"data_access_handle": "secondary"})
+        resolved = framework_class.pick_connection_from_dac(dac, options=options)
+        assert resolved is second_valid_connection

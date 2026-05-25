@@ -116,11 +116,8 @@ class ATestSparkFeatureGroup(FeatureGroup, MatchData):
         if data_access_collection is None:
             return None
 
-        if data_access_collection.initialized_connection_objects is None:
-            return None
-
-        if data_access_collection.initialized_connection_objects:
-            for conn in data_access_collection.initialized_connection_objects:
+        if data_access_collection.connections:
+            for conn in data_access_collection.connections.values():
                 if isinstance(conn, SparkSession):
                     return conn
         return None
@@ -281,7 +278,7 @@ class TestSparkIntegrationWithMlodaAPI:
             Feature(name="score_plus_ten", options={"SparkTestDataCreator": spark_session}),
         ]
 
-        data_access_collection = DataAccessCollection(initialized_connection_objects={spark_session})
+        data_access_collection = DataAccessCollection(connections={spark_session})
 
         # Run with Spark framework
         result = mloda.run_all(

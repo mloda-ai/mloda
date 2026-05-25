@@ -213,6 +213,6 @@ class TestDuckDBTfsConnectionInit(TfsConnectionInitMixin):
     def test_returns_none_when_duckdb_module_missing(self, framework_class: Any) -> None:
         """When the duckdb module symbol is None (optional dep missing), the classmethod
         must return None without raising AttributeError, matching Spark/Iceberg."""
-        dac = DataAccessCollection(initialized_connection_objects={object()})
+        dac = DataAccessCollection(connections={object()})
         with patch.object(duckdb_framework_module, "duckdb", None):
             assert framework_class.pick_connection_from_dac(dac) is None

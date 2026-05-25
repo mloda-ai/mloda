@@ -18,18 +18,14 @@ The DataAccessCollection is designed to control the access to data of any kind. 
 
 The DataAccessCollection can only be added via **mlodaAPI**.
 
-List options:
+A DAC holds resources of four kinds:
 
-1.  **Files:** Specifies the exact location of files: path/folder/text.txt
+1.  **Files:** the exact location of files, e.g. `path/folder/text.txt`.
+2.  **Folders:** directories where files are located, e.g. `path/folder/`.
+3.  **Credentials:** dicts with the information needed to reach a data source, e.g. `{host: example.com, password: example}`.
+4.  **Connections:** already-initialized connection objects (database connections, Spark sessions, Iceberg catalogs, etc.).
 
-2.  **Folders:** Points to directories where files are located: path/folder/
-
-3.  **Credential dicts:** Contains the necessary credentials to access data:  
- {host: example.com, password: example}
-
-4.  **Initialized connection object:** Stores connection objects that are already initialized: (DBConnectionObject)
-
-5.  **Uninitialized connection object:** Stores not initialized connection objects: (UninitializedDBConnection)
+When the collection holds more than one resource of the same kind, you can name them with stable handles and disambiguate per feature via `Options(context={"data_access_handle": "..."})`. See [Named Data Access Handles](named-data-access-handles.md) for the full naming model, the resolution rule, and the available error shapes; for the simple single-source cases below, naming is optional.
 
 You can apply these options like so:
 
@@ -40,9 +36,8 @@ data_access = DataAccessCollection()
 # Add file paths, folder paths, credentials, and connection objects
 data_access.add_file('path/to/folder/text.txt')
 data_access.add_folder('path/to/folder/')
-data_access.add_credential_dict({'host': 'example.com', 'password': 'example'})
-data_access.add_initialized_connection_object('InitializedDBConnection')
-data_access.add_uninitialized_connection_object('UninitializedDBConnection')
+data_access.add_credentials({'host': 'example.com', 'password': 'example'})
+data_access.add_connection('InitializedDBConnection')
 
 mloda.run_all(
     feature_list,
@@ -101,7 +96,7 @@ for that feature.
 
 #### Disambiguating columns shared across multiple files
 
-When a `DataAccessCollection` holds multiple files that share the same column name (e.g. `id` appears in both `application_train.csv` and `bureau.csv`), global-scope resolution is non-deterministic: the engine iterates an unordered set and returns the first file that contains the requested columns. Two features intended to come from the same file can end up in different `FeatureGroup` nodes, producing a misleading "missing Links" error.
+When a `DataAccessCollection` holds multiple files that share the same column name (e.g. `id` appears in both `application_train.csv` and `bureau.csv`), the resolver refuses to guess: it raises `ValueError` listing the candidate files and asks for `data_access_handle`. `column_to_file` is a per-column shortcut that binds columns to files at construction so you don't have to set `data_access_handle` on every feature.
 
 Use `column_to_file` to pin each column to its canonical file:
 
@@ -109,11 +104,11 @@ Use `column_to_file` to pin each column to its canonical file:
 from mloda.user import DataAccessCollection, mloda
 
 data_access = DataAccessCollection(
-    files={"application_train.csv", "bureau.csv"},
+    files={"train": "application_train.csv", "bureau": "bureau.csv"},
     column_to_file={
-        "SK_ID_CURR": "application_train.csv",
-        "TARGET":     "application_train.csv",
-        "AMT_CREDIT_SUM": "bureau.csv",
+        "SK_ID_CURR": "train",
+        "TARGET":     "train",
+        "AMT_CREDIT_SUM": "bureau",
     },
 )
 
@@ -126,9 +121,9 @@ result = mloda.run_all(
 
 Rules:
 - `column_to_file` only applies to global-scope resolution. Per-feature `options` always take precedence.
-- All values must be present in the `files` set -- construction raises `ValueError` otherwise.
+- Values may be either a file handle (a key of the `files` dict) or a file path (a value of the `files` dict); they are normalized to handles internally. Construction raises `ValueError` if a value matches neither.
 - If a batch of features has some columns pinned and others not, a `ValueError` is raised (use `column_to_file` for all columns or none in a batch).
-- Columns not listed in the map fall through to normal first-match-wins resolution.
+- For columns not listed in the map, the consumer falls back to the shared resolver: a single matching file binds, multiple matching files raise `ValueError` listing the candidates. Set `data_access_handle` on the feature's `Options` to disambiguate without `column_to_file`. See [Named Data Access Handles](named-data-access-handles.md).
 
 The existing per-feature alternative still works for one-off pinning:
 

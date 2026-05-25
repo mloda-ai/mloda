@@ -56,11 +56,13 @@ class TestSQLITEReader:
 
     @pytest.fixture(scope="class")
     def valid_credentials(self, temp_sqlite_db: Any) -> Any:
+        # Backwards-compat regression: keep one HashableDict-wrapped fixture so the legacy
+        # acceptor branch in SQLITEReader.connect / is_valid_credentials stays exercised.
         return HashableDict({"sqlite": temp_sqlite_db})
 
     @pytest.fixture(scope="class")
     def invalid_credentials(self) -> Any:
-        return HashableDict({"sqlite": "non_existent.db"})
+        return {"sqlite": "non_existent.db"}
 
     @pytest.fixture
     def mock_read_db(self) -> Any:
@@ -81,16 +83,16 @@ class TestSQLITEReader:
         connection.close()
 
     def test_connect_invalid_type(self) -> None:
-        with pytest.raises(ValueError, match="Credentials must be an HashableDict."):
-            SQLITEReader.connect({"sqlite": "path/to/db"})
+        with pytest.raises(ValueError, match="must be a dict"):
+            SQLITEReader.connect("not-a-dict")
 
     def test_is_valid_credentials_valid(self, valid_credentials: Any) -> None:
         assert SQLITEReader.is_valid_credentials(valid_credentials)
 
     def test_is_valid_credentials_nonexistent(self, tmp_path: Any) -> None:
-        credentials = HashableDict({"sqlite": str(tmp_path / "nonexistent.db")})
+        credentials = {"sqlite": str(tmp_path / "nonexistent.db")}
         with pytest.raises(
-            ValueError, match=f"Database file {credentials.data['sqlite']} does not exist, but key is given."
+            ValueError, match=f"Database file {credentials['sqlite']} does not exist, but key is given."
         ):
             SQLITEReader.is_valid_credentials(credentials)
 

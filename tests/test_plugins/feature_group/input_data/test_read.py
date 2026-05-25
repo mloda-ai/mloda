@@ -11,7 +11,7 @@ import pyarrow as pa
 
 from mloda.user import DataAccessCollection
 from mloda.user import Feature
-from mloda.provider import FeatureSet, HashableDict
+from mloda.provider import FeatureSet
 from mloda.user import Index
 from mloda.user import Link, JoinSpec
 from mloda.user import PluginCollector
@@ -53,11 +53,7 @@ class TestTwoReader:
             # add sqlite reader feature
             f = Feature(
                 name=feature,
-                options={
-                    SQLITEReader.__name__: HashableDict(
-                        {SQLITEReader.db_path(): self.db_path, "table_name": "test_table"}
-                    )
-                },
+                options={SQLITEReader.__name__: {SQLITEReader.db_path(): self.db_path, "table_name": "test_table"}},
             )
             feature_list.append(f)
             # add csv reader feature
@@ -77,9 +73,7 @@ class TestTwoReader:
             f = Feature(
                 name=feature,
                 options={
-                    SQLITEReader.__name__: HashableDict(
-                        {SQLITEReader.db_path(): self.db_path, "table_name": "test_table"}
-                    ),
+                    SQLITEReader.__name__: {SQLITEReader.db_path(): self.db_path, "table_name": "test_table"},
                     CsvReader.__name__: self.file_path,
                 },
             )
@@ -97,11 +91,7 @@ class TestTwoReader:
         for feature in self.feature_list:
             f = Feature(
                 name=feature,
-                options={
-                    SQLITEReader.__name__: HashableDict(
-                        {SQLITEReader.db_path(): self.db_path, "table_name": "test_table"}
-                    )
-                },
+                options={SQLITEReader.__name__: {SQLITEReader.db_path(): self.db_path, "table_name": "test_table"}},
             )
             feature_list.append(f)
 
@@ -174,7 +164,7 @@ class TestTwoReader:
             name="sum_of_",
             options={
                 "sum": ("any_num", "Amount"),
-                SQLITEReader.__name__: HashableDict({SQLITEReader.db_path(): self.db_path, "table_name": "test_table"}),
+                SQLITEReader.__name__: {SQLITEReader.db_path(): self.db_path, "table_name": "test_table"},
                 CsvReader.__name__: self.file_path,
                 "test_agg_feature": True,
             },

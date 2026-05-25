@@ -88,7 +88,7 @@ import duckdb
 connection = duckdb.connect()
 
 # Set up data access
-data_access_collection = DataAccessCollection(initialized_connection_objects={connection})
+data_access_collection = DataAccessCollection(connections={connection})
 
 # Run with DuckDB framework
 result = mloda.run_all(
@@ -113,7 +113,7 @@ spark = SparkSession.builder \
     .getOrCreate()
 
 # Set up data access
-data_access_collection = DataAccessCollection(initialized_connection_objects={spark})
+data_access_collection = DataAccessCollection(connections={spark})
 
 # Run with Spark framework
 result = mloda.run_all(

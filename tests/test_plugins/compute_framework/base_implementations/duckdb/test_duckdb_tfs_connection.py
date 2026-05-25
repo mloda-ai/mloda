@@ -45,7 +45,7 @@ class TfsDoubledDuckDBFG(FeatureGroup, MatchData):
             return framework_connection_object
         if data_access_collection is None:
             return None
-        for conn in data_access_collection.initialized_connection_objects:
+        for conn in data_access_collection.connections.values():
             if isinstance(conn, duckdb.DuckDBPyConnection):
                 return conn
         return None

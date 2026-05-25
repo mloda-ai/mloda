@@ -27,7 +27,7 @@ class TestColumnToFileHint:
         result = TestRF.match_subclass_data_access(dac, ["id", "val"], options=Options({}))
         assert result == "a.csv"
 
-    def test_unpinned_feature_falls_through(self) -> None:
+    def test_unpinned_feature_raises_on_ambiguity(self) -> None:
         class TestRF(ReadFile):
             @classmethod
             def get_column_names(cls, file_name: str) -> list[str]:
@@ -37,10 +37,27 @@ class TestColumnToFileHint:
             def suffix(cls) -> tuple[str, ...]:
                 return (".csv",)
 
-        dac = DataAccessCollection(files={"a.csv", "b.csv"}, column_to_file={"id": "a.csv"})
-        # "other_col" not in map, so falls through to normal resolution
-        result = TestRF.match_subclass_data_access(dac, ["other_col"], options=Options({}))
-        assert result is not None
+        dac = DataAccessCollection(files={"a": "a.csv", "b": "b.csv"}, column_to_file={"id": "a"})
+        with pytest.raises(ValueError) as excinfo:
+            TestRF.match_subclass_data_access(dac, ["other_col"], options=Options({}))
+        assert "data_access_handle" in str(excinfo.value)
+        assert "'a'" in str(excinfo.value) and "'b'" in str(excinfo.value)
+
+    def test_unpinned_feature_resolves_with_hint(self) -> None:
+        class TestRF(ReadFile):
+            @classmethod
+            def get_column_names(cls, file_name: str) -> list[str]:
+                return ["id", "val", "other_col"]
+
+            @classmethod
+            def suffix(cls) -> tuple[str, ...]:
+                return (".csv",)
+
+        dac = DataAccessCollection(files={"a": "a.csv", "b": "b.csv"}, column_to_file={"id": "a"})
+        result = TestRF.match_subclass_data_access(
+            dac, ["other_col"], options=Options(context={"data_access_handle": "b"})
+        )
+        assert result == "b.csv"
 
     def test_no_hint_preserves_behavior(self) -> None:
         class TestRF(ReadFile):
@@ -110,7 +127,7 @@ class TestColumnToFileHint:
 
     def test_construction_rejects_unknown_file(self) -> None:
         with pytest.raises(ValueError):
-            DataAccessCollection(files={"a.csv"}, column_to_file={"col": "b.csv"})
+            DataAccessCollection(files={"a.csv"}, column_to_file={"col": "b"})
 
     def test_integration_two_csvs_sharing_id_column(self) -> None:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, newline="") as f1:
@@ -165,7 +182,7 @@ class TestColumnToFileHintReadDocument:
         result = TestRD.match_subclass_data_access(dac, ["feature_a"], options=Options({}))
         assert result == "a.txt"
 
-    def test_document_no_hint_falls_through(self) -> None:
+    def test_document_no_hint_raises_on_ambiguity(self) -> None:
         class TestRD(ReadDocument):
             @classmethod
             def suffix(cls) -> tuple[str, ...]:
@@ -176,9 +193,25 @@ class TestColumnToFileHintReadDocument:
                 return None
 
         dac = DataAccessCollection(files={"a.txt", "b.txt"})
-        result = TestRD.match_subclass_data_access(dac, ["any_feature"], options=Options({}))
-        assert result is not None
-        assert result.endswith(".txt")
+        with pytest.raises(ValueError) as excinfo:
+            TestRD.match_subclass_data_access(dac, ["any_feature"], options=Options({}))
+        assert "data_access_handle" in str(excinfo.value)
+
+    def test_document_hint_resolves_ambiguity(self) -> None:
+        class TestRD(ReadDocument):
+            @classmethod
+            def suffix(cls) -> tuple[str, ...]:
+                return (".txt",)
+
+            @classmethod
+            def load_data(cls, data_access: Any, features: Any) -> Any:
+                return None
+
+        dac = DataAccessCollection(files={"a": "a.txt", "b": "b.txt"})
+        result = TestRD.match_subclass_data_access(
+            dac, ["any_feature"], options=Options(context={"data_access_handle": "a"})
+        )
+        assert result == "a.txt"
 
     def test_document_mixed_batch_raises(self) -> None:
         class TestRD(ReadDocument):

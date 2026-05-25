@@ -188,7 +188,7 @@ connection = duckdb.connect()
 
 # Set up data access with connection
 data_access_collection = DataAccessCollection(
-    initialized_connection_objects={connection}
+    connections={connection}
 )
 
 feature = Feature("id", options={"compute_framework": "DuckDBFramework"})
@@ -218,7 +218,7 @@ catalog = load_catalog("default", **{
 
 # Set up data access with catalog
 data_access_collection = DataAccessCollection(
-    initialized_connection_objects={catalog}
+    connections={catalog}
 )
 
 feature = Feature("id", options={"compute_framework": "IcebergFramework"})
@@ -246,7 +246,7 @@ spark = SparkSession.builder \
 
 # Set up data access with SparkSession
 data_access_collection = DataAccessCollection(
-    initialized_connection_objects={spark}
+    connections={spark}
 )
 
 feature = Feature("id", options={"compute_framework": "SparkFramework"})

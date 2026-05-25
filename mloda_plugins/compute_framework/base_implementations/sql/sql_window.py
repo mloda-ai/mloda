@@ -124,6 +124,7 @@ def render_order_by_item(item: str | OrderBy) -> str:
     return " ".join(parts)
 
 
+# Preceding(0) and CurrentRow rank equally on purpose: 0 PRECEDING is SQL-equivalent to CURRENT ROW.
 def bound_rank(bound: FrameBound, side: Literal["start", "end"]) -> float:
     if isinstance(bound, Unbounded):
         return float("-inf") if side == "start" else float("inf")

@@ -13,6 +13,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from mloda.provider import HashableDict
 from mloda.user import DataAccessCollection
 from mloda.user import ParallelizationMode
@@ -35,6 +37,7 @@ class TestSqliteCredentialsUnderMultiprocessing:
         conn.commit()
         conn.close()
 
+    @pytest.mark.timeout(30)
     def test_hashable_dict_credentials_work_under_multiprocessing(self, tmp_path: Path, flight_server: Any) -> None:
         """Backwards-compat: the legacy HashableDict-wrapped pattern still produces rows under MULTIPROCESSING."""
         db_path = tmp_path / "mp_hashable.sqlite"
@@ -53,6 +56,7 @@ class TestSqliteCredentialsUnderMultiprocessing:
 
         assert "name" in result[0].to_pydict()
 
+    @pytest.mark.timeout(30)
     def test_plain_dict_credentials_under_multiprocessing(self, tmp_path: Path, flight_server: Any) -> None:
         """An unwrapped plain dict is now accepted and produces rows end-to-end under MULTIPROCESSING."""
         db_path = tmp_path / "mp_plain.sqlite"

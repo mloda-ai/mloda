@@ -76,6 +76,8 @@ class OrderBy:
     nulls: Literal["first", "last"] | None = None
 
     def __post_init__(self) -> None:
+        if self.column == "":
+            raise ValueError("OrderBy column must be a non-empty string")
         if self.nulls is not None and self.nulls not in ("first", "last"):
             raise ValueError(f"OrderBy nulls must be 'first', 'last', or None; got {self.nulls!r}")
 

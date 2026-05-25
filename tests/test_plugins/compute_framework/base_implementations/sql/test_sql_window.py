@@ -43,6 +43,12 @@ def test_orderby_invalid_nulls_raises() -> None:
         OrderBy("age", nulls="middle")  # type: ignore[arg-type]
 
 
+def test_orderby_empty_column_raises() -> None:
+    """OrderBy must reject an empty column name at construction time."""
+    with pytest.raises(ValueError, match="column"):
+        OrderBy("")
+
+
 def test_window_frame_kind_invalid_string_raises() -> None:
     """WindowFrame must reject any kind outside the Literal alphabet at construction time."""
     with pytest.raises(ValueError, match="kind"):

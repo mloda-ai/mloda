@@ -327,7 +327,7 @@ class ExecutionOrchestrator:
             self.manager = None
         else:
             MyManager.register("CfwManager", CfwManager)
-            self.manager = MyManager().__enter__()
+            self.manager = MyManager(ctx=multiprocessing.get_context("spawn")).__enter__()
             self.cfw_register = self.manager.CfwManager(parallelization_modes, function_extender)
 
         if self.flight_server:

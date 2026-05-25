@@ -75,6 +75,7 @@ class TestFlightServerProcessLocation:
         monkeypatch.setattr(
             "mloda.core.runtime.flight.runner_flight_server.create_location", lambda: "grpc://127.0.0.1:0"
         )
+
         class FakeCtx:
             Process = DeadProcess
             Queue = staticmethod(multiprocessing.Queue)

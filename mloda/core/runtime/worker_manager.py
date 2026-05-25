@@ -5,6 +5,7 @@ import queue
 import threading
 import time
 import logging
+from multiprocessing.process import BaseProcess
 from typing import Any, Callable, Optional
 from uuid import UUID
 
@@ -18,7 +19,7 @@ class WorkerManager:
 
     def __init__(self) -> None:
         """Initialize empty state."""
-        self.tasks: list[threading.Thread | multiprocessing.Process] = []
+        self.tasks: list[threading.Thread | BaseProcess] = []
         self.process_register: dict[UUID, tuple[Any, Any, Any]] = {}
         self.result_queues_collection: set[Any] = set()
         self.result_uuids_collection: set[UUID] = set()

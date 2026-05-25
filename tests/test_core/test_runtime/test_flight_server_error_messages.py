@@ -37,7 +37,7 @@ class TestFlightServerProcessLocation:
 
         class FakeCtx:
             Process = InlineProcess
-            Queue = staticmethod(multiprocessing.Queue)
+            Queue: Any = staticmethod(multiprocessing.Queue)
 
         monkeypatch.setattr(
             "mloda.core.runtime.flight.runner_flight_server.mp_spawn_context",
@@ -78,7 +78,7 @@ class TestFlightServerProcessLocation:
 
         class FakeCtx:
             Process = DeadProcess
-            Queue = staticmethod(multiprocessing.Queue)
+            Queue: Any = staticmethod(multiprocessing.Queue)
 
         monkeypatch.setattr(
             "mloda.core.runtime.flight.runner_flight_server.mp_spawn_context",

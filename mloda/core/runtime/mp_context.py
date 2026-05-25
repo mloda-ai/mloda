@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import multiprocessing
-from multiprocessing.context import BaseContext
+from multiprocessing.context import SpawnContext
 
 
-def mp_spawn_context() -> BaseContext:
+def mp_spawn_context() -> SpawnContext:
     """Return a fresh spawn-based multiprocessing context.
 
     mloda forks several helper processes (Manager, worker, Flight server)

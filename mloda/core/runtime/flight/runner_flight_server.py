@@ -13,7 +13,7 @@ from mloda.core.runtime.flight.flight_server import FlightServer, create_locatio
 
 logger = logging.getLogger(__name__)
 
-LOCATION_PUBLISH_TIMEOUT_SECONDS = 5.0
+LOCATION_PUBLISH_TIMEOUT_SECONDS = 9.9
 LOCATION_PUBLISH_POLL_SECONDS = 0.1
 
 

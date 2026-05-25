@@ -43,8 +43,8 @@ class DuckdbRelation:
         return self._relation.columns
 
     @property
-    def types(self) -> list[str]:
-        return self._relation.types
+    def types(self) -> list[Any]:
+        return list(self._relation.dtypes)
 
     def filter(self, condition: str, params: tuple[Any, ...] = ()) -> "DuckdbRelation":
         """Apply a filter condition. Params are inlined via ``quote_value``

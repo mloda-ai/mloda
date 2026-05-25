@@ -2,6 +2,7 @@ import datetime
 import re
 import sqlite3
 import uuid
+from collections.abc import Sequence
 from typing import Any, Optional
 
 import pyarrow as pa
@@ -35,18 +36,18 @@ def _arrow_type_to_sqlite(arrow_type: pa.DataType) -> str:
 
 
 def _infer_sqlite_type_from_values(values: list[Any]) -> str:
+    non_null_values = [value for value in values if value is not None]
+    if not non_null_values:
+        return "TEXT"
+    if all(isinstance(value, (bytes, bytearray)) for value in non_null_values):
+        return "BLOB"
+
     result = "INTEGER"  # default when all non-None are bool/int
-    found_non_none = False
-    for v in values:
-        if v is None:
-            continue
-        found_non_none = True
+    for v in non_null_values:
         if not isinstance(v, (bool, int, float)):
             return "TEXT"  # TEXT dominates; safe to return early
         if isinstance(v, float) and result == "INTEGER":
             result = "REAL"  # REAL upgrades INTEGER but not TEXT
-    if not found_non_none:
-        return "TEXT"
     return result
 
 
@@ -59,6 +60,75 @@ def _sqlite_affinity_to_arrow_type(affinity: str) -> pa.DataType:
     if "BLOB" in upper:
         return pa.large_binary()
     return pa.string()
+
+
+def _infer_arrow_type_from_values(values: list[Any]) -> pa.DataType:
+    non_null_values = [value for value in values if value is not None]
+    if not non_null_values:
+        return pa.string()
+    if all(isinstance(value, bool) for value in non_null_values):
+        return pa.bool_()
+    if all(isinstance(value, datetime.datetime) for value in non_null_values):
+        return pa.timestamp("us")
+    if all(isinstance(value, datetime.date) and not isinstance(value, datetime.datetime) for value in non_null_values):
+        return pa.date32()
+    if all(isinstance(value, (bytes, bytearray)) for value in non_null_values):
+        return pa.large_binary()
+    if all(isinstance(value, (bool, int, float)) for value in non_null_values):
+        if any(isinstance(value, float) for value in non_null_values):
+            return pa.float64()
+        return pa.int64()
+    return pa.string()
+
+
+def _raw_sql_projection_starts_with_star(projection: str) -> bool:
+    return re.match(r"^\*\s*(?:,|$)", projection.lstrip()) is not None
+
+
+def _values_for_arrow_type(values: list[Any], arrow_type: pa.DataType) -> list[Any]:
+    if pa.types.is_boolean(arrow_type):
+        return [None if value is None else bool(value) for value in values]
+    if pa.types.is_timestamp(arrow_type):
+        return [datetime.datetime.fromisoformat(value) if isinstance(value, str) else value for value in values]
+    if pa.types.is_date(arrow_type):
+        return [datetime.date.fromisoformat(value) if isinstance(value, str) else value for value in values]
+    return values
+
+
+def _compatible_arrow_type(left_type: pa.DataType | None, right_type: pa.DataType | None) -> pa.DataType | None:
+    if left_type is None or right_type is None:
+        return None
+    if left_type == right_type:
+        return left_type
+    if pa.types.is_integer(left_type) and pa.types.is_integer(right_type):
+        if pa.types.is_signed_integer(left_type) or pa.types.is_signed_integer(right_type):
+            width = max(left_type.bit_width, right_type.bit_width)
+            if width <= 8:
+                return pa.int8()
+            if width <= 16:
+                return pa.int16()
+            if width <= 32:
+                return pa.int32()
+            return pa.int64()
+
+        width = max(left_type.bit_width, right_type.bit_width)
+        if width <= 8:
+            return pa.uint8()
+        if width <= 16:
+            return pa.uint16()
+        if width <= 32:
+            return pa.uint32()
+        return pa.uint64()
+    if pa.types.is_floating(left_type) and pa.types.is_floating(right_type):
+        return pa.float64() if max(left_type.bit_width, right_type.bit_width) > 32 else pa.float32()
+    if (
+        pa.types.is_integer(left_type)
+        and pa.types.is_floating(right_type)
+        or pa.types.is_floating(left_type)
+        and pa.types.is_integer(right_type)
+    ):
+        return pa.float64()
+    return left_type
 
 
 class SqliteRelation:
@@ -75,12 +145,19 @@ class SqliteRelation:
       user-controlled input.
     """
 
-    def __init__(self, connection: sqlite3.Connection, table_name: str, _is_view: bool = False) -> None:
+    def __init__(
+        self,
+        connection: sqlite3.Connection,
+        table_name: str,
+        _is_view: bool = False,
+        _types: Optional[Sequence[pa.DataType | None]] = None,
+    ) -> None:
         self._connection = connection
         self._table_name = table_name
         self._alias: Optional[str] = None
         self._is_view = _is_view
         self._cached_columns: Optional[list[str]] = None
+        self._cached_types: Optional[list[pa.DataType | None]] = list(_types) if _types is not None else None
 
     @property
     def connection(self) -> sqlite3.Connection:
@@ -98,37 +175,124 @@ class SqliteRelation:
         return self._cached_columns
 
     @property
-    def types(self) -> dict[str, str]:
-        """Return column type affinities via PRAGMA table_info.
-        This is a best-effort fallback since from_arrow does not
-        retain the source Arrow schema as a private field.
-        """
+    def types(self) -> list[pa.DataType]:
+        columns = self.columns
+        type_hints = self._types_for_current_columns()
+        if type_hints is not None:
+            return type_hints
+        type_map = self._sqlite_affinity_types_by_column()
+        return [type_map.get(column, pa.string()) for column in columns]
+
+    def _sqlite_affinity_types_by_column(self) -> dict[str, pa.DataType]:
         cursor = self._connection.execute(f"PRAGMA table_info({quote_ident(self._table_name)})")
-        return {row[1]: row[2].lower() for row in cursor.fetchall()}
+        return {row[1]: _sqlite_affinity_to_arrow_type(str(row[2])) for row in cursor.fetchall()}
+
+    def _type_hints_for_current_columns(self) -> Optional[list[pa.DataType | None]]:
+        if self._cached_types is None or len(self._cached_types) != len(self.columns):
+            return None
+        return list(self._cached_types)
+
+    def _types_for_current_columns(self) -> Optional[list[pa.DataType]]:
+        type_hints = self._type_hints_for_current_columns()
+        if type_hints is None:
+            return None
+        if any(arrow_type is None for arrow_type in type_hints):
+            return self._types_with_inferred_unknown_hints(type_hints)
+        return [arrow_type for arrow_type in type_hints if arrow_type is not None]
+
+    def _types_with_inferred_unknown_hints(self, type_hints: list[pa.DataType | None]) -> list[pa.DataType]:
+        unknown_indexes = [idx for idx, arrow_type in enumerate(type_hints) if arrow_type is None]
+        values_by_index: dict[int, list[Any]] = {idx: [] for idx in unknown_indexes}
+        cursor = self._connection.execute(f"SELECT * FROM {quote_ident(self._table_name)}")  # nosec
+        for row in cursor.fetchall():
+            for idx in unknown_indexes:
+                values_by_index[idx].append(row[idx])
+
+        resolved_hints = list(type_hints)
+        for idx in unknown_indexes:
+            resolved_hints[idx] = _infer_arrow_type_from_values(values_by_index[idx])
+        self._cached_types = resolved_hints
+        return [arrow_type for arrow_type in resolved_hints if arrow_type is not None]
+
+    def _types_for_projection(self, columns: list[str]) -> Optional[list[pa.DataType | None]]:
+        current_type_hints = self._types_for_current_columns()
+        if current_type_hints is None:
+            return None
+        type_map = dict(zip(self.columns, current_type_hints, strict=True))
+        if any(column not in type_map for column in columns):
+            return None
+        return [type_map[column] for column in columns]
+
+    def _types_for_raw_sql_projection(
+        self, projection: str, output_columns: list[str]
+    ) -> Optional[list[pa.DataType | None]]:
+        if not _raw_sql_projection_starts_with_star(projection):
+            return None
+        source_columns = self.columns
+        source_type_hints = self._types_for_current_columns()
+        if source_type_hints is None or len(output_columns) < len(source_columns):
+            return None
+        if output_columns[: len(source_columns)] != source_columns:
+            return None
+        return source_type_hints + [None] * (len(output_columns) - len(source_columns))
+
+    @staticmethod
+    def _types_for_join_projection(
+        left_cols: list[str],
+        left_types: Optional[Sequence[pa.DataType | None]],
+        right_cols: list[str],
+        right_types: Optional[Sequence[pa.DataType | None]],
+        shared: set[str],
+        coalesce_shared: bool = False,
+    ) -> Optional[list[pa.DataType | None]]:
+        if left_types is None or right_types is None:
+            return None
+        left_type_map = dict(zip(left_cols, left_types, strict=True))
+        right_type_map = dict(zip(right_cols, right_types, strict=True))
+        output_types = [
+            _compatible_arrow_type(left_type_map[column], right_type_map[column])
+            if coalesce_shared and column in shared
+            else left_type_map[column]
+            for column in left_cols
+        ]
+        output_types.extend(right_type_map[column] for column in right_cols if column not in shared)
+        return output_types
 
     def filter(self, condition: str, params: tuple[Any, ...] = ()) -> "SqliteRelation":
         """Apply a filter condition using PEP 249 parameterized queries."""
         new_name = _next_table_name()
+        types = self._types_for_current_columns()
         sql = (
             f"CREATE TEMP TABLE {quote_ident(new_name)} AS "  # nosec
             f"SELECT * FROM {quote_ident(self._table_name)} WHERE {condition}"
         )
         self._connection.execute(sql, params)
-        return SqliteRelation(self._connection, new_name, _is_view=False)
+        return SqliteRelation(
+            self._connection,
+            new_name,
+            _is_view=False,
+            _types=types,
+        )
 
     def select(self, *columns: str, _raw_sql: Optional[str] = None) -> "SqliteRelation":
         """Project columns. _raw_sql bypasses quoting: never pass user-controlled input."""
         new_name = _next_table_name()
         if _raw_sql is not None:
             projection = _raw_sql
+            types: Optional[list[pa.DataType | None]] = None
         else:
             projection = ", ".join(quote_ident(c) for c in columns)
+            types = self._types_for_projection(list(columns))
         sql = f"CREATE TEMP VIEW {quote_ident(new_name)} AS SELECT {projection} FROM {quote_ident(self._table_name)}"  # nosec
         self._connection.execute(sql)
-        return SqliteRelation(self._connection, new_name, _is_view=True)
+        if _raw_sql is not None:
+            cursor = self._connection.execute(f"SELECT * FROM {quote_ident(new_name)} LIMIT 0")  # nosec
+            output_columns = [desc[0] for desc in cursor.description]
+            types = self._types_for_raw_sql_projection(projection, output_columns)
+        return SqliteRelation(self._connection, new_name, _is_view=True, _types=types)
 
     def set_alias(self, alias: str) -> "SqliteRelation":
-        rel = SqliteRelation(self._connection, self._table_name, self._is_view)
+        rel = SqliteRelation(self._connection, self._table_name, self._is_view, self._types_for_current_columns())
         rel._alias = alias
         return rel
 
@@ -137,11 +301,17 @@ class SqliteRelation:
 
     def limit(self, n: int) -> "SqliteRelation":
         new_name = _next_table_name()
+        types = self._types_for_current_columns()
         sql = (
             f"CREATE TEMP VIEW {quote_ident(new_name)} AS SELECT * FROM {quote_ident(self._table_name)} LIMIT {int(n)}"  # nosec
         )
         self._connection.execute(sql)
-        return SqliteRelation(self._connection, new_name, _is_view=True)
+        return SqliteRelation(
+            self._connection,
+            new_name,
+            _is_view=True,
+            _types=types,
+        )
 
     def drop(self) -> None:
         """Drop the underlying temp table or view."""
@@ -185,18 +355,23 @@ class SqliteRelation:
             sql_left_table = other._table_name
             sql_left_alias = other_alias
             sql_left_cols = other_cols
+            sql_left_types = other._types_for_current_columns()
             sql_right_table = self._table_name
             sql_right_alias = self_alias
             sql_right_cols = self_cols
+            sql_right_types = self._types_for_current_columns()
         else:
             sql_left_table = self._table_name
             sql_left_alias = self_alias
             sql_left_cols = self_cols
+            sql_left_types = self._types_for_current_columns()
             sql_right_table = other._table_name
             sql_right_alias = other_alias
             sql_right_cols = other_cols
+            sql_right_types = other._types_for_current_columns()
 
         projection = self._build_join_projection(sql_left_alias, sql_left_cols, sql_right_alias, sql_right_cols, shared)
+        types = self._types_for_join_projection(sql_left_cols, sql_left_types, sql_right_cols, sql_right_types, shared)
 
         sql = (
             f"CREATE TEMP VIEW {quote_ident(new_table)} AS "  # nosec
@@ -205,7 +380,7 @@ class SqliteRelation:
             f"ON {condition}"
         )
         self._connection.execute(sql)
-        return SqliteRelation(self._connection, new_table, _is_view=True)
+        return SqliteRelation(self._connection, new_table, _is_view=True, _types=types)
 
     def _full_outer_join(
         self,
@@ -245,9 +420,17 @@ class SqliteRelation:
             f"{where_clause}"
         )
 
+        types = self._types_for_join_projection(
+            self_cols,
+            self._types_for_current_columns(),
+            other_cols,
+            other._types_for_current_columns(),
+            shared,
+            coalesce_shared=True,
+        )
         sql = f"CREATE TEMP VIEW {quote_ident(new_table)} AS {left_sql} UNION ALL {right_sql}"
         self._connection.execute(sql)
-        return SqliteRelation(self._connection, new_table, _is_view=True)
+        return SqliteRelation(self._connection, new_table, _is_view=True, _types=types)
 
     @staticmethod
     def _build_join_projection(
@@ -275,7 +458,9 @@ class SqliteRelation:
 
     def append_column(self, name: str, values: list[Any]) -> "SqliteRelation":
         """Return a new relation with an additional column appended positionally."""
+        current_types = self._types_for_current_columns()
         new_col_rel = SqliteRelation.from_dict(self._connection, {name: values})
+        new_col_types = new_col_rel._types_for_current_columns()
         rn = "__mloda_rn__"
         qrn = quote_ident(rn)
         left_name = _next_table_name()
@@ -302,7 +487,8 @@ class SqliteRelation:
             f"INNER JOIN {quote_ident(right_name)} "
             f"ON {quote_ident(left_name)}.{qrn} = {quote_ident(right_name)}.{qrn}"
         )
-        return SqliteRelation(self._connection, result_name, _is_view=True)
+        types = current_types + new_col_types if current_types is not None and new_col_types is not None else None
+        return SqliteRelation(self._connection, result_name, _is_view=True, _types=types)
 
     def to_arrow_table(self) -> pa.Table:
         cursor = self._connection.execute(f"SELECT * FROM {quote_ident(self._table_name)}")  # nosec
@@ -310,9 +496,7 @@ class SqliteRelation:
         rows = cursor.fetchall()
 
         if not rows:
-            pragma_cursor = self._connection.execute(f"PRAGMA table_info({quote_ident(self._table_name)})")
-            type_map = {row[1]: row[2] for row in pragma_cursor.fetchall()}
-            arrays = [pa.array([], type=_sqlite_affinity_to_arrow_type(type_map.get(c, "TEXT"))) for c in cols]
+            arrays = [pa.array([], type=arrow_type) for arrow_type in self.types]
             return pa.table(dict(zip(cols, arrays)))
 
         col_data: dict[str, list[Any]] = {c: [] for c in cols}
@@ -320,7 +504,14 @@ class SqliteRelation:
             for c, val in zip(cols, row):
                 col_data[c].append(val)
 
-        return pa.table(col_data)
+        type_hints = self._types_for_current_columns()
+        if type_hints is None:
+            return pa.table(col_data)
+
+        arrays = []
+        for column, arrow_type in zip(cols, type_hints, strict=True):
+            arrays.append(pa.array(_values_for_arrow_type(col_data[column], arrow_type), type=arrow_type))
+        return pa.table(dict(zip(cols, arrays, strict=True)))
 
     def df(self) -> Any:
         return self.to_arrow_table().to_pandas()
@@ -346,7 +537,7 @@ class SqliteRelation:
             rows = list(zip(*(col.to_pylist() for col in arrow_table.columns)))
             connection.executemany(insert_sql, rows)
 
-        return cls(connection, table_name)
+        return cls(connection, table_name, _types=list(arrow_table.schema.types))
 
     @classmethod
     def from_dict(cls, connection: sqlite3.Connection, data: dict[str, list[Any]]) -> "SqliteRelation":
@@ -356,7 +547,8 @@ class SqliteRelation:
         if not cols:
             raise ValueError("Cannot create relation from empty dictionary")
 
-        col_defs = ", ".join(f"{quote_ident(c)} {_infer_sqlite_type_from_values(data[c])}" for c in cols)
+        sqlite_types = {column: _infer_sqlite_type_from_values(data[column]) for column in cols}
+        col_defs = ", ".join(f"{quote_ident(c)} {sqlite_types[c]}" for c in cols)
         connection.execute(f"CREATE TEMP TABLE {quote_ident(table_name)} ({col_defs})")
 
         num_rows = len(data[cols[0]])
@@ -371,4 +563,5 @@ class SqliteRelation:
                 rows.append(row)
             connection.executemany(insert_sql, rows)
 
-        return cls(connection, table_name)
+        types = [_infer_arrow_type_from_values(data[column]) for column in cols]
+        return cls(connection, table_name, _types=types)

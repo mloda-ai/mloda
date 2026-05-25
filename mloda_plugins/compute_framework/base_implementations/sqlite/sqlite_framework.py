@@ -12,17 +12,8 @@ from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_filter_e
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_mask_engine import SqliteMaskEngine
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_merge_engine import SqliteMergeEngine
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation
-from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
 
 logger = logging.getLogger(__name__)
-
-
-_SQLITE_TYPE_MAP: dict[str, DataType] = {
-    "integer": DataType.INT64,
-    "real": DataType.DOUBLE,
-    "text": DataType.STRING,
-    "blob": DataType.BINARY,
-}
 
 
 def _regexp(pattern: str, string: Optional[str]) -> bool:
@@ -77,23 +68,16 @@ class SqliteFramework(ComputeFramework):
         return set(data.columns)
 
     def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
-        if not hasattr(data, "connection") or column_name not in data.columns:
+        if not hasattr(data, "columns") or column_name not in data.columns:
             return None
-        cursor = data.connection.execute(f"PRAGMA table_info({quote_ident(data.table_name)})")
-        for row in cursor.fetchall():
-            if row[1] == column_name:
-                return str(row[2]).lower()
-        return None
+        idx = data.columns.index(column_name)
+        return str(data.types[idx])
 
     def _extract_column_data_type(self, data: Any, column_name: str) -> Optional[DataType]:
-        if not hasattr(data, "connection") or column_name not in data.columns:
+        if not hasattr(data, "columns") or column_name not in data.columns:
             return None
-        cursor = data.connection.execute(f"PRAGMA table_info({quote_ident(data.table_name)})")
-        for row in cursor.fetchall():
-            if row[1] == column_name:
-                type_str = str(row[2]).lower()
-                return _SQLITE_TYPE_MAP.get(type_str)
-        return None
+        idx = data.columns.index(column_name)
+        return DataType.from_arrow_type_safe(data.types[idx])
 
     def transform(
         self,

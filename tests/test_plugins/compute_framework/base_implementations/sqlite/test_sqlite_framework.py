@@ -4,8 +4,7 @@ from typing import Any, Optional
 import pyarrow as pa
 import pytest
 
-from mloda.user import FeatureName
-from mloda.user import ParallelizationMode
+from mloda.user import DataType, FeatureName, ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework, _regexp
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation
 from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
@@ -192,6 +191,22 @@ class TestSqliteDtypeExtraction(DtypeExtractionTestMixin):
             {"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]}
         )
         return SqliteRelation.from_arrow(connection, arrow_table)
+
+    def test_extract_raw_sql_expression_column_data_type_is_numeric(
+        self, connection: sqlite3.Connection, framework_instance: SqliteFramework
+    ) -> None:
+        rel = SqliteRelation.from_arrow(connection, pa.table({"id": pa.array([1, 2], type=pa.int32())}))
+        projected = rel.select(_raw_sql="*, id + 1 AS next_id")
+        materialized_type = projected.to_arrow_table().schema.field("next_id").type
+
+        assert pa.types.is_integer(materialized_type)
+        assert {
+            "dtype": framework_instance._extract_column_dtype(projected, "next_id"),
+            "data_type": framework_instance._extract_column_data_type(projected, "next_id"),
+        } == {
+            "dtype": str(materialized_type),
+            "data_type": DataType.INT64,
+        }
 
 
 class TestSqliteDataTypeValidator(DataTypeValidatorFrameworkTestMixin):

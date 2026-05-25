@@ -42,6 +42,24 @@ class TestDuckdbRelation(RelationTestMixin):
     def get_column_values(self, result: Any, column: str) -> list[Any]:
         return result.df()[column].tolist()  # type: ignore[no-any-return]
 
+    def test_types_exposes_relation_types_aligned_with_columns(self, connection: Any) -> None:
+        arrow = pa.table(
+            {
+                "id": pa.array([1, 2], type=pa.int64()),
+                "score": pa.array([1.5, 2.5], type=pa.float64()),
+                "name": pa.array(["Alice", "Bob"], type=pa.string()),
+                "flag": pa.array([True, False], type=pa.bool_()),
+            }
+        )
+        rel = DuckdbRelation.from_arrow(connection, arrow)
+
+        assert list(zip(rel.columns, (str(dtype) for dtype in rel.types), strict=True)) == [
+            ("id", "BIGINT"),
+            ("score", "DOUBLE"),
+            ("name", "VARCHAR"),
+            ("flag", "BOOLEAN"),
+        ]
+
     # --- Select ---
 
     def test_select_raw_sql_expression(self, sample_relation: "DuckdbRelation") -> None:

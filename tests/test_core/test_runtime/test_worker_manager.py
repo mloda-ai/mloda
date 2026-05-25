@@ -2,6 +2,7 @@
 
 import multiprocessing
 import queue
+import sys
 import threading
 import time
 from typing import Any
@@ -336,11 +337,12 @@ class TestWorkerManagerDropCompletion:
         manager.wait_for_drop_completion(mock_queue, cfw_uuid, timeout=0.1)
         elapsed = time.time() - start_time
 
-        # Should timeout after approximately 0.1 seconds. Upper bound is generous
-        # because spawn-context teardown noise can stretch time.sleep(0.001) ticks
-        # on loaded CI; the assertion exists to guard against an infinite loop, not
-        # to verify wall-clock precision.
-        assert 0.09 < elapsed < 1.0
+        # Should timeout after approximately 0.1 seconds. On Python 3.14 the
+        # spawn-context teardown of unrelated workers can stretch time.sleep(0.001)
+        # ticks on loaded CI, so widen the upper bound there only; the assertion
+        # exists to guard against an infinite loop, not to verify wall-clock precision.
+        upper = 1.0 if sys.version_info >= (3, 14) else 0.2
+        assert 0.09 < elapsed < upper
 
     def test_wait_for_drop_completion_uses_non_blocking_get(self) -> None:
         """wait_for_drop_completion should use non-blocking queue get."""

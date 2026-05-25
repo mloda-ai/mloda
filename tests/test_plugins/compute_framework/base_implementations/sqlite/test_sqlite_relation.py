@@ -1,5 +1,4 @@
 import datetime
-import math
 import sqlite3
 import warnings
 from typing import Any
@@ -8,14 +7,6 @@ import pyarrow as pa
 import pytest
 
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
-from mloda_plugins.compute_framework.base_implementations.sql.sql_window import (
-    CurrentRow,
-    Following,
-    OrderBy,
-    Preceding,
-    Unbounded,
-    WindowFrame,
-)
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import (
     SqliteRelation,
     _infer_sqlite_type_from_values,
@@ -23,9 +14,12 @@ from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation
 from tests.test_plugins.compute_framework.base_implementations.relation_test_mixin import (
     RelationTestMixin,
 )
+from tests.test_plugins.compute_framework.base_implementations.sql_relation_window_test_mixin import (
+    SqlRelationWindowTestMixin,
+)
 
 
-class TestSqliteRelation(RelationTestMixin):
+class TestSqliteRelation(SqlRelationWindowTestMixin, RelationTestMixin):
     @pytest.fixture
     def sample_relation(self, connection: sqlite3.Connection) -> SqliteRelation:
         arrow = pa.Table.from_pydict(
@@ -292,190 +286,6 @@ class TestSqliteRelation(RelationTestMixin):
         rel = SqliteRelation.from_dict(connection, {"Foo": [1, 2, 3], "b": [4, 5, 6]})
         with pytest.raises(ValueError, match="foo"):
             rel.append_column("foo", [10, 20, 30])
-
-    # --- with_row_number ---
-
-    def test_with_row_number_no_partition_no_order_assigns_unique_numbers(self, connection: sqlite3.Connection) -> None:
-        """Bare ROW_NUMBER() OVER () must yield row numbers that are a permutation of [1, 2]."""
-        rel = SqliteRelation.from_dict(connection, {"x": [10, 20]})
-        result = rel.with_row_number("rn")
-        assert "rn" in result.columns
-        rns = sorted(result.to_arrow_table().column("rn").to_pylist())
-        assert rns == [1, 2]
-
-    def test_with_row_number_order_by_string(self, sample_relation: SqliteRelation) -> None:
-        """with_row_number('rn', order_by=('id',)) must produce row numbers matching id ascending."""
-        result = sample_relation.with_row_number("rn", order_by=("id",))
-        ordered = result.order("id")
-        assert self.get_column_values(ordered, "rn") == [1, 2, 3, 4, 5]
-
-    def test_with_row_number_partition_and_order(self, sample_relation: SqliteRelation) -> None:
-        """Within each category, row numbers must restart at 1 ordered by id ascending."""
-        result = sample_relation.with_row_number("rn", partition_by=("category",), order_by=("id",))
-        ordered = result.order("id")
-        # category per id: A,B,A,C,B -> per-category rn ascending by id:
-        # A: id 1 (rn 1), id 3 (rn 2); B: id 2 (rn 1), id 5 (rn 2); C: id 4 (rn 1)
-        # so for ids 1..5: 1, 1, 2, 1, 2
-        assert self.get_column_values(ordered, "rn") == [1, 1, 2, 1, 2]
-
-    def test_with_row_number_alias_quoted(self, sample_relation: SqliteRelation) -> None:
-        """An alias with a space must be quoted and land verbatim in the result columns."""
-        result = sample_relation.with_row_number("row num", order_by=("id",))
-        assert "row num" in result.columns
-        assert len(result) == 5
-
-    def test_with_row_number_raises_when_alias_already_exists(self, sample_relation: SqliteRelation) -> None:
-        """with_row_number must reject an alias colliding with an existing column."""
-        with pytest.raises(ValueError, match="id"):
-            sample_relation.with_row_number("id")
-
-    def test_with_row_number_raises_on_case_only_collision(self, connection: sqlite3.Connection) -> None:
-        """SQLite identifiers are case-insensitive in resolution: alias 'category' must collide with existing 'Category'."""
-        rel = SqliteRelation.from_dict(
-            connection,
-            {
-                "id": [1, 2, 3, 4, 5],
-                "Category": ["A", "B", "A", "C", "B"],
-            },
-        )
-        with pytest.raises(ValueError, match="category"):
-            rel.with_row_number("category")
-
-    def test_with_row_number_order_by_descending(self, sample_relation: SqliteRelation) -> None:
-        """with_row_number must honor OrderBy(descending=True) and produce descending row numbers by id."""
-        result = sample_relation.with_row_number("rn", order_by=(OrderBy("id", descending=True),))
-        ordered = result.order("id")
-        assert self.get_column_values(ordered, "rn") == [5, 4, 3, 2, 1]
-
-    def test_with_row_number_order_by_nulls_last(self, connection: sqlite3.Connection) -> None:
-        """OrderBy('age', nulls='last') must place the NULL row at the highest row number."""
-        rel = SqliteRelation.from_dict(
-            connection,
-            {
-                "id": [1, 2, 3],
-                "age": [30, None, 25],
-            },
-        )
-        result = rel.with_row_number("rn", order_by=(OrderBy("age", nulls="last"),))
-        ordered = result.order("id")
-        rns = self.get_column_values(ordered, "rn")
-        # id=1 age=30 -> rn=2; id=2 age=NULL -> rn=3 (NULL last gets highest rn); id=3 age=25 -> rn=1
-        assert rns == [2, 3, 1]
-
-    # --- window() ---
-
-    def test_window_partition_only(self, sample_relation: SqliteRelation) -> None:
-        """SUM(age) partitioned by category, no order, no frame: each row gets its category total."""
-        result = sample_relation.window("SUM(age)", "cat_sum", partition_by=("category",))
-        assert "cat_sum" in result.columns
-        ordered = result.order("id")
-        sums = self.get_column_values(ordered, "cat_sum")
-        # Categories per id (1..5): A,B,A,C,B; sums: A=25+35=60, B=30+45=75, C=40
-        assert sums == [60, 75, 60, 40, 75]
-
-    def test_window_partition_and_order_running_sum(self, sample_relation: SqliteRelation) -> None:
-        """SUM(age) partitioned by category, ordered by id, default RANGE UNBOUNDED PRECEDING..CURRENT ROW."""
-        result = sample_relation.window("SUM(age)", "cat_sum", partition_by=("category",), order_by=("id",))
-        ordered = result.order("id")
-        rs = self.get_column_values(ordered, "cat_sum")
-        # Running sum within category by ascending id:
-        # id=1 (A): 25; id=2 (B): 30; id=3 (A): 25+35=60; id=4 (C): 40; id=5 (B): 30+45=75
-        assert rs == [25, 30, 60, 40, 75]
-
-    def test_window_no_partition_no_order(self, sample_relation: SqliteRelation) -> None:
-        """COUNT(*) with no partition / order / frame returns total row count for every row."""
-        result = sample_relation.window("COUNT(*)", "total")
-        totals = self.get_column_values(result, "total")
-        assert totals == [5, 5, 5, 5, 5]
-
-    def test_window_returns_new_relation(self, sample_relation: SqliteRelation) -> None:
-        """window() must return a brand-new SqliteRelation, never mutate or return self."""
-        result = sample_relation.window("COUNT(*)", "total")
-        assert result is not sample_relation
-        assert isinstance(result, SqliteRelation)
-
-    def test_window_rows_frame(self, sample_relation: SqliteRelation) -> None:
-        """ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW: cumulative sum ordered by id."""
-        result = sample_relation.window(
-            "SUM(age)",
-            "cum",
-            order_by=("id",),
-            frame=WindowFrame(kind="rows", start=Unbounded(), end=CurrentRow()),
-        )
-        ordered = result.order("id")
-        cum = self.get_column_values(ordered, "cum")
-        assert cum == [25, 55, 90, 130, 175]
-
-    def test_window_range_frame(self, sample_relation: SqliteRelation) -> None:
-        """RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING: grand total per row."""
-        result = sample_relation.window(
-            "SUM(age)",
-            "total",
-            order_by=("id",),
-            frame=WindowFrame(kind="range", start=Unbounded(), end=Unbounded()),
-        )
-        ordered = result.order("id")
-        totals = self.get_column_values(ordered, "total")
-        assert totals == [175, 175, 175, 175, 175]
-
-    def test_window_groups_frame(self, sample_relation: SqliteRelation) -> None:
-        """GROUPS BETWEEN 1 PRECEDING AND CURRENT ROW: verify the frame variant compiles and produces a column."""
-        result = sample_relation.window(
-            "SUM(age)",
-            "g",
-            order_by=("category",),
-            frame=WindowFrame(kind="groups", start=Preceding(1), end=CurrentRow()),
-        )
-        assert "g" in result.columns
-        assert len(result) == 5
-
-    def test_window_rows_preceding_and_following(self, sample_relation: SqliteRelation) -> None:
-        """ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING ordered by id: sliding 3-row window sum."""
-        result = sample_relation.window(
-            "SUM(age)",
-            "win",
-            order_by=("id",),
-            frame=WindowFrame(kind="rows", start=Preceding(1), end=Following(1)),
-        )
-        ordered = result.order("id")
-        win = self.get_column_values(ordered, "win")
-        # ages by id: 25, 30, 35, 40, 45
-        # id=1: 25+30=55; id=2: 25+30+35=90; id=3: 30+35+40=105; id=4: 35+40+45=120; id=5: 40+45=85
-        assert win == [55, 90, 105, 120, 85]
-
-    def test_window_alias_quoted(self, sample_relation: SqliteRelation) -> None:
-        """An alias with a space must be quoted and land verbatim in the result columns."""
-        result = sample_relation.window("COUNT(*)", "row total")
-        assert "row total" in result.columns
-        assert len(result) == 5
-
-    def test_window_func_passthrough_lead(self, sample_relation: SqliteRelation) -> None:
-        """``func`` is passed through verbatim: LEAD(age, 1, NULL) OVER (ORDER BY id) yields next row's age."""
-        result = sample_relation.window("LEAD(age, 1, NULL)", "next_age", order_by=("id",))
-        ordered = result.order("id")
-        next_ages = self.get_column_values(ordered, "next_age")
-        # ages by id ascending: 25, 30, 35, 40, 45 -> next: 30, 35, 40, 45, NULL
-        # SQLite LEAD over INTEGER may surface as REAL through the pyarrow round-trip,
-        # turning the trailing NULL into a float NaN. Accept either form.
-        assert next_ages[:4] == [30, 35, 40, 45]
-        assert next_ages[4] is None or (isinstance(next_ages[4], float) and math.isnan(next_ages[4]))
-
-    def test_window_raises_when_alias_already_exists(self, sample_relation: SqliteRelation) -> None:
-        """window() must reject an alias colliding with an existing column instead of producing a duplicated name."""
-        with pytest.raises(ValueError, match="age"):
-            sample_relation.window("COUNT(*)", "age")
-
-    def test_window_raises_on_case_only_collision(self, connection: sqlite3.Connection) -> None:
-        """SQLite identifiers are case-insensitive in resolution: alias 'age' must collide with existing 'Age'."""
-        rel = SqliteRelation.from_dict(
-            connection,
-            {
-                "id": [1, 2, 3, 4, 5],
-                "Age": [25, 30, 35, 40, 45],
-            },
-        )
-        with pytest.raises(ValueError, match="age"):
-            rel.window("COUNT(*)", "age")
 
     def test_join_with_sql_injection_alias(self, connection: sqlite3.Connection) -> None:
         """A crafted alias must not be interpreted as SQL."""

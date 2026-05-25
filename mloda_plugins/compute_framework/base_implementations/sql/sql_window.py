@@ -19,6 +19,7 @@ __all__ = [
     "FrameBound",
     "WindowFrame",
     "OrderBy",
+    "validate_window",
 ]
 
 
@@ -127,6 +128,21 @@ def _bound_rank(bound: FrameBound, side: Literal["start", "end"]) -> float:
     if isinstance(bound, Following):
         return float(bound.offset)
     raise TypeError(f"Unsupported frame bound: {type(bound).__name__}")
+
+
+def validate_window(
+    order_by: Sequence[str | OrderBy],
+    frame: WindowFrame | None,
+) -> None:
+    if frame is None or frame.kind != "range":
+        return
+    has_offset_bound = isinstance(frame.start, (Preceding, Following)) or isinstance(frame.end, (Preceding, Following))
+    if not has_offset_bound:
+        return
+    if len(order_by) != 1:
+        raise ValueError(
+            f"RANGE frame with numeric offset bounds requires exactly one ORDER BY column; got {len(order_by)}"
+        )
 
 
 def _render_over_clause(

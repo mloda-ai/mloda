@@ -27,6 +27,7 @@ from mloda_plugins.compute_framework.base_implementations.sql.sql_window import 
     Unbounded,
     WindowFrame,
     _render_over_clause,
+    validate_window,
 )
 
 __all__ = [
@@ -235,6 +236,7 @@ class DuckdbRelation:
         """
         if alias.casefold() in {c.casefold() for c in self.columns}:
             raise ValueError(f"Column {alias!r} already exists in the relation")
+        validate_window(order_by, frame)
         over_sql = _render_over_clause(partition_by, order_by, frame)
         return self.project(f"*, {func} OVER ({over_sql}) AS {quote_ident(alias)}")
 

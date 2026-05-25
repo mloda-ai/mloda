@@ -313,3 +313,51 @@ class SqlRelationWindowTestMixin:
         result = rel.window("ROW_NUMBER()", "rn", order_by=("odd col",))
         ordered = result.order("rn")
         assert ordered.to_arrow_table().column("odd col").to_pylist() == [1, 2, 3]
+
+    # --- RANGE frame validation: offset bounds require exactly one ORDER BY column ---
+
+    def test_window_range_offset_with_multi_column_order_by_raises(self, sample_relation: Any) -> None:
+        """RANGE frame with a Preceding/Following bound requires exactly one ORDER BY column.
+
+        Multi-column ORDER BY plus a RANGE offset bound is rejected by both DuckDB and SQLite
+        at execute time; the validator must surface a clear Python ValueError instead.
+        """
+        with pytest.raises(ValueError) as excinfo:
+            sample_relation.window(
+                "SUM(age)",
+                "s",
+                order_by=("id", "category"),
+                frame=WindowFrame(kind="range", start=Preceding(1), end=CurrentRow()),
+            )
+        message = str(excinfo.value)
+        assert "RANGE" in message
+        assert "ORDER BY" in message
+
+    def test_window_range_offset_with_empty_order_by_raises(self, sample_relation: Any) -> None:
+        """RANGE frame with a Preceding/Following bound and no ORDER BY column must raise ValueError."""
+        with pytest.raises(ValueError) as excinfo:
+            sample_relation.window(
+                "SUM(age)",
+                "s",
+                order_by=(),
+                frame=WindowFrame(kind="range", start=Preceding(1), end=CurrentRow()),
+            )
+        message = str(excinfo.value)
+        assert "RANGE" in message
+        assert "ORDER BY" in message
+
+    def test_window_range_sentinel_only_with_multi_column_order_by_succeeds(self, sample_relation: Any) -> None:
+        """RANGE with sentinel-only bounds (Unbounded/CurrentRow) must remain legal regardless of ORDER BY count.
+
+        The validation should only fire when at least one bound is Preceding/Following.
+        Counterpart of ``test_window_range_frame_unbounded_to_unbounded`` but with multi-column order_by.
+        """
+        result = sample_relation.window(
+            "SUM(age)",
+            "total",
+            order_by=("id", "category"),
+            frame=WindowFrame(kind="range", start=Unbounded(), end=Unbounded()),
+        )
+        ordered = result.order("id")
+        totals = self.get_column_values(ordered, "total")
+        assert totals == [175, 175, 175, 175, 175]

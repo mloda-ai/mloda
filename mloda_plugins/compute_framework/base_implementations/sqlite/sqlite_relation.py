@@ -12,6 +12,7 @@ from mloda_plugins.compute_framework.base_implementations.sql.sql_window import 
     OrderBy,
     WindowFrame,
     _render_over_clause,
+    validate_window,
 )
 
 
@@ -54,6 +55,13 @@ def _infer_sqlite_type_from_values(values: list[Any]) -> str:
         if isinstance(v, float) and result == "INTEGER":
             result = "REAL"  # REAL upgrades INTEGER but not TEXT
     return result
+
+
+def _assert_nulls_supported(order_by: Sequence[str | OrderBy]) -> None:
+    if sqlite3.sqlite_version_info >= (3, 30, 0):
+        return
+    if any(isinstance(item, OrderBy) and item.nulls is not None for item in order_by):
+        raise ValueError(f"NULLS FIRST/LAST in ORDER BY requires SQLite >= 3.30.0; runtime is {sqlite3.sqlite_version}")
 
 
 def _sqlite_affinity_to_arrow_type(affinity: str) -> pa.DataType:
@@ -489,6 +497,7 @@ class SqliteRelation:
         """
         if alias.casefold() in {c.casefold() for c in self.columns}:
             raise ValueError(f"Column {alias!r} already exists in the relation")
+        _assert_nulls_supported(order_by)
         over_sql = _render_over_clause(partition_by, order_by, None)
         new_name = _next_table_name()
         sql = (
@@ -517,6 +526,8 @@ class SqliteRelation:
         """
         if alias.casefold() in {c.casefold() for c in self.columns}:
             raise ValueError(f"Column {alias!r} already exists in the relation")
+        _assert_nulls_supported(order_by)
+        validate_window(order_by, frame)
         over_sql = _render_over_clause(partition_by, order_by, frame)
         new_name = _next_table_name()
         sql = (

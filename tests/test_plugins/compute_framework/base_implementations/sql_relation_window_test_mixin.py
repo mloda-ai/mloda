@@ -122,12 +122,12 @@ class SqlRelationWindowTestMixin:
     def test_with_row_number_partition_by_keyword_only(self, sample_relation: Any) -> None:
         """partition_by must be keyword-only to match the sibling window() API."""
         with pytest.raises(TypeError):
-            sample_relation.with_row_number("rn", ("category",))  # type: ignore[misc]
+            sample_relation.with_row_number("rn", ("category",))
 
     def test_with_row_number_order_by_keyword_only(self, sample_relation: Any) -> None:
         """order_by must be keyword-only to match the sibling window() API."""
         with pytest.raises(TypeError):
-            sample_relation.with_row_number("rn", (), ("age",))  # type: ignore[misc]
+            sample_relation.with_row_number("rn", (), ("age",))
 
     def test_with_row_number_raises_when_alias_already_exists(self, sample_relation: Any) -> None:
         """with_row_number must reject an alias colliding with an existing column instead of producing a duplicated name."""

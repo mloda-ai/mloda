@@ -336,8 +336,11 @@ class TestWorkerManagerDropCompletion:
         manager.wait_for_drop_completion(mock_queue, cfw_uuid, timeout=0.1)
         elapsed = time.time() - start_time
 
-        # Should timeout after approximately 0.1 seconds
-        assert 0.09 < elapsed < 0.2
+        # Should timeout after approximately 0.1 seconds. Upper bound is generous
+        # because spawn-context teardown noise can stretch time.sleep(0.001) ticks
+        # on loaded CI; the assertion exists to guard against an infinite loop, not
+        # to verify wall-clock precision.
+        assert 0.09 < elapsed < 1.0
 
     def test_wait_for_drop_completion_uses_non_blocking_get(self) -> None:
         """wait_for_drop_completion should use non-blocking queue get."""

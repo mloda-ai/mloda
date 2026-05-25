@@ -115,3 +115,13 @@ class TestPickHelperColumnName:
         result = pick_helper_column_name(taken={"__MLODA_RN0__"})
         assert result != "__mloda_rn0__"
         assert result == "__mloda_rn1__"
+
+    def test_pick_helper_column_name_lowercases_uppercase_prefix(self) -> None:
+        """An uppercase prefix must be casefolded before building the candidate name."""
+        result = pick_helper_column_name(taken=set(), prefix="__MLODA_RN")
+        assert result == "__mloda_rn0__"
+
+    def test_pick_helper_column_name_uppercase_prefix_skips_case_variant(self) -> None:
+        """A mixed-case prefix must not collide case-insensitively with taken."""
+        result = pick_helper_column_name(taken={"__mloda_rn0__"}, prefix="__MLODA_RN")
+        assert result == "__mloda_rn1__"

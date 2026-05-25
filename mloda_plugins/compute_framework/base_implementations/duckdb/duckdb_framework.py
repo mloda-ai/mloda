@@ -104,7 +104,7 @@ class DuckDBFramework(ComputeFramework):
 
     def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
         if column_name in data.columns:
-            dtypes = data._relation.dtypes
+            dtypes = data.types
             idx = data.columns.index(column_name)
             return str(dtypes[idx])
         return None
@@ -113,7 +113,7 @@ class DuckDBFramework(ComputeFramework):
         if column_name not in data.columns:
             return None
         idx = data.columns.index(column_name)
-        duckdb_type = data._relation.dtypes[idx]
+        duckdb_type = data.types[idx]
         type_str = str(duckdb_type).upper()
         if type_str in _DUCKDB_TYPE_MAP:
             return _DUCKDB_TYPE_MAP[type_str]

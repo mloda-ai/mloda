@@ -11,7 +11,7 @@ from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import p
 from mloda_plugins.compute_framework.base_implementations.sql.sql_window import (
     OrderBy,
     WindowFrame,
-    _render_over_clause,
+    render_over_clause,
     validate_window,
 )
 
@@ -498,7 +498,7 @@ class SqliteRelation:
         if alias.casefold() in {c.casefold() for c in self.columns}:
             raise ValueError(f"Column {alias!r} already exists in the relation")
         _assert_nulls_supported(order_by)
-        over_sql = _render_over_clause(partition_by, order_by, None)
+        over_sql = render_over_clause(partition_by, order_by, None)
         new_name = _next_table_name()
         sql = (
             f"CREATE TEMP VIEW {quote_ident(new_name)} AS "  # nosec
@@ -528,7 +528,7 @@ class SqliteRelation:
             raise ValueError(f"Column {alias!r} already exists in the relation")
         _assert_nulls_supported(order_by)
         validate_window(order_by, frame)
-        over_sql = _render_over_clause(partition_by, order_by, frame)
+        over_sql = render_over_clause(partition_by, order_by, frame)
         new_name = _next_table_name()
         sql = (
             f"CREATE TEMP VIEW {quote_ident(new_name)} AS "  # nosec

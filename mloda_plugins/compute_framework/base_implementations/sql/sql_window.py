@@ -20,6 +20,10 @@ __all__ = [
     "WindowFrame",
     "OrderBy",
     "validate_window",
+    "render_over_clause",
+    "render_frame_bound",
+    "render_order_by_item",
+    "bound_rank",
 ]
 
 
@@ -90,11 +94,11 @@ class WindowFrame:
     def __post_init__(self) -> None:
         if self.kind not in ("rows", "range", "groups"):
             raise ValueError(f"WindowFrame kind must be one of 'rows', 'range', 'groups'; got {self.kind!r}")
-        if _bound_rank(self.start, "start") > _bound_rank(self.end, "end"):
+        if bound_rank(self.start, "start") > bound_rank(self.end, "end"):
             raise ValueError(f"WindowFrame start must not come after end; got start={self.start!r}, end={self.end!r}")
 
 
-def _render_frame_bound(bound: FrameBound, side: Literal["start", "end"]) -> str:
+def render_frame_bound(bound: FrameBound, side: Literal["start", "end"]) -> str:
     """Render a single frame bound for the given ``side`` of a BETWEEN clause."""
     if isinstance(bound, Unbounded):
         return "UNBOUNDED PRECEDING" if side == "start" else "UNBOUNDED FOLLOWING"
@@ -107,7 +111,7 @@ def _render_frame_bound(bound: FrameBound, side: Literal["start", "end"]) -> str
     raise TypeError(f"Unsupported frame bound: {type(bound).__name__}")
 
 
-def _render_order_by_item(item: str | OrderBy) -> str:
+def render_order_by_item(item: str | OrderBy) -> str:
     if isinstance(item, str):
         return quote_ident(item)
     parts = [quote_ident(item.column)]
@@ -118,7 +122,7 @@ def _render_order_by_item(item: str | OrderBy) -> str:
     return " ".join(parts)
 
 
-def _bound_rank(bound: FrameBound, side: Literal["start", "end"]) -> float:
+def bound_rank(bound: FrameBound, side: Literal["start", "end"]) -> float:
     if isinstance(bound, Unbounded):
         return float("-inf") if side == "start" else float("inf")
     if isinstance(bound, Preceding):
@@ -145,7 +149,7 @@ def validate_window(
         )
 
 
-def _render_over_clause(
+def render_over_clause(
     partition_by: Sequence[str],
     order_by: Sequence[str | OrderBy],
     frame: WindowFrame | None,
@@ -155,9 +159,9 @@ def _render_over_clause(
     if partition_by:
         parts.append("PARTITION BY " + ", ".join(quote_ident(c) for c in partition_by))
     if order_by:
-        parts.append("ORDER BY " + ", ".join(_render_order_by_item(c) for c in order_by))
+        parts.append("ORDER BY " + ", ".join(render_order_by_item(c) for c in order_by))
     if frame is not None:
-        start_sql = _render_frame_bound(frame.start, "start")
-        end_sql = _render_frame_bound(frame.end, "end")
+        start_sql = render_frame_bound(frame.start, "start")
+        end_sql = render_frame_bound(frame.end, "end")
         parts.append(f"{frame.kind.upper()} BETWEEN {start_sql} AND {end_sql}")
     return " ".join(parts)

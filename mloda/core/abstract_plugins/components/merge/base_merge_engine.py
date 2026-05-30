@@ -74,7 +74,7 @@ class BaseMergeEngine(ABC):
         jointype: JoinType,
         left_index: Index,
         right_index: Index,
-        link: Link | None,
+        link: Link | None = None,
     ) -> Any:
         self.check_import()
 

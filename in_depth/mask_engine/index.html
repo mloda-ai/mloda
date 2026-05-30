@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="../../img/favicon.ico" />
+    <title>Mask Engine - mloda docs</title>
+    <link rel="stylesheet" href="../../css/theme.css" />
+    <link rel="stylesheet" href="../../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Mask Engine";
+        var mkdocs_page_input_path = "in_depth/mask_engine.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="../.." class="icon icon-home"> mloda docs
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption"><span class="caption-text">Home</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../..">mloda</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">mloda Concepts</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/0_table_of_content/">Table of Content</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/1_ml_mloda_intro/">Intro to the core interfaces of mloda</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/2_ml_advantage_process_focus/">What makes mloda unique?</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/3_ml_data_feature_feature_groups/">Data, Feature, FeatureSets and FeatureGroups in mloda</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/4_ml_data_providers_user_steward/">Provider, User, Steward in mloda</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Getting Started</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/installation/">Installation</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/api-request/">API Request</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/feature-groups/">Feature Groups</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/compute-frameworks/">Compute Frameworks</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/extender/">Extender</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/base_usage/">mloda demo: How can we make feature engineering shareable?</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">In Depth - Basics</span></p>
+              <ul class="current">
+                  <li class="toctree-l1"><a class="reference internal" href="../mloda-api/">mloda API</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../streaming/">Streaming</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../access-feature-data/">(Feature) data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../join_data/">Join data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../filter_data/">Filter data</a>
+                  </li>
+                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Mask Engine</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#how-the-mask-engine-is-wired">How the mask engine is wired</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#primitives">Primitives</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#convenience-methods">Convenience methods</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#betweendata-column-min_value-max_value-min_exclusivefalse-max_exclusivefalse">between(data, column, min_value, max_value, *, min_exclusive=False, max_exclusive=False)</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#all_ofdata-masks">all_of(data, masks)</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#masking-patterns">Masking patterns</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#inline-masking-skip-row-elimination">Inline masking, skip row elimination</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#inline-masking-row-elimination">Inline masking + row elimination</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#pipeline-data-flow-inline-masking">Pipeline data flow (inline masking)</a>
+    </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../artifacts/">Artifacts</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">In Depth - Advanced</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../data-quality/">Data quality</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../domain/">Domain concept</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../data-access-patterns/">Data Access Patterns</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../named-data-access-handles/">Named Data Access Handles</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Compute Frameworks</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../framework-transformers/">Framework Transformers</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../compute-framework-integration/">Compute Framework Integration</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../framework-connection-object/">Framework Connection Object</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-config/">Feature Configuration</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-chain-parser/">Feature Chain Parser</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-group-matching/">Feature Group Matching</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../property-mapping/">PROPERTY_MAPPING</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-group-testing/">Feature Group Testing</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-group-version/">Feature Group Versioning</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../multiple_result_columns/">Multiple Result Columns</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Plugin System</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../discover-plugins/">Discover Plugins</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../troubleshooting/feature-group-resolution-errors/">Feature Group Resolution Errors</a>
+                </li>
+    </ul>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Development</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../development/">Contributors</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../license/">License - Apache 2.0</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Need Help?</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../faq/">FAQ</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../..">mloda docs</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../.." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">In Depth - Basics</li>
+      <li class="breadcrumb-item active">Mask Engine</li>
+    <li class="wy-breadcrumbs-aside">
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h2 id="mask-engine">Mask Engine</h2>
+<p>The mask engine provides boolean masking primitives for use inside
+<code>calculate_feature()</code>. It lets a FeatureGroup selectively include or exclude
+values without removing rows from the output.</p>
+<p>For user-provided filter propagation (GlobalFilter, SingleFilter, row elimination),
+see <a href="../filter_data/">Filter Data</a>.</p>
+<h3 id="how-the-mask-engine-is-wired">How the mask engine is wired</h3>
+<p>Each <code>ComputeFramework</code> provides a <code>BaseMaskEngine</code> subclass via its
+<code>mask_engine()</code> classmethod. The framework sets <code>features.mask_engine</code> on the
+<code>FeatureSet</code> before <code>calculate_feature()</code> is called. This wiring is independent
+of <code>features.filters</code> and <code>final_filters()</code>.</p>
+<pre><code>@classmethod
+def calculate_feature(cls, data, features: FeatureSet):
+    engine = features.mask_engine   # always available when the framework provides one
+    mask = engine.equal(data, &quot;status&quot;, &quot;active&quot;)
+    # ... apply mask
+</code></pre>
+<h3 id="primitives">Primitives</h3>
+<p>Every <code>BaseMaskEngine</code> subclass implements these abstract classmethods:</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Returns mask where...</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>equal(data, column, value)</code></td>
+<td><code>data[column] == value</code></td>
+</tr>
+<tr>
+<td><code>greater_equal(data, column, value)</code></td>
+<td><code>data[column] &gt;= value</code></td>
+</tr>
+<tr>
+<td><code>greater_than(data, column, value)</code></td>
+<td><code>data[column] &gt; value</code></td>
+</tr>
+<tr>
+<td><code>less_equal(data, column, value)</code></td>
+<td><code>data[column] &lt;= value</code></td>
+</tr>
+<tr>
+<td><code>less_than(data, column, value)</code></td>
+<td><code>data[column] &lt; value</code></td>
+</tr>
+<tr>
+<td><code>is_in(data, column, values)</code></td>
+<td><code>data[column]</code> is in <code>values</code></td>
+</tr>
+<tr>
+<td><code>combine(mask1, mask2)</code></td>
+<td>logical AND of two masks</td>
+</tr>
+<tr>
+<td><code>all_true(data)</code></td>
+<td>all <code>True</code> (no filtering)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="convenience-methods">Convenience methods</h3>
+<p>Built from the primitives above. No per-engine implementation needed.</p>
+<h4 id="betweendata-column-min_value-max_value-min_exclusivefalse-max_exclusivefalse"><code>between(data, column, min_value, max_value, *, min_exclusive=False, max_exclusive=False)</code></h4>
+<p>Range check combining a lower and upper bound:</p>
+<pre><code># Inclusive: value in [10, 100]
+mask = engine.between(data, &quot;value&quot;, 10, 100)
+
+# Exclusive bounds: value in (10, 100)
+mask = engine.between(data, &quot;value&quot;, 10, 100, min_exclusive=True, max_exclusive=True)
+
+# Half-open: value in [10, 100)
+mask = engine.between(data, &quot;value&quot;, 10, 100, max_exclusive=True)
+</code></pre>
+<h4 id="all_ofdata-masks"><code>all_of(data, masks)</code></h4>
+<p>AND-combine a list of masks. Returns an all-True mask if the list is empty.</p>
+<pre><code>mask = engine.all_of(data, [
+    engine.equal(data, &quot;status&quot;, &quot;active&quot;),
+    engine.between(data, &quot;value&quot;, 10, 100),
+])
+</code></pre>
+<h3 id="masking-patterns">Masking patterns</h3>
+<h4 id="inline-masking-skip-row-elimination">Inline masking, skip row elimination</h4>
+<p>Set <code>final_filters() = False</code> to tell the framework not to remove rows.
+Use the mask engine to selectively null out values before aggregation.</p>
+<pre><code>class MaskedRegionSum(FeatureGroup):
+    @classmethod
+    def final_filters(cls) -&gt; bool:
+        return False  # skip row elimination
+
+    @classmethod
+    def calculate_feature(cls, data, features: FeatureSet):
+        engine = features.mask_engine
+        mask = engine.equal(data, &quot;status&quot;, &quot;active&quot;)
+        masked = pc.if_else(mask, data[&quot;sales&quot;], None)
+        # aggregate masked values, broadcast back to all rows
+        return pa.table({cls.get_class_name(): broadcast_sum(masked, data[&quot;region&quot;])})
+</code></pre>
+<p>Result: all rows preserved, but only matching values contributed to the sum.</p>
+<h4 id="inline-masking-row-elimination">Inline masking + row elimination</h4>
+<p>Use the mask engine for conditional logic <strong>and</strong> return <code>final_filters() = True</code>
+so the framework also eliminates non-matching rows afterward. You must preserve
+the filter column in your output (see the
+<a href="../filter_data/#the-overlap-contract">overlap contract</a> in the filter docs).</p>
+<pre><code>class MaskedRegionSumActiveOnly(FeatureGroup):
+    @classmethod
+    def final_filters(cls) -&gt; bool:
+        return True  # also eliminate non-matching rows
+
+    @classmethod
+    def calculate_feature(cls, data, features: FeatureSet):
+        engine = features.mask_engine
+        mask = engine.equal(data, &quot;status&quot;, &quot;active&quot;)
+        masked = pc.if_else(mask, data[&quot;sales&quot;], None)
+        sums = broadcast_sum(masked, data[&quot;region&quot;])
+        # Return all rows; the framework will remove non-matching ones
+        return pa.table({
+            cls.get_class_name(): sums,
+            &quot;status&quot;: data[&quot;status&quot;],  # preserve the filter column
+        })
+</code></pre>
+<p>Result: only matching rows remain, with aggregated values computed from masked data.</p>
+<h3 id="pipeline-data-flow-inline-masking">Pipeline data flow (inline masking)</h3>
+<pre><code>Input:
+    region | status   | value
+    A      | active   |  10
+    A      | inactive |  20
+    B      | active   |  30
+    B      | inactive |  40
+
+Mask predicate: status == &quot;active&quot;
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>Data</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Use <code>features.mask_engine</code></td>
+<td><code>engine.equal(data, "status", "active")</code></td>
+</tr>
+<tr>
+<td>Build mask</td>
+<td><code>[True, False, True, False]</code></td>
+</tr>
+<tr>
+<td>Apply mask to value column</td>
+<td><code>masked_value = [10, NULL, 30, NULL]</code></td>
+</tr>
+<tr>
+<td>Aggregate (sum by region, broadcast)</td>
+<td>Region A: 10, Region B: 30</td>
+</tr>
+<tr>
+<td><strong>Final result</strong></td>
+<td><code>[10, 10, 30, 30]</code> (4 rows, all preserved)</td>
+</tr>
+</tbody>
+</table>
+<p>The framework skips <code>run_final_filter()</code> because <code>final_filters() = False</code>.</p>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../filter_data/" class="btn btn-neutral float-left" title="Filter data"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../artifacts/" class="btn btn-neutral float-right" title="Artifacts">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+    
+      <span><a href="../filter_data/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../artifacts/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "../..";</script>
+    <script src="../../js/theme_extra.js"></script>
+    <script src="../../js/theme.js"></script>
+      <script src="../../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

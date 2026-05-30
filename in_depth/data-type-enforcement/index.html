@@ -86,6 +86,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../filter_data/">Filter data</a>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../mask_engine/">Mask Engine</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" href="../artifacts/">Artifacts</a>
                   </li>
               </ul>
@@ -96,6 +98,8 @@
                   <li class="toctree-l1"><a class="reference internal" href="../domain/">Domain concept</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-access-patterns/">Data Access Patterns</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../named-data-access-handles/">Named Data Access Handles</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Compute Frameworks</a>
     <ul>
@@ -144,6 +148,8 @@
     <li class="toctree-l3"><a class="reference internal" href="#strict-mode">Strict Mode</a>
     </li>
         </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#per-framework-precision-support">Per-Framework Precision Support</a>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#execution-plan-grouping">Execution Plan Grouping</a>
     </li>
@@ -218,6 +224,12 @@ feature_any = Feature.not_typed(&quot;legacy_column&quot;)
 - <code>date_of()</code>, <code>timestamp_millis_of()</code>, <code>timestamp_micros_of()</code> - Date/time types
 - <code>decimal_of()</code>, <code>binary_of()</code> - Other types</p>
 <h2 id="validation-behavior">Validation Behavior</h2>
+<p>!!! note "Changed in 0.7.0"
+    Type validation now runs on <strong>all</strong> bundled compute frameworks through a uniform
+    <code>_extract_column_data_type</code> hook. In 0.6.x, type extraction relied on a single
+    PyArrow-schema path, so typed features running on frameworks that did not expose that
+    schema were silently left unvalidated. After upgrading, those features may raise a
+    <code>DataTypeMismatchError</code> for the first time where validation previously did nothing.</p>
 <h3 id="default-lenient-mode">Default (Lenient) Mode</h3>
 <p>By default, validation allows compatible type conversions within categories:</p>
 <table>
@@ -251,6 +263,68 @@ feature_any = Feature.not_typed(&quot;legacy_column&quot;)
 )
 </code></pre>
 <p>In strict mode, only exact type matches or standard widening conversions are allowed.</p>
+<h2 id="per-framework-precision-support">Per-Framework Precision Support</h2>
+<p>Not every backend's native type system can distinguish every precision mloda declares. The table below shows which precisions each bundled framework can extract from data. For the rest, the framework's <code>_extract_column_data_type</code> returns the widest type in the family (still correct under lenient mode), and strict-mode tests for the affected precision are skipped with a clear reason.</p>
+<table>
+<thead>
+<tr>
+<th>Framework</th>
+<th>INT32 / INT64</th>
+<th>FLOAT / DOUBLE</th>
+<th>TIMESTAMP_MILLIS / MICROS</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Pandas</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>Polars (eager / lazy)</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>PyArrow</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>DuckDB</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>Spark</td>
+<td>yes</td>
+<td>yes</td>
+<td>no (only <code>TimestampType</code> exists)</td>
+</tr>
+<tr>
+<td>Iceberg</td>
+<td>yes</td>
+<td>yes</td>
+<td>no (only <code>TimestampType</code> exists)</td>
+</tr>
+<tr>
+<td>SQLite</td>
+<td>no (INTEGER affinity)</td>
+<td>no (REAL affinity)</td>
+<td>no (stored as TEXT)</td>
+</tr>
+<tr>
+<td>PythonDict</td>
+<td>no (<code>type.__name__</code> is "int")</td>
+<td>no (Python float is 64-bit)</td>
+<td>no (<code>datetime.datetime</code> is microsecond)</td>
+</tr>
+</tbody>
+</table>
 <h2 id="execution-plan-grouping">Execution Plan Grouping</h2>
 <p>Features with different explicit data types are separated into different execution groups at plan time. This allows type-specific processing paths.</p>
 <p>Untyped features (<code>data_type=None</code>) are "lenient" and can be grouped with any typed features, preserving compatibility with index columns and legacy code.</p>

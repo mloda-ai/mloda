@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="../../img/favicon.ico" />
+    <title>Named Data Access Handles - mloda docs</title>
+    <link rel="stylesheet" href="../../css/theme.css" />
+    <link rel="stylesheet" href="../../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Named Data Access Handles";
+        var mkdocs_page_input_path = "in_depth/named-data-access-handles.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="../.." class="icon icon-home"> mloda docs
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption"><span class="caption-text">Home</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../..">mloda</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">mloda Concepts</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/0_table_of_content/">Table of Content</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/1_ml_mloda_intro/">Intro to the core interfaces of mloda</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/2_ml_advantage_process_focus/">What makes mloda unique?</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/3_ml_data_feature_feature_groups/">Data, Feature, FeatureSets and FeatureGroups in mloda</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/4_ml_data_providers_user_steward/">Provider, User, Steward in mloda</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Getting Started</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/installation/">Installation</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/api-request/">API Request</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/feature-groups/">Feature Groups</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/compute-frameworks/">Compute Frameworks</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/extender/">Extender</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/base_usage/">mloda demo: How can we make feature engineering shareable?</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">In Depth - Basics</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../mloda-api/">mloda API</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../streaming/">Streaming</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../access-feature-data/">(Feature) data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../join_data/">Join data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../filter_data/">Filter data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../mask_engine/">Mask Engine</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../artifacts/">Artifacts</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">In Depth - Advanced</span></p>
+              <ul class="current">
+                  <li class="toctree-l1"><a class="reference internal" href="../data-quality/">Data quality</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../domain/">Domain concept</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../data-access-patterns/">Data Access Patterns</a>
+                  </li>
+                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Named Data Access Handles</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#the-four-kinds-of-resources">The four kinds of resources</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#naming-is-optional">Naming is optional</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#resolution-rule">Resolution rule</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#per-feature-disambiguation-data_access_handle">Per-feature disambiguation: data_access_handle</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#introspection-handles">Introspection: handles()</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#interaction-with-column_to_file">Interaction with column_to_file</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#why-this-exists">Why this exists</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#common-errors">Common errors</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#related">Related</a>
+    </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Compute Frameworks</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../framework-transformers/">Framework Transformers</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../compute-framework-integration/">Compute Framework Integration</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../framework-connection-object/">Framework Connection Object</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-config/">Feature Configuration</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-chain-parser/">Feature Chain Parser</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-group-matching/">Feature Group Matching</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../property-mapping/">PROPERTY_MAPPING</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-group-testing/">Feature Group Testing</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-group-version/">Feature Group Versioning</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../multiple_result_columns/">Multiple Result Columns</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Plugin System</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../discover-plugins/">Discover Plugins</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../troubleshooting/feature-group-resolution-errors/">Feature Group Resolution Errors</a>
+                </li>
+    </ul>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Development</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../development/">Contributors</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../license/">License - Apache 2.0</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Need Help?</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../faq/">FAQ</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../..">mloda docs</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../.." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">In Depth - Advanced</li>
+      <li class="breadcrumb-item active">Named Data Access Handles</li>
+    <li class="wy-breadcrumbs-aside">
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="named-data-access-handles">Named Data Access Handles</h1>
+<p><code>DataAccessCollection</code> (DAC) is a registry of data resources keyed by stable string handles. Every consumer that needs to bind one resource uses a single resolution rule that raises on ambiguity rather than letting iteration order decide.</p>
+<p>For background, see <a href="https://github.com/mloda-ai/mloda/issues/443">issue #443</a>.</p>
+<h2 id="the-four-kinds-of-resources">The four kinds of resources</h2>
+<p>A DAC holds resources of four kinds. Each kind has its own keyed dict:</p>
+<pre><code class="language-py">DataAccessCollection(
+    connections={&quot;warehouse&quot;: warehouse_conn, &quot;analytics&quot;: analytics_conn},
+    files={&quot;transactions&quot;: &quot;/data/tx.parquet&quot;, &quot;users&quot;: &quot;/data/users.csv&quot;},
+    folders={&quot;raw&quot;: &quot;/data/raw/&quot;},
+    credentials={&quot;pg-prod&quot;: {&quot;host&quot;: &quot;...&quot;, &quot;user&quot;: &quot;...&quot;}, &quot;snowflake-dev&quot;: {...}},
+)
+</code></pre>
+<p>Handle names are arbitrary strings you choose. They are globally unique across kinds: you cannot register a connection and a file under the same name. Registration raises <code>ValueError</code> on duplicates.</p>
+<p>Mutators mirror the keyed-dict shape:</p>
+<pre><code class="language-py">dac.add_connection(&quot;warehouse&quot;, warehouse_conn)
+dac.add_file(&quot;transactions&quot;, &quot;/data/tx.parquet&quot;)
+dac.add_folder(&quot;raw&quot;, &quot;/data/raw/&quot;)
+dac.add_credentials(&quot;pg-prod&quot;, {&quot;host&quot;: &quot;...&quot;})
+</code></pre>
+<p>A small runnable example, backed by <code>sqlite3</code> so it has no external dependencies:</p>
+<pre><code class="language-python">import sqlite3
+from mloda.user import DataAccessCollection
+
+primary = sqlite3.connect(&quot;:memory:&quot;)
+secondary = sqlite3.connect(&quot;:memory:&quot;)
+
+dac = DataAccessCollection(
+    connections={&quot;primary&quot;: primary, &quot;secondary&quot;: secondary},
+    files={&quot;users&quot;: &quot;/tmp/users.csv&quot;},
+)
+
+assert dac.handles() == {
+    &quot;primary&quot;: &quot;connection&quot;,
+    &quot;secondary&quot;: &quot;connection&quot;,
+    &quot;users&quot;: &quot;file&quot;,
+}
+</code></pre>
+<h2 id="naming-is-optional">Naming is optional</h2>
+<p>You only need to name resources when there are multiple sources of the same kind that the resolver cannot tell apart. In the simple single-source case, pass bare values:</p>
+<pre><code class="language-py">DataAccessCollection(files={&quot;/data/tx.parquet&quot;})       # set or list
+DataAccessCollection(connections={duckdb_conn})        # set
+DataAccessCollection(folders={&quot;/data/raw&quot;})            # set
+DataAccessCollection(credentials=[{&quot;host&quot;: &quot;h&quot;}])      # list (dicts are unhashable)
+</code></pre>
+<p>The same shape applies to the mutators:</p>
+<pre><code class="language-py">dac.add_file(&quot;/data/tx.parquet&quot;)                       # auto-named
+dac.add_file(&quot;tx&quot;, &quot;/data/tx.parquet&quot;)                 # named (when you need a handle)
+</code></pre>
+<p>Unnamed entries get internal auto-handles (<code>_auto_file_0</code>, <code>_auto_connection_0</code>, etc.) that you never need to reference. They exist only so the resolver has a unique key per entry. If you later hit ambiguity, the error message will tell you to switch to the named form and pick a <code>data_access_handle</code>.</p>
+<p>Naming is only required when:</p>
+<ul>
+<li>Two or more resources of the same kind match the same consumer (then you must set <code>data_access_handle</code> to pick one), or</li>
+<li>You use <code>column_to_file</code> and prefer to reference files by name rather than path (both work, see below).</li>
+</ul>
+<h2 id="resolution-rule">Resolution rule</h2>
+<p>When a feature group asks the DAC for a resource of a given kind, the resolver applies one rule:</p>
+<ol>
+<li><strong>If <code>data_access_handle</code> is set on the feature's <code>Options</code></strong>: look up that handle. If it does not exist, exists under a different kind, or fails the consumer's type predicate, raise <code>ValueError</code> with the actual situation and the available handles.</li>
+<li><strong>Otherwise</strong>: filter the kind's registry by the consumer's predicate (for example, "this file matches my suffix and columns").<ul>
+<li>Zero matches: return <code>None</code> (the consumer typically continues looking elsewhere).</li>
+<li>One match: bind it.</li>
+<li>More than one match: raise <code>ValueError</code> listing the candidate handles and telling the user to set <code>data_access_handle</code>.</li>
+</ul>
+</li>
+</ol>
+<p>The error shape is the same for every kind. This is the same contract <code>ComputeFramework.pick_connection_from_dac</code> shipped in #442, generalized to every consumer.</p>
+<pre><code class="language-python">import sqlite3
+import pytest
+from mloda.user import DataAccessCollection
+
+dac = DataAccessCollection(
+    connections={
+        &quot;primary&quot;: sqlite3.connect(&quot;:memory:&quot;),
+        &quot;secondary&quot;: sqlite3.connect(&quot;:memory:&quot;),
+    },
+)
+
+assert dac.resolve(&quot;connection&quot;, hint=&quot;primary&quot;) is not None
+
+with pytest.raises(ValueError) as excinfo:
+    dac.resolve(&quot;connection&quot;)
+assert &quot;data_access_handle&quot; in str(excinfo.value)
+assert &quot;'primary'&quot; in str(excinfo.value) and &quot;'secondary'&quot; in str(excinfo.value)
+
+with pytest.raises(ValueError) as excinfo:
+    dac.resolve(&quot;connection&quot;, hint=&quot;missing&quot;)
+assert &quot;missing&quot; in str(excinfo.value)
+</code></pre>
+<h2 id="per-feature-disambiguation-data_access_handle">Per-feature disambiguation: <code>data_access_handle</code></h2>
+<p>When more than one resource of the same kind matches a feature's requirements, you disambiguate by setting <code>data_access_handle</code> on the feature's <code>Options</code>:</p>
+<pre><code class="language-py">from mloda.user import DataAccessCollection, Options, Feature, mloda
+
+dac = DataAccessCollection(
+    files={&quot;transactions&quot;: &quot;/data/tx.csv&quot;, &quot;users&quot;: &quot;/data/users.csv&quot;},
+)
+
+features = [
+    Feature(&quot;amount&quot;,   options=Options(context={&quot;data_access_handle&quot;: &quot;transactions&quot;})),
+    Feature(&quot;email&quot;,    options=Options(context={&quot;data_access_handle&quot;: &quot;users&quot;})),
+]
+
+mloda.run_all(features, compute_frameworks=[&quot;PyArrowTable&quot;], data_access_collection=dac)
+</code></pre>
+<p>The key works across <code>read_file</code>, <code>read_document</code>, and <code>read_db</code> on a per-feature basis, and across every CFW that consumes connections (DuckDB, SQLite, Spark, Iceberg today) on an engine-wide basis.</p>
+<p>!!! note "Connections are resolved once per engine, not per feature"
+    <code>ComputeFramework.pick_connection_from_dac</code> runs at engine setup, not on the per-request path. A single CFW therefore binds a single connection per session. If you need two features in the same session to bind different connections of the same CFW, that is currently out of scope (tracked separately); use a single <code>data_access_handle</code> on the DAC's matching connections, or split the run.</p>
+<h2 id="introspection-handles">Introspection: <code>handles()</code></h2>
+<p><code>DataAccessCollection.handles()</code> returns a <code>{handle: kind}</code> map of everything registered. Use it for audits, logging, or to surface candidates in your own error messages:</p>
+<pre><code class="language-py">dac.handles()
+# {&quot;warehouse&quot;: &quot;connection&quot;, &quot;analytics&quot;: &quot;connection&quot;,
+#  &quot;transactions&quot;: &quot;file&quot;, &quot;users&quot;: &quot;file&quot;,
+#  &quot;raw&quot;: &quot;folder&quot;, &quot;pg-prod&quot;: &quot;credentials&quot;}
+</code></pre>
+<h2 id="interaction-with-column_to_file">Interaction with <code>column_to_file</code></h2>
+<p><code>column_to_file</code> is a file-specific override that takes precedence over the resolver. Its values may be either a <strong>file handle</strong> (key of the <code>files</code> dict) or a <strong>file path</strong> (value of the <code>files</code> dict); both are accepted and normalized to handles internally:</p>
+<pre><code class="language-py">DataAccessCollection(
+    files={&quot;train&quot;: &quot;application_train.csv&quot;, &quot;bureau&quot;: &quot;bureau.csv&quot;},
+    column_to_file={
+        &quot;SK_ID_CURR&quot;: &quot;train&quot;,
+        &quot;TARGET&quot;:     &quot;train&quot;,
+        &quot;AMT_CREDIT_SUM&quot;: &quot;bureau&quot;,
+    },
+)
+</code></pre>
+<p>For columns listed in the map, the resolver short-circuits to the pinned file. For columns not listed, the regular resolver rule applies (single match binds; multiple raises and asks for <code>data_access_handle</code>).</p>
+<p>See <a href="../access-feature-data/#disambiguating-columns-shared-across-multiple-files">Disambiguating columns shared across multiple files</a> for the full example.</p>
+<h2 id="why-this-exists">Why this exists</h2>
+<p>Before #443, every DAC field was an unkeyed set. When two resources of the same kind were registered, Python's set iteration (<code>PYTHONHASHSEED</code>-dependent) decided which one the engine picked. The same pipeline could read the wrong table, wrong file, or wrong credential across processes, with no error and no signal at planning time.</p>
+<p>Named handles collapse that bug class to one invariant: <em>if the registry has more than one entry of the requested kind and the consumer did not pass a handle, raise and list the candidates</em>. Same rule, same error shape, regardless of field.</p>
+<h2 id="common-errors">Common errors</h2>
+<ul>
+<li><strong>"Handle 'X' is already registered under kind 'K'"</strong>: you called <code>add_*</code> (or constructed the DAC) with a handle already used by another resource. Pick a different name.</li>
+<li><strong>"Handle 'X' not found for kind 'K'. Available handles of kind 'K': [...]"</strong>: you set <code>data_access_handle='X'</code> but the DAC has no resource of that kind named <code>X</code>. Check the spelling or register it.</li>
+<li><strong>"Handle 'X' is registered under kind 'K1', but kind 'K2' was requested"</strong>: you set <code>data_access_handle='X'</code>, but the registry has <code>X</code> under a different kind. A connection consumer cannot bind to a file handle even if the names match.</li>
+<li><strong>"Ambiguous resolve for kind 'K': N candidates [...]; set 'data_access_handle' in Options to disambiguate"</strong>: more than one entry of the requested kind matched. Set <code>data_access_handle</code> on the feature's <code>Options</code> to pick one, or remove the extras from the DAC.</li>
+</ul>
+<h2 id="related">Related</h2>
+<ul>
+<li><a href="../access-feature-data/">(Feature) data</a>: overview of data access in mloda.</li>
+<li><a href="../data-access-patterns/">Data Access Patterns</a>: <code>BaseInputData</code> vs <code>MatchData</code>.</li>
+<li><a href="../framework-connection-object/">Framework Connection Object</a>: stateful connection lifecycle.</li>
+</ul>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../data-access-patterns/" class="btn btn-neutral float-left" title="Data Access Patterns"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../framework-transformers/" class="btn btn-neutral float-right" title="Framework Transformers">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+    
+      <span><a href="../data-access-patterns/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../framework-transformers/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "../..";</script>
+    <script src="../../js/theme_extra.js"></script>
+    <script src="../../js/theme.js"></script>
+      <script src="../../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

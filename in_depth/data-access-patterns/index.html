@@ -86,6 +86,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../filter_data/">Filter data</a>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../mask_engine/">Mask Engine</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" href="../artifacts/">Artifacts</a>
                   </li>
               </ul>
@@ -172,6 +174,8 @@
     <li class="toctree-l2"><a class="reference internal" href="#summary">Summary</a>
     </li>
     </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../named-data-access-handles/">Named Data Access Handles</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Compute Frameworks</a>
     <ul>
@@ -339,8 +343,12 @@ class DuckDBFeatureGroup(FeatureGroup, MatchData):
         # Logic to determine if this matcher handles DuckDB connections
         if framework_connection_object and isinstance(framework_connection_object, duckdb.DuckDBPyConnection):
             return framework_connection_object
-        if data_access_collection and data_access_collection.has_duckdb_connections():
-            return data_access_collection.get_duckdb_connection()
+        if data_access_collection is not None:
+            return data_access_collection.resolve(
+                &quot;connection&quot;,
+                predicate=lambda c: isinstance(c, duckdb.DuckDBPyConnection),
+                hint=options.get(&quot;data_access_handle&quot;),
+            )
         return None
 </code></pre>
 <h2 id="key-differences">Key Differences</h2>
@@ -511,7 +519,7 @@ class DuckDBFeatureGroup(FeatureGroup, MatchData):
           </div><footer>
     <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
         <a href="../domain/" class="btn btn-neutral float-left" title="Domain concept"><span class="icon icon-circle-arrow-left"></span> Previous</a>
-        <a href="../framework-transformers/" class="btn btn-neutral float-right" title="Framework Transformers">Next <span class="icon icon-circle-arrow-right"></span></a>
+        <a href="../named-data-access-handles/" class="btn btn-neutral float-right" title="Named Data Access Handles">Next <span class="icon icon-circle-arrow-right"></span></a>
     </div>
 
   <hr/>
@@ -537,7 +545,7 @@ class DuckDBFeatureGroup(FeatureGroup, MatchData):
       <span><a href="../domain/" style="color: #fcfcfc">&laquo; Previous</a></span>
     
     
-      <span><a href="../framework-transformers/" style="color: #fcfcfc">Next &raquo;</a></span>
+      <span><a href="../named-data-access-handles/" style="color: #fcfcfc">Next &raquo;</a></span>
     
   </span>
 </div>

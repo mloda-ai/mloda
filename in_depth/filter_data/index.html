@@ -102,6 +102,8 @@
     </li>
     </ul>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../mask_engine/">Mask Engine</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" href="../artifacts/">Artifacts</a>
                   </li>
               </ul>
@@ -112,6 +114,8 @@
                   <li class="toctree-l1"><a class="reference internal" href="../domain/">Domain concept</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-access-patterns/">Data Access Patterns</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../named-data-access-handles/">Named Data Access Handles</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Compute Frameworks</a>
     <ul>
@@ -236,8 +240,9 @@
 <li>event_time_column: The column name containing event timestamps. Default is "reference_time".</li>
 <li>validity_time_column: The column name containing validity timestamps. Default is "time_travel".</li>
 </ul>
-<p>The <strong>single_filters</strong> created will be converted to UTC as ISO 8601 formatted strings to ensure consistency
-    across time zones and avoid ambiguity when comparing or processing time-based data.</p>
+<p>The bounds of the created <strong>single_filters</strong> are normalized to tz-aware <code>datetime</code> objects in UTC,
+    so each filter engine can compare them directly against the framework's native temporal type.
+    Custom filter engines that previously parsed ISO 8601 strings must now accept <code>datetime</code> values.</p>
 <h4 id="how-to-create-a-collection-of-single-filters-globalfilter">How to create a collection of single filters (GlobalFilter)</h4>
 <p>In this example, we simply instantiate a GlobalFilter and add a SingleFilter.</p>
 <pre><code class="language-python">from mloda.user import GlobalFilter
@@ -248,7 +253,7 @@ global_filter.add_filter(&quot;example_order_id&quot;, &quot;equal&quot;, {&quot
 global_filter.filters
 </code></pre>
 <p>Result</p>
-<pre><code class="language-python">{&lt;SingleFilter(feature_name=example_order_id, type=equal, parameters=(('value', 1),))&gt;}
+<pre><code class="language-python">{&lt;SingleFilter(feature_name=example_order_id, type=equal, parameters=FilterParameterImpl(_raw=(('value', 1),)))&gt;}
 </code></pre>
 <h4 id="how-to-deal-with-time-filters">How to deal with time filters</h4>
 <p>In this example, we show how one can manage datetime relations.</p>
@@ -264,8 +269,8 @@ global_filter.add_time_and_time_travel_filters(event_from, event_to, valid_from,
 global_filter.filters
 </code></pre>
 <p>Result</p>
-<pre><code class="language-python">{&lt;SingleFilter(feature_name=time_travel, type=range, parameters=(('max', '2022-12-31T00:00:00+00:00'), ('max_exclusive', True), ('min', '2022-01-01T00:00:00+00:00')))&gt;,
- &lt;SingleFilter(feature_name=reference_time, type=range, parameters=(('max', '2023-12-31T00:00:00+00:00'), ('max_exclusive', True), ('min', '2023-01-01T00:00:00+00:00')))&gt;}
+<pre><code class="language-python">{&lt;SingleFilter(feature_name=time_travel, type=range, parameters=FilterParameterImpl(_raw=(('max', datetime.datetime(2022, 12, 31, 0, 0, tzinfo=datetime.timezone.utc)), ('max_exclusive', True), ('min', datetime.datetime(2022, 1, 1, 0, 0, tzinfo=datetime.timezone.utc)))))&gt;,
+ &lt;SingleFilter(feature_name=reference_time, type=range, parameters=FilterParameterImpl(_raw=(('max', datetime.datetime(2023, 12, 31, 0, 0, tzinfo=datetime.timezone.utc)), ('max_exclusive', True), ('min', datetime.datetime(2023, 1, 1, 0, 0, tzinfo=datetime.timezone.utc)))))&gt;}
 </code></pre>
 <h4 id="example-access-to-filters-in-the-feature-group">Example access to Filters in the Feature Group</h4>
 <p>Now, we need to also use a FeatureGroup which supports it. In this example, we show where we can access the SingleFilters.
@@ -328,7 +333,7 @@ FeatureGroups that declare the filter's column as an input. Each matched filter 
 <strong>deep-copied</strong> before delivery. If two FeatureGroups both match the same original
 filter, they each receive independent copies. This means a single <code>GlobalFilter</code> can
 be processed differently by different FeatureGroups in the same pipeline: one may use
-it for inline masking while another uses it for row elimination.</p>
+the mask engine for inline masking while another uses filters for row elimination.</p>
 <p>Matched filters are attached to the <code>FeatureSet</code> before <code>calculate_feature()</code> is
 called. Inside your calculation you can access them via <code>features.filters</code>:</p>
 <pre><code>@classmethod
@@ -339,7 +344,8 @@ def calculate_feature(cls, data, features: FeatureSet):
             value  = single_filter.parameter.value  # e.g. &quot;active&quot;
             # ... use however you need
 </code></pre>
-<p><code>features.filters</code> is <strong>always available</strong>, regardless of any other setting.</p>
+<p><code>features.filters</code> is available whenever a <code>GlobalFilter</code> with matching filters is
+provided. It is <code>None</code> when no filters match or no <code>GlobalFilter</code> is passed.</p>
 <h3 id="two-independent-concerns">Two independent concerns</h3>
 <p>Filters involve two decisions that are <strong>independent</strong> of each other:</p>
 <table>
@@ -352,7 +358,7 @@ def calculate_feature(cls, data, features: FeatureSet):
 </thead>
 <tbody>
 <tr>
-<td><strong>Inline reading</strong> -- should the FeatureGroup read <code>features.filters</code> during calculation?</td>
+<td><strong>Inline masking</strong> -- should the FeatureGroup use <code>features.mask_engine</code> during calculation?</td>
 <td>The FeatureGroup author (you)</td>
 <td>During <code>calculate_feature()</code></td>
 </tr>
@@ -363,7 +369,8 @@ def calculate_feature(cls, data, features: FeatureSet):
 </tr>
 </tbody>
 </table>
-<p>A FeatureGroup can do either, both, or neither. The two concerns are decoupled.</p>
+<p>A FeatureGroup can do either, both, or neither. The two concerns are decoupled.
+For inline masking details, see <a href="../mask_engine/">Mask Engine</a>.</p>
 <h3 id="final_filters-reference"><code>final_filters()</code> reference</h3>
 <p>Override this classmethod on your FeatureGroup to control post-calculation row elimination:</p>
 <pre><code>@classmethod
@@ -392,8 +399,8 @@ def final_filters(cls) -&gt; bool | None:
 </tr>
 </tbody>
 </table>
-<p>This method does <strong>not</strong> affect whether <code>features.filters</code> is populated. Filters are
-always available for inline reading.</p>
+<p>This method does <strong>not</strong> affect whether <code>features.filters</code> is populated or whether
+<code>features.mask_engine</code> is wired. Both are set independently of <code>final_filters()</code>.</p>
 <p><code>final_filters()</code> is a <strong>semantic</strong> flag that controls <em>when</em> in the pipeline the
 filter is applied, not <em>where</em> the computation runs physically:</p>
 <table>
@@ -439,52 +446,9 @@ removes non-matching rows after calculation. No override needed.</p>
         # Just compute; framework handles filtering afterward
         return pa.table({cls.get_class_name(): compute_totals(data)})
 </code></pre>
-<h4 id="pattern-2-inline-masking-skip-row-elimination">Pattern 2: Inline masking, skip row elimination</h4>
-<p>Use <code>FilterMask.build()</code> to turn <code>features.filters</code> into a boolean mask for a given
-column. This replaces the boilerplate of iterating <code>SingleFilter</code> objects and building
-masks manually. The correct engine is wired automatically by the <code>ComputeFramework</code>.</p>
-<p>Import it from <code>mloda.provider</code>:</p>
-<pre><code class="language-python">from mloda.provider import FilterMask
-</code></pre>
-<p>Example: "Sum of active sales per region, broadcast back to every row."</p>
-<pre><code>class MaskedRegionSum(FeatureGroup):
-    @classmethod
-    def final_filters(cls) -&gt; bool:
-        return False  # skip row elimination
-
-    @classmethod
-    def calculate_feature(cls, data, features: FeatureSet):
-        mask = FilterMask.build(data, features, column=&quot;status&quot;)
-        masked = pc.if_else(mask, data[&quot;sales&quot;], None)
-        # aggregate masked values, broadcast back to all rows
-        return pa.table({cls.get_class_name(): broadcast_sum(masked, data[&quot;region&quot;])})
-</code></pre>
-<p>Result: all rows preserved, but only matching values contributed to the sum.</p>
-<p><code>FilterMask.build()</code> supports <code>equal</code>, <code>min</code>, <code>max</code>, <code>range</code>, and
-<code>categorical_inclusion</code> filter types. When multiple filters target the same column
-they are AND-combined. When no filters match the column, an all-True mask is returned.</p>
-<h4 id="pattern-3-inline-masking-row-elimination">Pattern 3: Inline masking + row elimination</h4>
-<p>Read filters for conditional logic <strong>and</strong> request row elimination afterward. Useful when
-you need filter-aware computation (masking, weighting, branching) but also want
-non-matching rows removed from the final output.</p>
-<p>Example: "Sum of active sales per region, only for active rows."</p>
-<pre><code>class MaskedRegionSumActiveOnly(FeatureGroup):
-    @classmethod
-    def final_filters(cls) -&gt; bool:
-        return True  # also eliminate non-matching rows
-
-    @classmethod
-    def calculate_feature(cls, data, features: FeatureSet):
-        mask = FilterMask.build(data, features, column=&quot;status&quot;)
-        masked = pc.if_else(mask, data[&quot;sales&quot;], None)
-        sums = broadcast_sum(masked, data[&quot;region&quot;])
-        # Return all rows; the framework will remove non-matching ones
-        return pa.table({
-            cls.get_class_name(): sums,
-            &quot;status&quot;: data[&quot;status&quot;],  # preserve the filter column
-        })
-</code></pre>
-<p>Result: only matching rows remain, with aggregated values computed from masked data.</p>
+<h4 id="patterns-2-3-inline-masking">Patterns 2 &amp; 3: Inline masking</h4>
+<p>For patterns that use <code>features.mask_engine</code> to build boolean masks inside
+<code>calculate_feature()</code>, see <a href="../mask_engine/">Mask Engine</a>.</p>
 <h4 id="pattern-4-force-elimination-on-a-non-eliminating-engine">Pattern 4: Force elimination on a non-eliminating engine</h4>
 <p>Some engines skip row elimination by default (e.g. Iceberg, which uses predicate pushdown
 at scan time). If your FeatureGroup computes derived columns that the scan could not
@@ -495,9 +459,9 @@ filter, override <code>final_filters()</code> to force elimination:</p>
         return True  # override Iceberg's default of False
 </code></pre>
 <h3 id="the-overlap-contract">The overlap contract</h3>
-<p>When a FeatureGroup reads filters inline <strong>and</strong> returns <code>final_filters() = True</code>, the
-same filters are processed twice: once by your code during calculation, and once by the
-framework's FilterEngine afterward.</p>
+<p>When a FeatureGroup uses the mask engine inline <strong>and</strong> returns <code>final_filters() = True</code>,
+filters are processed twice: once by your masking logic during calculation, and once by
+the framework's FilterEngine afterward.</p>
 <p>This is safe as long as you follow one rule: <strong>preserve the filter column with its
 original values in your output</strong>.</p>
 <p>The framework's row elimination works by matching against the filter column in your
@@ -531,7 +495,7 @@ return pa.table({
 <tr>
 <th>Your FeatureGroup...</th>
 <th style="text-align: center;"><code>final_filters()</code></th>
-<th style="text-align: center;">Reads <code>features.filters</code>?</th>
+<th style="text-align: center;">Uses <a href="../mask_engine/">mask engine</a>?</th>
 <th style="text-align: center;">Must preserve filter column?</th>
 </tr>
 </thead>
@@ -623,37 +587,8 @@ Filter: status == &quot;active&quot;
 <p>The result is identical to eager row elimination, but no intermediate full-table
 materialization occurs.</p>
 <h4 id="inline-masking-all-rows-preserved">Inline masking (all rows preserved)</h4>
-<table>
-<thead>
-<tr>
-<th>Stage</th>
-<th>Data</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Read <code>features.filters</code></td>
-<td>Extract: <code>status == "active"</code></td>
-</tr>
-<tr>
-<td>Build mask</td>
-<td><code>[True, False, True, False]</code></td>
-</tr>
-<tr>
-<td>Apply mask to value column</td>
-<td><code>masked_value = [10, NULL, 30, NULL]</code></td>
-</tr>
-<tr>
-<td>Aggregate (sum by region, broadcast)</td>
-<td>Region A: 10, Region B: 30</td>
-</tr>
-<tr>
-<td><strong>Final result</strong></td>
-<td><code>[10, 10, 30, 30]</code> (4 rows, all preserved)</td>
-</tr>
-</tbody>
-</table>
-<p>The framework skips <code>run_final_filter()</code> because <code>final_filters() = False</code>.</p>
+<p>See the <a href="../mask_engine/#pipeline-data-flow-inline-masking">Mask Engine pipeline data flow</a>
+for details on this pattern.</p>
 <h4 id="masking-and-elimination-same-filter-two-featuregroups">Masking and elimination (same filter, two FeatureGroups)</h4>
 <p>A pipeline may need the same filter for two purposes in separate steps. Because
 filters are deep-copied independently for each FeatureGroup, both steps run
@@ -674,7 +609,7 @@ without interference:</p>
 </tr>
 <tr>
 <td><code>calculate_feature()</code></td>
-<td>Reads filters, masks values, aggregates</td>
+<td>Uses mask engine, masks values, aggregates</td>
 <td>Computes raw values, ignores filters</td>
 </tr>
 <tr>
@@ -694,7 +629,7 @@ without interference:</p>
           </div><footer>
     <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
         <a href="../join_data/" class="btn btn-neutral float-left" title="Join data"><span class="icon icon-circle-arrow-left"></span> Previous</a>
-        <a href="../artifacts/" class="btn btn-neutral float-right" title="Artifacts">Next <span class="icon icon-circle-arrow-right"></span></a>
+        <a href="../mask_engine/" class="btn btn-neutral float-right" title="Mask Engine">Next <span class="icon icon-circle-arrow-right"></span></a>
     </div>
 
   <hr/>
@@ -720,7 +655,7 @@ without interference:</p>
       <span><a href="../join_data/" style="color: #fcfcfc">&laquo; Previous</a></span>
     
     
-      <span><a href="../artifacts/" style="color: #fcfcfc">Next &raquo;</a></span>
+      <span><a href="../mask_engine/" style="color: #fcfcfc">Next &raquo;</a></span>
     
   </span>
 </div>

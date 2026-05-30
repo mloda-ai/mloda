@@ -106,6 +106,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../filter_data/">Filter data</a>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../mask_engine/">Mask Engine</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" href="../artifacts/">Artifacts</a>
                   </li>
               </ul>
@@ -116,6 +118,8 @@
                   <li class="toctree-l1"><a class="reference internal" href="../domain/">Domain concept</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-access-patterns/">Data Access Patterns</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../named-data-access-handles/">Named Data Access Handles</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Compute Frameworks</a>
     <ul>
@@ -214,25 +218,14 @@
 <h4 id="dataaccesscollection-global-data-access">DataAccessCollection - global data access</h4>
 <p>The DataAccessCollection is designed to control the access to data of any kind. The main purpose of this class is to organize and simplify interactions with these different data elements, making it easier to work to ingest data of various form into the framework. It provides as an interface for accessing and storing of data on a global level.</p>
 <p>The DataAccessCollection can only be added via <strong>mlodaAPI</strong>.</p>
-<p>List options:</p>
+<p>A DAC holds resources of four kinds:</p>
 <ol>
-<li>
-<p><strong>Files:</strong> Specifies the exact location of files: path/folder/text.txt</p>
-</li>
-<li>
-<p><strong>Folders:</strong> Points to directories where files are located: path/folder/</p>
-</li>
-<li>
-<p><strong>Credential dicts:</strong> Contains the necessary credentials to access data:<br />
- {host: example.com, password: example}</p>
-</li>
-<li>
-<p><strong>Initialized connection object:</strong> Stores connection objects that are already initialized: (DBConnectionObject)</p>
-</li>
-<li>
-<p><strong>Uninitialized connection object:</strong> Stores not initialized connection objects: (UninitializedDBConnection)</p>
-</li>
+<li><strong>Files:</strong> the exact location of files, e.g. <code>path/folder/text.txt</code>.</li>
+<li><strong>Folders:</strong> directories where files are located, e.g. <code>path/folder/</code>.</li>
+<li><strong>Credentials:</strong> dicts with the information needed to reach a data source, e.g. <code>{host: example.com, password: example}</code>.</li>
+<li><strong>Connections:</strong> already-initialized connection objects (database connections, Spark sessions, Iceberg catalogs, etc.).</li>
 </ol>
+<p>When the collection holds more than one resource of the same kind, you can name them with stable handles and disambiguate per feature via <code>Options(context={"data_access_handle": "..."})</code>. See <a href="../named-data-access-handles/">Named Data Access Handles</a> for the full naming model, the resolution rule, and the available error shapes; for the simple single-source cases below, naming is optional.</p>
 <p>You can apply these options like so:</p>
 <pre><code class="language-python">
 data_access = DataAccessCollection()
@@ -240,9 +233,8 @@ data_access = DataAccessCollection()
 # Add file paths, folder paths, credentials, and connection objects
 data_access.add_file('path/to/folder/text.txt')
 data_access.add_folder('path/to/folder/')
-data_access.add_credential_dict({'host': 'example.com', 'password': 'example'})
-data_access.add_initialized_connection_object('InitializedDBConnection')
-data_access.add_uninitialized_connection_object('UninitializedDBConnection')
+data_access.add_credentials({'host': 'example.com', 'password': 'example'})
+data_access.add_connection('InitializedDBConnection')
 
 mloda.run_all(
     feature_list,
@@ -286,16 +278,16 @@ with <code>ReadFile</code>.</p>
 <p>This tells ReadDocument to include .json files and ReadFile to auto-exclude them
 for that feature.</p>
 <h4 id="disambiguating-columns-shared-across-multiple-files">Disambiguating columns shared across multiple files</h4>
-<p>When a <code>DataAccessCollection</code> holds multiple files that share the same column name (e.g. <code>id</code> appears in both <code>application_train.csv</code> and <code>bureau.csv</code>), global-scope resolution is non-deterministic: the engine iterates an unordered set and returns the first file that contains the requested columns. Two features intended to come from the same file can end up in different <code>FeatureGroup</code> nodes, producing a misleading "missing Links" error.</p>
+<p>When a <code>DataAccessCollection</code> holds multiple files that share the same column name (e.g. <code>id</code> appears in both <code>application_train.csv</code> and <code>bureau.csv</code>), the resolver refuses to guess: it raises <code>ValueError</code> listing the candidate files and asks for <code>data_access_handle</code>. <code>column_to_file</code> is a per-column shortcut that binds columns to files at construction so you don't have to set <code>data_access_handle</code> on every feature.</p>
 <p>Use <code>column_to_file</code> to pin each column to its canonical file:</p>
 <pre><code class="language-python">from mloda.user import DataAccessCollection, mloda
 
 data_access = DataAccessCollection(
-    files={&quot;application_train.csv&quot;, &quot;bureau.csv&quot;},
+    files={&quot;train&quot;: &quot;application_train.csv&quot;, &quot;bureau&quot;: &quot;bureau.csv&quot;},
     column_to_file={
-        &quot;SK_ID_CURR&quot;: &quot;application_train.csv&quot;,
-        &quot;TARGET&quot;:     &quot;application_train.csv&quot;,
-        &quot;AMT_CREDIT_SUM&quot;: &quot;bureau.csv&quot;,
+        &quot;SK_ID_CURR&quot;: &quot;train&quot;,
+        &quot;TARGET&quot;:     &quot;train&quot;,
+        &quot;AMT_CREDIT_SUM&quot;: &quot;bureau&quot;,
     },
 )
 
@@ -307,9 +299,9 @@ result = mloda.run_all(
 </code></pre>
 <p>Rules:
 - <code>column_to_file</code> only applies to global-scope resolution. Per-feature <code>options</code> always take precedence.
-- All values must be present in the <code>files</code> set -- construction raises <code>ValueError</code> otherwise.
+- Values may be either a file handle (a key of the <code>files</code> dict) or a file path (a value of the <code>files</code> dict); they are normalized to handles internally. Construction raises <code>ValueError</code> if a value matches neither.
 - If a batch of features has some columns pinned and others not, a <code>ValueError</code> is raised (use <code>column_to_file</code> for all columns or none in a batch).
-- Columns not listed in the map fall through to normal first-match-wins resolution.</p>
+- For columns not listed in the map, the consumer falls back to the shared resolver: a single matching file binds, multiple matching files raise <code>ValueError</code> listing the candidates. Set <code>data_access_handle</code> on the feature's <code>Options</code> to disambiguate without <code>column_to_file</code>. See <a href="../named-data-access-handles/">Named Data Access Handles</a>.</p>
 <p>The existing per-feature alternative still works for one-off pinning:</p>
 <pre><code class="language-python">Feature(&quot;SK_ID_CURR&quot;, options=Options({CsvReader: &quot;application_train.csv&quot;}))
 </code></pre>

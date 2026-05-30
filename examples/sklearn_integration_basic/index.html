@@ -96,6 +96,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../in_depth/filter_data/">Filter data</a>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../in_depth/mask_engine/">Mask Engine</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../in_depth/artifacts/">Artifacts</a>
                   </li>
               </ul>
@@ -106,6 +108,8 @@
                   <li class="toctree-l1"><a class="reference internal" href="../../in_depth/domain/">Domain concept</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../in_depth/data-access-patterns/">Data Access Patterns</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../in_depth/named-data-access-handles/">Named Data Access Handles</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Compute Frameworks</a>
     <ul>
@@ -1339,28 +1343,20 @@ print(f"Result: {list(_result.columns)} \n {list(_result2.columns)} columns tota
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="application/vnd.jupyter.stderr" tabindex="0">
-<pre>/home/tom/envs/python310/lib/python3.10/site-packages/tqdm/auto.py:21: TqdmWarning: IProgress not found. Please update jupyter and ipywidgets. See https://ipywidgets.readthedocs.io/en/stable/user_install.html
-  from .autonotebook import tqdm as notebook_tqdm
-</pre>
-</div>
-</div>
-<div class="jp-OutputArea-child">
-<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
 <pre>✅ Transformed dataset with split fit/transform:
-   state__onehot_encoded~1  gender__onehot_encoded~0  state__onehot_encoded~0  \
+   state__onehot_encoded~1  gender__onehot_encoded~0  state__onehot_encoded~3  \
 0                      0.0                       1.0                      0.0   
 1                      0.0                       0.0                      0.0   
 
-   gender__onehot_encoded~1  state__onehot_encoded~2  state__onehot_encoded~3  
-0                       0.0                      1.0                      0.0  
-1                       1.0                      1.0                      0.0  
-   age__mean_imputed__standard_scaled  weight__mean_imputed__standard_scaled
-0                            0.339295                               1.243621
-1                            1.057320                              -0.677472
-Result: ['state__onehot_encoded~1', 'gender__onehot_encoded~0', 'state__onehot_encoded~0', 'gender__onehot_encoded~1', 'state__onehot_encoded~2', 'state__onehot_encoded~3'] 
- ['age__mean_imputed__standard_scaled', 'weight__mean_imputed__standard_scaled'] columns total
+   state__onehot_encoded~2  gender__onehot_encoded~1  state__onehot_encoded~0  
+0                      1.0                       0.0                      0.0  
+1                      1.0                       1.0                      0.0  
+   weight__mean_imputed__standard_scaled  age__mean_imputed__standard_scaled
+0                               1.243621                            0.339295
+1                              -0.677472                            1.057320
+Result: ['state__onehot_encoded~1', 'gender__onehot_encoded~0', 'state__onehot_encoded~3', 'state__onehot_encoded~2', 'gender__onehot_encoded~1', 'state__onehot_encoded~0'] 
+ [FeatureName('weight__mean_imputed__standard_scaled'), FeatureName('age__mean_imputed__standard_scaled')] columns total
 </pre>
 </div>
 </div>

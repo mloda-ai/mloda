@@ -118,6 +118,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../../in_depth/filter_data/">Filter data</a>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../../in_depth/mask_engine/">Mask Engine</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../../in_depth/artifacts/">Artifacts</a>
                   </li>
               </ul>
@@ -128,6 +130,8 @@
                   <li class="toctree-l1"><a class="reference internal" href="../../../in_depth/domain/">Domain concept</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../../in_depth/data-access-patterns/">Data Access Patterns</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../../in_depth/named-data-access-handles/">Named Data Access Handles</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Compute Frameworks</a>
     <ul>
@@ -1023,9 +1027,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <span class="n">data_access_collection</span><span class="o">.</span><span class="n">add_folder</span><span class="p">(</span><span class="n">base_data_path</span><span class="p">)</span>
 
 <span class="c1"># As a db cannot work with a folder, we need to add a connection for the db.</span>
-<span class="n">data_access_collection</span><span class="o">.</span><span class="n">add_credential_dict</span><span class="p">(</span>
-    <span class="n">credential_dict</span><span class="o">=</span><span class="p">{</span><span class="n">SQLITEReader</span><span class="o">.</span><span class="n">db_path</span><span class="p">():</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">base_data_path</span><span class="p">,</span> <span class="s2">"example.sqlite"</span><span class="p">)}</span>
-<span class="p">)</span>
+<span class="n">data_access_collection</span><span class="o">.</span><span class="n">add_credentials</span><span class="p">({</span><span class="n">SQLITEReader</span><span class="o">.</span><span class="n">db_path</span><span class="p">():</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">base_data_path</span><span class="p">,</span> <span class="s2">"example.sqlite"</span><span class="p">)})</span>
 
 <span class="n">order_features</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Feature</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"order_id"</span><span class="p">,</span> <span class="s2">"product_id"</span><span class="p">,</span> <span class="s2">"quantity"</span><span class="p">,</span> <span class="s2">"item_price"</span><span class="p">]</span>
 <span class="n">payment_features</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Feature</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"payment_id"</span><span class="p">,</span> <span class="s2">"payment_type"</span><span class="p">,</span> <span class="s2">"payment_status"</span><span class="p">,</span> <span class="s2">"valid_datetime"</span><span class="p">]</span>
@@ -1066,9 +1068,7 @@ if not os.path.exists(base_data_path):
 data_access_collection.add_folder(base_data_path)
 
 # As a db cannot work with a folder, we need to add a connection for the db.
-data_access_collection.add_credential_dict(
-    credential_dict={SQLITEReader.db_path(): os.path.join(base_data_path, "example.sqlite")}
-)
+data_access_collection.add_credentials({SQLITEReader.db_path(): os.path.join(base_data_path, "example.sqlite")})
 
 order_features: list[str | Feature] = ["order_id", "product_id", "quantity", "item_price"]
 payment_features: list[str | Feature] = ["payment_id", "payment_type", "payment_status", "valid_datetime"]
@@ -1093,25 +1093,19 @@ mloda.run_all(
 <div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
 </div>
 <div class="jp-OutputArea jp-Cell-outputArea">
-<div class="jp-OutputArea-child">
-<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="application/vnd.jupyter.stderr" tabindex="0">
-<pre>/home/tom/envs/python310/lib/python3.10/site-packages/tqdm/auto.py:21: TqdmWarning: IProgress not found. Please update jupyter and ipywidgets. See https://ipywidgets.readthedocs.io/en/stable/user_install.html
-  from .autonotebook import tqdm as notebook_tqdm
-</pre>
-</div>
-</div>
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
 <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[1]:</div>
 <div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain" tabindex="0">
 <pre>[pyarrow.Table
- user_location: string
- update_date: int64
- merchant_location: string
+ item_price: double
+ order_id: int64
+ product_id: int64
+ quantity: int64
  ----
- user_location: [["East","West","North","West","West",...,"West","North","North","North","East"]]
- update_date: [[1640995200000,1641632290909,1642269381818,1642906472727,1643543563636,...,1701518836363,1702155927272,1702793018181,1703430109090,1704067200000]]
- merchant_location: [["North","East","East","East","North",...,"North","South","East","South","North"]],
+ item_price: [[74.86,154.56,67.7,186.21,118.69,...,80.51,98.91,162.98,194.98,107.73]]
+ order_id: [[1,2,3,4,5,...,96,97,98,99,100]]
+ product_id: [[282,355,395,319,275,...,170,328,361,192,271]]
+ quantity: [[6,2,4,9,5,...,4,3,5,5,6]],
  pyarrow.Table
  payment_id: int64
  valid_datetime: timestamp[ns, tz=UTC]
@@ -1123,15 +1117,13 @@ mloda.run_all(
  payment_status: [["failed","pending","completed","pending","failed",...,"completed","pending","completed","failed","completed"]]
  payment_type: [["debit card","debit card","store credit","credit card","store credit",...,"paypal","debit card","credit card","store credit","paypal"]],
  pyarrow.Table
- item_price: double
- product_id: int64
- quantity: int64
- order_id: int64
+ merchant_location: string
+ update_date: int64
+ user_location: string
  ----
- item_price: [[74.86,154.56,67.7,186.21,118.69,...,80.51,98.91,162.98,194.98,107.73]]
- product_id: [[282,355,395,319,275,...,170,328,361,192,271]]
- quantity: [[6,2,4,9,5,...,4,3,5,5,6]]
- order_id: [[1,2,3,4,5,...,96,97,98,99,100]],
+ merchant_location: [["North","East","East","East","North",...,"North","South","East","South","North"]]
+ update_date: [[1640995200000,1641632290909,1642269381818,1642906472727,1643543563636,...,1701518836363,1702155927272,1702793018181,1703430109090,1704067200000]]
+ user_location: [["East","West","North","West","West",...,"West","North","North","North","East"]],
  pyarrow.Table
  user_age_group: string
  transaction_type: string
@@ -1222,7 +1214,7 @@ mloda.run_all(
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [2]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-2">

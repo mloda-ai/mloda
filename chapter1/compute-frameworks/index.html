@@ -118,6 +118,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../in_depth/filter_data/">Filter data</a>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../in_depth/mask_engine/">Mask Engine</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../in_depth/artifacts/">Artifacts</a>
                   </li>
               </ul>
@@ -128,6 +130,8 @@
                   <li class="toctree-l1"><a class="reference internal" href="../../in_depth/domain/">Domain concept</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../in_depth/data-access-patterns/">Data Access Patterns</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../in_depth/named-data-access-handles/">Named Data Access Handles</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Compute Frameworks</a>
     <ul>
@@ -427,7 +431,7 @@ connection = duckdb.connect()
 
 # Set up data access with connection
 data_access_collection = DataAccessCollection(
-    initialized_connection_objects={connection}
+    connections={connection}
 )
 
 feature = Feature(&quot;id&quot;, options={&quot;compute_framework&quot;: &quot;DuckDBFramework&quot;})
@@ -454,7 +458,7 @@ catalog = load_catalog(&quot;default&quot;, **{
 
 # Set up data access with catalog
 data_access_collection = DataAccessCollection(
-    initialized_connection_objects={catalog}
+    connections={catalog}
 )
 
 feature = Feature(&quot;id&quot;, options={&quot;compute_framework&quot;: &quot;IcebergFramework&quot;})
@@ -479,7 +483,7 @@ spark = SparkSession.builder \
 
 # Set up data access with SparkSession
 data_access_collection = DataAccessCollection(
-    initialized_connection_objects={spark}
+    connections={spark}
 )
 
 feature = Feature(&quot;id&quot;, options={&quot;compute_framework&quot;: &quot;SparkFramework&quot;})

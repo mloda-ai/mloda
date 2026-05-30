@@ -86,6 +86,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../filter_data/">Filter data</a>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../mask_engine/">Mask Engine</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" href="../artifacts/">Artifacts</a>
                   </li>
               </ul>
@@ -96,6 +98,8 @@
                   <li class="toctree-l1"><a class="reference internal" href="../domain/">Domain concept</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-access-patterns/">Data Access Patterns</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../named-data-access-handles/">Named Data Access Handles</a>
                   </li>
                   <li class="toctree-l1 current"><a class="reference internal current" >Compute Frameworks</a>
     <ul class="current">
@@ -126,6 +130,14 @@
     <li class="toctree-l3"><a class="reference internal" href="#data-transformation">Data Transformation</a>
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#example">Example</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#sql-relation-helpers-duckdb-sqlite">SQL Relation Helpers (DuckDB / SQLite)</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#reading-column-types">Reading column types</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#window-functions">Window functions</a>
+    </li>
+        </ul>
     </li>
     </ul>
                 </li>
@@ -376,6 +388,45 @@ class SparkDistributedFeatureGroup(DistributedFeatureGroup):
         return data.groupBy(&quot;category_column&quot;).agg({&quot;value_column&quot;: &quot;sum&quot;})
 </code></pre>
 <p><strong>Important</strong>: Spark feature groups require PySpark installation and Java 8+ environment with JAVA_HOME configured. The framework can auto-create a local SparkSession if none is provided, but for production use, you should provide a configured SparkSession through the data access collection. Spark uses its own distributed processing capabilities instead of mloda's framework inherent multiprocessing.</p>
+<h2 id="sql-relation-helpers-duckdb-sqlite">SQL Relation Helpers (DuckDB / SQLite)</h2>
+<p>The DuckDB and SQLite frameworks expose a relation object (<code>DuckdbRelation</code>, <code>SqliteRelation</code>) inside <code>calculate_feature</code>. Both share the same helper surface so a feature group can be written once against either.</p>
+<h3 id="reading-column-types">Reading column types</h3>
+<p>The <code>.types</code> property returns column types aligned with <code>.columns</code>. The element type differs by backend:</p>
+<ul>
+<li><code>DuckdbRelation.types</code> returns DuckDB-native dtype objects.</li>
+<li><code>SqliteRelation.types</code> returns PyArrow <code>pa.DataType</code> objects (from propagated hints, falling back to SQLite affinity inference).</li>
+</ul>
+<pre><code class="language-python">relation.columns   # [&quot;user_id&quot;, &quot;amount&quot;]
+relation.types     # backend-specific dtype objects, same order as columns
+</code></pre>
+<h3 id="window-functions">Window functions</h3>
+<p><code>with_row_number</code> appends a <code>ROW_NUMBER()</code> column; <code>window</code> appends an arbitrary window expression. Both quote every identifier and raise <code>ValueError</code> if the new <code>alias</code> collides with an existing column.</p>
+<pre><code class="language-python">from mloda_plugins.compute_framework.base_implementations.sql.sql_window import (
+    OrderBy,
+    WindowFrame,
+    Preceding,
+    CurrentRow,
+)
+
+# ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY ts)
+ranked = relation.with_row_number(
+    &quot;rn&quot;,
+    partition_by=[&quot;user_id&quot;],
+    order_by=[OrderBy(&quot;ts&quot;)],
+)
+
+# SUM(amount) OVER (PARTITION BY user_id ORDER BY ts ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)
+rolling = relation.window(
+    &quot;SUM(amount)&quot;,
+    &quot;amount_rolling&quot;,
+    partition_by=[&quot;user_id&quot;],
+    order_by=[OrderBy(&quot;ts&quot;)],
+    frame=WindowFrame(kind=&quot;rows&quot;, start=Preceding(2), end=CurrentRow()),
+)
+</code></pre>
+<p><code>order_by</code> accepts plain column-name strings or <code>OrderBy(column, descending=..., nulls="first"|"last")</code>. The <code>func</code> passed to <code>window</code> is inlined verbatim as raw SQL, so never build it from user-controlled input.</p>
+<p>!!! warning "SQLite version requirement"
+    On SQLite, <code>with_row_number</code> and <code>window</code> require SQLite &gt;= 3.28.0; using <code>NULLS</code> placement in <code>order_by</code> additionally requires SQLite &gt;= 3.30.0. Both raise <code>ValueError</code> on older runtimes. DuckDB has no such gate.</p>
               
             </div>
           </div><footer>

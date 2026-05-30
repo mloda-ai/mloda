@@ -106,6 +106,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../in_depth/filter_data/">Filter data</a>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../in_depth/mask_engine/">Mask Engine</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../in_depth/artifacts/">Artifacts</a>
                   </li>
               </ul>
@@ -116,6 +118,8 @@
                   <li class="toctree-l1"><a class="reference internal" href="../../in_depth/domain/">Domain concept</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../in_depth/data-access-patterns/">Data Access Patterns</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../in_depth/named-data-access-handles/">Named Data Access Handles</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Compute Frameworks</a>
     <ul>
@@ -946,7 +950,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [1]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [2]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-1">
@@ -1018,7 +1022,7 @@ class DummyData(FeatureGroup):
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [2]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [3]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-2">
@@ -1032,23 +1036,19 @@ class DummyData(FeatureGroup):
 </clipboard-copy>
 </div>
 <div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># We load dependencies.</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user</span><span class="w"> </span><span class="kn">import</span> <span class="n">mloda</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user</span><span class="w"> </span><span class="kn">import</span> <span class="n">mloda</span><span class="p">,</span> <span class="n">PluginLoader</span>
 
-<span class="c1"># Load plugins into namespace</span>
-
-<span class="c1"># from mloda.user import PluginLoader</span>
-<span class="c1"># plugin_loader = PluginLoader.all()</span>
+<span class="c1"># Load plugins into namespace so compute frameworks register.</span>
+<span class="n">PluginLoader</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
 
 <span class="n">result</span> <span class="o">=</span> <span class="n">mloda</span><span class="o">.</span><span class="n">run_all</span><span class="p">([</span><span class="s2">"age"</span><span class="p">,</span> <span class="s2">"weight"</span><span class="p">,</span> <span class="s2">"state"</span><span class="p">,</span> <span class="s2">"gender"</span><span class="p">],</span> <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">[</span><span class="s2">"PyArrowTable"</span><span class="p">,</span> <span class="s2">"PandasDataFrame"</span><span class="p">])</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
 </pre></div>
 <div class="clipboard-copy-txt" id="cell-2"># We load dependencies.
-from mloda.user import mloda
+from mloda.user import mloda, PluginLoader
 
-# Load plugins into namespace
-
-# from mloda.user import PluginLoader
-# plugin_loader = PluginLoader.all()
+# Load plugins into namespace so compute frameworks register.
+PluginLoader.all()
 
 result = mloda.run_all(["age", "weight", "state", "gender"], compute_frameworks=["PyArrowTable", "PandasDataFrame"])
 print(result)</div>
@@ -1065,14 +1065,14 @@ print(result)</div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
 <pre>[pyarrow.Table
 age: int64
-weight: double
-gender: string
 state: string
+gender: string
+weight: double
 ----
-age: [[59,79,51,53,54,...,19,44,49,48,61]]
-weight: [[82.63466082550435,48.76135309655511,53.42935283513809,69.46679872093235,100.29825438843457,...,76.29799759158638,75.02026515813283,88.5564452526703,75.07448813986902,65.00412677965708]]
-gender: [["M","M","F","M","M",...,"F","M","F","M","F"]]
-state: [["TX","CA","TX","NY","FL",...,"CA","TX","NY","CA","CA"]]]
+age: [[45,22,44,57,67,...,60,39,60,67,64]]
+state: [["NY","NY","CA","TX","NY",...,"NY","FL","FL","NY","CA"]]
+gender: [["F","F","F","F","M",...,"F","M","F","F","M"]]
+weight: [[36.66709068215393,94.58258926334653,74.50051114637361,83.70913985668527,69.9010573127665,...,87.79184719361417,82.59339550062022,60.5190747793419,67.50612502058775,59.859807557032894]]]
 </pre>
 </div>
 </div>
@@ -1114,7 +1114,7 @@ state: [["TX","CA","TX","NY","FL",...,"CA","TX","NY","CA","CA"]]]
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [3]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [4]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-3">
@@ -1161,17 +1161,17 @@ print(result)</div>
 │ ---           │
 │ i64           │
 ╞═══════════════╡
-│ 4968          │
-│ 4968          │
-│ 4968          │
-│ 4968          │
-│ 4968          │
+│ 5046          │
+│ 5046          │
+│ 5046          │
+│ 5046          │
+│ 5046          │
 │ …             │
-│ 4968          │
-│ 4968          │
-│ 4968          │
-│ 4968          │
-│ 4968          │
+│ 5046          │
+│ 5046          │
+│ 5046          │
+│ 5046          │
+│ 5046          │
 └───────────────┘]
 </pre>
 </div>
@@ -1197,7 +1197,7 @@ print(result)</div>
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [4]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [5]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-4">
@@ -1252,11 +1252,11 @@ print(result)</div>
 │ ---                 │
 │ i64                 │
 ╞═════════════════════╡
-│ 273                 │
-│ 273                 │
-│ 273                 │
-│ 273                 │
-│ 273                 │
+│ 215                 │
+│ 215                 │
+│ 215                 │
+│ 215                 │
+│ 215                 │
 └─────────────────────┘]
 </pre>
 </div>

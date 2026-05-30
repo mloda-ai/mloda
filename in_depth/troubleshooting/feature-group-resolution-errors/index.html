@@ -86,6 +86,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../filter_data/">Filter data</a>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../mask_engine/">Mask Engine</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../artifacts/">Artifacts</a>
                   </li>
               </ul>
@@ -96,6 +98,8 @@
                   <li class="toctree-l1"><a class="reference internal" href="../../domain/">Domain concept</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../data-access-patterns/">Data Access Patterns</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../named-data-access-handles/">Named Data Access Handles</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Compute Frameworks</a>
     <ul>
@@ -147,6 +151,14 @@
     </li>
         </ul>
     </li>
+    <li class="toctree-l3"><a class="reference internal" href="#featuregroup-redefinition-errors">FeatureGroup Redefinition Errors</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#the-problem_1">The Problem</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#solutions_1">Solutions</a>
+    </li>
+        </ul>
+    </li>
     <li class="toctree-l3"><a class="reference internal" href="#related-documentation">Related Documentation</a>
     </li>
     </ul>
@@ -194,11 +206,12 @@
                 <h1 id="feature-group-resolution-errors">Feature Group Resolution Errors</h1>
 <h2 id="multiple-feature-groups-error">Multiple Feature Groups Error</h2>
 <h3 id="the-problem">The Problem</h3>
-<pre><code>ValueError: Multiple feature groups {&lt;feature_groups&gt;} found for feature name: &lt;feature_name&gt;
+<pre><code>ValueError: Multiple feature groups found for feature '&lt;feature_name&gt;':
+  - FeatureGroupA (...) [domain: ...]
+  - FeatureGroupB (...) [domain: ...]
 </code></pre>
-<p>This error occurs when multiple feature groups claim they can handle the same feature. Each feature must resolve to exactly one feature group to prevent conflicts.</p>
-<p>If you are running this in a notebook, please restart the kernel to clear any cached plugins. 
-If you experience this multiple times, please open an <a href="https://github.com/mloda-ai/mloda/issues/">issue</a> or <a href="mailto:info@mloda.ai">contact the maintainers</a>, so that we prioritize this.</p>
+<p>This error occurs when multiple distinct feature groups claim they can handle the same feature. Each feature must resolve to exactly one feature group to prevent conflicts.</p>
+<p>If you previously hit this in a notebook because of a redefined feature group (re-running a cell that defines <code>class MyFG(FeatureGroup): ...</code>), that case is now auto-deduplicated. If this error still appears, it points to a real conflict between two distinct classes (different <code>(module, qualname)</code>).</p>
 <h3 id="solutions">Solutions</h3>
 <h4 id="1-use-plugincollector-to-enable-or-disable-feature-groups">1. Use PluginCollector to enable or disable feature groups</h4>
 <p>Control which feature groups are loaded to prevent conflicts:</p>
@@ -223,6 +236,43 @@ plugin_loader.load_group(&quot;feature_group&quot;) # load plugins only from mlo
 def get_domain(cls):
     return &quot;sales&quot;  # Makes this FG only handle 'sales' domain features
 </code></pre>
+<h2 id="featuregroup-redefinition-errors">FeatureGroup Redefinition Errors</h2>
+<h3 id="the-problem_1">The Problem</h3>
+<pre><code>ValueError: FeatureGroup redefined with different source code:
+  - MyFG (__main__) source hash 5a3f0c12
+  - MyFG (__main__) source hash b1e052a3
+Set PluginCollector(...).set_allow_redefinition() to keep only the most recently defined version of each class.
+If you are running this in a notebook, restart the kernel to clear stale class definitions.
+</code></pre>
+<p>This error occurs when the same feature group class name has been redefined with different source code in a long-lived Python namespace. Common triggers:</p>
+<ul>
+<li>Re-running a Jupyter cell that defines <code>class MyFG(FeatureGroup): ...</code> after editing the class body. IPython's <code>Out[N]</code> history holds a strong reference to the old class object, so it stays alive in <code>FeatureGroup.__subclasses__()</code>.</li>
+<li>Calling <code>importlib.reload</code> on a module that defines feature group classes.</li>
+</ul>
+<p>If both versions of the class have <strong>identical</strong> source code (e.g., re-running a cell without edits), mloda silently keeps one. The error fires only when the source actually differs.</p>
+<h3 id="solutions_1">Solutions</h3>
+<h4 id="1-take-the-most-recent-version-iterative-development">1. Take the most recent version (iterative development)</h4>
+<p>For rapid iteration in notebooks, opt in to "newest wins" using the builder method on <code>PluginCollector</code>:</p>
+<p><strong>Option A</strong> — set the override flag on a fresh collector:</p>
+<pre><code class="language-python">from mloda.provider import FeatureGroup
+from mloda.user import PluginCollector
+
+
+class SomeFG(FeatureGroup):
+    pass
+
+
+plugin_collector = PluginCollector().set_allow_redefinition()
+</code></pre>
+<p><strong>Option B</strong> — compose with disable/enable filters:</p>
+<pre><code class="language-python">plugin_collector = (
+    PluginCollector.disabled_feature_groups({SomeFG})
+    .set_allow_redefinition()
+)
+</code></pre>
+<p>Pass this collector through to <code>mloda.run_all</code>, <code>resolve_feature</code>, or any other entry point that accepts a <code>plugin_collector</code> argument.</p>
+<h4 id="2-restart-the-kernel">2. Restart the kernel</h4>
+<p>Restarting the Jupyter kernel clears <code>Out[N]</code> history and unloads all stale class objects. Use this when you want a fully clean state and do not need to preserve other notebook state.</p>
 <h2 id="related-documentation">Related Documentation</h2>
 <ul>
 <li><a href="../../feature-group-matching/">Feature Group Matching</a></li>

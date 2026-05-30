@@ -86,6 +86,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../in_depth/filter_data/">Filter data</a>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../in_depth/mask_engine/">Mask Engine</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" href="../in_depth/artifacts/">Artifacts</a>
                   </li>
               </ul>
@@ -96,6 +98,8 @@
                   <li class="toctree-l1"><a class="reference internal" href="../in_depth/domain/">Domain concept</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../in_depth/data-access-patterns/">Data Access Patterns</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../in_depth/named-data-access-handles/">Named Data Access Handles</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Compute Frameworks</a>
     <ul>
@@ -146,15 +150,11 @@
               <ul class="current">
                   <li class="toctree-l1 current"><a class="reference internal current" href="#">Contributors</a>
     <ul class="current">
-    <li class="toctree-l2"><a class="reference internal" href="#1-clone-the-repository">1. Clone the repository:</a>
+    <li class="toctree-l2"><a class="reference internal" href="#dev-container-optional">Dev Container (Optional)</a>
     </li>
-    <li class="toctree-l2"><a class="reference internal" href="#2-dev-container-optional">2. Dev Container (Optional)</a>
+    <li class="toctree-l2"><a class="reference internal" href="#building-the-docs-locally">Building the docs locally</a>
     </li>
-    <li class="toctree-l2"><a class="reference internal" href="#3-running-tests-with-tox">3. Running Tests with Tox</a>
-    </li>
-    <li class="toctree-l2"><a class="reference internal" href="#4-docs">4. Docs</a>
-    </li>
-    <li class="toctree-l2"><a class="reference internal" href="#5-contribute">5. Contribute</a>
+    <li class="toctree-l2"><a class="reference internal" href="#where-to-start">Where to start</a>
     </li>
     </ul>
                   </li>
@@ -191,44 +191,23 @@
             <div class="section" itemprop="articleBody">
               
                 <h2 id="development-setup-for-contributors">Development Setup (for Contributors)</h2>
-<p>If you are contributing to mloda or working on its development, follow these steps to set up your environment, including using the provided dev container and running tests with tox.</p>
-<p>By contributing, you agree that your contributions will be licensed under the <a href="https://github.com/mloda-ai/mloda/blob/main/LICENSE">Apache License, Version 2.0</a>.</p>
-<h4 id="1-clone-the-repository">1. Clone the repository:</h4>
-<pre><code class="language-bash">git clone https://github.com/mloda-ai/mloda.git
-</code></pre>
-<h4 id="2-dev-container-optional">2. Dev Container (Optional)</h4>
-<p>Prerequisite:
-docker</p>
+<p>Thanks for your interest in contributing to mloda. The canonical contributor guide is <a href="https://github.com/mloda-ai/mloda/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>, and all participants are expected to follow our <a href="https://github.com/mloda-ai/mloda/blob/main/CODE_OF_CONDUCT.md">Code of Conduct</a>. This page covers two topics that are specific to working on the docs and the dev environment.</p>
+<h4 id="dev-container-optional">Dev Container (Optional)</h4>
+<p>Prerequisite: Docker.</p>
 <ul>
 <li>Open the project in a dev container (in VS Code or a compatible tool).</li>
-<li>Start developing: The dev container includes all necessary dependencies and tools to work on mloda.</li>
+<li>The dev container includes all necessary dependencies and tools to work on mloda.</li>
 </ul>
-<p>If you don't want to or can't use docker, skip step 2.
-Instead you can run it in the current machine with</p>
-<pre><code class="language-bash">pip install -r tests/requirements-test.txt &amp;&amp; pip install tox
-</code></pre>
-<h4 id="3-running-tests-with-tox">3. Running Tests with Tox</h4>
-<p>We use tox to run tests in multiple environments.</p>
-<p>This is to ensure that adjustments are working and integrated well.</p>
-<p>Run main test suite:</p>
-<pre><code class="language-bash">tox
-</code></pre>
-<p>Run core test suite:</p>
-<pre><code class="language-bash">tox -e core
-</code></pre>
-<p>Run installed module test suite: </p>
-<pre><code class="language-bash">tox -e installed
-</code></pre>
-<h4 id="4-docs">4. Docs</h4>
-<p>You can adjust the docs under the folder docs.
-To view local changes, use:</p>
+<p>If you don't use Docker, follow the local setup in <a href="https://github.com/mloda-ai/mloda/blob/main/CONTRIBUTING.md#local-development-setup">CONTRIBUTING.md</a> (<code>uv sync --all-extras</code>, then <code>source .venv/bin/activate</code>).</p>
+<h4 id="building-the-docs-locally">Building the docs locally</h4>
+<p>After completing the setup in CONTRIBUTING.md, you can preview docs changes with:</p>
 <pre><code class="language-bash">mkdocs serve --config-file docs/mkdocs.yml
 </code></pre>
-<h4 id="5-contribute">5. Contribute</h4>
-<p>Want to contribute? You can:</p>
+<h4 id="where-to-start">Where to start</h4>
 <ul>
-<li>Create an Issue: If you find a bug or have a feature request or have an idea, feel free to create an issue.</li>
-<li>Submit a Pull Request (PR): If you'd like to contribute code, you can open a pull request with your changes.</li>
+<li>Plugin contributions: see the <a href="https://github.com/mloda-ai/mloda-registry/tree/main/docs/guides">mloda-registry guides</a> and the <a href="https://github.com/mloda-ai/mloda-plugin-template">mloda-plugin-template</a>.</li>
+<li>Core framework contributions: browse issues labeled <a href="https://github.com/mloda-ai/mloda/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22"><code>good first issue</code></a> and <a href="https://github.com/mloda-ai/mloda/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22"><code>help wanted</code></a>.</li>
+<li>Bugs and feature requests: open an <a href="https://github.com/mloda-ai/mloda/issues/">issue</a>.</li>
 </ul>
               
             </div>

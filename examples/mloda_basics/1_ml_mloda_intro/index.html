@@ -90,6 +90,8 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../../in_depth/filter_data/">Filter data</a>
                   </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../../in_depth/mask_engine/">Mask Engine</a>
+                  </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../../in_depth/artifacts/">Artifacts</a>
                   </li>
               </ul>
@@ -100,6 +102,8 @@
                   <li class="toctree-l1"><a class="reference internal" href="../../../in_depth/domain/">Domain concept</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../../in_depth/data-access-patterns/">Data Access Patterns</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../../in_depth/named-data-access-handles/">Named Data Access Handles</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Compute Frameworks</a>
     <ul>
@@ -981,17 +985,9 @@ print(plugin_loader.list_loaded_modules("sql"))</div>
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="application/vnd.jupyter.stderr" tabindex="0">
-<pre>/home/tom/envs/python310/lib/python3.10/site-packages/tqdm/auto.py:21: TqdmWarning: IProgress not found. Please update jupyter and ipywidgets. See https://ipywidgets.readthedocs.io/en/stable/user_install.html
-  from .autonotebook import tqdm as notebook_tqdm
-</pre>
-</div>
-</div>
-<div class="jp-OutputArea-child">
-<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>['mloda_plugins.feature_group.experimental.llm.tools.available.read_file_tool', 'mloda_plugins.feature_group.input_data.read_context_files', 'mloda_plugins.feature_group.input_data.read_file', 'mloda_plugins.feature_group.input_data.read_db_feature', 'mloda_plugins.feature_group.input_data.read_db', 'mloda_plugins.feature_group.input_data.read_file_feature', 'mloda_plugins.feature_group.input_data.read_files.json', 'mloda_plugins.feature_group.input_data.read_files.csv', 'mloda_plugins.feature_group.input_data.read_files.parquet', 'mloda_plugins.feature_group.input_data.read_files.feather', 'mloda_plugins.feature_group.input_data.read_files.text_file_reader', 'mloda_plugins.feature_group.input_data.read_files.orc', 'mloda_plugins.feature_group.input_data.read_dbs.sqlite']
-['mloda_plugins.feature_group.input_data.read_dbs.sqlite']
+<pre>['mloda_plugins.feature_group.experimental.llm.tools.available.read_file_tool', 'mloda_plugins.feature_group.input_data.read_context_files', 'mloda_plugins.feature_group.input_data.read_file', 'mloda_plugins.feature_group.input_data.read_db_feature', 'mloda_plugins.feature_group.input_data.read_document', 'mloda_plugins.feature_group.input_data.read_db', 'mloda_plugins.feature_group.input_data.read_file_feature', 'mloda_plugins.feature_group.input_data.read_document_feature', 'mloda_plugins.feature_group.input_data.read_files.markdown_document_reader', 'mloda_plugins.feature_group.input_data.read_files.json', 'mloda_plugins.feature_group.input_data.read_files.csv', 'mloda_plugins.feature_group.input_data.read_files.json_document_reader', 'mloda_plugins.feature_group.input_data.read_files.parquet', 'mloda_plugins.feature_group.input_data.read_files.feather', 'mloda_plugins.feature_group.input_data.read_files.text_file_reader', 'mloda_plugins.feature_group.input_data.read_files.orc', 'mloda_plugins.feature_group.input_data.read_files.yaml_document_reader', 'mloda_plugins.feature_group.input_data.read_dbs.sqlite']
+['mloda_plugins.feature_group.input_data.read_dbs.sqlite', 'mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_filter_engine', 'mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework', 'mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_pyarrow_transformer', 'mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation', 'mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_merge_engine', 'mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_mask_engine', 'mloda_plugins.compute_framework.base_implementations.sql.sql_window', 'mloda_plugins.compute_framework.base_implementations.sql.sql_base_pyarrow_transformer', 'mloda_plugins.compute_framework.base_implementations.sql.sql_base_merge_engine', 'mloda_plugins.compute_framework.base_implementations.sql.sql_base_mask_engine', 'mloda_plugins.compute_framework.base_implementations.sql.sql_utils', 'mloda_plugins.compute_framework.base_implementations.sql.sql_base_filter_engine']
 </pre>
 </div>
 </div>
@@ -1143,9 +1139,7 @@ categorical_features: list[str | Feature] = ["user_age_group", "product_category
 <span class="n">data_access_collection</span><span class="o">.</span><span class="n">add_folder</span><span class="p">(</span><span class="n">base_data_path</span><span class="p">)</span>
 
 <span class="c1"># As a db cannot work with a folder, we need to add a connection for the db.</span>
-<span class="n">data_access_collection</span><span class="o">.</span><span class="n">add_credential_dict</span><span class="p">(</span>
-    <span class="n">credential_dict</span><span class="o">=</span><span class="p">{</span><span class="n">SQLITEReader</span><span class="o">.</span><span class="n">db_path</span><span class="p">():</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">base_data_path</span><span class="p">,</span> <span class="s2">"example.sqlite"</span><span class="p">)}</span>
-<span class="p">)</span>
+<span class="n">data_access_collection</span><span class="o">.</span><span class="n">add_credentials</span><span class="p">({</span><span class="n">SQLITEReader</span><span class="o">.</span><span class="n">db_path</span><span class="p">():</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">base_data_path</span><span class="p">,</span> <span class="s2">"example.sqlite"</span><span class="p">)})</span>
 </pre></div>
 <div class="clipboard-copy-txt" id="cell-4"># Step 2: We specify the data sources to load
 import os
@@ -1165,9 +1159,7 @@ if not os.path.exists(base_data_path):
 data_access_collection.add_folder(base_data_path)
 
 # As a db cannot work with a folder, we need to add a connection for the db.
-data_access_collection.add_credential_dict(
-    credential_dict={SQLITEReader.db_path(): os.path.join(base_data_path, "example.sqlite")}
-)</div>
+data_access_collection.add_credentials({SQLITEReader.db_path(): os.path.join(base_data_path, "example.sqlite")})</div>
 </div>
 </div>
 </div>
@@ -1231,16 +1223,6 @@ for data in result:
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
 <pre>pyarrow.Table
-quantity: int64
-product_id: int64
-order_id: int64
-item_price: double
-----
-quantity: [[6,2]]
-product_id: [[282,355]]
-order_id: [[1,2]]
-item_price: [[74.86,154.56]] &lt;class 'pyarrow.lib.Table'&gt;
-pyarrow.Table
 valid_datetime: timestamp[ns, tz=UTC]
 payment_type: string
 payment_id: int64
@@ -1251,21 +1233,31 @@ payment_type: [["debit card","debit card"]]
 payment_id: [[1,2]]
 payment_status: [["failed","pending"]] &lt;class 'pyarrow.lib.Table'&gt;
 pyarrow.Table
-update_date: int64
-merchant_location: string
-user_location: string
+quantity: int64
+product_id: int64
+item_price: double
+order_id: int64
 ----
-update_date: [[1640995200000,1641632290909]]
-merchant_location: [["North","East"]]
-user_location: [["East","West"]] &lt;class 'pyarrow.lib.Table'&gt;
+quantity: [[6,2]]
+product_id: [[282,355]]
+item_price: [[74.86,154.56]]
+order_id: [[1,2]] &lt;class 'pyarrow.lib.Table'&gt;
 pyarrow.Table
-user_age_group: string
-product_category: string
-transaction_type: string
+user_location: string
+merchant_location: string
+update_date: int64
 ----
-user_age_group: [["26-35","26-35"]]
+user_location: [["East","West"]]
+merchant_location: [["North","East"]]
+update_date: [[1640995200000,1641632290909]] &lt;class 'pyarrow.lib.Table'&gt;
+pyarrow.Table
+transaction_type: string
+product_category: string
+user_age_group: string
+----
+transaction_type: [["online","online"]]
 product_category: [["clothing","home"]]
-transaction_type: [["online","online"]] &lt;class 'pyarrow.lib.Table'&gt;
+user_age_group: [["26-35","26-35"]] &lt;class 'pyarrow.lib.Table'&gt;
 </pre>
 </div>
 </div>
@@ -1325,18 +1317,18 @@ for data in result:
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>   quantity  product_id  order_id  item_price
-0         6         282         1       74.86
-1         2         355         2      154.56 &lt;class 'pandas.core.frame.DataFrame'&gt;
+<pre>   quantity  product_id  item_price  order_id
+0         6         282       74.86         1
+1         2         355      154.56         2 &lt;class 'pandas.core.frame.DataFrame'&gt;
+  user_location merchant_location    update_date
+0          East             North  1640995200000
+1          West              East  1641632290909 &lt;class 'pandas.core.frame.DataFrame'&gt;
                        valid_datetime payment_type  payment_id payment_status
 0 2024-01-11 23:01:49.090909090+00:00   debit card           1         failed
 1 2024-01-15 09:41:49.090909090+00:00   debit card           2        pending &lt;class 'pandas.core.frame.DataFrame'&gt;
-     update_date merchant_location user_location
-0  1640995200000             North          East
-1  1641632290909              East          West &lt;class 'pandas.core.frame.DataFrame'&gt;
-  user_age_group product_category transaction_type
-0          26-35         clothing           online
-1          26-35             home           online &lt;class 'pandas.core.frame.DataFrame'&gt;
+  transaction_type product_category user_age_group
+0           online         clothing          26-35
+1           online             home          26-35 &lt;class 'pandas.core.frame.DataFrame'&gt;
 </pre>
 </div>
 </div>
@@ -1400,16 +1392,16 @@ for res in result:
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
 <pre>The resulting data structure differs based on the compute framework:
 
-    order_id
-0         1
-1         2
-2         3 &lt;class 'pandas.core.frame.DataFrame'&gt;
-The resulting data structure differs based on the compute framework:
-
  pyarrow.Table
 product_id: int64
 ----
 product_id: [[282,355,395]] &lt;class 'pyarrow.lib.Table'&gt;
+The resulting data structure differs based on the compute framework:
+
+    order_id
+0         1
+1         2
+2         3 &lt;class 'pandas.core.frame.DataFrame'&gt;
 </pre>
 </div>
 </div>

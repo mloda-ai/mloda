@@ -69,6 +69,10 @@ class DuckdbRelation:
 
     @property
     def types(self) -> list[Any]:
+        """Column types as DuckDB-native dtype objects, aligned with ``columns``.
+
+        Note ``SqliteRelation.types`` instead returns PyArrow ``pa.DataType`` objects.
+        """
         return list(self._relation.dtypes)
 
     def filter(self, condition: str, params: tuple[Any, ...] = ()) -> "DuckdbRelation":

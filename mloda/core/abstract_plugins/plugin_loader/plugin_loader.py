@@ -65,7 +65,10 @@ class PluginLoader:
                 continue
             relative_path = item.relative_to(group_path.parent).with_suffix("")
             module_path = ".".join(relative_path.parts)
-            self._load_plugin(module_path)
+            try:
+                self._load_plugin(module_path)
+            except ModuleNotFoundError:
+                continue
 
     def load_group(self, group_name: str) -> None:
         """

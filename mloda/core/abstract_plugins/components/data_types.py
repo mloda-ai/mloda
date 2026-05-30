@@ -1,8 +1,14 @@
+from __future__ import annotations
+
 import datetime
 import decimal
 from enum import Enum
 from typing import Any, Optional
-import pyarrow as pa
+
+try:
+    import pyarrow as pa
+except ImportError:
+    pa = None  # type: ignore[assignment]
 
 
 class DataType(Enum):
@@ -65,9 +71,9 @@ class DataType(Enum):
             return cls.DATE
         elif isinstance(value, decimal.Decimal):
             return cls.DECIMAL
-        elif isinstance(value, pa.Date32Scalar) or isinstance(value, pa.Date32Array):
+        elif pa is not None and (isinstance(value, pa.Date32Scalar) or isinstance(value, pa.Date32Array)):
             return cls.DATE
-        elif isinstance(value, pa.TimestampScalar) or isinstance(value, pa.TimestampArray):
+        elif pa is not None and (isinstance(value, pa.TimestampScalar) or isinstance(value, pa.TimestampArray)):
             return cls.TIMESTAMP_MICROS
         else:
             raise ValueError(f"Unsupported data type: {type(value)}")

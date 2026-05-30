@@ -11,9 +11,7 @@ license = { text = "Apache-2.0" }
 authors = [
     { name = "Tom Kaltofen", email = "info@mloda.ai" }
 ]
-dependencies = [
-    "pyarrow"
-]
+dependencies = []
 
 requires-python = ">=3.10,<3.15"
 classifiers = [
@@ -42,11 +40,12 @@ test = [
     "pip-licenses-cli",
     "tomli>=1.0.0; python_version < '3.11'",
 ]
+pyarrow = ["pyarrow"]
 pandas = ["pandas"]
 polars = ["polars"]
 duckdb = ["duckdb"]
-iceberg = ["pyiceberg"]
-spark = ["pyspark"]
+iceberg = ["pyiceberg", "pyarrow"]
+spark = ["pyspark", "pyarrow"]
 otel = [
     "opentelemetry-api",
     "opentelemetry-sdk",
@@ -67,6 +66,7 @@ docs = [
 ]
 all = [
     "mloda[test]",
+    "mloda[pyarrow]",
     "mloda[pandas]",
     "mloda[polars]",
     "mloda[duckdb]",

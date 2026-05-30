@@ -6,7 +6,11 @@ from mloda.core.abstract_plugins.components.framework_transformer.cfw_transforme
     ComputeFrameworkTransformer,
 )
 from mloda.core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
-import pyarrow as pa
+
+try:
+    import pyarrow as pa
+except ImportError:
+    pa = None  # type: ignore[assignment]
 
 from mloda.core.abstract_plugins.function_extender import (
     Extender,
@@ -675,7 +679,7 @@ Available join types:
         _object_id = str(object_id)
 
         # transform to pa.Table for better parquet support
-        if not isinstance(self.data, pa.Table):
+        if pa is None or not isinstance(self.data, pa.Table):
             _from_fw = type(self.data)
             _to_fw = pa.Table
 
@@ -690,7 +694,7 @@ Available join types:
     @final
     @classmethod
     def convert_flight_server_data_back(cls, data: Any, transformer: ComputeFrameworkTransformer) -> Any:
-        if not isinstance(data, pa.Table):
+        if pa is None or not isinstance(data, pa.Table):
             return data
         if isinstance(data, cls.expected_data_framework()):
             return data

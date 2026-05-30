@@ -28,10 +28,10 @@ class SqliteMergeEngine(SqlBaseMergeEngine):
 
         if asof_config.direction == "backward":
             op = "<=" if asof_config.allow_exact_matches else "<"
-            agg = "MAX"
+            time_order = "DESC"
         else:
             op = ">=" if asof_config.allow_exact_matches else ">"
-            agg = "MIN"
+            time_order = "ASC"
 
         left_name = f"_left_{uuid.uuid4().hex}"
         right_name = f"_right_{uuid.uuid4().hex}"
@@ -41,28 +41,38 @@ class SqliteMergeEngine(SqlBaseMergeEngine):
         lt = quote_ident(asof_config.left_time_column)
         rt = quote_ident(asof_config.right_time_column)
 
-        sub_conds = [f"R2.{quote_ident(right)} = L.{quote_ident(left)}" for left, right in zip(left_by, right_by)]
-        sub_conds.append(f"R2.{rt} {op} L.{lt}")
+        on_conds = [f"L.{quote_ident(left)} = R.{quote_ident(right)}" for left, right in zip(left_by, right_by)]
+        on_conds.append(f"R.{rt} {op} L.{lt}")
         if asof_config.tolerance is not None:
             tol = float(asof_config.tolerance)
-            sub_conds.append(f"ABS(L.{lt} - R2.{rt}) <= {tol}")
-        subquery = (
-            f"SELECT {agg}(R2.{rt}) FROM {quote_ident(right_name)} AS R2 WHERE " + " AND ".join(sub_conds)  # nosec
-        )
-
-        on_conds = [f"L.{quote_ident(left)} = R.{quote_ident(right)}" for left, right in zip(left_by, right_by)]
-        on_conds.append(f"R.{rt} = ({subquery})")
+            on_conds.append(f"ABS(L.{lt} - R.{rt}) <= {tol}")
         on_clause = " AND ".join(on_conds)
 
         left_cols = self.get_column_names(left_data)
         right_cols = self.get_column_names(right_data)
-        proj = [f"L.{quote_ident(c)} AS {quote_ident(c)}" for c in left_cols]
-        proj += [f"R.{quote_ident(c)} AS {quote_ident(c)}" for c in right_cols if c not in left_cols]
-        projection = ", ".join(proj)
+        right_extra = [c for c in right_cols if c not in left_cols]
+
+        lid = quote_ident("_mloda_lid")
+        rn = quote_ident("_mloda_rn")
+
+        order_keys = [f"(R.{rt} IS NULL)", f"R.{rt} {time_order}"]
+        order_keys += [f"R.{quote_ident(c)} ASC" for c in right_extra]
+        order_clause = ", ".join(order_keys)
+
+        inner_proj = ["L.*"]
+        inner_proj += [f"R.{quote_ident(c)} AS {quote_ident(c)}" for c in right_extra]
+        inner_projection = ", ".join(inner_proj)
+
+        outer_cols = [quote_ident(c) for c in left_cols] + [quote_ident(c) for c in right_extra]
+        outer_projection = ", ".join(outer_cols)
 
         sql = (
-            f"SELECT {projection} FROM {quote_ident(left_name)} AS L "  # nosec
+            f"SELECT {outer_projection} FROM ("  # nosec
+            f"SELECT {inner_projection}, "
+            f"ROW_NUMBER() OVER (PARTITION BY L.{lid} ORDER BY {order_clause}) AS {rn} "
+            f"FROM (SELECT *, ROW_NUMBER() OVER () AS {lid} FROM {quote_ident(left_name)}) AS L "
             f"LEFT JOIN {quote_ident(right_name)} AS R ON {on_clause}"
+            f") WHERE {rn} = 1"
         )
         return self._execute_sql(sql)
 

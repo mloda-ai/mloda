@@ -57,3 +57,20 @@ class TestSqliteAsofMergeEngine(AsofMergeEngineTestBase):
         cfg = AsOfJoinConfig(left_time_column="t", right_time_column="t", direction="nearest")
         with pytest.raises(ValueError, match="nearest"):
             engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg)
+
+    def test_tie_yields_single_row(self) -> None:
+        """Tie contract: when two right rows share the identical boundary time within the same
+        by-key, the ASOF join must still yield exactly ONE row per left row (parity with
+        duckdb/pandas/python_dict/pyarrow). Ties are broken deterministically by ordering the
+        candidate right rows on their non-key columns ascending, so the smaller rv (100) wins.
+        """
+        left = self.convert_dict_to_framework([{"k": 1, "t": 10, "lv": 1}])
+        right = self.convert_dict_to_framework([{"k": 1, "t": 5, "rv": 100}, {"k": 1, "t": 5, "rv": 200}])
+
+        engine = SqliteMergeEngine(self.get_connection())
+        cfg = AsOfJoinConfig(left_time_column="t", right_time_column="t", direction="backward")
+        result = engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg)
+
+        result_dicts = self.convert_framework_to_dict(result)
+        assert len(result_dicts) == 1, f"expected 1 row, got {len(result_dicts)}: {result_dicts}"
+        assert self._normalize_value(result_dicts[0]["rv"]) == 100

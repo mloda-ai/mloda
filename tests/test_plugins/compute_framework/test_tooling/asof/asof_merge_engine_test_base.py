@@ -109,7 +109,10 @@ class AsofMergeEngineTestBase(ABC):
         result_dicts.sort(key=lambda row: tuple(str(row.get(c, "")) for c in sort_columns))
 
         self._assert_row_count(result_dicts, scenario["expected_rows"])
-        self._assert_columns_exist(result_dicts, scenario["expected_columns"])
+        if scenario.get("exact_columns"):
+            self._assert_exact_columns(result_dicts, scenario["expected_columns"])
+        else:
+            self._assert_columns_exist(result_dicts, scenario["expected_columns"])
         self._assert_rv_values(result_dicts, scenario["expected_rv"])
 
     def _assert_row_count(self, result: list[dict[str, Any]], expected: int) -> None:
@@ -124,6 +127,15 @@ class AsofMergeEngineTestBase(ABC):
         actual_columns = set(result[0].keys())
         for col in expected_columns:
             assert col in actual_columns, f"Expected column '{col}' not found. Available: {actual_columns}"
+
+    def _assert_exact_columns(self, result: list[dict[str, Any]], expected_columns: list[str]) -> None:
+        """Assert that the result's column set equals expected_columns exactly (order-independent)."""
+        if not result:
+            return
+        actual_columns = set(result[0].keys())
+        assert actual_columns == set(expected_columns), (
+            f"Column set mismatch: got {sorted(actual_columns)}, expected {sorted(expected_columns)}"
+        )
 
     def _assert_rv_values(self, result: list[dict[str, Any]], expected_rv: list[Any]) -> None:
         """Assert that the 'rv' column matches expected values after null normalization."""
@@ -160,3 +172,7 @@ class AsofMergeEngineTestBase(ABC):
     def test_multi_by_key(self) -> None:
         """Vector E: multi by-key (k1, k2), backward."""
         self._run_asof_test("multi_by_key")
+
+    def test_differing_names(self) -> None:
+        """Vector G: differing by-key and time-column names; both by-key columns survive."""
+        self._run_asof_test("differing_names")

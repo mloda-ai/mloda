@@ -9,8 +9,8 @@ Expected values are copied verbatim from the canonical pandas reference tests.
 from typing import Any, TypedDict
 
 
-class AsofScenario(TypedDict):
-    """Type definition for an ASOF merge test scenario."""
+class _AsofScenarioRequired(TypedDict):
+    """Required fields for an ASOF merge test scenario."""
 
     description: str
     left: list[dict[str, Any]]
@@ -24,6 +24,17 @@ class AsofScenario(TypedDict):
     expected_rows: int
     expected_columns: list[str]
     expected_rv: list[Any]
+
+
+class AsofScenario(_AsofScenarioRequired, total=False):
+    """An ASOF merge test scenario.
+
+    When ``exact_columns`` is True, the result's column set must equal
+    ``expected_columns`` exactly (not merely contain it). Used to pin the
+    differing-names contract where both left and right by-key columns survive.
+    """
+
+    exact_columns: bool
 
 
 # Canonical ASOF test scenarios. Data and expected values copied from the pandas
@@ -137,5 +148,29 @@ ASOF_SCENARIOS: dict[str, AsofScenario] = {
         "expected_rows": 2,
         "expected_columns": ["k1", "k2", "t", "lv", "rv"],
         "expected_rv": [10, 20],
+    },
+    "differing_names": {
+        "description": (
+            "Vector G: differing by-key names (lk vs rk) AND differing time-column names (lt vs rt), "
+            "backward, all matched. Both left and right by-key columns must survive in the output, so "
+            "the exact column set is asserted."
+        ),
+        "left": [{"lk": 1, "lt": 10, "lv": 100}, {"lk": 1, "lt": 20, "lv": 200}, {"lk": 2, "lt": 15, "lv": 300}],
+        "right": [
+            {"rk": 1, "rt": 5, "rv": 1},
+            {"rk": 1, "rt": 18, "rv": 2},
+            {"rk": 2, "rt": 5, "rv": 3},
+            {"rk": 2, "rt": 30, "rv": 4},
+        ],
+        "left_index": ("lk",),
+        "right_index": ("rk",),
+        "left_time_column": "lt",
+        "right_time_column": "rt",
+        "cfg_kwargs": {"direction": "backward"},
+        "sort_columns": ["lk", "lt"],
+        "expected_rows": 3,
+        "expected_columns": ["lk", "lt", "lv", "rk", "rt", "rv"],
+        "expected_rv": [1, 2, 3],
+        "exact_columns": True,
     },
 }

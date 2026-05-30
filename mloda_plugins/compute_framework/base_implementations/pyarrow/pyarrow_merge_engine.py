@@ -3,9 +3,15 @@ from typing import Any
 import pyarrow as pa
 import pyarrow.compute as pc
 
+from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 from mloda.user import Index
 from mloda.user import JoinType
 from mloda.provider import BaseMergeEngine
+
+try:
+    import pandas as pd
+except ImportError:
+    pd = None
 
 
 class PyArrowMergeEngine(BaseMergeEngine):
@@ -68,6 +74,42 @@ class PyArrowMergeEngine(BaseMergeEngine):
         If needed, one could add it.
         """
         raise ValueError(f"JoinType union is not yet implemented in {self.__class__.__name__}")
+
+    def merge_asof(
+        self,
+        left_data: Any,
+        right_data: Any,
+        left_index: Index,
+        right_index: Index,
+        asof_config: AsOfJoinConfig,
+    ) -> Any:
+        if pd is None:
+            raise ImportError("Pandas is not installed. To be able to use this framework, please install pandas.")
+
+        by_left = list(left_index.index)
+        by_right = list(right_index.index)
+        lt, rt = asof_config.left_time_column, asof_config.right_time_column
+
+        left_df = left_data.to_pandas().sort_values(lt)
+        right_df = right_data.to_pandas().sort_values(rt)
+
+        kwargs: dict[str, Any] = {
+            "direction": asof_config.direction,
+            "allow_exact_matches": asof_config.allow_exact_matches,
+        }
+        if asof_config.tolerance is not None:
+            kwargs["tolerance"] = asof_config.tolerance
+
+        result = pd.merge_asof(
+            left_df,
+            right_df,
+            left_on=lt,
+            right_on=rt,
+            left_by=by_left,
+            right_by=by_right,
+            **kwargs,
+        )
+        return pa.Table.from_pandas(result, preserve_index=False)
 
     def join_logic(
         self, join_type: str, left_data: Any, right_data: Any, left_index: Index, right_index: Index, jointype: JoinType

@@ -18,6 +18,7 @@ hooks-only addition.
 This module is intentionally NOT collected as tests (no ``Test`` prefix).
 """
 
+import sqlite3
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 
@@ -53,10 +54,14 @@ except ImportError:
 
 try:
     import duckdb
+except ImportError:
+    logger.warning("DuckDB is not installed. Some tests will be skipped.")
+    duckdb = None  # type: ignore[assignment]
+
+try:
     import pyarrow as pa
 except ImportError:
-    logger.warning("DuckDB or PyArrow is not installed. Some tests will be skipped.")
-    duckdb = None  # type: ignore[assignment]
+    logger.warning("PyArrow is not installed. Some tests will be skipped.")
     pa = None  # type: ignore[assignment]
 
 
@@ -83,6 +88,8 @@ def _records_from_frame(data: Any) -> list[dict[str, Any]]:
         records = data.to_dicts()
     elif pa is not None and isinstance(data, pa.Table):
         records = data.to_pylist()
+    elif isinstance(data, list):
+        records = data
     elif hasattr(data, "to_dicts"):
         records = data.to_dicts()
     elif hasattr(data, "to_dict"):
@@ -108,10 +115,10 @@ def _asof_link() -> Link:
 
 
 class _AsofMatchData(MatchData):
-    """Surfaces a DuckDB connection when one is provided; inert otherwise.
+    """Surfaces a DuckDB or sqlite3 connection when one is provided; inert otherwise.
 
-    Under pandas/polars no connection is passed, so this returns None and the
-    framework selection falls back to the requested ``compute_frameworks``.
+    Under pandas/polars/python_dict/pyarrow no connection is passed, so this returns
+    None and the framework selection falls back to the requested ``compute_frameworks``.
     """
 
     @classmethod
@@ -130,9 +137,13 @@ class _AsofMatchData(MatchData):
             return None
         if duckdb is not None and isinstance(framework_connection_object, duckdb.DuckDBPyConnection):
             return framework_connection_object
+        if isinstance(framework_connection_object, sqlite3.Connection):
+            return framework_connection_object
         if data_access_collection is not None and data_access_collection.connections:
             for conn in data_access_collection.connections.values():
                 if duckdb is not None and isinstance(conn, duckdb.DuckDBPyConnection):
+                    return conn
+                if isinstance(conn, sqlite3.Connection):
                     return conn
         return None
 

@@ -1,4 +1,5 @@
 from typing import Any
+from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 from mloda.provider import BaseMergeEngine
 from mloda.user import Index
 from mloda.user import JoinType
@@ -34,6 +35,86 @@ class PythonDictMergeEngine(BaseMergeEngine):
 
     def merge_union(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
         return self.join_logic("union", left_data, right_data, left_index, right_index, JoinType.UNION)
+
+    def merge_asof(
+        self,
+        left_data: Any,
+        right_data: Any,
+        left_index: Index,
+        right_index: Index,
+        asof_config: AsOfJoinConfig,
+    ) -> Any:
+        left_by = list(left_index.index)
+        right_by = list(right_index.index)
+        lt, rt = asof_config.left_time_column, asof_config.right_time_column
+        direction = asof_config.direction
+        allow_exact = asof_config.allow_exact_matches
+        tolerance = asof_config.tolerance
+
+        right_by_groups: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
+        for r in right_data:
+            key = tuple(r.get(col) for col in right_by)
+            right_by_groups.setdefault(key, []).append(r)
+
+        left_keys = set()
+        for left in left_data:
+            left_keys.update(left.keys())
+        right_extra_cols = []
+        for r in right_data:
+            for col in r.keys():
+                if col not in left_keys and col not in right_extra_cols:
+                    right_extra_cols.append(col)
+
+        result = []
+        for left in left_data:
+            key = tuple(left.get(col) for col in left_by)
+            left_time = left.get(lt)
+            match = self._select_asof_match(
+                right_by_groups.get(key, []), rt, left_time, direction, allow_exact, tolerance
+            )
+            merged = {**left}
+            for col in right_extra_cols:
+                merged[col] = match.get(col) if match is not None else None
+            result.append(merged)
+
+        return result
+
+    @staticmethod
+    def _select_asof_match(
+        candidates: list[dict[str, Any]],
+        rt: str,
+        left_time: Any,
+        direction: str,
+        allow_exact: bool,
+        tolerance: float | None,
+    ) -> dict[str, Any] | None:
+        eligible = []
+        for r in candidates:
+            right_time = r.get(rt)
+            if right_time is None or left_time is None:
+                continue
+            if direction == "backward":
+                ok = right_time <= left_time if allow_exact else right_time < left_time
+            elif direction == "forward":
+                ok = right_time >= left_time if allow_exact else right_time > left_time
+            else:
+                ok = allow_exact or right_time != left_time
+            if ok:
+                eligible.append(r)
+
+        if not eligible:
+            return None
+
+        if direction == "backward":
+            best = max(eligible, key=lambda r: r[rt])
+        elif direction == "forward":
+            best = min(eligible, key=lambda r: r[rt])
+        else:
+            best = min(eligible, key=lambda r: abs(r[rt] - left_time))
+
+        if tolerance is not None and abs(best[rt] - left_time) > tolerance:
+            return None
+        return best
 
     def join_logic(
         self, join_type: str, left_data: Any, right_data: Any, left_index: Index, right_index: Index, jointype: JoinType

@@ -210,4 +210,4 @@ class MultiIndexMergeEngineTestBase(ABC):
         engine = self.merge_engine_class()(connection) if connection else self.merge_engine_class()()
 
         with pytest.raises(ValueError):
-            engine.merge(left_data, right_data, JoinType.INNER, left_index, right_index)
+            engine.merge(left_data, right_data, JoinType.INNER, left_index, right_index, link=None)

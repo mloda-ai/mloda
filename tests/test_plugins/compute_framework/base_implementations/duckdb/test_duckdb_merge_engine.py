@@ -211,12 +211,12 @@ class TestDuckDBMergeEngine:
         engine = DuckDBMergeEngine(connection)
 
         # Test all join types through the main merge method
-        result = engine.merge(left_data, right_data, JoinType.INNER, index_obj, index_obj)
+        result = engine.merge(left_data, right_data, JoinType.INNER, index_obj, index_obj, link=None)
         result_df = result.df()
         assert len(result_df) == 1
         assert result_df["idx"].tolist()[0] == 1
 
-        result = engine.merge(left_data, right_data, JoinType.LEFT, index_obj, index_obj)
+        result = engine.merge(left_data, right_data, JoinType.LEFT, index_obj, index_obj, link=None)
         result_df = result.df()
         assert len(result_df) == 2
 

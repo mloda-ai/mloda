@@ -123,7 +123,7 @@ class TestSqliteMergeEngine:
         self, connection: sqlite3.Connection, left_data: SqliteRelation, right_data: SqliteRelation, index_obj: Index
     ) -> None:
         engine = SqliteMergeEngine(connection)
-        result = engine.merge(left_data, right_data, JoinType.INNER, index_obj, index_obj)
+        result = engine.merge(left_data, right_data, JoinType.INNER, index_obj, index_obj, link=None)
         assert len(result.df()) == 1
 
     def test_get_column_names(self, connection: sqlite3.Connection) -> None:

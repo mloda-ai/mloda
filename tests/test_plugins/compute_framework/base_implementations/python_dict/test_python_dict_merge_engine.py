@@ -169,11 +169,11 @@ class TestPythonDictMergeEngine:
         engine = PythonDictMergeEngine()
 
         # Test all join types through the main merge method
-        result = engine.merge(left_data, right_data, JoinType.INNER, index_obj, index_obj)
+        result = engine.merge(left_data, right_data, JoinType.INNER, index_obj, index_obj, link=None)
         expected = [{"idx": 1, "col1": "a", "col2": "x"}]
         assert result == expected
 
-        result = engine.merge(left_data, right_data, JoinType.LEFT, index_obj, index_obj)
+        result = engine.merge(left_data, right_data, JoinType.LEFT, index_obj, index_obj, link=None)
         expected = [{"idx": 1, "col1": "a", "col2": "x"}, {"idx": 3, "col1": "b", "col2": None}]
         assert result == expected
 

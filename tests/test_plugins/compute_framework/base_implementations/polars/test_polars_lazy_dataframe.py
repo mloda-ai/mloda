@@ -101,7 +101,7 @@ class TestPolarsLazyDataFrameComputeFramework:
         _lazy_df = PolarsLazyDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         _lazy_df.data = self.left_data
         merge_engine = _lazy_df.merge_engine()
-        result = merge_engine().merge(_lazy_df.data, self.right_data, JoinType.INNER, self.idx, self.idx)
+        result = merge_engine().merge(_lazy_df.data, self.right_data, JoinType.INNER, self.idx, self.idx, link=None)
         assert isinstance(result, pl.LazyFrame)
 
         # Verify results when collected
@@ -114,7 +114,7 @@ class TestPolarsLazyDataFrameComputeFramework:
         _lazy_df = PolarsLazyDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         _lazy_df.data = self.left_data
         merge_engine = _lazy_df.merge_engine()
-        result = merge_engine().merge(_lazy_df.data, self.right_data, JoinType.LEFT, self.idx, self.idx)
+        result = merge_engine().merge(_lazy_df.data, self.right_data, JoinType.LEFT, self.idx, self.idx, link=None)
         assert isinstance(result, pl.LazyFrame)
 
         # Verify results when collected
@@ -126,7 +126,7 @@ class TestPolarsLazyDataFrameComputeFramework:
         _lazy_df = PolarsLazyDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         _lazy_df.data = self.left_data
         merge_engine = _lazy_df.merge_engine()
-        result = merge_engine().merge(_lazy_df.data, self.right_data, JoinType.APPEND, self.idx, self.idx)
+        result = merge_engine().merge(_lazy_df.data, self.right_data, JoinType.APPEND, self.idx, self.idx, link=None)
         assert isinstance(result, pl.LazyFrame)
 
         # Verify results when collected

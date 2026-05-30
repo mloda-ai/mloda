@@ -78,40 +78,40 @@ class DataFrameTestBase(ABC):
         framework = self._create_test_framework()
         framework.data = self.left_data
         merge_engine = self._get_merge_engine(framework)
-        result = merge_engine().merge(framework.data, self.right_data, JoinType.INNER, self.idx, self.idx)
+        result = merge_engine().merge(framework.data, self.right_data, JoinType.INNER, self.idx, self.idx, link=None)
         self._assert_row_count(result, 1)
 
     def test_merge_left(self) -> None:
         framework = self._create_test_framework()
         framework.data = self.left_data
         merge_engine = self._get_merge_engine(framework)
-        result = merge_engine().merge(framework.data, self.right_data, JoinType.LEFT, self.idx, self.idx)
+        result = merge_engine().merge(framework.data, self.right_data, JoinType.LEFT, self.idx, self.idx, link=None)
         self._assert_row_count(result, 2)
 
     def test_merge_right(self) -> None:
         framework = self._create_test_framework()
         framework.data = self.left_data
         merge_engine = self._get_merge_engine(framework)
-        result = merge_engine().merge(framework.data, self.right_data, JoinType.RIGHT, self.idx, self.idx)
+        result = merge_engine().merge(framework.data, self.right_data, JoinType.RIGHT, self.idx, self.idx, link=None)
         self._assert_row_count(result, 2)
 
     def test_merge_full_outer(self) -> None:
         framework = self._create_test_framework()
         framework.data = self.left_data
         merge_engine = self._get_merge_engine(framework)
-        result = merge_engine().merge(framework.data, self.right_data, JoinType.OUTER, self.idx, self.idx)
+        result = merge_engine().merge(framework.data, self.right_data, JoinType.OUTER, self.idx, self.idx, link=None)
         self._assert_row_count(result, 3)
 
     def test_merge_append(self) -> None:
         framework = self._create_test_framework()
         framework.data = self.left_data
         merge_engine = self._get_merge_engine(framework)
-        result = merge_engine().merge(framework.data, self.right_data, JoinType.APPEND, self.idx, self.idx)
+        result = merge_engine().merge(framework.data, self.right_data, JoinType.APPEND, self.idx, self.idx, link=None)
         self._assert_row_count(result, 4)
 
     def test_merge_union(self) -> None:
         framework = self._create_test_framework()
         framework.data = self.left_data
         merge_engine = self._get_merge_engine(framework)
-        result = merge_engine().merge(framework.data, self.right_data, JoinType.UNION, self.idx, self.idx)
+        result = merge_engine().merge(framework.data, self.right_data, JoinType.UNION, self.idx, self.idx, link=None)
         self._assert_row_count(result, 4)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError, dataclass
+from datetime import timedelta
 from enum import Enum
 from uuid import uuid4
 from typing import Any, Optional
@@ -46,7 +47,7 @@ class AsOfJoinConfig:
     left_time_column: str
     right_time_column: str
     direction: str = "backward"
-    tolerance: float | None = None
+    tolerance: float | int | timedelta | None = None
     allow_exact_matches: bool = True
 
     def __post_init__(self) -> None:
@@ -458,7 +459,7 @@ class Link:
         left_time_column: str,
         right_time_column: str,
         direction: str = "backward",
-        tolerance: float | None = None,
+        tolerance: float | int | timedelta | None = None,
         allow_exact_matches: bool = True,
         left_discriminator: Optional[dict[str, Any]] = None,
         right_discriminator: Optional[dict[str, Any]] = None,
@@ -489,7 +490,7 @@ class Link:
         left_time_column: str,
         right_time_column: str,
         direction: str = "backward",
-        tolerance: float | None = None,
+        tolerance: float | int | timedelta | None = None,
         allow_exact_matches: bool = True,
         left_index: int = 0,
         right_index: int = 0,

@@ -14,6 +14,7 @@ expected values are easy to reason about. The tests use the shared session-scope
 SparkSession fixture to avoid Java gateway conflicts.
 """
 
+from datetime import timedelta
 from typing import Any
 import pytest
 
@@ -192,3 +193,25 @@ class TestSparkAsofMergeEngine:
                 Index(("k",)),
                 AsOfJoinConfig(left_time_column="t", right_time_column="t", direction="nearest"),
             )
+
+
+class TestSparkAsofTimedeltaGuard:
+    """Guard test for a timedelta tolerance on the Spark backend.
+
+    Deliberately NOT decorated with @skipif(not PYSPARK_AVAILABLE): the guard must fire
+    BEFORE check_import() and before any DataFrame access, so it is testable without a
+    running SparkSession (and without JAVA_HOME). We construct the engine directly and
+    pass None DataFrames; the timedelta guard at the top of merge_asof must raise a clear
+    ValueError mentioning 'timedelta' before anything touches the (None) data.
+    """
+
+    def test_timedelta_tolerance_raises_value_error_without_session(self) -> None:
+        engine = SparkMergeEngine()
+        cfg = AsOfJoinConfig(
+            left_time_column="t",
+            right_time_column="t",
+            direction="backward",
+            tolerance=timedelta(seconds=5),
+        )
+        with pytest.raises(ValueError, match="timedelta"):
+            engine.merge_asof(None, None, Index(("k",)), Index(("k",)), cfg)

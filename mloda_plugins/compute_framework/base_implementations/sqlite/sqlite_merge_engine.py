@@ -1,5 +1,6 @@
 import sqlite3
 import uuid
+from datetime import timedelta
 from typing import Any
 
 from mloda.core.abstract_plugins.components.index.index import Index
@@ -44,6 +45,11 @@ class SqliteMergeEngine(SqlBaseMergeEngine):
         on_conds = [f"L.{quote_ident(left)} = R.{quote_ident(right)}" for left, right in zip(left_by, right_by)]
         on_conds.append(f"R.{rt} {op} L.{lt}")
         if asof_config.tolerance is not None:
+            if isinstance(asof_config.tolerance, timedelta):
+                raise ValueError(
+                    f"{self.__class__.__name__} ASOF does not support a timedelta tolerance; provide a numeric "
+                    "tolerance (e.g. epoch seconds matching the time column)."
+                )
             tol = float(asof_config.tolerance)
             on_conds.append(f"ABS(L.{lt} - R.{rt}) <= {tol}")
         on_clause = " AND ".join(on_conds)

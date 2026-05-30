@@ -1,3 +1,4 @@
+from datetime import timedelta
 from functools import reduce
 from typing import Any
 
@@ -47,6 +48,11 @@ class SparkMergeEngine(BaseMergeEngine):
         right_index: Index,
         asof_config: AsOfJoinConfig,
     ) -> Any:
+        if isinstance(asof_config.tolerance, timedelta):
+            raise ValueError(
+                f"{self.__class__.__name__} ASOF does not support a timedelta tolerance; provide a numeric "
+                "tolerance (e.g. epoch seconds matching the time column)."
+            )
         self.check_import()
         if asof_config.direction == "nearest":
             raise ValueError("SparkMergeEngine asof does not support direction='nearest'.")

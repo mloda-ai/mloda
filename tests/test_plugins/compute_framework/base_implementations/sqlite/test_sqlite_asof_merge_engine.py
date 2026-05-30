@@ -7,6 +7,7 @@ into a SqliteRelation routes through PyArrow, so PyArrow must be available.
 """
 
 import sqlite3
+from datetime import timedelta
 from typing import Any, Optional
 
 import pytest
@@ -56,6 +57,23 @@ class TestSqliteAsofMergeEngine(AsofMergeEngineTestBase):
         engine = SqliteMergeEngine(self.get_connection())
         cfg = AsOfJoinConfig(left_time_column="t", right_time_column="t", direction="nearest")
         with pytest.raises(ValueError, match="nearest"):
+            engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg)
+
+    def test_timedelta_tolerance_raises_value_error(self) -> None:
+        """A timedelta tolerance is unsupported on the SQLite SQL backend (which needs a numeric
+        gap). It must raise a clear ValueError mentioning 'timedelta', not the confusing
+        TypeError from float(timedelta)."""
+        left = self.convert_dict_to_framework([{"k": 1, "t": 10, "lv": 100}])
+        right = self.convert_dict_to_framework([{"k": 1, "t": 8, "rv": 7}])
+
+        engine = SqliteMergeEngine(self.get_connection())
+        cfg = AsOfJoinConfig(
+            left_time_column="t",
+            right_time_column="t",
+            direction="backward",
+            tolerance=timedelta(seconds=5),
+        )
+        with pytest.raises(ValueError, match="timedelta"):
             engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg)
 
     def test_tie_yields_single_row(self) -> None:

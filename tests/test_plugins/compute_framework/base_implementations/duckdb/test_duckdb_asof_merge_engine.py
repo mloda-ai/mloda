@@ -5,6 +5,7 @@ Consumes the shared AsofMergeEngineTestBase. Preserves the DuckDB-specific
 test that 'nearest' direction raises ValueError.
 """
 
+from datetime import timedelta
 from typing import Any, Optional
 
 import pytest
@@ -60,4 +61,24 @@ class TestDuckDBAsofMergeEngine(AsofMergeEngineTestBase):
         engine = DuckDBMergeEngine(conn)
         cfg = AsOfJoinConfig(left_time_column="t", right_time_column="t", direction="nearest")
         with pytest.raises(ValueError):
+            engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg)
+
+    def test_timedelta_tolerance_raises_value_error(self) -> None:
+        """A timedelta tolerance is unsupported on the DuckDB SQL backend (which needs a numeric
+        gap). It must raise a clear ValueError mentioning 'timedelta', not the confusing
+        TypeError from float(timedelta)."""
+        import duckdb as _duckdb  # noqa: PLC0415
+
+        conn = _duckdb.connect()
+        left = DuckdbRelation.from_arrow(conn, pa.Table.from_pydict({"k": [1], "t": [10], "lv": [100]}))
+        right = DuckdbRelation.from_arrow(conn, pa.Table.from_pydict({"k": [1], "t": [8], "rv": [7]}))
+
+        engine = DuckDBMergeEngine(conn)
+        cfg = AsOfJoinConfig(
+            left_time_column="t",
+            right_time_column="t",
+            direction="backward",
+            tolerance=timedelta(seconds=5),
+        )
+        with pytest.raises(ValueError, match="timedelta"):
             engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg)

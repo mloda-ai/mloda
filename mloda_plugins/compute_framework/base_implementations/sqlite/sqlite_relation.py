@@ -194,6 +194,11 @@ class SqliteRelation:
 
     @property
     def types(self) -> list[pa.DataType]:
+        """Column types as PyArrow ``pa.DataType`` objects, aligned with ``columns``.
+
+        Uses propagated type hints when available; otherwise falls back to SQLite
+        column-affinity inference via ``PRAGMA table_info``.
+        """
         columns = self.columns
         type_hints = self._types_for_current_columns()
         if type_hints is not None:
@@ -499,6 +504,8 @@ class SqliteRelation:
         column (comparison is case-insensitive).
         With no partition_by/order_by, row-number assignment order is
         implementation-defined; pass order_by for a deterministic numbering.
+        Raises ``ValueError`` on SQLite < 3.28.0 (window functions unsupported);
+        ``NULLS`` placement in ``order_by`` additionally requires SQLite >= 3.30.0.
         """
         if alias.casefold() in {c.casefold() for c in self.columns}:
             raise ValueError(f"Column {alias!r} already exists in the relation")
@@ -529,6 +536,8 @@ class SqliteRelation:
         The ``alias`` and every identifier in ``partition_by`` / ``order_by`` are quoted
         via ``quote_ident``.
         Raises ``ValueError`` if ``alias`` collides with an existing column (comparison is case-insensitive).
+        Raises ``ValueError`` on SQLite < 3.28.0 (window functions unsupported);
+        ``NULLS`` placement in ``order_by`` additionally requires SQLite >= 3.30.0.
         """
         if alias.casefold() in {c.casefold() for c in self.columns}:
             raise ValueError(f"Column {alias!r} already exists in the relation")

@@ -54,8 +54,9 @@ Parameters:
 -   event_time_column: The column name containing event timestamps. Default is "reference_time".
 -   validity_time_column: The column name containing validity timestamps. Default is "time_travel".
 
-The **single_filters** created will be converted to UTC as ISO 8601 formatted strings to ensure consistency
-    across time zones and avoid ambiguity when comparing or processing time-based data.
+The bounds of the created **single_filters** are normalized to tz-aware `datetime` objects in UTC,
+    so each filter engine can compare them directly against the framework's native temporal type.
+    Custom filter engines that previously parsed ISO 8601 strings must now accept `datetime` values.
 
 #### How to create a collection of single filters (GlobalFilter)
 
@@ -73,7 +74,7 @@ global_filter.filters
 Result
 
 ``` python
-{<SingleFilter(feature_name=example_order_id, type=equal, parameters=(('value', 1),))>}
+{<SingleFilter(feature_name=example_order_id, type=equal, parameters=FilterParameterImpl(_raw=(('value', 1),)))>}
 ```
 
 #### How to deal with time filters
@@ -96,8 +97,8 @@ global_filter.filters
 Result
 
 ``` python
-{<SingleFilter(feature_name=time_travel, type=range, parameters=(('max', '2022-12-31T00:00:00+00:00'), ('max_exclusive', True), ('min', '2022-01-01T00:00:00+00:00')))>,
- <SingleFilter(feature_name=reference_time, type=range, parameters=(('max', '2023-12-31T00:00:00+00:00'), ('max_exclusive', True), ('min', '2023-01-01T00:00:00+00:00')))>}
+{<SingleFilter(feature_name=time_travel, type=range, parameters=FilterParameterImpl(_raw=(('max', datetime.datetime(2022, 12, 31, 0, 0, tzinfo=datetime.timezone.utc)), ('max_exclusive', True), ('min', datetime.datetime(2022, 1, 1, 0, 0, tzinfo=datetime.timezone.utc)))))>,
+ <SingleFilter(feature_name=reference_time, type=range, parameters=FilterParameterImpl(_raw=(('max', datetime.datetime(2023, 12, 31, 0, 0, tzinfo=datetime.timezone.utc)), ('max_exclusive', True), ('min', datetime.datetime(2023, 1, 1, 0, 0, tzinfo=datetime.timezone.utc)))))>}
 ```
 
 

@@ -32,8 +32,9 @@ lifecycle_path_4 = root_dir.joinpath("4_ml_data_providers_user_steward.ipynb")
 
 
 class TestMlodaBasicsNotebooks:
+    @pytest.mark.timeout(60)
     @testbook(lifecycle_path, execute=True)  # type: ignore
-    def atest_notebook_1_mloda_basics(self, tb: Any) -> None:
+    def test_notebook_1_mloda_basics(self, tb: Any) -> None:
         pass
 
     @pytest.mark.timeout(60)

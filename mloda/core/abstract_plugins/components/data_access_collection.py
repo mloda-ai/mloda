@@ -26,6 +26,13 @@ class DataAccessCollection:
         credentials: dict[str, Any] | list[Any] | None = None,
         column_to_file: dict[str, str] | None = None,
     ) -> None:
+        """Build the collection from named or auto-named resources.
+
+        Each resource kind accepts a ``dict[handle, value]`` to register named
+        resources, or a ``set``/``list`` whose entries get auto-assigned handles.
+        ``column_to_file`` maps a column to either a file handle or a file path
+        (paths are normalized to their handle).
+        """
         self._auto_handles: set[str] = set()
 
         # Start with user-supplied dict entries; collect non-dict inputs for a second pass
@@ -107,21 +114,25 @@ class DataAccessCollection:
                 seen[handle] = kind
 
     def add_connection(self, *args: Any) -> None:
+        """Register a connection. ``add_connection(value)`` auto-names it; ``add_connection(handle, value)`` names it."""
         handle, value = self._resolve_mutator_args("connection", args)
         self._reject_duplicate(handle)
         self.connections[handle] = value
 
     def add_file(self, *args: Any) -> None:
+        """Register a file. ``add_file(path)`` auto-names it; ``add_file(handle, path)`` names it."""
         handle, value = self._resolve_mutator_args("file", args)
         self._reject_duplicate(handle)
         self.files[handle] = value
 
     def add_folder(self, *args: Any) -> None:
+        """Register a folder. ``add_folder(path)`` auto-names it; ``add_folder(handle, path)`` names it."""
         handle, value = self._resolve_mutator_args("folder", args)
         self._reject_duplicate(handle)
         self.folders[handle] = value
 
     def add_credentials(self, *args: Any) -> None:
+        """Register credentials. ``add_credentials(value)`` auto-names them; ``add_credentials(handle, value)`` names them."""
         handle, value = self._resolve_mutator_args("credentials", args)
         self._reject_duplicate(handle)
         self.credentials[handle] = value

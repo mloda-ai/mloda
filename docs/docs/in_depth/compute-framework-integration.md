@@ -208,3 +208,53 @@ class SparkDistributedFeatureGroup(DistributedFeatureGroup):
 ```
 
 **Important**: Spark feature groups require PySpark installation and Java 8+ environment with JAVA_HOME configured. The framework can auto-create a local SparkSession if none is provided, but for production use, you should provide a configured SparkSession through the data access collection. Spark uses its own distributed processing capabilities instead of mloda's framework inherent multiprocessing.
+
+## SQL Relation Helpers (DuckDB / SQLite)
+
+The DuckDB and SQLite frameworks expose a relation object (`DuckdbRelation`, `SqliteRelation`) inside `calculate_feature`. Both share the same helper surface so a feature group can be written once against either.
+
+### Reading column types
+
+The `.types` property returns column types aligned with `.columns`. The element type differs by backend:
+
+- `DuckdbRelation.types` returns DuckDB-native dtype objects.
+- `SqliteRelation.types` returns PyArrow `pa.DataType` objects (from propagated hints, falling back to SQLite affinity inference).
+
+``` python
+relation.columns   # ["user_id", "amount"]
+relation.types     # backend-specific dtype objects, same order as columns
+```
+
+### Window functions
+
+`with_row_number` appends a `ROW_NUMBER()` column; `window` appends an arbitrary window expression. Both quote every identifier and raise `ValueError` if the new `alias` collides with an existing column.
+
+``` python
+from mloda_plugins.compute_framework.base_implementations.sql.sql_window import (
+    OrderBy,
+    WindowFrame,
+    Preceding,
+    CurrentRow,
+)
+
+# ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY ts)
+ranked = relation.with_row_number(
+    "rn",
+    partition_by=["user_id"],
+    order_by=[OrderBy("ts")],
+)
+
+# SUM(amount) OVER (PARTITION BY user_id ORDER BY ts ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)
+rolling = relation.window(
+    "SUM(amount)",
+    "amount_rolling",
+    partition_by=["user_id"],
+    order_by=[OrderBy("ts")],
+    frame=WindowFrame(kind="rows", start=Preceding(2), end=CurrentRow()),
+)
+```
+
+`order_by` accepts plain column-name strings or `OrderBy(column, descending=..., nulls="first"|"last")`. The `func` passed to `window` is inlined verbatim as raw SQL, so never build it from user-controlled input.
+
+!!! warning "SQLite version requirement"
+    On SQLite, `with_row_number` and `window` require SQLite >= 3.28.0; using `NULLS` placement in `order_by` additionally requires SQLite >= 3.30.0. Both raise `ValueError` on older runtimes. DuckDB has no such gate.

@@ -28,6 +28,13 @@ Available typed constructors:
 
 ## Validation Behavior
 
+!!! note "Changed in 0.7.0"
+    Type validation now runs on **all** bundled compute frameworks through a uniform
+    `_extract_column_data_type` hook. In 0.6.x, type extraction relied on a single
+    PyArrow-schema path, so typed features running on frameworks that did not expose that
+    schema were silently left unvalidated. After upgrading, those features may raise a
+    `DataTypeMismatchError` for the first time where validation previously did nothing.
+
 ### Default (Lenient) Mode
 
 By default, validation allows compatible type conversions within categories:

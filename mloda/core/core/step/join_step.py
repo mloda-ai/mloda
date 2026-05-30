@@ -38,7 +38,7 @@ class JoinStep(Step):
         merge_engine_instance = merge_engine_class(framework_connection)
 
         cfw.data = merge_engine_instance.merge(
-            cfw.data, from_cfw_data, self.link.jointype, self.link.left_index, self.link.right_index
+            cfw.data, from_cfw_data, self.link.jointype, self.link.left_index, self.link.right_index, link=self.link
         )
         cfw.set_column_names()
 

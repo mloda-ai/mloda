@@ -1,5 +1,6 @@
 from typing import Any
 
+from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 from mloda.user import Index
 from mloda.user import JoinType
 from mloda.provider import BaseMergeEngine
@@ -33,6 +34,47 @@ class PolarsMergeEngine(BaseMergeEngine):
     def merge_union(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
         combined = self.merge_append(left_data, right_data, left_index, right_index)
         return combined.unique()
+
+    def merge_asof(
+        self,
+        left_data: Any,
+        right_data: Any,
+        left_index: Index,
+        right_index: Index,
+        asof_config: AsOfJoinConfig,
+    ) -> Any:
+        by_left = list(left_index.index)
+        by_right = list(right_index.index)
+        lt, rt = asof_config.left_time_column, asof_config.right_time_column
+        left_cols = self.get_column_names(left_data)
+        right_cols = self.get_column_names(right_data)
+
+        left_sorted = left_data.sort(lt)
+        right_sorted = right_data.sort(rt)
+
+        kwargs: dict[str, Any] = {
+            "strategy": asof_config.direction,
+            "allow_exact_matches": asof_config.allow_exact_matches,
+        }
+        if asof_config.tolerance is not None:
+            kwargs["tolerance"] = asof_config.tolerance
+
+        result = left_sorted.join_asof(
+            right_sorted, left_on=lt, right_on=rt, by_left=by_left, by_right=by_right, **kwargs
+        )
+
+        # Re-add any right by-key whose name differs from its left counterpart (polars drops it).
+        for l_key, r_key in zip(by_left, by_right):
+            if r_key != l_key and r_key not in left_cols:
+                result = result.with_columns(
+                    pl.when(pl.col(rt).is_not_null()).then(pl.col(l_key)).otherwise(None).alias(r_key)
+                )
+
+        # Canonical column order: all left cols, then right cols not present in left.
+        desired = list(left_cols) + [c for c in right_cols if c not in left_cols]
+        present = self.get_column_names(result)
+        result = result.select([c for c in desired if c in present])
+        return result
 
     def get_column_names(self, data: Any) -> list[str]:
         """Get column names from data. Override in subclasses for different data types."""

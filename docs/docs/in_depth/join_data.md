@@ -52,6 +52,7 @@ Join Types specify how two datasets are merged based on their keys. The framewor
 -   Left Join,
 -   Outer Join,
 -   Right Join (use sparingly; prefer left joins when possible).
+-   ASOF Join (point-in-time / as-of: equi match on the by-keys, nearest time match on the time columns).
 
 ```python
 from enum import Enum
@@ -63,9 +64,14 @@ class JoinType(Enum):
     OUTER = "outer"
     APPEND = "append"
     UNION = "union"
+    ASOF = "asof"
 
 join_type = JoinType.INNER
 ```
+
+ASOF joins are created via `Link.asof(...)` / `Link.asof_on(...)`, carrying time columns plus
+`direction`/`tolerance`/`allow_exact_matches` (pandas `merge_asof` semantics). Supported on the
+pandas, polars_lazy, and duckdb compute frameworks; other backends raise until follow-ups land.
 
 #### Link
 

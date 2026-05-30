@@ -1,5 +1,6 @@
 from uuid import UUID
 import uuid
+import pytest
 import pandas as pd
 import pandas.testing as pdt
 from typing import Any, Optional
@@ -9,6 +10,7 @@ from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.user import Index
 from mloda.provider import BaseInputData
+from mloda.provider import BaseMergeEngine
 from mloda.provider import DataCreator
 from mloda.user import Link, JoinSpec
 from mloda.user import Options
@@ -191,6 +193,61 @@ class TestBaseMergeEngine:
 
         for res in result:
             assert len(res) == 5
+
+    def test_merge_asof_default_raises_value_error(self) -> None:
+        """A bare BaseMergeEngine subclass must raise ValueError mentioning 'asof' for merge_asof."""
+        from mloda.user import JoinType
+        from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
+
+        class BareMergeEngine(BaseMergeEngine):
+            pass
+
+        engine = BareMergeEngine()
+        idx = Index(("k",))
+        cfg = AsOfJoinConfig(left_time_column="t", right_time_column="t")
+
+        with pytest.raises(ValueError, match="asof"):
+            engine.merge_asof(None, None, idx, idx, cfg)
+
+        # Sanity: JoinType.ASOF must exist for the dispatch tests below.
+        assert JoinType.ASOF.value == "asof"
+
+    def test_merge_asof_without_link_raises_value_error(self) -> None:
+        """merge(..., JoinType.ASOF, ..., link=None) must raise ValueError."""
+        from mloda.user import JoinType
+
+        class BareMergeEngine(BaseMergeEngine):
+            pass
+
+        engine = BareMergeEngine()
+        idx = Index(("k",))
+
+        with pytest.raises(ValueError):
+            engine.merge(None, None, JoinType.ASOF, idx, idx, link=None)
+
+    def test_merge_asof_dispatches_to_merge_asof(self) -> None:
+        """merge(..., JoinType.ASOF, ..., link=Link.asof(...)) dispatches to merge_asof."""
+        from mloda.user import JoinType
+
+        sentinel = object()
+
+        class DispatchMergeEngine(BaseMergeEngine):
+            def merge_asof(
+                self, left_data: Any, right_data: Any, left_index: Index, right_index: Index, asof_config: Any
+            ) -> Any:
+                return sentinel
+
+        engine = DispatchMergeEngine()
+        idx = Index(("k",))
+        link = Link.asof(
+            JoinSpec(AppendMergeTestFeature, "k"),
+            JoinSpec(SecondAppendMergeTestFeature, "k"),
+            left_time_column="t",
+            right_time_column="t",
+        )
+
+        result = engine.merge(None, None, JoinType.ASOF, idx, idx, link=link)
+        assert result is sentinel
 
     def test_dependent_append_multiple_features_v3(self) -> None:
         feature = Feature(

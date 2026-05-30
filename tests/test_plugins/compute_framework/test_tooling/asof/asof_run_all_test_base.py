@@ -1,21 +1,24 @@
 """
-End-to-end integration test driving an ASOF (point-in-time) join through the
+Shared base for ASOF (point-in-time) join integration tests driven through the
 public API ``mloda.run_all``.
 
-The engine-level shared tests exhaustively cover ASOF semantics per backend. This
-test only proves the plumbing fires:
+The engine-level shared tests exhaustively cover ASOF semantics per backend. These
+tests only prove the plumbing fires:
 ``run_all -> JoinStep -> BaseMergeEngine.merge -> merge_asof`` and that the parent
 feature group can consume the joined frame.
 
 One representative scenario is used: ``direction="backward"``, single by-key,
 reusing the ``backward_single_key`` data shape from the shared ASOF scenarios.
 
-Coverage:
-- Frameworks: pandas, polars (eager), polars (lazy), duckdb.
-- Parallelization: SYNC and THREADING for pandas/polars; SYNC only for duckdb,
-  because ``DuckDBFramework.supported_parallelization_modes()`` is ``{SYNC}``.
+Subclasses implement only ``compute_framework_name`` (and, for connection-backed
+frameworks such as DuckDB, ``get_connection`` + ``teardown_method``); the
+parametrized test method lives in this base so adding a backend is a thin,
+hooks-only addition.
+
+This module is intentionally NOT collected as tests (no ``Test`` prefix).
 """
 
+from abc import ABC, abstractmethod
 from typing import Any, Optional
 
 import pytest
@@ -189,70 +192,54 @@ class AsofJoinedFeature(FeatureGroup, _AsofMatchData):
 _ENABLED = PluginCollector.enabled_feature_groups({AsofLeftFeature, AsofRightFeature, AsofJoinedFeature})
 
 
-def _run(modes: set[ParallelizationMode], flight_server: Any, compute_framework: str) -> list[str]:
-    feature = Feature(name=AsofJoinedFeature.get_class_name())
+class AsofRunAllTestBase(ABC):
+    """Drives a backward, single-by-key ASOF join end-to-end through run_all.
 
-    result = mloda.run_all(
-        [feature],
-        links={_asof_link()},
-        compute_frameworks=[compute_framework],
-        plugin_collector=_ENABLED,
-        flight_server=flight_server,
-        parallelization_modes=modes,
-    )
+    Subclasses implement ``compute_framework_name`` and, for connection-backed
+    frameworks, ``get_connection`` (plus a ``teardown_method`` to close it).
+    """
 
-    assert len(result) == 1
-    records = _records_from_frame(result[0])
-    return [str(r["AsofJoinedFeature"]) for r in records]
+    @classmethod
+    @abstractmethod
+    def compute_framework_name(cls) -> str:
+        """Return the compute framework name string for ``compute_frameworks=[...]``."""
+        pass
 
+    def get_connection(self) -> Optional[Any]:
+        """Return a framework connection object, or None when none is needed."""
+        return None
 
-_NON_DUCKDB_MODES = [
-    ({ParallelizationMode.SYNC}),
-    ({ParallelizationMode.THREADING}),
-]
+    def _run(self, modes: set[ParallelizationMode], flight_server: Any) -> list[str]:
+        conn = self.get_connection()
 
-
-class TestAsofRunAllIntegration:
-    """Drives a backward, single-by-key ASOF join end-to-end through run_all."""
-
-    @pytest.mark.parametrize("modes", _NON_DUCKDB_MODES)
-    def test_pandas(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
-        assert sorted(_run(modes, flight_server, "PandasDataFrame")) == _EXPECTED_ENCODED
-
-    @pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
-    @pytest.mark.parametrize("modes", _NON_DUCKDB_MODES)
-    def test_polars(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
-        assert sorted(_run(modes, flight_server, "PolarsDataFrame")) == _EXPECTED_ENCODED
-
-    @pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
-    @pytest.mark.parametrize("modes", _NON_DUCKDB_MODES)
-    def test_polars_lazy(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
-        assert sorted(_run(modes, flight_server, "PolarsLazyDataFrame")) == _EXPECTED_ENCODED
-
-    @pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB or PyArrow is not installed. Skipping this test.")
-    @pytest.mark.parametrize("modes", [({ParallelizationMode.SYNC})])
-    def test_duckdb(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
-        conn = duckdb.connect()
-        feature = Feature(
-            name=AsofJoinedFeature.get_class_name(),
-            options={
-                AsofLeftFeature.get_class_name(): conn,
-                AsofRightFeature.get_class_name(): conn,
-                AsofJoinedFeature.get_class_name(): conn,
-            },
-        )
+        if conn is not None:
+            feature = Feature(
+                name=AsofJoinedFeature.get_class_name(),
+                options={
+                    AsofLeftFeature.get_class_name(): conn,
+                    AsofRightFeature.get_class_name(): conn,
+                    AsofJoinedFeature.get_class_name(): conn,
+                },
+            )
+            data_access_collection = DataAccessCollection(connections={conn})
+        else:
+            feature = Feature(name=AsofJoinedFeature.get_class_name())
+            data_access_collection = None
 
         result = mloda.run_all(
             [feature],
             links={_asof_link()},
-            compute_frameworks=["DuckDBFramework"],
+            compute_frameworks=[self.compute_framework_name()],
             plugin_collector=_ENABLED,
             flight_server=flight_server,
             parallelization_modes=modes,
-            data_access_collection=DataAccessCollection(connections={conn}),
+            data_access_collection=data_access_collection,
         )
 
         assert len(result) == 1
         records = _records_from_frame(result[0])
-        assert sorted(str(r["AsofJoinedFeature"]) for r in records) == _EXPECTED_ENCODED
-        conn.close()
+        return sorted(str(r["AsofJoinedFeature"]) for r in records)
+
+    @pytest.mark.parametrize("modes", [{ParallelizationMode.SYNC}, {ParallelizationMode.THREADING}])
+    def test_backward_single_key(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
+        assert self._run(modes, flight_server) == _EXPECTED_ENCODED

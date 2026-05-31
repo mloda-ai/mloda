@@ -57,8 +57,11 @@ nav:
 theme:
   name: readthedocs
 
+hooks:
+  - marimo_export_hook.py
+
 plugins:
   - search
   - mkdocs-jupyter:
-      include: ["*.ipynb"] 
+      include: ["*.ipynb"]
       execute: false

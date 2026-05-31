@@ -9,3 +9,8 @@ build/
 dist/
 .aider*
 security-reports/
+
+# Generated from the marimo .py notebooks at docs build time.
+docs/docs/examples/**/*.ipynb
+__marimo__/
+.cache/

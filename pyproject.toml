@@ -29,7 +29,6 @@ test = [
     "mktestdocs",
     "pandera",
     "pyarrow",
-    "testbook",
     "ipykernel",
     "bandit",
     "types-PyYAML",
@@ -71,6 +70,12 @@ docs = [
     "mkdocs-jupyter",
     "notebook",
     "mermaid-py",
+    "marimo",
+    # Backends the example notebooks execute during the docs build.
+    "mloda[pandas]",
+    "mloda[polars]",
+    "mloda[pyarrow]",
+    "mloda[sklearn]",
 ]
 all = [
     "mloda[test]",
@@ -125,6 +130,12 @@ skips = [
 [tool.mypy]
 explicit_package_bases = true
 namespace_packages = true
+# marimo notebooks are unannotated reactive cells; validated by execution, not mypy.
+exclude = [
+    'docs/docs/examples/base_usage\.py$',
+    'docs/docs/examples/sklearn_integration_basic\.py$',
+    'docs/docs/examples/mloda_basics/\d.*\.py$',
+]
 
 [[tool.mypy.overrides]]
 module = "mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_filter_engine"
@@ -149,7 +160,8 @@ line-length = 120
 extend-select = ["UP006", "UP007"]
 
 [tool.ruff.lint.per-file-ignores]
-"docs/**/*.ipynb" = ["E402"]
+# marimo notebook idioms static linting can't follow (cell imports, re-exports, cross-cell names).
+"docs/docs/examples/**/*.py" = ["E402", "F401", "F821", "F841"]
 
 [tool.uv]
 exclude-newer = "7 days"

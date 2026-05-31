@@ -39,6 +39,7 @@ NOTEBOOKS: list[str] = [
 
 
 class TestMlodaBasicsNotebooks:
+    @pytest.mark.notebooks
     @pytest.mark.timeout(60)
     @pytest.mark.parametrize(
         "notebook",

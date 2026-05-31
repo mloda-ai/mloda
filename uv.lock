@@ -1779,7 +1779,6 @@ sqlite = [
 test = [
     { name = "bandit" },
     { name = "ipykernel" },
-    { name = "marimo" },
     { name = "mktestdocs" },
     { name = "mypy" },
     { name = "pandera" },
@@ -1809,7 +1808,6 @@ requires-dist = [
     { name = "ipykernel", marker = "extra == 'test'" },
     { name = "joblib", marker = "extra == 'sklearn'", specifier = ">=1.0.0" },
     { name = "marimo", marker = "extra == 'docs'" },
-    { name = "marimo", marker = "extra == 'test'" },
     { name = "mermaid-py", marker = "extra == 'docs'" },
     { name = "mkdocs", marker = "extra == 'docs'" },
     { name = "mkdocs-jupyter", marker = "extra == 'docs'" },

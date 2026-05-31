@@ -38,7 +38,6 @@ test = [
     "pip-audit<2.11.0",
     "pip-licenses-cli",
     "tomli>=1.0.0; python_version < '3.11'",
-    "marimo",
 ]
 pyarrow = ["pyarrow"]
 pandas = ["pandas"]

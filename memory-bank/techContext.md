@@ -7,6 +7,7 @@
 *   Pandas
 *   mkdocs
 *   mkdocs-jupyter
+*   marimo (example notebooks, authored as .py)
 *   pytest
 *   tox
 *   ruff

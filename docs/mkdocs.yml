@@ -57,8 +57,13 @@ nav:
 theme:
   name: readthedocs
 
+# Example notebooks are authored as marimo (.py) files. This hook exports each one to a
+# Jupyter notebook with executed outputs at build time, which mkdocs-jupyter then renders.
+hooks:
+  - marimo_export_hook.py
+
 plugins:
   - search
   - mkdocs-jupyter:
-      include: ["*.ipynb"] 
+      include: ["*.ipynb"]
       execute: false

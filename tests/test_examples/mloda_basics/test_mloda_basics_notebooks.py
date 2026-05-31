@@ -1,14 +1,17 @@
 from datetime import datetime, timezone
-import os
+import subprocess  # nosec B404
+import sys
 
 
 from pathlib import Path
-from typing import Any
 
 import pytest
 
 from mloda.user import PluginCollector
-from testbook import testbook
+
+# Importing PandasDataFrame registers it in the compute-framework subclass registry,
+# so test_create_synthetic_data resolves "PandasDataFrame" even when run in isolation.
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame  # noqa: F401
 
 from docs.docs.examples.mloda_basics.create_synthetic_data import (
     CategoricalSyntheticDataSet,
@@ -22,30 +25,38 @@ from mloda.user import mloda
 from mloda.user import GlobalFilter
 
 
-root_dir = Path(os.path.abspath(os.curdir))
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
-root_dir = root_dir.joinpath("docs").joinpath("docs").joinpath("examples").joinpath("mloda_basics")
-
-lifecycle_path = root_dir.joinpath("1_ml_mloda_intro.ipynb")
-lifecycle_path_2 = root_dir.joinpath("2_ml_advantage_process_focus.ipynb")
-lifecycle_path_4 = root_dir.joinpath("4_ml_data_providers_user_steward.ipynb")
+NOTEBOOKS: list[str] = [
+    "docs/docs/examples/base_usage.py",
+    "docs/docs/examples/sklearn_integration_basic.py",
+    "docs/docs/examples/mloda_basics/0_table_of_content.py",
+    "docs/docs/examples/mloda_basics/1_ml_mloda_intro.py",
+    "docs/docs/examples/mloda_basics/2_ml_advantage_process_focus.py",
+    "docs/docs/examples/mloda_basics/3_ml_data_feature_feature_groups.py",
+    "docs/docs/examples/mloda_basics/4_ml_data_providers_user_steward.py",
+]
 
 
 class TestMlodaBasicsNotebooks:
     @pytest.mark.timeout(60)
-    @testbook(lifecycle_path, execute=True)  # type: ignore
-    def test_notebook_1_mloda_basics(self, tb: Any) -> None:
-        pass
-
-    @pytest.mark.timeout(60)
-    @testbook(lifecycle_path_2, execute=True)  # type: ignore
-    def test_notebook_2_mloda_basics(self, tb: Any) -> None:
-        pass
-
-    @pytest.mark.timeout(60)
-    @testbook(lifecycle_path_4, execute=True)  # type: ignore
-    def test_notebook_4_mloda_basics(self, tb: Any) -> None:
-        pass
+    @pytest.mark.parametrize(
+        "notebook",
+        [pytest.param(nb, id=Path(nb).stem) for nb in NOTEBOOKS],
+    )
+    def test_notebook_runs(self, notebook: str) -> None:
+        notebook_path = REPO_ROOT / notebook
+        result = subprocess.run(  # nosec B603
+            [sys.executable, str(notebook_path)],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, (
+            f"Notebook {notebook} failed with return code {result.returncode}\n"
+            f"STDOUT:\n{result.stdout}\n"
+            f"STDERR:\n{result.stderr}"
+        )
 
     def test_create_synthetic_data(self) -> None:
         # Order Data

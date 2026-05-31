@@ -9,3 +9,9 @@ build/
 dist/
 .aider*
 security-reports/
+
+# marimo notebooks under docs/docs/examples are the source of truth; the .ipynb files
+# rendered by mkdocs-jupyter are generated at build time by docs/marimo_export_hook.py.
+docs/docs/examples/**/*.ipynb
+__marimo__/
+.cache/

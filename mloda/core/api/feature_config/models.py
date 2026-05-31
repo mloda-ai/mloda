@@ -18,12 +18,18 @@ class FeatureConfig:
     in_features: Optional[list[str]] = None
     group_options: Optional[dict[str, Any]] = None
     context_options: Optional[dict[str, Any]] = None
+    propagate_context_keys: Optional[list[str]] = None
     column_index: Optional[int] = None
 
     def __post_init__(self) -> None:
         """Validate that options and group_options/context_options are mutually exclusive."""
         if self.options and (self.group_options or self.context_options):
             raise ValueError("Cannot use both 'options' and 'group_options'/'context_options'")
+        if self.propagate_context_keys and not self.context_options:
+            raise ValueError(
+                "'propagate_context_keys' requires 'context_options'; "
+                "it is meaningless without context options and would otherwise be silently dropped"
+            )
 
 
 def feature_config_schema() -> dict[str, Any]:
@@ -40,6 +46,7 @@ def feature_config_schema() -> dict[str, Any]:
             "in_features": {"type": "array", "items": {"type": "string"}},
             "group_options": {"type": "object"},
             "context_options": {"type": "object"},
+            "propagate_context_keys": {"type": "array", "items": {"type": "string"}},
             "column_index": {"type": "integer"},
         },
         "required": ["name"],

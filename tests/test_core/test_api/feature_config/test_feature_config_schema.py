@@ -20,3 +20,18 @@ def test_feature_config_schema_structure() -> None:
 
     assert "name" in schema["properties"], "'name' should be in schema properties"
     assert "name" in schema["required"], "'name' should be in required fields"
+
+
+def test_feature_config_schema_includes_propagate_context_keys() -> None:
+    """Test that the schema advertises the propagate_context_keys field.
+
+    The schema should expose propagate_context_keys as an array of strings so
+    that the documented configuration field is discoverable.
+    """
+    schema = feature_config_schema()
+
+    assert "propagate_context_keys" in schema["properties"], "'propagate_context_keys' should be in schema properties"
+
+    prop = schema["properties"]["propagate_context_keys"]
+    assert prop["type"] == "array", "'propagate_context_keys' should be an array"
+    assert prop["items"] == {"type": "string"}, "'propagate_context_keys' items should be strings"

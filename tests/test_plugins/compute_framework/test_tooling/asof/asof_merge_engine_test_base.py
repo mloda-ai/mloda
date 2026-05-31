@@ -6,6 +6,7 @@ for point-in-time (as-of) merge operations across all compute frameworks.
 """
 
 import math
+import warnings
 from abc import ABC, abstractmethod
 from collections import Counter
 from typing import Any, Optional
@@ -190,3 +191,24 @@ class AsofMergeEngineTestBase(ABC):
     def test_differing_names(self) -> None:
         """Vector G: differing by-key and time-column names; both by-key columns survive."""
         self._run_asof_test("differing_names")
+
+    def test_no_sortedness_warning_with_by_groups(self) -> None:
+        """An ASOF join with `by` groups must not emit a 'Sortedness' warning.
+
+        Polars' ``join_asof`` warns ("Sortedness of columns cannot be checked when
+        'by' groups provided") whenever ``by_left``/``by_right`` are passed; the fix
+        is to pass ``check_sortedness=False``. The warning is framework-specific
+        (only polars emits it), so we record all warnings and assert none mention
+        "Sortedness" rather than turning every UserWarning into an error -- this keeps
+        the test framework-safe for pandas/duckdb that inherit this base class.
+
+        For the lazy polars engine the warning is deferred until the LazyFrame is
+        collected, so the capture must wrap the whole scenario run (including the
+        conversion/collect inside ``_run_asof_test``), not just the merge_asof call.
+        """
+        with warnings.catch_warnings(record=True) as recorded:
+            warnings.simplefilter("always")
+            self._run_asof_test("multi_by_key")
+
+        offending = [str(w.message) for w in recorded if "Sortedness" in str(w.message)]
+        assert not offending, f"Unexpected 'Sortedness' warning(s) emitted: {offending}"

@@ -4,6 +4,7 @@ import pytest
 from mloda.user import JoinType
 from mloda.user import Index
 from mloda_plugins.compute_framework.base_implementations.polars.polars_merge_engine import PolarsMergeEngine
+from tests.test_plugins.compute_framework.test_tooling.merge_link import make_merge_link
 
 import logging
 
@@ -170,11 +171,11 @@ class TestPolarsMergeEngine:
         engine = PolarsMergeEngine()
 
         # Test all join types through the main merge method
-        result = engine.merge(left_data, right_data, JoinType.INNER, index_obj, index_obj, link=None)
+        result = engine.merge(left_data, right_data, make_merge_link(JoinType.INNER, index_obj, index_obj))
         expected = pl.DataFrame({"idx": [1], "col1": ["a"], "col2": ["x"]})
         assert result.equals(expected)
 
-        result = engine.merge(left_data, right_data, JoinType.LEFT, index_obj, index_obj, link=None)
+        result = engine.merge(left_data, right_data, make_merge_link(JoinType.LEFT, index_obj, index_obj))
         expected = pl.DataFrame({"idx": [1, 3], "col1": ["a", "b"], "col2": ["x", None]})
         assert result.equals(expected)
 

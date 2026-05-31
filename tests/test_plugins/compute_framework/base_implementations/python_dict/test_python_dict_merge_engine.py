@@ -7,6 +7,7 @@ from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_merge_engine import (
     PythonDictMergeEngine,
 )
+from tests.test_plugins.compute_framework.test_tooling.merge_link import make_merge_link
 from tests.test_plugins.compute_framework.test_tooling.multi_index.multi_index_test_base import (
     MultiIndexMergeEngineTestBase,
 )
@@ -169,11 +170,11 @@ class TestPythonDictMergeEngine:
         engine = PythonDictMergeEngine()
 
         # Test all join types through the main merge method
-        result = engine.merge(left_data, right_data, JoinType.INNER, index_obj, index_obj, link=None)
+        result = engine.merge(left_data, right_data, make_merge_link(JoinType.INNER, index_obj, index_obj))
         expected = [{"idx": 1, "col1": "a", "col2": "x"}]
         assert result == expected
 
-        result = engine.merge(left_data, right_data, JoinType.LEFT, index_obj, index_obj, link=None)
+        result = engine.merge(left_data, right_data, make_merge_link(JoinType.LEFT, index_obj, index_obj))
         expected = [{"idx": 1, "col1": "a", "col2": "x"}, {"idx": 3, "col1": "b", "col2": None}]
         assert result == expected
 

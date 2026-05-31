@@ -37,9 +37,7 @@ class JoinStep(Step):
         framework_connection = cfw.get_framework_connection_object()
         merge_engine_instance = merge_engine_class(framework_connection)
 
-        cfw.data = merge_engine_instance.merge(
-            cfw.data, from_cfw_data, self.link.jointype, self.link.left_index, self.link.right_index, link=self.link
-        )
+        cfw.data = merge_engine_instance.merge(cfw.data, from_cfw_data, self.link)
         cfw.set_column_names()
 
     def _upload_data_if_needed(self, cfw: ComputeFramework, cfw_register: CfwManager) -> None:

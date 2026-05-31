@@ -45,6 +45,7 @@ from tests.test_plugins.compute_framework.base_implementations.spark.conftest im
     PYSPARK_AVAILABLE,
     SKIP_REASON,
 )
+from tests.test_plugins.compute_framework.test_tooling.merge_link import make_merge_link
 
 import logging
 
@@ -179,7 +180,7 @@ class TestSparkFrameworkComputeFramework:
         merge_engine_class = spark_framework.merge_engine()
         framework_connection = spark_framework.get_framework_connection_object()
         merge_engine = merge_engine_class(framework_connection)
-        result = merge_engine.merge(left_data, right_data, JoinType.INNER, idx, idx, link=None)
+        result = merge_engine.merge(left_data, right_data, make_merge_link(JoinType.INNER, idx, idx))
 
         # Check that we got a result and it has the expected structure
         assert result is not None
@@ -198,7 +199,7 @@ class TestSparkFrameworkComputeFramework:
         framework_connection = spark_framework.get_framework_connection_object()
         merge_engine_class = spark_framework.merge_engine()
         merge_engine = merge_engine_class(framework_connection)
-        result = merge_engine.merge(left_data, right_data, JoinType.LEFT, idx, idx, link=None)
+        result = merge_engine.merge(left_data, right_data, make_merge_link(JoinType.LEFT, idx, idx))
 
         # Check that we got a result with all left rows
         assert result is not None
@@ -217,7 +218,7 @@ class TestSparkFrameworkComputeFramework:
         framework_connection = spark_framework.get_framework_connection_object()
         merge_engine_class = spark_framework.merge_engine()
         merge_engine = merge_engine_class(framework_connection)
-        result = merge_engine.merge(left_data, right_data, JoinType.APPEND, idx, idx, link=None)
+        result = merge_engine.merge(left_data, right_data, make_merge_link(JoinType.APPEND, idx, idx))
 
         # Check that we got a result with combined rows
         assert result is not None
@@ -236,7 +237,7 @@ class TestSparkFrameworkComputeFramework:
         framework_connection = spark_framework.get_framework_connection_object()
         merge_engine_class = spark_framework.merge_engine()
         merge_engine = merge_engine_class(framework_connection)
-        result = merge_engine.merge(left_data, right_data, JoinType.UNION, idx, idx, link=None)
+        result = merge_engine.merge(left_data, right_data, make_merge_link(JoinType.UNION, idx, idx))
 
         # Check that we got a result (union removes duplicates)
         assert result is not None

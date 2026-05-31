@@ -67,16 +67,12 @@ class BaseMergeEngine(ABC):
         raise ValueError(f"JoinType asof is not yet implemented in {self.__class__.__name__}")
 
     @final
-    def merge(
-        self,
-        left_data: Any,
-        right_data: Any,
-        jointype: JoinType,
-        left_index: Index,
-        right_index: Index,
-        link: Link | None = None,
-    ) -> Any:
+    def merge(self, left_data: Any, right_data: Any, link: Link) -> Any:
         self.check_import()
+
+        jointype = link.jointype
+        left_index = link.left_index
+        right_index = link.right_index
 
         if jointype not in (JoinType.APPEND, JoinType.UNION):
             if len(left_index.index) != len(right_index.index):
@@ -99,7 +95,7 @@ class BaseMergeEngine(ABC):
         elif jointype == JoinType.UNION:
             return self.merge_union(left_data, right_data, left_index, right_index)
         elif jointype == JoinType.ASOF:
-            if link is None or link.asof_config is None:
+            if link.asof_config is None:
                 raise ValueError("ASOF join requires a Link carrying an asof_config.")
             return self.merge_asof(left_data, right_data, left_index, right_index, link.asof_config)
         else:

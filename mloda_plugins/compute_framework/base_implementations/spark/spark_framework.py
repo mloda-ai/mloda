@@ -8,6 +8,7 @@ from mloda.provider import ComputeFramework
 from mloda.provider import BaseFilterEngine, BaseMaskEngine
 from mloda_plugins.compute_framework.base_implementations.spark.spark_filter_engine import SparkFilterEngine
 from mloda_plugins.compute_framework.base_implementations.spark.spark_mask_engine import SparkMaskEngine
+from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import pick_helper_column_name
 
 try:
     from pyspark.sql import SparkSession, DataFrame
@@ -222,8 +223,10 @@ class SparkFramework(ComputeFramework):
 
                 window_spec = Window.orderBy(F.monotonically_increasing_id())
 
+                rn = pick_helper_column_name(taken=set(self.data.columns))
+
                 # Add row numbers to existing DataFrame
-                existing_with_row_num = self.data.withColumn("__row_num", F.row_number().over(window_spec))
+                existing_with_row_num = self.data.withColumn(rn, F.row_number().over(window_spec))
 
                 # Create new DataFrame with the new column
                 if self.framework_connection_object is None:
@@ -236,14 +239,14 @@ class SparkFramework(ComputeFramework):
                     [(i + 1, val) for i, val in enumerate(data_list)],
                     StructType(
                         [
-                            StructField("__row_num", IntegerType(), False),
+                            StructField(rn, IntegerType(), False),
                             StructField(feature_name, self._infer_spark_type(data_list[0] if data_list else ""), True),
                         ]
                     ),
                 )
 
                 # Join the DataFrames and drop the row number column
-                result = existing_with_row_num.join(new_data_df, "__row_num").drop("__row_num")
+                result = existing_with_row_num.join(new_data_df, rn).drop(rn)
                 return result
 
             raise ValueError(f"Only one feature can be added at a time: {feature_names}")

@@ -7,13 +7,9 @@ from typing import Any, Optional
 
 import pyarrow as pa
 
-from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import pick_helper_column_name, quote_ident
-from mloda_plugins.compute_framework.base_implementations.sql.sql_window import (
-    OrderBy,
-    WindowFrame,
-    render_over_clause,
-    validate_window,
-)
+from mloda_plugins.compute_framework.base_implementations.sql.sql_base_relation import SqlBaseRelation
+from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
+from mloda_plugins.compute_framework.base_implementations.sql.sql_window import OrderBy
 
 
 # Python 3.12 deprecated the built-in sqlite3 datetime adapters; explicit ISO-format
@@ -149,7 +145,7 @@ def _compatible_arrow_type(left_type: pa.DataType | None, right_type: pa.DataTyp
     return left_type
 
 
-class SqliteRelation:
+class SqliteRelation(SqlBaseRelation):
     """Lazy relation wrapper around a sqlite3 connection and table name.
 
     Each mutating operation (filter, select) creates a new temp view/table
@@ -490,78 +486,28 @@ class SqliteRelation:
                 select_parts.append(f"{qr}.{qc} AS {qc}")
         return ", ".join(select_parts)
 
-    def with_row_number(
-        self,
-        alias: str,
-        *,
-        partition_by: Sequence[str] = (),
-        order_by: Sequence[str | OrderBy] = (),
-    ) -> "SqliteRelation":
-        """Append a ROW_NUMBER() window column named ``alias``.
-
-        All identifiers in ``partition_by`` / ``order_by`` and the ``alias`` are quoted
-        via ``quote_ident``. Raises ``ValueError`` if ``alias`` collides with an existing
-        column (comparison is case-insensitive).
-        With no partition_by/order_by, row-number assignment order is
-        implementation-defined; pass order_by for a deterministic numbering.
-        Raises ``ValueError`` on SQLite < 3.28.0 (window functions unsupported);
-        ``NULLS`` placement in ``order_by`` additionally requires SQLite >= 3.30.0.
-        """
-        if alias.casefold() in {c.casefold() for c in self.columns}:
-            raise ValueError(f"Column {alias!r} already exists in the relation")
-        _assert_window_supported()
-        _assert_nulls_supported(order_by)
-        over_sql = render_over_clause(partition_by, order_by, None)
+    def _project_raw(self, projection: str) -> "SqliteRelation":
         new_name = _next_table_name()
         sql = (
             f"CREATE TEMP VIEW {quote_ident(new_name)} AS "  # nosec
-            f"SELECT *, ROW_NUMBER() OVER ({over_sql}) AS {quote_ident(alias)} "
-            f"FROM {quote_ident(self._table_name)}"
+            f"SELECT {projection} FROM {quote_ident(self._table_name)}"
         )
         self._connection.execute(sql)
         return SqliteRelation(self._connection, new_name, _is_view=True)
 
-    def window(
-        self,
-        func: str,
-        alias: str,
-        *,
-        partition_by: Sequence[str] = (),
-        order_by: Sequence[str | OrderBy] = (),
-        frame: WindowFrame | None = None,
-    ) -> "SqliteRelation":
-        """Append a window-function column ``alias`` computed by ``func`` over the OVER clause.
-
-        ``func`` is a raw SQL fragment inlined verbatim; never pass user-controlled input.
-        The ``alias`` and every identifier in ``partition_by`` / ``order_by`` are quoted
-        via ``quote_ident``.
-        Raises ``ValueError`` if ``alias`` collides with an existing column (comparison is case-insensitive).
-        Raises ``ValueError`` on SQLite < 3.28.0 (window functions unsupported);
-        ``NULLS`` placement in ``order_by`` additionally requires SQLite >= 3.30.0.
-        """
-        if alias.casefold() in {c.casefold() for c in self.columns}:
-            raise ValueError(f"Column {alias!r} already exists in the relation")
+    def _assert_window_supported(self) -> None:
         _assert_window_supported()
+
+    def _assert_nulls_supported(self, order_by: Sequence[str | OrderBy]) -> None:
         _assert_nulls_supported(order_by)
-        validate_window(order_by, frame)
-        over_sql = render_over_clause(partition_by, order_by, frame)
-        new_name = _next_table_name()
-        sql = (
-            f"CREATE TEMP VIEW {quote_ident(new_name)} AS "  # nosec
-            f"SELECT *, {func} OVER ({over_sql}) AS {quote_ident(alias)} "
-            f"FROM {quote_ident(self._table_name)}"
-        )
-        self._connection.execute(sql)
-        return SqliteRelation(self._connection, new_name, _is_view=True)
 
     def append_column(self, name: str, values: list[Any]) -> "SqliteRelation":
         """Return a new relation with an additional column appended positionally."""
-        if name.casefold() in {c.casefold() for c in self.columns}:
-            raise ValueError(f"Column {name!r} already exists in the relation")
+        self._ensure_column_absent(name)
         current_types = self._types_for_current_columns()
         new_col_rel = SqliteRelation.from_dict(self._connection, {name: values})
         new_col_types = new_col_rel._types_for_current_columns()
-        rn = pick_helper_column_name(taken=set(self.columns) | {name})
+        rn = self._pick_helper_column(name)
         qrn = quote_ident(rn)
         left_name = _next_table_name()
         right_name = _next_table_name()

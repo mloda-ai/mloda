@@ -271,6 +271,39 @@ class TestSparkFrameworkComputeFramework:
         assert result is not None
         assert result.count() == 0
 
+    def test_add_column_preserves_existing_user_row_num_column(self, spark_session: Any) -> None:
+        """add_column must not clobber a pre-existing user column literally named ``__row_num``.
+
+        The add-column path uses an internal row-number helper column to align new values with
+        existing rows. A DataFrame that already owns ``__row_num`` must keep it intact alongside
+        the newly added feature column.
+        """
+        spark_framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+        spark_framework.set_framework_connection_object(spark_session)
+
+        existing = spark_session.createDataFrame(
+            [
+                {"__row_num": 100, "other": "a"},
+                {"__row_num": 200, "other": "b"},
+                {"__row_num": 300, "other": "c"},
+            ]
+        )
+        spark_framework.data = existing
+
+        result = spark_framework.transform([10, 20, 30], {"new_feature"})
+        rows = result.collect()
+
+        by_other = {row["other"]: row for row in rows}
+        assert set(by_other.keys()) == {"a", "b", "c"}
+        # (a) the new column exists with the expected values, aligned per original row
+        assert by_other["a"]["new_feature"] == 10
+        assert by_other["b"]["new_feature"] == 20
+        assert by_other["c"]["new_feature"] == 30
+        # (b) the original __row_num column survives with its original distinctive values
+        assert "__row_num" in result.columns
+        assert sorted(row["__row_num"] for row in rows) == [100, 200, 300]
+        assert {by_other["a"]["__row_num"], by_other["b"]["__row_num"], by_other["c"]["__row_num"]} == {100, 200, 300}
+
     def test_infer_spark_type(self, spark_session: Any) -> None:
         """Test Spark type inference."""
         from pyspark.sql.types import BooleanType, IntegerType, DoubleType, StringType

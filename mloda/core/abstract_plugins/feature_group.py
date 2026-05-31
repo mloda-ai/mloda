@@ -261,6 +261,8 @@ class FeatureGroup(ABC):
         If this feature group always returns a specific data type, this method should
         return that data type. Otherwise, it should return None, indicating that the
         data type is not fixed and may vary depending on the input or computation.
+        If the data type cannot be determined during planning, return None instead
+        of raising an exception.
         """
         return None
 

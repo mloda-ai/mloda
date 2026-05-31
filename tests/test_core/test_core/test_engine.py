@@ -2,6 +2,8 @@ from typing import Any
 from unittest.mock import patch
 from mloda.user import DataType
 
+from mloda.provider import FeatureGroup
+from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.core.core.engine import Engine
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins
@@ -25,6 +27,17 @@ from tests.test_core.test_abstract_plugins.test_abstract_feature_group import (
 
 
 class TestEngine:
+    def test_set_data_type_treats_raising_return_data_type_rule_as_undeclared(self) -> None:
+        class MisbehavingDataTypeRuleFeatureGroup(FeatureGroup):
+            @classmethod
+            def return_data_type_rule(cls, feature: Feature) -> DataType | None:
+                raise ValueError("type cannot be inferred")
+
+        engine = object.__new__(Engine)
+        feature = Feature.str_of("typed_feature")
+
+        assert engine.set_data_type(feature, MisbehavingDataTypeRuleFeatureGroup) == DataType.STRING
+
     def test_init_engine(self) -> None:
         with (
             patch(

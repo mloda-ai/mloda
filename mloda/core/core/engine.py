@@ -367,7 +367,10 @@ class Engine:
         return feature
 
     def set_data_type(self, feature: Feature, feature_group_class: type[FeatureGroup]) -> Optional[DataType]:
-        fg_data_type = feature_group_class.return_data_type_rule(feature)
+        try:
+            fg_data_type = feature_group_class.return_data_type_rule(feature)
+        except Exception:
+            fg_data_type = None
         if feature.data_type and fg_data_type:
             if feature.data_type != fg_data_type:
                 raise ValueError(

@@ -115,7 +115,7 @@ Note: `options` and `group_options`/`context_options` are mutually exclusive.
 
 ## Worked Example: Window, Rank, and Percentile Features
 
-Row-preserving operations (window aggregation, rank, percentile) cannot be requested by a bare name: the Feature Group only matches when the request also carries the options its matcher needs. Put those options in `context_options`. The feature name encodes the operation (`{source}__{operation}`), and the matcher reads the partition/order from `context_options`.
+Row-preserving operations (window aggregation, rank, percentile) cannot be requested by a bare name: the Feature Group only matches when the request also carries the partition/order options its matcher needs. The feature name encodes the operation (`{source}__{operation}`); the matcher then requires those options to be present. It reads them via `options.get` (group first, then context), so they resolve from either side, but `context_options` is the right home.
 
 ```json
 [

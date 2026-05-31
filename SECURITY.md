@@ -37,10 +37,13 @@ Please include as much of the following as you can:
 
 ## What to Expect
 
-- **Acknowledgement** within **72 hours**.
-- An initial assessment and severity estimate within **7 days**.
-- Regular updates as we work toward a fix, and credit in the advisory once it
-  is published (unless you prefer to remain anonymous).
+mloda is an early-stage project maintained by a small team, so we can't commit
+to fixed response times yet. That said:
+
+- We aim to acknowledge reports as soon as we reasonably can.
+- We'll assess the severity and keep you updated as we work toward a fix.
+- We're happy to credit you in the advisory once it's published, unless you
+  prefer to remain anonymous.
 
 We follow coordinated disclosure: we ask that you give us a reasonable window
 to release a fix before any public disclosure. Thank you for helping keep mloda

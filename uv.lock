@@ -1515,11 +1515,8 @@ wheels = [
 
 [[package]]
 name = "mloda"
-version = "0.6.3"
+version = "0.7.0"
 source = { editable = "." }
-dependencies = [
-    { name = "pyarrow" },
-]
 
 [package.optional-dependencies]
 all = [
@@ -1568,9 +1565,18 @@ docs = [
 ]
 duckdb = [
     { name = "duckdb" },
+    { name = "pyarrow" },
 ]
 iceberg = [
+    { name = "pyarrow" },
     { name = "pyiceberg" },
+]
+nopyarrow-test = [
+    { name = "pytest" },
+    { name = "pytest-order" },
+    { name = "pytest-timeout" },
+    { name = "pytest-xdist" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
 otel = [
     { name = "opentelemetry-api" },
@@ -1586,13 +1592,20 @@ pandas = [
 polars = [
     { name = "polars" },
 ]
+pyarrow = [
+    { name = "pyarrow" },
+]
 sklearn = [
     { name = "joblib" },
     { name = "scikit-learn", version = "1.7.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scikit-learn", version = "1.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
 spark = [
+    { name = "pyarrow" },
     { name = "pyspark" },
+]
+sqlite = [
+    { name = "pyarrow" },
 ]
 test = [
     { name = "bandit" },
@@ -1636,7 +1649,9 @@ requires-dist = [
     { name = "mloda", extras = ["otel"], marker = "extra == 'all'" },
     { name = "mloda", extras = ["pandas"], marker = "extra == 'all'" },
     { name = "mloda", extras = ["polars"], marker = "extra == 'all'" },
+    { name = "mloda", extras = ["pyarrow"], marker = "extra == 'all'" },
     { name = "mloda", extras = ["sklearn"], marker = "extra == 'all'" },
+    { name = "mloda", extras = ["sqlite"], marker = "extra == 'all'" },
     { name = "mloda", extras = ["test"], marker = "extra == 'all'" },
     { name = "mloda", extras = ["text-cleaning"], marker = "extra == 'all'" },
     { name = "mypy", marker = "extra == 'test'" },
@@ -1652,24 +1667,33 @@ requires-dist = [
     { name = "pip-audit", marker = "extra == 'test'", specifier = "<2.11.0" },
     { name = "pip-licenses-cli", marker = "extra == 'test'" },
     { name = "polars", marker = "extra == 'polars'" },
-    { name = "pyarrow" },
+    { name = "pyarrow", marker = "extra == 'duckdb'" },
+    { name = "pyarrow", marker = "extra == 'iceberg'" },
+    { name = "pyarrow", marker = "extra == 'pyarrow'" },
+    { name = "pyarrow", marker = "extra == 'spark'" },
+    { name = "pyarrow", marker = "extra == 'sqlite'" },
     { name = "pyarrow", marker = "extra == 'test'" },
     { name = "pyiceberg", marker = "extra == 'iceberg'" },
     { name = "pyspark", marker = "extra == 'spark'" },
+    { name = "pytest", marker = "extra == 'nopyarrow-test'", specifier = ">=9.0.3" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=9.0.3" },
+    { name = "pytest-order", marker = "extra == 'nopyarrow-test'" },
     { name = "pytest-order", marker = "extra == 'test'" },
+    { name = "pytest-timeout", marker = "extra == 'nopyarrow-test'" },
     { name = "pytest-timeout", marker = "extra == 'test'" },
+    { name = "pytest-xdist", marker = "extra == 'nopyarrow-test'" },
     { name = "pytest-xdist", marker = "extra == 'test'" },
     { name = "ruff", marker = "extra == 'test'" },
     { name = "scikit-learn", marker = "extra == 'sklearn'", specifier = ">=1.0.0" },
     { name = "scikit-learn", marker = "extra == 'test'", specifier = ">=1.0.0" },
     { name = "testbook", marker = "extra == 'test'" },
+    { name = "tomli", marker = "python_full_version < '3.11' and extra == 'nopyarrow-test'", specifier = ">=1.0.0" },
     { name = "tomli", marker = "python_full_version < '3.11' and extra == 'test'", specifier = ">=1.0.0" },
     { name = "types-pyyaml", marker = "extra == 'test'" },
     { name = "types-requests", marker = "extra == 'test'" },
     { name = "types-toml", marker = "extra == 'test'" },
 ]
-provides-extras = ["test", "pandas", "polars", "duckdb", "iceberg", "spark", "otel", "sklearn", "text-cleaning", "docs", "all"]
+provides-extras = ["test", "pyarrow", "pandas", "polars", "duckdb", "sqlite", "iceberg", "spark", "otel", "sklearn", "text-cleaning", "nopyarrow-test", "docs", "all"]
 
 [[package]]
 name = "mmh3"

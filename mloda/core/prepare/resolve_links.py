@@ -330,6 +330,9 @@ class ResolveLinks:
                         candidates = pinned
 
                 # Fail loud on residual ASOF ambiguity.
+                # Only the multi-ASOF case raises here: a residual mix of one ASOF + one
+                # non-ASOF candidate is intentionally NOT raised, since non-ASOF ambiguity is
+                # handled by the existing downstream join-type validation (preserves prior behavior).
                 if len(candidates) > 1:
                     asof_candidates = [link for link in candidates if link.jointype == JoinType.ASOF]
                     if len(asof_candidates) > 1:

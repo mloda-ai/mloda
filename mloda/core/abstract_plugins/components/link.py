@@ -4,7 +4,7 @@ from dataclasses import FrozenInstanceError, dataclass
 from datetime import timedelta
 from enum import Enum
 from uuid import uuid4
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 
 from mloda.core.abstract_plugins.components.index.index import Index
@@ -46,7 +46,7 @@ class AsOfJoinConfig:
 
     left_time_column: str
     right_time_column: str
-    direction: str = "backward"
+    direction: Literal["backward", "forward", "nearest"] = "backward"
     tolerance: float | int | timedelta | None = None
     allow_exact_matches: bool = True
 
@@ -458,7 +458,7 @@ class Link:
         *,
         left_time_column: str,
         right_time_column: str,
-        direction: str = "backward",
+        direction: Literal["backward", "forward", "nearest"] = "backward",
         tolerance: float | int | timedelta | None = None,
         allow_exact_matches: bool = True,
         left_discriminator: Optional[dict[str, Any]] = None,
@@ -489,7 +489,7 @@ class Link:
         *,
         left_time_column: str,
         right_time_column: str,
-        direction: str = "backward",
+        direction: Literal["backward", "forward", "nearest"] = "backward",
         tolerance: float | int | timedelta | None = None,
         allow_exact_matches: bool = True,
         left_index: int = 0,

@@ -7,6 +7,7 @@ for point-in-time (as-of) merge operations across all compute frameworks.
 
 import math
 from abc import ABC, abstractmethod
+from collections import Counter
 from typing import Any, Optional
 
 from mloda.user import Index
@@ -106,9 +107,10 @@ class AsofMergeEngineTestBase(ABC):
 
         # Sort deterministically before asserting
         sort_columns = scenario["sort_columns"]
-        result_dicts.sort(key=lambda row: tuple(str(row.get(c, "")) for c in sort_columns))
+        result_dicts.sort(key=lambda row: tuple((row.get(c) is None, row.get(c)) for c in sort_columns))
 
         self._assert_row_count(result_dicts, scenario["expected_rows"])
+        self._assert_left_rows_preserved(scenario["left"], result_dicts)
         if scenario.get("exact_columns"):
             self._assert_exact_columns(result_dicts, scenario["expected_columns"])
         else:
@@ -119,6 +121,18 @@ class AsofMergeEngineTestBase(ABC):
         """Assert that result has expected number of rows."""
         actual = len(result)
         assert actual == expected, f"Expected {expected} rows, got {actual}"
+
+    def _assert_left_rows_preserved(self, left: list[dict[str, Any]], result: list[dict[str, Any]]) -> None:
+        """Assert ASOF is a LEFT join: every left row survives exactly once.
+
+        The multiset (Counter) of the left value column ``lv`` must be identical in the
+        scenario's left input and the merged output, after null normalization.
+        """
+        expected = Counter(self._normalize_value(row.get("lv")) for row in left)
+        actual = Counter(self._normalize_value(row.get("lv")) for row in result)
+        assert actual == expected, (
+            f"Left rows not preserved: lv multiset mismatch. expected {dict(expected)}, got {dict(actual)}"
+        )
 
     def _assert_columns_exist(self, result: list[dict[str, Any]], expected_columns: list[str]) -> None:
         """Assert that all expected columns exist in result."""

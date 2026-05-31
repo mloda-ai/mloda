@@ -93,7 +93,7 @@ class TestAsOfJoinConfig:
         from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 
         with pytest.raises(ValueError):
-            AsOfJoinConfig(left_time_column="t", right_time_column="t", direction="sideways")
+            AsOfJoinConfig(left_time_column="t", right_time_column="t", direction="sideways")  # type: ignore[arg-type]  # intentionally invalid to exercise the runtime guard
 
     def test_is_frozen(self) -> None:
         """AsOfJoinConfig is frozen (immutable)."""

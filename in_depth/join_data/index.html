@@ -244,6 +244,7 @@ is_a_part_of = single_column_index.is_a_part_of(multi_column_index) # Returns Tr
 <li>Left Join,</li>
 <li>Outer Join,</li>
 <li>Right Join (use sparingly; prefer left joins when possible).</li>
+<li>ASOF Join (point-in-time / as-of: equi match on the by-keys, nearest time match on the time columns).</li>
 </ul>
 <pre><code class="language-python">from enum import Enum
 
@@ -254,9 +255,38 @@ class JoinType(Enum):
     OUTER = &quot;outer&quot;
     APPEND = &quot;append&quot;
     UNION = &quot;union&quot;
+    ASOF = &quot;asof&quot;
 
 join_type = JoinType.INNER
 </code></pre>
+<p>ASOF joins are created via <code>Link.asof(...)</code> / <code>Link.asof_on(...)</code>, carrying time columns plus
+<code>direction</code>/<code>tolerance</code>/<code>allow_exact_matches</code> (pandas <code>merge_asof</code> semantics). The by-keys (the
+join <code>Index</code>) drive the equi match; the time columns drive the inequality match. ASOF is a LEFT
+join: every left row survives, with null right columns when no match is found.</p>
+<p><strong>Backend support.</strong> Implemented for <code>pandas</code>, <code>polars</code> (eager and lazy), <code>duckdb</code>, <code>python_dict</code>,
+<code>pyarrow</code>, and <code>sqlite</code>. A <code>spark</code> implementation exists but is <strong>experimental and not exercised in
+CI</strong> (requires <code>JAVA_HOME</code>); validate it yourself before relying on it. <code>iceberg</code> has no merge
+engine and does not support joins.</p>
+<p>Cross-backend caveats to be aware of:</p>
+<ul>
+<li><strong><code>direction='nearest'</code></strong> is supported on <code>pandas</code>, <code>polars</code>, <code>pyarrow</code>, and <code>python_dict</code>. The
+    SQL/Spark backends (<code>duckdb</code>, <code>sqlite</code>, <code>spark</code>) raise <code>ValueError</code> for <code>nearest</code>, as there is
+    no clean SQL form.</li>
+<li><strong><code>tolerance</code></strong> accepts <code>float | int | timedelta</code>. A <code>timedelta</code> tolerance is forwarded natively
+    by <code>pandas</code>/<code>polars</code>/<code>pyarrow</code>, but the SQL/Spark backends (<code>duckdb</code>, <code>sqlite</code>, <code>spark</code>) cannot
+    derive a numeric tolerance from a <code>timedelta</code> without knowing the time column's storage and will
+    raise <code>ValueError</code>; provide a numeric tolerance (e.g. epoch seconds matching the time column).
+    This is enforced inside the merge engine at run time, not at <code>Link.asof(...)</code> construction.</li>
+<li><strong>Overlapping non-key columns.</strong> If the left and right frames share a column name other than the
+    by-keys/time columns, <code>pandas</code>/<code>pyarrow</code> keep both with <code>_x</code>/<code>_y</code> suffixes, whereas the
+    SQL/<code>polars</code>/<code>python_dict</code> backends keep the left column and drop the right one. Rename
+    conflicting columns upstream if you need both.</li>
+<li><strong>Ties.</strong> When two right rows share the identical boundary timestamp within a by-key, the chosen
+    row is backend-defined (each engine applies its own internal tie rule). <code>python_dict</code>,
+    <code>sqlite</code>, and <code>spark</code> resolve ties deterministically (smallest surviving right column values
+    win); the other backends follow their native <code>merge_asof</code>/<code>ASOF JOIN</code> behavior. Do not rely on
+    a specific tied row being selected across backends.</li>
+</ul>
 <h4 id="link">Link</h4>
 <p>A Link specifies the relationship of:</p>
 <ul>

@@ -1,0 +1,204 @@
+{
+  "version": "1",
+  "metadata": {
+    "marimo_version": "0.23.8",
+    "script_metadata_hash": null
+  },
+  "cells": [
+    {
+      "id": "Hbol",
+      "code_hash": "1d0db38904205bec4d6f6f6a1f6cec3e",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "MJUe",
+      "code_hash": "99726dc59db1a1880a574ebd31104eda",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "# Data, Feature, FeatureSets and FeatureGroups in mloda"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "vblA",
+      "code_hash": "38be452a395b0249aa8327fe485241f1",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "mloda focuses on the processes around data. This means we need to abstract different parts of what is usually summed up in the term \"data\" into distinct objects.\n\nThese key objects are:\n\n- Data\n- Feature\n- FeatureGroup\n- FeatureSet\n\nThis notebook will explain the relations shown in the graph below."
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "bkHC",
+      "code_hash": "a162ec9d3fe9d223d3c57b3436b0c1a9",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "lEQa",
+      "code_hash": "72947d871d92f87f604508a1f07d5c07",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "## Data\n\nIn mloda, data is considered an object that describes how to access the data. It could be:\n\n- a dataframe (pandas or polars)\n- an unstructured object (json)\n- a URL\n- an object containing a lazy evaluated function\n\nAs a hard requirement, there must be a way to relate data to a feature. Often, this is done using a name-based approach, other methods could be used as well."
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "PKri",
+      "code_hash": "405dafdbdf812563995439e1411d0da3",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "## Feature\n\nA feature is an object that configures the procedural representation of data, but not the process nor data itself. A feature typically includes configuration options:\n\n- Name\n- Options (Configurations)\n- Domains\n- Compute Framework\n- Data Type\n\n### How do we relate Data and Feature?\n\nWe cannot do this directly. We need to relate the Feature with a FeatureGroup first.\n\n## Feature Group\n\nA FeatureGroup group describe Features, which share data processes and share how the configuration of Features are applied to the data. A FeatureGroup also contains configurations created be the Provider if needed e.g. if a FeatureGroup is only valid for a specific technology."
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Xref",
+      "code_hash": "18a961b5c54862926964f7f378b36ecc",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "### Why do we relate a Feature to a FeatureGroup\n\nWe need to match the Feature with a FeatureGroup, as the FeatureGroup \"knows\" how to use the access description of the data. Additionally, the FeatureGroup \"knows\" which other required input Features the Feature needs. mloda will add these required input Features to be resolved as well.\n\n```python\n# This could be:\ndef input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:\n    return {OrderAmount, Datetime, ID}\n```"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "SFPL",
+      "code_hash": "52f3b1a2ca253a8223d9fb0374fffee0",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "### How do we relate a Feature to a FeatureGroup\n\nTo match a Feature with a FeatureGroup, we use the IdentifyFeatureGroupClass functionality of the Engine, which checks the following properties of the FeatureGroup Plugins:\n\n- Is _filter_feature_group_by_criteria matching?\n- Is domain matching?\n- Is compute framework matching?\n- Are links matching?\n- When multiple feature groups match: Are these just feature groups which have inheritance? If so, use the child.\n\nAs a result, there should be only one feature group that is possible to use."
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "BYtC",
+      "code_hash": "41d02547557d8139675caf183023c367",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "### Let us look a bit more into: _filter_feature_group_by_criteria\n\n```python\n@classmethod\ndef match_feature_group_criteria(\n    feature_name: Union[FeatureName, str],\n    options: Options,\n    data_access_collection: Optional[DataAccessCollection] = None\n    )\n    ...\n```\n\nEvery feature group must implement this function. However, most will inherit the default behaviour from the FeatureGroup base class.\n\nThe default behaviour covers mostly name based approaches to identify a feature (equal or prefix of a feature name).\nBut this can be also a call to a webservice, which knows which data supports or could be any other algorithmic solution.\n\nAs example could be this sqlite database, where we check the table for metainformation.\n\n```python\n@classmethod\ndef check_feature_in_data_access(cls, feature_name: str, data_access: Any) -> bool:\n    # get tables in the database\n    result, _ = cls.read_db(data_access, query=\"SELECT name FROM sqlite_master WHERE type='table';\")\n    table_names = [table[0] for table in result]\n\n    # check if the feature_name is in the tables\n    for table in table_names:\n        result, _ = cls.read_db(data_access, query=f\"PRAGMA table_info({table});\")\n        column_names = [column[1] for column in result]\n        if feature_name in column_names:\n            cls.set_table_name(data_access, table)\n            return True\n    return False\n```\n\nThis means, you are open to customize this logic to match a Feature to a FeatureGroup. But please, do not query the database for every single feature to feature group match lookup. :)"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "RGSE",
+      "code_hash": "bc106c81403ba655c598ec56fdf40bb6",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "## What if we have multiple Features sharing the same FeatureGroup?\n\nTo group features under the same FeatureGroup, we use the FeatureSet object.\n\nFor features to share a FeatureSet, they must also have the same configuration and compute_framework.\nIf the configurations differ, mloda will automatically create separate FeatureSets.\n\n```python\ndef similarity_hash(self) -> int:\n    compute_frameworks_hashable = (\n        frozenset(self.compute_frameworks) if self.compute_frameworks is not None else None\n    )\n    return hash((self.options, compute_frameworks_hashable))\n```\n\nExamples:\n\n - Testing migrations: Feature(A, Polars), Feature(B, Pandas)\n - Sliding time windows: Feature(A, 10 days), Feature(B, 20 days)\n\nThis means inbetween Data to Feature, we have another abstraction, the FeatureSet."
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Kclp",
+      "code_hash": "6b60472e886152697670978f6183800f",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "## FeatureSet\n\nA FeatureSet is a collection of Features, which share the same configuration and the same FeatureGroup. This FeatureSet is used by the FeatureGroup to apply the operations on the data to receive the requested Feature.\n\nThey are created by mloda. One can access its properties during the calculate_feature function, but are not created by any user.\n\n```python\n@classmethod\ndef calculate_feature(cls, data: Any, features: FeatureSet) -> Any:\n    ...\n```\n\nIn that sense, the FeatureSet has informations of\n\n- the Features itself\n- filters\n- names\n- artifacts\n- and has some convenience functionalities for easier access for the user."
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "emfo",
+      "code_hash": "8d6ba51d88b8f7c5ed0fa4123042d0ab",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "## Conclusion\n\nIn this notebook, we explored the key concepts and components in mloda related to data, features, feature sets, and feature groups. We discussed how data is accessed and represented, the definition and role of features, and how features are grouped and managed within feature sets and feature groups. Understanding these components is crucial for building robust and reusable machine learning pipelines. By abstracting and organizing data and features in this manner, mloda ensures consistency, flexibility, and scalability in machine learning workflows."
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Hstk",
+      "code_hash": "a162ec9d3fe9d223d3c57b3436b0c1a9",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "nWHF",
+      "code_hash": "ecd17970e8b587833770f0bc2c88e715",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "In short: we abstracted away processes from data."
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "iLit",
+      "code_hash": "b7e1ad76b08128f4cd533c9aaf29d26e",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    }
+  ]
+}

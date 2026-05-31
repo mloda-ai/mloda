@@ -1,0 +1,174 @@
+{
+  "version": "1",
+  "metadata": {
+    "marimo_version": "0.23.8",
+    "script_metadata_hash": null
+  },
+  "cells": [
+    {
+      "id": "Hbol",
+      "code_hash": "1d0db38904205bec4d6f6f6a1f6cec3e",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "MJUe",
+      "code_hash": "b34734e6cde59fe332ab77998d19de98",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "# mloda + scikit-learn Integration: Basic Example\n\nThis notebook demonstrates how mloda enhances scikit-learn workflows by providing reusable, manageable feature transformations.\n\n## Quick Comparison: Traditional sklearn vs mloda"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "vblA",
+      "code_hash": "4bfbc4ed388eaaa7f921d90e1987988e",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "## Setup: Create Sample Data"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "bkHC",
+      "code_hash": "18da7d1ec8f74ee76d0c5e50faf7df14",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stdout",
+          "text": "Sample data with missing values:\n    age     weight state gender\n0  56.0  90.585667    NY      F\n1  69.0  59.833209    NY      M\n2  46.0  87.302978    FL      F\n3  32.0  64.374841    FL      M\n4  60.0  59.587811    FL      M\n\nData shape: (1000, 4)\nMissing values: age=50, weight=50\n",
+          "mimetype": "text/plain"
+        }
+      ]
+    },
+    {
+      "id": "lEQa",
+      "code_hash": "0ff4ceb3824d193de6591bba2a35d5a5",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "## Traditional scikit-learn Pipeline"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "PKri",
+      "code_hash": "d3e0baf66eb1d151d8e80911f161b209",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stdout",
+          "text": "\u2705 Transformed dataset with split fit/transform:\n   state_CA  state_FL  state_NY  state_TX  gender_F  gender_M       age  \\\n0       0.0       0.0       1.0       0.0       1.0       0.0  0.351358   \n1       0.0       0.0       1.0       0.0       0.0       1.0  1.086080   \n\n     weight  \n0  1.287800  \n1 -0.705904  \nTraditional pipeline result shape: (1000, 8)\nResult: 8 columns total\n",
+          "mimetype": "text/plain"
+        }
+      ]
+    },
+    {
+      "id": "Xref",
+      "code_hash": "09b09228dac61e3bd994cdc5d49cb57c",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "## mloda Approach"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "SFPL",
+      "code_hash": "67eb827d733040054a73b04ba6d717d6",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stdout",
+          "text": "\u2705 Transformed dataset with split fit/transform:\n   state__onehot_encoded~2  state__onehot_encoded~1  gender__onehot_encoded~0  \\\n0                      1.0                      0.0                       1.0   \n1                      1.0                      0.0                       0.0   \n\n   state__onehot_encoded~0  state__onehot_encoded~3  gender__onehot_encoded~1  \n0                      0.0                      0.0                       0.0  \n1                      0.0                      0.0                       1.0  \n   age__mean_imputed__standard_scaled  weight__mean_imputed__standard_scaled\n0                            0.339295                               1.243621\n1                            1.057320                              -0.677472\nResult: ['state__onehot_encoded~2', 'state__onehot_encoded~1', 'gender__onehot_encoded~0', 'state__onehot_encoded~0', 'state__onehot_encoded~3', 'gender__onehot_encoded~1'] \n [FeatureName('age__mean_imputed__standard_scaled'), FeatureName('weight__mean_imputed__standard_scaled')] columns total\n",
+          "mimetype": "text/plain"
+        }
+      ]
+    },
+    {
+      "id": "BYtC",
+      "code_hash": "12f8582d6530065294eef5723099fe58",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stdout",
+          "text": "   state__onehot_encoded~0\n0                      0.0\n1                      0.0    weight__mean_imputed__robust_scaled\n0                             0.938858\n1                            -0.535025    age__mean_imputed__standard_scaled__max_aggr\n0                                      1.609647\n1                                      1.609647\n",
+          "mimetype": "text/plain"
+        }
+      ]
+    },
+    {
+      "id": "RGSE",
+      "code_hash": "4612bb663483c4cc7f0b26d2b1f27a0d",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stdout",
+          "text": "I, SecondSklearnDataCreator AM NOW USED.\n   state__onehot_encoded~0\n0                      1.0\n1                      1.0    weight__mean_imputed__robust_scaled\n0                             0.677809\n1                            -0.293511    age__mean_imputed__standard_scaled__max_aggr\n0                                      1.631997\n1                                      1.631997\n",
+          "mimetype": "text/plain"
+        }
+      ]
+    }
+  ]
+}

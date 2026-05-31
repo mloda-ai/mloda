@@ -139,6 +139,8 @@
     </li>
         </ul>
     </li>
+    <li class="toctree-l3"><a class="reference internal" href="#worked-example-window-rank-and-percentile-features">Worked Example: Window, Rank, and Percentile Features</a>
+    </li>
     <li class="toctree-l3"><a class="reference internal" href="#feature-chaining-with-in_features">Feature Chaining with in_features</a>
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#multi-column-features">Multi-Column Features</a>
@@ -345,6 +347,55 @@ result = mloda.run_all(features, compute_frameworks=[&quot;PandasDataFrame&quot;
 ]
 </code></pre>
 <p>Note: <code>options</code> and <code>group_options</code>/<code>context_options</code> are mutually exclusive.</p>
+<h2 id="worked-example-window-rank-and-percentile-features">Worked Example: Window, Rank, and Percentile Features</h2>
+<p>Row-preserving operations (window aggregation, rank, percentile) cannot be requested by a bare name: the Feature Group only matches when the request also carries the partition/order options its matcher needs. The feature name encodes the operation (<code>{source}__{operation}</code>); the matcher then requires those options to be present. It reads them via <code>options.get</code> (group first, then context), so they resolve from either side, but <code>context_options</code> is the right home.</p>
+<pre><code class="language-json">[
+    {
+        &quot;name&quot;: &quot;steps__sum_window&quot;,
+        &quot;context_options&quot;: {&quot;partition_by&quot;: [&quot;subject_id&quot;]}
+    },
+    {
+        &quot;name&quot;: &quot;price__last_window&quot;,
+        &quot;context_options&quot;: {&quot;partition_by&quot;: [&quot;region&quot;], &quot;order_by&quot;: &quot;timestamp&quot;}
+    },
+    {
+        &quot;name&quot;: &quot;sales__row_number_ranked&quot;,
+        &quot;context_options&quot;: {&quot;partition_by&quot;: [&quot;region&quot;], &quot;order_by&quot;: &quot;sales&quot;}
+    },
+    {
+        &quot;name&quot;: &quot;sales__p95_percentile&quot;,
+        &quot;context_options&quot;: {&quot;partition_by&quot;: [&quot;region&quot;]}
+    }
+]
+</code></pre>
+<p>Key names per operation (from the registry <code>data_operations</code> packages):</p>
+<table>
+<thead>
+<tr>
+<th>Operation</th>
+<th>Name pattern</th>
+<th>Required <code>context_options</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Window aggregation</td>
+<td><code>{source}__{agg}_window</code> (<code>sum</code>, <code>avg</code>, <code>first</code>, <code>last</code>, ...)</td>
+<td><code>partition_by</code> (list); <code>order_by</code> (string) is required for order-dependent aggregations like <code>first</code>/<code>last</code></td>
+</tr>
+<tr>
+<td>Rank</td>
+<td><code>{source}__{rank_type}_ranked</code> (<code>row_number</code>, <code>dense_rank</code>, <code>ntile_N</code>, ...)</td>
+<td><code>partition_by</code> (list), <code>order_by</code> (string)</td>
+</tr>
+<tr>
+<td>Percentile</td>
+<td><code>{source}__p{N}_percentile</code> (e.g. <code>p50</code>, <code>p95</code>)</td>
+<td><code>partition_by</code> (list)</td>
+</tr>
+</tbody>
+</table>
+<p>Use <code>context_options</code> (not <code>group_options</code>) for these: the partition/order are operation parameters, not identity that should split the Feature Group.</p>
 <h2 id="feature-chaining-with-in_features">Feature Chaining with in_features</h2>
 <p>Define dependent features using <code>in_features</code>:</p>
 <pre><code class="language-json">[

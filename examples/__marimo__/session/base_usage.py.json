@@ -1,0 +1,212 @@
+{
+  "version": "1",
+  "metadata": {
+    "marimo_version": "0.23.8",
+    "script_metadata_hash": null
+  },
+  "cells": [
+    {
+      "id": "Hbol",
+      "code_hash": "1d0db38904205bec4d6f6f6a1f6cec3e",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "MJUe",
+      "code_hash": "5f0658c563381305754719107bc9b9a5",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "# mloda demo: How can we make feature engineering shareable?"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "vblA",
+      "code_hash": "4693aee1e1bdb5cd75046f31d9ef2852",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "### Define dummy data as plugin"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "bkHC",
+      "code_hash": "35691756c0042b487d0c346f7bc5c9d1",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "lEQa",
+      "code_hash": "777df7ff6325f5ba5c8a3a1a77fe8bc2",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "### Request mlodaAPI to create features"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "PKri",
+      "code_hash": "fcf7b77dc1970ce3cd000df37ea4ddf7",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stdout",
+          "text": "[pyarrow.Table\nage: int64\nstate: string\nweight: double\ngender: string\n----\nage: [[31,57,38,67,47,...,41,58,73,74,25]]\nstate: [[\"FL\",\"CA\",\"NY\",\"TX\",\"TX\",...,\"CA\",\"CA\",\"NY\",\"NY\",\"FL\"]]\nweight: [[53.07717743546068,47.84488437429319,68.9278583048704,97.40943188374412,80.39857279514968,...,75.42237139226059,62.266587953254444,64.40075366428398,75.37274314011698,98.47289476170835]]\ngender: [[\"M\",\"F\",\"M\",\"F\",\"F\",...,\"M\",\"F\",\"M\",\"F\",\"F\"]]]\n",
+          "mimetype": "text/plain"
+        }
+      ]
+    },
+    {
+      "id": "Xref",
+      "code_hash": "380eea2f820e3801fdb268772847970a",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "### Alternative options to consume data\n\n- Apidata\n- Files\n- DBs\n- Streams\n- ...\n\nThis is not the heart of mloda."
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "SFPL",
+      "code_hash": "35e066f15fd5443e8c484725ab385b64",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "### Chain features - automatic dependency resolution"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "BYtC",
+      "code_hash": "4bf0c8f59d9a90d1d9323e7a3f5b3946",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stdout",
+          "text": "[shape: (100, 1)\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502 age__sum_aggr \u2502\n\u2502 ---           \u2502\n\u2502 i64           \u2502\n\u255e\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2561\n\u2502 4763          \u2502\n\u2502 4763          \u2502\n\u2502 4763          \u2502\n\u2502 4763          \u2502\n\u2502 4763          \u2502\n\u2502 \u2026             \u2502\n\u2502 4763          \u2502\n\u2502 4763          \u2502\n\u2502 4763          \u2502\n\u2502 4763          \u2502\n\u2502 4763          \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518]\n",
+          "mimetype": "text/plain"
+        }
+      ]
+    },
+    {
+      "id": "RGSE",
+      "code_hash": "d42555e717f9678e6716e868f619f2df",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "As long as the plugins exists, we can run any datatransformation.\n\n### What is behind the \"age__sum_aggr\" syntax?"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Kclp",
+      "code_hash": "e6179df7f51ae4e2e5ff87f33276a0af",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stdout",
+          "text": "[shape: (5, 1)\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502 CustomConfiguration \u2502\n\u2502 ---                 \u2502\n\u2502 i64                 \u2502\n\u255e\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2561\n\u2502 266                 \u2502\n\u2502 266                 \u2502\n\u2502 266                 \u2502\n\u2502 266                 \u2502\n\u2502 266                 \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518]\n",
+          "mimetype": "text/plain"
+        }
+      ]
+    },
+    {
+      "id": "emfo",
+      "code_hash": "20f7f74da57454e3b9024ba17828b877",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "### How the chaining essentially works\n\n```python\nclass FeatureGroup(ABC):\n\n    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:\n\n        # In principle, the resolver checks if the feature group depends on another input feature\n        # -> then adds it to the chain of features which need to be resolved\n        if feature_name contains \"input_feature__sum_aggr\":\n            return input_feature\n\n    # How does mloda knows a feature matches a feature group?\n    # Customizable, but some good guesses\n    @classmethod\n    def match_feature_group_criteria(\n        cls,\n        feature_name: Union[FeatureName, str],\n        options: Options,\n        data_access_collection: Optional[DataAccessCollection] = None,\n    ) -> bool:\n```\n\n### Now we have chaining and matching. Why do we do this?"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Hstk",
+      "code_hash": "7936cc8354deaa3a7463999ea46ab597",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "```python\nclass FeatureGroup(ABC):\n\n    @classmethod\n    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:\n        \\\"\\\"\\\"\n        This function should be used to calculate the feature.\n        \\\"\\\"\\\"\n\n        # data is the incoming data from other feature dependencies or data via mloda\n\n        # features is the configuration\n```\n\n### Business knowledge is in the data and in the configuration, but not in the plugin definition."
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "nWHF",
+      "code_hash": "05dc21c0119c2b511e3d8af3d1e04238",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "## Big idea\n\n**Separate business logic from transformation logic:**\n\n- Plugins = generic transformations (shareable across companies)\n- Data + Config = your business knowledge (stays private)\n\n\u2192 Stop rewriting \"sum of a column\" at every company\n\n\u2192 Build a shared ecosystem of feature engineering plugins"
+          }
+        }
+      ],
+      "console": []
+    }
+  ]
+}

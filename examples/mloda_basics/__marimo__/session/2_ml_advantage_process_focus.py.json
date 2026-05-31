@@ -1,0 +1,113 @@
+{
+  "version": "1",
+  "metadata": {
+    "marimo_version": "0.23.8",
+    "script_metadata_hash": null
+  },
+  "cells": [
+    {
+      "id": "Hbol",
+      "code_hash": "1d0db38904205bec4d6f6f6a1f6cec3e",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "MJUe",
+      "code_hash": "931c28cd01844037589c74acd3e91a14",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "# What makes mloda unique?"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "vblA",
+      "code_hash": "c91251e22b844609a777d51a2f0f51f3",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "At first glance, data systems may appear straightforward: input data goes in and output data goes out.\n\nThe inherent complexity, however, lies in the details:\n\n- ensuring data reusability\n- supporting a wide range of technologies across software and ML lifecycles\n- addressing the needs of different user groups\n\nmloda redefines traditional data management by shifting focus from the data itself to the dynamic processes surrounding it."
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "bkHC",
+      "code_hash": "c41d0420637eabfbff1298dbae23d5ae",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "## Data should be reuseable\n\nIn most organizations, data pipelines are often built with a single-purpose focus. This tight coupling of data and data transformation within the same process limits reusability. For example:\n\n```SQL\nselect lower(data) from table into other_table;\n```\n\nIn this scenario, embedding data specifics into the process prevents sharing or adapting it for other tasks, leading to repeated rewrites and wasted effort.\n\nmloda addresses this issue by decoupling data and process definitions - the features. Instead of combining them in a single process, data and the features are treated as separate entities that come together only during calculation time. The following code snippet of mloda brings together data and features:\n\n```python\ndef calculate_feature(cls, data: Any, features: FeatureSet) -> Any:\n    ...\n```\n\nIn this model:\n\n- Data remains independent and can be sourced from various locations\n- Features represent the process definitions (transformations) applied to the data\n\nBenefits of Decoupling Data and Features:\n\n- Process Flexibility: Switching between different processing modes is made simple and intuitive, such as batch and stream processing could be done using the same features\n- Artifact and Validation Reusability: Input and output feature artifacts, along with their validations, can be repurposed across projects or teams\n- Production-Ready Functionality: Centralized features such as global logging, monitoring of data usage, and lineage tracking can be consistently applied across all pipelines\n\nThis modular approach not only reduces redundancy but also creates a robust framework for scaling data transformations efficiently across diverse use cases."
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "lEQa",
+      "code_hash": "cb7c0507a2e7cb0395c046d7bb0dd719",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "## Accommodating different technologies across software and ML lifecycles"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "PKri",
+      "code_hash": "e0bbe28c01f0a03b1e7706ff6d1f091f",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "In current systems, data processes are tightly coupled with the technologies used at specific lifecycle stages\u2014ETL systems for batch pipelines, streaming platforms for real-time applications, and ML frameworks for training. This rigid coupling makes it challenging to adapt to changing technologies or switch between processing modes.\n\nMetadata management further complicates the situation, it is kept fragmented across separate tools:\n\n| **Tool/Feature**                | **Purpose**                              |\n|----------------------------------|------------------------------------------|\n| **Feature Stores**               | Managing ML features                     |\n| **Data Catalogs**                | Organizing base data                     |\n| **Pipeline Orchestration Tools** | Managing workflows                       |\n| **Monitoring Systems**           | Tracking data quality and performance    |\n\nThis siloed approach leads to redundancy, inefficiencies, and considerable complexity when maintaining metadata and integrating tools.\nmloda tackles these issues by decoupling data and processes, where processes are inherently reusable and adaptable, thereby reducing redundancy and ensuring lifecycle consistency.\n\nAs shown in the previous notebook, each Feature can be calculated using its own technology!"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Xref",
+      "code_hash": "202725b5b90f7cecd5648dddebab393d",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "## Addressing the Needs of Diverse User Groups with mloda"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "SFPL",
+      "code_hash": "19d0c90eef789c54dcb5ae774c12ba8f",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "Traditional data systems are fragmented and often inefficient. mloda tackles these challenges for providers, users, and stewards:\n\n| User            | Problem                          | mloda Framework                               |\n|------------------|----------------------------------|-----------------------------------------------|\n| **Providers** | Limited freedom in tools      | Decouples processes, allowing tool flexibility. |\n|                  | Cumbersome APIs                 | Simplifies with standardized, user-friendly APIs. |\n|                  | Knowledge gaps for meta data    | Adds metadata tracking through whole lifecycle  |\n| **Data Users**   | Fragmented access               | Unified mloda simplifies navigation.             |\n|                  | Reusability gaps                | Central repository enables easy reuse.        |\n|                  | Customization constraints       | Offers configurable workflows and templates.  |\n| **Stewards**  | Siloed governance               | Centralizes governance for consistency.       |\n|                  | Ambiguous accountability        | Tracks ownership for transparency.            |\n|                  | Compliance risks                | Standardizes processes for compliance.        |\n\nmloda is designed to prioritize seamless interfaces between these roles, unifying workflows and aiming at simplified collaboration. Our current development efforts are focused on enhancing the experiences for providers and data users, with improvements for stewards actively underway."
+          }
+        }
+      ],
+      "console": []
+    }
+  ]
+}

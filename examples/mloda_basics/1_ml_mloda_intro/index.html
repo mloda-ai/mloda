@@ -907,7 +907,35 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </style>
 <!-- End of mermaid configuration --><div class="jupyter-wrapper">
 <div class="jp-Notebook" data-jp-theme-light="true" data-jp-theme-name="JupyterLab Light">
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=Hbol">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="CodeMirror cm-s-jupyter">
+<div class="zeroclipboard-container">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-1">
+<div>
+<span class="notice" hidden="">Copied!</span>
+<svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
+<path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+<path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+</svg>
+</div>
+</clipboard-copy>
+</div>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">marimo</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">mo</span>
+</pre></div>
+<div class="clipboard-copy-txt" id="cell-1">import marimo as mo</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=MJUe">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -918,7 +946,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=vblA">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -936,15 +964,15 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </div>
 </div>
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=bkHC">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [1]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
-<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-1">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-2">
 <div>
 <span class="notice" hidden="">Copied!</span>
 <svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
@@ -959,17 +987,15 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 
 <span class="n">plugin_loader</span> <span class="o">=</span> <span class="n">PluginLoader</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
 
-
 <span class="c1"># Since there are potentially many plugins loaded, we'll focus on specific categories for clarity.</span>
 <span class="c1"># Here, we demonstrate by listing the available 'read' and 'sql' plugins.</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">plugin_loader</span><span class="o">.</span><span class="n">list_loaded_modules</span><span class="p">(</span><span class="s2">"read"</span><span class="p">))</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">plugin_loader</span><span class="o">.</span><span class="n">list_loaded_modules</span><span class="p">(</span><span class="s2">"sql"</span><span class="p">))</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-1"># Load all available plugins into the python environment
+<div class="clipboard-copy-txt" id="cell-2"># Load all available plugins into the python environment
 from mloda.user import PluginLoader
 
 plugin_loader = PluginLoader.all()
-
 
 # Since there are potentially many plugins loaded, we'll focus on specific categories for clarity.
 # Here, we demonstrate by listing the available 'read' and 'sql' plugins.
@@ -995,15 +1021,15 @@ print(plugin_loader.list_loaded_modules("sql"))</div>
 </div>
 </div>
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=lEQa">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [2]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
-<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-2">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-3">
 <div>
 <span class="notice" hidden="">Copied!</span>
 <svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
@@ -1022,7 +1048,7 @@ print(plugin_loader.list_loaded_modules("sql"))</div>
 
 <span class="c1"># create_synthetic_data.create_ml_lifecylce_data()</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-2"># Optional!
+<div class="clipboard-copy-txt" id="cell-3"># Optional!
 # We use synthetic dummy data to demonstrate the basic usage.
 # You can run this cell in your own jupyter notebook.
 # They are however not relevant for further understanding.
@@ -1036,7 +1062,7 @@ print(plugin_loader.list_loaded_modules("sql"))</div>
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=PKri">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -1046,7 +1072,7 @@ print(plugin_loader.list_loaded_modules("sql"))</div>
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=Xref">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -1058,15 +1084,15 @@ print(plugin_loader.list_loaded_modules("sql"))</div>
 </div>
 </div>
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=SFPL">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [3]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
-<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-3">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-4">
 <div>
 <span class="notice" hidden="">Copied!</span>
 <svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
@@ -1087,7 +1113,7 @@ print(plugin_loader.list_loaded_modules("sql"))</div>
 
 <span class="n">categorical_features</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Feature</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"user_age_group"</span><span class="p">,</span> <span class="s2">"product_category"</span><span class="p">,</span> <span class="s2">"transaction_type"</span><span class="p">]</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-3"># Step 1: We want to load typical order information like order_id, product_id, quantity, and item_price.
+<div class="clipboard-copy-txt" id="cell-4"># Step 1: We want to load typical order information like order_id, product_id, quantity, and item_price.
 from mloda.user import Feature
 
 order_features: list[str | Feature] = ["order_id", "product_id", "quantity", "item_price"]
@@ -1103,15 +1129,15 @@ categorical_features: list[str | Feature] = ["user_age_group", "product_category
 </div>
 </div>
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=BYtC">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [4]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
-<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-4">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-5">
 <div>
 <span class="notice" hidden="">Copied!</span>
 <svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
@@ -1141,7 +1167,7 @@ categorical_features: list[str | Feature] = ["user_age_group", "product_category
 <span class="c1"># As a db cannot work with a folder, we need to add a connection for the db.</span>
 <span class="n">data_access_collection</span><span class="o">.</span><span class="n">add_credentials</span><span class="p">({</span><span class="n">SQLITEReader</span><span class="o">.</span><span class="n">db_path</span><span class="p">():</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">base_data_path</span><span class="p">,</span> <span class="s2">"example.sqlite"</span><span class="p">)})</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-4"># Step 2: We specify the data sources to load
+<div class="clipboard-copy-txt" id="cell-5"># Step 2: We specify the data sources to load
 import os
 from mloda.user import DataAccessCollection
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
@@ -1166,15 +1192,15 @@ data_access_collection.add_credentials({SQLITEReader.db_path(): os.path.join(bas
 </div>
 </div>
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=RGSE">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [5]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
-<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-5">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-6">
 <div>
 <span class="notice" hidden="">Copied!</span>
 <svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
@@ -1188,29 +1214,27 @@ data_access_collection.add_credentials({SQLITEReader.db_path(): os.path.join(bas
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user</span><span class="w"> </span><span class="kn">import</span> <span class="n">mloda</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.compute_framework.base_implementations.pyarrow.table</span><span class="w"> </span><span class="kn">import</span> <span class="n">PyArrowTable</span>
 
-
 <span class="n">all_features</span> <span class="o">=</span> <span class="n">order_features</span> <span class="o">+</span> <span class="n">payment_features</span> <span class="o">+</span> <span class="n">location_features</span> <span class="o">+</span> <span class="n">categorical_features</span>
-
-<span class="c1"># Retrieve data based on the specified feature list and access collection</span>
-<span class="n">result</span> <span class="o">=</span> <span class="n">mloda</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span><span class="n">all_features</span><span class="p">,</span> <span class="n">data_access_collection</span><span class="o">=</span><span class="n">data_access_collection</span><span class="p">,</span> <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">{</span><span class="n">PyArrowTable</span><span class="p">})</span>
-
-<span class="c1"># Display the first five entries of each result table and its type</span>
-<span class="k">for</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">result</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="p">[:</span><span class="mi">2</span><span class="p">],</span> <span class="nb">type</span><span class="p">(</span><span class="n">data</span><span class="p">))</span>
+<span class="n">_result</span> <span class="o">=</span> <span class="n">mloda</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span>
+    <span class="n">all_features</span><span class="p">,</span> <span class="n">data_access_collection</span><span class="o">=</span><span class="n">data_access_collection</span><span class="p">,</span> <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">{</span><span class="n">PyArrowTable</span><span class="p">}</span>
+<span class="p">)</span>
+<span class="k">for</span> <span class="n">_data</span> <span class="ow">in</span> <span class="n">_result</span><span class="p">:</span>
+    <span class="c1"># Retrieve data based on the specified feature list and access collection</span>
+    <span class="c1"># Display the first five entries of each result table and its type</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">_data</span><span class="p">[:</span><span class="mi">2</span><span class="p">],</span> <span class="nb">type</span><span class="p">(</span><span class="n">_data</span><span class="p">))</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-5"># Step 3: Request Data Using the Defined Access Collection and Desired Features
+<div class="clipboard-copy-txt" id="cell-6"># Step 3: Request Data Using the Defined Access Collection and Desired Features
 from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
-
 all_features = order_features + payment_features + location_features + categorical_features
-
-# Retrieve data based on the specified feature list and access collection
-result = mloda.run_all(all_features, data_access_collection=data_access_collection, compute_frameworks={PyArrowTable})
-
-# Display the first five entries of each result table and its type
-for data in result:
-    print(data[:2], type(data))</div>
+_result = mloda.run_all(
+    all_features, data_access_collection=data_access_collection, compute_frameworks={PyArrowTable}
+)
+for _data in _result:
+    # Retrieve data based on the specified feature list and access collection
+    # Display the first five entries of each result table and its type
+    print(_data[:2], type(_data))</div>
 </div>
 </div>
 </div>
@@ -1223,33 +1247,33 @@ for data in result:
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
 <pre>pyarrow.Table
-valid_datetime: timestamp[ns, tz=UTC]
-payment_type: string
-payment_id: int64
-payment_status: string
-----
-valid_datetime: [[2024-01-11 23:01:49.090909090Z,2024-01-15 09:41:49.090909090Z]]
-payment_type: [["debit card","debit card"]]
-payment_id: [[1,2]]
-payment_status: [["failed","pending"]] &lt;class 'pyarrow.lib.Table'&gt;
-pyarrow.Table
-quantity: int64
-product_id: int64
-item_price: double
-order_id: int64
-----
-quantity: [[6,2]]
-product_id: [[282,355]]
-item_price: [[74.86,154.56]]
-order_id: [[1,2]] &lt;class 'pyarrow.lib.Table'&gt;
-pyarrow.Table
 user_location: string
-merchant_location: string
 update_date: int64
+merchant_location: string
 ----
 user_location: [["East","West"]]
-merchant_location: [["North","East"]]
-update_date: [[1640995200000,1641632290909]] &lt;class 'pyarrow.lib.Table'&gt;
+update_date: [[1640995200000,1641632290909]]
+merchant_location: [["North","East"]] &lt;class 'pyarrow.lib.Table'&gt;
+pyarrow.Table
+order_id: int64
+product_id: int64
+item_price: double
+quantity: int64
+----
+order_id: [[1,2]]
+product_id: [[282,355]]
+item_price: [[74.86,154.56]]
+quantity: [[6,2]] &lt;class 'pyarrow.lib.Table'&gt;
+pyarrow.Table
+valid_datetime: timestamp[ns, tz=UTC]
+payment_status: string
+payment_type: string
+payment_id: int64
+----
+valid_datetime: [[2024-01-11 23:01:49.090909090Z,2024-01-15 09:41:49.090909090Z]]
+payment_status: [["failed","pending"]]
+payment_type: [["debit card","debit card"]]
+payment_id: [[1,2]] &lt;class 'pyarrow.lib.Table'&gt;
 pyarrow.Table
 transaction_type: string
 product_category: string
@@ -1265,15 +1289,15 @@ user_age_group: [["26-35","26-35"]] &lt;class 'pyarrow.lib.Table'&gt;
 </div>
 </div>
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=Kclp">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [6]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
-<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-6">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-7">
 <div>
 <span class="notice" hidden="">Copied!</span>
 <svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
@@ -1286,26 +1310,24 @@ user_age_group: [["26-35","26-35"]] &lt;class 'pyarrow.lib.Table'&gt;
 <div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># The data is initially loaded as a Pyarrow table. However, we can easily load it also as a PandasDataFrame.</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.compute_framework.base_implementations.pandas.dataframe</span><span class="w"> </span><span class="kn">import</span> <span class="n">PandasDataFrame</span>
 
-<span class="c1"># Request data using the Pandas compute framework</span>
-<span class="n">result</span> <span class="o">=</span> <span class="n">mloda</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span>
+<span class="n">_result</span> <span class="o">=</span> <span class="n">mloda</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span>
     <span class="n">all_features</span><span class="p">,</span> <span class="n">data_access_collection</span><span class="o">=</span><span class="n">data_access_collection</span><span class="p">,</span> <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">{</span><span class="n">PandasDataFrame</span><span class="p">}</span>
 <span class="p">)</span>
-
-<span class="c1"># Display the first five entries of each result table and its type</span>
-<span class="k">for</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">result</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="p">[:</span><span class="mi">2</span><span class="p">],</span> <span class="nb">type</span><span class="p">(</span><span class="n">data</span><span class="p">))</span>
+<span class="c1"># Request data using the Pandas compute framework</span>
+<span class="k">for</span> <span class="n">_data</span> <span class="ow">in</span> <span class="n">_result</span><span class="p">:</span>
+    <span class="c1"># Display the first five entries of each result table and its type</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">_data</span><span class="p">[:</span><span class="mi">2</span><span class="p">],</span> <span class="nb">type</span><span class="p">(</span><span class="n">_data</span><span class="p">))</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-6"># The data is initially loaded as a Pyarrow table. However, we can easily load it also as a PandasDataFrame.
+<div class="clipboard-copy-txt" id="cell-7"># The data is initially loaded as a Pyarrow table. However, we can easily load it also as a PandasDataFrame.
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
-# Request data using the Pandas compute framework
-result = mloda.run_all(
+_result = mloda.run_all(
     all_features, data_access_collection=data_access_collection, compute_frameworks={PandasDataFrame}
 )
-
-# Display the first five entries of each result table and its type
-for data in result:
-    print(data[:2], type(data))</div>
+# Request data using the Pandas compute framework
+for _data in _result:
+    # Display the first five entries of each result table and its type
+    print(_data[:2], type(_data))</div>
 </div>
 </div>
 </div>
@@ -1317,15 +1339,15 @@ for data in result:
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>   quantity  product_id  item_price  order_id
-0         6         282       74.86         1
+<pre>  user_location    update_date merchant_location
+0          East  1640995200000             North
+1          West  1641632290909              East &lt;class 'pandas.core.frame.DataFrame'&gt;
+   order_id  product_id  item_price  quantity
+0         1         282       74.86         6
 1         2         355      154.56         2 &lt;class 'pandas.core.frame.DataFrame'&gt;
-  user_location merchant_location    update_date
-0          East             North  1640995200000
-1          West              East  1641632290909 &lt;class 'pandas.core.frame.DataFrame'&gt;
-                       valid_datetime payment_type  payment_id payment_status
-0 2024-01-11 23:01:49.090909090+00:00   debit card           1         failed
-1 2024-01-15 09:41:49.090909090+00:00   debit card           2        pending &lt;class 'pandas.core.frame.DataFrame'&gt;
+                       valid_datetime payment_status payment_type  payment_id
+0 2024-01-11 23:01:49.090909090+00:00         failed   debit card           1
+1 2024-01-15 09:41:49.090909090+00:00        pending   debit card           2 &lt;class 'pandas.core.frame.DataFrame'&gt;
   transaction_type product_category user_age_group
 0           online         clothing          26-35
 1           online             home          26-35 &lt;class 'pandas.core.frame.DataFrame'&gt;
@@ -1336,15 +1358,15 @@ for data in result:
 </div>
 </div>
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=emfo">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [7]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
-<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-7">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-8">
 <div>
 <span class="notice" hidden="">Copied!</span>
 <svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
@@ -1358,26 +1380,22 @@ for data in result:
 <span class="n">order_id</span> <span class="o">=</span> <span class="n">Feature</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"order_id"</span><span class="p">,</span> <span class="n">compute_framework</span><span class="o">=</span><span class="s2">"PandasDataFrame"</span><span class="p">)</span>
 <span class="n">product_id</span> <span class="o">=</span> <span class="n">Feature</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"product_id"</span><span class="p">,</span> <span class="n">compute_framework</span><span class="o">=</span><span class="s2">"PyArrowTable"</span><span class="p">)</span>
 <span class="n">specific_framework_feature_list</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Feature</span> <span class="o">|</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">order_id</span><span class="p">,</span> <span class="n">product_id</span><span class="p">]</span>
-
+<span class="n">_result</span> <span class="o">=</span> <span class="n">mloda</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span><span class="n">specific_framework_feature_list</span><span class="p">,</span> <span class="n">data_access_collection</span><span class="o">=</span><span class="n">data_access_collection</span><span class="p">)</span>
 <span class="c1"># Request data for the defined features</span>
-<span class="n">result</span> <span class="o">=</span> <span class="n">mloda</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span><span class="n">specific_framework_feature_list</span><span class="p">,</span> <span class="n">data_access_collection</span><span class="o">=</span><span class="n">data_access_collection</span><span class="p">)</span>
-
-<span class="c1"># Display the first few rows and data types of the results</span>
-<span class="k">for</span> <span class="n">res</span> <span class="ow">in</span> <span class="n">result</span><span class="p">:</span>
+<span class="k">for</span> <span class="n">res</span> <span class="ow">in</span> <span class="n">_result</span><span class="p">:</span>
     <span class="nb">print</span><span class="p">(</span><span class="s2">"The resulting data structure differs based on the compute framework:"</span><span class="p">)</span>
+    <span class="c1"># Display the first few rows and data types of the results</span>
     <span class="nb">print</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">res</span><span class="p">[:</span><span class="mi">3</span><span class="p">],</span> <span class="nb">type</span><span class="p">(</span><span class="n">res</span><span class="p">))</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-7"># Define features with specific compute frameworks
+<div class="clipboard-copy-txt" id="cell-8"># Define features with specific compute frameworks
 order_id = Feature(name="order_id", compute_framework="PandasDataFrame")
 product_id = Feature(name="product_id", compute_framework="PyArrowTable")
 specific_framework_feature_list: list[Feature | str] = [order_id, product_id]
-
+_result = mloda.run_all(specific_framework_feature_list, data_access_collection=data_access_collection)
 # Request data for the defined features
-result = mloda.run_all(specific_framework_feature_list, data_access_collection=data_access_collection)
-
-# Display the first few rows and data types of the results
-for res in result:
+for res in _result:
     print("The resulting data structure differs based on the compute framework:")
+    # Display the first few rows and data types of the results
     print("\n", res[:3], type(res))</div>
 </div>
 </div>
@@ -1392,16 +1410,16 @@ for res in result:
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
 <pre>The resulting data structure differs based on the compute framework:
 
- pyarrow.Table
-product_id: int64
-----
-product_id: [[282,355,395]] &lt;class 'pyarrow.lib.Table'&gt;
-The resulting data structure differs based on the compute framework:
-
     order_id
 0         1
 1         2
 2         3 &lt;class 'pandas.core.frame.DataFrame'&gt;
+The resulting data structure differs based on the compute framework:
+
+ pyarrow.Table
+product_id: int64
+----
+product_id: [[282,355,395]] &lt;class 'pyarrow.lib.Table'&gt;
 </pre>
 </div>
 </div>
@@ -1409,15 +1427,15 @@ The resulting data structure differs based on the compute framework:
 </div>
 </div>
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=Hstk">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [8]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
-<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-8">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-9">
 <div>
 <span class="notice" hidden="">Copied!</span>
 <svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
@@ -1427,40 +1445,26 @@ The resulting data structure differs based on the compute framework:
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># Demonstrating mloda's Flexibility with Different Data Technologies</span>
-
-<span class="c1"># Import required modules</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Optional</span>
-
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Optional</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda.provider</span><span class="w"> </span><span class="kn">import</span> <span class="n">FeatureGroup</span><span class="p">,</span> <span class="n">FeatureSet</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user</span><span class="w"> </span><span class="kn">import</span> <span class="n">Feature</span><span class="p">,</span> <span class="n">FeatureName</span><span class="p">,</span> <span class="n">Options</span><span class="p">,</span> <span class="n">Index</span><span class="p">,</span> <span class="n">Link</span><span class="p">,</span> <span class="n">JoinSpec</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user</span><span class="w"> </span><span class="kn">import</span> <span class="n">FeatureName</span><span class="p">,</span> <span class="n">Options</span><span class="p">,</span> <span class="n">Index</span><span class="p">,</span> <span class="n">Link</span><span class="p">,</span> <span class="n">JoinSpec</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.feature_group.input_data.read_file_feature</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReadFileFeature</span>
 
-
-<span class="c1"># Define the index for the join</span>
 <span class="n">index</span> <span class="o">=</span> <span class="n">Index</span><span class="p">((</span><span class="s2">"order_id"</span><span class="p">,))</span>
 
-
-<span class="c1"># Extend ReadFileFeature to provide index columns</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">ReadFileFeatureJoin</span><span class="p">(</span><span class="n">ReadFileFeature</span><span class="p">):</span>
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">index_columns</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="n">Index</span><span class="p">]]:</span>
         <span class="k">return</span> <span class="p">[</span><span class="n">index</span><span class="p">]</span>
 
-
-<span class="c1"># Define the link between the features using JoinSpec</span>
 <span class="n">link</span> <span class="o">=</span> <span class="n">Link</span><span class="o">.</span><span class="n">inner</span><span class="p">(</span><span class="n">JoinSpec</span><span class="p">(</span><span class="n">ReadFileFeatureJoin</span><span class="p">,</span> <span class="n">index</span><span class="p">),</span> <span class="n">JoinSpec</span><span class="p">(</span><span class="n">ReadFileFeatureJoin</span><span class="p">,</span> <span class="n">index</span><span class="p">))</span>
 
-
-<span class="c1"># Create an example feature group to demonstrate joining</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">ExampleMlLifeCycleJoin</span><span class="p">(</span><span class="n">FeatureGroup</span><span class="p">):</span>
-    <span class="c1"># Define input features with different compute frameworks</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">input_features</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">options</span><span class="p">:</span> <span class="n">Options</span><span class="p">,</span> <span class="n">feature_name</span><span class="p">:</span> <span class="n">FeatureName</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">set</span><span class="p">[</span><span class="n">Feature</span><span class="p">]]:</span>
         <span class="n">quantity</span> <span class="o">=</span> <span class="n">Feature</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"quantity"</span><span class="p">,</span> <span class="n">compute_framework</span><span class="o">=</span><span class="s2">"PandasDataFrame"</span><span class="p">)</span>
         <span class="n">product_id</span> <span class="o">=</span> <span class="n">Feature</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"product_id"</span><span class="p">,</span> <span class="n">compute_framework</span><span class="o">=</span><span class="s2">"PyArrowTable"</span><span class="p">)</span>
         <span class="k">return</span> <span class="p">{</span><span class="n">product_id</span><span class="p">,</span> <span class="n">quantity</span><span class="p">}</span>
 
-    <span class="c1"># Perform calculations on the joined data</span>
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">calculate_feature</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">features</span><span class="p">:</span> <span class="n">FeatureSet</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
         <span class="nb">print</span><span class="p">(</span>
@@ -1471,55 +1475,33 @@ The resulting data structure differs based on the compute framework:
         <span class="p">)</span>
         <span class="k">return</span> <span class="p">{</span><span class="s2">"ExampleMlLifeCycleJoin"</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]}</span>
 
-
-<span class="c1"># Run the pipeline</span>
-<span class="n">result</span> <span class="o">=</span> <span class="n">mloda</span><span class="o">.</span><span class="n">run_all</span><span class="p">([</span><span class="s2">"ExampleMlLifeCycleJoin"</span><span class="p">],</span> <span class="n">data_access_collection</span><span class="o">=</span><span class="n">data_access_collection</span><span class="p">,</span> <span class="n">links</span><span class="o">=</span><span class="p">{</span><span class="n">link</span><span class="p">})</span>
-
-
-<span class="c1"># Display the final result</span>
+<span class="n">_result</span> <span class="o">=</span> <span class="n">mloda</span><span class="o">.</span><span class="n">run_all</span><span class="p">([</span><span class="s2">"ExampleMlLifeCycleJoin"</span><span class="p">],</span> <span class="n">data_access_collection</span><span class="o">=</span><span class="n">data_access_collection</span><span class="p">,</span> <span class="n">links</span><span class="o">=</span><span class="p">{</span><span class="n">link</span><span class="p">})</span>
 <span class="nb">print</span><span class="p">(</span>
     <span class="s2">"Final result: "</span><span class="p">,</span>
-    <span class="n">result</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+    <span class="n">_result</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
     <span class="s2">"</span><span class="se">\n</span><span class="s2">Note: As no specific compute framework was defined for the result, the output could be in either format."</span><span class="p">,</span>
 <span class="p">)</span>
-
-<span class="c1"># Summary: mloda's abstraction layer enables complex process pipelines that handle different data technologies.</span>
-<span class="c1"># This decouples processes from the underlying data structure, ensuring flexibility and scalability.</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-8"># Demonstrating mloda's Flexibility with Different Data Technologies
-
-# Import required modules
-from typing import Any, Optional
-
+<div class="clipboard-copy-txt" id="cell-9">from typing import Any, Optional
 from mloda.provider import FeatureGroup, FeatureSet
-from mloda.user import Feature, FeatureName, Options, Index, Link, JoinSpec
+from mloda.user import FeatureName, Options, Index, Link, JoinSpec
 from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
 
-
-# Define the index for the join
 index = Index(("order_id",))
 
-
-# Extend ReadFileFeature to provide index columns
 class ReadFileFeatureJoin(ReadFileFeature):
     @classmethod
     def index_columns(cls) -&gt; Optional[list[Index]]:
         return [index]
 
-
-# Define the link between the features using JoinSpec
 link = Link.inner(JoinSpec(ReadFileFeatureJoin, index), JoinSpec(ReadFileFeatureJoin, index))
 
-
-# Create an example feature group to demonstrate joining
 class ExampleMlLifeCycleJoin(FeatureGroup):
-    # Define input features with different compute frameworks
     def input_features(self, options: Options, feature_name: FeatureName) -&gt; Optional[set[Feature]]:
         quantity = Feature(name="quantity", compute_framework="PandasDataFrame")
         product_id = Feature(name="product_id", compute_framework="PyArrowTable")
         return {product_id, quantity}
 
-    # Perform calculations on the joined data
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:
         print(
@@ -1530,20 +1512,12 @@ class ExampleMlLifeCycleJoin(FeatureGroup):
         )
         return {"ExampleMlLifeCycleJoin": [1, 2, 3]}
 
-
-# Run the pipeline
-result = mloda.run_all(["ExampleMlLifeCycleJoin"], data_access_collection=data_access_collection, links={link})
-
-
-# Display the final result
+_result = mloda.run_all(["ExampleMlLifeCycleJoin"], data_access_collection=data_access_collection, links={link})
 print(
     "Final result: ",
-    result[0],
+    _result[0],
     "\nNote: As no specific compute framework was defined for the result, the output could be in either format.",
-)
-
-# Summary: mloda's abstraction layer enables complex process pipelines that handle different data technologies.
-# This decouples processes from the underlying data structure, ensuring flexibility and scalability.</div>
+)</div>
 </div>
 </div>
 </div>
@@ -1556,19 +1530,25 @@ print(
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
 <pre>Data from two different sources is now combined into one feature within one data technology: 
- pyarrow.Table
-product_id: int64
-order_id: int64
-quantity: int64
-----
-product_id: [[282,355,395,319,275,...,170,328,361,192,271]]
-order_id: [[1,2,3,4,5,...,96,97,98,99,100]]
-quantity: [[6,2,4,9,5,...,4,3,5,5,6]] &lt;class 'pyarrow.lib.Table'&gt; 
+     order_id  quantity  product_id
+0          1         6         282
+1          2         2         355
+2          3         4         395
+3          4         9         319
+4          5         5         275
+..       ...       ...         ...
+95        96         4         170
+96        97         3         328
+97        98         5         361
+98        99         5         192
+99       100         6         271
 
-Final result:  pyarrow.Table
-ExampleMlLifeCycleJoin: int64
-----
-ExampleMlLifeCycleJoin: [[1,2,3]] 
+[100 rows x 3 columns] &lt;class 'pandas.core.frame.DataFrame'&gt; 
+
+Final result:     ExampleMlLifeCycleJoin
+0                       1
+1                       2
+2                       3 
 Note: As no specific compute framework was defined for the result, the output could be in either format.
 </pre>
 </div>
@@ -1577,7 +1557,7 @@ Note: As no specific compute framework was defined for the result, the output co
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=nWHF">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -1596,7 +1576,7 @@ Note: As no specific compute framework was defined for the result, the output co
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=iLit">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>

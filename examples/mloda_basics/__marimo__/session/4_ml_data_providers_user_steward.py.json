@@ -1,0 +1,224 @@
+{
+  "version": "1",
+  "metadata": {
+    "marimo_version": "0.23.8",
+    "script_metadata_hash": null
+  },
+  "cells": [
+    {
+      "id": "Hbol",
+      "code_hash": "1d0db38904205bec4d6f6f6a1f6cec3e",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "MJUe",
+      "code_hash": "f7ce7311cbe55b19cc4be03c133a805f",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "# Provider, User, Steward in mloda"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "vblA",
+      "code_hash": "e13ee63c2f68e325da412d9964f15d04",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "## Roles in mloda\n\nIn this notebook, we will describe three roles which exists in the mloda framework.\n\n- Providers: Provide access to raw data, business-layer data, or aggregated data.\n  - A data scientist or analyst might create simpler datasets or analytical outputs\n  - A data engineer might design access to complex data infrastructures, such as data lakes or warehouses\n  - Shares plugins and with it access to data\n\n- Data User: Interacts with mloda by applying plugins while making requests via the mlodaAPI.\n  - A data scientist or analyst who needs data and data transformations (features)\n  - Consumes features from other parts of the organizations\n\n- Steward: Ensures lifetime value, availability and governance of data and features"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "bkHC",
+      "code_hash": "aedb76530b4c1a171d31e73eb9a1ba2e",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "## Provider\n\nLet us look closer into the role of a provider.\n\nWhat could a provider create?"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "lEQa",
+      "code_hash": "e332aba93143527009f60b1a989951d6",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "application/json": "[\"text/plain:pyarrow.Table\\npayment_type: string\\npayment_status: string\\nvalid_datetime: timestamp[ns, tz=UTC]\\npayment_id: int64\\n----\\npayment_type: [[\\\"debit card\\\",\\\"debit card\\\",\\\"store credit\\\",\\\"credit card\\\",\\\"store credit\\\",...,\\\"paypal\\\",\\\"debit card\\\",\\\"credit card\\\",\\\"store credit\\\",\\\"paypal\\\"]]\\npayment_status: [[\\\"failed\\\",\\\"pending\\\",\\\"completed\\\",\\\"pending\\\",\\\"failed\\\",...,\\\"completed\\\",\\\"pending\\\",\\\"completed\\\",\\\"failed\\\",\\\"completed\\\"]]\\nvalid_datetime: [[2024-01-11 23:01:49.090909090Z,2024-01-15 09:41:49.090909090Z,2024-01-29 19:23:38.181818181Z,2024-01-04 18:10:54.545454545Z,2024-01-06 15:16:21.818181818Z,...,2024-01-13 12:36:21.818181818Z,2024-01-10 01:56:21.818181818Z,2024-01-15 02:10:54.545454545Z,2024-01-28 20:50:54.545454545Z,2024-01-06 00:14:32.727272727Z]]\\npayment_id: [[1,2,3,4,5,...,96,97,98,99,100]]\", \"text/plain:pyarrow.Table\\nmerchant_location: string\\nuser_location: string\\nupdate_date: int64\\n----\\nmerchant_location: [[\\\"North\\\",\\\"East\\\",\\\"East\\\",\\\"East\\\",\\\"North\\\",...,\\\"North\\\",\\\"South\\\",\\\"East\\\",\\\"South\\\",\\\"North\\\"]]\\nuser_location: [[\\\"East\\\",\\\"West\\\",\\\"North\\\",\\\"West\\\",\\\"West\\\",...,\\\"West\\\",\\\"North\\\",\\\"North\\\",\\\"North\\\",\\\"East\\\"]]\\nupdate_date: [[1640995200000,1641632290909,1642269381818,1642906472727,1643543563636,...,1701518836363,1702155927272,1702793018181,1703430109090,1704067200000]]\", \"text/plain:pyarrow.Table\\nitem_price: double\\norder_id: int64\\nproduct_id: int64\\nquantity: int64\\n----\\nitem_price: [[74.86,154.56,67.7,186.21,118.69,...,80.51,98.91,162.98,194.98,107.73]]\\norder_id: [[1,2,3,4,5,...,96,97,98,99,100]]\\nproduct_id: [[282,355,395,319,275,...,170,328,361,192,271]]\\nquantity: [[6,2,4,9,5,...,4,3,5,5,6]]\", \"text/plain:pyarrow.Table\\nproduct_category: string\\ntransaction_type: string\\nuser_age_group: string\\n----\\nproduct_category: [[\\\"clothing\\\",\\\"home\\\",\\\"clothing\\\",\\\"clothing\\\",\\\"clothing\\\",...,\\\"clothing\\\",\\\"home\\\",\\\"books\\\",\\\"beauty\\\",\\\"clothing\\\"]]\\ntransaction_type: [[\\\"online\\\",\\\"online\\\",\\\"telephone\\\",\\\"telephone\\\",\\\"mail-order\\\",...,\\\"mail-order\\\",\\\"in-store\\\",\\\"telephone\\\",\\\"mail-order\\\",\\\"mail-order\\\"]]\\nuser_age_group: [[\\\"26-35\\\",\\\"26-35\\\",\\\"36-45\\\",\\\"55+\\\",\\\"26-35\\\",...,\\\"26-35\\\",\\\"46-55\\\",\\\"36-45\\\",\\\"26-35\\\",\\\"36-45\\\"]]\"]"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "PKri",
+      "code_hash": "8ab057dbb2ad69c6f10462ff0205b92a",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "### FeatureGroup mloda (plugin) in short\n\nIn mloda, a provider defines access by creating feature groups. Here's an example implementation:\n\n```python\nclass FeatureGroupClass(FeatureGroup):\n\n    # Root feature definition\n    @classmethod\n    def input_data(...)\n        ...\n\n    # Features derived from other features\n    def input_features(...)\n        ...\n\n    @classmethod\n    def calculate_feature(...)\n        ...\n```"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Xref",
+      "code_hash": "8b8dd565897f60f79044a1314f2bf552",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "### Simple example implementation of the FeatureGroup mloda\n\nIn the background, mloda loads the plugins, which were created before, like this one.\n\n```python\nclass ReadFileFeature(FeatureGroup):\n    @classmethod\n    def input_data(cls) -> Optional[BaseInputData]:\n        return ReadFile()\n\n    @classmethod\n    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:\n        reader = cls.input_data()\n        if reader is not None:\n            data = reader.load(features)\n            return data\n        raise ValueError(f\"Reading file failed for feature {features.get_name_of_one_feature()}.\")\n```\n\nWe use composition to read different data sources. A ReadFile object looks like this:\n\n```python\nclass CsvReader(ReadFile):\n    @classmethod\n    def suffix(cls) -> Tuple[str, ...]:\n        return (\n            \".csv\",\n            \".CSV\",\n        )\n\n    @classmethod\n    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:\n        result = pyarrow_csv.read_csv(data_access)\n        return result.select(list(features.get_all_names()))\n\n    @classmethod\n    def get_column_names(cls, file_name: str) -> Any:\n        read_options = pyarrow_csv.ReadOptions(skip_rows_after_names=1)\n        table = pyarrow_csv.read_csv(file_name, read_options=read_options)\n        return table.schema.names\n```\n\nAs you can see, the implementation is flexible in the sense that if you need something, you can adjust it quite easily. The other files like .json, .parquet and the sqlite access are implemented in a similar fashion."
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "SFPL",
+      "code_hash": "e527e1b5ea8352fabad107862bc611ad",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "BYtC",
+      "code_hash": "5d9677f5a3fd6de5d6f08711de2ac3a0",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stdout",
+          "text": "We used CsvReader2 to load the data.\n",
+          "mimetype": "text/plain"
+        }
+      ]
+    },
+    {
+      "id": "RGSE",
+      "code_hash": "28a2e5fed8186e1837dd09124442efa5",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "### Complex plugins\n\nThese can be quite varied:\n\n- aggregate features\n- entity features\n- historical features\n\nAdditionally, one can also write feature groups for:\n\n- using feature stores\n- using orchestrator steps\n- lazy evaluated functions"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Kclp",
+      "code_hash": "efcec6bb88c89435e1e7917a8087a135",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "### Quality\n\nThe producer must optimize quality, which includes:\n\n- defining input and output validators\n- manage the storage and retrieval of artifacts\n- implementing software testing\n\nAn integration test could be done by using mlodamloda.run_all and custom data.\n\nAn example of a unit test could look like:\n```python\ndef test_csv_reader_2(self) -> None:\n   def test_parse_options_are_customized(self, mock_read_csv):\n        # Ensure the parse options are as expected\n        expected_parse_options = pyarrow_csv.ParseOptions(\n            delimiter=\",\",\n            quote_char='\"',\n            ignore_empty_lines=True\n        )\n\n        # Call the method to trigger parse options usage\n        CsvReader2.load_data(Mock(), Mock(spec=FeatureSet))\n\n        # Verify that the _parse_options in CsvReader2 are customized\n        self.assertEqual(CsvReader2._parse_options, expected_parse_options)\n```\n\nThis allows us to apply software engineering practices consistently throughout the entire data workflow."
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "emfo",
+      "code_hash": "ce9c3893cd25eafd06a2fb85a4f5af97",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "### Consequences\n\nWithin mloda, the provider is empowered as the primary driver, owing to the extensive and customizable range of available plugins.\n\nUnlike traditional data toolchains, mloda provides providers with the flexibility to define their specific start and end points. This enables the versatile application of mloda across different parts of machine learning lifecycle, such as prototyping, training data preparation, or real-time result monitoring.\n\nThis includes the autonomy to define the boundaries of the provider's domain and to govern the outflow of data. Both aspects are managed through feature groups, which remain under the direct control of the provider."
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Hstk",
+      "code_hash": "1a9eb2931c95b52f54f3ab79cd1029bc",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "## Data User Role\n\nThe Data User plays a pivotal role in configuring and utilizing the mloda API for machine learning and data workflows. The mloda API offers flexible configurations to cater to diverse use cases across the ML lifecycle. Below is an outline of the configurations and features that define the Data User's role:\n\n```python\nclass mlodaAPI:\n    def __init__(\n        self,\n        requested_features: Union[Features, list[Union[Feature, str]]],\n        compute_frameworks: Union[Set[Type[ComputeFramework]], Optional[list[str]]] = None,\n        links: Optional[Set[Link]] = None,\n        data_access_collection: Optional[DataAccessCollection] = None,\n        global_filter: Optional[GlobalFilter] = None,\n        api_input_data_collection: Optional[ApiInputDataCollection] = None,\n        plugin_collector: Optional[PluginCollector] = None,\n    ) -> None:\n\ndata = mlodamloda.run_all(requested_feature,...)\n```\n\nLet's use the mloda to further explain the Data User role. As shown above, there are several configurations to consider. The key ones are:\n\n- Which features to request and if the compute_frameworks should be limited?\n- How data is linked?\n- What specific access rights and permissions does the user have?\n- How data is refined to meet the requirements of the use case?\n\nWith all the given configurations, the mloda core is designed, whenever feasible, to follow the process:\n\n- First, formulate an optimized execution plan\n- Second, to execute the plan accordingly\n\nWhat the user mostly gains is that the process is repeatable and can be run in most environments, as long as the plugins are available and the accesses exist (firewalls, credentials).\n\nThe data user could run mloda API in following scenarios:\n\n- POC notebooks\n- Production code scenarios (model training or realtime prediction)\n- Micro service endpont\n- KPI or QA test data ingestion\n\nWith this, the whole ml lifecycle is represented and plugins can be reused in a testable and repeatable way along this cycle."
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "nWHF",
+      "code_hash": "a2398c1e2270cfb02efd527ecfb9a5e5",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "## Steward Role\n\nStewards typically operate at various levels within an organization.\n\nIt can be the one who produces the data, the business stakeholder responsible for the service, or, in some cases, may not be explicitly defined.\n\nIn mloda, the steward is the one in control of the governance. However, as to date, this system is not included in this open-source offering, as this platform is reserved for development until the plugin ecosystem has a higher degree of maturity.\n\nWe have the plugin functionalities to integrate governance and operations systems in place. Two simple examples can be:\n\n#### Using organization wide logging\n\n```python\nclass OtelExtender(Extender):\n    def __init__(self) -> None:\n        if trace is None:\n            return\n\n        # Function to be wrapped by the Extender\n        self.wrapped = {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}\n\n    def wraps(self) -> Set[ExtenderHook]:\n        return self.wrapped\n\n    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:\n        logger.warning(\"OtelExtender\")\n        result = func(*args, **kwargs)\n        return result\n```\n\n#### Logging data size\n\n```python\nclass LogSizeOfData(Extender):\n\n    def wraps(self) -> Set[ExtenderHook]:\n        # Function to be wrapped by the Extender\n        return {ExtenderHook.VALIDATE_INPUT_FEATURE}\n\n    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:\n        result = func(*args, **kwargs)\n        size = sys.getsizeof(result)\n        print(f\"Size: {size}\")\n        return result\n```"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "iLit",
+      "code_hash": "c2d696b44d67f42d862e21b1867524b3",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "## Conclusion\n\nIn this notebook, we explored the roles of Providers, Data Users, and Stewards within mloda. We delved into the responsibilities and functionalities associated with each role, highlighting how they contribute to the overall data lifecycle.\n\n- Providers are responsible for implementing the plugins, ensuring the accuracy of data access processes, and defining relevant configuration options\n\n- Data Users create usage configuration and apply the mlodaAPI to receive data\n\n- Stewards, while not fully covered in this open-source offering, they are critical for governance and ensuring the ongoing availability and maintenance of essential plugins\n\nUnderstanding these roles and their interactions, shows how mloda's modular and extensible design is vital in bringing the change to efficient data management practices and processing throughout the machine learning lifecycle"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ZHCJ",
+      "code_hash": "cf8f56f22aafd6f3f88791d5ee33aeb8",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "## Next steps\n\nWhile mloda holds a great potential to become a unified portal, we face a key challenge: its plugin coverage is not comprehensive enough to integrate seamlessly across all available tools and technologies. Therefore, active community contributions are absolutely essential to accelerate both its adoption and its ability to transform data management practices"
+          }
+        }
+      ],
+      "console": []
+    }
+  ]
+}

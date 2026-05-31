@@ -1,0 +1,48 @@
+{
+  "version": "1",
+  "metadata": {
+    "marimo_version": "0.23.8",
+    "script_metadata_hash": null
+  },
+  "cells": [
+    {
+      "id": "Hbol",
+      "code_hash": "1d0db38904205bec4d6f6f6a1f6cec3e",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "MJUe",
+      "code_hash": "eabf147152f0da3a1d533c8076f91589",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "## Table of content\n\n1) Intro to the core interfaces of mloda\n   - Introduction to mloda's core interfaces and practical demonstration of its capabilities.\n2) What makes mloda unique?\n   - Explanation of mloda's unique aspects, including data reusability and support for diverse technologies.\n3) What is data, Feature, FeatureSets and FeatureGroups in mloda\n   - Detailed overview of key objects in mloda and their relationships.\n4) Roles in mloda\n   - Exploration of the roles of Providers, Data Users, and Stewards within mloda."
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "vblA",
+      "code_hash": "14d358dc82cca64a023020e1043bf817",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "## Prerequisite Setup for This Example\n------------------------------------\nThis example assumes that you have cloned the repository and followed the\n[Local Development Setup](https://github.com/mloda-ai/mloda/blob/main/CONTRIBUTING.md#local-development-setup):\n\n```bash\nuv sync --all-extras\nsource .venv/bin/activate\n```\n\nThis installs all dependencies, including the docs extras needed for these notebooks."
+          }
+        }
+      ],
+      "console": []
+    }
+  ]
+}

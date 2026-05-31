@@ -154,6 +154,8 @@
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#building-the-docs-locally">Building the docs locally</a>
     </li>
+    <li class="toctree-l2"><a class="reference internal" href="#authoring-example-notebooks-marimo">Authoring example notebooks (marimo)</a>
+    </li>
     <li class="toctree-l2"><a class="reference internal" href="#where-to-start">Where to start</a>
     </li>
     </ul>
@@ -200,9 +202,21 @@
 </ul>
 <p>If you don't use Docker, follow the local setup in <a href="https://github.com/mloda-ai/mloda/blob/main/CONTRIBUTING.md#local-development-setup">CONTRIBUTING.md</a> (<code>uv sync --all-extras</code>, then <code>source .venv/bin/activate</code>).</p>
 <h4 id="building-the-docs-locally">Building the docs locally</h4>
-<p>After completing the setup in CONTRIBUTING.md, you can preview docs changes with:</p>
+<p>After completing the setup in CONTRIBUTING.md (<code>uv sync --all-extras</code>), you can preview docs changes with:</p>
 <pre><code class="language-bash">mkdocs serve --config-file docs/mkdocs.yml
 </code></pre>
+<p>The build executes the example notebooks to capture their outputs, so it needs the example notebooks' compute backends. <code>uv sync --all-extras</code> (or installing <code>mloda[docs]</code>) provides them.</p>
+<h4 id="authoring-example-notebooks-marimo">Authoring example notebooks (marimo)</h4>
+<p>The example notebooks under <code>docs/docs/examples/</code> are <a href="https://marimo.io">marimo</a> notebooks stored as plain Python (<code>.py</code>), so they stay diff-friendly and lintable. Edit one with:</p>
+<pre><code class="language-bash">marimo edit docs/docs/examples/base_usage.py
+</code></pre>
+<p>A few things to keep in mind:</p>
+<ul>
+<li>marimo is reactive: a variable may be defined in only one cell, and names prefixed with <code>_</code> are private to their cell. Give values that are shared across cells distinct, non-underscore names.</li>
+<li>A notebook is valid when it runs end to end as a script: <code>python docs/docs/examples/base_usage.py</code> must exit <code>0</code>. This is exactly what CI checks.</li>
+<li>Run <code>ruff format</code> on the file before committing.</li>
+<li>The rendered <code>.ipynb</code> (with executed outputs) is generated at build time by <code>docs/marimo_export_hook.py</code> and is git-ignored. Do not commit <code>.ipynb</code> files; add new notebooks as <code>.py</code> and reference them with their <code>.ipynb</code> name in <code>docs/mkdocs.yml</code>.</li>
+</ul>
 <h4 id="where-to-start">Where to start</h4>
 <ul>
 <li>Plugin contributions: see the <a href="https://github.com/mloda-ai/mloda-registry/tree/main/docs/guides">mloda-registry guides</a> and the <a href="https://github.com/mloda-ai/mloda-plugin-template">mloda-plugin-template</a>.</li>

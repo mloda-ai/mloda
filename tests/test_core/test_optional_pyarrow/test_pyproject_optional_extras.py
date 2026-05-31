@@ -10,12 +10,13 @@ Current (red) failures expected:
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
-try:
+if sys.version_info >= (3, 11):
     import tomllib
-except ModuleNotFoundError:
-    import tomli as tomllib  # type: ignore[no-redef]
+else:
+    import tomli as tomllib
 
 
 _PYPROJECT = Path(__file__).parent.parent.parent.parent / "pyproject.toml"

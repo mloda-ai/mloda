@@ -6,6 +6,10 @@ to mloda Feature instances.
 """
 
 from typing import Any
+
+# Import from the component modules, NOT the `mloda.user` facade: that facade
+# imports load_features_from_config from this module, so a facade import here
+# creates a circular import (guarded by test_import_isolation.py).
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.api.feature_config.parser import parse_json

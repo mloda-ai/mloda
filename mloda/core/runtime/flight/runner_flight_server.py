@@ -9,7 +9,7 @@ from typing import Any
 import logging
 
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
-from mloda.core.runtime.flight.flight_server import FlightServer, create_location
+from mloda.core.runtime.flight.flight_server import FlightServer, create_location, _require_pyarrow_flight
 from mloda.core.runtime.mp_context import mp_spawn_context
 
 logger = logging.getLogger(__name__)
@@ -31,6 +31,7 @@ class ParallelRunnerFlightServer:
         flight_server.serve()
 
     def start_flight_server_process(self) -> None:
+        _require_pyarrow_flight()
         if not self.flight_server_process:
             location = create_location()
             ctx = mp_spawn_context()

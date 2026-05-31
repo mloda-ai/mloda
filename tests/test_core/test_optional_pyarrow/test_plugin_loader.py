@@ -68,3 +68,40 @@ def test_load_plugin_reraises_for_missing_mloda_module() -> None:
     loader = PluginLoader()
     with pytest.raises(ModuleNotFoundError):
         loader._load_plugin("compute_framework.this_module_does_not_exist_xyz")
+
+
+def test_load_plugin_reraises_for_unknown_external_module(monkeypatch: pytest.MonkeyPatch) -> None:
+    """_load_plugin must re-raise ModuleNotFoundError for an unknown (non-optional) external module."""
+    from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
+
+    def fake_import_module(name: str) -> object:
+        raise ModuleNotFoundError(
+            "No module named 'totally_missing_dependency_xyz'",
+            name="totally_missing_dependency_xyz",
+        )
+
+    monkeypatch.setattr(
+        "mloda.core.abstract_plugins.plugin_loader.plugin_loader.importlib.import_module",
+        fake_import_module,
+    )
+
+    loader = PluginLoader()
+    with pytest.raises(ModuleNotFoundError):
+        loader._load_plugin("compute_framework.some_unloaded_plugin_xyz")
+
+
+def test_load_plugin_reraises_for_nameless_module_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
+    """_load_plugin must re-raise a ModuleNotFoundError that was raised without a name= keyword (e.name is None)."""
+    from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
+
+    def fake_import_module(name: str) -> object:
+        raise ModuleNotFoundError("totally_missing_dependency")
+
+    monkeypatch.setattr(
+        "mloda.core.abstract_plugins.plugin_loader.plugin_loader.importlib.import_module",
+        fake_import_module,
+    )
+
+    loader = PluginLoader()
+    with pytest.raises(ModuleNotFoundError):
+        loader._load_plugin("compute_framework.some_unloaded_plugin_nameless_xyz")

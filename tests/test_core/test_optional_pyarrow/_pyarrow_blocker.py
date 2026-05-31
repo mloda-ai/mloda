@@ -13,7 +13,7 @@ import sys
 class _BlockPyarrow:
     def find_spec(self, name, path=None, target=None):
         if name == "pyarrow" or name.startswith("pyarrow."):
-            raise ModuleNotFoundError("pyarrow blocked for test")
+            raise ModuleNotFoundError("pyarrow blocked for test", name=name)
         return None
 
 sys.meta_path.insert(0, _BlockPyarrow())

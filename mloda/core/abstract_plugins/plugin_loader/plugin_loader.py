@@ -8,6 +8,30 @@ from typing import ClassVar, Optional
 
 logger = logging.getLogger(__name__)
 
+# Missing modules NOT in this set are treated as genuine errors and re-raised; the set is intentionally
+# generous because under-inclusion breaks `tox -e nopyarrow`, while over-inclusion is harmless (it only
+# ever causes a skip when that dependency is genuinely absent).
+OPTIONAL_PLUGIN_DEPENDENCIES: frozenset[str] = frozenset(
+    {
+        "pyarrow",
+        "pandas",
+        "polars",
+        "numpy",
+        "scipy",
+        "duckdb",
+        "pyiceberg",
+        "pyspark",
+        "opentelemetry",
+        "sklearn",
+        "joblib",
+        "nltk",
+        "anthropic",
+        "openai",
+        "google",
+        "yaml",
+    }
+)
+
 
 class PluginLoader:
     _disabled_groups: ClassVar[set[str]] = set()
@@ -103,8 +127,11 @@ class PluginLoader:
         except ModuleNotFoundError as e:
             if e.name and (e.name == self.base_package or e.name.startswith(self.base_package + ".")):
                 raise
-            logger.debug("Skipping plugin %s: missing optional dependency %s", full_module_name, e.name)
-            return
+            root = e.name.split(".")[0] if e.name else None
+            if root in OPTIONAL_PLUGIN_DEPENDENCIES:
+                logger.debug("Skipping plugin %s: missing optional dependency %s", full_module_name, e.name)
+                return
+            raise
 
         self.plugins[full_module_name] = module
         self._add_plugin_to_graph(full_module_name)

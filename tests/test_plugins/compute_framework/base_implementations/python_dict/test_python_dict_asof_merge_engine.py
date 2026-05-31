@@ -55,3 +55,34 @@ class TestPythonDictAsofMergeEngine(AsofMergeEngineTestBase):
 
         assert len(result) == 1
         assert result[0]["rv"] == "A"
+
+    def test_tie_breaks_ascending_and_is_order_independent(self) -> None:
+        """
+        Tie determinism: two right rows share the identical boundary timestamp within a
+        by-key. The winner must be the row whose right non-key column values sort ASCENDING
+        (smallest wins), matching the sqlite backend fix (fc805f0), and the result must be
+        INDEPENDENT of right-input ordering.
+
+        Left {k:1, t:10, lv:1}; two right rows tie at t=10 (== left t, backward, allow_exact
+        default True): {k:1, t:10, rv:5} and {k:1, t:10, rv:2}. Expected exactly one row with
+        rv==2 regardless of which order the tied right rows are supplied in.
+        """
+        left = [{"k": 1, "t": 10, "lv": 1}]
+        right_a = [{"k": 1, "t": 10, "rv": 5}, {"k": 1, "t": 10, "rv": 2}]
+        right_b = [{"k": 1, "t": 10, "rv": 2}, {"k": 1, "t": 10, "rv": 5}]
+
+        cfg = AsOfJoinConfig(
+            left_time_column="t",
+            right_time_column="t",
+            direction="backward",
+            allow_exact_matches=True,
+        )
+
+        result_a = PythonDictMergeEngine().merge_asof(left, right_a, Index(("k",)), Index(("k",)), cfg)
+        assert len(result_a) == 1
+        assert result_a[0]["rv"] == 2
+
+        # Order-independence: reversed right input must yield the identical winner.
+        result_b = PythonDictMergeEngine().merge_asof(left, right_b, Index(("k",)), Index(("k",)), cfg)
+        assert len(result_b) == 1
+        assert result_b[0]["rv"] == 2

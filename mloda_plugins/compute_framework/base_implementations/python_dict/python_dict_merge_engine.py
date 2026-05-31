@@ -1,3 +1,4 @@
+from datetime import timedelta
 from typing import Any
 from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 from mloda.provider import BaseMergeEngine
@@ -70,7 +71,7 @@ class PythonDictMergeEngine(BaseMergeEngine):
             key = tuple(left.get(col) for col in left_by)
             left_time = left.get(lt)
             match = self._select_asof_match(
-                right_by_groups.get(key, []), rt, left_time, direction, allow_exact, tolerance
+                right_by_groups.get(key, []), rt, left_time, direction, allow_exact, tolerance, right_by
             )
             merged = {**left}
             for col in right_extra_cols:
@@ -86,7 +87,8 @@ class PythonDictMergeEngine(BaseMergeEngine):
         left_time: Any,
         direction: str,
         allow_exact: bool,
-        tolerance: float | None,
+        tolerance: float | int | timedelta | None,
+        by_cols: list[str],
     ) -> dict[str, Any] | None:
         eligible = []
         for r in candidates:
@@ -105,12 +107,24 @@ class PythonDictMergeEngine(BaseMergeEngine):
         if not eligible:
             return None
 
+        # Pick the winning time per direction (largest for backward, smallest for forward,
+        # nearest abs gap otherwise). max/min here only select the time value, not the row.
         if direction == "backward":
-            best = max(eligible, key=lambda r: r[rt])
+            best_time = max(r[rt] for r in eligible)
+            tied = [r for r in eligible if r[rt] == best_time]
         elif direction == "forward":
-            best = min(eligible, key=lambda r: r[rt])
+            best_time = min(r[rt] for r in eligible)
+            tied = [r for r in eligible if r[rt] == best_time]
         else:
-            best = min(eligible, key=lambda r: abs(r[rt] - left_time))
+            best_gap = min(abs(r[rt] - left_time) for r in eligible)
+            tied = [r for r in eligible if abs(r[rt] - left_time) == best_gap]
+
+        # Tie-break deterministically and independent of input order: among rows tied on the
+        # primary time criterion, the smallest right non-key column values win (ascending),
+        # mirroring the sqlite backend.
+        by_set = set(by_cols)
+        non_key_cols = sorted({c for r in tied for c in r.keys() if c not in by_set})
+        best = min(tied, key=lambda r: tuple(r.get(c) for c in non_key_cols))
 
         if tolerance is not None and abs(best[rt] - left_time) > tolerance:
             return None

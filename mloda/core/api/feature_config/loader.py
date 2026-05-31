@@ -6,8 +6,12 @@ to mloda Feature instances.
 """
 
 from typing import Any
-from mloda.user import Feature
-from mloda.user import Options
+
+# Import from the component modules, NOT the `mloda.user` facade: that facade
+# imports load_features_from_config from this module, so a facade import here
+# creates a circular import (guarded by test_import_isolation.py).
+from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.api.feature_config.parser import parse_json
 from mloda.core.api.feature_config.models import FeatureConfig
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
@@ -92,7 +96,13 @@ def load_features_from_config(config_str: str, format: str = "json") -> list[Fea
                 if item.in_features:
                     # Always convert to frozenset for consistency
                     context[DefaultOptionKeys.in_features] = frozenset(item.in_features)
-                options = Options(group=item.group_options or {}, context=context)
+                options = Options(
+                    group=item.group_options or {},
+                    context=context,
+                    propagate_context_keys=frozenset(item.propagate_context_keys)
+                    if item.propagate_context_keys
+                    else None,
+                )
                 feature = Feature(name=feature_name, options=options)
                 features.append(feature)
             # Check if in_features exists and create Options accordingly

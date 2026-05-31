@@ -113,6 +113,41 @@ For explicit separation of group and context parameters:
 
 Note: `options` and `group_options`/`context_options` are mutually exclusive.
 
+## Worked Example: Window, Rank, and Percentile Features
+
+Row-preserving operations (window aggregation, rank, percentile) cannot be requested by a bare name: the Feature Group only matches when the request also carries the partition/order options its matcher needs. The feature name encodes the operation (`{source}__{operation}`); the matcher then requires those options to be present. It reads them via `options.get` (group first, then context), so they resolve from either side, but `context_options` is the right home.
+
+```json
+[
+    {
+        "name": "steps__sum_window",
+        "context_options": {"partition_by": ["subject_id"]}
+    },
+    {
+        "name": "price__last_window",
+        "context_options": {"partition_by": ["region"], "order_by": "timestamp"}
+    },
+    {
+        "name": "sales__row_number_ranked",
+        "context_options": {"partition_by": ["region"], "order_by": "sales"}
+    },
+    {
+        "name": "sales__p95_percentile",
+        "context_options": {"partition_by": ["region"]}
+    }
+]
+```
+
+Key names per operation (from the registry `data_operations` packages):
+
+| Operation | Name pattern | Required `context_options` |
+|-----------|--------------|----------------------------|
+| Window aggregation | `{source}__{agg}_window` (`sum`, `avg`, `first`, `last`, ...) | `partition_by` (list); `order_by` (string) is required for order-dependent aggregations like `first`/`last` |
+| Rank | `{source}__{rank_type}_ranked` (`row_number`, `dense_rank`, `ntile_N`, ...) | `partition_by` (list), `order_by` (string) |
+| Percentile | `{source}__p{N}_percentile` (e.g. `p50`, `p95`) | `partition_by` (list) |
+
+Use `context_options` (not `group_options`) for these: the partition/order are operation parameters, not identity that should split the Feature Group.
+
 ## Feature Chaining with in_features
 
 Define dependent features using `in_features`:

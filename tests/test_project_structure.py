@@ -119,7 +119,9 @@ def _normalize_extra_name(name: str) -> str:
 
 
 class TestExtrasConsistency:
-    INTENTIONALLY_EXCLUDED_FROM_ALL = {"all", "spark"}
+    # nopyarrow_test is a test-only extra that must omit pyarrow (used by the
+    # nopyarrow tox env); like spark, it is intentionally not part of [all].
+    INTENTIONALLY_EXCLUDED_FROM_ALL = {"all", "spark", "nopyarrow_test"}
 
     def test_all_extras_uses_self_references(self) -> None:
         extras = _load_extras()

@@ -1,7 +1,12 @@
 from typing import Any
 from uuid import uuid4
-from pyarrow import flight
-import pyarrow as pa
+
+try:
+    from pyarrow import flight
+    import pyarrow as pa
+except ImportError:
+    flight = None
+    pa = None  # type: ignore[assignment]
 import os
 
 import logging
@@ -13,8 +18,20 @@ def create_location(host: str = "127.0.0.1") -> str:
     return f"grpc://{host}:0"
 
 
-class FlightServer(flight.FlightServerBase):  # type: ignore[misc]
+def _require_pyarrow_flight() -> None:
+    if flight is None:
+        raise ImportError(
+            "pyarrow is required for Flight-based (multiprocessing/distributed) data transport. "
+            "Install it with: pip install 'mloda[pyarrow]'"
+        )
+
+
+_FlightServerBase: Any = flight.FlightServerBase if flight is not None else object
+
+
+class FlightServer(_FlightServerBase):  # type: ignore[misc]
     def __init__(self, location: Any = create_location()) -> None:
+        _require_pyarrow_flight()
         self.tables: dict[str, Any] = {}  # Dictionary to store tables
         self.location = location
 
@@ -41,6 +58,7 @@ class FlightServer(flight.FlightServerBase):  # type: ignore[misc]
 
     @staticmethod
     def upload_table(location: str, table: Any, table_key: str) -> None:
+        _require_pyarrow_flight()
         with flight.FlightClient(location) as client:
             descriptor = flight.FlightDescriptor.for_path(table_key)
             writer, _ = client.do_put(descriptor, table.schema)
@@ -65,6 +83,7 @@ class FlightServer(flight.FlightServerBase):  # type: ignore[misc]
 
     @staticmethod
     def download_table(location: str, table_key: Any) -> Any:
+        _require_pyarrow_flight()
         with flight.FlightClient(location) as client:
             ticket = flight.Ticket(table_key.encode("utf-8"))
             reader = client.do_get(ticket)
@@ -85,6 +104,7 @@ class FlightServer(flight.FlightServerBase):  # type: ignore[misc]
 
     @staticmethod
     def drop_tables(location: str, table_key: set[str]) -> None:
+        _require_pyarrow_flight()
         with flight.FlightClient(location) as client:
             for key in table_key:
                 action = flight.Action("drop_table", key.encode("utf-8"))
@@ -93,6 +113,7 @@ class FlightServer(flight.FlightServerBase):  # type: ignore[misc]
 
     @staticmethod
     def sent_shutdown_signal(location: str) -> None:
+        _require_pyarrow_flight()
         with flight.FlightClient(location) as client:
             action = flight.Action("shutdown", b"")
             for _ in client.do_action(action):
@@ -109,6 +130,7 @@ class FlightServer(flight.FlightServerBase):  # type: ignore[misc]
 
     @staticmethod
     def list_flight_infos(location: str) -> set[str]:
+        _require_pyarrow_flight()
         with flight.FlightClient(location) as client:
             flight_infos = {x.descriptor.path[0] for x in client.list_flights()}
         client.close()

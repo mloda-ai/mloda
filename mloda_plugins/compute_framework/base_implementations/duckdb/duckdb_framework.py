@@ -15,6 +15,11 @@ try:
 except ImportError:
     duckdb = None  # type: ignore[assignment]
 
+try:
+    import pyarrow as pa
+except ImportError:
+    pa = None  # type: ignore[assignment]
+
 logger = logging.getLogger(__name__)
 
 
@@ -138,9 +143,11 @@ class DuckDBFramework(ComputeFramework):
 
         if isinstance(data, dict):
             """Initial data: Transform dict to DuckDB relation"""
-            # Convert dict to PyArrow first, then to DuckDB relation
-            import pyarrow as pa
-
+            if pa is None:
+                raise ImportError(
+                    "pyarrow is required to build a DuckDB relation from a dict. "
+                    "Install it with: pip install 'mloda[duckdb]'"
+                )
             arrow_table = pa.Table.from_pydict(data)
 
             if self.framework_connection_object is None:

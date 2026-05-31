@@ -271,6 +271,11 @@ class DuckdbRelation:
 
     @classmethod
     def from_dict(cls, connection: duckdb.DuckDBPyConnection, data: dict[str, list[Any]]) -> "DuckdbRelation":
+        if pa is None:
+            raise ImportError(
+                "pyarrow is required to build a DuckDB relation from a dict. "
+                "Install it with: pip install 'mloda[duckdb]'"
+            )
         if not data:
             raise ValueError("Cannot create relation from empty dictionary")
         arrow_table = pa.table(data)

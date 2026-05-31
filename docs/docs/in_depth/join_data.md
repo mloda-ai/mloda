@@ -94,10 +94,10 @@ Cross-backend caveats to be aware of:
     SQL/`polars`/`python_dict` backends keep the left column and drop the right one. Rename
     conflicting columns upstream if you need both.
 -   **Ties.** When two right rows share the identical boundary timestamp within a by-key, the chosen
-    row is backend-defined (each engine applies its own internal tie rule). `python_dict` and
-    `sqlite` resolve ties deterministically (smallest right non-key column values win); other
-    backends follow their native `merge_asof`/`ASOF JOIN` behavior. Do not rely on a specific tied
-    row being selected across backends.
+    row is backend-defined (each engine applies its own internal tie rule). `python_dict`,
+    `sqlite`, and `spark` resolve ties deterministically (smallest surviving right column values
+    win); the other backends follow their native `merge_asof`/`ASOF JOIN` behavior. Do not rely on
+    a specific tied row being selected across backends.
 
 #### Link
 

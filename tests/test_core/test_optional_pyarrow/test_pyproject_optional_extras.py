@@ -1,11 +1,6 @@
 """Tests that pyproject.toml declares the correct optional-dependency extras.
 
 These tests parse pyproject.toml directly (no subprocess needed).
-
-Current (red) failures expected:
-- duckdb extra does not list pyarrow
-- no sqlite extra exists
-- all extra does not reference mloda[sqlite]
 """
 
 from __future__ import annotations
@@ -30,10 +25,7 @@ def _load_optional_deps() -> dict[str, list[str]]:
 
 
 def test_duckdb_extra_contains_pyarrow() -> None:
-    """The duckdb optional-dependency extra must list pyarrow as a dependency.
-
-    Current (red): duckdb = ["duckdb"] with no pyarrow entry.
-    """
+    """The duckdb optional-dependency extra must list pyarrow as a dependency."""
     optional = _load_optional_deps()
     assert "duckdb" in optional, "No duckdb extra found in pyproject.toml"
     duckdb_deps = optional["duckdb"]
@@ -41,10 +33,7 @@ def test_duckdb_extra_contains_pyarrow() -> None:
 
 
 def test_sqlite_extra_exists_and_contains_pyarrow() -> None:
-    """A sqlite optional-dependency extra must exist and include pyarrow.
-
-    Current (red): no sqlite extra exists in pyproject.toml.
-    """
+    """A sqlite optional-dependency extra must exist and include pyarrow."""
     optional = _load_optional_deps()
     assert "sqlite" in optional, f"No sqlite extra found in pyproject.toml. Available extras: {list(optional.keys())}"
     sqlite_deps = optional["sqlite"]
@@ -52,10 +41,7 @@ def test_sqlite_extra_exists_and_contains_pyarrow() -> None:
 
 
 def test_all_extra_references_sqlite() -> None:
-    """The all extra must reference mloda[sqlite].
-
-    Current (red): all does not include mloda[sqlite].
-    """
+    """The all extra must reference mloda[sqlite]."""
     optional = _load_optional_deps()
     assert "all" in optional, "No all extra found in pyproject.toml"
     all_deps = optional["all"]

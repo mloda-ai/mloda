@@ -8,9 +8,6 @@ computation using ``PythonDictFramework``.
 
 The test always runs (no skipif): the subprocess blocks pyarrow internally, so
 the result is independent of whether pyarrow is present in the environment.
-
-Today this FAILS because three core modules import pyarrow at module top level
-on the eager import path.
 """
 
 import os

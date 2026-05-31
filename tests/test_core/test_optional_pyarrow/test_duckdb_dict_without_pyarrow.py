@@ -1,10 +1,4 @@
-"""Test that DuckdbRelation.from_dict raises ImportError when pyarrow is absent.
-
-from_dict currently calls pa.table(data) directly; when pa is None this produces
-AttributeError: 'NoneType' object has no attribute 'table'.
-
-Expected (green): from_dict must detect pa is None and raise ImportError mentioning pyarrow.
-"""
+"""Test that DuckdbRelation.from_dict raises ImportError when pyarrow is absent."""
 
 from __future__ import annotations
 
@@ -44,10 +38,7 @@ except Exception as e:
 
 @pytest.mark.timeout(30)
 def test_duckdb_from_dict_raises_import_error_without_pyarrow() -> None:
-    """DuckdbRelation.from_dict must raise ImportError mentioning pyarrow when pyarrow absent.
-
-    Current (red): raises AttributeError because pa is None and pa.table() fails.
-    """
+    """DuckdbRelation.from_dict must raise ImportError mentioning pyarrow when pyarrow absent."""
     result = run_blocked(_BODY)
 
     if "DUCKDB_MISSING" in result.stdout:

@@ -1,10 +1,4 @@
-"""Tests that DataType arrow-conversion methods raise ImportError when pyarrow is absent.
-
-Current behavior (red): the methods crash with AttributeError because pa is None
-(the try/except at module top sets pa = None), so pa.int32() etc. raise AttributeError.
-Expected behavior (green): each method must detect pa is None and raise ImportError
-with a message containing "pyarrow".
-"""
+"""Tests that DataType arrow-conversion methods raise ImportError when pyarrow is absent."""
 
 from __future__ import annotations
 
@@ -63,10 +57,7 @@ except Exception as e:
 
 @pytest.mark.timeout(30)
 def test_to_arrow_type_raises_import_error_without_pyarrow() -> None:
-    """DataType.to_arrow_type must raise ImportError mentioning pyarrow when pyarrow absent.
-
-    Current (red): raises AttributeError because pa is None.
-    """
+    """DataType.to_arrow_type must raise ImportError mentioning pyarrow when pyarrow absent."""
     result = run_blocked(_BODY_TO_ARROW)
     assert result.returncode == 0, f"Body crashed unexpectedly.\nstderr:\n{result.stderr}"
     assert "IMPORTERROR" in result.stdout, (
@@ -76,10 +67,7 @@ def test_to_arrow_type_raises_import_error_without_pyarrow() -> None:
 
 @pytest.mark.timeout(30)
 def test_from_arrow_type_raises_import_error_without_pyarrow() -> None:
-    """DataType.from_arrow_type must raise ImportError mentioning pyarrow when pyarrow absent.
-
-    Current (red): raises AttributeError because pa is None.
-    """
+    """DataType.from_arrow_type must raise ImportError mentioning pyarrow when pyarrow absent."""
     result = run_blocked(_BODY_FROM_ARROW)
     assert result.returncode == 0, f"Body crashed unexpectedly.\nstderr:\n{result.stderr}"
     assert "IMPORTERROR" in result.stdout, (
@@ -89,10 +77,7 @@ def test_from_arrow_type_raises_import_error_without_pyarrow() -> None:
 
 @pytest.mark.timeout(30)
 def test_infer_arrow_type_raises_import_error_without_pyarrow() -> None:
-    """DataType.infer_arrow_type must raise ImportError mentioning pyarrow when pyarrow absent.
-
-    Current (red): raises AttributeError because pa is None (via to_arrow_type).
-    """
+    """DataType.infer_arrow_type must raise ImportError mentioning pyarrow when pyarrow absent."""
     result = run_blocked(_BODY_INFER_ARROW)
     assert result.returncode == 0, f"Body crashed unexpectedly.\nstderr:\n{result.stderr}"
     assert "IMPORTERROR" in result.stdout, (

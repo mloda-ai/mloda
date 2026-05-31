@@ -1,10 +1,5 @@
 """Tests that file-reader modules import cleanly under blocked pyarrow and that their
 load_data methods raise ImportError mentioning pyarrow (not a top-level crash).
-
-Current state (red for import tests): each reader has a hard top-level
-    from pyarrow import <submodule>
-which causes ModuleNotFoundError at import time under the blocker, so the
-IMPORTED sentinel is never printed and the test fails.
 """
 
 from __future__ import annotations
@@ -112,11 +107,7 @@ except Exception as e:
 
 @pytest.mark.timeout(30)
 def test_csv_reader_imports_without_pyarrow() -> None:
-    """CsvReader module must import successfully even when pyarrow is absent.
-
-    Current (red): top-level 'from pyarrow import csv' raises ModuleNotFoundError
-    so IMPORTED sentinel is never printed.
-    """
+    """CsvReader module must import successfully even when pyarrow is absent."""
     result = run_blocked(_BODY_CSV_IMPORT)
     assert result.returncode == 0, f"Body crashed.\nstderr:\n{result.stderr}"
     assert "IMPORTED" in result.stdout, (
@@ -126,11 +117,7 @@ def test_csv_reader_imports_without_pyarrow() -> None:
 
 @pytest.mark.timeout(30)
 def test_csv_reader_load_data_raises_import_error_without_pyarrow() -> None:
-    """CsvReader.load_data must raise ImportError mentioning pyarrow when pyarrow absent.
-
-    Current (red): module fails to import at all, so this test can only be meaningful
-    after the import test goes green (module restructured). Assert IMPORTERROR.
-    """
+    """CsvReader.load_data must raise ImportError mentioning pyarrow when pyarrow absent."""
     result = run_blocked(_BODY_CSV_LOAD)
     assert result.returncode == 0, f"Body crashed.\nstderr:\n{result.stderr}"
     assert "IMPORTERROR" in result.stdout, (
@@ -140,10 +127,7 @@ def test_csv_reader_load_data_raises_import_error_without_pyarrow() -> None:
 
 @pytest.mark.timeout(30)
 def test_json_reader_imports_without_pyarrow() -> None:
-    """JsonReader module must import successfully even when pyarrow is absent.
-
-    Current (red): top-level 'from pyarrow import json' raises ModuleNotFoundError.
-    """
+    """JsonReader module must import successfully even when pyarrow is absent."""
     result = run_blocked(_BODY_JSON_IMPORT)
     assert result.returncode == 0, f"Body crashed.\nstderr:\n{result.stderr}"
     assert "IMPORTED" in result.stdout, (
@@ -153,10 +137,7 @@ def test_json_reader_imports_without_pyarrow() -> None:
 
 @pytest.mark.timeout(30)
 def test_parquet_reader_imports_without_pyarrow() -> None:
-    """ParquetReader module must import successfully even when pyarrow is absent.
-
-    Current (red): top-level 'from pyarrow import parquet' raises ModuleNotFoundError.
-    """
+    """ParquetReader module must import successfully even when pyarrow is absent."""
     result = run_blocked(_BODY_PARQUET_IMPORT)
     assert result.returncode == 0, f"Body crashed.\nstderr:\n{result.stderr}"
     assert "IMPORTED" in result.stdout, (
@@ -166,10 +147,7 @@ def test_parquet_reader_imports_without_pyarrow() -> None:
 
 @pytest.mark.timeout(30)
 def test_feather_reader_imports_without_pyarrow() -> None:
-    """FeatherReader module must import successfully even when pyarrow is absent.
-
-    Current (red): top-level 'from pyarrow import feather' raises ModuleNotFoundError.
-    """
+    """FeatherReader module must import successfully even when pyarrow is absent."""
     result = run_blocked(_BODY_FEATHER_IMPORT)
     assert result.returncode == 0, f"Body crashed.\nstderr:\n{result.stderr}"
     assert "IMPORTED" in result.stdout, (
@@ -179,10 +157,7 @@ def test_feather_reader_imports_without_pyarrow() -> None:
 
 @pytest.mark.timeout(30)
 def test_orc_reader_imports_without_pyarrow() -> None:
-    """OrcReader module must import successfully even when pyarrow is absent.
-
-    Current (red): top-level 'from pyarrow import orc' raises ModuleNotFoundError.
-    """
+    """OrcReader module must import successfully even when pyarrow is absent."""
     result = run_blocked(_BODY_ORC_IMPORT)
     assert result.returncode == 0, f"Body crashed.\nstderr:\n{result.stderr}"
     assert "IMPORTED" in result.stdout, (

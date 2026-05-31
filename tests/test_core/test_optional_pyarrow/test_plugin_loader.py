@@ -35,11 +35,7 @@ print("LOADED:" + joined)
 
 @pytest.mark.timeout(30)
 def test_plugin_loader_all_without_pyarrow() -> None:
-    """PluginLoader.all() must succeed even when pyarrow is unavailable.
-
-    Expected RED failure: subprocess crashes with ModuleNotFoundError because
-    at least one mloda_plugins module imports pyarrow at the top level.
-    """
+    """PluginLoader.all() must succeed even when pyarrow is unavailable."""
     result = run_blocked(_BODY_ALL)
 
     assert result.returncode == 0, (
@@ -66,10 +62,7 @@ def test_plugin_loader_all_without_pyarrow() -> None:
 
 
 def test_load_plugin_reraises_for_missing_mloda_module() -> None:
-    """_load_plugin must raise ModuleNotFoundError for a genuinely non-existent module.
-
-    This test does NOT block pyarrow and must pass today (characterization/guard test).
-    """
+    """_load_plugin must raise ModuleNotFoundError for a genuinely non-existent module."""
     from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 
     loader = PluginLoader()

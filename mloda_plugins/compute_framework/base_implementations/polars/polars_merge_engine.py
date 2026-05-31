@@ -60,7 +60,7 @@ class PolarsMergeEngine(BaseMergeEngine):
             kwargs["tolerance"] = asof_config.tolerance
 
         result = left_sorted.join_asof(
-            right_sorted, left_on=lt, right_on=rt, by_left=by_left, by_right=by_right, **kwargs
+            right_sorted, left_on=lt, right_on=rt, by_left=by_left, by_right=by_right, check_sortedness=False, **kwargs
         )
 
         # Re-add any right by-key whose name differs from its left counterpart (polars drops it).

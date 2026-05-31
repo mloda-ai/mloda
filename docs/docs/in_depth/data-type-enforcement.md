@@ -60,6 +60,54 @@ feature = Feature.int32_of(
 
 In strict mode, only exact type matches or standard widening conversions are allowed.
 
+## Implementing the Hook in a Custom Compute Framework
+
+Enforcement is driven by a single override point on `ComputeFramework`:
+
+```python
+def _extract_column_data_type(self, data: Any, column_name: str) -> Optional[DataType]:
+    ...
+```
+
+When a typed feature is produced, mloda calls this hook for the column and compares
+the returned `DataType` against the feature's declared type, raising
+`DataTypeMismatchError` on an incompatible pairing (per the lenient/strict rules above).
+
+The contract:
+
+- **Return a `DataType`** to have the column validated. Map the framework's native type
+  (e.g. `pa.DataType`, `pd.api.types`, `polars.DataType`, a pyspark/pyiceberg type) directly
+  to the unified `DataType` enum: no string round-trip.
+- **Return `None` to skip the column.** The validator treats `None` as a graceful no-op and
+  performs no check for that column.
+
+!!! warning "The base implementation is a silent no-op"
+    `ComputeFramework._extract_column_data_type` returns `None` by default. A custom framework
+    that does not override it ships with **type enforcement effectively disabled**: declared
+    feature types are silently never checked. Override the hook to opt your framework in.
+
+A custom framework imports `DataType` from the public API:
+
+```python
+from typing import Any, Optional
+from mloda.user import DataType
+from mloda.provider import ComputeFramework
+
+
+class MyFramework(ComputeFramework):
+    def _extract_column_data_type(self, data: Any, column_name: str) -> Optional[DataType]:
+        native = data.schema.field(column_name).type  # framework-specific access
+        if native == ...:
+            return DataType.INT64
+        # Unknown / unmappable type: skip rather than guess.
+        return None
+```
+
+See `PythonDictFramework._extract_column_data_type` for a complete reference override, and
+the table below for how each bundled framework handles precisions its backend cannot
+distinguish (it returns the widest type in the family rather than `None`, so lenient-mode
+validation still applies).
+
 ## Per-Framework Precision Support
 
 Not every backend's native type system can distinguish every precision mloda declares. The table below shows which precisions each bundled framework can extract from data. For the rest, the framework's `_extract_column_data_type` returns the widest type in the family (still correct under lenient mode), and strict-mode tests for the affected precision are skipped with a clear reason.

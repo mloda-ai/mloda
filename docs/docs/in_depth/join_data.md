@@ -52,6 +52,7 @@ Join Types specify how two datasets are merged based on their keys. The framewor
 -   Left Join,
 -   Outer Join,
 -   Right Join (use sparingly; prefer left joins when possible).
+-   ASOF Join (point-in-time / as-of: equi match on the by-keys, nearest time match on the time columns).
 
 ```python
 from enum import Enum
@@ -63,9 +64,40 @@ class JoinType(Enum):
     OUTER = "outer"
     APPEND = "append"
     UNION = "union"
+    ASOF = "asof"
 
 join_type = JoinType.INNER
 ```
+
+ASOF joins are created via `Link.asof(...)` / `Link.asof_on(...)`, carrying time columns plus
+`direction`/`tolerance`/`allow_exact_matches` (pandas `merge_asof` semantics). The by-keys (the
+join `Index`) drive the equi match; the time columns drive the inequality match. ASOF is a LEFT
+join: every left row survives, with null right columns when no match is found.
+
+**Backend support.** Implemented for `pandas`, `polars` (eager and lazy), `duckdb`, `python_dict`,
+`pyarrow`, and `sqlite`. A `spark` implementation exists but is **experimental and not exercised in
+CI** (requires `JAVA_HOME`); validate it yourself before relying on it. `iceberg` has no merge
+engine and does not support joins.
+
+Cross-backend caveats to be aware of:
+
+-   **`direction='nearest'`** is supported on `pandas`, `polars`, `pyarrow`, and `python_dict`. The
+    SQL/Spark backends (`duckdb`, `sqlite`, `spark`) raise `ValueError` for `nearest`, as there is
+    no clean SQL form.
+-   **`tolerance`** accepts `float | int | timedelta`. A `timedelta` tolerance is forwarded natively
+    by `pandas`/`polars`/`pyarrow`, but the SQL/Spark backends (`duckdb`, `sqlite`, `spark`) cannot
+    derive a numeric tolerance from a `timedelta` without knowing the time column's storage and will
+    raise `ValueError`; provide a numeric tolerance (e.g. epoch seconds matching the time column).
+    This is enforced inside the merge engine at run time, not at `Link.asof(...)` construction.
+-   **Overlapping non-key columns.** If the left and right frames share a column name other than the
+    by-keys/time columns, `pandas`/`pyarrow` keep both with `_x`/`_y` suffixes, whereas the
+    SQL/`polars`/`python_dict` backends keep the left column and drop the right one. Rename
+    conflicting columns upstream if you need both.
+-   **Ties.** When two right rows share the identical boundary timestamp within a by-key, the chosen
+    row is backend-defined (each engine applies its own internal tie rule). `python_dict`,
+    `sqlite`, and `spark` resolve ties deterministically (smallest surviving right column values
+    win); the other backends follow their native `merge_asof`/`ASOF JOIN` behavior. Do not rely on
+    a specific tied row being selected across backends.
 
 #### Link
 

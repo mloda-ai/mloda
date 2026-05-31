@@ -15,6 +15,8 @@ from mloda.user import Index
 from mloda.provider import BaseMergeEngine
 from mloda.core.abstract_plugins.components.link import JoinType
 
+from tests.test_plugins.compute_framework.test_tooling.merge_link import make_merge_link
+
 from .test_scenarios import SCENARIOS, MergeScenario
 from .test_data_converter import DataConverter
 
@@ -210,4 +212,4 @@ class MultiIndexMergeEngineTestBase(ABC):
         engine = self.merge_engine_class()(connection) if connection else self.merge_engine_class()()
 
         with pytest.raises(ValueError):
-            engine.merge(left_data, right_data, JoinType.INNER, left_index, right_index)
+            engine.merge(left_data, right_data, make_merge_link(JoinType.INNER, left_index, right_index))

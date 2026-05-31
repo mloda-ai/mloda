@@ -4,7 +4,7 @@ from uuid import UUID
 
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.prepare.graph.graph import Graph
-from mloda.core.abstract_plugins.components.link import Link
+from mloda.core.abstract_plugins.components.link import JoinType, Link
 from mloda.core.prepare.validators.resolve_link_validator import ResolveLinkValidator
 
 
@@ -249,6 +249,15 @@ class ResolveLinks:
             return
 
         for child, parents in self.graph.parent_to_children_mapping.items():
+            # A Link pinned on any one of the child's parent features governs the
+            # whole join for that feature-group pair, including the (by-key) index
+            # pair that carries no pin of its own.
+            pinned_links: list[Link] = []
+            for p in parents:
+                node = self.graph.get_nodes()[p]
+                if node.feature is not None and node.feature.link is not None:
+                    pinned_links.append(node.feature.link)
+
             for parent_in in parents:
                 for parent_out in parents:
                     if parent_in == parent_out:
@@ -260,7 +269,13 @@ class ResolveLinks:
                     right_fg = r_right.feature_group_class
 
                     # Two-pass matching: exact match first, then polymorphic
-                    matched_links = self._find_matching_links(left_fg, right_fg, r_right.feature)
+                    matched_links = self._find_matching_links(
+                        left_fg,
+                        right_fg,
+                        r_right.feature,
+                        left_feature=r_left.feature,
+                        pinned_links=pinned_links,
+                    )
 
                     for matched_link in matched_links:
                         key = self.create_link_trekker_key(
@@ -268,7 +283,14 @@ class ResolveLinks:
                         )
                         self.set_link_trekker(key, child)
 
-    def _find_matching_links(self, left_fg: type, right_fg: type, right_feature: Any = None) -> list[Link]:
+    def _find_matching_links(
+        self,
+        left_fg: type,
+        right_fg: type,
+        right_feature: Any = None,
+        left_feature: Any = None,
+        pinned_links: Optional[list[Link]] = None,
+    ) -> list[Link]:
         """Find all matching links using two-pass matching: exact first, then polymorphic.
 
         Returns all exact matches if any exist, otherwise returns the most specific
@@ -280,16 +302,47 @@ class ResolveLinks:
         # Pass 1: Collect all exact matches
         exact_matches = [link for link in self.links if link.matches_exact(left_fg, right_fg)]
         if exact_matches:
-            if len(exact_matches) > 1 and right_feature is not None:
-                # Multiple links share the same (left_fg, right_fg): disambiguate by right_index
-                index_filtered = [
-                    link
-                    for link in exact_matches
-                    if right_feature.index is not None and link.right_index == right_feature.index
+            candidates = exact_matches
+            if len(candidates) > 1:
+                # Narrow by right_index (preserve existing behavior).
+                if right_feature is not None:
+                    index_filtered = [
+                        link
+                        for link in candidates
+                        if right_feature.index is not None and link.right_index == right_feature.index
+                    ]
+                    if index_filtered:
+                        candidates = index_filtered
+
+                # Narrow by a Link pinned on either joining feature, or on any of
+                # the child's sibling parent features (a pin on one joining feature
+                # governs the whole feature-group-pair join).
+                pins = [
+                    f.link
+                    for f in (left_feature, right_feature)
+                    if f is not None and getattr(f, "link", None) is not None
                 ]
-                if index_filtered:
-                    return index_filtered
-            return exact_matches
+                if pinned_links:
+                    pins.extend(pinned_links)
+                if pins:
+                    pinned = [link for link in candidates if any(link == p for p in pins)]
+                    if pinned:
+                        candidates = pinned
+
+                # Fail loud on residual ASOF ambiguity.
+                # Only the multi-ASOF case raises here: a residual mix of one ASOF + one
+                # non-ASOF candidate is intentionally NOT raised, since non-ASOF ambiguity is
+                # handled by the existing downstream join-type validation (preserves prior behavior).
+                if len(candidates) > 1:
+                    asof_candidates = [link for link in candidates if link.jointype == JoinType.ASOF]
+                    if len(asof_candidates) > 1:
+                        raise ValueError(
+                            f"Ambiguous ASOF links for ({left_fg.__name__}, {right_fg.__name__}): "
+                            f"{len(asof_candidates)} ASOF links share the same join key and cannot be "
+                            "auto-selected. Pin the intended link on the joining feature via "
+                            "Feature(..., link=<the Link>)."
+                        )
+            return candidates
 
         # Pass 2: If no exact matches, find most specific polymorphic matches
         polymorphic_matches = [link for link in self.links if link.matches_polymorphic(left_fg, right_fg)]

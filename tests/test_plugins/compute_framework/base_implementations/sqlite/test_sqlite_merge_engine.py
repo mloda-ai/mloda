@@ -10,6 +10,7 @@ from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import _regexp
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_merge_engine import SqliteMergeEngine
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation
+from tests.test_plugins.compute_framework.test_tooling.merge_link import make_merge_link
 from tests.test_plugins.compute_framework.test_tooling.multi_index.multi_index_test_base import (
     MultiIndexMergeEngineTestBase,
 )
@@ -123,7 +124,7 @@ class TestSqliteMergeEngine:
         self, connection: sqlite3.Connection, left_data: SqliteRelation, right_data: SqliteRelation, index_obj: Index
     ) -> None:
         engine = SqliteMergeEngine(connection)
-        result = engine.merge(left_data, right_data, JoinType.INNER, index_obj, index_obj)
+        result = engine.merge(left_data, right_data, make_merge_link(JoinType.INNER, index_obj, index_obj))
         assert len(result.df()) == 1
 
     def test_get_column_names(self, connection: sqlite3.Connection) -> None:

@@ -7,6 +7,7 @@ from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe 
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
 from mloda.user import Index
+from tests.test_plugins.compute_framework.test_tooling.merge_link import make_merge_link
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )
@@ -101,7 +102,9 @@ class TestPolarsLazyDataFrameComputeFramework:
         _lazy_df = PolarsLazyDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         _lazy_df.data = self.left_data
         merge_engine = _lazy_df.merge_engine()
-        result = merge_engine().merge(_lazy_df.data, self.right_data, JoinType.INNER, self.idx, self.idx)
+        result = merge_engine().merge(
+            _lazy_df.data, self.right_data, make_merge_link(JoinType.INNER, self.idx, self.idx)
+        )
         assert isinstance(result, pl.LazyFrame)
 
         # Verify results when collected
@@ -114,7 +117,9 @@ class TestPolarsLazyDataFrameComputeFramework:
         _lazy_df = PolarsLazyDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         _lazy_df.data = self.left_data
         merge_engine = _lazy_df.merge_engine()
-        result = merge_engine().merge(_lazy_df.data, self.right_data, JoinType.LEFT, self.idx, self.idx)
+        result = merge_engine().merge(
+            _lazy_df.data, self.right_data, make_merge_link(JoinType.LEFT, self.idx, self.idx)
+        )
         assert isinstance(result, pl.LazyFrame)
 
         # Verify results when collected
@@ -126,7 +131,9 @@ class TestPolarsLazyDataFrameComputeFramework:
         _lazy_df = PolarsLazyDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         _lazy_df.data = self.left_data
         merge_engine = _lazy_df.merge_engine()
-        result = merge_engine().merge(_lazy_df.data, self.right_data, JoinType.APPEND, self.idx, self.idx)
+        result = merge_engine().merge(
+            _lazy_df.data, self.right_data, make_merge_link(JoinType.APPEND, self.idx, self.idx)
+        )
         assert isinstance(result, pl.LazyFrame)
 
         # Verify results when collected

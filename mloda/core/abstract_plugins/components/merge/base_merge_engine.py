@@ -2,7 +2,7 @@ from abc import ABC
 from typing import Any, Optional, final
 
 from mloda.core.abstract_plugins.components.index.index import Index
-from mloda.core.abstract_plugins.components.link import JoinType
+from mloda.core.abstract_plugins.components.link import AsOfJoinConfig, JoinType, Link
 
 
 class BaseMergeEngine(ABC):
@@ -56,9 +56,23 @@ class BaseMergeEngine(ABC):
     def merge_union(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
         raise ValueError(f"JoinType union is not yet implemented in {self.__class__.__name__}")
 
+    def merge_asof(
+        self,
+        left_data: Any,
+        right_data: Any,
+        left_index: Index,
+        right_index: Index,
+        asof_config: AsOfJoinConfig,
+    ) -> Any:
+        raise ValueError(f"JoinType asof is not yet implemented in {self.__class__.__name__}")
+
     @final
-    def merge(self, left_data: Any, right_data: Any, jointype: JoinType, left_index: Index, right_index: Index) -> Any:
+    def merge(self, left_data: Any, right_data: Any, link: Link) -> Any:
         self.check_import()
+
+        jointype = link.jointype
+        left_index = link.left_index
+        right_index = link.right_index
 
         if jointype not in (JoinType.APPEND, JoinType.UNION):
             if len(left_index.index) != len(right_index.index):
@@ -80,5 +94,9 @@ class BaseMergeEngine(ABC):
             return self.merge_append(left_data, right_data, left_index, right_index)
         elif jointype == JoinType.UNION:
             return self.merge_union(left_data, right_data, left_index, right_index)
+        elif jointype == JoinType.ASOF:
+            if link.asof_config is None:
+                raise ValueError("ASOF join requires a Link carrying an asof_config.")
+            return self.merge_asof(left_data, right_data, left_index, right_index, link.asof_config)
         else:
             raise ValueError(f"JoinType {jointype} is not yet implemented {self.__class__.__name__}")

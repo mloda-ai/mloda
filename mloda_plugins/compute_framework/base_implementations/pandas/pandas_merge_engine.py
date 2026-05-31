@@ -1,5 +1,6 @@
 from typing import Any
 
+from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 from mloda.user import Index
 from mloda.user import JoinType
 from mloda.provider import BaseMergeEngine
@@ -34,6 +35,35 @@ class PandasMergeEngine(BaseMergeEngine):
         combined = self.merge_append(left_data, right_data, left_index, right_index)
         return combined.drop_duplicates()
 
+    def merge_asof(
+        self,
+        left_data: Any,
+        right_data: Any,
+        left_index: Index,
+        right_index: Index,
+        asof_config: AsOfJoinConfig,
+    ) -> Any:
+        by_left = list(left_index.index)
+        by_right = list(right_index.index)
+        lt, rt = asof_config.left_time_column, asof_config.right_time_column
+        left_sorted = left_data.sort_values(lt)
+        right_sorted = right_data.sort_values(rt)
+        kwargs: dict[str, Any] = {
+            "direction": asof_config.direction,
+            "allow_exact_matches": asof_config.allow_exact_matches,
+        }
+        if asof_config.tolerance is not None:
+            kwargs["tolerance"] = asof_config.tolerance
+        return self.pd_merge_asof()(
+            left_sorted,
+            right_sorted,
+            left_on=lt,
+            right_on=rt,
+            left_by=by_left,
+            right_by=by_right,
+            **kwargs,
+        )
+
     def join_logic(
         self, join_type: str, left_data: Any, right_data: Any, left_index: Index, right_index: Index, jointype: JoinType
     ) -> Any:
@@ -60,3 +90,9 @@ class PandasMergeEngine(BaseMergeEngine):
         if pd is None:
             raise ImportError("Pandas is not installed. To be able to use this framework, please install pandas.")
         return pd.concat
+
+    @classmethod
+    def pd_merge_asof(cls) -> Any:
+        if pd is None:
+            raise ImportError("Pandas is not installed. To be able to use this framework, please install pandas.")
+        return pd.merge_asof

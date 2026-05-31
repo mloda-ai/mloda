@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, dataclass
+from datetime import timedelta
 from enum import Enum
 from uuid import uuid4
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 
 from mloda.core.abstract_plugins.components.index.index import Index
@@ -21,6 +22,8 @@ class JoinType(Enum):
         OUTER: Includes all rows from both datasets, filling unmatched values with nulls.
         APPEND: Stacks datasets vertically, preserving all rows from both.
         UNION: Combines datasets, removing duplicate rows.
+        ASOF: Per-row point-in-time / as-of join: equi match on the by-keys, nearest
+            time match (by direction) on the time columns.
     """
 
     INNER = "inner"
@@ -29,6 +32,29 @@ class JoinType(Enum):
     OUTER = "outer"
     APPEND = "append"
     UNION = "union"
+    ASOF = "asof"
+
+
+@dataclass(frozen=True)
+class AsOfJoinConfig:
+    """Configuration for an ASOF (point-in-time) join.
+
+    The by-keys (the join Index) drive the equi match; the time columns drive the
+    inequality match. ``direction``/``tolerance``/``allow_exact_matches`` follow
+    pandas ``merge_asof`` semantics.
+    """
+
+    left_time_column: str
+    right_time_column: str
+    direction: Literal["backward", "forward", "nearest"] = "backward"
+    tolerance: float | int | timedelta | None = None
+    allow_exact_matches: bool = True
+
+    def __post_init__(self) -> None:
+        if self.direction not in ("backward", "forward", "nearest"):
+            raise ValueError(
+                f"Invalid asof direction {self.direction!r}; expected 'backward', 'forward', or 'nearest'."
+            )
 
 
 class JoinSpec:
@@ -148,6 +174,15 @@ class Link:
         The _on methods require feature groups to have index_columns() defined.
         Use left_index/right_index to select which index when multiple are available.
 
+        **ASOF factories** - point-in-time / as-of joins:
+            - Link.asof(left_joinspec, right_joinspec, left_time_column=..., right_time_column=...)
+            - Link.asof_on(LeftFG, RightFG, left_time_column=..., right_time_column=...)
+
+        For an ASOF join the by-keys are the ``Index`` (an equi match) and the time
+        columns drive the inequality match. ``direction`` ('backward', 'forward',
+        'nearest'), ``tolerance`` and ``allow_exact_matches`` follow pandas
+        ``merge_asof`` semantics and are carried on the link via an ``AsOfJoinConfig``.
+
     Example:
         >>> # Verbose: explicit JoinSpec with index
         >>> Link.inner(JoinSpec(UserFG, "user_id"), JoinSpec(OrderFG, "user_id"))
@@ -201,6 +236,7 @@ class Link:
         right: JoinSpec,
         left_discriminator: Optional[dict[str, Any]] = None,
         right_discriminator: Optional[dict[str, Any]] = None,
+        asof_config: Optional[AsOfJoinConfig] = None,
     ) -> None:
         self.jointype = JoinType(jointype) if isinstance(jointype, str) else jointype
         self.left_feature_group = left.feature_group
@@ -209,6 +245,7 @@ class Link:
         self.right_index = right.index
         self.left_discriminator = left_discriminator
         self.right_discriminator = right_discriminator
+        self.asof_config = asof_config
 
         self.uuid = uuid4()
 
@@ -413,6 +450,72 @@ class Link:
             right_discriminator=right_discriminator,
         )
 
+    @classmethod
+    def asof(
+        cls,
+        left: JoinSpec,
+        right: JoinSpec,
+        *,
+        left_time_column: str,
+        right_time_column: str,
+        direction: Literal["backward", "forward", "nearest"] = "backward",
+        tolerance: float | int | timedelta | None = None,
+        allow_exact_matches: bool = True,
+        left_discriminator: Optional[dict[str, Any]] = None,
+        right_discriminator: Optional[dict[str, Any]] = None,
+    ) -> "Link":
+        """Create an ASOF (point-in-time) join from explicit JoinSpecs."""
+        config = AsOfJoinConfig(
+            left_time_column=left_time_column,
+            right_time_column=right_time_column,
+            direction=direction,
+            tolerance=tolerance,
+            allow_exact_matches=allow_exact_matches,
+        )
+        return cls(
+            JoinType.ASOF,
+            left,
+            right,
+            left_discriminator=left_discriminator,
+            right_discriminator=right_discriminator,
+            asof_config=config,
+        )
+
+    @classmethod
+    def asof_on(
+        cls,
+        left: type[Any],
+        right: type[Any],
+        *,
+        left_time_column: str,
+        right_time_column: str,
+        direction: Literal["backward", "forward", "nearest"] = "backward",
+        tolerance: float | int | timedelta | None = None,
+        allow_exact_matches: bool = True,
+        left_index: int = 0,
+        right_index: int = 0,
+        left_discriminator: Optional[dict[str, Any]] = None,
+        right_discriminator: Optional[dict[str, Any]] = None,
+    ) -> "Link":
+        """Create an ASOF join, deriving the by-key Index from index_columns()."""
+        left_idx = _get_index_from_feature_group(left, left_index, "left")
+        right_idx = _get_index_from_feature_group(right, right_index, "right")
+        config = AsOfJoinConfig(
+            left_time_column=left_time_column,
+            right_time_column=right_time_column,
+            direction=direction,
+            tolerance=tolerance,
+            allow_exact_matches=allow_exact_matches,
+        )
+        return cls(
+            JoinType.ASOF,
+            JoinSpec(left, left_idx),
+            JoinSpec(right, right_idx),
+            left_discriminator=left_discriminator,
+            right_discriminator=right_discriminator,
+            asof_config=config,
+        )
+
     def matches_exact(
         self,
         other_left_feature_group: type[Any],
@@ -452,6 +555,7 @@ class Link:
             and self.right_feature_group.get_class_name() == other.right_feature_group.get_class_name()
             and self.left_index == other.left_index
             and self.right_index == other.right_index
+            and self.asof_config == other.asof_config
         )
 
     def __hash__(self) -> int:
@@ -462,5 +566,6 @@ class Link:
                 self.right_feature_group.get_class_name(),
                 self.left_index,
                 self.right_index,
+                self.asof_config,
             )
         )

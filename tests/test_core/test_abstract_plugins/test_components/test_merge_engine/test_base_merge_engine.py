@@ -1,5 +1,6 @@
 from uuid import UUID
 import uuid
+import pytest
 import pandas as pd
 import pandas.testing as pdt
 from typing import Any, Optional
@@ -9,12 +10,14 @@ from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.user import Index
 from mloda.provider import BaseInputData
+from mloda.provider import BaseMergeEngine
 from mloda.provider import DataCreator
 from mloda.user import Link, JoinSpec
 from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda.user import mloda
 from mloda.provider import DefaultOptionKeys
+from tests.test_plugins.compute_framework.test_tooling.merge_link import make_merge_link
 
 
 class AppendMergeTestFeature(FeatureGroup):
@@ -191,6 +194,78 @@ class TestBaseMergeEngine:
 
         for res in result:
             assert len(res) == 5
+
+    def test_merge_asof_default_raises_value_error(self) -> None:
+        """A bare BaseMergeEngine subclass must raise ValueError mentioning 'asof' for merge_asof."""
+        from mloda.user import JoinType
+        from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
+
+        class BareMergeEngine(BaseMergeEngine):
+            pass
+
+        engine = BareMergeEngine()
+        idx = Index(("k",))
+        cfg = AsOfJoinConfig(left_time_column="t", right_time_column="t")
+
+        with pytest.raises(ValueError, match="asof"):
+            engine.merge_asof(None, None, idx, idx, cfg)
+
+        # Sanity: JoinType.ASOF must exist for the dispatch tests below.
+        assert JoinType.ASOF.value == "asof"
+
+    def test_merge_asof_link_without_config_raises_value_error(self) -> None:
+        """An ASOF-jointype Link whose asof_config is None must raise ValueError mentioning 'asof_config'."""
+        from mloda.user import JoinType
+
+        class BareMergeEngine(BaseMergeEngine):
+            pass
+
+        engine = BareMergeEngine()
+        idx = Index(("k",))
+        link = make_merge_link(JoinType.ASOF, idx, idx)
+
+        with pytest.raises(ValueError, match="asof_config"):
+            engine.merge(None, None, link)
+
+    def test_merge_non_asof_dispatches_via_link(self) -> None:
+        """A non-ASOF Link dispatches to the matching leaf hook (INNER -> merge_inner)."""
+        from mloda.user import JoinType
+        from mloda.core.abstract_plugins.components.index.index import Index as CoreIndex
+
+        sentinel = object()
+
+        class NonAsofMergeEngine(BaseMergeEngine):
+            def merge_inner(
+                self, left_data: Any, right_data: Any, left_index: CoreIndex, right_index: CoreIndex
+            ) -> Any:
+                return sentinel
+
+        engine = NonAsofMergeEngine()
+        idx = CoreIndex(("id",))
+
+        result = engine.merge(None, None, make_merge_link(JoinType.INNER, idx, idx))
+        assert result is sentinel
+
+    def test_merge_asof_dispatches_to_merge_asof(self) -> None:
+        """merge() with a real ASOF Link (carrying asof_config) dispatches to merge_asof."""
+        sentinel = object()
+
+        class DispatchMergeEngine(BaseMergeEngine):
+            def merge_asof(
+                self, left_data: Any, right_data: Any, left_index: Index, right_index: Index, asof_config: Any
+            ) -> Any:
+                return sentinel
+
+        engine = DispatchMergeEngine()
+        link = Link.asof(
+            JoinSpec(AppendMergeTestFeature, "k"),
+            JoinSpec(SecondAppendMergeTestFeature, "k"),
+            left_time_column="t",
+            right_time_column="t",
+        )
+
+        result = engine.merge(None, None, link)
+        assert result is sentinel
 
     def test_dependent_append_multiple_features_v3(self) -> None:
         feature = Feature(

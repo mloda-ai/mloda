@@ -37,10 +37,7 @@ Please include as much of the following as you can:
 
 ## What to Expect
 
-mloda is an early-stage project maintained by a small team, so we can't commit
-to fixed response times yet. That said:
-
-- We aim to acknowledge reports as soon as we reasonably can.
+- We'll get in touch to acknowledge your report.
 - We'll assess the severity and keep you updated as we work toward a fix.
 - We're happy to credit you in the advisory once it's published, unless you
   prefer to remain anonymous.

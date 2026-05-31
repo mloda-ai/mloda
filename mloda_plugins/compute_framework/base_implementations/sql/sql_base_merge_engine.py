@@ -1,4 +1,3 @@
-import uuid
 from abc import abstractmethod
 from typing import Any
 
@@ -11,22 +10,16 @@ from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import q
 class SqlBaseMergeEngine(BaseMergeEngine):
     """Shared SQL merge logic for SQL-based merge engines.
 
-    All identifiers are quoted via ``quote_ident``. Table names used in
-    ``_merge_relations`` are internally generated UUIDs, never user input.
+    All identifiers are quoted via ``quote_ident``.
 
     Subclasses must implement:
-    - _execute_sql(sql): Execute SQL and return a relation/result
-    - _register_table(name, data): Register data as a named table for SQL queries
+    - _merge_relations(left, right, union_all): Build a union/append of two relations
     - _set_alias(data, alias): Set an alias on a relation
     - _join_relation(left, right, condition, how): Execute a join between two relations
     """
 
     @abstractmethod
-    def _execute_sql(self, sql: str) -> Any:
-        raise NotImplementedError
-
-    @abstractmethod
-    def _register_table(self, name: str, data: Any) -> None:
+    def _merge_relations(self, left_data: Any, right_data: Any, union_all: bool) -> Any:
         raise NotImplementedError
 
     @abstractmethod
@@ -55,31 +48,19 @@ class SqlBaseMergeEngine(BaseMergeEngine):
     def merge_append(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
         return self._merge_relations(left_data, right_data, union_all=True)
 
-    def _merge_relations(self, left_data: Any, right_data: Any, union_all: bool) -> Any:
-        def build_projection(cols_present: Any, all_cols: list[str]) -> str:
-            return ", ".join(
-                [quote_ident(col) if col in cols_present else f"NULL AS {quote_ident(col)}" for col in all_cols]
-            )
-
+    def _union_projections(self, left_data: Any, right_data: Any) -> tuple[str, str]:
+        """Build (left_projection, right_projection) over the sorted union of both column sets,
+        NULL-filling columns missing from each side. All identifiers are quoted via quote_ident."""
         left_cols = set(self.get_column_names(left_data))
         right_cols = set(self.get_column_names(right_data))
         all_cols = sorted(left_cols.union(right_cols))
 
-        left_proj = build_projection(left_cols, all_cols)
-        right_proj = build_projection(right_cols, all_cols)
+        def build(cols_present: set[str]) -> str:
+            return ", ".join(
+                quote_ident(col) if col in cols_present else f"NULL AS {quote_ident(col)}" for col in all_cols
+            )
 
-        union_keyword = "UNION ALL" if union_all else "UNION"
-
-        if self.framework_connection is None:
-            raise ValueError("Framework connection is not set. Please set the framework connection before merging.")
-
-        left_name = f"_left_{uuid.uuid4().hex}"
-        right_name = f"_right_{uuid.uuid4().hex}"
-        self._register_table(left_name, left_data)
-        self._register_table(right_name, right_data)
-
-        sql = f" SELECT {left_proj} FROM {quote_ident(left_name)} {union_keyword} SELECT {right_proj} FROM {quote_ident(right_name)} "  # nosec
-        return self._execute_sql(sql)
+        return build(left_cols), build(right_cols)
 
     def get_column_names(self, data: Any) -> list[str]:
         if hasattr(data, "columns"):

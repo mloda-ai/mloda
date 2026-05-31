@@ -3,6 +3,7 @@ import pytest
 
 from mloda.user import JoinType
 from mloda.user import Index
+from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_merge_engine import DuckDBMergeEngine
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
@@ -302,6 +303,56 @@ class TestDuckDBMergeEngine:
         assert engine.column_exists_in_result(data, "col1") is True
         assert engine.column_exists_in_result(data, "col2") is True
         assert engine.column_exists_in_result(data, "nonexistent") is False
+
+
+@pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB or PyArrow is not installed. Skipping this test.")
+class TestDuckDBMergeEngineViewLeak:
+    """Regression tests for issue #475: SQL merge engines must not leak per-merge temp views.
+
+    merge_union, merge_append and merge_asof register uniquely-named `_left_<uuid>` /
+    `_right_<uuid>` views on every call. On a long-lived connection these accumulate and
+    are never dropped. These tests run many merges through ONE connection and assert the
+    catalog does not retain the temp registration views, while results stay correct.
+    """
+
+    @staticmethod
+    def _leaked_view_count(connection: Any) -> int:
+        rows = connection.sql(
+            "SELECT count(*) FROM duckdb_views() WHERE view_name LIKE '_left_%' OR view_name LIKE '_right_%'"
+        ).fetchall()
+        return int(rows[0][0])
+
+    def test_merge_union_does_not_leak_views(self, connection: Any, index_obj: Any) -> None:
+        engine = DuckDBMergeEngine(connection)
+        for _ in range(5):
+            left = DuckdbRelation.from_arrow(connection, pa.Table.from_pydict({"idx": [1, 3], "col1": ["a", "b"]}))
+            right = DuckdbRelation.from_arrow(connection, pa.Table.from_pydict({"idx": [1, 2], "col2": ["x", "z"]}))
+            result_df = engine.merge_union(left, right, index_obj, index_obj).df()
+            assert sorted(result_df["idx"].tolist()) == [1, 1, 2, 3]
+
+        assert self._leaked_view_count(connection) == 0
+
+    def test_merge_append_does_not_leak_views(self, connection: Any, index_obj: Any) -> None:
+        engine = DuckDBMergeEngine(connection)
+        for _ in range(5):
+            left = DuckdbRelation.from_arrow(connection, pa.Table.from_pydict({"idx": [1, 3], "col1": ["a", "b"]}))
+            right = DuckdbRelation.from_arrow(connection, pa.Table.from_pydict({"idx": [1, 2], "col2": ["x", "z"]}))
+            result_df = engine.merge_append(left, right, index_obj, index_obj).df()
+            assert len(result_df) == 4
+
+        assert self._leaked_view_count(connection) == 0
+
+    def test_merge_asof_does_not_leak_views(self, connection: Any) -> None:
+        engine = DuckDBMergeEngine(connection)
+        cfg = AsOfJoinConfig(left_time_column="t", right_time_column="t", direction="backward")
+        for _ in range(5):
+            left = DuckdbRelation.from_arrow(connection, pa.Table.from_pydict({"k": [1], "t": [10], "lv": [100]}))
+            right = DuckdbRelation.from_arrow(connection, pa.Table.from_pydict({"k": [1], "t": [8], "rv": [7]}))
+            result_df = engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg).df()
+            assert len(result_df) == 1
+            assert result_df["rv"].tolist()[0] == 7
+
+        assert self._leaked_view_count(connection) == 0
 
 
 @pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB or PyArrow is not installed. Skipping this test.")

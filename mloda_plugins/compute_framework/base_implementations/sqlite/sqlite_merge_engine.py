@@ -1,5 +1,4 @@
 import sqlite3
-import uuid
 from datetime import timedelta
 from typing import Any
 
@@ -11,6 +10,16 @@ from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation
 
 
 class SqliteMergeEngine(SqlBaseMergeEngine):
+    def _merge_relations(self, left_data: Any, right_data: Any, union_all: bool) -> Any:
+        if self.framework_connection is None:
+            raise ValueError("Framework connection is not set. Please set the framework connection before merging.")
+        left_proj, right_proj = self._union_projections(left_data, right_data)
+        union_keyword = "UNION ALL" if union_all else "UNION"
+        left_ref = quote_ident(left_data.table_name)
+        right_ref = quote_ident(right_data.table_name)
+        sql = f" SELECT {left_proj} FROM {left_ref} {union_keyword} SELECT {right_proj} FROM {right_ref} "  # nosec
+        return self._execute_sql(sql)
+
     def merge_asof(
         self,
         left_data: Any,
@@ -34,10 +43,8 @@ class SqliteMergeEngine(SqlBaseMergeEngine):
             op = ">=" if asof_config.allow_exact_matches else ">"
             time_order = "ASC"
 
-        left_name = f"_left_{uuid.uuid4().hex}"
-        right_name = f"_right_{uuid.uuid4().hex}"
-        self._register_table(left_name, left_data)
-        self._register_table(right_name, right_data)
+        left_ref = quote_ident(left_data.table_name)
+        right_ref = quote_ident(right_data.table_name)
 
         lt = quote_ident(asof_config.left_time_column)
         rt = quote_ident(asof_config.right_time_column)
@@ -76,8 +83,8 @@ class SqliteMergeEngine(SqlBaseMergeEngine):
             f"SELECT {outer_projection} FROM ("  # nosec
             f"SELECT {inner_projection}, "
             f"ROW_NUMBER() OVER (PARTITION BY L.{lid} ORDER BY {order_clause}) AS {rn} "
-            f"FROM (SELECT *, ROW_NUMBER() OVER () AS {lid} FROM {quote_ident(left_name)}) AS L "
-            f"LEFT JOIN {quote_ident(right_name)} AS R ON {on_clause}"
+            f"FROM (SELECT *, ROW_NUMBER() OVER () AS {lid} FROM {left_ref}) AS L "
+            f"LEFT JOIN {right_ref} AS R ON {on_clause}"
             f") WHERE {rn} = 1"
         )
         return self._execute_sql(sql)
@@ -87,16 +94,8 @@ class SqliteMergeEngine(SqlBaseMergeEngine):
             raise ValueError("Framework connection is not set.")
         conn: sqlite3.Connection = self.framework_connection
         new_table = _next_table_name()
-        conn.execute(f"CREATE TEMP VIEW {quote_ident(new_table)} AS {sql}")
+        conn.execute(f"CREATE TEMP VIEW {quote_ident(new_table)} AS {sql}")  # nosec
         return SqliteRelation(conn, new_table, _is_view=True)
-
-    def _register_table(self, name: str, data: Any) -> None:
-        if self.framework_connection is None:
-            raise ValueError("Framework connection is not set.")
-        conn: sqlite3.Connection = self.framework_connection
-        rel: SqliteRelation = data
-        conn.execute(f"DROP VIEW IF EXISTS {quote_ident(name)}")
-        conn.execute(f"CREATE TEMP VIEW {quote_ident(name)} AS SELECT * FROM {quote_ident(rel.table_name)}")  # nosec
 
     def _set_alias(self, data: Any, alias: str) -> Any:
         return data.set_alias(alias)

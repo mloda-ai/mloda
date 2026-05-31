@@ -1,4 +1,3 @@
-import uuid
 from datetime import timedelta
 from typing import Any
 
@@ -19,6 +18,17 @@ class DuckDBMergeEngine(SqlBaseMergeEngine):
         if duckdb is None:
             raise ImportError("DuckDB is not installed. To be able to use this framework, please install duckdb.")
 
+    def _merge_relations(self, left_data: Any, right_data: Any, union_all: bool) -> Any:
+        if self.framework_connection is None:
+            raise ValueError("Framework connection is not set. Please set the framework connection before merging.")
+        left_proj, right_proj = self._union_projections(left_data, right_data)
+        left_rel = left_data._relation.project(left_proj)
+        right_rel = right_data._relation.project(right_proj)
+        unioned = left_rel.union(right_rel)
+        if not union_all:
+            unioned = unioned.distinct()
+        return DuckdbRelation(self.framework_connection, unioned)
+
     def merge_asof(
         self,
         left_data: Any,
@@ -36,30 +46,23 @@ class DuckDBMergeEngine(SqlBaseMergeEngine):
         right_by = right_index.index if right_index.is_multi_index() else (right_index.index[0],)
 
         if asof_config.direction == "backward":
-            op = ">=" if asof_config.allow_exact_matches else ">"
+            op, time_order = (">=" if asof_config.allow_exact_matches else ">"), "DESC"
         else:
-            op = "<=" if asof_config.allow_exact_matches else "<"
-
-        left_name = f"_left_{uuid.uuid4().hex}"
-        right_name = f"_right_{uuid.uuid4().hex}"
-        self._register_table(left_name, left_data)
-        self._register_table(right_name, right_data)
-
-        conds = [
-            f"left_rel.{quote_ident(left)} = right_rel.{quote_ident(right)}" for left, right in zip(left_by, right_by)
-        ]
-        lt = quote_ident(asof_config.left_time_column)
-        rt = quote_ident(asof_config.right_time_column)
-        conds.append(f"left_rel.{lt} {op} right_rel.{rt}")
-        on_clause = " AND ".join(conds)
+            op, time_order = ("<=" if asof_config.allow_exact_matches else "<"), "ASC"
 
         left_cols = self.get_column_names(left_data)
         right_cols = self.get_column_names(right_data)
+        right_extra = [c for c in right_cols if c not in left_cols]
 
-        # tolerance: NULL out the right columns (LEFT semantics keep the row) when the
-        # time gap exceeds tolerance. Expressed in the projection so the asof inequality
-        # remains the last ON condition (a DuckDB ASOF JOIN requirement).
-        tol_guard = ""
+        lt, rt = asof_config.left_time_column, asof_config.right_time_column
+
+        rmap = {c: f"_mloda_r_{c}" for c in right_cols}
+        left_rel = left_data._relation.project("*, ROW_NUMBER() OVER () AS _mloda_lid").set_alias("L")
+        right_proj = ", ".join(f"{quote_ident(c)} AS {quote_ident(rmap[c])}" for c in right_cols)
+        right_rel = right_data._relation.project(right_proj).set_alias("R")
+
+        conds = [f"L.{quote_ident(lb)} = R.{quote_ident(rmap[rb])}" for lb, rb in zip(left_by, right_by)]
+        conds.append(f"L.{quote_ident(lt)} {op} R.{quote_ident(rmap[rt])}")
         if asof_config.tolerance is not None:
             if isinstance(asof_config.tolerance, timedelta):
                 raise ValueError(
@@ -67,41 +70,23 @@ class DuckDBMergeEngine(SqlBaseMergeEngine):
                     "tolerance (e.g. epoch seconds matching the time column)."
                 )
             tol = float(asof_config.tolerance)
-            if asof_config.direction == "backward":
-                gap = f"(left_rel.{lt} - right_rel.{rt})"
-            else:
-                gap = f"(right_rel.{rt} - left_rel.{lt})"
-            tol_guard = f"{gap} <= {tol}"
+            conds.append(f"ABS(L.{quote_ident(lt)} - R.{quote_ident(rmap[rt])}) <= {tol}")
+        on_clause = " AND ".join(conds)
 
-        def project(col: str, rel: str) -> str:
-            ref = f"{rel}.{quote_ident(col)}"
-            if rel == "right_rel" and tol_guard:
-                return f"CASE WHEN {tol_guard} THEN {ref} ELSE NULL END AS {quote_ident(col)}"
-            return f"{ref} AS {quote_ident(col)}"
+        joined = left_rel.join(right_rel, on_clause, how="left")
 
-        proj = [project(c, "left_rel") for c in left_cols]
-        proj += [project(c, "right_rel") for c in right_cols if c not in left_cols]
-        projection = ", ".join(proj)
-
-        sql = (
-            f"SELECT {projection} FROM {quote_ident(left_name)} AS left_rel "  # nosec
-            f"ASOF LEFT JOIN {quote_ident(right_name)} AS right_rel ON {on_clause}"
+        qrt = quote_ident(rmap[rt])
+        order_keys = [f"({qrt} IS NULL)", f"{qrt} {time_order}"]
+        order_keys += [f"{quote_ident(rmap[c])} ASC" for c in right_extra]
+        ranked = joined.project(
+            f"*, ROW_NUMBER() OVER (PARTITION BY _mloda_lid ORDER BY {', '.join(order_keys)}) AS _mloda_rn"
         )
-        return self._execute_sql(sql)
+        picked = ranked.filter("_mloda_rn = 1")
 
-    def _execute_sql(self, sql: str) -> Any:
-        if self.framework_connection is None:
-            raise ValueError("Framework connection is not set.")
-        result = self.framework_connection.sql(sql)
+        final_proj = [f"{quote_ident(c)} AS {quote_ident(c)}" for c in left_cols]
+        final_proj += [f"{quote_ident(rmap[c])} AS {quote_ident(c)}" for c in right_extra]
+        result = picked.project(", ".join(final_proj))
         return DuckdbRelation(self.framework_connection, result)
-
-    def _register_table(self, name: str, data: Any) -> None:
-        if self.framework_connection is None:
-            raise ValueError("Framework connection is not set.")
-        if isinstance(data, DuckdbRelation):
-            data._relation.create_view(name, replace=True)
-        else:
-            self.framework_connection.register(name, data)
 
     def _set_alias(self, data: Any, alias: str) -> Any:
         return data.set_alias(alias)

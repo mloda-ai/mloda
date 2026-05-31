@@ -6,6 +6,7 @@ import pytest
 
 from mloda.user import JoinType
 from mloda.user import Index
+from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import _regexp
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_merge_engine import SqliteMergeEngine
@@ -293,16 +294,61 @@ class TestSqliteMergeEngine:
         assert set(result_df["idx"].tolist()) == {2, 3, 4}
 
 
+class TestSqliteMergeEngineViewLeak:
+    """Regression tests for issue #475: SQL merge engines must not leak per-merge temp views.
+
+    merge_union, merge_append and merge_asof register uniquely-named `_left_<uuid>` /
+    `_right_<uuid>` temp views on every call and never drop them. On a long-lived connection
+    these accumulate. These tests run many merges through ONE connection and assert the
+    catalog does not retain the temp registration views, while results stay correct.
+    """
+
+    @staticmethod
+    def _leaked_view_count(connection: sqlite3.Connection) -> int:
+        row = connection.execute(
+            "SELECT count(*) FROM sqlite_temp_master WHERE type='view' "
+            "AND (name LIKE '_left_%' OR name LIKE '_right_%')"
+        ).fetchone()
+        return int(row[0])
+
+    def test_merge_union_does_not_leak_views(self, connection: sqlite3.Connection, index_obj: Index) -> None:
+        engine = SqliteMergeEngine(connection)
+        for _ in range(5):
+            left = SqliteRelation.from_arrow(connection, pa.Table.from_pydict({"idx": [1, 3], "col1": ["a", "b"]}))
+            right = SqliteRelation.from_arrow(connection, pa.Table.from_pydict({"idx": [1, 2], "col2": ["x", "z"]}))
+            table = engine.merge_union(left, right, index_obj, index_obj).to_arrow_table()
+            assert table.num_rows <= 4
+            assert set(table.column("idx").to_pylist()) == {1, 2, 3}
+
+        assert self._leaked_view_count(connection) == 0
+
+    def test_merge_append_does_not_leak_views(self, connection: sqlite3.Connection, index_obj: Index) -> None:
+        engine = SqliteMergeEngine(connection)
+        for _ in range(5):
+            left = SqliteRelation.from_arrow(connection, pa.Table.from_pydict({"idx": [1, 3], "col1": ["a", "b"]}))
+            right = SqliteRelation.from_arrow(connection, pa.Table.from_pydict({"idx": [1, 2], "col2": ["x", "z"]}))
+            table = engine.merge_append(left, right, index_obj, index_obj).to_arrow_table()
+            assert table.num_rows == 4
+
+        assert self._leaked_view_count(connection) == 0
+
+    def test_merge_asof_does_not_leak_views(self, connection: sqlite3.Connection) -> None:
+        engine = SqliteMergeEngine(connection)
+        cfg = AsOfJoinConfig(left_time_column="t", right_time_column="t", direction="backward")
+        for _ in range(5):
+            left = SqliteRelation.from_arrow(connection, pa.Table.from_pydict({"k": [1], "t": [10], "lv": [100]}))
+            right = SqliteRelation.from_arrow(connection, pa.Table.from_pydict({"k": [1], "t": [8], "rv": [7]}))
+            table = engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg).to_arrow_table()
+            assert table.num_rows == 1
+            assert table.column("rv").to_pylist()[0] == 7
+
+        assert self._leaked_view_count(connection) == 0
+
+
 def test_execute_sql_raises_value_error_when_no_connection() -> None:
     engine = SqliteMergeEngine()
     with pytest.raises(ValueError, match="Framework connection is not set"):
         engine._execute_sql("SELECT 1")
-
-
-def test_register_table_raises_value_error_when_no_connection() -> None:
-    engine = SqliteMergeEngine()
-    with pytest.raises(ValueError, match="Framework connection is not set"):
-        engine._register_table("some_table", None)
 
 
 class TestSqliteMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):

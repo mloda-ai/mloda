@@ -43,6 +43,8 @@ class TestPyArrowMergeEngineHelperColumnCollision:
         # The user's mloda_right_index column must survive with its original values per matched row
         assert by_key[2]["mloda_right_index"] == 99
         assert by_key[3]["mloda_right_index"] == 88
+        # The synthetic join-key helper must NOT leak into the output schema.
+        assert set(result.column_names) == {"left_id", "lval", "right_id", "mloda_right_index", "rval"}
 
 
 class TestPyArrowMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):

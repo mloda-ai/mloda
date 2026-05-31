@@ -9,8 +9,7 @@ import pytest
 
 from mloda.user import PluginCollector
 
-# Importing PandasDataFrame registers it in the compute-framework subclass registry,
-# so test_create_synthetic_data resolves "PandasDataFrame" even when run in isolation.
+# Registers PandasDataFrame so test_create_synthetic_data resolves it when run in isolation.
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame  # noqa: F401
 
 from docs.docs.examples.mloda_basics.create_synthetic_data import (

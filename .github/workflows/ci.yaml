@@ -52,8 +52,7 @@ jobs:
       timeout-minutes: 3
 
   notebooks:
-    # Executes the marimo example notebooks. Kept out of the build matrix because
-    # running seven notebooks end to end is slower than the unit-test jobs.
+    # Runs the marimo example notebooks; slower than the unit-test matrix.
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4

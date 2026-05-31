@@ -71,8 +71,7 @@ docs = [
     "notebook",
     "mermaid-py",
     "marimo",
-    # The build executes the example notebooks (via marimo_export_hook.py) to capture
-    # their outputs, so the compute backends the notebooks use must be installable too.
+    # Backends the example notebooks execute during the docs build.
     "mloda[pandas]",
     "mloda[polars]",
     "mloda[pyarrow]",
@@ -131,9 +130,7 @@ skips = [
 [tool.mypy]
 explicit_package_bases = true
 namespace_packages = true
-# marimo notebooks are reactive-runtime modules: cells are unannotated `@app.cell` functions
-# that mypy --strict cannot meaningfully type-check. They are validated by execution instead.
-# (create_synthetic_data.py and __init__.py under examples stay type-checked.)
+# marimo notebooks are unannotated reactive cells; validated by execution, not mypy.
 exclude = [
     'docs/docs/examples/base_usage\.py$',
     'docs/docs/examples/sklearn_integration_basic\.py$',
@@ -163,10 +160,7 @@ line-length = 120
 extend-select = ["UP006", "UP007"]
 
 [tool.ruff.lint.per-file-ignores]
-# marimo notebooks place imports inside cells (E402), re-export cell values (F401),
-# carry string type annotations that reference cross-cell names (F821), and keep
-# intermediate results assigned for display (F841). marimo resolves these via its
-# reactive dataflow; static linting cannot.
+# marimo notebook idioms static linting can't follow (cell imports, re-exports, cross-cell names).
 "docs/docs/examples/**/*.py" = ["E402", "F401", "F821", "F841"]
 
 [tool.uv]

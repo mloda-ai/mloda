@@ -1,15 +1,5 @@
-"""mkdocs hook that renders marimo notebooks.
-
-The example notebooks under ``docs/docs/examples`` are authored as marimo (``.py``)
-files so they stay diff-friendly in version control. This hook exports each one to a
-Jupyter ``.ipynb`` with executed outputs before the build, so the ``mkdocs-jupyter``
-plugin can render them exactly as before. The generated ``.ipynb`` files are build
-artifacts (git-ignored); only the ``.py`` sources are tracked.
-
-The export runs in ``on_pre_build`` (before mkdocs collects files) and regenerates a
-notebook only when its ``.py`` source is newer than the previously generated ``.ipynb``,
-so ``mkdocs serve`` does not rebuild in a loop.
-"""
+"""mkdocs hook: export the marimo example notebooks (.py) to .ipynb with outputs so
+mkdocs-jupyter can render them. Regenerates only when the .py is newer than the .ipynb."""
 
 from __future__ import annotations
 

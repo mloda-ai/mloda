@@ -24,8 +24,7 @@ Instead, use one of these private channels:
    [Security tab](https://github.com/mloda-ai/mloda/security/advisories/new)
    and click **Report a vulnerability**. This keeps the report, discussion, and
    coordinated disclosure in one place.
-2. **Email** — write to **security@mloda.ai**. Encrypt with our PGP key on
-   request if the details are sensitive.
+2. **Email** — write to **security@mloda.ai**.
 
 Please include as much of the following as you can:
 

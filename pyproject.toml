@@ -43,7 +43,8 @@ test = [
 pyarrow = ["pyarrow"]
 pandas = ["pandas"]
 polars = ["polars"]
-duckdb = ["duckdb"]
+duckdb = ["duckdb", "pyarrow"]
+sqlite = ["pyarrow"]
 iceberg = ["pyiceberg", "pyarrow"]
 spark = ["pyspark", "pyarrow"]
 otel = [
@@ -58,6 +59,13 @@ sklearn = [
     "joblib>=1.0.0",
 ]
 text_cleaning = ["nltk>=3.8"]
+nopyarrow_test = [
+    "pytest>=9.0.3",
+    "pytest-xdist",
+    "pytest-order",
+    "pytest-timeout",
+    "tomli>=1.0.0; python_version < '3.11'",
+]
 docs = [
     "mkdocs",
     "mkdocs-jupyter",
@@ -70,6 +78,7 @@ all = [
     "mloda[pandas]",
     "mloda[polars]",
     "mloda[duckdb]",
+    "mloda[sqlite]",
     "mloda[iceberg]",
     "mloda[otel]",
     "mloda[sklearn]",

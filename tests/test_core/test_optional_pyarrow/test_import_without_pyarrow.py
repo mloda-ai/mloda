@@ -95,6 +95,7 @@ def test_import_and_run_without_pyarrow() -> None:
         capture_output=True,
         text=True,
         env={**os.environ, "MLODA_TEST_BLOCK_PYARROW": "1"},
+        timeout=30,
     )
 
     assert result.returncode == 0, (

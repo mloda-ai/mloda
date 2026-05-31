@@ -11,6 +11,13 @@ except ImportError:
     pa = None  # type: ignore[assignment]
 
 
+def _require_pyarrow() -> None:
+    if pa is None:
+        raise ImportError(
+            "pyarrow is required for Arrow type conversions. Install it with: pip install 'mloda[pyarrow]'"
+        )
+
+
 class DataType(Enum):
     """
     These enums are based on arrow data types, which are found in the parquet file format,
@@ -89,6 +96,7 @@ class DataType(Enum):
         Returns:
             pa.DataType: The corresponding PyArrow DataType.
         """
+        _require_pyarrow()
         mapping = {
             cls.INT32: pa.int32(),
             cls.INT64: pa.int64(),
@@ -110,6 +118,7 @@ class DataType(Enum):
 
     @classmethod
     def _arrow_type_to_dtype_or_none(cls, arrow_type: pa.DataType) -> Optional["DataType"]:
+        _require_pyarrow()
         if pa.types.is_int32(arrow_type):
             return cls.INT32
         elif pa.types.is_int64(arrow_type):

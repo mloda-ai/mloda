@@ -65,10 +65,7 @@ class PluginLoader:
                 continue
             relative_path = item.relative_to(group_path.parent).with_suffix("")
             module_path = ".".join(relative_path.parts)
-            try:
-                self._load_plugin(module_path)
-            except ModuleNotFoundError:
-                continue
+            self._load_plugin(module_path)
 
     def load_group(self, group_name: str) -> None:
         """
@@ -101,7 +98,14 @@ class PluginLoader:
             self._add_plugin_to_graph(full_module_name)
             return
 
-        module = importlib.import_module(full_module_name)
+        try:
+            module = importlib.import_module(full_module_name)
+        except ModuleNotFoundError as e:
+            if e.name and (e.name == self.base_package or e.name.startswith(self.base_package + ".")):
+                raise
+            logger.debug("Skipping plugin %s: missing optional dependency %s", full_module_name, e.name)
+            return
+
         self.plugins[full_module_name] = module
         self._add_plugin_to_graph(full_module_name)
 

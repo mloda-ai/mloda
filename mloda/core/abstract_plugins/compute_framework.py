@@ -6,12 +6,6 @@ from mloda.core.abstract_plugins.components.framework_transformer.cfw_transforme
     ComputeFrameworkTransformer,
 )
 from mloda.core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
-
-try:
-    import pyarrow as pa
-except ImportError:
-    pa = None  # type: ignore[assignment]
-
 from mloda.core.abstract_plugins.function_extender import (
     Extender,
     ExtenderHook,
@@ -22,6 +16,16 @@ from mloda.core.abstract_plugins.components.parallelization_modes import Paralle
 from mloda.core.filter.filter_engine import BaseFilterEngine
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
 from mloda.core.runtime.flight.flight_server import FlightServer
+
+try:
+    import pyarrow as pa
+except ImportError:
+    pa = None  # type: ignore[assignment]
+
+
+def _require_pyarrow() -> None:
+    if pa is None:
+        raise ImportError("pyarrow is required for this operation. Install it with: pip install 'mloda[pyarrow]'")
 
 
 class ComputeFramework(ABC):
@@ -674,6 +678,7 @@ Available join types:
 
     @final
     def upload_table(self, location: str, object_id: Optional[UUID] = None) -> str:
+        _require_pyarrow()
         if object_id is None:
             object_id = uuid4()
         _object_id = str(object_id)

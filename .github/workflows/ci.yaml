@@ -31,6 +31,8 @@ jobs:
             toxenv: "-e python313"
           - python-version: "3.14"
             toxenv: "-e python314"
+          - python-version: "3.12"
+            toxenv: "-e nopyarrow"
 
     steps:
     - uses: actions/checkout@v4

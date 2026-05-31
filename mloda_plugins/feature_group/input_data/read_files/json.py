@@ -1,6 +1,9 @@
 from typing import Any
 
-from pyarrow import json as pyarrow_json
+try:
+    from pyarrow import json as pyarrow_json
+except ImportError:
+    pyarrow_json = None
 
 from mloda.provider import FeatureSet
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
@@ -124,6 +127,8 @@ class JsonReader(ReadFile):
 
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        if pyarrow_json is None:
+            raise ImportError("pyarrow is required to read JSON files. Install it with: pip install 'mloda[pyarrow]'")
         result = pyarrow_json.read_json(
             data_access,
             parse_options=pyarrow_json.ParseOptions(

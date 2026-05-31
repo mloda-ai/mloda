@@ -1,6 +1,9 @@
 from typing import Any
 
-from pyarrow import parquet as pyarrow_parquet
+try:
+    from pyarrow import parquet as pyarrow_parquet
+except ImportError:
+    pyarrow_parquet = None
 
 from mloda.provider import FeatureSet
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
@@ -108,6 +111,10 @@ class ParquetReader(ReadFile):
 
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        if pyarrow_parquet is None:
+            raise ImportError(
+                "pyarrow is required to read Parquet files. Install it with: pip install 'mloda[pyarrow]'"
+            )
         return pyarrow_parquet.read_table(data_access, columns=list(features.get_all_names()))
 
     @classmethod

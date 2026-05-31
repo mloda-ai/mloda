@@ -1,6 +1,9 @@
 from typing import Any
 
-from pyarrow import csv as pyarrow_csv
+try:
+    from pyarrow import csv as pyarrow_csv
+except ImportError:
+    pyarrow_csv = None
 
 from mloda.provider import FeatureSet
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
@@ -155,6 +158,8 @@ class CsvReader(ReadFile):
 
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        if pyarrow_csv is None:
+            raise ImportError("pyarrow is required to read CSV files. Install it with: pip install 'mloda[pyarrow]'")
         result = pyarrow_csv.read_csv(data_access)
         return result.select(list(features.get_all_names()))
 

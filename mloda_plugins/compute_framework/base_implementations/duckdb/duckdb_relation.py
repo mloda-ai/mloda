@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
 from typing import Any, Literal, Optional, cast
 
 try:
@@ -14,9 +13,9 @@ try:
 except ImportError:
     pa = None  # type: ignore[assignment]
 
+from mloda_plugins.compute_framework.base_implementations.sql.sql_base_relation import SqlBaseRelation
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
     inline_params,
-    pick_helper_column_name,
     quote_ident,
 )
 from mloda_plugins.compute_framework.base_implementations.sql.sql_window import (
@@ -26,8 +25,6 @@ from mloda_plugins.compute_framework.base_implementations.sql.sql_window import 
     Preceding,
     Unbounded,
     WindowFrame,
-    render_over_clause,
-    validate_window,
 )
 
 __all__ = [
@@ -41,7 +38,7 @@ __all__ = [
 ]
 
 
-class DuckdbRelation:
+class DuckdbRelation(SqlBaseRelation):
     """Lazy wrapper around DuckDBPyRelation.
 
     All operations delegate to DuckDB's native lazy Relational API;
@@ -202,57 +199,17 @@ class DuckdbRelation:
         result: int = row[0]
         return result
 
-    def with_row_number(
-        self,
-        alias: str,
-        *,
-        partition_by: Sequence[str] = (),
-        order_by: Sequence[str | OrderBy] = (),
-    ) -> "DuckdbRelation":
-        """Append a ROW_NUMBER() window column named ``alias``.
-
-        All identifiers in ``partition_by`` / ``order_by`` and the ``alias`` are quoted
-        via ``quote_ident``. Raises ``ValueError`` if ``alias`` collides with an existing
-        column (comparison is case-insensitive).
-        With no partition_by/order_by, row-number assignment order is
-        implementation-defined; pass order_by for a deterministic numbering.
-        """
-        if alias.casefold() in {c.casefold() for c in self.columns}:
-            raise ValueError(f"Column {alias!r} already exists in the relation")
-        over_sql = render_over_clause(partition_by, order_by, None)
-        return self.project(f"*, ROW_NUMBER() OVER ({over_sql}) AS {quote_ident(alias)}")
-
-    def window(
-        self,
-        func: str,
-        alias: str,
-        *,
-        partition_by: Sequence[str] = (),
-        order_by: Sequence[str | OrderBy] = (),
-        frame: WindowFrame | None = None,
-    ) -> "DuckdbRelation":
-        """Append a window-function column ``alias`` computed by ``func`` over the OVER clause.
-
-        ``func`` is a raw SQL fragment inlined verbatim; never pass user-controlled input.
-        The ``alias`` and every identifier in ``partition_by`` / ``order_by`` are quoted
-        via ``quote_ident``.
-        Raises ``ValueError`` if ``alias`` collides with an existing column (comparison is case-insensitive).
-        """
-        if alias.casefold() in {c.casefold() for c in self.columns}:
-            raise ValueError(f"Column {alias!r} already exists in the relation")
-        validate_window(order_by, frame)
-        over_sql = render_over_clause(partition_by, order_by, frame)
-        return self.project(f"*, {func} OVER ({over_sql}) AS {quote_ident(alias)}")
+    def _project_raw(self, projection: str) -> "DuckdbRelation":
+        return self.project(projection)
 
     def append_column(self, name: str, values: list[Any]) -> "DuckdbRelation":
         """Return a new relation with an additional column appended positionally.
 
         Raises ``ValueError`` if ``name`` collides with an existing column (comparison is case-insensitive).
         """
-        if name.casefold() in {c.casefold() for c in self.columns}:
-            raise ValueError(f"Column {name!r} already exists in the relation")
+        self._ensure_column_absent(name)
         new_col_rel = DuckdbRelation.from_dict(self._connection, {name: values})
-        rn = pick_helper_column_name(taken=set(self.columns) | {name})
+        rn = self._pick_helper_column(name)
         qrn = quote_ident(rn)
         left = self._relation.project(f"*, ROW_NUMBER() OVER () AS {qrn}")
         right = new_col_rel._relation.project(f"*, ROW_NUMBER() OVER () AS {qrn}")

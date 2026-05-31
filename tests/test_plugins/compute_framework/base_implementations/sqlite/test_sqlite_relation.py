@@ -275,17 +275,9 @@ class TestSqliteRelation(SqlRelationWindowTestMixin, RelationTestMixin):
         assert arrow.column("b").to_pylist() == [4, 5, 6]
         assert arrow.column("c").to_pylist() == [7, 8, 9]
 
-    def test_append_column_raises_when_name_already_exists(self, connection: sqlite3.Connection) -> None:
-        """append_column must reject ``name`` colliding with an existing column instead of silently corrupting the schema."""
-        rel = SqliteRelation.from_dict(connection, {"a": [1, 2, 3], "b": [4, 5, 6]})
-        with pytest.raises(ValueError, match="b"):
-            rel.append_column("b", [10, 20, 30])
-
-    def test_append_column_raises_on_case_only_collision(self, connection: sqlite3.Connection) -> None:
-        """append_column must reject ``name`` that case-insensitively collides with an existing column, since SQLite treats quoted identifiers as case-insensitive in resolution."""
-        rel = SqliteRelation.from_dict(connection, {"Foo": [1, 2, 3], "b": [4, 5, 6]})
-        with pytest.raises(ValueError, match="foo"):
-            rel.append_column("foo", [10, 20, 30])
+    # NOTE: test_append_column_raises_when_name_already_exists and
+    # test_append_column_raises_on_case_only_collision now live in RelationTestMixin
+    # (single source of truth for both DuckDB and SQLite).
 
     def test_join_with_sql_injection_alias(self, connection: sqlite3.Connection) -> None:
         """A crafted alias must not be interpreted as SQL."""

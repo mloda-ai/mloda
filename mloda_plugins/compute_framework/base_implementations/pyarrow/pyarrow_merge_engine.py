@@ -7,6 +7,7 @@ from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 from mloda.user import Index
 from mloda.user import JoinType
 from mloda.provider import BaseMergeEngine
+from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import pick_helper_column_name
 
 try:
     import pandas as pd
@@ -121,10 +122,7 @@ class PyArrowMergeEngine(BaseMergeEngine):
             if left_index.index[0] != right_index.index[0]:
                 # PyArrow drops the index column in all cases.
                 # Thus, we create a copy of the index column and append it to the right_data to avoid this in case of different index columns.
-                _right_index = "mloda_right_index"
-                if _right_index in right_data.column_names:
-                    raise ValueError(f"Column name {_right_index} already exists in right_data.")
-
+                _right_index = pick_helper_column_name(taken=set(right_data.column_names), prefix="mloda_right_index")
                 right_data = right_data.append_column(_right_index, right_data[right_index.index[0]])
                 left_keys = [left_index.index[0]]
                 right_keys = [_right_index]

@@ -275,10 +275,6 @@ class TestSqliteRelation(SqlRelationWindowTestMixin, RelationTestMixin):
         assert arrow.column("b").to_pylist() == [4, 5, 6]
         assert arrow.column("c").to_pylist() == [7, 8, 9]
 
-    # NOTE: test_append_column_raises_when_name_already_exists and
-    # test_append_column_raises_on_case_only_collision now live in RelationTestMixin
-    # (single source of truth for both DuckDB and SQLite).
-
     def test_join_with_sql_injection_alias(self, connection: sqlite3.Connection) -> None:
         """A crafted alias must not be interpreted as SQL."""
         left = SqliteRelation.from_dict(connection, {"idx": [1, 2], "val": ["a", "b"]})

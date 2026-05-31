@@ -298,6 +298,3 @@ class TestDuckdbRelation(SqlRelationWindowTestMixin, RelationTestMixin):
         arrow = result.to_arrow_table()
         assert arrow.column("__mloda_rn__").to_pylist() == ["x", "y", "z"]
         assert arrow.column("c").to_pylist() == [7, 8, 9]
-
-    # NOTE: helper-name collision and append_column name-collision tests now live in
-    # RelationTestMixin so both DuckDB and SQLite inherit and run them.

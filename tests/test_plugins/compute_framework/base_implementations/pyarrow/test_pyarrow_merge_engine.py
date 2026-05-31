@@ -19,16 +19,17 @@ class TestPyArrowMergeEngineHelperColumnCollision:
     """Regression: the different-index-name path must not collide with a user column."""
 
     def test_merge_inner_different_index_names_with_existing_mloda_right_index(self) -> None:
-        """When left/right index columns differ, join_logic copies the right index into a helper
-        column. It currently hardcodes ``mloda_right_index`` and raises ValueError if that name is
-        already a column in right_data. The fix picks a collision-free helper name instead, so the
-        merge must succeed AND preserve the user's ``mloda_right_index`` column values.
+        """Merging with different left/right index names must not collide with a user column.
+
+        The different-index-name path copies the right index into an internal helper column.
+        When a user column is already named ``mloda_right_index``, the merge must still succeed,
+        preserve that user column's values, and not leak the helper into the output schema.
         """
         left = pa.Table.from_pydict({"left_id": [1, 2, 3], "lval": ["a", "b", "c"]})
         right = pa.Table.from_pydict(
             {
                 "right_id": [2, 3, 4],
-                "mloda_right_index": [99, 88, 77],  # user column that collides with the legacy helper name
+                "mloda_right_index": [99, 88, 77],  # user column named like the internal helper
                 "rval": ["x", "y", "z"],
             }
         )

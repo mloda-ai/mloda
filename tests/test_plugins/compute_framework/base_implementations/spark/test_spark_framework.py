@@ -274,11 +274,9 @@ class TestSparkFrameworkComputeFramework:
     def test_add_column_preserves_existing_user_row_num_column(self, spark_session: Any) -> None:
         """add_column must not clobber a pre-existing user column literally named ``__row_num``.
 
-        The add-column path (transform with an iterable of values + a single feature name)
-        internally uses a row-number helper column to align the new values with existing rows.
-        If that helper hardcodes ``__row_num`` it silently overwrites/drops a user column of the
-        same name. This regression builds a DataFrame that already owns ``__row_num`` and asserts
-        both the new feature column and the original ``__row_num`` survive intact.
+        The add-column path uses an internal row-number helper column to align new values with
+        existing rows. A DataFrame that already owns ``__row_num`` must keep it intact alongside
+        the newly added feature column.
         """
         spark_framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         spark_framework.set_framework_connection_object(spark_session)

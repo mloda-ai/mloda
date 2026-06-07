@@ -8,7 +8,7 @@ Combining datasets from various feature groups is crucial for building comprehen
 -   **Multiple Links on the Same Compute Framework**: Joining a single base FG to multiple right-side FGs (same class, subclasses, or distinct) all within the same compute framework.
 
 
-_**If we have a feature, which is dependent on a aforementioned setup,**_
+_**If we have a feature, which is dependent on an aforementioned setup,**_
 
 -   we need to define a Link,
 -   and the ComputeFramework must support the according merge!

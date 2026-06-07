@@ -28,7 +28,7 @@ class BaseMergeEngine(ABC):
     def check_import(self) -> None:
         """
         Convenience method to check if the necessary imports are available. This is important for ensuring that not
-        installed modules dont break the framework.
+        installed modules don't break the framework.
 
         This gets called in the final merge.
 

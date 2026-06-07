@@ -12,7 +12,7 @@ That however means that a data project typically contains multiple filters. For 
 
 #### FilterType
 
-This class is supposed to created similarity in the framework and by framework users.
+This class is supposed to create similarity in the framework and by framework users.
 
 ``` python
 class FilterType(Enum):
@@ -26,7 +26,7 @@ class FilterType(Enum):
 
 #### GlobalFilter
 
-The GlobalFilter provides methods to add filters to the collection. The prefered way to use the GlobalFilter is by using the following functions.
+The GlobalFilter provides methods to add filters to the collection. The preferred way to use the GlobalFilter is by using the following functions.
 
 **add_filter**: Adds a single filter to the GlobalFilter object.
 

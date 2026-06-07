@@ -436,7 +436,7 @@ class ExecutionPlan:
 
         children_uuids = self.reduce_children_to_one_level(children_uuids, graph)
 
-        # This gets the parent ids of the joinstep, which needs to be calulated before the link.
+        # This gets the parent ids of the joinstep, which needs to be calculated before the link.
         required_uuids: set[UUID] = set()
         for uuid in children_uuids:
             required_uuids.update(graph.parent_to_children_mapping[uuid])
@@ -453,7 +453,7 @@ class ExecutionPlan:
                 right_framework_uuids.add(uuid)
 
         # The order shows which items should be added first.
-        # Thus, we need to make sure that higher orderered links are calculated first.
+        # Thus, we need to make sure that higher ordered links are calculated first.
         for k, v in link_trekker.order.items():
             if link.uuid in v:
                 required_uuids.add(k)

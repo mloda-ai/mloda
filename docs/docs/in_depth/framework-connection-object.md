@@ -187,7 +187,7 @@ return framework_connection_object.from_other_format(data)
    ```
    ValueError: A DuckDB connection object is required for this transformation.
    ```
-   **Solution**: Ensure you're providing a connection object when using stateful frameworks. Currently, parent features are not receiving the connection details automatic. Thus, you might need to give them a second time to root features!
+   **Solution**: Ensure you're providing a connection object when using stateful frameworks. Currently, parent features are not receiving the connection details automatically. Thus, you might need to give them a second time to root features!
 
 ## Summary
 

@@ -14,7 +14,7 @@ These methods ensure efficient data management while maintaining flexibility and
 
 #### DataAccessCollection - global data access
 
-The DataAccessCollection is designed to control the access to data of any kind. The main purpose of this class is to organize and simplify interactions with these different data elements, making it easier to work to ingest data of various form into the framework. It provides as an interface for accessing and storing of data on a global level.
+The DataAccessCollection is designed to control the access to data of any kind. The main purpose of this class is to organize and simplify interactions with these different data elements, making it easier to work to ingest data of various forms into the framework. It serves as an interface for accessing and storing of data on a global level.
 
 The DataAccessCollection can only be added via **mlodaAPI**.
 

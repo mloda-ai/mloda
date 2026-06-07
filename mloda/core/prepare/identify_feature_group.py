@@ -100,7 +100,7 @@ class IdentifyFeatureGroupClass:
         if links is None:
             return True
 
-        # Validate that atleast one index is supported by the feature group
+        # Validate that at least one index is supported by the feature group
         for link in links:
             if feature_group.supports_index(link.left_index):
                 return True

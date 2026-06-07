@@ -136,7 +136,7 @@ class BaseInputData(ABC):
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
         """
-        This funtion should be implemented in final child classes, which use scoped data access.
+        This function should be implemented in final child classes, which use scoped data access.
         """
         raise NotImplementedError
 

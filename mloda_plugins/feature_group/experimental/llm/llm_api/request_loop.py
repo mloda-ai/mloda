@@ -27,10 +27,10 @@ class RequestLoop(LLMBaseRequest):
     A feature group that interacts with LLMs via a request loop.
     It works by sending requests as long as tools are called.
 
-    If the `project_meta_data` option is set to True, the feature group requires that the requested of the
+    If the `project_meta_data` option is set to True, the feature group requires that the requester of the
     feature GeminiRequestLoop set the link between SourceInputFeatureComposite and one of the other feature groups.
 
-    The specific SourceInputFeatureComposite depends on your projects access, thus we don t know it here.
+    The specific SourceInputFeatureComposite depends on your project's access, thus we don't know it here.
     If you encounter this feature and want an automatic link setting, we could develop this.
     However, it was deprioritized due to the complexity of the feature.
 

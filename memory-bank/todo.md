@@ -34,7 +34,7 @@ Scope notes:
   `RuleOutcome` (incl. `Broken`). Unit tests for construction, equality, `Fixed` payload.
   Standalone — tox green on its own.
 
-- [ ] **Phase 2 — Contract flip + engine reconciliation (atomic).**
+- [x] **Phase 2 — Contract flip + engine reconciliation (atomic).**
   - `FeatureGroup.return_data_type_rule` default returns `Open()`; annotation → `RuleResult`.
   - `engine.set_data_type`: call rule in a guard; on raise → classify
     (`debug` for `ValueError`/`IndexError`/`TypeError`/`KeyError`; `warning` otherwise) + log

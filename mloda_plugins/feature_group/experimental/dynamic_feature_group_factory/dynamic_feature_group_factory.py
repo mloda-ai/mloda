@@ -4,7 +4,7 @@ from mloda.user import Options
 from mloda.user import FeatureName
 from mloda.user import DataAccessCollection
 from mloda.provider import FeatureSet
-from mloda.user import DataType
+from mloda.core.abstract_plugins.components.data_type_rule import RuleResult
 from mloda.provider import ComputeFramework
 from mloda.user import Index
 from mloda.provider import BaseInputData
@@ -249,7 +249,7 @@ class DynamicFeatureGroupCreator:
                 return properties["compute_framework_rule"]()  # type: ignore[no-any-return]
             return super(new_class, cls).compute_framework_rule()  # type: ignore[misc, arg-type, no-any-return]
 
-        def return_data_type_rule(cls, feature: Any) -> Optional[DataType]:  # type: ignore[no-untyped-def]
+        def return_data_type_rule(cls, feature: Any) -> RuleResult:  # type: ignore[no-untyped-def]
             if "return_data_type_rule" in properties:
                 return properties["return_data_type_rule"](cls, feature)  # type: ignore[no-any-return]
             return super(new_class, cls).return_data_type_rule(feature)  # type: ignore[misc, arg-type, no-any-return]

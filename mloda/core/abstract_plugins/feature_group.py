@@ -6,7 +6,7 @@ from abc import ABC
 
 from mloda.core.abstract_plugins.components.base_artifact import BaseArtifact
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda.core.abstract_plugins.components.data_types import DataType
+from mloda.core.abstract_plugins.components.data_type_rule import Open, RuleResult
 
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
@@ -61,7 +61,7 @@ class FeatureGroup(ABC):
         - ``domain``: default is the default domain
         - ``compute_framework_rule``: default allows all compute frameworks
         - ``index_columns``: default is None
-        - ``return_data_type_rule``: default is None
+        - ``return_data_type_rule``: default is ``Open()``
 
     See ``FeatureChainParserMixin`` and ``docs/in_depth/property-mapping.md``
     for the full PROPERTY_MAPPING reference.
@@ -254,15 +254,15 @@ class FeatureGroup(ABC):
         return [feature_name]
 
     @classmethod
-    def return_data_type_rule(cls, feature: Feature) -> Optional[DataType]:
+    def return_data_type_rule(cls, feature: Feature) -> RuleResult:
         """
         Specifies a fixed return data type for this feature group, if applicable.
 
         If this feature group always returns a specific data type, this method should
-        return that data type. Otherwise, it should return None, indicating that the
-        data type is not fixed and may vary depending on the input or computation.
+        return ``Fixed(data_type)``. Otherwise, it should return ``Open()``, indicating
+        that the data type is not fixed and may vary depending on the input or computation.
         """
-        return None
+        return Open()
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         """

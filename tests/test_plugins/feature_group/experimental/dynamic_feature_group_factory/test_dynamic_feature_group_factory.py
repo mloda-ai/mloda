@@ -6,6 +6,7 @@ from mloda.user import FeatureName
 from mloda.user import DataAccessCollection
 from mloda.provider import FeatureSet
 from mloda.user import DataType
+from mloda.core.abstract_plugins.components.data_type_rule import Fixed
 from mloda.provider import ComputeFramework
 from mloda.user import Index
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -30,7 +31,7 @@ class TestDynamicFeatureGroupFactory:
             "match_feature_group_criteria": lambda cls, feature_name, options, data_access_collection: (
                 feature_name == FeatureName("test_feature")
             ),
-            "return_data_type_rule": lambda cls, feature: DataType.STRING,
+            "return_data_type_rule": lambda cls, feature: Fixed(DataType.STRING),
             "input_features": lambda self, options, feature_name: None,
         }
 
@@ -52,7 +53,7 @@ class TestDynamicFeatureGroupFactory:
         # Test data type rule
         feature = Any
         result_type = DynamicTestFeatureGroup.return_data_type_rule(feature)  # type: ignore
-        assert result_type == DataType.STRING
+        assert result_type == Fixed(DataType.STRING)
 
         # Test input features, as no error was thrown.
         result_names = DynamicTestFeatureGroup().input_features(options, Any)  # type: ignore

@@ -1,5 +1,6 @@
 from collections import defaultdict
 from copy import deepcopy
+import logging
 from typing import Any, Optional
 from uuid import UUID
 import uuid
@@ -15,6 +16,7 @@ from mloda.core.prepare.accessible_plugins import PreFilterPlugins
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.data_types import DataType
+from mloda.core.abstract_plugins.components.data_type_rule import Broken, Deferred, Fixed, Open, RuleResult
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.prepare.graph.build_graph import BuildGraph
@@ -28,6 +30,8 @@ from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.link import JoinType, Link
 from mloda.core.abstract_plugins.components.validators.link_validator import LinkValidator
+
+logger = logging.getLogger(__name__)
 
 
 class Engine:
@@ -367,11 +371,44 @@ class Engine:
         return feature
 
     def set_data_type(self, feature: Feature, feature_group_class: type[FeatureGroup]) -> Optional[DataType]:
-        fg_data_type = feature_group_class.return_data_type_rule(feature)
-        if feature.data_type and fg_data_type:
-            if feature.data_type != fg_data_type:
+        declared = feature.data_type
+
+        # This is the ONE permitted try/except: owning the never-raises guarantee at this
+        # single call site is the whole point of the contract change. A rule that raises is
+        # captured as a ``Broken`` outcome instead of crashing planning.
+        try:
+            outcome: RuleResult | Broken = feature_group_class.return_data_type_rule(feature)
+        except Exception as exc:
+            outcome = Broken(exc)
+
+        if isinstance(outcome, Broken):
+            if declared is not None:
+                # raise-while-declared: a real mismatch may have been suppressed; never silent.
+                level = logging.WARNING
+            elif isinstance(outcome.error, (ValueError, IndexError, TypeError, KeyError)):
+                level = logging.DEBUG
+            else:
+                level = logging.WARNING
+            logger.log(
+                level,
+                "return_data_type_rule for feature %s on feature group %s raised: %s",
+                feature.name,
+                feature_group_class,
+                outcome.error,
+            )
+            return declared
+
+        if isinstance(outcome, Fixed):
+            if declared is not None and declared != outcome.data_type:
                 raise ValueError(
                     f"Feature {feature.name} has a data type mismatch with feature group {feature_group_class}."
                 )
-            return fg_data_type
-        return fg_data_type or feature.data_type
+            return outcome.data_type
+
+        if isinstance(outcome, Open):
+            return declared
+
+        if isinstance(outcome, Deferred):
+            return declared
+
+        raise AssertionError(f"Unhandled rule outcome: {outcome!r}")

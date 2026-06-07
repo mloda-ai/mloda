@@ -3,7 +3,6 @@ from typing import Callable, Optional
 import pytest
 import pyarrow as pa
 
-from mloda.core.abstract_plugins.components.data_type_rule import Fixed
 from mloda.core.abstract_plugins.components.validators.datatype_validator import (
     DataTypeMismatchError,
     DataTypeValidator,
@@ -228,7 +227,7 @@ class TestValidateEnforcesOnPandas:
 
             @classmethod
             def return_data_type_rule(cls, feature: Any) -> Any:
-                return Fixed(DataType.DOUBLE)
+                return DataType.DOUBLE
 
             @classmethod
             def calculate_feature(cls, data: Any, features: Any) -> Any:
@@ -287,7 +286,7 @@ class TestValidateEnforcesOnPandas:
 
             @classmethod
             def return_data_type_rule(cls, feature: Any) -> Any:
-                return Fixed(DataType.STRING)
+                return DataType.STRING
 
             @classmethod
             def calculate_feature(cls, data: Any, features: Any) -> Any:

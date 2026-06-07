@@ -1,7 +1,7 @@
 from typing import Optional
 import numpy as np
 import pytest
-from mloda.core.abstract_plugins.components.data_type_rule import Fixed, Open, RuleResult
+from mloda.core.abstract_plugins.components.data_type_rule import Open, RuleResult
 from mloda.user import DataAccessCollection
 from mloda.user import DataType
 from mloda.user import FeatureName
@@ -44,7 +44,7 @@ class BaseTestFeatureGroup2(FeatureGroup):
     @classmethod
     def return_data_type_rule(cls, feature: Feature) -> RuleResult:
         if "BaseTestFeature" in feature.name and "2" in feature.name:
-            return Fixed(DataType.STRING)
+            return DataType.STRING
         return Open()
 
 

@@ -259,7 +259,7 @@ class FeatureGroup(ABC):
         Specifies a fixed return data type for this feature group, if applicable.
 
         If this feature group always returns a specific data type, this method should
-        return ``Fixed(data_type)``. Otherwise, it should return ``Open()``, indicating
+        return the ``DataType`` directly. Otherwise, it should return ``Open()``, indicating
         that the data type is not fixed and may vary depending on the input or computation.
         """
         return Open()

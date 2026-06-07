@@ -16,7 +16,7 @@ from mloda.core.prepare.accessible_plugins import PreFilterPlugins
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.data_types import DataType
-from mloda.core.abstract_plugins.components.data_type_rule import Broken, Deferred, Fixed, Open, RuleResult
+from mloda.core.abstract_plugins.components.data_type_rule import Broken, Deferred, Open, RuleResult
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.prepare.graph.build_graph import BuildGraph
@@ -398,12 +398,12 @@ class Engine:
             )
             return declared
 
-        if isinstance(outcome, Fixed):
-            if declared is not None and declared != outcome.data_type:
+        if isinstance(outcome, DataType):
+            if declared is not None and declared != outcome:
                 raise ValueError(
                     f"Feature {feature.name} has a data type mismatch with feature group {feature_group_class}."
                 )
-            return outcome.data_type
+            return outcome
 
         if isinstance(outcome, Open):
             return declared

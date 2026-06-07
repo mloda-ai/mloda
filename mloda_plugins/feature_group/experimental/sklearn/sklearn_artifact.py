@@ -4,7 +4,6 @@ Artifact for storing fitted scikit-learn transformers and estimators.
 
 import json
 import base64
-import hashlib
 import logging
 import tempfile
 from pathlib import Path
@@ -114,62 +113,6 @@ class SklearnArtifact(BaseArtifact):
                 artifact[key] = value
 
         return artifact
-
-    @classmethod
-    def _get_artifact_file_path(cls, features: FeatureSet) -> Path:
-        """
-        Generate a file path for storing the artifact.
-
-        Args:
-            features: The feature set
-
-        Returns:
-            Path object for the artifact file
-        """
-        if features.name_of_one_feature is None:
-            raise ValueError("Feature name is required for artifact storage")
-
-        # Get storage path from options or use default temp directory
-        storage_path = None
-
-        options = cls.get_singular_option_from_options(features)
-
-        if options:
-            storage_path = options.get("artifact_storage_path")
-
-        if storage_path is None:
-            storage_path = tempfile.gettempdir()
-
-        # Create a unique filename based on feature name and configuration
-        feature_name = str(features.name_of_one_feature)
-
-        # Create a hash of the feature configuration for uniqueness
-        # Exclude artifact-related keys to ensure consistent hashing
-        config_data = {}
-        if options:
-            config_data = {
-                k: v for k, v in options.items() if not k.startswith(feature_name) and k != "artifact_storage_path"
-            }
-
-        # Convert non-serializable objects for hashing
-        serializable_config = {}
-        for k, v in config_data.items():
-            if isinstance(v, frozenset):
-                # Convert frozenset to sorted list for consistent hashing
-                serializable_config[k] = sorted(list(v))
-            else:
-                serializable_config[k] = v
-
-        config_str = json.dumps(serializable_config, sort_keys=True)
-        config_hash = hashlib.md5(config_str.encode(), usedforsecurity=False).hexdigest()[:8]
-
-        filename = f"sklearn_artifact_{feature_name}_{config_hash}.joblib"
-
-        # Ensure the directory exists
-        storage_dir = Path(storage_path)
-        storage_dir.mkdir(parents=True, exist_ok=True)
-
-        return storage_dir / filename
 
     @classmethod
     def custom_saver(cls, features: FeatureSet, artifact: Any) -> Optional[Any]:
@@ -325,38 +268,3 @@ class SklearnArtifact(BaseArtifact):
             if not isinstance(features.save_artifact, dict):
                 features.save_artifact = {}
             features.save_artifact[artifact_key] = artifact_data
-
-    @classmethod
-    def check_artifact_exists(cls, features: FeatureSet, artifact_key: str) -> bool:
-        """
-        Helper method to check if a specific artifact exists.
-
-        Args:
-            features: The feature set
-            artifact_key: The artifact key to check
-
-        Returns:
-            True if the artifact exists, False otherwise
-        """
-        if features.artifact_to_load:
-            artifacts = cls.custom_loader(features)
-            return artifacts is not None and artifact_key in artifacts
-        return False
-
-    @classmethod
-    def validate_artifact_key_exists(cls, features: FeatureSet, artifact_key: str) -> None:
-        """
-        Helper method to validate that an artifact key exists, raising an error if not.
-
-        Args:
-            features: The feature set
-            artifact_key: The artifact key to validate
-
-        Raises:
-            ValueError: If the artifact key is not found
-        """
-        if features.artifact_to_load:
-            artifacts = cls.custom_loader(features)
-            if artifacts is None or artifact_key not in artifacts:
-                available_keys = list(artifacts.keys()) if artifacts else []
-                raise ValueError(f"Artifact not found for key '{artifact_key}'. Available artifacts: {available_keys}")

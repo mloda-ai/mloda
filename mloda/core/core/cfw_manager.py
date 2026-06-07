@@ -197,10 +197,6 @@ class CfwManager:
         """Retrieves the exception information."""
         return self.exc_info
 
-    def get_compute_frameworks(self) -> dict[UUID, tuple[str, set[UUID]]]:
-        """Retrieves the dictionary of compute frameworks."""
-        return self.compute_frameworks
-
     def get_function_extender(self) -> Optional[set[Extender]]:
         """Retrieves the optional set of function extenders."""
         return self.function_extender

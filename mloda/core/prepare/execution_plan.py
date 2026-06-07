@@ -873,11 +873,7 @@ class ExecutionPlan:
                 )
             )
 
-        for k, v in graph.nodes[uuid].feature.options.items():
-            for _k, _v in pointer_dict.items():
-                if k == _k and v == _v:
-                    return True
-        return False
+        return self._matches_discriminator(pointer_dict, graph, uuid)
 
     def find_feature_uuids(
         self, parents: set[UUID], local_feature_set_collection: list[set[UUID]]

@@ -67,23 +67,6 @@ class ReadDB(BaseInputData):
         reader, data_access = reader_data_access
         return reader(), data_access
 
-    def load(self, features: FeatureSet) -> Any:
-        _options = None
-        for feature in features.features:
-            if _options:
-                if _options != feature.options:
-                    raise ValueError("All features must have the same options.")
-            _options = feature.options
-
-        reader, data_access = self.init_reader(_options)
-
-        data = reader.load_data(data_access, features)
-
-        if data is None:
-            raise ValueError(f"Loading data failed for feature {features.get_name_of_one_feature()}.")
-
-        return data
-
     @classmethod
     def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
         data_accesses: list[Any] = []

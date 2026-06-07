@@ -137,11 +137,7 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Raises:
             ValueError: If parameters cannot be extracted
         """
-        source_features = cls._extract_source_features(feature)
-        operations = cls._extract_cleaning_operations(feature)
-        if operations is None:
-            raise ValueError(f"Could not extract operations from: {feature.name}")
-        return operations, source_features[0]
+        return cls._extract_operation_and_source_feature(feature, cls._extract_cleaning_operations, "operations")
 
     @classmethod
     def _extract_cleaning_operations(cls, feature: Feature) -> Optional[tuple[Any, Any]]:

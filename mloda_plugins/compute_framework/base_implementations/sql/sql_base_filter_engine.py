@@ -58,42 +58,14 @@ class SqlBaseFilterEngine(BaseFilterEngine):
         return cls._apply_filter(data, condition, (value,))
 
     @classmethod
-    def do_max_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        column_name = filter_feature.name
+    def _apply_max_exclusive_filter(cls, data: Any, column_name: str, threshold: Any) -> Any:
+        condition = f"{quote_ident(column_name)} < ?"
+        return cls._apply_filter(data, condition, (threshold,))
 
-        has_max = filter_feature.parameter.max_value is not None
-        has_value = filter_feature.parameter.value is not None
-
-        if has_max:
-            min_parameter, max_parameter, max_operator = cls.get_min_max_operator(filter_feature)
-
-            if min_parameter is not None:
-                raise ValueError(
-                    f"Filter parameter {filter_feature.parameter} not supported as max filter: {filter_feature.name}"
-                )
-
-            if max_parameter is None:
-                raise ValueError(
-                    f"Filter parameter {filter_feature.parameter} is None although expected: {filter_feature.name}"
-                )
-
-            if max_operator is True:
-                condition = f"{quote_ident(column_name)} < ?"
-            else:
-                condition = f"{quote_ident(column_name)} <= ?"
-            params: tuple[Any, ...] = (max_parameter,)
-        elif has_value:
-            value = filter_feature.parameter.value
-
-            if value is None:
-                raise ValueError(f"Filter parameter 'value' not found in {filter_feature.parameter}")
-
-            condition = f"{quote_ident(column_name)} <= ?"
-            params = (value,)
-        else:
-            raise ValueError(f"No valid filter parameter found in {filter_feature.parameter}")
-
-        return cls._apply_filter(data, condition, params)
+    @classmethod
+    def _apply_max_inclusive_filter(cls, data: Any, column_name: str, threshold: Any) -> Any:
+        condition = f"{quote_ident(column_name)} <= ?"
+        return cls._apply_filter(data, condition, (threshold,))
 
     @classmethod
     def do_equal_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:

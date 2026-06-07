@@ -15,9 +15,10 @@ from mloda.user import FeatureName
 from mloda.user import Options
 from mloda.provider import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.forecasting.forecasting_artifact import ForecastingArtifact
+from mloda_plugins.feature_group.experimental.time_reference_mixin import TimeReferenceMixin
 
 
-class ForecastingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, FeatureGroup):
     """
     Base class for all forecasting feature groups.
 
@@ -115,17 +116,6 @@ class ForecastingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         "knn": "K-Nearest Neighbors Regression",
     }
 
-    # Define supported time units (same as TimeWindowFeatureGroup)
-    TIME_UNITS = {
-        "second": "Seconds",
-        "minute": "Minutes",
-        "hour": "Hours",
-        "day": "Days",
-        "week": "Weeks",
-        "month": "Months",
-        "year": "Years",
-    }
-
     # Define the prefix pattern for this feature group
     PREFIX_PATTERN = r".*__([\w]+)_forecast_(\d+)([\w]+)$"
 
@@ -149,7 +139,7 @@ class ForecastingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             ),
         },
         TIME_UNIT: {
-            **TIME_UNITS,
+            **TimeReferenceMixin.TIME_UNITS,
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
         },
@@ -176,27 +166,6 @@ class ForecastingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         trained models and other components needed for forecasting.
         """
         return ForecastingArtifact
-
-    @classmethod
-    def get_reference_time_column(cls, options: Optional[Options] = None) -> str:
-        """
-        Get the reference time column name from options or use the default.
-
-        Args:
-            options: Optional Options object that may contain a custom reference time column name
-
-        Returns:
-            The reference time column name to use
-        """
-        reference_time_key = DefaultOptionKeys.reference_time
-        if options and options.get(reference_time_key):
-            reference_time = options.get(reference_time_key)
-            if not isinstance(reference_time, str):
-                raise ValueError(
-                    f"Invalid reference_time option: {reference_time}. Must be string. Is: {type(reference_time)}."
-                )
-            return reference_time
-        return DefaultOptionKeys.reference_time
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         """Extract source feature and time filter feature from either configuration-based options or string parsing."""

@@ -46,46 +46,12 @@ class SparkFilterEngine(BaseFilterEngine):
         return data.filter(F.col(column_name) >= value)
 
     @classmethod
-    def do_max_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        column_name = filter_feature.name
+    def _apply_max_exclusive_filter(cls, data: Any, column_name: str, threshold: Any) -> Any:
+        return data.filter(F.col(column_name) < threshold)
 
-        # Check if this is a complex parameter with max/max_exclusive or a simple one with value
-
-        has_max = filter_feature.parameter.max_value is not None
-
-        has_value = filter_feature.parameter.value is not None
-
-        if has_max:
-            # Complex parameter - use get_min_max_operator
-            min_parameter, max_parameter, max_operator = cls.get_min_max_operator(filter_feature)
-
-            if min_parameter is not None:
-                raise ValueError(
-                    f"Filter parameter {filter_feature.parameter} not supported as max filter: {filter_feature.name}"
-                )
-
-            if max_parameter is None:
-                raise ValueError(
-                    f"Filter parameter {filter_feature.parameter} is None although expected: {filter_feature.name}"
-                )
-
-            if max_operator is True:
-                condition = F.col(column_name) < max_parameter
-            else:
-                condition = F.col(column_name) <= max_parameter
-        elif has_value:
-            # Simple parameter - extract the value
-
-            value = filter_feature.parameter.value
-
-            if value is None:
-                raise ValueError(f"Filter parameter 'value' not found in {filter_feature.parameter}")
-
-            condition = F.col(column_name) <= value
-        else:
-            raise ValueError(f"No valid filter parameter found in {filter_feature.parameter}")
-
-        return data.filter(condition)
+    @classmethod
+    def _apply_max_inclusive_filter(cls, data: Any, column_name: str, threshold: Any) -> Any:
+        return data.filter(F.col(column_name) <= threshold)
 
     @classmethod
     def do_equal_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:

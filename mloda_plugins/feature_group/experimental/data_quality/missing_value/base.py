@@ -259,13 +259,7 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Raises:
             ValueError: If parameters cannot be extracted
         """
-        source_features = cls._extract_source_features(feature)
-        imputation_method = cls._extract_imputation_method(feature)
-
-        if imputation_method is None:
-            raise ValueError(f"Could not extract imputation method from: {feature.name}")
-
-        return imputation_method, source_features[0]
+        return cls._extract_operation_and_source_feature(feature, cls._extract_imputation_method, "imputation method")
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

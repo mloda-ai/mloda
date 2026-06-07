@@ -185,11 +185,7 @@ class ScalingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Raises:
             ValueError: If parameters cannot be extracted
         """
-        source_features = cls._extract_source_features(feature)
-        scaler_type = cls._extract_scaler_type(feature)
-        if scaler_type is None:
-            raise ValueError(f"Could not extract scaler type from: {feature.name}")
-        return scaler_type, source_features[0]
+        return cls._extract_operation_and_source_feature(feature, cls._extract_scaler_type, "scaler type")
 
     @classmethod
     def _extract_scaler_type(cls, feature: Feature) -> Optional[str]:

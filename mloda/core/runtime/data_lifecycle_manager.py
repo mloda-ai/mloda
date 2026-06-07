@@ -73,16 +73,6 @@ class DataLifecycleManager:
         else:
             cfw.drop_last_data(None)
 
-    def track_flyway_datasets(self, cfw_uuid: UUID, datasets: set[UUID]) -> None:
-        """
-        Stores flyway datasets for a CFW UUID for later dropping.
-
-        Args:
-            cfw_uuid: The UUID of the CFW.
-            datasets: Set of dataset UUIDs to track for dropping.
-        """
-        self.track_data_to_drop[cfw_uuid] = datasets
-
     def add_to_result_data_collection(
         self, cfw: ComputeFramework, features: FeatureSet, step_uuid: UUID, location: Optional[str] = None
     ) -> None:

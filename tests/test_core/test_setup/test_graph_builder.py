@@ -73,13 +73,16 @@ class TestGraphBuildGraph:
         feature_link_parents[uuid.UUID(int=4)] = {uuid.UUID(int=3)}
 
         feature_group_collection: dict[type[FeatureGroup], set[Feature]] = defaultdict(set)
-        f0, f1, f2, f3, f4 = (
-            Feature("GraphFeature2")._set_uuid(uuid.UUID(int=0)),
-            Feature("GraphFeature3")._set_uuid(uuid.UUID(int=1)),
-            Feature("GraphFeature4")._set_uuid(uuid.UUID(int=2)),
-            Feature("GraphFeature6")._set_uuid(uuid.UUID(int=3)),
-            Feature("GraphFeature5")._set_uuid(uuid.UUID(int=4)),
-        )
+        f0 = Feature("GraphFeature2")
+        f0.uuid = uuid.UUID(int=0)
+        f1 = Feature("GraphFeature3")
+        f1.uuid = uuid.UUID(int=1)
+        f2 = Feature("GraphFeature4")
+        f2.uuid = uuid.UUID(int=2)
+        f3 = Feature("GraphFeature6")
+        f3.uuid = uuid.UUID(int=3)
+        f4 = Feature("GraphFeature5")
+        f4.uuid = uuid.UUID(int=4)
         feature_group_collection[BaseTestFeatureGroup1] = {f0, f1, f2, f3, f4}
 
         build_graph = BuildGraph(feature_link_parents, feature_group_collection)

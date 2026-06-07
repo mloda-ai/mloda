@@ -166,23 +166,3 @@ class TestSparkMergeEngine:
 
         with pytest.raises(ValueError, match="MultiIndex is not yet implemented"):
             merge_engine._join_logic("inner", left_data, right_data, multi_idx, idx)
-
-    def test_handle_column_conflicts(self, spark_session: Any) -> None:
-        """Test column conflict handling."""
-        # Create data with conflicting column names
-        left_data_conflict = spark_session.createDataFrame(
-            [{"idx": 1, "common_col": "left_a"}, {"idx": 3, "common_col": "left_b"}]
-        )
-        right_data_conflict = spark_session.createDataFrame(
-            [{"idx": 1, "common_col": "right_x"}, {"idx": 2, "common_col": "right_z"}]
-        )
-        idx = Index(("idx",))
-
-        merge_engine = SparkMergeEngine(spark_session)
-        left_result, right_result = merge_engine._handle_column_conflicts(
-            left_data_conflict, right_data_conflict, idx, idx
-        )
-
-        # Check that conflicting columns in right DataFrame are renamed
-        assert "common_col_right" in right_result.columns
-        assert "common_col" in left_result.columns

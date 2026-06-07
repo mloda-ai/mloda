@@ -133,23 +133,3 @@ class SparkMergeEngine(BaseMergeEngine):
             join_condition = left_data[left_idx] == right_data[right_idx]
 
         return left_data.join(right_data, join_condition, join_type)
-
-    def _handle_column_conflicts(
-        self, left_data: Any, right_data: Any, left_index: Index, right_index: Index
-    ) -> tuple[Any, Any]:
-        """Handle column name conflicts by renaming columns in right DataFrame."""
-        left_columns = set(left_data.columns)
-        right_columns = set(right_data.columns)
-
-        # Find conflicting columns (excluding join keys)
-        left_idx = left_index.index[0]
-        right_idx = right_index.index[0]
-
-        conflicts = (left_columns & right_columns) - {left_idx, right_idx}
-
-        if conflicts:
-            # Rename conflicting columns in right DataFrame
-            for col in conflicts:
-                right_data = right_data.withColumnRenamed(col, f"{col}_right")
-
-        return left_data, right_data

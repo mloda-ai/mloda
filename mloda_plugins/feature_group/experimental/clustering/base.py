@@ -140,6 +140,11 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     }
 
     @classmethod
+    def context_key_schema(cls) -> dict[str, Any] | None:
+        """Opt into context-key validation; accepted keys derive from PROPERTY_MAPPING."""
+        return cls.derive_context_key_schema()
+
+    @classmethod
     def _validate_string_match(cls, feature_name: str, operation_config: str, source_feature: str) -> bool:
         """Validate clustering-specific string patterns using parse_clustering_prefix()."""
         if FeatureChainParser.is_chained_feature(feature_name):

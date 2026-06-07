@@ -200,6 +200,11 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
     }
 
     @classmethod
+    def context_key_schema(cls) -> dict[str, Any] | None:
+        """Opt into context-key validation; accepted keys derive from PROPERTY_MAPPING."""
+        return cls.derive_context_key_schema()
+
+    @classmethod
     def parse_reduction_suffix(cls, feature_name: str) -> tuple[str, int]:
         """
         Parse the dimensionality reduction suffix into its components.

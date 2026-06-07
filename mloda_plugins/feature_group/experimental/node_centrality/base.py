@@ -165,6 +165,11 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     }
 
     @classmethod
+    def context_key_schema(cls) -> dict[str, Any] | None:
+        """Opt into context-key validation; accepted keys derive from PROPERTY_MAPPING."""
+        return cls.derive_context_key_schema()
+
+    @classmethod
     def parse_centrality_prefix(cls, feature_name: str) -> str:
         """
         Parse the centrality suffix to extract the centrality type.

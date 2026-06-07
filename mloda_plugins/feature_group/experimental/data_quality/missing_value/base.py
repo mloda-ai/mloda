@@ -190,6 +190,11 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     }
 
     @classmethod
+    def context_key_schema(cls) -> dict[str, Any] | None:
+        """Opt into context-key validation; accepted keys derive from PROPERTY_MAPPING."""
+        return cls.derive_context_key_schema()
+
+    @classmethod
     def get_imputation_method(cls, feature_name: str) -> str:
         """Extract the imputation method from the feature name."""
         # parse_feature_name returns (operation_config, source_feature)

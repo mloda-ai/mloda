@@ -181,11 +181,6 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return point_parts[0], point_parts[1]
 
     @classmethod
-    def _supports_distance_type(cls, distance_type: str) -> bool:
-        """Check if this feature group supports the given distance type."""
-        return distance_type in cls.DISTANCE_TYPES
-
-    @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         """
         Calculate distances between point features.

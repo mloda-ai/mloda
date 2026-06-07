@@ -159,13 +159,6 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return aggregation_type in cls.AGGREGATION_TYPES
 
     @classmethod
-    def _raise_unsupported_aggregation_type(cls, aggregation_type: str) -> bool:
-        """
-        Raise an error for unsupported aggregation type.
-        """
-        raise ValueError(f"Unsupported aggregation type: {aggregation_type}")
-
-    @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         """
         Perform aggregations.

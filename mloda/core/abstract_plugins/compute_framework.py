@@ -569,11 +569,6 @@ class ComputeFramework(ABC):
     def add_already_calculated_children_and_drop_if_possible(
         self, children: set[UUID], location: Optional[str] = None
     ) -> bool | frozenset[UUID]:
-        # if len(self.object_ids) > 1:
-        #    if location is None:
-        #        raise ValueError("Location is not set")
-        #    self.drop_data(set(self.object_ids[:-1]), location)
-
         self.already_calculated_children_tracker.update(children)
 
         if self.children_if_root.issubset(self.already_calculated_children_tracker):

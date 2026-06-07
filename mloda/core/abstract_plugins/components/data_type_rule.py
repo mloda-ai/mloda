@@ -1,9 +1,10 @@
 """Tagged-union return contract for ``FeatureGroup.return_data_type_rule``.
 
-``RuleResult`` (``DataType | Open | Deferred``) is what plugins may return: a
-concrete type is expressed as a bare ``DataType``, while ``Open`` and ``Deferred``
-are sentinels. ``RuleOutcome`` additionally includes ``Broken``, which is
-engine-internal and produced only when a rule raises.
+``DataTypeDeclaration`` (``DataType | Open | Deferred``) is what a plugin may
+return: a concrete type is expressed as a bare ``DataType``, while ``Open`` and
+``Deferred`` are sentinels. ``Broken`` is the engine-internal wrapper carrying
+the exception; it is produced only when a rule raises and is never returned by a
+plugin.
 """
 
 from __future__ import annotations
@@ -28,5 +29,4 @@ class Broken:
     error: BaseException
 
 
-RuleResult = DataType | Open | Deferred
-RuleOutcome = DataType | Open | Deferred | Broken
+DataTypeDeclaration = DataType | Open | Deferred

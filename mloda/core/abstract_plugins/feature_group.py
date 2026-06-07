@@ -6,7 +6,7 @@ from abc import ABC
 
 from mloda.core.abstract_plugins.components.base_artifact import BaseArtifact
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda.core.abstract_plugins.components.data_type_rule import Open, RuleResult
+from mloda.core.abstract_plugins.components.data_type_rule import Open, DataTypeDeclaration
 
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
@@ -254,7 +254,7 @@ class FeatureGroup(ABC):
         return [feature_name]
 
     @classmethod
-    def return_data_type_rule(cls, feature: Feature) -> RuleResult:
+    def return_data_type_rule(cls, feature: Feature) -> DataTypeDeclaration:
         """
         Specifies a fixed return data type for this feature group, if applicable.
 

@@ -1,7 +1,7 @@
 """Tests for ``Engine.set_data_type`` reconciliation against the new
 ``return_data_type_rule`` contract.
 
-The rule now returns a ``RuleResult`` (``DataType | Open | Deferred``) instead of a
+The rule now returns a ``DataTypeDeclaration`` (``DataType | Open | Deferred``) instead of a
 raw ``Optional[DataType]``. ``set_data_type`` keeps returning ``Optional[DataType]``
 but reconciles the rule outcome against any declared ``feature.data_type`` and must
 never let a raising rule crash planning.
@@ -15,9 +15,9 @@ import logging
 import pytest
 
 from mloda.core.abstract_plugins.components.data_type_rule import (
+    DataTypeDeclaration,
     Deferred,
     Open,
-    RuleResult,
 )
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.core.engine import Engine
@@ -34,31 +34,31 @@ def _engine() -> Engine:
 
 class _FixedInt64(FeatureGroup):
     @classmethod
-    def return_data_type_rule(cls, feature: Feature) -> RuleResult:
+    def return_data_type_rule(cls, feature: Feature) -> DataTypeDeclaration:
         return DataType.INT64
 
 
 class _OpenRule(FeatureGroup):
     @classmethod
-    def return_data_type_rule(cls, feature: Feature) -> RuleResult:
+    def return_data_type_rule(cls, feature: Feature) -> DataTypeDeclaration:
         return Open()
 
 
 class _DeferredRule(FeatureGroup):
     @classmethod
-    def return_data_type_rule(cls, feature: Feature) -> RuleResult:
+    def return_data_type_rule(cls, feature: Feature) -> DataTypeDeclaration:
         return Deferred()
 
 
 class _RaisesValueError(FeatureGroup):
     @classmethod
-    def return_data_type_rule(cls, feature: Feature) -> RuleResult:
+    def return_data_type_rule(cls, feature: Feature) -> DataTypeDeclaration:
         raise ValueError("boom-data-shape")
 
 
 class _RaisesAttributeError(FeatureGroup):
     @classmethod
-    def return_data_type_rule(cls, feature: Feature) -> RuleResult:
+    def return_data_type_rule(cls, feature: Feature) -> DataTypeDeclaration:
         raise AttributeError("boom-programmer-error")
 
 

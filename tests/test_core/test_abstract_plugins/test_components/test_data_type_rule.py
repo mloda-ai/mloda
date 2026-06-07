@@ -1,4 +1,4 @@
-"""Tests for the data_type_rule tagged union (RuleResult / RuleOutcome).
+"""Tests for the data_type_rule tagged union (DataTypeDeclaration).
 
 These tests define the expected behavior of the module
 ``mloda.core.abstract_plugins.components.data_type_rule``, which carries the
@@ -12,9 +12,9 @@ import pytest
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.data_type_rule import (
     Broken,
+    DataTypeDeclaration,
     Deferred,
     Open,
-    RuleResult,
 )
 
 
@@ -34,8 +34,8 @@ def test_broken_is_frozen() -> None:
 def test_open_and_deferred_equality() -> None:
     assert Open() == Open()
     assert Deferred() == Deferred()
-    open_result: RuleResult = Open()
-    deferred_result: RuleResult = Deferred()
+    open_result: DataTypeDeclaration = Open()
+    deferred_result: DataTypeDeclaration = Deferred()
     assert open_result != deferred_result
 
 

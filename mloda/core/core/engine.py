@@ -16,7 +16,7 @@ from mloda.core.prepare.accessible_plugins import PreFilterPlugins
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.data_types import DataType
-from mloda.core.abstract_plugins.components.data_type_rule import Broken, Deferred, Open, RuleResult
+from mloda.core.abstract_plugins.components.data_type_rule import Broken, DataTypeDeclaration, Deferred, Open
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.prepare.graph.build_graph import BuildGraph
@@ -377,7 +377,7 @@ class Engine:
         # single call site is the whole point of the contract change. A rule that raises is
         # captured as a ``Broken`` outcome instead of crashing planning.
         try:
-            outcome: RuleResult | Broken = feature_group_class.return_data_type_rule(feature)
+            outcome: DataTypeDeclaration | Broken = feature_group_class.return_data_type_rule(feature)
         except Exception as exc:
             outcome = Broken(exc)
 

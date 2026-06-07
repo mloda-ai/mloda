@@ -50,6 +50,13 @@ hook over raising a generic error from inside `calculate_feature`: the
 rejection happens during planning rather than at compute time, and the message
 is built for you.
 
+The debug inspector `resolve_feature(name)` reflects the hook too: its
+`ResolvedFeature` result carries `supported_compute_frameworks` and
+`unsupported_compute_frameworks` (evaluated under default options, since the
+inspector does not know the caller's `Options`), and a feature that matches a
+group but is unsupported on every installed framework resolves to
+`feature_group=None` with a capability error rather than appearing runnable.
+
 ### Framework-Specific Implementations
 
 Feature groups follow a layered architecture:

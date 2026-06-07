@@ -1,8 +1,10 @@
 from difflib import get_close_matches
-from typing import Optional
+from typing import Iterable, Optional
 
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.feature_name import FeatureName
+from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup, format_feature_group_class
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -11,6 +13,31 @@ from mloda.core.abstract_plugins.components.link import Link
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def split_frameworks_by_capability(
+    feature_groups: Iterable[type[FeatureGroup]],
+    feature_name: FeatureName | str,
+    options: Options,
+) -> tuple[set[type[ComputeFramework]], set[type[ComputeFramework]]]:
+    """Split each feature group's available frameworks into (supported, rejected)
+    by the match-time capability hook.
+
+    For each feature group, considers the frameworks it declares via
+    compute_framework_definition() that are currently available
+    (ComputeFramework.is_available()), and partitions them by
+    supports_compute_framework(feature_name, options, cfw)."""
+    supported: set[type[ComputeFramework]] = set()
+    rejected: set[type[ComputeFramework]] = set()
+    for fg in feature_groups:
+        for cfw in fg.compute_framework_definition():
+            if not cfw.is_available():
+                continue
+            if fg.supports_compute_framework(feature_name, options, cfw):
+                supported.add(cfw)
+            else:
+                rejected.add(cfw)
+    return supported, rejected
 
 
 class IdentifyFeatureGroupClass:
@@ -131,17 +158,9 @@ class IdentifyFeatureGroupClass:
             )
 
     def _capability_rejection_message(self, feature: Feature) -> Optional[str]:
-        rejected: set[type[ComputeFramework]] = set()
-        supported: set[type[ComputeFramework]] = set()
-
-        for fg in self._criteria_matched_feature_groups:
-            for cfw in fg.compute_framework_definition():
-                if not cfw.is_available():
-                    continue
-                if fg.supports_compute_framework(feature.name, feature.options, cfw):
-                    supported.add(cfw)
-                else:
-                    rejected.add(cfw)
+        supported, rejected = split_frameworks_by_capability(
+            self._criteria_matched_feature_groups, feature.name, feature.options
+        )
 
         if not rejected:
             return None

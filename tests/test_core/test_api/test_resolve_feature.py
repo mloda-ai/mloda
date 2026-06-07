@@ -10,12 +10,88 @@ import pytest
 from typing import Optional
 
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.api.plugin_info import ResolvedFeature
 from mloda.core.api.plugin_docs import resolve_feature
 from mloda.user import PluginLoader
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
+    PythonDictFramework,
+)
+
+
+SPLIT_CAP_FEATURE = "SplitCapResolveFeature"
+ALL_REJECTED_CAP_FEATURE = "AllRejectedCapResolveFeature"
+
+
+class SplitCapResolveFeatureGroup(FeatureGroup):
+    """Supports the op on PandasDataFrame but rejects PythonDictFramework.
+
+    Bounded compute_framework_rule so compute_framework_definition() is exactly
+    {PandasDataFrame, PythonDictFramework} and the capability split is deterministic.
+    """
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PandasDataFrame, PythonDictFramework}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> bool:
+        if isinstance(feature_name, FeatureName):
+            feature_name = str(feature_name)
+        return feature_name == SPLIT_CAP_FEATURE
+
+    @classmethod
+    def supports_compute_framework(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        compute_framework: type[ComputeFramework],
+    ) -> bool:
+        return compute_framework is not PythonDictFramework
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        return None
+
+
+class AllRejectedCapResolveFeatureGroup(FeatureGroup):
+    """Rejects the op on every framework in its bounded definition."""
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PandasDataFrame, PythonDictFramework}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> bool:
+        if isinstance(feature_name, FeatureName):
+            feature_name = str(feature_name)
+        return feature_name == ALL_REJECTED_CAP_FEATURE
+
+    @classmethod
+    def supports_compute_framework(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        compute_framework: type[ComputeFramework],
+    ) -> bool:
+        return False
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        return None
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -260,3 +336,64 @@ class TestResolveFeatureSubclassFiltering:
             candidate_names = [c.__name__ for c in result.candidates]
             # At minimum, we should see our test classes if they matched
             assert any("CandidatesTest" in name for name in candidate_names) or len(result.candidates) >= 1
+
+
+class TestResolveFeatureCapabilityAware:
+    """Capability-aware resolution: resolve_feature reports the supported/unsupported split.
+
+    These tests pin the PLANNED contract and are expected to FAIL until
+    resolve_feature and ResolvedFeature are made capability-aware (issue #482).
+    """
+
+    def test_resolved_feature_has_capability_fields_defaulting_empty(self) -> None:
+        """ResolvedFeature gains two new list fields defaulting to empty lists.
+
+        The existing 4-positional-arg constructor must still work.
+        """
+        result = ResolvedFeature("n", None, [], None)
+        assert result.supported_compute_frameworks == []
+        assert result.unsupported_compute_frameworks == []
+
+    def test_split_resolution_reports_supported_and_unsupported(self) -> None:
+        """A feature supported on one framework but rejected on another still resolves.
+
+        feature_group is not None and error is None, but the capability split is
+        reported: the rejected framework appears in unsupported, the supporting one
+        in supported.
+        """
+        result = resolve_feature(SPLIT_CAP_FEATURE)
+
+        # It still resolves: a supporting framework exists.
+        assert result.feature_group is not None
+        assert result.error is None
+
+        # The capability split is reported (subset membership only).
+        assert "PythonDictFramework" in result.unsupported_compute_frameworks
+        assert "PandasDataFrame" in result.supported_compute_frameworks
+        assert "PandasDataFrame" not in result.unsupported_compute_frameworks
+
+    def test_all_rejected_resolution_fails_with_capability_error(self) -> None:
+        """When every framework in the definition rejects the op, resolution fails.
+
+        feature_group is None, error names the unsupported framework(s) and includes
+        the 'default options' caveat, and the split lists both frameworks as
+        unsupported with none supported.
+        """
+        result = resolve_feature(ALL_REJECTED_CAP_FEATURE)
+
+        assert result.feature_group is None
+        assert result.error is not None
+
+        lowered = result.error.lower()
+        assert "unsupported" in lowered, f"Error must signal 'unsupported', got: {result.error}"
+        assert "PandasDataFrame" in result.error, f"Error must name PandasDataFrame, got: {result.error}"
+        assert "PythonDictFramework" in result.error, f"Error must name PythonDictFramework, got: {result.error}"
+        assert "default options" in result.error, (
+            f"Error must include the 'default options' caveat, got: {result.error}"
+        )
+
+        # The split lists both frameworks as unsupported and none as supported (subset membership only).
+        assert "PythonDictFramework" in result.unsupported_compute_frameworks
+        assert "PandasDataFrame" in result.unsupported_compute_frameworks
+        assert "PandasDataFrame" not in result.supported_compute_frameworks
+        assert "PythonDictFramework" not in result.supported_compute_frameworks

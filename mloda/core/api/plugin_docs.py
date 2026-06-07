@@ -26,6 +26,7 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.api.plugin_info import ComputeFrameworkInfo, ExtenderInfo, FeatureGroupInfo, ResolvedFeature
 from mloda.core.prepare.accessible_plugins import dedup_feature_group_subclasses
+from mloda.core.prepare.identify_feature_group import split_frameworks_by_capability
 
 
 def get_feature_group_docs(
@@ -284,6 +285,24 @@ def resolve_feature(feature_name: str, plugin_collector: Optional[PluginCollecto
             error=f"No FeatureGroup found for feature name: {feature_name}",
         )
 
+    supported, rejected = split_frameworks_by_capability(candidates, feature_name_obj, Options())
+    supported_names = sorted(c.get_class_name() for c in supported)
+    rejected_names = sorted(c.get_class_name() for c in rejected)
+
+    if not supported and rejected:
+        return ResolvedFeature(
+            feature_name=feature_name,
+            feature_group=None,
+            candidates=candidates,
+            error=(
+                f"Feature '{feature_name}' matches {[c.get_class_name() for c in candidates]} "
+                f"but is unsupported on all installed compute frameworks "
+                f"(evaluated under default options): {rejected_names}."
+            ),
+            supported_compute_frameworks=[],
+            unsupported_compute_frameworks=rejected_names,
+        )
+
     filtered = _filter_subclasses(candidates)
 
     if len(filtered) == 1:
@@ -292,6 +311,8 @@ def resolve_feature(feature_name: str, plugin_collector: Optional[PluginCollecto
             feature_group=filtered[0],
             candidates=candidates,
             error=None,
+            supported_compute_frameworks=supported_names,
+            unsupported_compute_frameworks=rejected_names,
         )
 
     conflicting_names = [fg.__name__ for fg in filtered]
@@ -300,6 +321,8 @@ def resolve_feature(feature_name: str, plugin_collector: Optional[PluginCollecto
         feature_group=None,
         candidates=candidates,
         error=f"Multiple FeatureGroups match feature name '{feature_name}': {conflicting_names}",
+        supported_compute_frameworks=supported_names,
+        unsupported_compute_frameworks=rejected_names,
     )
 
 

@@ -7,6 +7,7 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup, format_feature_group_class
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.link import Link
+from mloda.core.abstract_plugins.components.validators.options_validator import OptionsValidator
 
 import logging
 
@@ -118,6 +119,15 @@ class IdentifyFeatureGroupClass:
         if not compute_frameworks:
             raise ValueError(
                 f"Feature {feature.name} {format_feature_group_class(feature_group_class)} has no compute framework."
+            )
+
+        schema = feature_group_class.context_key_schema()
+        if schema is not None:
+            OptionsValidator.validate_context_keys(
+                str(feature.name),
+                feature.options.context,
+                schema,
+                set(feature.options.propagate_context_keys),
             )
 
     def _build_no_feature_group_error(

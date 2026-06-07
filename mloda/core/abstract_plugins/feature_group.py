@@ -121,6 +121,18 @@ class FeatureGroup(ABC):
         return None
 
     @classmethod
+    def context_key_schema(cls) -> Optional[dict[str, Any]]:
+        """Optionally declare accepted context keys and their expected types.
+
+        Return None (default) to keep permissive behavior (no validation).
+        Return a dict mapping each accepted context key to an expected type
+        (a type, a tuple of types, or None to skip the type check). When
+        declared, core validates the resolving feature's context keys at
+        planning time and raises ValueError on an unknown key.
+        """
+        return None
+
+    @classmethod
     def validate_input_features(cls, data: Any, features: FeatureSet) -> None:
         """
         Validate the input data before feature calculation.

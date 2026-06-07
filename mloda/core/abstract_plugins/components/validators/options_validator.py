@@ -1,4 +1,7 @@
+from difflib import get_close_matches
 from typing import Any
+
+from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 
 
 class OptionsValidator:
@@ -73,3 +76,39 @@ class OptionsValidator:
         conflicting_keys = other_group_keys & self_context_keys
         if conflicting_keys:
             raise ValueError(f"Cannot update group: keys already exist in context: {conflicting_keys}")
+
+    @staticmethod
+    def validate_context_keys(
+        feature_name: str,
+        context: dict[str, Any],
+        schema: dict[str, Any],
+        extra_allowed_keys: set[str] | None = None,
+    ) -> None:
+        """
+        Validate a feature's context keys against a declared schema.
+
+        Unknown keys raise ValueError (with a 'did you mean' hint when a close
+        match exists). Keys mapped to a type in the schema are type-checked;
+        a schema value of None skips the type check. Framework-reserved keys
+        (DefaultOptionKeys) and extra_allowed_keys are always permitted.
+        """
+        allowed = set(schema) | {k.value for k in DefaultOptionKeys} | (extra_allowed_keys or set())
+
+        for key in context:
+            if key in allowed:
+                continue
+            match = get_close_matches(key, sorted(allowed), n=1, cutoff=0.6)
+            if match:
+                raise ValueError(
+                    f"Unknown context key '{key}' for feature '{feature_name}'; did you mean '{match[0]}'?"
+                )
+            raise ValueError(f"Unknown context key '{key}' for feature '{feature_name}'.")
+
+        for key, expected in schema.items():
+            if expected is None or key not in context:
+                continue
+            if not isinstance(context[key], expected):
+                raise ValueError(
+                    f"Context key '{key}' for feature '{feature_name}' expects type {expected}, "
+                    f"got {type(context[key]).__name__}"
+                )

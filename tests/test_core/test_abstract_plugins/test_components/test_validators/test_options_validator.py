@@ -1,7 +1,7 @@
 import pytest
 from typing import Any
 
-from mloda.provider import OptionsValidator
+from mloda.provider import OptionsValidator, DefaultOptionKeys
 
 
 class TestValidateNoDuplicateKeys:
@@ -214,3 +214,103 @@ class TestValidateNoGroupContextConflicts:
         OptionsValidator.validate_no_group_context_conflicts(
             other_group_keys=other_group_keys, self_context_keys=self_context_keys
         )
+
+
+class TestValidateContextKeys:
+    """Test the validate_context_keys static method (context-key schema validation)."""
+
+    def test_unknown_key_with_near_match_raises_with_suggestion(self) -> None:
+        """Unknown context key close to a schema key raises ValueError with a 'did you mean' hint."""
+        with pytest.raises(ValueError) as exc_info:
+            OptionsValidator.validate_context_keys(
+                feature_name="my_feature",
+                context={"partiton_by": "col"},
+                schema={"partition_by": str},
+            )
+
+        error_msg = str(exc_info.value)
+        assert "context key 'partiton_by'" in error_msg
+        assert "did you mean 'partition_by'" in error_msg
+        assert "my_feature" in error_msg
+
+    def test_unknown_key_without_near_match_raises(self) -> None:
+        """Unknown context key with no close match still raises ValueError mentioning the key."""
+        with pytest.raises(ValueError) as exc_info:
+            OptionsValidator.validate_context_keys(
+                feature_name="my_feature",
+                context={"zzz_unrelated": 1},
+                schema={"partition_by": str},
+            )
+
+        error_msg = str(exc_info.value)
+        assert "context key 'zzz_unrelated'" in error_msg
+
+    def test_all_valid_keys_pass(self) -> None:
+        """All context keys present in schema and type-correct should not raise."""
+        # Act & Assert - should not raise
+        OptionsValidator.validate_context_keys(
+            feature_name="my_feature",
+            context={"partition_by": "col", "frame_size": 10},
+            schema={"partition_by": str, "frame_size": int},
+        )
+
+    def test_framework_reserved_key_allowed(self) -> None:
+        """A framework-reserved key (DefaultOptionKeys) is allowed even when absent from schema."""
+        # Act & Assert - should not raise
+        OptionsValidator.validate_context_keys(
+            feature_name="my_feature",
+            context={DefaultOptionKeys.in_features.value: "some_source"},
+            schema={"partition_by": str},
+        )
+
+    def test_type_mismatch_raises(self) -> None:
+        """A context value whose type does not match the schema type raises ValueError."""
+        with pytest.raises(ValueError) as exc_info:
+            OptionsValidator.validate_context_keys(
+                feature_name="my_feature",
+                context={"frame_size": "10"},
+                schema={"frame_size": int},
+            )
+
+        error_msg = str(exc_info.value)
+        assert "frame_size" in error_msg
+
+    def test_type_match_passes(self) -> None:
+        """A context value whose type matches the schema type does not raise."""
+        # Act & Assert - should not raise
+        OptionsValidator.validate_context_keys(
+            feature_name="my_feature",
+            context={"frame_size": 10},
+            schema={"frame_size": int},
+        )
+
+    def test_none_expected_type_skips_type_check(self) -> None:
+        """A schema entry mapping to None skips the type check for that key."""
+        # Act & Assert - should not raise even though value is an int
+        OptionsValidator.validate_context_keys(
+            feature_name="my_feature",
+            context={"order_by": 123},
+            schema={"order_by": None},
+        )
+
+    def test_extra_allowed_keys_exempts_key(self) -> None:
+        """A key listed in extra_allowed_keys is exempt from the unknown-key error."""
+        # Act & Assert - should not raise
+        OptionsValidator.validate_context_keys(
+            feature_name="my_feature",
+            context={"partition_by": "col", "propagated_x": "v"},
+            schema={"partition_by": str},
+            extra_allowed_keys={"propagated_x"},
+        )
+
+    def test_empty_schema_rejects_non_reserved_key(self) -> None:
+        """A declared-but-empty schema accepts nothing custom: a non-reserved key raises."""
+        with pytest.raises(ValueError) as exc_info:
+            OptionsValidator.validate_context_keys(
+                feature_name="my_feature",
+                context={"anything": 1},
+                schema={},
+            )
+
+        error_msg = str(exc_info.value)
+        assert "context key 'anything'" in error_msg

@@ -43,6 +43,8 @@ class Options:
     on which feature groups resolve the feature at runtime. Typos in key names
     will not raise errors; the key will simply be ignored by all feature groups.
     Use ``DefaultOptionKeys`` constants where available to prevent typos.
+    A feature group may opt in to context-key validation by overriding
+    ``FeatureGroup.context_key_schema()``.
 
     Examples:
         >>> # Basic usage with positional dict (goes to group)

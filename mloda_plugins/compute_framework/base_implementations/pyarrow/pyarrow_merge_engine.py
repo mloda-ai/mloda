@@ -9,11 +9,6 @@ from mloda.user import JoinType
 from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import pick_helper_column_name
 
-try:
-    import pandas as pd
-except ImportError:
-    pd = None
-
 
 class PyArrowMergeEngine(BaseMergeEngine):
     @staticmethod
@@ -84,33 +79,71 @@ class PyArrowMergeEngine(BaseMergeEngine):
         right_index: Index,
         asof_config: AsOfJoinConfig,
     ) -> Any:
-        if pd is None:
-            raise ImportError("Pandas is not installed. To be able to use this framework, please install pandas.")
+        if asof_config.direction == "nearest":
+            raise ValueError(f"{self.__class__.__name__} asof does not support direction='nearest'.")
+
+        if asof_config.allow_exact_matches is False:
+            raise ValueError(
+                f"{self.__class__.__name__} asof does not support allow_exact_matches=False; "
+                "Acero's match range always includes exact matches."
+            )
+
+        if asof_config.tolerance is not None and not isinstance(asof_config.tolerance, int):
+            raise ValueError(
+                f"{self.__class__.__name__} asof requires an integer tolerance; "
+                "timedelta and non-integer tolerances are not supported."
+            )
 
         by_left = list(left_index.index)
         by_right = list(right_index.index)
         lt, rt = asof_config.left_time_column, asof_config.right_time_column
 
-        left_df = left_data.to_pandas().sort_values(lt)
-        right_df = right_data.to_pandas().sort_values(rt)
+        left_cols = list(left_data.column_names)
+        right_cols = list(right_data.column_names)
 
-        kwargs: dict[str, Any] = {
-            "direction": asof_config.direction,
-            "allow_exact_matches": asof_config.allow_exact_matches,
-        }
+        right_match = set(by_right) | {rt}
+        right_value_keep = [c for c in right_cols if c not in right_match and c not in left_cols]
+        right_key_carry = [c for c in right_match if c not in left_cols]
+
+        right_select = by_right + [rt] + right_value_keep
+        right_join = right_data.select(right_select)
+
+        taken = set(left_cols) | set(right_join.column_names)
+        carry_to_original: dict[str, str] = {}
+        for c in right_key_carry:
+            carry_name = pick_helper_column_name(taken=taken, prefix="mloda_asof_carry")
+            taken.add(carry_name)
+            right_join = right_join.append_column(carry_name, right_data[c])
+            carry_to_original[carry_name] = c
+
+        left_data = self._normalize_string_types(left_data, by_left)
+        right_join = self._normalize_string_types(right_join, by_right)
+
         if asof_config.tolerance is not None:
-            kwargs["tolerance"] = asof_config.tolerance
+            magnitude = int(asof_config.tolerance)
+        else:
+            left_on_i = pc.cast(left_data[lt], pa.int64())
+            right_on_i = pc.cast(right_join[rt], pa.int64())
+            combined = pa.concat_arrays([left_on_i.combine_chunks(), right_on_i.combine_chunks()])
+            mm = pc.min_max(combined).as_py()
+            magnitude = 0 if mm["min"] is None or mm["max"] is None else (mm["max"] - mm["min"])
 
-        result = pd.merge_asof(
-            left_df,
-            right_df,
-            left_on=lt,
+        signed_tol = -magnitude if asof_config.direction == "backward" else magnitude
+
+        result = left_data.sort_by(lt).join_asof(
+            right_join.sort_by(rt),
+            on=lt,
+            by=by_left,
             right_on=rt,
-            left_by=by_left,
             right_by=by_right,
-            **kwargs,
+            tolerance=signed_tol,
         )
-        return pa.Table.from_pandas(result, preserve_index=False)
+
+        if carry_to_original:
+            new_names = [carry_to_original.get(name, name) for name in result.column_names]
+            result = result.rename_columns(new_names)
+
+        return result
 
     def join_logic(
         self, join_type: str, left_data: Any, right_data: Any, left_index: Index, right_index: Index, jointype: JoinType

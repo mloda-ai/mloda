@@ -50,7 +50,7 @@ class PythonDictFramework(ComputeFramework):
         column_ordering: Optional[str] = None,
     ) -> list[dict[str, Any]]:
         if not data:
-            raise ValueError(f"Data cannot be empty: {selected_feature_names}")
+            return []
 
         # Get all unique column names from all rows
         column_names: set[str] = set()
@@ -62,6 +62,9 @@ class PythonDictFramework(ComputeFramework):
         )
 
         return [{k: record.get(k) for k in _selected_feature_names if k in record} for record in data]
+
+    def _is_empty(self, data: Any) -> bool:
+        return not data
 
     def _extract_column_names(self, data: Any) -> set[str]:
         all_columns: set[str] = set()
@@ -116,7 +119,7 @@ class PythonDictFramework(ComputeFramework):
         """
 
         if not data:
-            raise ValueError("Data cannot be empty")
+            return []
 
         transformed_data = self.apply_compute_framework_transformer(data)
         if transformed_data is not None:

@@ -462,6 +462,16 @@ class FeatureGroup(ABC):
         return rule
 
     @classmethod
+    def allow_empty_result(cls) -> bool:
+        """Whether an empty result set is a valid outcome for this feature group.
+
+        Returns False by default (an empty result is treated as an error). Non-tabular
+        domains whose queries can legitimately match nothing (knowledge graphs, search,
+        memory, authz filters) override this to return True.
+        """
+        return False
+
+    @classmethod
     def supports_compute_framework(
         cls,
         feature_name: FeatureName | str,

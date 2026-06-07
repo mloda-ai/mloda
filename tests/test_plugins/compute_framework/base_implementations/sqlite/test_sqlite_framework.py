@@ -14,6 +14,9 @@ from tests.test_plugins.compute_framework.base_implementations.datatype_validato
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
     DtypeExtractionTestMixin,
 )
+from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
+    EmptyResultFrameworkTestMixin,
+)
 
 
 class TestSqliteFrameworkBasics:
@@ -247,3 +250,23 @@ class TestSqliteDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
 
     def test_timestamp_us_column_strict_ms_raises(self, framework_instance: Any, precision_sample_data: Any) -> None:
         pytest.skip("SQLite stores timestamps as TEXT; TIMESTAMP precision cannot be distinguished")
+
+
+class TestSqliteEmptyResult(EmptyResultFrameworkTestMixin):
+    """Test SqliteFramework._is_empty using shared mixin.
+
+    SQLite data is a relation, so the data fixtures are built via ``from_arrow`` and pull in
+    the shared ``connection`` fixture, mirroring the DataTypeValidator consumer.
+    """
+
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return SqliteFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+    @pytest.fixture
+    def empty_data(self, connection: sqlite3.Connection) -> Any:
+        return SqliteRelation.from_arrow(connection, pa.table({"a": pa.array([], pa.int64())}))
+
+    @pytest.fixture
+    def non_empty_data(self, connection: sqlite3.Connection) -> Any:
+        return SqliteRelation.from_arrow(connection, pa.table({"a": [1]}))

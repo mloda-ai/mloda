@@ -51,12 +51,12 @@ class TestPythonDictFramework:
         result = framework.transform(input_data, set())
         assert result == input_data
 
-    def test_transform_empty_data_error(self) -> None:
-        """Test that empty data raises an error."""
+    def test_transform_empty_data_returns_empty_list(self) -> None:
+        """Empty data is propagated as [] (the framework never judges emptiness)."""
         framework = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
-        with pytest.raises(ValueError, match="Data cannot be empty"):
-            framework.transform(None, set())
+        assert framework.transform(None, set()) == []
+        assert framework.transform([], set()) == []
 
     def test_transform_invalid_data(self) -> None:
         """Test that invalid data types raise errors."""
@@ -78,14 +78,13 @@ class TestPythonDictFramework:
 
         assert result == expected
 
-    def test_select_data_empty_error(self) -> None:
-        """Test that empty data raises an error in column selection."""
+    def test_select_data_empty_returns_empty_list(self) -> None:
+        """Empty data is propagated as [] in column selection (no judgement)."""
         framework = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
         feature_names = {FeatureName("col1")}
 
-        with pytest.raises(ValueError, match="Data cannot be empty"):
-            framework.select_data_by_column_names([], feature_names)
+        assert framework.select_data_by_column_names([], feature_names) == []
 
     def test_set_column_names(self) -> None:
         """Test setting column names from data."""

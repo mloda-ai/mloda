@@ -256,6 +256,22 @@ Output similar to:
 `Artifacts` can also be used for validation as the full mloda is available. A use case could be to store statistics of a feature and then validate them later on.
 For more details on artifacts, refer to the [artifact documentation](artifacts.md).
 
+#### Empty-Result Guard
+
+`run_validate_output_features` runs an empty-result check **before** data-type
+enforcement and before the custom `validate_output_features` hook. If the
+result contains zero rows and `allow_empty_result()` is `False` (the default),
+it raises `EmptyResultError` immediately. As a consequence, custom output
+validators are not reached on empty data unless the feature group has opted in
+by returning `True` from `allow_empty_result()`.
+
+This ordering ensures that schema-level validators never receive empty tables
+they were not designed to handle, and that the error message is clear and
+actionable rather than a downstream type error.
+
+For details on opting in and the underlying `_is_empty` predicate, see
+[Allowing Empty Results](compute-framework-integration.md#allowing-empty-results).
+
 #### Conclusion
 
 In conclusion, feature validation is crucial for ensuring data quality in both input and output stages. By leveraging custom validators and extenders, validation can be tailored to specific needs while maintaining flexibility. This process helps detect inconsistencies early, improving the accuracy and robustness of data  and feature pipelines.

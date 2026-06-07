@@ -13,6 +13,9 @@ from tests.test_plugins.compute_framework.base_implementations.datatype_validato
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
     DtypeExtractionTestMixin,
 )
+from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
+    EmptyResultFrameworkTestMixin,
+)
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )
@@ -273,6 +276,39 @@ class TestIcebergDtypeExtraction(DtypeExtractionTestMixin):
             NestedField(3, "float_col", DoubleType()),
         )
         return TestIcebergDataTypeValidator._wrap_schema(schema)
+
+
+@pytest.mark.skipif(
+    pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
+)
+class TestIcebergEmptyResult(EmptyResultFrameworkTestMixin):
+    """Test IcebergFramework._is_empty using shared mixin (native IcebergTable branch).
+
+    Iceberg tables need catalog context to construct, so the fixtures wrap a ``Mock`` typed
+    as ``IcebergTable`` whose ``scan().to_arrow()`` returns a known PyArrow table, mirroring
+    the mock-table convention in ``test_iceberg_integration.py``. ``Mock(spec=IcebergTable)``
+    satisfies ``isinstance(_, IcebergTable)``, so the framework's native-table branch runs.
+
+    This pins the ``scan().to_arrow().num_rows == 0`` access pattern (the documented native
+    branch). The pa.Table working-data branch is covered by the e2e run_all test, since
+    ``IcebergFramework.transform`` emits a PyArrow table for dict input.
+    """
+
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return IcebergFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+    @pytest.fixture
+    def empty_data(self) -> Any:
+        mock_table = Mock(spec=IcebergTable)
+        mock_table.scan.return_value.to_arrow.return_value = pa.table({"a": pa.array([], pa.int64())})
+        return mock_table
+
+    @pytest.fixture
+    def non_empty_data(self) -> Any:
+        mock_table = Mock(spec=IcebergTable)
+        mock_table.scan.return_value.to_arrow.return_value = pa.table({"a": [1]})
+        return mock_table
 
 
 from tests.test_plugins.compute_framework.base_implementations.tfs_connection_test_mixin import TfsConnectionInitMixin  # noqa: E402

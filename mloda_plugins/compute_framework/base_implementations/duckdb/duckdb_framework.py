@@ -132,6 +132,9 @@ class DuckDBFramework(ComputeFramework):
             raise ImportError("DuckDB is not installed. To be able to use this framework, please install duckdb.")
         return DuckdbRelation
 
+    def _is_empty(self, data: Any) -> bool:
+        return len(data) == 0
+
     def transform(
         self,
         data: Any,

@@ -57,6 +57,60 @@ inspector does not know the caller's `Options`), and a feature that matches a
 group but is unsupported on every installed framework resolves to
 `feature_group=None` with a capability error rather than appearing runnable.
 
+### Allowing Empty Results
+
+By default, mloda treats a zero-row result for a **final** requested feature as
+an error. If `calculate_feature` returns empty data for a feature that was
+explicitly requested, `ComputeFramework.run_validate_output_features` raises:
+
+```
+EmptyResultError: Data cannot be empty: <FeatureGroupClassName>
+```
+
+`EmptyResultError` is a `ValueError` subclass. Intermediate feature groups
+(those whose output feeds another feature group rather than the caller directly)
+are never subject to this check.
+
+#### Opting in to empty results
+
+Override `allow_empty_result` on a feature group to declare that zero rows is a
+legitimate outcome for that group:
+
+``` python
+class KnowledgeGraphFeatureGroup(FeatureGroup):
+    @classmethod
+    def allow_empty_result(cls) -> bool:
+        """Zero matches is a valid answer for graph traversals."""
+        return True
+```
+
+When `allow_empty_result()` returns `True`, empty data flows through to the
+caller unchanged. Typical use cases include knowledge graphs, search, agent
+memory, and authorization filters, where "no results" is a meaningful and
+expected answer rather than a pipeline failure.
+
+#### The `_is_empty` predicate
+
+The empty-result guard relies on `ComputeFramework._is_empty(self, data) -> bool`
+to detect zero-row data. The base class returns `False` (opt-out by default).
+All built-in compute frameworks (PythonDict, PyArrow, Pandas, Polars, DuckDB,
+SQLite, Spark, Iceberg) override it, so the guard is active on every built-in
+framework without any configuration.
+
+If you implement a **new** compute framework, override `_is_empty` to opt it in:
+
+``` python
+class MyComputeFramework(ComputeFramework):
+    def _is_empty(self, data) -> bool:
+        return len(data) == 0
+```
+
+#### Filter column validation
+
+As a side effect, when `allow_empty_result()` is `True`, `_validate_filter_columns`
+also skips its column-presence check on zero-row data. This prevents spurious
+"column not found" errors when a filter is applied to legitimately empty output.
+
 ### Framework-Specific Implementations
 
 Feature groups follow a layered architecture:

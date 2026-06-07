@@ -39,6 +39,9 @@ from tests.test_plugins.compute_framework.base_implementations.datatype_validato
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
     DtypeExtractionTestMixin,
 )
+from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
+    EmptyResultFrameworkTestMixin,
+)
 
 # Import shared fixtures and availability flags from conftest.py
 from tests.test_plugins.compute_framework.base_implementations.spark.conftest import (
@@ -367,6 +370,29 @@ class TestSparkDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
 
     def test_timestamp_us_column_strict_ms_raises(self, framework_instance: Any, precision_sample_data: Any) -> None:
         pytest.skip("Spark has only one TimestampType (microseconds); millisecond cannot be expressed")
+
+
+@pytest.mark.skipif(not PYSPARK_AVAILABLE, reason=SKIP_REASON or "PySpark is not available")
+class TestSparkEmptyResult(EmptyResultFrameworkTestMixin):
+    """Test SparkFramework._is_empty using shared mixin.
+
+    A Spark DataFrame has no rows-without-data form: the empty case needs an explicit
+    ``StructType`` so the (zero-row) frame still carries a column, mirroring how the Spark
+    framework builds empty frames.
+    """
+
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+    @pytest.fixture
+    def empty_data(self, spark_session: Any) -> Any:
+        schema = StructType([StructField("a", LongType())])
+        return spark_session.createDataFrame([], schema)
+
+    @pytest.fixture
+    def non_empty_data(self, spark_session: Any) -> Any:
+        return spark_session.createDataFrame([{"a": 1}])
 
 
 from tests.test_plugins.compute_framework.base_implementations.tfs_connection_test_mixin import TfsConnectionInitMixin  # noqa: E402

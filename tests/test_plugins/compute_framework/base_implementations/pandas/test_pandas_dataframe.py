@@ -11,6 +11,9 @@ from tests.test_plugins.compute_framework.base_implementations.datatype_validato
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
     DtypeExtractionTestMixin,
 )
+from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
+    EmptyResultFrameworkTestMixin,
+)
 
 import logging
 
@@ -150,3 +153,20 @@ class TestPandasDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
             types_mapper={pa.string(): pd.StringDtype()}.get,
             coerce_temporal_nanoseconds=False,
         )
+
+
+@pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
+class TestPandasEmptyResult(EmptyResultFrameworkTestMixin):
+    """Test PandasDataFrame._is_empty using shared mixin."""
+
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return PandasDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+    @pytest.fixture
+    def empty_data(self) -> Any:
+        return pd.DataFrame({"a": pd.Series([], dtype="int64")})
+
+    @pytest.fixture
+    def non_empty_data(self) -> Any:
+        return pd.DataFrame({"a": [1]})

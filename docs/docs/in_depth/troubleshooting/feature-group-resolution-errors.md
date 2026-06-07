@@ -102,6 +102,48 @@ Pass this collector through to `mloda.run_all`, `resolve_feature`, or any other 
 
 Restarting the Jupyter kernel clears `Out[N]` history and unloads all stale class objects. Use this when you want a fully clean state and do not need to preserve other notebook state.
 
+## EmptyResultError
+
+### The Problem
+
+```
+EmptyResultError: Data cannot be empty: MyFeatureGroup
+```
+
+This error fires when a **final** requested feature group returns zero rows and
+`allow_empty_result()` is `False` (the default). It signals that the pipeline
+produced no data for a feature the caller explicitly asked for.
+
+If the empty result is genuine (a bug, missing data, wrong filter), this error
+is correct behaviour — it protects callers from silently receiving empty output.
+
+### When to fix it
+
+Override `allow_empty_result` only when zero rows is a legitimate answer for
+your domain, for example: graph traversals that may find no path, search queries
+that may match nothing, authorization filters that may deny all rows, or agent
+memory that may have no relevant entries.
+
+``` python
+class MyFeatureGroup(FeatureGroup):
+    @classmethod
+    def allow_empty_result(cls) -> bool:
+        return True
+```
+
+With the override in place, empty data flows through to the caller without
+raising.
+
+### Intermediates are exempt
+
+The check applies only to features that were explicitly requested by the caller.
+Intermediate feature groups — those whose output feeds another feature group
+rather than the final result — are never subject to `EmptyResultError`, even
+if `allow_empty_result()` is `False`.
+
+For full details on how the guard works and the `_is_empty` predicate, see
+[Allowing Empty Results](../compute-framework-integration.md#allowing-empty-results).
+
 ## Related Documentation
 
 - [Feature Group Matching](../feature-group-matching.md)

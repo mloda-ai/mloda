@@ -28,6 +28,10 @@ def _require_pyarrow() -> None:
         raise ImportError("pyarrow is required for this operation. Install it with: pip install 'mloda[pyarrow]'")
 
 
+class EmptyResultError(ValueError):
+    """Raised when a compute framework produces an empty result and allow_empty_result is False."""
+
+
 class ComputeFramework(ABC):
     """
     Documentation ComputeFramework:
@@ -300,6 +304,9 @@ class ComputeFramework(ABC):
             return
 
         data_columns = self._extract_column_names(data)
+        if feature_group is not None and feature_group.allow_empty_result() and not data_columns:
+            return
+
         fg_name = feature_group.get_class_name() if feature_group is not None else "Unknown"
         for single_filter in applicable:
             col = single_filter.filter_feature.name
@@ -432,6 +439,14 @@ class ComputeFramework(ABC):
             return True
         return any(dtype_str.startswith(p) for p in ComputeFramework._NUMERIC_PREFIXES)
 
+    def _is_empty(self, data: Any) -> bool:
+        """Whether `data` represents an empty result in this framework's representation.
+
+        Base returns False (frameworks that can carry an empty-but-typed result, or that
+        keep their own empty guards, opt out). Override where emptiness is row-derived.
+        """
+        return False
+
     def _extract_column_names(self, data: Any) -> set[str]:
         """Extract column names from the data.
 
@@ -507,6 +522,14 @@ class ComputeFramework(ABC):
     def run_validate_output_features(self, feature_group: Any, features: Any) -> None:
         if self.data is None:
             return
+
+        if (
+            self._is_empty(self.data)
+            and features.get_initial_requested_features()
+            and feature_group is not None
+            and not feature_group.allow_empty_result()
+        ):
+            raise EmptyResultError(f"Data cannot be empty: {feature_group.get_class_name()}")
 
         from mloda.core.abstract_plugins.components.validators.datatype_validator import DataTypeValidator
 

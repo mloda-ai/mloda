@@ -15,6 +15,9 @@ from tests.test_plugins.compute_framework.base_implementations.datatype_validato
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
     DtypeExtractionTestMixin,
 )
+from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
+    EmptyResultFrameworkTestMixin,
+)
 
 
 class TestPyArrowTableAvailability:
@@ -115,3 +118,19 @@ class TestPyArrowDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
 
     def from_arrow(self, table: pa.Table) -> pa.Table:
         return table
+
+
+class TestPyArrowEmptyResult(EmptyResultFrameworkTestMixin):
+    """Test PyArrowTable._is_empty using shared mixin."""
+
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return PyArrowTable(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+    @pytest.fixture
+    def empty_data(self) -> Any:
+        return pa.table({"a": pa.array([], pa.int64())})
+
+    @pytest.fixture
+    def non_empty_data(self) -> Any:
+        return pa.table({"a": [1]})

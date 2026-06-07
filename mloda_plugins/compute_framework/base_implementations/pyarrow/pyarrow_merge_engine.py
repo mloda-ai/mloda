@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -88,11 +88,15 @@ class PyArrowMergeEngine(BaseMergeEngine):
                 "Acero's match range always includes exact matches."
             )
 
-        if asof_config.tolerance is not None and not isinstance(asof_config.tolerance, int):
-            raise ValueError(
-                f"{self.__class__.__name__} asof requires an integer tolerance; "
-                "timedelta and non-integer tolerances are not supported."
-            )
+        tol = asof_config.tolerance
+        if tol is not None:
+            is_integer = isinstance(tol, int) and not isinstance(tol, bool)
+            is_integer_valued_float = isinstance(tol, float) and tol.is_integer()
+            if not (is_integer or is_integer_valued_float):
+                raise ValueError(
+                    f"{self.__class__.__name__} asof requires an integer tolerance; "
+                    "timedelta, boolean and non-integer tolerances are not supported."
+                )
 
         by_left = list(left_index.index)
         by_right = list(right_index.index)
@@ -119,8 +123,8 @@ class PyArrowMergeEngine(BaseMergeEngine):
         left_data = self._normalize_string_types(left_data, by_left)
         right_join = self._normalize_string_types(right_join, by_right)
 
-        if asof_config.tolerance is not None:
-            magnitude = int(asof_config.tolerance)
+        if tol is not None:
+            magnitude = int(cast(float, tol))
         else:
             left_on_i = pc.cast(left_data[lt], pa.int64())
             right_on_i = pc.cast(right_join[rt], pa.int64())
@@ -129,6 +133,8 @@ class PyArrowMergeEngine(BaseMergeEngine):
             magnitude = 0 if mm["min"] is None or mm["max"] is None else (mm["max"] - mm["min"])
 
         signed_tol = -magnitude if asof_config.direction == "backward" else magnitude
+        _INT64_MIN, _INT64_MAX = -(2**63), 2**63 - 1
+        signed_tol = max(_INT64_MIN, min(signed_tol, _INT64_MAX))
 
         result = left_data.sort_by(lt).join_asof(
             right_join.sort_by(rt),

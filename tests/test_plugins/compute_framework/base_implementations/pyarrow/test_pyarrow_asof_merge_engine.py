@@ -95,7 +95,22 @@ class TestPyArrowAsofMergeEngine(AsofMergeEngineTestBase):
             engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg)
 
     def test_tolerance_float_rejected(self) -> None:
-        """Acero's asof tolerance must be an integer; a float tolerance is rejected -> ValueError."""
+        """A non-integer float tolerance cannot be expressed as an Acero integer span -> ValueError."""
+        left = pa.Table.from_pydict({"k": [1], "t": [10], "lv": [100]})
+        right = pa.Table.from_pydict({"k": [1, 1], "t": [8, 15], "rv": ["A", "B"]})
+
+        engine = PyArrowMergeEngine()
+        cfg = AsOfJoinConfig(
+            left_time_column="t",
+            right_time_column="t",
+            direction="backward",
+            tolerance=5.5,
+        )
+        with pytest.raises(ValueError, match="PyArrowMergeEngine"):
+            engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg)
+
+    def test_tolerance_float_integer_valued_accepted(self) -> None:
+        """An integer-valued float tolerance (5.0) must be accepted and behave like the int."""
         left = pa.Table.from_pydict({"k": [1], "t": [10], "lv": [100]})
         right = pa.Table.from_pydict({"k": [1, 1], "t": [8, 15], "rv": ["A", "B"]})
 
@@ -106,5 +121,79 @@ class TestPyArrowAsofMergeEngine(AsofMergeEngineTestBase):
             direction="backward",
             tolerance=5.0,
         )
+        result = engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg)
+        rows = result.to_pylist()
+        assert len(rows) == 1
+        assert rows[0]["rv"] == "A"
+
+    def test_tolerance_bool_rejected(self) -> None:
+        """A boolean tolerance must be rejected; bool is an int subclass and must not become 1."""
+        left = pa.Table.from_pydict({"k": [1], "t": [10], "lv": [100]})
+        right = pa.Table.from_pydict({"k": [1, 1], "t": [8, 15], "rv": ["A", "B"]})
+
+        engine = PyArrowMergeEngine()
+        cfg = AsOfJoinConfig(
+            left_time_column="t",
+            right_time_column="t",
+            direction="backward",
+            tolerance=True,
+        )
         with pytest.raises(ValueError, match="PyArrowMergeEngine"):
             engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg)
+
+    def test_unbounded_tolerance_extreme_int64_no_overflow(self) -> None:
+        """Unbounded tolerance on extreme int64 on-keys (forward) must not raise OverflowError."""
+        left = pa.Table.from_pydict({"k": [1], "t": pa.array([-(2**62)], pa.int64()), "lv": [1]})
+        right = pa.Table.from_pydict({"k": [1], "t": pa.array([2**62], pa.int64()), "rv": [5]})
+
+        engine = PyArrowMergeEngine()
+        cfg = AsOfJoinConfig(left_time_column="t", right_time_column="t", direction="forward")
+        result = engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg)
+        rows = result.to_pylist()
+        assert len(rows) == 1
+        assert rows[0]["lv"] == 1
+
+    def test_forward_tolerance_none(self) -> None:
+        """Forward direction with unbounded (None) tolerance: nearest right.t >= left.t."""
+        left = pa.Table.from_pydict({"k": [1, 1], "t": [10, 20], "lv": [100, 200]})
+        right = pa.Table.from_pydict({"k": [1, 1], "t": [5, 18], "rv": ["A", "B"]})
+
+        engine = PyArrowMergeEngine()
+        cfg = AsOfJoinConfig(left_time_column="t", right_time_column="t", direction="forward")
+        result = engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg)
+        rows = sorted(result.to_pylist(), key=lambda r: r["t"])
+        assert len(rows) == 2
+        assert rows[0]["lv"] == 100
+        assert rows[0]["rv"] == "B"
+        assert rows[1]["lv"] == 200
+        assert rows[1]["rv"] is None
+
+    def test_colliding_right_value_column_dropped(self) -> None:
+        """A right VALUE column colliding with a left column is dropped; the left column survives."""
+        left = pa.Table.from_pydict({"k": [1], "t": [10], "lv": [100], "shared": ["L"]})
+        right = pa.Table.from_pydict({"k": [1], "t": [5], "rv": ["X"], "shared": ["R"]})
+
+        engine = PyArrowMergeEngine()
+        cfg = AsOfJoinConfig(left_time_column="t", right_time_column="t", direction="backward")
+        result = engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg)
+        rows = result.to_pylist()
+        assert len(rows) == 1
+        assert result.column_names.count("shared") == 1
+        assert rows[0]["shared"] == "L"
+        assert rows[0]["rv"] == "X"
+
+    def test_differing_string_key_carry(self) -> None:
+        """Differing-name string by-keys (lk vs rk) survive via the carry column."""
+        left = pa.Table.from_pydict({"lk": ["a"], "lt": [10], "lv": [100]})
+        right = pa.Table.from_pydict({"rk": ["a"], "rt": [5], "rv": ["X"]})
+
+        engine = PyArrowMergeEngine()
+        cfg = AsOfJoinConfig(left_time_column="lt", right_time_column="rt", direction="backward")
+        result = engine.merge_asof(left, right, Index(("lk",)), Index(("rk",)), cfg)
+        rows = result.to_pylist()
+        assert len(rows) == 1
+        assert "lk" in result.column_names
+        assert "rk" in result.column_names
+        assert rows[0]["lk"] == "a"
+        assert rows[0]["rk"] == "a"
+        assert rows[0]["rv"] == "X"

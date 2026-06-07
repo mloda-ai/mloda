@@ -70,12 +70,6 @@ class TestPandasDataFrameClassMethods:
         assert inspect.ismethod(method), "pd_series should be a classmethod (bound method on class)"
         assert method.__self__ is PandasDataFrame, "pd_series should be bound to the PandasDataFrame class"
 
-    def test_pd_merge_is_classmethod(self) -> None:
-        """Verify pd_merge is a classmethod by checking it's bound when accessed from the class."""
-        method = getattr(PandasDataFrame, "pd_merge")
-        assert inspect.ismethod(method), "pd_merge should be a classmethod (bound method on class)"
-        assert method.__self__ is PandasDataFrame, "pd_merge should be bound to the PandasDataFrame class"
-
     def test_methods_callable_on_class(self) -> None:
         """Verify methods can be called on the class."""
         # These should work without instantiation
@@ -83,7 +77,6 @@ class TestPandasDataFrameClassMethods:
 
         assert PandasDataFrame.pd_dataframe() == pd.DataFrame
         assert PandasDataFrame.pd_series() == pd.Series
-        assert PandasDataFrame.pd_merge() == pd.merge
 
     def test_methods_callable_on_instance(self) -> None:
         """Verify methods can be called on instances."""
@@ -94,7 +87,6 @@ class TestPandasDataFrameClassMethods:
         instance = PandasDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         assert instance.pd_dataframe() == pd.DataFrame
         assert instance.pd_series() == pd.Series
-        assert instance.pd_merge() == pd.merge
 
 
 class TestPandasMergeEngineClassMethods:

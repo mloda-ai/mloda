@@ -84,12 +84,6 @@ class PandasDataFrame(ComputeFramework):
             raise ImportError("Pandas is not installed. To be able to use this framework, please install pandas.")
         return pd.Series
 
-    @classmethod
-    def pd_merge(cls) -> Any:
-        if pd is None:
-            raise ImportError("Pandas is not installed. To be able to use this framework, please install pandas.")
-        return pd.merge
-
     def transform(
         self,
         data: Any,

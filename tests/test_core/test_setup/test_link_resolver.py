@@ -32,15 +32,27 @@ uuid_1, uuid_2, uuid_3, uuid_4, uuid_5, uuid_6, uuid_7 = (
 
 class TestResolveGraph:
     def create_graph(self) -> Graph:
-        f1, f2, f3, f4, f5, f6, f7 = (
-            Feature("GraphFeature1")._set_uuid(uuid_1)._set_compute_frameworks({BaseTestComputeFramework1}),
-            Feature("GraphFeature2")._set_uuid(uuid_2)._set_compute_frameworks({BaseTestComputeFramework1}),
-            Feature("GraphFeature3")._set_uuid(uuid_3)._set_compute_frameworks({BaseTestComputeFramework1}),
-            Feature("GraphFeature4")._set_uuid(uuid_4)._set_compute_frameworks({BaseTestComputeFramework2}),
-            Feature("GraphFeature5")._set_uuid(uuid_5)._set_compute_frameworks({BaseTestComputeFramework3}),
-            Feature("GraphFeature6")._set_uuid(uuid_6)._set_compute_frameworks({BaseTestComputeFramework1}),
-            Feature("GraphFeature7")._set_uuid(uuid_7)._set_compute_frameworks({BaseTestComputeFramework1}),
-        )
+        f1 = Feature("GraphFeature1")
+        f1.uuid = uuid_1
+        f1.compute_frameworks = {BaseTestComputeFramework1}
+        f2 = Feature("GraphFeature2")
+        f2.uuid = uuid_2
+        f2.compute_frameworks = {BaseTestComputeFramework1}
+        f3 = Feature("GraphFeature3")
+        f3.uuid = uuid_3
+        f3.compute_frameworks = {BaseTestComputeFramework1}
+        f4 = Feature("GraphFeature4")
+        f4.uuid = uuid_4
+        f4.compute_frameworks = {BaseTestComputeFramework2}
+        f5 = Feature("GraphFeature5")
+        f5.uuid = uuid_5
+        f5.compute_frameworks = {BaseTestComputeFramework3}
+        f6 = Feature("GraphFeature6")
+        f6.uuid = uuid_6
+        f6.compute_frameworks = {BaseTestComputeFramework1}
+        f7 = Feature("GraphFeature7")
+        f7.uuid = uuid_7
+        f7.compute_frameworks = {BaseTestComputeFramework1}
 
         graph = Graph()
 

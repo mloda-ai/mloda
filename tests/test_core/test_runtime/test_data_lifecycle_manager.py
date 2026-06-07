@@ -189,44 +189,6 @@ class TestDataLifecycleManagerDropCfwData:
             manager.drop_cfw_data(cfw_uuid, cfw_collection)
 
 
-class TestDataLifecycleManagerTrackFlywayDatasets:
-    """Test tracking flyway datasets for data dropping."""
-
-    def test_track_flyway_datasets_stores_datasets_for_cfw(self) -> None:
-        """Should store flyway datasets for a CFW UUID."""
-        manager = DataLifecycleManager()
-        cfw_uuid = uuid4()
-        dataset_uuid1 = uuid4()
-        dataset_uuid2 = uuid4()
-        datasets = {dataset_uuid1, dataset_uuid2}
-
-        manager.track_flyway_datasets(cfw_uuid, datasets)
-
-        assert manager.track_data_to_drop[cfw_uuid] == datasets
-
-    def test_track_flyway_datasets_overwrites_existing_tracking(self) -> None:
-        """Should overwrite existing tracking for a CFW UUID."""
-        manager = DataLifecycleManager()
-        cfw_uuid = uuid4()
-        old_dataset = uuid4()
-        new_dataset1 = uuid4()
-        new_dataset2 = uuid4()
-
-        manager.track_data_to_drop[cfw_uuid] = {old_dataset}
-        manager.track_flyway_datasets(cfw_uuid, {new_dataset1, new_dataset2})
-
-        assert manager.track_data_to_drop[cfw_uuid] == {new_dataset1, new_dataset2}
-
-    def test_track_flyway_datasets_handles_empty_set(self) -> None:
-        """Should handle empty set of datasets."""
-        manager = DataLifecycleManager()
-        cfw_uuid = uuid4()
-
-        manager.track_flyway_datasets(cfw_uuid, set())
-
-        assert manager.track_data_to_drop[cfw_uuid] == set()
-
-
 class TestDataLifecycleManagerAddToResultDataCollection:
     """Test adding result data to the collection."""
 
@@ -511,8 +473,8 @@ class TestDataLifecycleManagerIntegration:
         manager.add_to_result_data_collection(mock_cfw2, features2, step_uuid2)
 
         # Track data to drop
-        manager.track_flyway_datasets(cfw_uuid1, {step_uuid1})
-        manager.track_flyway_datasets(cfw_uuid2, {step_uuid2})
+        manager.track_data_to_drop[cfw_uuid1] = {step_uuid1}
+        manager.track_data_to_drop[cfw_uuid2] = {step_uuid2}
 
         # Drop data for finished CFWs
         finished_ids = {step_uuid1, step_uuid2}

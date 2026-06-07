@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import copy
 from typing import Any, Optional
-from uuid import UUID, uuid4
+from uuid import uuid4
 from mloda.core.abstract_plugins.components.data_types import DataType
 
 from mloda.core.abstract_plugins.components.domain import Domain
@@ -242,16 +242,6 @@ class Feature:
                 compute_framework_options, get_all_subclasses(ComputeFramework), "options"
             )
         return None
-
-    def _set_uuid(self, uuid: UUID) -> Feature:
-        # use only for testing
-        self.uuid = uuid
-        return self
-
-    def _set_compute_frameworks(self, compute_frameworks: set[type[ComputeFramework]]) -> Feature:
-        # use only for testing
-        self.compute_frameworks = compute_frameworks
-        return self
 
     def get_compute_framework(self) -> type[ComputeFramework]:
         FeatureValidator.validate_compute_frameworks_resolved(self.compute_frameworks, str(self.name))

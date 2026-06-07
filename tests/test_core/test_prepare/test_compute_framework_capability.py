@@ -234,7 +234,7 @@ class TestComputeFrameworkCapabilityHook:
     def test_distinguishable_error_when_pinned_to_unsupported_framework(self) -> None:
         """Pinning to the unsupported framework yields a dedicated, distinguishable error."""
         feature = Feature(CAPABILITY_FEATURE)
-        feature._set_compute_frameworks({CapabilityFwB})
+        feature.compute_frameworks = {CapabilityFwB}
 
         accessible_plugins: FeatureGroupEnvironmentMapping = {
             RejectBCapabilityFeatureGroup: {CapabilityFwA, CapabilityFwB},
@@ -316,7 +316,7 @@ class TestComputeFrameworkCapabilityHook:
 
         # Capability rejection -> distinct, dedicated error.
         pinned_feature = Feature(CAPABILITY_FEATURE)
-        pinned_feature._set_compute_frameworks({CapabilityFwB})
+        pinned_feature.compute_frameworks = {CapabilityFwB}
         capability_accessible: FeatureGroupEnvironmentMapping = {
             RejectBCapabilityFeatureGroup: {CapabilityFwA, CapabilityFwB},
         }
@@ -348,7 +348,7 @@ class TestComputeFrameworkCapabilityHook:
         (its accessible_plugins value is an empty set). It must still show up as supported.
         """
         feature = Feature(CAPABILITY_FEATURE)
-        feature._set_compute_frameworks({CapabilityFwB})
+        feature.compute_frameworks = {CapabilityFwB}
 
         # FwA declared by PandasLikeFG but NOT enabled (empty set); FwB enabled for SqliteLikeFG.
         accessible_plugins: FeatureGroupEnvironmentMapping = {

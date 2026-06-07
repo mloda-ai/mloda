@@ -297,6 +297,26 @@ class FeatureChainParserMixin:
             return cast(dict[str, Any], cls.PROPERTY_MAPPING)
         return None
 
+    @classmethod
+    def derive_context_key_schema(cls) -> Optional[dict[str, Any]]:
+        """Build a context_key_schema() from this group's PROPERTY_MAPPING.
+
+        Returns {str(key): None for key in PROPERTY_MAPPING} (every declared
+        property name; type checks are skipped because PROPERTY_MAPPING already
+        validates values via validation_function/type_validator). Returns None
+        when there is no PROPERTY_MAPPING or it is empty, preserving permissive
+        behavior. A feature group opts in by overriding context_key_schema to
+        return cls.derive_context_key_schema().
+
+        Every PROPERTY_MAPPING key is returned, so any declared key is accepted
+        whether it lands in Options.group or Options.context; group-placed keys
+        are still not validated at planning time.
+        """
+        property_mapping = cls._get_property_mapping()
+        if not property_mapping:
+            return None
+        return {str(key): None for key in property_mapping}
+
     @staticmethod
     def _has_required_when_predicates(property_mapping: dict[str, Any]) -> bool:
         """Return True if any entry in property_mapping uses required_when."""

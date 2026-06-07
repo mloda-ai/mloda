@@ -129,6 +129,14 @@ class FeatureGroup(ABC):
         (a type, a tuple of types, or None to skip the type check). When
         declared, core validates the resolving feature's context keys at
         planning time and raises ValueError on an unknown key.
+
+        Scope: only Options.context keys are validated; keys in Options.group
+        are not checked. Validation runs only while the feature still resolves
+        to this group, so a typo on a required parameter surfaces as a normal
+        "no feature group found" resolution error rather than a context-key
+        suggestion. Configuration-based groups (FeatureChainParserMixin with a
+        PROPERTY_MAPPING) can derive this automatically via
+        cls.derive_context_key_schema().
         """
         return None
 

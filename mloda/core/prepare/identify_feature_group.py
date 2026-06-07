@@ -127,7 +127,7 @@ class IdentifyFeatureGroupClass:
                 str(feature.name),
                 feature.options.context,
                 schema,
-                set(feature.options.propagate_context_keys),
+                set(feature.options.propagate_context_keys) | set(feature.options.received_propagated_keys),
             )
 
     def _build_no_feature_group_error(

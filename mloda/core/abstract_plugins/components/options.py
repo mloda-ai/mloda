@@ -79,6 +79,7 @@ class Options:
         self.group = group or {}
         self.context = context or {}
         self.propagate_context_keys: frozenset[str] = propagate_context_keys or frozenset()
+        self.received_propagated_keys: frozenset[str] = frozenset()
         OptionsValidator.validate_no_duplicate_keys(self.group, self.context)
         OptionsValidator.validate_propagate_keys_in_context(self.propagate_context_keys, self.context)
 
@@ -224,7 +225,9 @@ class Options:
 
         copied_group = safe_deepcopy_dict(self.group)
         copied_context = safe_deepcopy_dict(self.context)
-        return Options(group=copied_group, context=copied_context, propagate_context_keys=self.propagate_context_keys)
+        copied = Options(group=copied_group, context=copied_context, propagate_context_keys=self.propagate_context_keys)
+        copied.received_propagated_keys = self.received_propagated_keys
+        return copied
 
     def __str__(self) -> str:
         parts = f"Options(group={self.group}, context={self.context}"
@@ -300,3 +303,4 @@ class Options:
                     raise ValueError(f"Context key '{key}' conflict: parent='{value}', child='{self.context[key]}'")
 
             self.context.update(propagating)
+            self.received_propagated_keys = self.received_propagated_keys | frozenset(propagating.keys())

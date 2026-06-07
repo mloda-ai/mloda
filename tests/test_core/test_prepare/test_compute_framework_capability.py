@@ -125,6 +125,63 @@ class RejectAllCapabilityFeatureGroup(FeatureGroup):
         return None
 
 
+class PandasLikeFG(FeatureGroup):
+    """Declares only CapabilityFwA and supports the op on it (default hook).
+
+    Mirrors an installed/declared backend whose framework may or may not be
+    enabled for a particular run.
+    """
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {CapabilityFwA}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> bool:
+        if isinstance(feature_name, FeatureName):
+            feature_name = str(feature_name)
+        return feature_name == CAPABILITY_FEATURE
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        return None
+
+
+class SqliteLikeFG(FeatureGroup):
+    """Declares only CapabilityFwB and rejects the op on it."""
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {CapabilityFwB}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> bool:
+        if isinstance(feature_name, FeatureName):
+            feature_name = str(feature_name)
+        return feature_name == CAPABILITY_FEATURE
+
+    @classmethod
+    def supports_compute_framework(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        compute_framework: type[ComputeFramework],
+    ) -> bool:
+        return compute_framework is not CapabilityFwB
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        return None
+
+
 class TestComputeFrameworkCapabilityHook:
     """Capability-hook contract for compute-framework support at match time."""
 
@@ -279,4 +336,47 @@ class TestComputeFrameworkCapabilityHook:
         )
         assert "No feature groups found for feature name" not in capability_message, (
             f"Capability error must be distinguishable from the unknown-feature error, but got: {capability_message}"
+        )
+
+    def test_supported_list_includes_declared_but_not_enabled_framework(self) -> None:
+        """A declared+available+supporting framework appears in 'Supported on' even if not enabled this run.
+
+        Change B: the 'Supported on' list must be derived from each criteria-matched
+        feature group's ``compute_framework_definition()`` intersected with availability
+        and ``supports_compute_framework``, NOT from the run-enabled set. Here CapabilityFwA
+        is declared by ``PandasLikeFG`` and available, but is NOT enabled for this run
+        (its accessible_plugins value is an empty set). It must still show up as supported.
+        """
+        feature = Feature(CAPABILITY_FEATURE)
+        feature._set_compute_frameworks({CapabilityFwB})
+
+        # FwA declared by PandasLikeFG but NOT enabled (empty set); FwB enabled for SqliteLikeFG.
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            PandasLikeFG: set(),
+            SqliteLikeFG: {CapabilityFwB},
+        }
+
+        with pytest.raises(ValueError) as exc_info:
+            IdentifyFeatureGroupClass(
+                feature=feature,
+                accessible_plugins=accessible_plugins,
+                links=None,
+                data_access_collection=None,
+            )
+
+        error_message = str(exc_info.value)
+        lowered = error_message.lower()
+
+        assert "unsupported" in lowered or "not supported" in lowered, (
+            f"Capability error must signal an unsupported framework, but got: {error_message}"
+        )
+        assert CapabilityFwB.get_class_name() in error_message, (
+            f"Error must name the unsupported framework '{CapabilityFwB.get_class_name()}', but got: {error_message}"
+        )
+        assert CapabilityFwA.get_class_name() in error_message, (
+            "Error 'Supported on' list must include the declared+available+supporting framework "
+            f"'{CapabilityFwA.get_class_name()}' even though it was not enabled this run, but got: {error_message}"
+        )
+        assert "Did you mean" not in error_message, (
+            f"Capability error must skip the fuzzy suggestion path, but got: {error_message}"
         )

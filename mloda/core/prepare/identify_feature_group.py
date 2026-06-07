@@ -130,14 +130,14 @@ class IdentifyFeatureGroupClass:
                 f"Feature {feature.name} {format_feature_group_class(feature_group_class)} has no compute framework."
             )
 
-    def _capability_rejection_message(
-        self, feature: Feature, accessible_plugins: FeatureGroupEnvironmentMapping
-    ) -> Optional[str]:
+    def _capability_rejection_message(self, feature: Feature) -> Optional[str]:
         rejected: set[type[ComputeFramework]] = set()
         supported: set[type[ComputeFramework]] = set()
 
         for fg in self._criteria_matched_feature_groups:
-            for cfw in accessible_plugins.get(fg, set()):
+            for cfw in fg.compute_framework_definition():
+                if not cfw.is_available():
+                    continue
                 if fg.supports_compute_framework(feature.name, feature.options, cfw):
                     supported.add(cfw)
                 else:
@@ -159,7 +159,7 @@ class IdentifyFeatureGroupClass:
     def _build_no_feature_group_error(
         self, feature: Feature, accessible_plugins: FeatureGroupEnvironmentMapping
     ) -> str:
-        capability_message = self._capability_rejection_message(feature, accessible_plugins)
+        capability_message = self._capability_rejection_message(feature)
         if capability_message is not None:
             return capability_message
 

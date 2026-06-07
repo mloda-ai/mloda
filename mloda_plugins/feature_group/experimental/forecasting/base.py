@@ -15,9 +15,10 @@ from mloda.user import FeatureName
 from mloda.user import Options
 from mloda.provider import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.forecasting.forecasting_artifact import ForecastingArtifact
+from mloda_plugins.feature_group.experimental.time_reference_mixin import TimeReferenceMixin
 
 
-class ForecastingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, FeatureGroup):
     """
     Base class for all forecasting feature groups.
 
@@ -115,17 +116,6 @@ class ForecastingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         "knn": "K-Nearest Neighbors Regression",
     }
 
-    # Define supported time units (same as TimeWindowFeatureGroup)
-    TIME_UNITS = {
-        "second": "Seconds",
-        "minute": "Minutes",
-        "hour": "Hours",
-        "day": "Days",
-        "week": "Weeks",
-        "month": "Months",
-        "year": "Years",
-    }
-
     # Define the prefix pattern for this feature group
     PREFIX_PATTERN = r".*__([\w]+)_forecast_(\d+)([\w]+)$"
 
@@ -149,7 +139,7 @@ class ForecastingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             ),
         },
         TIME_UNIT: {
-            **TIME_UNITS,
+            **TimeReferenceMixin.TIME_UNITS,
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
         },

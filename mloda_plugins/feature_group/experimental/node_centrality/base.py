@@ -262,11 +262,7 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Raises:
             ValueError: If parameters cannot be extracted
         """
-        source_features = cls._extract_source_features(feature)
-        centrality_type = cls._extract_centrality_type(feature)
-        if centrality_type is None:
-            raise ValueError(f"Could not extract centrality type from: {feature.name}")
-        return centrality_type, source_features[0]
+        return cls._extract_operation_and_source_feature(feature, cls._extract_centrality_type, "centrality type")
 
     @classmethod
     def _extract_centrality_type(cls, feature: Feature) -> Optional[str]:

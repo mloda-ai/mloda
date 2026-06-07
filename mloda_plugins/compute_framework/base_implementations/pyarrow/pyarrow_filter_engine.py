@@ -48,45 +48,14 @@ class PyArrowFilterEngine(BaseFilterEngine):
         return data.filter(mask)
 
     @classmethod
-    def do_max_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        column_name = filter_feature.name
+    def _apply_max_exclusive_filter(cls, data: Any, column_name: str, threshold: Any) -> Any:
+        mask = pc.less(data[column_name], threshold)
+        return data.filter(mask)
 
-        # Check if this is a complex parameter with max/max_exclusive or a simple one with value
-        has_max = filter_feature.parameter.max_value is not None
-        has_value = filter_feature.parameter.value is not None
-
-        if has_max:
-            # Complex parameter - use get_min_max_operator
-            min_parameter, max_parameter, max_operator = cls.get_min_max_operator(filter_feature)
-
-            if min_parameter is not None:
-                raise ValueError(
-                    f"Filter parameter {filter_feature.parameter} not supported as max filter: {filter_feature.name}"
-                )
-
-            if max_parameter is None:
-                raise ValueError(
-                    f"Filter parameter {filter_feature.parameter} is None although expected: {filter_feature.name}"
-                )
-
-            if max_operator is True:
-                mask = pc.less(data[column_name], max_parameter)
-            else:
-                mask = pc.less_equal(data[column_name], max_parameter)
-
-            return data.filter(mask)
-        elif has_value:
-            # Simple parameter - extract the value
-            value = filter_feature.parameter.value
-
-            if value is None:
-                raise ValueError(f"Filter parameter 'value' not found in {filter_feature.parameter}")
-
-            # Simple max filter
-            mask = pc.less_equal(data[column_name], value)
-            return data.filter(mask)
-        else:
-            raise ValueError(f"No valid filter parameter found in {filter_feature.parameter}")
+    @classmethod
+    def _apply_max_inclusive_filter(cls, data: Any, column_name: str, threshold: Any) -> Any:
+        mask = pc.less_equal(data[column_name], threshold)
+        return data.filter(mask)
 
     @classmethod
     def do_equal_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:

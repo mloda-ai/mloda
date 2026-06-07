@@ -54,48 +54,12 @@ class PythonDictFilterEngine(BaseFilterEngine):
         return [row for row in data if row.get(column_name) is not None and row.get(column_name) >= value]
 
     @classmethod
-    def do_max_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        column_name = filter_feature.name
+    def _apply_max_exclusive_filter(cls, data: Any, column_name: str, threshold: Any) -> Any:
+        return [row for row in data if row.get(column_name) is not None and row.get(column_name) < threshold]
 
-        # Check if this is a complex parameter with max/max_exclusive or a simple one with value
-
-        has_max = filter_feature.parameter.max_value is not None
-
-        has_value = filter_feature.parameter.value is not None
-
-        if has_max:
-            # Complex parameter - use get_min_max_operator
-            min_parameter, max_parameter, max_operator = cls.get_min_max_operator(filter_feature)
-
-            if min_parameter is not None:
-                raise ValueError(
-                    f"Filter parameter {filter_feature.parameter} not supported as max filter: {filter_feature.name}"
-                )
-
-            if max_parameter is None:
-                raise ValueError(
-                    f"Filter parameter {filter_feature.parameter} is None although expected: {filter_feature.name}"
-                )
-
-            if max_operator is True:
-                return [
-                    row for row in data if row.get(column_name) is not None and row.get(column_name) < max_parameter
-                ]
-            else:
-                return [
-                    row for row in data if row.get(column_name) is not None and row.get(column_name) <= max_parameter
-                ]
-        elif has_value:
-            # Simple parameter - extract the value
-
-            value = filter_feature.parameter.value
-
-            if value is None:
-                raise ValueError(f"Filter parameter 'value' not found in {filter_feature.parameter}")
-
-            return [row for row in data if row.get(column_name) is not None and row.get(column_name) <= value]
-        else:
-            raise ValueError(f"No valid filter parameter found in {filter_feature.parameter}")
+    @classmethod
+    def _apply_max_inclusive_filter(cls, data: Any, column_name: str, threshold: Any) -> Any:
+        return [row for row in data if row.get(column_name) is not None and row.get(column_name) <= threshold]
 
     @classmethod
     def do_equal_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:

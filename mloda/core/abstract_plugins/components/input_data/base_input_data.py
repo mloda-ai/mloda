@@ -127,11 +127,24 @@ class BaseInputData(ABC):
             )
         options.add_to_group("BaseInputData", (cls_to_be_added, matched_data_access))
 
-    def load(self, features: FeatureSet) -> Any:
-        """
-        This class should be implemented in intermediary child classes, which use scoped data access.
-        """
+    def init_reader(self, options: Optional[Options]) -> tuple["BaseInputData", Any]:
         raise NotImplementedError
+
+    def load(self, features: FeatureSet) -> Any:
+        _options = None
+        for feature in features.features:
+            if _options:
+                if _options != feature.options:
+                    raise ValueError("All features must have the same options.")
+            _options = feature.options
+
+        reader, data_access = self.init_reader(_options)
+        data = reader.load_data(data_access, features)
+
+        if data is None:
+            raise ValueError(f"Loading data failed for feature {features.get_name_of_one_feature()}.")
+
+        return data
 
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:

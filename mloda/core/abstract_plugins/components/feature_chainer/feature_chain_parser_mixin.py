@@ -46,6 +46,7 @@ group). Return values use truthy/falsy semantics: any falsy return (``False``,
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import Any, Optional, cast
 
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -380,6 +381,30 @@ class FeatureChainParserMixin:
         # Configuration-based fallback using get_in_features()
         in_features_set = feature.options.get_in_features()
         return [f.name for f in in_features_set]
+
+    @classmethod
+    def _extract_operation_and_source_feature(
+        cls, feature: Feature, extract_fn: Callable[[Feature], Any], label: str
+    ) -> tuple[Any, str]:
+        """
+        Extract an operation parameter and the primary source feature name from a feature.
+
+        Args:
+            feature: The feature to extract parameters from
+            extract_fn: Callable that returns the operation-specific value (or None if not found)
+            label: Human-readable noun used in the error message when extraction fails
+
+        Returns:
+            Tuple of (operation_value, source_feature_name)
+
+        Raises:
+            ValueError: If the operation value cannot be extracted
+        """
+        source_features = cls._extract_source_features(feature)
+        operation = extract_fn(feature)
+        if operation is None:
+            raise ValueError(f"Could not extract {label} from: {feature.name}")
+        return operation, source_features[0]
 
     @classmethod
     def _resolve_operation(

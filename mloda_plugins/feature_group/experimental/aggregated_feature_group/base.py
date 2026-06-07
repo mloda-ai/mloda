@@ -142,16 +142,9 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Raises:
             ValueError: If parameters cannot be extracted
         """
-        # Use the mixin method to extract source features
-        source_features = cls._extract_source_features(feature)
-
-        # Extract aggregation type
-        aggregation_type = cls._resolve_operation(feature, cls.AGGREGATION_TYPE)
-
-        if aggregation_type is None:
-            raise ValueError(f"Could not extract aggregation type from: {feature.name}")
-
-        return aggregation_type, source_features[0]
+        return cls._extract_operation_and_source_feature(
+            feature, lambda f: cls._resolve_operation(f, cls.AGGREGATION_TYPE), "aggregation type"
+        )
 
     @classmethod
     def _supports_aggregation_type(cls, aggregation_type: str) -> bool:

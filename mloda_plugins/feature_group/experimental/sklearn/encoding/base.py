@@ -297,11 +297,7 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Raises:
             ValueError: If parameters cannot be extracted
         """
-        source_features = cls._extract_source_features(feature)
-        encoder_type = cls._extract_encoder_type(feature)
-        if encoder_type is None:
-            raise ValueError(f"Could not extract encoder type from: {feature.name}")
-        return encoder_type, source_features[0]
+        return cls._extract_operation_and_source_feature(feature, cls._extract_encoder_type, "encoder type")
 
     @classmethod
     def _extract_encoder_type(cls, feature: Feature) -> Optional[str]:

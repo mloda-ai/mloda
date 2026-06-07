@@ -167,27 +167,6 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
         """
         return ForecastingArtifact
 
-    @classmethod
-    def get_reference_time_column(cls, options: Optional[Options] = None) -> str:
-        """
-        Get the reference time column name from options or use the default.
-
-        Args:
-            options: Optional Options object that may contain a custom reference time column name
-
-        Returns:
-            The reference time column name to use
-        """
-        reference_time_key = DefaultOptionKeys.reference_time
-        if options and options.get(reference_time_key):
-            reference_time = options.get(reference_time_key)
-            if not isinstance(reference_time, str):
-                raise ValueError(
-                    f"Invalid reference_time option: {reference_time}. Must be string. Is: {type(reference_time)}."
-                )
-            return reference_time
-        return DefaultOptionKeys.reference_time
-
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         """Extract source feature and time filter feature from either configuration-based options or string parsing."""
 

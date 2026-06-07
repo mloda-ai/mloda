@@ -21,6 +21,8 @@ class IdentifyFeatureGroupClass:
         links: Optional[set[Link]],
         data_access_collection: Optional[DataAccessCollection] = None,
     ):
+        self._criteria_matched_feature_groups: set[type[FeatureGroup]] = set()
+
         feature_group = self._filter_loop(feature, accessible_plugins, links, data_access_collection)
 
         self.validate(feature_group, feature, accessible_plugins)
@@ -42,14 +44,22 @@ class IdentifyFeatureGroupClass:
             if not self._filter_feature_group_by_domain(feature_group, feature):
                 continue
 
-            if not self._filter_feature_group_by_framework(compute_frameworks, feature):
+            self._criteria_matched_feature_groups.add(feature_group)
+
+            supported_frameworks = {
+                cfw
+                for cfw in compute_frameworks
+                if feature_group.supports_compute_framework(feature.name, feature.options, cfw)
+            }
+
+            if not self._filter_feature_group_by_framework(supported_frameworks, feature):
                 continue
 
             if not self._filter_feature_group_by_links(feature_group, links):
                 continue
 
-            if compute_frameworks:
-                _identified_feature_groups[feature_group] = compute_frameworks
+            if supported_frameworks:
+                _identified_feature_groups[feature_group] = supported_frameworks
 
         _identified_feature_groups = self.filter_subclasses(_identified_feature_groups)
         return _identified_feature_groups
@@ -120,9 +130,39 @@ class IdentifyFeatureGroupClass:
                 f"Feature {feature.name} {format_feature_group_class(feature_group_class)} has no compute framework."
             )
 
+    def _capability_rejection_message(
+        self, feature: Feature, accessible_plugins: FeatureGroupEnvironmentMapping
+    ) -> Optional[str]:
+        rejected: set[type[ComputeFramework]] = set()
+        supported: set[type[ComputeFramework]] = set()
+
+        for fg in self._criteria_matched_feature_groups:
+            for cfw in accessible_plugins.get(fg, set()):
+                if fg.supports_compute_framework(feature.name, feature.options, cfw):
+                    supported.add(cfw)
+                else:
+                    rejected.add(cfw)
+
+        if not rejected:
+            return None
+
+        rejected_names = sorted(fw.get_class_name() for fw in rejected)
+        msg = f"Unsupported compute framework(s) for feature '{str(feature.name)}': {rejected_names}."
+
+        if supported:
+            supported_names = sorted(fw.get_class_name() for fw in supported)
+            msg += f" Supported on: {supported_names}."
+
+        msg += " Pin the feature to a supported compute framework or override supports_compute_framework."
+        return msg
+
     def _build_no_feature_group_error(
         self, feature: Feature, accessible_plugins: FeatureGroupEnvironmentMapping
     ) -> str:
+        capability_message = self._capability_rejection_message(feature, accessible_plugins)
+        if capability_message is not None:
+            return capability_message
+
         feature_name = str(feature.name)
         msg = f"No feature groups found for feature name: '{feature_name}'."
 

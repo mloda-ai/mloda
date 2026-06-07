@@ -18,6 +18,38 @@ def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
     # Or return True to support all available compute frameworks
 ```
 
+### Declaring an Operation Unsupported on a Framework
+
+`compute_framework_rule` is a static, class-level set: it cannot say "this
+feature group runs on SQLite in general, but *this particular operation* is
+unsupported there." For that, override `supports_compute_framework`, a
+per-feature hook evaluated at match time:
+
+``` python
+@classmethod
+def supports_compute_framework(cls, feature_name, options, compute_framework) -> bool:
+    """Reject an operation on a specific framework. Default returns True."""
+    if compute_framework is SQLiteFramework and is_median_op(feature_name, options):
+        return False  # median is unsupported on SQLite
+    return True
+```
+
+Returning `False` removes that framework from the candidate set **for this
+feature only**:
+
+- If another framework can still run the operation, the matcher routes around
+  the rejected one silently (no error).
+- If the only remaining candidate is the rejected framework (for example, the
+  user pinned the feature to it), resolution fails with a dedicated,
+  actionable error that names the unsupported and supported frameworks, e.g.
+  `Unsupported compute framework(s) for feature 'X': ['SQLiteFramework']. Supported on: ['DuckDBFramework', 'PandasDataFrame'].`
+
+This is distinct from the "no feature group found" error, so an unsupported
+operation is no longer indistinguishable from an unknown feature. Prefer this
+hook over raising a generic error from inside `calculate_feature`: the
+rejection happens during planning rather than at compute time, and the message
+is built for you.
+
 ### Framework-Specific Implementations
 
 Feature groups follow a layered architecture:

@@ -1,7 +1,7 @@
 from typing import Optional
 import numpy as np
 import pytest
-from mloda.core.abstract_plugins.components.data_type_rule import Open, DataTypeDeclaration
+from mloda.core.abstract_plugins.components.data_type_rule import DataTypeDeclaration
 from mloda.user import DataAccessCollection
 from mloda.user import DataType
 from mloda.user import FeatureName
@@ -45,7 +45,7 @@ class BaseTestFeatureGroup2(FeatureGroup):
     def return_data_type_rule(cls, feature: Feature) -> DataTypeDeclaration:
         if "BaseTestFeature" in feature.name and "2" in feature.name:
             return DataType.STRING
-        return Open()
+        return None
 
 
 def test_apply_naming_convention_basic_multi_column() -> None:

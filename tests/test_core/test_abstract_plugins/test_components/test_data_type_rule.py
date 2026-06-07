@@ -14,13 +14,11 @@ from mloda.core.abstract_plugins.components.data_type_rule import (
     Broken,
     DataTypeDeclaration,
     Deferred,
-    Open,
 )
 
 
 def test_variants_are_constructible() -> None:
     assert DataType.INT64 is not None
-    assert Open() is not None
     assert Deferred() is not None
     assert Broken(ValueError("x")) is not None
 
@@ -31,12 +29,11 @@ def test_broken_is_frozen() -> None:
         broken.error = ValueError("y")  # type: ignore[misc]
 
 
-def test_open_and_deferred_equality() -> None:
-    assert Open() == Open()
+def test_none_and_deferred_inequality() -> None:
     assert Deferred() == Deferred()
-    open_result: DataTypeDeclaration = Open()
+    none_result: DataTypeDeclaration = None
     deferred_result: DataTypeDeclaration = Deferred()
-    assert open_result != deferred_result
+    assert none_result != deferred_result
 
 
 def test_broken_carries_exact_exception() -> None:

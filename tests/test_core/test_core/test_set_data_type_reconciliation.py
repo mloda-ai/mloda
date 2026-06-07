@@ -1,16 +1,16 @@
 """Tests for ``Engine.set_data_type`` reconciliation against the new
 ``return_data_type_rule`` contract.
 
-The rule now returns a ``DataTypeDeclaration`` (``DataType | None | Deferred``) instead of a
+The rule returns a ``DataTypeDeclaration`` (``DataType | None | Deferred``) instead of a
 raw ``Optional[DataType]``. ``set_data_type`` keeps returning ``Optional[DataType]``
-but reconciles the rule outcome against any declared ``feature.data_type`` and must
-never let a raising rule crash planning.
+and reconciles the rule outcome against any declared ``feature.data_type``. The engine
+is fail-fast: it does NOT swallow exceptions raised by a rule. A rule that raises must
+let the exception propagate so planning fails loudly. ``None`` is the explicit
+"no fixed type" signal and ``Deferred`` is the compute-time sentinel.
 
 ``set_data_type`` uses no instance state, so we bypass the heavy ``Engine.__init__``
 via ``Engine.__new__`` and call the method directly.
 """
-
-import logging
 
 import pytest
 
@@ -22,8 +22,6 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.core.engine import Engine
 from mloda.user import DataType
 from mloda.user import Feature
-
-ENGINE_LOGGER = "mloda.core.core.engine"
 
 
 def _engine() -> Engine:
@@ -59,6 +57,12 @@ class _RaisesAttributeError(FeatureGroup):
     @classmethod
     def return_data_type_rule(cls, feature: Feature) -> DataTypeDeclaration:
         raise AttributeError("boom-programmer-error")
+
+
+class _RaisesKeyError(FeatureGroup):
+    @classmethod
+    def return_data_type_rule(cls, feature: Feature) -> DataTypeDeclaration:
+        raise KeyError("boom-missing-key")
 
 
 def test_fixed_with_no_declared_type_returns_fixed_type() -> None:
@@ -103,43 +107,21 @@ def test_deferred_with_declared_type_returns_declared() -> None:
     assert result == DataType.STRING
 
 
-def test_rule_raises_value_error_no_declared_does_not_crash_and_logs_debug(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
+def test_rule_raises_value_error_no_declared_propagates() -> None:
     feature = Feature("reconcile_raise_value_undeclared")
-    with caplog.at_level(logging.DEBUG, logger=ENGINE_LOGGER):
-        result = _engine().set_data_type(feature, _RaisesValueError)
-
-    assert result is None
-
-    debug_records = [r for r in caplog.records if r.levelno == logging.DEBUG]
-    assert debug_records, "expected a DEBUG record for a data-shape rule error without a declared type"
-    assert any("reconcile_raise_value_undeclared" in r.getMessage() for r in debug_records)
+    with pytest.raises(ValueError):
+        _engine().set_data_type(feature, _RaisesValueError)
 
 
-def test_rule_raises_attribute_error_no_declared_does_not_crash_and_logs_warning(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
+def test_rule_raises_attribute_error_no_declared_propagates() -> None:
     feature = Feature("reconcile_raise_attr_undeclared")
-    with caplog.at_level(logging.DEBUG, logger=ENGINE_LOGGER):
-        result = _engine().set_data_type(feature, _RaisesAttributeError)
-
-    assert result is None
-
-    warning_records = [r for r in caplog.records if r.levelno == logging.WARNING]
-    assert warning_records, "expected a WARNING record for a non-data-shape rule error"
-    assert any("reconcile_raise_attr_undeclared" in r.getMessage() for r in warning_records)
+    with pytest.raises(AttributeError):
+        _engine().set_data_type(feature, _RaisesAttributeError)
 
 
-def test_rule_raises_value_error_while_declared_logs_warning_and_returns_declared(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    feature = Feature("reconcile_raise_value_declared", data_type=DataType.STRING)
-    with caplog.at_level(logging.DEBUG, logger=ENGINE_LOGGER):
-        result = _engine().set_data_type(feature, _RaisesValueError)
-
-    assert result == DataType.STRING
-
-    warning_records = [r for r in caplog.records if r.levelno == logging.WARNING]
-    assert warning_records, "raise-while-declared must warn even for data-shape errors (possible silent mismatch)"
-    assert any("reconcile_raise_value_declared" in r.getMessage() for r in warning_records)
+def test_rule_raises_while_declared_propagates_raised_exception() -> None:
+    # A distinct exception type so the propagated error cannot be confused with
+    # the declared/fixed mismatch path (which raises ValueError).
+    feature = Feature("reconcile_raise_key_declared", data_type=DataType.STRING)
+    with pytest.raises(KeyError):
+        _engine().set_data_type(feature, _RaisesKeyError)

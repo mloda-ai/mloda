@@ -5,13 +5,8 @@ These tests define the expected behavior of the module
 result of ``FeatureGroup.return_data_type_rule``.
 """
 
-from dataclasses import FrozenInstanceError
-
-import pytest
-
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.data_type_rule import (
-    Broken,
     DataTypeDeclaration,
     Deferred,
 )
@@ -20,13 +15,6 @@ from mloda.core.abstract_plugins.components.data_type_rule import (
 def test_variants_are_constructible() -> None:
     assert DataType.INT64 is not None
     assert Deferred() is not None
-    assert Broken(ValueError("x")) is not None
-
-
-def test_broken_is_frozen() -> None:
-    broken = Broken(ValueError("x"))
-    with pytest.raises(FrozenInstanceError):
-        broken.error = ValueError("y")  # type: ignore[misc]
 
 
 def test_none_and_deferred_inequality() -> None:
@@ -34,8 +22,3 @@ def test_none_and_deferred_inequality() -> None:
     none_result: DataTypeDeclaration = None
     deferred_result: DataTypeDeclaration = Deferred()
     assert none_result != deferred_result
-
-
-def test_broken_carries_exact_exception() -> None:
-    exc = ValueError("x")
-    assert Broken(exc).error is exc

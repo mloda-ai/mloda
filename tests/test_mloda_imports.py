@@ -187,6 +187,22 @@ def test_import_provider_base_classes() -> None:
     assert BaseMergeEngine is not None
 
 
+def test_import_provider_data_type_declaration() -> None:
+    """from mloda.provider import Deferred, DataTypeDeclaration (return_data_type_rule contract)"""
+    from mloda.provider import Deferred, DataTypeDeclaration
+    from mloda.core.abstract_plugins.components import data_type_rule
+
+    # DataTypeDeclaration is a type alias, not a class: just assert it is importable.
+    assert DataTypeDeclaration is not None
+
+    # Deferred is constructible and value-equal (frozen dataclass).
+    assert Deferred() is not None
+    assert Deferred() == Deferred()
+
+    # No duplicate symbol: the provider re-export is the same object.
+    assert Deferred is data_type_rule.Deferred
+
+
 # =============================================================================
 # mloda.steward Module Tests (Data Steward governance)
 # =============================================================================

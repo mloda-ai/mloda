@@ -26,6 +26,76 @@ Available typed constructors:
 - `date_of()`, `timestamp_millis_of()`, `timestamp_micros_of()` - Date/time types
 - `decimal_of()`, `binary_of()` - Other types
 
+## Declaring a Feature Group's Output Type
+
+The section above is the *data user* declaring a type on a `Feature`. A *feature group* can also
+declare the type it produces, via `return_data_type_rule` — the provider-side counterpart. mloda
+reconciles the two at planning time.
+
+```python
+from mloda.provider import FeatureGroup, DataTypeDeclaration
+from mloda.user import DataType
+
+
+class UserCount(FeatureGroup):
+    @classmethod
+    def return_data_type_rule(cls, feature) -> DataTypeDeclaration:
+        return DataType.INT64
+```
+
+The rule returns one of three things (`DataTypeDeclaration = DataType | None | Deferred`):
+
+| Return | Meaning |
+|---|---|
+| a concrete `DataType` | the group always emits this type |
+| `None` (the default) | no fixed type / polymorphic |
+| `Deferred()` | the type is fixed per run but only knowable at compute time |
+
+Reconciliation with the user's declared type, at planning:
+
+- rule returns a concrete `DataType` that **differs** from the user's declared type → planning raises a mismatch (loud, early);
+- rule returns `None` or `Deferred` → the user's declared type (if any) stands;
+- rule returns a concrete type and the user declared none → the rule's type is used.
+
+### When to use `Deferred`
+
+Return `Deferred()` when the feature group *will* emit a single, definite type, but that type is
+decided by the data or runtime rather than known at planning:
+
+- **reading from a source whose schema is read at compute time** — a column from a parquet file, a database, or an API, where the dtype lives in the source schema;
+- **a dtype-preserving transform** whose output type mirrors an input column resolved upstream at compute;
+- any output whose concrete type is fixed for a given run but data-dependent.
+
+```python
+from mloda.provider import FeatureGroup, Deferred, DataTypeDeclaration
+
+
+class ReadSourceColumn(FeatureGroup):
+    """Reads a column whose dtype comes from the source file's schema."""
+
+    @classmethod
+    def return_data_type_rule(cls, feature) -> DataTypeDeclaration:
+        # The column's type lives in the source schema, which is only inspected
+        # when the data is read, so it cannot be pinned during planning.
+        return Deferred()
+```
+
+!!! note "`Deferred` vs `None` today"
+    At planning, `Deferred` reconciles exactly like `None`: no type is pinned and planning-time
+    validation is skipped for the feature. The concrete type is then carried by the computed
+    column's native dtype and checked by the compute-time validator (`_extract_column_data_type`,
+    below). So the two behave identically at planning today; they differ in **intent** — `None`
+    means "I have no single type," `Deferred` means "I have one, resolved at compute." `Deferred`
+    is a declarable seam: a future consumer of resolved types can distinguish the two without a
+    contract change.
+
+### Errors are not swallowed (fail-fast)
+
+`return_data_type_rule` runs *after* the feature group has been selected for the feature, so a rule
+that raises is a failure of a committed component, not a non-applicable candidate. mloda does **not**
+catch it — the exception propagates and fails planning. If your rule does work that can legitimately
+fail to determine a type, return `None` for that case rather than letting it raise.
+
 ## Validation Behavior
 
 !!! note "Changed in 0.7.0"

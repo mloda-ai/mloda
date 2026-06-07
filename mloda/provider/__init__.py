@@ -55,6 +55,12 @@ from mloda.core.abstract_plugins.components.validators.datatype_validator import
     DataTypeMismatchError,
 )
 
+# Data-type declaration (return_data_type_rule contract)
+from mloda.core.abstract_plugins.components.data_type_rule import (
+    DataTypeDeclaration as DataTypeDeclaration,
+    Deferred as Deferred,
+)
+
 # Option keys
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 
@@ -106,6 +112,9 @@ __all__ = [
     "LinkValidator",
     "DataTypeValidator",
     "DataTypeMismatchError",
+    # Data-type declaration
+    "DataTypeDeclaration",
+    "Deferred",
     # Option keys
     "DefaultOptionKeys",
     # Feature chaining

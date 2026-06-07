@@ -26,6 +26,44 @@ Available typed constructors:
 - `date_of()`, `timestamp_millis_of()`, `timestamp_micros_of()` - Date/time types
 - `decimal_of()`, `binary_of()` - Other types
 
+## Declaring a Feature Group's Output Type
+
+The section above is the *data user* declaring a type on a `Feature`. A *feature group* can also
+declare the type it produces, via `return_data_type_rule` — the provider-side counterpart. mloda
+reconciles the two at planning time.
+
+```python
+from mloda.provider import FeatureGroup
+from mloda.user import DataType
+
+
+class UserCount(FeatureGroup):
+    @classmethod
+    def return_data_type_rule(cls, feature) -> DataType | None:
+        return DataType.INT64
+```
+
+The rule returns either:
+
+- a concrete `DataType` — the group always emits this type;
+- `None` (the default) — no fixed type / polymorphic.
+
+Reconciliation with the user's declared type, at planning:
+
+- rule returns a concrete `DataType` that **differs** from the user's declared type → planning raises a mismatch (loud, early);
+- rule returns `None` → the user's declared type (if any) stands;
+- rule returns a concrete type and the user declared none → the rule's type is used.
+
+A feature that ends up with `data_type=None` is then skipped by the compute-time validator (below);
+a concrete declared type flows through to runtime checking against the actual column dtype.
+
+### Errors are not swallowed
+
+`return_data_type_rule` runs *after* the feature group has been selected for the feature, so a rule
+that raises is a failure of a committed component, not a non-applicable candidate. mloda does **not**
+catch it — the exception propagates and fails planning. If your rule does work that can legitimately
+fail to determine a type, return `None` for that case rather than letting it raise.
+
 ## Validation Behavior
 
 !!! note "Changed in 0.7.0"

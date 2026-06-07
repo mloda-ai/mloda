@@ -1,6 +1,6 @@
 # Artifacts
 
-Artifacts are a crucial part of the mloda, enabling the storage and retrieval of intermediate results feature engineering processes.
+Artifacts are a crucial part of the mloda, enabling the storage and retrieval of intermediate results in feature engineering processes.
 Example use cases are embeddings, Feature Matrices, Model Checkpoints and more.
 
 ## Overview

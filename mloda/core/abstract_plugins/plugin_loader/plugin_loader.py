@@ -46,7 +46,7 @@ class PluginLoader:
 
         The PluginLoader is responsible for loading plugins from a specific package and its subpackages.
 
-        You can chose from:
+        You can choose from:
         - load_all_plugins
         - load_group
         - load_matching

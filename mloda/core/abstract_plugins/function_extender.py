@@ -12,7 +12,7 @@ class ExtenderHook(Enum):
 
 class Extender(ABC):
     """
-    - Automated Metadata harvestor connector
+    - Automated Metadata harvester connector
     - Messaging Integration ( email )
     - Automation Tools
     - data lineage mapping
@@ -22,7 +22,7 @@ class Extender(ABC):
     - metadata capture
     - Event logging
     - metrics on feature calculation
-    - visibility / observibility
+    - visibility / observability
     - Performance
     """
 

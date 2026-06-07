@@ -355,7 +355,7 @@ class Engine:
 
     def set_compute_framework(self, feature: Feature, compute_frameworks: set[type[ComputeFramework]]) -> Feature:
         """
-        This function leads to that the feature has always a compute framework set!
+        This function ensures that the feature always has a compute framework set!
         """
         if feature.compute_frameworks:
             if feature.get_compute_framework() not in compute_frameworks:

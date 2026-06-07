@@ -95,7 +95,7 @@ class GlobalFilter:
                 continue
             if self.compute_framework(_filter, feat) is False:
                 continue
-            # we don t check links, because this is not necessary as this is covered by the feature and feature group before
+            # we don't check links, because this is not necessary as this is covered by the feature and feature group before
 
             matched_filters.add(_filter)
         return matched_filters

@@ -54,7 +54,7 @@ class ReadFile(BaseInputData):
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
         """
-        This function should be implemented from child classes.
+        This function should be implemented by child classes.
         """
         raise NotImplementedError
 

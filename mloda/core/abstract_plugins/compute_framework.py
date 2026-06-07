@@ -36,7 +36,7 @@ class ComputeFramework(ABC):
 
     A compute framework must be in the namespace of the python project and must inherit from this class.
     This way, we can run feature computation on multiple frameworks.
-    Usecases:
+    Use cases:
     - Online and Offline computation
     - Testing
     - Migrations from one framework to another
@@ -48,8 +48,8 @@ class ComputeFramework(ABC):
     2) feature group definition - compute frameworks that can be used for the feature group
     3) from api request side - limits compute frameworks which can be used
 
-    Of course, for migrations, we have allow multiple definitions of the same feature group on different compute frameworks.
-    This usecase however is currently not supported, as one could just run the module twice and compare the result datasets for now.
+    Of course, for migrations, we allow multiple definitions of the same feature group on different compute frameworks.
+    This use case, however, is currently not supported, as one could just run the module twice and compare the result datasets for now.
     """
 
     def __init__(
@@ -59,7 +59,7 @@ class ComputeFramework(ABC):
         uuid: UUID = uuid4(),
         function_extender: Optional[set[Extender]] = None,
     ) -> None:
-        """This class is initialized step execution."""
+        """This class is initialized for step execution."""
         self.mode = mode
         self.data: Any = None
         self.children_if_root = children_if_root
@@ -113,7 +113,7 @@ class ComputeFramework(ABC):
         and thus, defined by the compute framework abstraction.
 
         If you wish not to transform the data, you can leave this.
-        This is not relevant if you stay in one compute framework as you don t need to switch it.
+        This is not relevant if you stay in one compute framework as you don't need to switch it.
         """
 
         transformed_data = self.apply_compute_framework_transformer(data)
@@ -543,7 +543,7 @@ class ComputeFramework(ABC):
     def validate_expected_framework(self, location: Optional[str] = None) -> None:
         """
         Validates that the data is in the expected framework.
-        Only touch is if your framework supports multiple data frameworks.
+        Only touch this if your framework supports multiple data frameworks.
         """
         if self.expected_data_framework() is None:
             return

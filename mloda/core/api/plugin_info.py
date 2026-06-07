@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -41,3 +41,7 @@ class ResolvedFeature:
     feature_group: Optional[type["FeatureGroup"]]
     candidates: list[type["FeatureGroup"]]
     error: Optional[str]
+    # Frameworks supporting the feature, evaluated under default options.
+    supported_compute_frameworks: list[str] = field(default_factory=list)
+    # Frameworks rejecting the feature, evaluated under default options.
+    unsupported_compute_frameworks: list[str] = field(default_factory=list)

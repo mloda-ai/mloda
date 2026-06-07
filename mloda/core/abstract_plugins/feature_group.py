@@ -461,6 +461,26 @@ class FeatureGroup(ABC):
             )
         return rule
 
+    @classmethod
+    def supports_compute_framework(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        compute_framework: type[ComputeFramework],
+    ) -> bool:
+        """Per-feature, per-framework capability check evaluated at match time.
+
+        Returns ``True`` (the default) to allow the framework. Override to declare
+        that a specific operation (encoded in ``feature_name``/``options``) is
+        unsupported on ``compute_framework`` -- return ``False`` and the matcher
+        removes that framework from the candidate set for this feature only.
+        Unlike ``compute_framework_rule`` (a static class-level set), this hook sees
+        the concrete feature, so it can reject an op on one backend while allowing
+        others. If every candidate framework is rejected, the matcher surfaces a
+        distinguishable error instead of a generic "no feature group" message.
+        """
+        return True
+
     @final
     @classmethod
     def get_class_name(cls) -> str:

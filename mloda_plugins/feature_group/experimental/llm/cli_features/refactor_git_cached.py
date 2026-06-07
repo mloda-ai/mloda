@@ -11,7 +11,6 @@ from mloda.provider import DataCreator
 from mloda.provider import ComputeFramework
 from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda_plugins.feature_group.experimental.llm.llm_api.claude import ClaudeRequestLoop
 from mloda_plugins.feature_group.experimental.llm.llm_api.gemini import GeminiRequestLoop
 from mloda_plugins.feature_group.experimental.llm.llm_file_selector import LLMFileSelector
 from mloda_plugins.feature_group.experimental.llm.tools.available.adjust_file_tool import AdjustFileTool
@@ -56,7 +55,6 @@ class RunRefactorDiffCached:
         # check if tests are passing
         previous = ""
         actual_git_diff = self.get_tool_output_by_feature_group_(DiffFeatureGroup)
-        single_code_smell, previous, actual_git_diff
         for i in range(20):
             previous = self.fix_code_smell(i, split_files, single_code_smell, previous, actual_git_diff)
             if "AnalysisComplete" in previous:
@@ -122,10 +120,8 @@ class RunRefactorDiffCached:
         tool_collection.add_tool(ReadFileTool.get_class_name())
         tool_collection.add_tool(CreateFileTool.get_class_name())
 
-        expensive_model = ClaudeRequestLoop.get_class_name()
         expensive_model = RunRefactorGeminiRequestLoop.get_class_name()
 
-        model = "claude-3-haiku-20240307"
         model = "gemini-2.0-flash-exp"
 
         feature = Feature(

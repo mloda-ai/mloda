@@ -51,7 +51,7 @@ class RequestLoop(LLMBaseRequest):
 
     @classmethod
     def api(cls) -> Any:
-        NotImplementedError
+        raise NotImplementedError
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         features = SourceInputFeatureComposite.input_features(options, feature_name) or set()

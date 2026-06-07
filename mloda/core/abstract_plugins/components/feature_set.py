@@ -104,10 +104,6 @@ class FeatureSet:
         FeatureSetValidator.validate_equal_options(self.features)
         return self.options.get(key)
 
-    def validate_equal_options(self) -> None:
-        """Checks if all features have the same options."""
-        FeatureSetValidator.validate_equal_options(self.features)
-
     def get_initial_requested_features(self) -> set[FeatureName]:
         return {feature.name for feature in self.features if feature.initial_requested_data}
 
@@ -122,6 +118,3 @@ class FeatureSet:
         FeatureSetValidator.validate_filters_not_set(self.filters)
         FeatureSetValidator.validate_filters_is_set_type(single_filters)
         self.filters = single_filters
-
-    def get_artifact(self, config: Options) -> Any:
-        return None

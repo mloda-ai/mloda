@@ -1,57 +1,49 @@
-# TODO: RuleResult union for `return_data_type_rule` (issue #485)
+# DONE: `Deferred` data-type declaration + fail-fast reconciliation (PR #493, refs #485)
 
-## Decision (locked)
+## Final design (locked)
 
-Break the plugin contract: `return_data_type_rule` returns a `RuleResult` tagged union
-instead of `Optional[DataType]`. The never-raises guarantee is owned by core at the single
-call site (`engine.set_data_type`), which classifies a raised rule into an engine-internal
-`Broken` outcome (log + return no-planning-type) instead of crashing the whole graph.
+`return_data_type_rule` returns `DataTypeDeclaration = DataType | None | Deferred`:
+- bare `DataType` — concrete type, known at planning
+- `None` — no fixed type / polymorphic (explicit signal; the default)
+- `Deferred` — fixed but only knowable at compute time
 
-Variants:
-- `Fixed(DataType)` — concrete type, known at planning (plugin-returnable)
-- `Open` — polymorphic by design, no fixed type ever (plugin-returnable; the new default)
-- `Deferred` — fixed but only knowable at compute; type rides in the computed data
-  ("Meaning A"), so it reconciles like `Open` today (no planning pin) and exists as a
-  declarable intent + forward seam (plugin-returnable)
-- `Broken(error)` — engine-only; produced when a rule raises
+`engine.set_data_type` is pure reconciliation of the user's declared type vs the provider's
+rule, and is **fail-fast** — it does NOT catch exceptions from the rule.
 
-Scope notes:
-- **Meaning A**: a resolved Deferred type is carried by the output data's native dtype and
-  the existing `DataTypeValidator` path; there is NO mloda-level reader of a post-compute
-  `feature.data_type`, so there is NO write-back step and NO `Feature` marker field.
-- Hazard preserved: `Fixed` vs declared-type mismatch still raises loudly at planning;
-  a rule that raises while the user declared a type logs a WARNING (not silent) and falls
-  back to the declared type.
-- Clean break, no compatibility shim. Migration surface: base default, factory passthrough,
-  two test files.
-- This PR is **core-only**. Registry `try/except` cleanup is a separate follow-up (issue DoD).
+| declared (user) | outcome (provider) | result |
+|---|---|---|
+| any | `None` | `declared` |
+| `None` | `DataType Y` | `Y` |
+| `X` | `DataType Y`, `X == Y` | `Y` |
+| `X` | `DataType Y`, `X != Y` | raise `ValueError` (mismatch) |
+| any | `Deferred` | `declared` (no planning pin) |
+| any | rule raises | exception propagates (fail-fast) |
 
-## Phases
+## Why this diverges from #485
 
-- [x] **Phase 1 — `RuleResult` union module.** New module
-  `mloda/core/abstract_plugins/components/data_type_rule.py` with frozen-dataclass variants
-  `Fixed`/`Open`/`Deferred`/`Broken`, type aliases `RuleResult` (plugin-returnable) and
-  `RuleOutcome` (incl. `Broken`). Unit tests for construction, equality, `Fixed` payload.
-  Standalone — tox green on its own.
+#485 proposed a catch-and-degrade wrapper ("planning never raises"). But the rule runs only
+*after* the feature group is selected (engine.py:138 → :172; the rule is used nowhere in
+selection), so a raise is a failure of a committed component, not a non-applicable candidate.
+Swallowing it would hide a real bug. Hence fail-fast, with `None` as the explicit "no type"
+signal. This still removes the motivation for per-plugin `try/except` (plugins return `None`
+for "can't determine", and let genuine errors raise).
 
-- [x] **Phase 2 — Contract flip + engine reconciliation (atomic).**
-  - `FeatureGroup.return_data_type_rule` default returns `Open()`; annotation → `RuleResult`.
-  - `engine.set_data_type`: call rule in a guard; on raise → classify
-    (`debug` for `ValueError`/`IndexError`/`TypeError`/`KeyError`; `warning` otherwise) + log
-    feature name + FG class + exc → `Broken`. Match `RuleResult`:
-    - `Fixed(Y)`: reconcile with declared type (`==` or raise mismatch); return `Y`.
-    - `Open`: return declared type or `None`.
-    - `Deferred`: return declared type or `None` (no planning pin).
-    - `Broken`: if declared type → WARN (raise-while-declared) + return declared type; else
-      return `None`.
-    - `assert_never` default for mypy `--strict` exhaustiveness.
-  - Migrate factory passthrough (`dynamic_feature_group_factory.py`) to `RuleResult`.
-  - Migrate the two test override files to the new contract.
-  - Tests: raising rule does not crash planning; mismatch still raises; raise-while-declared
-    warns + keeps declared type; classify levels; `Deferred`/`Open` → no pin.
-  - tox green.
+## Notes
+- **Meaning A** for `Deferred`: the resolved dtype is carried by the computed data's native
+  dtype; nothing in mloda reads a post-compute `feature.data_type`, so NO write-back and NO
+  `Feature` marker. `Deferred` reconciles like `None` today; it is a declarable intent +
+  forward seam.
+- **Backward compatible**: `DataType | None | Deferred` is a superset of `Optional[DataType]`;
+  existing plugins returning `DataType`/`None` need no change and still typecheck.
+- Core-only PR. Registry `try/except` cleanup is a separate, optional follow-up.
+
+## History (evolution during review)
+Started as the literal #485 wrapper (`Fixed`/`Open`/`Deferred`/`Broken` union, catch + classify
++ log). Simplified across review: dropped `Fixed` (bare `DataType`), dropped dead `RuleOutcome`,
+renamed `RuleResult` → `DataTypeDeclaration`, replaced `Open` with `None`, and finally dropped
+the `try/except` + `Broken` in favor of fail-fast once we established the rule runs
+post-selection.
 
 ## Gate
-`tox` must pass after each phase (pytest -n8 --timeout=10, ruff format/check, pip-licenses,
-mypy --strict, bandit). Update `EXPECTED_SKIP_COUNT` if skip count changes. Tick the box only
-when tox is green.
+`tox` green: pytest -n8 --timeout=10, ruff format/check, pip-licenses, mypy --strict, bandit.
+`EXPECTED_SKIP_COUNT` default is 194 (tox.ini).

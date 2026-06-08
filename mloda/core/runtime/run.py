@@ -84,14 +84,7 @@ class ExecutionOrchestrator:
             finished_ids, self.executor.cfw_collection, self.location
         )
 
-    def compute(self) -> None:
-        """
-        Executes the mloda pipeline based on the execution plan.
-
-        This method iterates through the execution plan, checks dependencies,
-        and executes steps using the appropriate parallelization mode.
-        It also handles errors, result collection, and data dropping.
-        """
+    def _init_run(self) -> tuple[set[UUID], set[UUID], set[UUID]]:
         if self.cfw_register is None:
             raise ValueError(
                 "Internal error: compute framework manager not initialized. This is likely a bug in mloda."
@@ -104,7 +97,43 @@ class ExecutionOrchestrator:
         finished_ids: set[UUID] = set()
         to_finish_ids: set[UUID] = set()
         currently_running_steps: set[UUID] = set()
+        return finished_ids, to_finish_ids, currently_running_steps
 
+    def _run_planner_pass(
+        self, finished_ids: set[UUID], to_finish_ids: set[UUID], currently_running_steps: set[UUID]
+    ) -> None:
+        for step in self.execution_planner:
+            to_finish_ids.update(step.get_uuids())
+
+            if isinstance(step, FeatureGroupStep):
+                self._drop_data_for_finished_cfws(finished_ids)
+
+            if self._is_step_done(step.get_uuids(), finished_ids):
+                continue
+
+            # check if step is currently running
+            if self.currently_running_step(step.get_uuids(), currently_running_steps):
+                if self._process_step_result(step):
+                    self._mark_step_as_finished(step.get_uuids(), finished_ids, currently_running_steps)
+                continue
+
+            if not self._can_run_step(step.required_uuids, step.get_uuids(), finished_ids, currently_running_steps):
+                continue
+            self._execute_step(step)
+
+    def _finalize(self) -> None:
+        self.data_lifecycle_manager.set_artifacts(self.cfw_register.get_artifacts())
+        self.join()
+
+    def compute(self) -> None:
+        """
+        Executes the mloda pipeline based on the execution plan.
+
+        This method iterates through the execution plan, checks dependencies,
+        and executes steps using the appropriate parallelization mode.
+        It also handles errors, result collection, and data dropping.
+        """
+        finished_ids, to_finish_ids, currently_running_steps = self._init_run()
         try:
             while to_finish_ids != finished_ids or len(finished_ids) == 0:
                 if self.cfw_register:
@@ -115,33 +144,13 @@ class ExecutionOrchestrator:
                 else:
                     break
 
-                for step in self.execution_planner:
-                    to_finish_ids.update(step.get_uuids())
-
-                    if isinstance(step, FeatureGroupStep):
-                        self._drop_data_for_finished_cfws(finished_ids)
-
-                    if self._is_step_done(step.get_uuids(), finished_ids):
-                        continue
-
-                    # check if step is currently running
-                    if self.currently_running_step(step.get_uuids(), currently_running_steps):
-                        if self._process_step_result(step):
-                            self._mark_step_as_finished(step.get_uuids(), finished_ids, currently_running_steps)
-                        continue
-
-                    if not self._can_run_step(
-                        step.required_uuids, step.get_uuids(), finished_ids, currently_running_steps
-                    ):
-                        continue
-                    self._execute_step(step)
+                self._run_planner_pass(finished_ids, to_finish_ids, currently_running_steps)
 
                 if ParallelizationMode.MULTIPROCESSING in self.cfw_register.get_parallelization_modes():
                     time.sleep(0.01)
 
         finally:
-            self.data_lifecycle_manager.set_artifacts(self.cfw_register.get_artifacts())
-            self.join()
+            self._finalize()
 
     def compute_stream(self) -> Generator[tuple[UUID, Any], None, None]:
         """Generator variant of ``compute()`` that yields results as they complete.
@@ -151,19 +160,7 @@ class ExecutionOrchestrator:
         emitted at feature-group granularity — there is no intra-group partial
         streaming.
         """
-        if self.cfw_register is None:
-            raise ValueError(
-                "Internal error: compute framework manager not initialized. This is likely a bug in mloda."
-            )
-
-        self.executor = ComputeFrameworkExecutor(
-            self.cfw_register, self.worker_manager, tfs_connection_map=self.tfs_connection_map
-        )
-
-        finished_ids: set[UUID] = set()
-        to_finish_ids: set[UUID] = set()
-        currently_running_steps: set[UUID] = set()
-
+        finished_ids, to_finish_ids, currently_running_steps = self._init_run()
         try:
             while to_finish_ids != finished_ids or len(finished_ids) == 0:
                 if self.cfw_register:
@@ -174,25 +171,7 @@ class ExecutionOrchestrator:
                 else:
                     break
 
-                for step in self.execution_planner:
-                    to_finish_ids.update(step.get_uuids())
-
-                    if isinstance(step, FeatureGroupStep):
-                        self._drop_data_for_finished_cfws(finished_ids)
-
-                    if self._is_step_done(step.get_uuids(), finished_ids):
-                        continue
-
-                    if self.currently_running_step(step.get_uuids(), currently_running_steps):
-                        if self._process_step_result(step):
-                            self._mark_step_as_finished(step.get_uuids(), finished_ids, currently_running_steps)
-                        continue
-
-                    if not self._can_run_step(
-                        step.required_uuids, step.get_uuids(), finished_ids, currently_running_steps
-                    ):
-                        continue
-                    self._execute_step(step)
+                self._run_planner_pass(finished_ids, to_finish_ids, currently_running_steps)
 
                 yield from self.data_lifecycle_manager.pop_result_data_collection()
 
@@ -202,8 +181,7 @@ class ExecutionOrchestrator:
                 time.sleep(0.01)
 
         finally:
-            self.data_lifecycle_manager.set_artifacts(self.cfw_register.get_artifacts())
-            self.join()
+            self._finalize()
 
     def _process_step_result(self, step: Any) -> Any | bool:
         """

@@ -143,9 +143,10 @@ class TestPolarsDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
 
 @pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
 class TestPolarsEmptyResult(EmptyResultFrameworkTestMixin):
-    """Test PolarsDataFrame._is_empty using shared mixin.
+    """Test PolarsDataFrame schema detection via shared mixin.
 
-    PolarsDataFrame carries an eager ``pl.DataFrame``, so emptiness is ``height == 0``.
+    PolarsDataFrame carries an eager ``pl.DataFrame``; a zero-row frame still carries its
+    columns, so ``_extract_column_names`` is non-empty (state C).
     """
 
     @pytest.fixture

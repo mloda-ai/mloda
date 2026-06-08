@@ -157,7 +157,7 @@ class TestPandasDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
 class TestPandasEmptyResult(EmptyResultFrameworkTestMixin):
-    """Test PandasDataFrame._is_empty using shared mixin."""
+    """Test PandasDataFrame schema detection via shared mixin (zero-row frame keeps columns)."""
 
     @pytest.fixture
     def framework_instance(self) -> Any:

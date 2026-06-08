@@ -181,11 +181,6 @@ class IcebergFramework(ComputeFramework):
             return DataType.DECIMAL
         return None
 
-    def _is_empty(self, data: Any) -> bool:
-        if pa is not None and isinstance(data, pa.Table):
-            return bool(data.num_rows == 0)
-        return bool(data.scan().to_arrow().num_rows == 0)
-
     def transform(self, data: Any, feature_names: set[str]) -> Any:
         """
         Transform data to Iceberg table format.

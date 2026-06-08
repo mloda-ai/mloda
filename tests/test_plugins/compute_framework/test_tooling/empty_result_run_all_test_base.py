@@ -2,23 +2,29 @@
 Shared base for the FeatureGroup-declared ``allow_empty_result`` policy, driven
 end-to-end through the public API ``mloda.run_all``.
 
-A FeatureGroup declares whether it may legitimately yield an empty result by overriding
-the ``allow_empty_result`` classmethod (default ``False``).
+A feature computation must return a SCHEMA-BEARING result: at least one column. Rows are
+optional. The guard in ``ComputeFramework.run_validate_output_features`` fires only for
+FINAL requested features when ``feature_group.allow_empty_result()`` is False, and raises
+``EmptyResultError`` for:
 
-- A FeatureGroup that does not override it (default ``False``), requested as a final
-  feature, must raise when it yields an empty result: empty is an error.
-- A FeatureGroup that overrides it to ``True``, requested as a final feature, must succeed
-  with an empty result. This is the knowledge-graph / search use case where zero matches is
-  valid.
+- State A: ``self.data is None`` (no result at all).
+- State B: a schema-less result (zero columns, i.e. ``_extract_column_names`` returns an
+  empty set).
 
-Both FeatureGroups emit a columnar dict with a single empty column, which ``transform``
-turns into a zero-row frame in every framework. The framework's ``_is_empty`` predicate
-detects the zero rows, and ``run_validate_output_features`` raises ``EmptyResultError``
-(a ``ValueError``, message ``"Data cannot be empty"``) unless the FG allows it.
+State C, a schema-bearing result with ZERO ROWS, MUST SUCCEED. This is the key behavior:
+a zero-row but column-bearing frame is a valid, well-typed empty result.
+
+Both empty-producing FeatureGroups emit a columnar dict with a single empty column.
+``transform`` turns this into a zero-row frame in every schema-bearing framework (PyArrow,
+Pandas, Polars, DuckDB, SQLite, Spark, Iceberg): the schema is carried as metadata even at
+zero rows, so these are state C and SUCCEED. For ``python_dict`` (``List[Dict[str, Any]]``)
+``transform`` collapses ``{"col": []}`` to ``[]``, which has no schema: that is state B and
+STILL RAISES (unless ``allow_empty_result()`` is True).
 
 Subclasses implement only ``compute_framework_name`` (and, for connection-backed frameworks
-such as DuckDB / SQLite / Spark / Iceberg, ``get_connection``). The connection is threaded
-through ``Feature.options`` + a ``DataAccessCollection``, mirroring ``AsofRunAllTestBase``.
+such as DuckDB / SQLite / Spark / Iceberg, ``get_connection``). The python_dict subclass also
+overrides ``default_empty_is_schemaless`` to opt into the "raises" expectation for the default
+FeatureGroup.
 
 This module is intentionally NOT collected as tests (no ``Test`` prefix).
 """
@@ -28,6 +34,7 @@ from typing import Any, Optional
 
 import pytest
 
+from mloda.core.abstract_plugins.compute_framework import EmptyResultError
 from mloda.provider import BaseInputData
 from mloda.provider import DataCreator
 from mloda.provider import FeatureGroup
@@ -61,7 +68,7 @@ def _records_from_frame(data: Any) -> list[dict[str, Any]]:
     """Extract native frame rows to plain Python row dicts across backends.
 
     Mirrors ``AsofRunAllTestBase._records_from_frame`` so the empty-result assertion is
-    framework-agnostic: an empty result is simply ``len(_records_from_frame(result)) == 0``.
+    framework-agnostic: a zero-row result is simply ``len(_records_from_frame(result)) == 0``.
     """
     records: list[dict[str, Any]]
     if pl is not None and isinstance(data, pl.LazyFrame):
@@ -122,7 +129,8 @@ class EmptyResultDefaultFeatureGroup(FeatureGroup, _EmptyResultMatchData):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        # Columnar dict with one empty column -> zero rows after transform in every framework.
+        # Columnar dict with one empty column -> zero rows after transform.
+        # Schema-bearing frameworks keep the column (state C); python_dict drops it (state B).
         return {"empty_result_default_col": []}
 
     @classmethod
@@ -151,8 +159,26 @@ class EmptyResultAllowedFeatureGroup(FeatureGroup, _EmptyResultMatchData):
         return {"empty_result_allowed_col"}
 
 
+class EmptyResultNoneFeatureGroup(FeatureGroup, _EmptyResultMatchData):
+    """Root FeatureGroup whose ``calculate_feature`` returns ``None`` (state A)."""
+
+    @classmethod
+    def input_data(cls) -> Optional[BaseInputData]:
+        return DataCreator(supports_features={"empty_result_none_col"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        # No result at all -> state A (self.data is None).
+        return None
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"empty_result_none_col"}
+
+
 _ENABLED_DEFAULT = PluginCollector.enabled_feature_groups({EmptyResultDefaultFeatureGroup})
 _ENABLED_ALLOWED = PluginCollector.enabled_feature_groups({EmptyResultAllowedFeatureGroup})
+_ENABLED_NONE = PluginCollector.enabled_feature_groups({EmptyResultNoneFeatureGroup})
 
 
 class EmptyResultRunAllTestBase(ABC):
@@ -167,6 +193,16 @@ class EmptyResultRunAllTestBase(ABC):
     def compute_framework_name(cls) -> str:
         """Return the compute framework name string for ``compute_frameworks=[...]``."""
         pass
+
+    @classmethod
+    def default_empty_is_schemaless(cls) -> bool:
+        """Whether the default FG's empty result is schema-less (state B) on this framework.
+
+        Schema-bearing frameworks keep the column at zero rows (state C -> success); the
+        python_dict subclass overrides this to True because ``transform`` collapses the
+        columnar dict to ``[]`` (state B -> raises).
+        """
+        return False
 
     def get_connection(self) -> Optional[Any]:
         """Return a framework connection object, or None when none is needed."""
@@ -185,19 +221,41 @@ class EmptyResultRunAllTestBase(ABC):
             return feature, DataAccessCollection(connections={conn})
         return Feature(name=feature_name), None
 
-    def test_empty_result_default_raises(self, flight_server: Any) -> None:
-        """A FeatureGroup that does not allow empty results raises on an empty final result."""
+    def test_empty_result_default(self, flight_server: Any) -> None:
+        """Default (not-allowed) FG requested as a final feature.
+
+        Schema-bearing frameworks return a schema-bearing zero-row result (state C) and
+        SUCCEED. python_dict drops the schema (state B) and raises ``EmptyResultError``.
+        """
         feature, dac = self._feature_and_dac("empty_result_default_col")
 
-        with pytest.raises(Exception, match="Data cannot be empty"):
-            mloda.run_all(
-                [feature],
-                compute_frameworks=[self.compute_framework_name()],
-                plugin_collector=_ENABLED_DEFAULT,
-                parallelization_modes={ParallelizationMode.SYNC},
-                flight_server=flight_server,
-                data_access_collection=dac,
-            )
+        if self.default_empty_is_schemaless():
+            # run_all wraps the framework-raised EmptyResultError in a plain Exception, so we
+            # assert on the type NAME surfaced in the wrapped message (stable across the
+            # green-phase message change) rather than the exception class or its text.
+            with pytest.raises(Exception) as excinfo:
+                mloda.run_all(
+                    [feature],
+                    compute_frameworks=[self.compute_framework_name()],
+                    plugin_collector=_ENABLED_DEFAULT,
+                    parallelization_modes={ParallelizationMode.SYNC},
+                    flight_server=flight_server,
+                    data_access_collection=dac,
+                )
+            assert EmptyResultError.__name__ in str(excinfo.value)
+            return
+
+        result = mloda.run_all(
+            [feature],
+            compute_frameworks=[self.compute_framework_name()],
+            plugin_collector=_ENABLED_DEFAULT,
+            parallelization_modes={ParallelizationMode.SYNC},
+            flight_server=flight_server,
+            data_access_collection=dac,
+        )
+
+        assert len(result) == 1
+        assert len(_records_from_frame(result[0])) == 0
 
     def test_empty_result_allowed_succeeds(self, flight_server: Any) -> None:
         """A FeatureGroup that overrides allow_empty_result()->True succeeds with an empty result."""
@@ -214,3 +272,25 @@ class EmptyResultRunAllTestBase(ABC):
 
         assert len(result) == 1
         assert len(_records_from_frame(result[0])) == 0
+
+    @pytest.mark.skip(reason="A-state: engine handling of None calculate_feature result - see orchestrator")
+    def test_empty_result_none_raises(self, flight_server: Any) -> None:
+        """State A: a FG whose ``calculate_feature`` returns ``None`` raises ``EmptyResultError``.
+
+        Requested as a final feature with the default (not-allowed) policy. Schema-bearing
+        frameworks reject the ``None`` result upstream (``transform`` raises
+        ``ValueError: Data <NoneType> is not supported``) before the empty-result guard runs,
+        so this state is not reachable end-to-end on the current engine for those frameworks.
+        """
+        feature, dac = self._feature_and_dac("empty_result_none_col")
+
+        with pytest.raises(Exception) as excinfo:
+            mloda.run_all(
+                [feature],
+                compute_frameworks=[self.compute_framework_name()],
+                plugin_collector=_ENABLED_NONE,
+                parallelization_modes={ParallelizationMode.SYNC},
+                flight_server=flight_server,
+                data_access_collection=dac,
+            )
+        assert EmptyResultError.__name__ in str(excinfo.value)

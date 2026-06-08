@@ -63,9 +63,6 @@ class PythonDictFramework(ComputeFramework):
 
         return [{k: record.get(k) for k in _selected_feature_names if k in record} for record in data]
 
-    def _is_empty(self, data: Any) -> bool:
-        return not data
-
     def _extract_column_names(self, data: Any) -> set[str]:
         all_columns: set[str] = set()
         for row in data:

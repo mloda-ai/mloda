@@ -121,7 +121,7 @@ class TestPyArrowDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
 
 
 class TestPyArrowEmptyResult(EmptyResultFrameworkTestMixin):
-    """Test PyArrowTable._is_empty using shared mixin."""
+    """Test PyArrowTable schema detection via shared mixin (zero-row table keeps columns)."""
 
     @pytest.fixture
     def framework_instance(self) -> Any:

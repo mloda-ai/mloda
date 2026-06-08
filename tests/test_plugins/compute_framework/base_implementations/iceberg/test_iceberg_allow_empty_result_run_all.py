@@ -3,8 +3,8 @@
 Consumes the shared EmptyResultRunAllTestBase. ``IcebergFramework.transform`` emits a
 PyArrow table for dict input (see ``test_iceberg_framework.test_transform_dict_to_arrow``),
 so no catalog connection is needed for this dict-producing FG: at validation ``self.data``
-is a zero-row PyArrow table. This pins the PyArrow working-data branch of Iceberg's
-``_is_empty``; the native IcebergTable (scan) branch is covered by the unit mixin test.
+is a zero-row PyArrow table that still carries its column (state C -> success). The native
+IcebergTable (schema) branch is covered by the unit mixin test.
 """
 
 import pytest

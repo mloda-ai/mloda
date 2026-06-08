@@ -374,11 +374,11 @@ class TestSparkDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
 
 @pytest.mark.skipif(not PYSPARK_AVAILABLE, reason=SKIP_REASON or "PySpark is not available")
 class TestSparkEmptyResult(EmptyResultFrameworkTestMixin):
-    """Test SparkFramework._is_empty using shared mixin.
+    """Test SparkFramework schema detection via shared mixin.
 
     A Spark DataFrame has no rows-without-data form: the empty case needs an explicit
     ``StructType`` so the (zero-row) frame still carries a column, mirroring how the Spark
-    framework builds empty frames.
+    framework builds empty frames, so ``_extract_column_names`` is non-empty (state C).
     """
 
     @pytest.fixture

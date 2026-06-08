@@ -439,14 +439,6 @@ class ComputeFramework(ABC):
             return True
         return any(dtype_str.startswith(p) for p in ComputeFramework._NUMERIC_PREFIXES)
 
-    def _is_empty(self, data: Any) -> bool:
-        """Whether `data` represents an empty result in this framework's representation.
-
-        Base returns False (frameworks that can carry an empty-but-typed result, or that
-        keep their own empty guards, opt out). Override where emptiness is row-derived.
-        """
-        return False
-
     def _extract_column_names(self, data: Any) -> set[str]:
         """Extract column names from the data.
 
@@ -523,17 +515,17 @@ class ComputeFramework(ABC):
         if self.data is None:
             return
 
-        # Order matters: evaluate the cheap, common-case predicates before _is_empty,
-        # which can be costly on lazy/remote frameworks (a bounded collect, COUNT(*), or
-        # rdd.isEmpty()). This way _is_empty only runs for a final requested result of a
-        # feature group that forbids empty results, never for intermediates or empty-allowed groups.
         if (
             features.get_initial_requested_features()
             and feature_group is not None
             and not feature_group.allow_empty_result()
-            and self._is_empty(self.data)
+            and not self._extract_column_names(self.data)
         ):
-            raise EmptyResultError(f"Data cannot be empty: {feature_group.get_class_name()}")
+            raise EmptyResultError(
+                f"Result carries no schema (no columns): {feature_group.get_class_name()}. "
+                "A feature must return a schema; zero rows is a valid result, zero columns is not. "
+                "If a schema-less empty result is legitimate, override allow_empty_result() to return True."
+            )
 
         from mloda.core.abstract_plugins.components.validators.datatype_validator import DataTypeValidator
 

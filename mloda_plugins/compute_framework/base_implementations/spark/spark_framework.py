@@ -158,9 +158,6 @@ class SparkFramework(ComputeFramework):
         else:
             return StringType()
 
-    def _is_empty(self, data: Any) -> bool:
-        return bool(data.rdd.isEmpty())
-
     def transform(
         self,
         data: Any,

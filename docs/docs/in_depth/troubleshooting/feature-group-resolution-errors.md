@@ -107,22 +107,29 @@ Restarting the Jupyter kernel clears `Out[N]` history and unloads all stale clas
 ### The Problem
 
 ```
-EmptyResultError: Data cannot be empty: MyFeatureGroup
+EmptyResultError: Result carries no schema (no columns): MyFeatureGroup. ...
 ```
 
-This error fires when a **final** requested feature group returns zero rows and
-`allow_empty_result()` is `False` (the default). It signals that the pipeline
-produced no data for a feature the caller explicitly asked for.
+This error fires when a **final** requested feature group returns a result with
+*no schema* (zero columns) and `allow_empty_result()` is `False` (the default).
+Note that **zero rows is not an error**: a well-typed frame with the right
+columns and no rows is a valid result and passes through. Only a result that
+carries no columns at all is rejected.
 
-If the empty result is genuine (a bug, missing data, wrong filter), this error
-is correct behaviour — it protects callers from silently receiving empty output.
+In practice you hit this on the PythonDict framework, whose empty value (`[]`)
+cannot carry a schema, or when a feature genuinely produces a column-less result.
+
+If the schema-less result is genuine (a bug, missing data, wrong filter), this
+error is correct behaviour — it protects callers from silently receiving output
+they cannot interpret.
 
 ### When to fix it
 
-Override `allow_empty_result` only when zero rows is a legitimate answer for
-your domain, for example: graph traversals that may find no path, search queries
-that may match nothing, authorization filters that may deny all rows, or agent
-memory that may have no relevant entries.
+Override `allow_empty_result` only when a schema-less empty result is a
+legitimate answer for your domain, for example: graph traversals that may find no
+path, search queries that may match nothing, authorization filters that may deny
+all rows, or agent memory that may have no relevant entries. This is most often
+needed on the PythonDict framework.
 
 ``` python
 class MyFeatureGroup(FeatureGroup):
@@ -141,7 +148,7 @@ Intermediate feature groups — those whose output feeds another feature group
 rather than the final result — are never subject to `EmptyResultError`, even
 if `allow_empty_result()` is `False`.
 
-For full details on how the guard works and the `_is_empty` predicate, see
+For full details on how the guard works and the schema-presence gate, see
 [Allowing Empty Results](../compute-framework-integration.md#allowing-empty-results).
 
 ## Related Documentation

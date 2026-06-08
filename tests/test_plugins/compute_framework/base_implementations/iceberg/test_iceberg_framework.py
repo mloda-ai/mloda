@@ -282,15 +282,15 @@ class TestIcebergDtypeExtraction(DtypeExtractionTestMixin):
     pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
 )
 class TestIcebergEmptyResult(EmptyResultFrameworkTestMixin):
-    """Test IcebergFramework._is_empty using shared mixin (native IcebergTable branch).
+    """Test IcebergFramework schema detection via shared mixin (native IcebergTable branch).
 
     Iceberg tables need catalog context to construct, so the fixtures wrap a ``Mock`` typed
-    as ``IcebergTable`` whose ``scan().to_arrow()`` returns a known PyArrow table, mirroring
+    as ``IcebergTable`` whose ``schema().column_names`` returns a known column list, mirroring
     the mock-table convention in ``test_iceberg_integration.py``. ``Mock(spec=IcebergTable)``
     satisfies ``isinstance(_, IcebergTable)``, so the framework's native-table branch runs.
 
-    This pins the ``scan().to_arrow().num_rows == 0`` access pattern (the documented native
-    branch). The pa.Table working-data branch is covered by the e2e run_all test, since
+    This pins the ``schema().column_names`` access pattern (the documented native branch).
+    The pa.Table working-data branch is covered by the e2e run_all test, since
     ``IcebergFramework.transform`` emits a PyArrow table for dict input.
     """
 
@@ -301,13 +301,13 @@ class TestIcebergEmptyResult(EmptyResultFrameworkTestMixin):
     @pytest.fixture
     def empty_data(self) -> Any:
         mock_table = Mock(spec=IcebergTable)
-        mock_table.scan.return_value.to_arrow.return_value = pa.table({"a": pa.array([], pa.int64())})
+        mock_table.schema.return_value.column_names = ["a"]
         return mock_table
 
     @pytest.fixture
     def non_empty_data(self) -> Any:
         mock_table = Mock(spec=IcebergTable)
-        mock_table.scan.return_value.to_arrow.return_value = pa.table({"a": [1]})
+        mock_table.schema.return_value.column_names = ["a"]
         return mock_table
 
 

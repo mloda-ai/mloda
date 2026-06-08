@@ -68,9 +68,6 @@ class PyArrowTable(ComputeFramework):
             return None
         return DataType.from_arrow_type_safe(data.schema.field(column_name).type)
 
-    def _is_empty(self, data: Any) -> bool:
-        return bool(data.num_rows == 0)
-
     def transform(
         self,
         data: Any,

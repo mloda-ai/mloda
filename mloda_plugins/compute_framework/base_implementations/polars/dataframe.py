@@ -93,9 +93,6 @@ class PolarsDataFrame(ComputeFramework):
             raise ImportError("Polars is not installed. To be able to use this framework, please install polars.")
         return pl.Series
 
-    def _is_empty(self, data: Any) -> bool:
-        return bool(data.height == 0)
-
     def transform(
         self,
         data: Any,

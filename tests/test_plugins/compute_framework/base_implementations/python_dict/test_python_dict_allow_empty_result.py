@@ -5,8 +5,8 @@
   propagate emptiness, they never judge it.
 - The empty short-circuit triggers only on empty rows, never on missing columns:
   non-empty data with an absent requested column still raises ``ValueError``.
-- ``ComputeFramework._is_empty(data)`` is an overridable predicate;
-  ``PythonDictFramework`` overrides it to ``return not data``.
+- ``ComputeFramework._extract_column_names(data)`` reports schema presence;
+  ``PythonDictFramework`` returns the union of row keys (empty set for ``[]``).
 - ``_validate_filter_columns`` consults ``feature_group.allow_empty_result()``
   to decide whether to skip validation on zero-row data.
 - ``EmptyResultError`` is a ``ValueError`` subclass.
@@ -131,11 +131,14 @@ class TestPythonDictAllowEmptyResultPolicy:
 
 
 class TestPythonDictEmptyResult(EmptyResultFrameworkTestMixin):
-    """Test PythonDictFramework._is_empty using the shared mixin.
+    """Test PythonDictFramework schema detection via the shared mixin.
 
-    PythonDict's native data is a list of row dicts: empty is ``[]``, non-empty is a
-    one-row list. This generalizes the former PythonDict-only ``_is_empty`` assertions.
+    PythonDict's native data is a list of row dicts: empty is ``[]`` (no schema, state B),
+    non-empty is a one-row list. ``empty_data_carries_schema`` is False so the mixin asserts
+    ``_extract_column_names([])`` yields an empty set.
     """
+
+    empty_data_carries_schema = False
 
     @pytest.fixture
     def framework_instance(self) -> Any:

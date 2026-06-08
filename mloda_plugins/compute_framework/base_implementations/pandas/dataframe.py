@@ -84,9 +84,6 @@ class PandasDataFrame(ComputeFramework):
             raise ImportError("Pandas is not installed. To be able to use this framework, please install pandas.")
         return pd.Series
 
-    def _is_empty(self, data: Any) -> bool:
-        return len(data) == 0
-
     def transform(
         self,
         data: Any,

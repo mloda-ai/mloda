@@ -78,9 +78,6 @@ class PolarsLazyDataFrame(PolarsDataFrame):
             raise ImportError("Polars is not installed. To be able to use this framework, please install polars.")
         return pl.Series
 
-    def _is_empty(self, data: Any) -> bool:
-        return bool(data.limit(1).collect().height == 0)
-
     def transform(
         self,
         data: Any,

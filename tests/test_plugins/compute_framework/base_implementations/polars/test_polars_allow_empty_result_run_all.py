@@ -3,10 +3,10 @@
 Two classes: one for the eager PolarsDataFrame, one for the lazy PolarsLazyDataFrame.
 Both consume the shared EmptyResultRunAllTestBase.
 
-Note for the implementer: the eager framework derives emptiness from ``height == 0``, but
-a ``pl.LazyFrame`` has no height without a ``collect()``, so the lazy framework needs its
-own ``_is_empty`` predicate. The lazy subclass below exercises only the end-to-end behavior
-through ``run_all`` (it does not assert a native representation).
+Both a zero-row eager ``pl.DataFrame`` and a lazy ``pl.LazyFrame`` still carry their schema
+(columns), so an empty schema-bearing result is valid (state C -> success). The subclasses
+below exercise the end-to-end behavior through ``run_all`` (they do not assert a native
+representation).
 """
 
 import pytest

@@ -253,10 +253,11 @@ class TestSqliteDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
 
 
 class TestSqliteEmptyResult(EmptyResultFrameworkTestMixin):
-    """Test SqliteFramework._is_empty using shared mixin.
+    """Test SqliteFramework schema detection via shared mixin.
 
     SQLite data is a relation, so the data fixtures are built via ``from_arrow`` and pull in
-    the shared ``connection`` fixture, mirroring the DataTypeValidator consumer.
+    the shared ``connection`` fixture, mirroring the DataTypeValidator consumer. A zero-row
+    relation still carries its columns (state C).
     """
 
     @pytest.fixture

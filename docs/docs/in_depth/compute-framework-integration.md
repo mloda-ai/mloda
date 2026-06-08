@@ -59,22 +59,46 @@ group but is unsupported on every installed framework resolves to
 
 ### Allowing Empty Results
 
-By default, mloda treats a zero-row result for a **final** requested feature as
-an error. If `calculate_feature` returns empty data for a feature that was
-explicitly requested, `ComputeFramework.run_validate_output_features` raises:
+The contract is: a **final** requested feature must return a *schema-bearing*
+result, meaning at least one column. **Zero rows is a valid result; zero columns
+is not.** A filter that excludes every row, a join with no matches, or a time
+window with no events all return a well-typed frame with the right columns and
+no rows, and mloda passes these through unchanged.
+
+The error fires only when a final requested result carries *no schema at all*. If
+`calculate_feature` produces a result with no columns,
+`ComputeFramework.run_validate_output_features` raises:
 
 ```
-EmptyResultError: Data cannot be empty: <FeatureGroupClassName>
+EmptyResultError: Result carries no schema (no columns): <FeatureGroupClassName>. ...
 ```
 
 `EmptyResultError` is a `ValueError` subclass. Intermediate feature groups
 (those whose output feeds another feature group rather than the caller directly)
 are never subject to this check.
 
+#### The schema-presence gate
+
+The guard detects a missing schema via the framework's existing
+`ComputeFramework._extract_column_names(self, data) -> set[str]`: an empty set
+means no schema, which is the error condition. Every framework already implements
+this off schema metadata, so it works on a zero-row frame and costs nothing extra
+(no row scan, collect, or count). No per-framework opt-in is needed when you
+implement a new compute framework, as long as `_extract_column_names` returns the
+columns for a zero-row frame.
+
+There is one representational caveat. The schema-bearing frameworks (PyArrow,
+Pandas, Polars, DuckDB, SQLite, Spark, Iceberg) carry their schema as metadata
+even at zero rows, so a zero-row result keeps its columns and passes. The
+PythonDict framework represents data as `list[dict]`, where the schema lives in
+each row's keys, so its only empty value is `[]`, which has no columns. A
+PythonDict result that is empty is therefore always treated as schema-less and
+must opt in via `allow_empty_result()` (see below) to be accepted.
+
 #### Opting in to empty results
 
-Override `allow_empty_result` on a feature group to declare that zero rows is a
-legitimate outcome for that group:
+Override `allow_empty_result` on a feature group to declare that a schema-less
+empty result is a legitimate outcome for that group:
 
 ``` python
 class KnowledgeGraphFeatureGroup(FeatureGroup):
@@ -84,32 +108,17 @@ class KnowledgeGraphFeatureGroup(FeatureGroup):
         return True
 ```
 
-When `allow_empty_result()` returns `True`, empty data flows through to the
-caller unchanged. Typical use cases include knowledge graphs, search, agent
-memory, and authorization filters, where "no results" is a meaningful and
-expected answer rather than a pipeline failure.
-
-#### The `_is_empty` predicate
-
-The empty-result guard relies on `ComputeFramework._is_empty(self, data) -> bool`
-to detect zero-row data. The base class returns `False` (opt-out by default).
-All built-in compute frameworks (PythonDict, PyArrow, Pandas, Polars, DuckDB,
-SQLite, Spark, Iceberg) override it, so the guard is active on every built-in
-framework without any configuration.
-
-If you implement a **new** compute framework, override `_is_empty` to opt it in:
-
-``` python
-class MyComputeFramework(ComputeFramework):
-    def _is_empty(self, data) -> bool:
-        return len(data) == 0
-```
+When `allow_empty_result()` returns `True`, the result flows through to the
+caller unchanged regardless of schema. Typical use cases include knowledge
+graphs, search, agent memory, and authorization filters, especially on the
+PythonDict framework where an empty match cannot carry a schema.
 
 #### Filter column validation
 
 As a side effect, when `allow_empty_result()` is `True`, `_validate_filter_columns`
-also skips its column-presence check on zero-row data. This prevents spurious
-"column not found" errors when a filter is applied to legitimately empty output.
+also skips its column-presence check on schema-less data. This prevents spurious
+"column not found" errors when a filter is applied to legitimately empty output
+that carries no columns to validate against.
 
 ### Framework-Specific Implementations
 

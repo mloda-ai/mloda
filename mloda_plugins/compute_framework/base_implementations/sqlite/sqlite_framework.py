@@ -79,9 +79,6 @@ class SqliteFramework(ComputeFramework):
         idx = data.columns.index(column_name)
         return DataType.from_arrow_type_safe(data.types[idx])
 
-    def _is_empty(self, data: Any) -> bool:
-        return len(data) == 0
-
     def transform(
         self,
         data: Any,

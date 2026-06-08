@@ -85,6 +85,7 @@ class ExecutionOrchestrator:
         )
 
     def _init_run(self) -> tuple[set[UUID], set[UUID], set[UUID]]:
+        """Validate state, construct the executor, and return fresh id-tracking sets."""
         if self.cfw_register is None:
             raise ValueError(
                 "Internal error: compute framework manager not initialized. This is likely a bug in mloda."
@@ -125,6 +126,19 @@ class ExecutionOrchestrator:
         self.data_lifecycle_manager.set_artifacts(self.cfw_register.get_artifacts())
         self.join()
 
+    def _check_for_error(self) -> bool:
+        """Return True if the run loop should stop (compute framework manager gone).
+
+        Raises if a worker reported an error.
+        """
+        if self.cfw_register:
+            error = self.cfw_register.get_error()
+            if error:
+                logger.error(self.cfw_register.get_error_exc_info())
+                raise Exception(self.cfw_register.get_error_exc_info(), self.cfw_register.get_error_msg())
+            return False
+        return True
+
     def compute(self) -> None:
         """
         Executes the mloda pipeline based on the execution plan.
@@ -136,12 +150,7 @@ class ExecutionOrchestrator:
         finished_ids, to_finish_ids, currently_running_steps = self._init_run()
         try:
             while to_finish_ids != finished_ids or len(finished_ids) == 0:
-                if self.cfw_register:
-                    error = self.cfw_register.get_error()
-                    if error:
-                        logger.error(self.cfw_register.get_error_exc_info())
-                        raise Exception(self.cfw_register.get_error_exc_info(), self.cfw_register.get_error_msg())
-                else:
+                if self._check_for_error():
                     break
 
                 self._run_planner_pass(finished_ids, to_finish_ids, currently_running_steps)
@@ -163,12 +172,7 @@ class ExecutionOrchestrator:
         finished_ids, to_finish_ids, currently_running_steps = self._init_run()
         try:
             while to_finish_ids != finished_ids or len(finished_ids) == 0:
-                if self.cfw_register:
-                    error = self.cfw_register.get_error()
-                    if error:
-                        logger.error(self.cfw_register.get_error_exc_info())
-                        raise Exception(self.cfw_register.get_error_exc_info(), self.cfw_register.get_error_msg())
-                else:
+                if self._check_for_error():
                     break
 
                 self._run_planner_pass(finished_ids, to_finish_ids, currently_running_steps)

@@ -523,11 +523,15 @@ class ComputeFramework(ABC):
         if self.data is None:
             return
 
+        # Order matters: evaluate the cheap, common-case predicates before _is_empty,
+        # which can be costly on lazy/remote frameworks (a bounded collect, COUNT(*), or
+        # rdd.isEmpty()). This way _is_empty only runs for a final requested result of a
+        # feature group that forbids empty results, never for intermediates or empty-allowed groups.
         if (
-            self._is_empty(self.data)
-            and features.get_initial_requested_features()
+            features.get_initial_requested_features()
             and feature_group is not None
             and not feature_group.allow_empty_result()
+            and self._is_empty(self.data)
         ):
             raise EmptyResultError(f"Data cannot be empty: {feature_group.get_class_name()}")
 

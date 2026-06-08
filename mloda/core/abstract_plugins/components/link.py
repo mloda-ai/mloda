@@ -253,6 +253,40 @@ class Link:
         return f"{self.jointype.value} {self.left_feature_group.get_class_name()} {self.left_index} {self.right_feature_group.get_class_name()} {self.right_index} {self.uuid}"
 
     @classmethod
+    def _from_specs(
+        cls,
+        jointype: JoinType,
+        left: JoinSpec,
+        right: JoinSpec,
+        left_discriminator: Optional[dict[str, Any]],
+        right_discriminator: Optional[dict[str, Any]],
+    ) -> "Link":
+        return cls(
+            jointype, left, right, left_discriminator=left_discriminator, right_discriminator=right_discriminator
+        )
+
+    @classmethod
+    def _from_feature_groups(
+        cls,
+        jointype: JoinType,
+        left: type[Any],
+        right: type[Any],
+        left_index: int,
+        right_index: int,
+        left_discriminator: Optional[dict[str, Any]],
+        right_discriminator: Optional[dict[str, Any]],
+    ) -> "Link":
+        left_idx = _get_index_from_feature_group(left, left_index, "left")
+        right_idx = _get_index_from_feature_group(right, right_index, "right")
+        return cls(
+            jointype,
+            JoinSpec(left, left_idx),
+            JoinSpec(right, right_idx),
+            left_discriminator=left_discriminator,
+            right_discriminator=right_discriminator,
+        )
+
+    @classmethod
     def inner(
         cls,
         left: JoinSpec,
@@ -260,9 +294,7 @@ class Link:
         left_discriminator: Optional[dict[str, Any]] = None,
         right_discriminator: Optional[dict[str, Any]] = None,
     ) -> "Link":
-        return cls(
-            JoinType.INNER, left, right, left_discriminator=left_discriminator, right_discriminator=right_discriminator
-        )
+        return cls._from_specs(JoinType.INNER, left, right, left_discriminator, right_discriminator)
 
     @classmethod
     def left(
@@ -272,9 +304,7 @@ class Link:
         left_discriminator: Optional[dict[str, Any]] = None,
         right_discriminator: Optional[dict[str, Any]] = None,
     ) -> "Link":
-        return cls(
-            JoinType.LEFT, left, right, left_discriminator=left_discriminator, right_discriminator=right_discriminator
-        )
+        return cls._from_specs(JoinType.LEFT, left, right, left_discriminator, right_discriminator)
 
     @classmethod
     def right(
@@ -284,9 +314,7 @@ class Link:
         left_discriminator: Optional[dict[str, Any]] = None,
         right_discriminator: Optional[dict[str, Any]] = None,
     ) -> "Link":
-        return cls(
-            JoinType.RIGHT, left, right, left_discriminator=left_discriminator, right_discriminator=right_discriminator
-        )
+        return cls._from_specs(JoinType.RIGHT, left, right, left_discriminator, right_discriminator)
 
     @classmethod
     def outer(
@@ -296,9 +324,7 @@ class Link:
         left_discriminator: Optional[dict[str, Any]] = None,
         right_discriminator: Optional[dict[str, Any]] = None,
     ) -> "Link":
-        return cls(
-            JoinType.OUTER, left, right, left_discriminator=left_discriminator, right_discriminator=right_discriminator
-        )
+        return cls._from_specs(JoinType.OUTER, left, right, left_discriminator, right_discriminator)
 
     @classmethod
     def append(
@@ -308,9 +334,7 @@ class Link:
         left_discriminator: Optional[dict[str, Any]] = None,
         right_discriminator: Optional[dict[str, Any]] = None,
     ) -> "Link":
-        return cls(
-            JoinType.APPEND, left, right, left_discriminator=left_discriminator, right_discriminator=right_discriminator
-        )
+        return cls._from_specs(JoinType.APPEND, left, right, left_discriminator, right_discriminator)
 
     @classmethod
     def union(
@@ -320,9 +344,7 @@ class Link:
         left_discriminator: Optional[dict[str, Any]] = None,
         right_discriminator: Optional[dict[str, Any]] = None,
     ) -> "Link":
-        return cls(
-            JoinType.UNION, left, right, left_discriminator=left_discriminator, right_discriminator=right_discriminator
-        )
+        return cls._from_specs(JoinType.UNION, left, right, left_discriminator, right_discriminator)
 
     @classmethod
     def inner_on(
@@ -335,14 +357,8 @@ class Link:
         right_discriminator: Optional[dict[str, Any]] = None,
     ) -> "Link":
         """Create INNER join using feature groups' index_columns()."""
-        left_idx = _get_index_from_feature_group(left, left_index, "left")
-        right_idx = _get_index_from_feature_group(right, right_index, "right")
-        return cls(
-            JoinType.INNER,
-            JoinSpec(left, left_idx),
-            JoinSpec(right, right_idx),
-            left_discriminator=left_discriminator,
-            right_discriminator=right_discriminator,
+        return cls._from_feature_groups(
+            JoinType.INNER, left, right, left_index, right_index, left_discriminator, right_discriminator
         )
 
     @classmethod
@@ -356,14 +372,8 @@ class Link:
         right_discriminator: Optional[dict[str, Any]] = None,
     ) -> "Link":
         """Create LEFT join using feature groups' index_columns()."""
-        left_idx = _get_index_from_feature_group(left, left_index, "left")
-        right_idx = _get_index_from_feature_group(right, right_index, "right")
-        return cls(
-            JoinType.LEFT,
-            JoinSpec(left, left_idx),
-            JoinSpec(right, right_idx),
-            left_discriminator=left_discriminator,
-            right_discriminator=right_discriminator,
+        return cls._from_feature_groups(
+            JoinType.LEFT, left, right, left_index, right_index, left_discriminator, right_discriminator
         )
 
     @classmethod
@@ -377,14 +387,8 @@ class Link:
         right_discriminator: Optional[dict[str, Any]] = None,
     ) -> "Link":
         """Create RIGHT join using feature groups' index_columns()."""
-        left_idx = _get_index_from_feature_group(left, left_index, "left")
-        right_idx = _get_index_from_feature_group(right, right_index, "right")
-        return cls(
-            JoinType.RIGHT,
-            JoinSpec(left, left_idx),
-            JoinSpec(right, right_idx),
-            left_discriminator=left_discriminator,
-            right_discriminator=right_discriminator,
+        return cls._from_feature_groups(
+            JoinType.RIGHT, left, right, left_index, right_index, left_discriminator, right_discriminator
         )
 
     @classmethod
@@ -398,14 +402,8 @@ class Link:
         right_discriminator: Optional[dict[str, Any]] = None,
     ) -> "Link":
         """Create OUTER join using feature groups' index_columns()."""
-        left_idx = _get_index_from_feature_group(left, left_index, "left")
-        right_idx = _get_index_from_feature_group(right, right_index, "right")
-        return cls(
-            JoinType.OUTER,
-            JoinSpec(left, left_idx),
-            JoinSpec(right, right_idx),
-            left_discriminator=left_discriminator,
-            right_discriminator=right_discriminator,
+        return cls._from_feature_groups(
+            JoinType.OUTER, left, right, left_index, right_index, left_discriminator, right_discriminator
         )
 
     @classmethod
@@ -419,14 +417,8 @@ class Link:
         right_discriminator: Optional[dict[str, Any]] = None,
     ) -> "Link":
         """Create APPEND join using feature groups' index_columns()."""
-        left_idx = _get_index_from_feature_group(left, left_index, "left")
-        right_idx = _get_index_from_feature_group(right, right_index, "right")
-        return cls(
-            JoinType.APPEND,
-            JoinSpec(left, left_idx),
-            JoinSpec(right, right_idx),
-            left_discriminator=left_discriminator,
-            right_discriminator=right_discriminator,
+        return cls._from_feature_groups(
+            JoinType.APPEND, left, right, left_index, right_index, left_discriminator, right_discriminator
         )
 
     @classmethod
@@ -440,14 +432,8 @@ class Link:
         right_discriminator: Optional[dict[str, Any]] = None,
     ) -> "Link":
         """Create UNION join using feature groups' index_columns()."""
-        left_idx = _get_index_from_feature_group(left, left_index, "left")
-        right_idx = _get_index_from_feature_group(right, right_index, "right")
-        return cls(
-            JoinType.UNION,
-            JoinSpec(left, left_idx),
-            JoinSpec(right, right_idx),
-            left_discriminator=left_discriminator,
-            right_discriminator=right_discriminator,
+        return cls._from_feature_groups(
+            JoinType.UNION, left, right, left_index, right_index, left_discriminator, right_discriminator
         )
 
     @classmethod

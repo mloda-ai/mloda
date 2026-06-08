@@ -222,6 +222,26 @@ class FeatureChainParserMixin:
                 if not cls._validate_string_match(feature_name, operation_config, source_feature):
                     return False
 
+        if not cls._validate_required_when(result, feature_name, prefix_patterns, property_mapping, options):
+            return False
+
+        if not cls._validate_type_validators(result, options, property_mapping):
+            return False
+
+        if not cls._validate_in_features(result, options):
+            return False
+
+        return result
+
+    @classmethod
+    def _validate_required_when(
+        cls,
+        result: bool,
+        feature_name: str | FeatureName,
+        prefix_patterns: list[str],
+        property_mapping: dict[str, Any] | None,
+        options: Options,
+    ) -> bool:
         # Enforce required_when constraints from PROPERTY_MAPPING.
         # Build effective options by merging string-parsed operation_config into
         # the Options object so predicates see values from both sources.
@@ -248,7 +268,10 @@ class FeatureChainParserMixin:
                         getattr(predicate, "__name__", repr(predicate)),
                     )
                     return False
+        return True
 
+    @classmethod
+    def _validate_type_validators(cls, result: bool, options: Options, property_mapping: dict[str, Any] | None) -> bool:
         # Enforce type_validator constraints from PROPERTY_MAPPING
         if result and property_mapping is not None:
             for key, mapping_entry in property_mapping.items():
@@ -267,7 +290,10 @@ class FeatureChainParserMixin:
                 except (TypeError, ValueError, AttributeError) as exc:
                     logger.debug("type_validator for '%s' raised %s for value %r", key, exc, value)
                     return False
+        return True
 
+    @classmethod
+    def _validate_in_features(cls, result: bool, options: Options) -> bool:
         # Enforce MIN/MAX_IN_FEATURES when in_features is present in options
         if result and hasattr(cls, "MIN_IN_FEATURES") and hasattr(cls, "MAX_IN_FEATURES"):
             in_features_raw = options.get(DefaultOptionKeys.in_features)
@@ -278,8 +304,7 @@ class FeatureChainParserMixin:
                     return False
                 if cls.MAX_IN_FEATURES is not None and count > cls.MAX_IN_FEATURES:
                     return False
-
-        return result
+        return True
 
     @classmethod
     def _get_prefix_patterns(cls) -> list[str]:

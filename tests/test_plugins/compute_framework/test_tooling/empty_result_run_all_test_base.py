@@ -272,25 +272,3 @@ class EmptyResultRunAllTestBase(ABC):
 
         assert len(result) == 1
         assert len(_records_from_frame(result[0])) == 0
-
-    @pytest.mark.skip(reason="A-state: engine handling of None calculate_feature result - see orchestrator")
-    def test_empty_result_none_raises(self, flight_server: Any) -> None:
-        """State A: a FG whose ``calculate_feature`` returns ``None`` raises ``EmptyResultError``.
-
-        Requested as a final feature with the default (not-allowed) policy. Schema-bearing
-        frameworks reject the ``None`` result upstream (``transform`` raises
-        ``ValueError: Data <NoneType> is not supported``) before the empty-result guard runs,
-        so this state is not reachable end-to-end on the current engine for those frameworks.
-        """
-        feature, dac = self._feature_and_dac("empty_result_none_col")
-
-        with pytest.raises(Exception) as excinfo:
-            mloda.run_all(
-                [feature],
-                compute_frameworks=[self.compute_framework_name()],
-                plugin_collector=_ENABLED_NONE,
-                parallelization_modes={ParallelizationMode.SYNC},
-                flight_server=flight_server,
-                data_access_collection=dac,
-            )
-        assert EmptyResultError.__name__ in str(excinfo.value)

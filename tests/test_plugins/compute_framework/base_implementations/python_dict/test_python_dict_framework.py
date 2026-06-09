@@ -57,6 +57,7 @@ class TestPythonDictFramework:
 
         assert framework.transform(None, set()) == []
         assert framework.transform([], set()) == []
+        assert framework.transform({}, set()) == []
 
     def test_transform_invalid_data(self) -> None:
         """Test that invalid data types raise errors."""
@@ -64,6 +65,18 @@ class TestPythonDictFramework:
 
         with pytest.raises(ValueError, match="Data type .* is not supported"):
             framework.transform("invalid", set())
+
+    @pytest.mark.parametrize("falsy_value", [0, False, ""])
+    def test_transform_falsy_unsupported_data_raises(self, falsy_value: Any) -> None:
+        """Falsy values of unsupported types are rejected, not swallowed as empty.
+
+        The empty short-circuit applies only to None, [] and {}. Other falsy
+        values (0, False, "") must reach the unsupported-data tail and raise.
+        """
+        framework = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+        with pytest.raises(ValueError, match="Data type .* is not supported"):
+            framework.transform(falsy_value, set())
 
     def test_select_data_by_column_names(self) -> None:
         """Test column selection functionality."""

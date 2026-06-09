@@ -29,7 +29,8 @@ def _require_pyarrow() -> None:
 
 
 class EmptyResultError(ValueError):
-    """Raised when a compute framework produces an empty result and allow_empty_result is False."""
+    """Raised when a final requested feature's result carries no schema (zero columns)
+    while allow_empty_result() is False; zero rows with a schema is valid."""
 
 
 class ComputeFramework(ABC):
@@ -304,7 +305,7 @@ class ComputeFramework(ABC):
             return
 
         data_columns = self._extract_column_names(data)
-        if feature_group is not None and feature_group.allow_empty_result() and not data_columns:
+        if not data_columns:
             return
 
         fg_name = feature_group.get_class_name() if feature_group is not None else "Unknown"
@@ -517,7 +518,6 @@ class ComputeFramework(ABC):
 
         if (
             features.get_initial_requested_features()
-            and feature_group is not None
             and not feature_group.allow_empty_result()
             and not self._extract_column_names(self.data)
         ):

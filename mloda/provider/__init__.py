@@ -22,6 +22,7 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup as FeatureGro
 # Versioning
 from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework as ComputeFramework
+from mloda.core.abstract_plugins.compute_framework import EmptyResultError as EmptyResultError
 
 # Utilities
 from mloda.core.abstract_plugins.components.hashable_dict import HashableDict
@@ -82,6 +83,7 @@ __all__ = [
     # Versioning
     "BaseFeatureGroupVersion",
     "ComputeFramework",
+    "EmptyResultError",
     # Utilities
     "HashableDict",
     "get_all_subclasses",

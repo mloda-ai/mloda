@@ -73,7 +73,8 @@ The error fires only when a final requested result carries *no schema at all*. I
 EmptyResultError: Result carries no schema (no columns): <FeatureGroupClassName>. ...
 ```
 
-`EmptyResultError` is a `ValueError` subclass. Intermediate feature groups
+`EmptyResultError` is a `ValueError` subclass and is importable from the public
+API: `from mloda.provider import EmptyResultError`. Intermediate feature groups
 (those whose output feeds another feature group rather than the caller directly)
 are never subject to this check.
 
@@ -93,7 +94,10 @@ even at zero rows, so a zero-row result keeps its columns and passes. The
 PythonDict framework represents data as `list[dict]`, where the schema lives in
 each row's keys, so its only empty value is `[]`, which has no columns. A
 PythonDict result that is empty is therefore always treated as schema-less and
-must opt in via `allow_empty_result()` (see below) to be accepted.
+must opt in via `allow_empty_result()` (see below) to be accepted. One
+consequence: on schema-less empty data, column selection returns the empty
+result as is, so a misspelled requested column on empty data does not produce a
+"column not found" error.
 
 #### Opting in to empty results
 
@@ -115,10 +119,13 @@ PythonDict framework where an empty match cannot carry a schema.
 
 #### Filter column validation
 
-As a side effect, when `allow_empty_result()` is `True`, `_validate_filter_columns`
-also skips its column-presence check on schema-less data. This prevents spurious
-"column not found" errors when a filter is applied to legitimately empty output
-that carries no columns to validate against.
+`_validate_filter_columns` skips its column-presence and dtype checks whenever
+the data carries no columns (schema-less), regardless of the
+`allow_empty_result()` policy. Judging whether emptiness is acceptable belongs
+solely to the output guard above; the filter validator's only job is to catch
+filter columns missing from a schema-bearing result. Applying filters to an
+empty result yields an empty result, so on schema-less data there is nothing to
+validate against and no spurious "column not found" error is raised.
 
 ### Framework-Specific Implementations
 

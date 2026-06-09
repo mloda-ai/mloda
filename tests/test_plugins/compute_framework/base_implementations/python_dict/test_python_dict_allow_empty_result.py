@@ -1,20 +1,27 @@
 """Unit tests for the FeatureGroup-declared ``allow_empty_result`` policy.
 
-- ``PythonDictFramework.select_data_by_column_names`` / ``.transform`` are
-  unconditionally empty-safe: on empty rows they return ``[]``. They only
-  propagate emptiness, they never judge it.
+- ``PythonDictFramework.select_data_by_column_names`` is unconditionally
+  empty-safe: on empty rows it returns ``[]``. It only propagates emptiness,
+  it never judges it. (``transform`` emptiness is covered in
+  ``test_python_dict_framework.py``.)
 - The empty short-circuit triggers only on empty rows, never on missing columns:
   non-empty data with an absent requested column still raises ``ValueError``.
 - ``ComputeFramework._extract_column_names(data)`` reports schema presence;
   ``PythonDictFramework`` returns the union of row keys (empty set for ``[]``).
-- ``_validate_filter_columns`` consults ``feature_group.allow_empty_result()``
-  to decide whether to skip validation on zero-row data.
-- ``EmptyResultError`` is a ``ValueError`` subclass.
+- ``_validate_filter_columns`` skips the column-presence check whenever the data
+  carries no schema (no columns), regardless of ``allow_empty_result()``:
+  emptiness judgement belongs solely to the output guard, and
+  ``apply_filters([])`` is ``[]``. Non-empty data missing a filter column
+  still raises.
+- ``EmptyResultError`` is a ``ValueError`` subclass and part of the public
+  ``mloda.provider`` API.
 """
 
 from typing import Any
 
 import pytest
+
+import mloda.provider
 
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
@@ -87,14 +94,6 @@ class TestPythonDictAllowEmptyResultPolicy:
         with pytest.raises(ValueError, match="No columns found"):
             _framework().select_data_by_column_names([{"a": 1}], {FeatureName("missing")})
 
-    def test_transform_empty_list_returns_empty_list(self) -> None:
-        """transform on [] returns [] unconditionally."""
-        assert _framework().transform([], set()) == []
-
-    def test_transform_none_returns_empty_list(self) -> None:
-        """transform on None returns [] unconditionally (None is empty)."""
-        assert _framework().transform(None, set()) == []
-
     def test_validate_filter_columns_empty_data_allow_empty_does_not_raise(self) -> None:
         """On zero-row data, validation is skipped when the FG allows empty results.
 
@@ -109,25 +108,52 @@ class TestPythonDictAllowEmptyResultPolicy:
         # Must not raise.
         _framework()._validate_filter_columns([], features, feature_group)
 
-    def test_validate_filter_columns_empty_data_default_raises(self) -> None:
-        """On zero-row data, validation still raises when the FG forbids empty results.
+    def test_validate_filter_columns_empty_data_default_does_not_raise(self) -> None:
+        """On schema-less (zero-column) data, validation is skipped regardless of the policy.
 
-        With ``feature_group.allow_empty_result()`` False, the absent filter column
-        'age' triggers the 'missing filter column' error. Matching that exact message
-        also proves the filter was applicable (the early-return path was not taken).
+        Emptiness judgement belongs solely to the output guard, and
+        ``apply_filters([])`` is ``[]``. Even with ``feature_group.allow_empty_result()``
+        False, empty data carries no schema, so the column-presence check must not fire.
+        """
+        single_filter = SingleFilter("age", FilterType.MIN, {"value": 30})
+        features = _FakeFeaturesWithFilter([single_filter])
+        feature_group = _FakeFeatureGroup(allow_empty=False)
+
+        # Must not raise.
+        _framework()._validate_filter_columns([], features, feature_group)
+
+    def test_validate_filter_columns_non_empty_data_missing_column_raises(self) -> None:
+        """Non-empty data missing the filter column still raises, regardless of the policy.
+
+        The schema-less skip applies only to zero-column data. With a present schema
+        that lacks the filter column 'age', the 'missing filter column' error must
+        fire even though ``allow_empty_result()`` is False.
         """
         single_filter = SingleFilter("age", FilterType.MIN, {"value": 30})
         features = _FakeFeaturesWithFilter([single_filter])
         feature_group = _FakeFeatureGroup(allow_empty=False)
 
         with pytest.raises(ValueError, match="missing filter column"):
-            _framework()._validate_filter_columns([], features, feature_group)
+            _framework()._validate_filter_columns([{"other": 1}], features, feature_group)
 
     def test_empty_result_error_is_value_error_subclass(self) -> None:
         """EmptyResultError remains a subclass of ValueError."""
         from mloda.core.abstract_plugins.compute_framework import EmptyResultError
 
         assert issubclass(EmptyResultError, ValueError)
+
+    def test_empty_result_error_exported_from_provider(self) -> None:
+        """EmptyResultError is part of the public ``mloda.provider`` API.
+
+        It must be re-exported as the same object as the core definition
+        (mirroring how ``DataTypeMismatchError`` is exported) and listed in
+        ``mloda.provider.__all__``.
+        """
+        from mloda.core.abstract_plugins.compute_framework import EmptyResultError as core_empty_result_error
+        from mloda.provider import EmptyResultError
+
+        assert EmptyResultError is core_empty_result_error
+        assert "EmptyResultError" in mloda.provider.__all__
 
 
 class TestPythonDictEmptyResult(EmptyResultFrameworkTestMixin):

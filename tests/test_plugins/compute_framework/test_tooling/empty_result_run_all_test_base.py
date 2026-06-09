@@ -7,9 +7,14 @@ optional. The guard in ``ComputeFramework.run_validate_output_features`` fires o
 FINAL requested features when ``feature_group.allow_empty_result()`` is False, and raises
 ``EmptyResultError`` for:
 
-- State A: ``self.data is None`` (no result at all).
 - State B: a schema-less result (zero columns, i.e. ``_extract_column_names`` returns an
   empty set).
+
+State A, a ``None`` result (no result at all), never reaches the guard: the method returns
+early when ``self.data is None``. A ``None`` result is rejected UPSTREAM instead:
+schema-bearing frameworks raise in ``transform`` (e.g. pandas: ``Data <class 'NoneType'>
+is not supported``), while python_dict's ``transform`` converts ``None`` to ``[]``, which
+then hits the guard as state B.
 
 State C, a schema-bearing result with ZERO ROWS, MUST SUCCEED. This is the key behavior:
 a zero-row but column-bearing frame is a valid, well-typed empty result.
@@ -168,7 +173,7 @@ class EmptyResultNoneFeatureGroup(FeatureGroup, _EmptyResultMatchData):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        # No result at all -> state A (self.data is None).
+        # No result at all -> state A (rejected upstream of the guard, see module docstring).
         return None
 
     @classmethod

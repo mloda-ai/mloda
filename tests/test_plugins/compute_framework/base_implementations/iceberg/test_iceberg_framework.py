@@ -282,16 +282,19 @@ class TestIcebergDtypeExtraction(DtypeExtractionTestMixin):
     pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
 )
 class TestIcebergEmptyResult(EmptyResultFrameworkTestMixin):
-    """Test IcebergFramework schema detection via shared mixin (native IcebergTable branch).
+    """Test IcebergFramework schema detection via shared mixin, covering both branches.
 
-    Iceberg tables need catalog context to construct, so the fixtures wrap a ``Mock`` typed
-    as ``IcebergTable`` whose ``schema().column_names`` returns a known column list, mirroring
-    the mock-table convention in ``test_iceberg_integration.py``. ``Mock(spec=IcebergTable)``
-    satisfies ``isinstance(_, IcebergTable)``, so the framework's native-table branch runs.
+    ``IcebergFramework._extract_column_names`` has two branches and the fixtures exercise
+    one each:
 
-    This pins the ``schema().column_names`` access pattern (the documented native branch).
-    The pa.Table working-data branch is covered by the e2e run_all test, since
-    ``IcebergFramework.transform`` emits a PyArrow table for dict input.
+    - ``empty_data`` is a real zero-row PyArrow table. ``IcebergFramework.transform`` emits
+      a pa.Table for dict input, so post-transform working data takes the pa.Table branch
+      (``set(data.schema.names)``); this pins that a zero-row pa.Table still exposes its
+      schema (state C).
+    - ``non_empty_data`` is a ``Mock`` typed as ``IcebergTable`` (catalog context is needed
+      to construct a real one, mirroring ``test_iceberg_integration.py``) whose
+      ``schema().column_names`` returns a known column list, pinning the native-table
+      branch's access pattern.
     """
 
     @pytest.fixture
@@ -300,9 +303,7 @@ class TestIcebergEmptyResult(EmptyResultFrameworkTestMixin):
 
     @pytest.fixture
     def empty_data(self) -> Any:
-        mock_table = Mock(spec=IcebergTable)
-        mock_table.schema.return_value.column_names = ["a"]
-        return mock_table
+        return pa.table({"a": pa.array([], pa.int64())})
 
     @pytest.fixture
     def non_empty_data(self) -> Any:

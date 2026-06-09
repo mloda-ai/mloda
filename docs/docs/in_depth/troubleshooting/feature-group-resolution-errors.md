@@ -120,7 +120,7 @@ In practice you hit this on the PythonDict framework, whose empty value (`[]`)
 cannot carry a schema, or when a feature genuinely produces a column-less result.
 
 If the schema-less result is genuine (a bug, missing data, wrong filter), this
-error is correct behaviour — it protects callers from silently receiving output
+error is correct behavior: it protects callers from silently receiving output
 they cannot interpret.
 
 ### When to fix it
@@ -139,14 +139,16 @@ class MyFeatureGroup(FeatureGroup):
 ```
 
 With the override in place, empty data flows through to the caller without
-raising.
+raising. To catch the error in calling code instead, import it from the public
+API: `from mloda.provider import EmptyResultError` (it is a `ValueError`
+subclass).
 
 ### Intermediates are exempt
 
 The check applies only to features that were explicitly requested by the caller.
-Intermediate feature groups — those whose output feeds another feature group
-rather than the final result — are never subject to `EmptyResultError`, even
-if `allow_empty_result()` is `False`.
+Intermediate feature groups, meaning those whose output feeds another feature
+group rather than the final result, are never subject to `EmptyResultError`,
+even if `allow_empty_result()` is `False`.
 
 For full details on how the guard works and the schema-presence gate, see
 [Allowing Empty Results](../compute-framework-integration.md#allowing-empty-results).

@@ -31,15 +31,16 @@ def test_empty_result_none_raises_pandas(flight_server: Any) -> None:
 
     Driven through the pandas compute framework, which needs no connection. Requested as a
     FINAL feature with the default (not-allowed) policy. Pandas rejects the ``None`` result
-    upstream (``transform`` raises ``ValueError: Data <NoneType> is not supported``) before
-    the empty-result guard runs; ``run_all`` re-wraps the framework error as a plain
-    ``Exception``. Kept as a module-level function (not a method on
-    ``EmptyResultRunAllTestBase``) so connection-backed frameworks don't inherit and run it
-    without a connection.
+    upstream (``transform`` raises ``ValueError: Data <class 'NoneType'> is not supported by
+    PandasDataFrame``) before the empty-result guard runs; ``run_all`` re-wraps the framework
+    error as a plain ``Exception`` whose message embeds that text (repr-escaped, so the inner
+    quotes around ``NoneType`` carry backslashes), which the ``match`` below pins. Kept as a
+    module-level function (not a method on ``EmptyResultRunAllTestBase``) so connection-backed
+    frameworks don't inherit and run it without a connection.
     """
     feature = Feature(name="empty_result_none_col")
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match=r"Data <class \\?'NoneType\\?'> is not supported by PandasDataFrame"):
         mloda.run_all(
             [feature],
             compute_frameworks=["PandasDataFrame"],

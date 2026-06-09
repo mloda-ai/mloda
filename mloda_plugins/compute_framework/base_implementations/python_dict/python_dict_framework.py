@@ -115,7 +115,7 @@ class PythonDictFramework(ComputeFramework):
             ValueError: If data type is not supported
         """
 
-        if not data:
+        if data is None or (isinstance(data, (list, dict)) and not data):
             return []
 
         transformed_data = self.apply_compute_framework_transformer(data)

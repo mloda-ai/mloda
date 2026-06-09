@@ -139,9 +139,11 @@ class MyFeatureGroup(FeatureGroup):
 ```
 
 With the override in place, empty data flows through to the caller without
-raising. To catch the error in calling code instead, import it from the public
-API: `from mloda.provider import EmptyResultError` (it is a `ValueError`
-subclass).
+raising. The public import `from mloda.provider import EmptyResultError` (a
+`ValueError` subclass) supports a typed `except` when you invoke framework or
+plugin code directly. When calling `mloda.run_all`, worker errors are wrapped
+in a generic `Exception` whose message embeds the original traceback, so match
+on the `EmptyResultError` name in the raised exception's message instead.
 
 ### Intermediates are exempt
 

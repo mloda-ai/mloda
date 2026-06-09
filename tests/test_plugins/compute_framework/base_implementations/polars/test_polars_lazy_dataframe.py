@@ -17,6 +17,9 @@ from tests.test_plugins.compute_framework.base_implementations.datatype_validato
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
     DtypeExtractionTestMixin,
 )
+from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
+    EmptyResultFrameworkTestMixin,
+)
 
 import logging
 
@@ -218,6 +221,28 @@ class TestPolarsLazyDtypeExtraction(DtypeExtractionTestMixin):
     @pytest.fixture
     def dtype_sample_data(self) -> Any:
         return pl.DataFrame({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]}).lazy()
+
+
+@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
+class TestPolarsLazyEmptyResult(EmptyResultFrameworkTestMixin):
+    """Test PolarsLazyDataFrame schema detection via shared mixin.
+
+    Pins that ``_extract_column_names`` (``data.collect_schema().names()``) does not
+    materialize the lazy frame and still sees the columns on a zero-row LazyFrame
+    (state C: schema present at zero rows).
+    """
+
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return PolarsLazyDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+    @pytest.fixture
+    def empty_data(self) -> Any:
+        return pl.LazyFrame({"a": []})
+
+    @pytest.fixture
+    def non_empty_data(self) -> Any:
+        return pl.DataFrame({"a": [1]}).lazy()
 
 
 @pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")

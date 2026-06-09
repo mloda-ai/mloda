@@ -119,13 +119,13 @@ PythonDict framework where an empty match cannot carry a schema.
 
 #### Filter column validation
 
-`_validate_filter_columns` skips its column-presence and dtype checks whenever
-the data carries no columns (schema-less), regardless of the
-`allow_empty_result()` policy. Judging whether emptiness is acceptable belongs
-solely to the output guard above; the filter validator's only job is to catch
-filter columns missing from a schema-bearing result. Applying filters to an
-empty result yields an empty result, so on schema-less data there is nothing to
-validate against and no spurious "column not found" error is raised.
+`_validate_filter_columns` skips its column-presence and dtype checks only when
+the data is a schema-less empty result (in practice PythonDict's empty list),
+regardless of the `allow_empty_result()` policy. Filtering an empty result is a
+no-op, so neither the column check nor row elimination has anything to do.
+Judging whether emptiness is acceptable belongs solely to the output guard
+above. Data on which the framework cannot see columns but that is not an empty
+result still fails the missing-filter-column check loudly.
 
 ### Framework-Specific Implementations
 

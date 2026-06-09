@@ -305,7 +305,8 @@ class ComputeFramework(ABC):
             return
 
         data_columns = self._extract_column_names(data)
-        if not data_columns:
+        # Skip only a schema-less empty result; non-empty data without visible columns must still fail loudly.
+        if not data_columns and isinstance(data, list) and not data:
             return
 
         fg_name = feature_group.get_class_name() if feature_group is not None else "Unknown"

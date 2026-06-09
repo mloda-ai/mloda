@@ -7,7 +7,16 @@ collapses ``{"col": []}`` to ``[]``, dropping the schema: the default (not-allow
 therefore yields a schema-less result (state B) and must RAISE, not succeed.
 """
 
+from typing import Any
+
+import pytest
+
+from mloda.core.abstract_plugins.compute_framework import EmptyResultError
+from mloda.user import Feature
+from mloda.user import ParallelizationMode
+from mloda.user import mloda
 from tests.test_plugins.compute_framework.test_tooling.empty_result_run_all_test_base import (
+    _ENABLED_DEFAULT,
     EmptyResultRunAllTestBase,
 )
 
@@ -23,3 +32,22 @@ class TestPythonDictAllowEmptyResultRunAll(EmptyResultRunAllTestBase):
     def default_empty_is_schemaless(cls) -> bool:
         # transform collapses {"col": []} to [], so the default empty result has no schema.
         return True
+
+
+def test_empty_result_default_raises_threading(flight_server: Any) -> None:
+    """The EmptyResultError survives the THREADING worker error channel.
+
+    Mirrors the base's default test (state B raises on PythonDict) but runs with
+    ``ParallelizationMode.THREADING`` instead of SYNC, pinning that the framework-raised
+    error propagates out of the thread worker. As in the base, run_all wraps the error,
+    so the assertion targets the type NAME in the wrapped message.
+    """
+    with pytest.raises(Exception) as excinfo:
+        mloda.run_all(
+            [Feature(name="empty_result_default_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_ENABLED_DEFAULT,
+            parallelization_modes={ParallelizationMode.THREADING},
+            flight_server=flight_server,
+        )
+    assert EmptyResultError.__name__ in str(excinfo.value)

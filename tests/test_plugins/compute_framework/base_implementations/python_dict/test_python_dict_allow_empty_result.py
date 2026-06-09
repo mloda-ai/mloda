@@ -8,11 +8,13 @@
   non-empty data with an absent requested column still raises ``ValueError``.
 - ``ComputeFramework._extract_column_names(data)`` reports schema presence;
   ``PythonDictFramework`` returns the union of row keys (empty set for ``[]``).
-- ``_validate_filter_columns`` skips the column-presence check whenever the data
-  carries no schema (no columns), regardless of ``allow_empty_result()``:
-  emptiness judgement belongs solely to the output guard, and
-  ``apply_filters([])`` is ``[]``. Non-empty data missing a filter column
-  still raises.
+- ``_validate_filter_columns`` skips the column-presence check ONLY for a
+  schema-less EMPTY result, concretely ``isinstance(data, list) and not data``,
+  regardless of ``allow_empty_result()``: emptiness judgement belongs solely to
+  the output guard, and ``apply_filters([])`` is ``[]``. Any other data on which
+  the framework sees no columns (filters run BEFORE transform, so raw
+  pre-transform objects such as a columnar dict reach the validator) still
+  raises, as does non-empty row data missing a filter column.
 - ``EmptyResultError`` is a ``ValueError`` subclass and part of the public
   ``mloda.provider`` API.
 """
@@ -95,11 +97,13 @@ class TestPythonDictAllowEmptyResultPolicy:
             _framework().select_data_by_column_names([{"a": 1}], {FeatureName("missing")})
 
     def test_validate_filter_columns_empty_data_allow_empty_does_not_raise(self) -> None:
-        """On zero-row data, validation is skipped when the FG allows empty results.
+        """The skip is driven by the data being a schema-less empty list, not by the policy.
 
         The applicable filter targets a column 'age' that is absent (the data is
-        empty). When ``feature_group.allow_empty_result()`` is True, validation
-        returns early instead of raising the 'missing filter column' error.
+        the schema-less empty list ``[]``). Validation returns early because the
+        data is an empty list; ``allow_empty_result()`` being True is irrelevant
+        to the skip. Together with the default-policy twin test below, this pins
+        policy-independence of the skip.
         """
         single_filter = SingleFilter("age", FilterType.MIN, {"value": 30})
         features = _FakeFeaturesWithFilter([single_filter])
@@ -109,11 +113,13 @@ class TestPythonDictAllowEmptyResultPolicy:
         _framework()._validate_filter_columns([], features, feature_group)
 
     def test_validate_filter_columns_empty_data_default_does_not_raise(self) -> None:
-        """On schema-less (zero-column) data, validation is skipped regardless of the policy.
+        """The skip is driven by the data being a schema-less empty list, not by the policy.
 
         Emptiness judgement belongs solely to the output guard, and
         ``apply_filters([])`` is ``[]``. Even with ``feature_group.allow_empty_result()``
-        False, empty data carries no schema, so the column-presence check must not fire.
+        False, the schema-less empty list ``[]`` must not trigger the column-presence
+        check: the ``allow_empty_result`` policy is irrelevant to the skip. Together
+        with the allow-empty twin test above, this pins policy-independence of the skip.
         """
         single_filter = SingleFilter("age", FilterType.MIN, {"value": 30})
         features = _FakeFeaturesWithFilter([single_filter])
@@ -135,6 +141,25 @@ class TestPythonDictAllowEmptyResultPolicy:
 
         with pytest.raises(ValueError, match="missing filter column"):
             _framework()._validate_filter_columns([{"other": 1}], features, feature_group)
+
+    def test_validate_filter_columns_columnar_dict_missing_column_raises(self) -> None:
+        """Raw pre-transform data the framework sees no columns on must still raise.
+
+        Filters run BEFORE transform (run_calculation), so the validator can receive
+        a raw NON-empty object the framework cannot read columns from: PythonDict's
+        ``_extract_column_names`` only reads list-of-dict rows and returns an empty
+        set for the columnar dict ``{"other": [1]}``. The skip applies ONLY to a
+        schema-less empty result (``isinstance(data, list) and not data``); for any
+        other no-columns-visible data, silently skipping hands raw data to the filter
+        engine, which crashes confusingly. The loud 'missing filter column' ValueError
+        must fire instead, regardless of ``allow_empty_result()``.
+        """
+        single_filter = SingleFilter("age", FilterType.MIN, {"value": 30})
+        features = _FakeFeaturesWithFilter([single_filter])
+        feature_group = _FakeFeatureGroup(allow_empty=False)
+
+        with pytest.raises(ValueError, match="missing filter column"):
+            _framework()._validate_filter_columns({"other": [1]}, features, feature_group)
 
     def test_empty_result_error_is_value_error_subclass(self) -> None:
         """EmptyResultError remains a subclass of ValueError."""

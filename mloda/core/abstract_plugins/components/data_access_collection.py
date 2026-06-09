@@ -1,5 +1,8 @@
 from typing import Any, Callable
 
+from mloda.core.abstract_plugins.components.credential import Credential
+from mloda.core.abstract_plugins.components.hashable_dict import HashableDict
+
 
 _KIND_TO_ATTR: dict[str, str] = {
     "connection": "connections",
@@ -23,7 +26,7 @@ class DataAccessCollection:
         connections: dict[str, Any] | set[Any] | list[Any] | None = None,
         files: dict[str, str] | set[str] | list[str] | None = None,
         folders: dict[str, str] | set[str] | list[str] | None = None,
-        credentials: dict[str, Any] | list[Any] | None = None,
+        credentials: dict[str, Any] | list[Any] | Credential | None = None,
         column_to_file: dict[str, str] | None = None,
     ) -> None:
         """Build the collection from named or auto-named resources.
@@ -34,6 +37,8 @@ class DataAccessCollection:
         (paths are normalized to their handle).
         """
         self._auto_handles: set[str] = set()
+
+        credentials = self._normalize_credentials(credentials)
 
         # Start with user-supplied dict entries; collect non-dict inputs for a second pass
         # so that auto-handle numbering can dodge every user-supplied handle (across all kinds).
@@ -50,6 +55,36 @@ class DataAccessCollection:
         self._assign_auto_handles("credentials", self.credentials, credentials)
 
         self.column_to_file: dict[str, str] | None = self._normalize_column_to_file(column_to_file)
+
+    @classmethod
+    def _normalize_credentials(
+        cls, credentials: dict[str, Any] | list[Any] | Credential | None
+    ) -> dict[str, Any] | list[Any] | None:
+        if credentials is None:
+            return None
+        if isinstance(credentials, Credential):
+            return [credentials.data]
+        if isinstance(credentials, dict):
+            return {handle: cls._validated_credential_value(handle, value) for handle, value in credentials.items()}
+        return [cls._unwrap_credential(entry) for entry in credentials]
+
+    @staticmethod
+    def _unwrap_credential(value: Any) -> Any:
+        if isinstance(value, Credential):
+            return value.data
+        return value
+
+    @classmethod
+    def _validated_credential_value(cls, handle: str, value: Any) -> Any:
+        unwrapped = cls._unwrap_credential(value)
+        if isinstance(unwrapped, (dict, HashableDict)):
+            return unwrapped
+        raise ValueError(
+            f"credentials value for handle '{handle}' is not a mapping. A bare dict is read as "
+            f"{{handle: credential}}, so a single credential must be wrapped: use the list form "
+            f"credentials=[{{'{handle}': ...}}], the typed form credentials=Credential({handle}=...), "
+            f"or the named form credentials={{'my-db': {{'{handle}': ...}}}}."
+        )
 
     @staticmethod
     def _copy_if_dict(value: Any) -> dict[str, Any]:
@@ -135,7 +170,7 @@ class DataAccessCollection:
         """Register credentials. ``add_credentials(value)`` auto-names them; ``add_credentials(handle, value)`` names them."""
         handle, value = self._resolve_mutator_args("credentials", args)
         self._reject_duplicate(handle)
-        self.credentials[handle] = value
+        self.credentials[handle] = self._validated_credential_value(handle, value)
 
     def _resolve_mutator_args(self, kind: str, args: tuple[Any, ...]) -> tuple[str, Any]:
         if len(args) == 1:

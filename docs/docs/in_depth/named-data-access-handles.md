@@ -57,6 +57,7 @@ You only need to name resources when there are multiple sources of the same kind
 DataAccessCollection(files={"/data/tx.parquet"})       # set or list
 DataAccessCollection(connections={duckdb_conn})        # set
 DataAccessCollection(folders={"/data/raw"})            # set
+DataAccessCollection(credentials=Credential(host="h")) # typed single credential (recommended)
 DataAccessCollection(credentials=[{"host": "h"}])      # list (dicts are unhashable)
 ```
 
@@ -73,6 +74,43 @@ Naming is only required when:
 
 - Two or more resources of the same kind match the same consumer (then you must set `data_access_handle` to pick one), or
 - You use `column_to_file` and prefer to reference files by name rather than path (both work, see below).
+
+## Typed credentials: `Credential`
+
+Credentials are the one kind where the named form and the value itself look identical, because a credential *is* a dict. These two lines differ only in brackets but mean completely different things:
+
+``` py
+credentials={"sqlite": "/data/x.db"}    # named form: handle "sqlite" -> credential "/data/x.db"
+credentials=[{"sqlite": "/data/x.db"}]  # one credential whose mapping is {"sqlite": "/data/x.db"}
+```
+
+The first shape is almost never what you mean: it registers the string `"/data/x.db"` as the credential, which then fails every connector's `is_valid_credentials` check. The typed `Credential` class removes the ambiguity, so the meaning comes from the type instead of the nesting depth:
+
+``` py
+from mloda.user import Credential, DataAccessCollection
+
+DataAccessCollection(credentials=Credential(sqlite="/data/x.db"))       # kwargs form
+DataAccessCollection(credentials=Credential({"sqlite": "/data/x.db"}))  # dict form
+DataAccessCollection(credentials=[Credential(sqlite="/a.db"), {"pg": {"host": "h"}}])
+DataAccessCollection(credentials={"pg-prod": Credential(host="h")})     # named form
+dac.add_credentials(Credential(host="h"))                               # mutators too
+```
+
+`Credential` is unwrapped to a plain dict at registration time, so feature groups and `is_valid_credentials` implementations keep receiving plain dicts. Nothing changes downstream.
+
+Two safety behaviors come with it:
+
+- **Early mis-wrap error.** Passing a bare dict whose values are not mappings (the mis-wrap shape above) now raises `ValueError` at construction time, naming the offending handle and showing the three correct alternatives, instead of failing silently later during matcher selection.
+- **Redacted repr.** `repr(Credential(password="hunter2"))` prints `Credential(password='***')`. Keys stay visible, values never reach logs or tracebacks.
+
+### Why a typed class: four kinds of users
+
+The design serves four user groups that hit credentials differently:
+
+1. **Notebook users** (one data source) write the obvious shape from an example. For them the bare dict either has to work or fail loudly at construction; `Credential(sqlite="/data/x.db")` gives them a form with no nesting decision to get wrong, and the early error catches the legacy shape.
+2. **Production users** (multiple sources) live in the named-handle registry and disambiguate per feature via `data_access_handle`. For them `Credential` keeps the registry values homogeneous, so ambiguity errors and `handles()` introspection stay trustworthy.
+3. **Plugin authors** implement `is_valid_credentials` and previously had to isinstance-juggle whatever leaked through (including bare strings from mis-wrapped input). The framework now normalizes at the boundary: whatever the end user typed, the plugin receives a plain dict.
+4. **Ops and data stewards** care about what is in the credential, not its shape. The resolver's ambiguity errors print candidate values; the redacting `repr` keeps passwords out of those messages, out of logs, and out of stack traces.
 
 ## Resolution rule
 
@@ -176,6 +214,7 @@ Named handles collapse that bug class to one invariant: *if the registry has mor
 - **"Handle 'X' not found for kind 'K'. Available handles of kind 'K': [...]"**: you set `data_access_handle='X'` but the DAC has no resource of that kind named `X`. Check the spelling or register it.
 - **"Handle 'X' is registered under kind 'K1', but kind 'K2' was requested"**: you set `data_access_handle='X'`, but the registry has `X` under a different kind. A connection consumer cannot bind to a file handle even if the names match.
 - **"Ambiguous resolve for kind 'K': N candidates [...]; set 'data_access_handle' in Options to disambiguate"**: more than one entry of the requested kind matched. Set `data_access_handle` on the feature's `Options` to pick one, or remove the extras from the DAC.
+- **"credentials value for handle 'X' is not a mapping"**: you passed a bare `{connector_id: slot}` dict as `credentials`, which the named form reads as `{handle: credential}`. Use `credentials=Credential(...)`, the list form `credentials=[{...}]`, or the named form `{handle: {connector_id: slot}}`. See [Typed credentials](#typed-credentials-credential).
 
 ## Related
 

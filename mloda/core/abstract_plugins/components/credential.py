@@ -26,7 +26,7 @@ class Credential:
 
     @property
     def data(self) -> dict[str, Any]:
-        """Return a copy of the credential mapping."""
+        """Return a shallow copy of the credential mapping."""
         return dict(self._data)
 
     def __repr__(self) -> str:

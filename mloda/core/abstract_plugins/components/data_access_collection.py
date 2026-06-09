@@ -65,7 +65,11 @@ class DataAccessCollection:
         if isinstance(credentials, Credential):
             return [credentials.data]
         if isinstance(credentials, dict):
-            return {handle: cls._validated_credential_value(handle, value) for handle, value in credentials.items()}
+            context_keys = tuple(credentials.keys())
+            return {
+                handle: cls._validated_credential_value(handle, value, context_keys)
+                for handle, value in credentials.items()
+            }
         return [cls._unwrap_credential(entry) for entry in credentials]
 
     @staticmethod
@@ -75,15 +79,16 @@ class DataAccessCollection:
         return value
 
     @classmethod
-    def _validated_credential_value(cls, handle: str, value: Any) -> Any:
+    def _validated_credential_value(cls, handle: str, value: Any, context_keys: tuple[str, ...] | None = None) -> Any:
         unwrapped = cls._unwrap_credential(value)
         if isinstance(unwrapped, (dict, HashableDict)):
             return unwrapped
+        fields = ", ".join(f"'{key}': ..." for key in (context_keys if context_keys is not None else (handle,)))
         raise ValueError(
             f"credentials value for handle '{handle}' is not a mapping. A bare dict is read as "
             f"{{handle: credential}}, so a single credential must be wrapped: use the list form "
-            f"credentials=[{{'{handle}': ...}}], the typed form credentials=Credential({handle}=...), "
-            f"or the named form credentials={{'my-db': {{'{handle}': ...}}}}."
+            f"credentials=[{{{fields}}}], the typed form credentials=Credential({{{fields}}}), "
+            f"or the named form credentials={{'my-db': {{{fields}}}}}."
         )
 
     @staticmethod
@@ -249,7 +254,10 @@ class DataAccessCollection:
         candidate_handles = [h for h, _ in matches]
         all_auto = all(h in self._auto_handles for h in candidate_handles)
         if all_auto:
-            bullets = "\n".join(f"  - {v}" for _, v in matches)
+            if kind == "credentials":
+                bullets = "\n".join(f"  - {self._redacted_credential(v)}" for _, v in matches)
+            else:
+                bullets = "\n".join(f"  - {v}" for _, v in matches)
             raise ValueError(
                 f"Ambiguous resolve for kind '{kind}': {len(matches)} matches:\n"
                 f"{bullets}\n"
@@ -260,3 +268,11 @@ class DataAccessCollection:
             f"Ambiguous resolve for kind '{kind}': {len(matches)} candidates {candidate_handles}; "
             f"set 'data_access_handle' in Options to disambiguate."
         )
+
+    @staticmethod
+    def _redacted_credential(value: Any) -> str:
+        if isinstance(value, HashableDict):
+            value = value.data
+        if isinstance(value, dict):
+            return "{" + ", ".join(f"'{key}': '***'" for key in value) + "}"
+        return "'***'"

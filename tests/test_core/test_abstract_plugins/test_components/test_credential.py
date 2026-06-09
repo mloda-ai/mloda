@@ -138,6 +138,18 @@ class TestDataAccessCollectionUnwrapsCredential:
         assert dac.credentials == {"named": {"sqlite": "/a.db"}}
         assert type(dac.credentials["named"]) is dict
 
+    def test_dict_positional_credential_registers_one_auto_named_plain_dict(self) -> None:
+        """Dict-positional form Credential({...}) flows through the collection like the kwargs form."""
+        dac = DataAccessCollection(credentials=Credential({"sqlite": "/data/x.db"}))
+        resolved = dac.resolve("credentials")
+        assert type(resolved) is dict
+        assert resolved == {"sqlite": "/data/x.db"}
+        registered = dac.handles()
+        assert len(registered) == 1
+        (handle, kind) = next(iter(registered.items()))
+        assert kind == "credentials"
+        assert handle.startswith("_auto_credentials_")
+
 
 class TestNamedFormRejectsNonMappingValues:
     """Cycle 2 of issue #511: the named form ``{handle: value}`` requires mapping values.
@@ -198,3 +210,83 @@ class TestNamedFormAcceptsMappingValues:
         dac = DataAccessCollection()
         dac.add_credentials("h", {"sqlite": "/x.db"})
         assert dac.credentials == {"h": {"sqlite": "/x.db"}}
+
+
+class TestResolveAmbiguityRedactsCredentialValues:
+    """Cycle 3, Finding A (security): the all-auto ambiguity error in ``resolve()``
+    must not print stored credential values verbatim.
+
+    For kind 'credentials' the candidate listing must redact values (keys stay
+    visible, values replaced, e.g. with '***'). Other kinds keep showing values.
+    """
+
+    def test_two_auto_credentials_ambiguity_redacts_secret_values(self) -> None:
+        dac = DataAccessCollection(
+            credentials=[
+                Credential(host="db1", password="hunter2"),  # nosec B106
+                Credential(host="db2", password="swordfish"),  # nosec B106
+            ]
+        )
+        with pytest.raises(ValueError) as excinfo:
+            dac.resolve("credentials")
+        msg = str(excinfo.value)
+        assert "hunter2" not in msg
+        assert "swordfish" not in msg
+        assert "host" in msg
+        assert "password" in msg
+        assert "data_access_handle" in msg
+
+    def test_hashable_dict_credentials_ambiguity_redacts_values_but_shows_keys(self) -> None:
+        dac = DataAccessCollection(
+            credentials=[
+                HashableDict({"token": "secret-a"}),  # nosec B105
+                HashableDict({"token": "secret-b"}),  # nosec B105
+            ]
+        )
+        with pytest.raises(ValueError) as excinfo:
+            dac.resolve("credentials")
+        msg = str(excinfo.value)
+        assert "secret-a" not in msg
+        assert "secret-b" not in msg
+        assert "token" in msg
+
+    def test_auto_named_files_ambiguity_still_shows_values(self) -> None:
+        """Guardrail: redaction is credentials-only; file paths stay visible in the listing."""
+        dac = DataAccessCollection(files=["/data/a.csv", "/data/b.csv"])
+        with pytest.raises(ValueError) as excinfo:
+            dac.resolve("file")
+        msg = str(excinfo.value)
+        assert "/data/a.csv" in msg
+
+
+class TestMisWrapErrorSuggestionsAreSafeAndComplete:
+    """Cycle 3, Finding B: the named-form mis-wrap ValueError must build its
+    suggestions from ALL keys of the offending input, never include the
+    offending values (they may be secrets), and use the dict-positional form
+    ``Credential({...})`` so the suggestion stays valid Python for any key.
+    """
+
+    def test_multi_field_suggestion_lists_all_keys_and_uses_dict_positional_form(self) -> None:
+        with pytest.raises(ValueError) as excinfo:
+            DataAccessCollection(credentials={"host": "h", "port": 5432})
+        msg = str(excinfo.value)
+        assert "host" in msg
+        assert "port" in msg
+        assert "Credential({" in msg
+        # Offending values must not be echoed back ('h' alone is untestable as a
+        # substring because 'host' contains it; the numeric value is unambiguous).
+        assert "5432" not in msg
+
+    def test_non_identifier_handle_never_yields_invalid_kwargs_suggestion(self) -> None:
+        with pytest.raises(ValueError) as excinfo:
+            DataAccessCollection(credentials={"pg-prod": "dsn-string"})
+        msg = str(excinfo.value)
+        assert "pg-prod" in msg
+        assert "Credential({" in msg
+        assert "Credential(pg-prod=" not in msg
+
+    def test_secret_value_never_appears_in_mis_wrap_error(self) -> None:
+        with pytest.raises(ValueError) as excinfo:
+            DataAccessCollection(credentials={"pg-prod": "dsn-string"})
+        msg = str(excinfo.value)
+        assert "dsn-string" not in msg

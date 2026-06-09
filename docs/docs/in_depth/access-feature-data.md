@@ -30,6 +30,7 @@ When the collection holds more than one resource of the same kind, you can name 
 You can apply these options like so:
 
 ``` python
+from mloda.user import Credential, DataAccessCollection
 
 data_access = DataAccessCollection()
 

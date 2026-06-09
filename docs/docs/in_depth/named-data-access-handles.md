@@ -101,7 +101,7 @@ dac.add_credentials(Credential(host="h"))                               # mutato
 Two safety behaviors come with it:
 
 - **Early mis-wrap error.** Passing a bare dict whose values are not mappings (the mis-wrap shape above) now raises `ValueError` at construction time, naming the offending handle and showing the three correct alternatives, instead of failing silently later during matcher selection.
-- **Redacted repr.** `repr(Credential(password="hunter2"))` prints `Credential(password='***')`. Keys stay visible, values never reach logs or tracebacks.
+- **Redacted error output.** `repr(Credential(password="hunter2"))` prints `Credential(password='***')`, and the resolver's ambiguity error renders credential candidates with keys visible and values replaced by `***`. Note that the registered credential itself is a plain dict, so code that prints `dac.credentials` directly still sees raw values.
 
 ### Why a typed class: four kinds of users
 
@@ -110,7 +110,7 @@ The design serves four user groups that hit credentials differently:
 1. **Notebook users** (one data source) write the obvious shape from an example. For them the bare dict either has to work or fail loudly at construction; `Credential(sqlite="/data/x.db")` gives them a form with no nesting decision to get wrong, and the early error catches the legacy shape.
 2. **Production users** (multiple sources) live in the named-handle registry and disambiguate per feature via `data_access_handle`. For them `Credential` keeps the registry values homogeneous, so ambiguity errors and `handles()` introspection stay trustworthy.
 3. **Plugin authors** implement `is_valid_credentials` and previously had to isinstance-juggle whatever leaked through (including bare strings from mis-wrapped input). The framework now normalizes at the boundary: whatever the end user typed, the plugin receives a plain dict.
-4. **Ops and data stewards** care about what is in the credential, not its shape. The resolver's ambiguity errors print candidate values; the redacting `repr` keeps passwords out of those messages, out of logs, and out of stack traces.
+4. **Ops and data stewards** care about what is in the credential, not its shape. The resolver's ambiguity errors print candidate values, so credential candidates are rendered with redacted values (keys only), keeping passwords out of those messages and the logs that capture them.
 
 ## Resolution rule
 

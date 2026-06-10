@@ -302,6 +302,47 @@ class TestEngineStrictModeWarn:
             f"warn mode must deduplicate already-warned class names per process, got {len(records)} records"
         )
 
+    def test_warn_mode_reports_same_name_classes_from_different_modules_separately(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Warn-mode dedup and reporting must key on module-qualified names, not bare __name__.
+
+        Two DISTINCT unregistered FeatureGroup classes that share __name__ but live in
+        different modules must BOTH appear in the aggregated warning, identified as
+        f"{module}:{qualname}". Keying on bare __name__ collapses them into one identity.
+        """
+        fg_a = cast(
+            type[FeatureGroup],
+            type("WarnDedupSameNameFG", (FeatureGroup,), {"__module__": "warn_dedup_fake_module_a"}),
+        )
+        fg_b = cast(
+            type[FeatureGroup],
+            type("WarnDedupSameNameFG", (FeatureGroup,), {"__module__": "warn_dedup_fake_module_b"}),
+        )
+        assert fg_a is not fg_b, "sanity: two distinct class objects sharing __name__"
+
+        collector = PluginCollector().set_strict_mode("warn")
+        with caplog.at_level(logging.WARNING):
+            PreFilterPlugins(_cfws(), collector)
+        records = [
+            rec
+            for rec in caplog.records
+            if rec.name == "mloda.core.prepare.accessible_plugins" and "not registered" in rec.getMessage()
+        ]
+        message = " ".join(rec.getMessage() for rec in records)
+
+        # Drop strong refs before asserting so a failure cannot leak the classes
+        # into FeatureGroup.__subclasses__() for other tests in this worker.
+        del fg_a, fg_b
+        gc.collect()
+
+        assert "warn_dedup_fake_module_a:WarnDedupSameNameFG" in message, (
+            "warn mode must report unregistered classes with module-qualified identifiers"
+        )
+        assert "warn_dedup_fake_module_b:WarnDedupSameNameFG" in message, (
+            "warn mode must report BOTH same-name classes from different modules, not collapse them on bare __name__"
+        )
+
 
 class TestEnvWithoutCollector:
     def test_env_strict_applies_without_collector(self, monkeypatch: pytest.MonkeyPatch) -> None:

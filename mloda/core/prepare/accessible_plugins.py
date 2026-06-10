@@ -251,7 +251,7 @@ class PreFilterPlugins:
             accessible_feature_groups = {fg for fg in accessible_feature_groups if fg in registered}
             if plugin_collector is not None:
                 dropped_enabled = sorted(
-                    fg.__name__
+                    f"{fg.__module__}:{fg.__qualname__}"
                     for fg in before_strict - accessible_feature_groups
                     if fg in plugin_collector.enabled_feature_group_classes
                 )
@@ -274,9 +274,9 @@ class PreFilterPlugins:
 
         if strict_mode == "warn":
             unregistered = sorted(
-                fg.__name__
+                f"{fg.__module__}:{fg.__qualname__}"
                 for fg in accessible_feature_groups
-                if fg not in registered and fg.__name__ not in _warned_unregistered
+                if fg not in registered and f"{fg.__module__}:{fg.__qualname__}" not in _warned_unregistered
             )
             if unregistered:
                 _warned_unregistered.update(unregistered)

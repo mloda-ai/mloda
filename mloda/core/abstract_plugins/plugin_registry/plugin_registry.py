@@ -39,6 +39,7 @@ def _resolve_plugin_type(cls: type[Any]) -> type[Any]:
 
 class PluginRegistry:
     def __init__(self) -> None:
+        # Only default() lazy init is locked; registration is expected single-threaded at import/startup time.
         self._entries: dict[str, PluginRegistryEntry] = {}
 
     @classmethod

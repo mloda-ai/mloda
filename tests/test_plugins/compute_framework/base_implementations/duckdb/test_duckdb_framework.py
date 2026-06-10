@@ -131,12 +131,28 @@ class TestDuckDBFrameworkSessionTimezone:
       - America/New_York:    2022-12-31 05:00:00+00  (leaked-tz bug)
       - Asia/Kolkata:        2022-12-31 18:30:00+00  (leaked-tz bug)
     so the bug is unambiguously visible as a wrong absolute instant.
+
+    Day-granularity flooring alone is not enough to exercise the fractional (:30) offset:
+    a whole-hour zone already yields the wrong day, so Asia/Kolkata's half-hour adds no
+    distinct discriminating power there. The sub-day (hour) test below closes that gap.
+    The chosen sub-day instant ``2023-01-01 06:42:00+00`` floors (to hour) to:
+      - UTC:                 2023-01-01 06:00:00+00  (expected)
+      - America/New_York:    2023-01-01 06:00:00+00  (whole-hour offset: no drift at hour granularity)
+      - Asia/Kolkata:        2023-01-01 06:30:00+00  (+5:30 fractional offset: drifts by exactly 30 min)
+    so only the fractional zone produces a wrong instant, proving the :30 offset is what
+    genuinely discriminates at sub-hour granularity.
     """
 
     # A UTC instant a couple of hours past midnight: still 2023-01-01 in UTC, but rolls
     # back to the previous day once a negative-offset session tz leaks in.
     KNOWN_INSTANT = datetime(2023, 1, 1, 2, 0, 0, tzinfo=timezone.utc)
     EXPECTED_UTC_DAY_FLOOR = datetime(2023, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+    # A mid-hour UTC instant: hour-flooring stays on 2023-01-01 06:00:00+00 in UTC and for
+    # whole-hour zones, but a +5:30 session tz leaking in lands the hour boundary at the
+    # :30 mark (06:30:00+00), a wrong absolute instant differing by the fractional offset.
+    KNOWN_INSTANT_SUBDAY = datetime(2023, 1, 1, 6, 42, 0, tzinfo=timezone.utc)
+    EXPECTED_UTC_HOUR_FLOOR = datetime(2023, 1, 1, 6, 0, 0, tzinfo=timezone.utc)
 
     @pytest.fixture
     def duckdb_framework(self) -> DuckDBFramework:
@@ -145,8 +161,19 @@ class TestDuckDBFrameworkSessionTimezone:
     def _timestamptz_relation(self, framework: DuckDBFramework, instant: datetime) -> DuckdbRelation:
         """Build a single-row TIMESTAMPTZ relation on the framework's connection."""
         conn = framework.get_framework_connection_object()
-        arrow_table = pa.table({"ts": pa.array([instant], type=pa.timestamp("us", tz="UTC"))})
-        return DuckdbRelation.from_arrow(conn, arrow_table)
+        # pa.array with a tz-typed timestamp interprets naive datetimes as already in that tz;
+        # tz-aware datetimes are rejected on some PyArrow builds across the 3.10-3.14 matrix,
+        # hence the .replace(tzinfo=None). The stored absolute instant is unchanged.
+        naive_utc = instant.replace(tzinfo=None)
+        arrow_table = pa.table({"ts": pa.array([naive_utc], type=pa.timestamp("us", tz="UTC"))})
+        relation = DuckdbRelation.from_arrow(conn, arrow_table)
+        # Guard: a future arrow/duckdb mapping must not silently produce a naive TIMESTAMP,
+        # which would make DATE_TRUNC stop depending on session tz and pass without the bug.
+        ts_type = relation.types[relation.columns.index("ts")]
+        assert "TIMESTAMP WITH TIME ZONE" in str(ts_type).upper(), (
+            f"Expected 'ts' to be a TIMESTAMPTZ column, got {ts_type!r}"
+        )
+        return relation
 
     @staticmethod
     def _floored_instant(relation: DuckdbRelation) -> datetime:
@@ -178,6 +205,25 @@ class TestDuckDBFrameworkSessionTimezone:
         result = self._floored_instant(floored)
         assert result == self.EXPECTED_UTC_DAY_FLOOR, (
             f"Day floor leaked session timezone {non_utc_zone!r}: expected {self.EXPECTED_UTC_DAY_FLOOR}, got {result}"
+        )
+
+    def test_date_trunc_hour_floor_is_utc_via_project(
+        self, duckdb_framework: DuckDBFramework, non_utc_connection: Any, non_utc_zone: str
+    ) -> None:
+        """Sub-day (hour) flooring must ignore the preset session tz.
+
+        Day-granularity flooring is already wrong for any whole-hour zone, so it cannot
+        isolate the fractional (+5:30) offset. Hour-flooring 2023-01-01 06:42:00+00 stays
+        at 06:00:00+00 under UTC and whole-hour zones, but a leaked +5:30 session tz would
+        floor to 06:30:00+00, so Asia/Kolkata genuinely discriminates the bug here.
+        """
+        duckdb_framework.set_framework_connection_object(non_utc_connection)
+        relation = self._timestamptz_relation(duckdb_framework, self.KNOWN_INSTANT_SUBDAY)
+        floored = relation.project('DATE_TRUNC(\'hour\', "ts") AS "ts"')
+        result = self._floored_instant(floored)
+        assert result == self.EXPECTED_UTC_HOUR_FLOOR, (
+            f"Hour floor leaked session timezone {non_utc_zone!r}: "
+            f"expected {self.EXPECTED_UTC_HOUR_FLOOR}, got {result}"
         )
 
 

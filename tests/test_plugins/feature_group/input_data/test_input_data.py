@@ -8,6 +8,9 @@ from mloda.provider import BaseInputData
 from mloda.provider import DataCreator
 from mloda.user import mloda
 
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable  # noqa: F401
+from tests.test_core.test_integration.test_core.test_runner_one_compute_framework import SumFeature  # noqa: F401
+
 
 class InputDataTestFeatureGroup(FeatureGroup):
     @classmethod

@@ -7,6 +7,7 @@ from mloda.user import Options
 from mloda.user import mloda
 
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable  # noqa: F401
 
 
 class NFeatureNameBase(FeatureGroup):

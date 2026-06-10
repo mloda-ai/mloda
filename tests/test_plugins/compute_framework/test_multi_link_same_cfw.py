@@ -15,6 +15,8 @@ from mloda.user import ParallelizationMode
 from mloda.user import PluginCollector
 from mloda.user import mloda
 
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame  # noqa: F401
+
 
 # === Scenario 1: Same class used 3x with different feature names per batch ===
 

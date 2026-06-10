@@ -5,6 +5,7 @@ import pytest
 from mloda.provider import FeatureGroup
 from mloda.user import PluginCollector
 from mloda.user import mloda
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable  # noqa: F401
 from tests.test_plugins.feature_group.input_data.test_input_data import InputDataTestFeatureGroup
 
 

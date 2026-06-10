@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timezone
 from typing import Any, Optional
 import pytest
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
@@ -110,6 +111,71 @@ class TestDuckDBFrameworkComputeFramework:
         arrow = result.to_arrow_table()
         assert arrow.column("col_a").to_pylist() == [1, 2, 3]
         assert arrow.column("col_c").to_pylist() == [7, 8, 9]
+
+
+@pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed. Skipping this test.")
+class TestDuckDBFrameworkSessionTimezone:
+    """Timestamp flooring must be UTC-based regardless of the connection's preset session timezone.
+
+    DuckDB's ``DATE_TRUNC`` on a ``TIMESTAMPTZ`` operates in the connection's session
+    timezone. ``set_framework_connection_object`` is the contract chokepoint: after a
+    user-supplied connection is handed to the framework, flooring a known UTC instant to
+    the day must yield the UTC-floored instant, NOT the local-midnight instant of whatever
+    timezone the connection happened to be preset to (issues #522/#523).
+
+    The chosen instant ``2023-01-01 02:00:00+00`` floors (to day) to:
+      - UTC:                 2023-01-01 00:00:00+00  (expected)
+      - America/New_York:    2022-12-31 05:00:00+00  (leaked-tz bug)
+      - Asia/Kolkata:        2022-12-31 18:30:00+00  (leaked-tz bug)
+    so the bug is unambiguously visible as a wrong absolute instant.
+    """
+
+    # A UTC instant a couple of hours past midnight: still 2023-01-01 in UTC, but rolls
+    # back to the previous day once a negative-offset session tz leaks in.
+    KNOWN_INSTANT = datetime(2023, 1, 1, 2, 0, 0, tzinfo=timezone.utc)
+    EXPECTED_UTC_DAY_FLOOR = datetime(2023, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+    @pytest.fixture
+    def duckdb_framework(self) -> DuckDBFramework:
+        return DuckDBFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+    def _timestamptz_relation(self, framework: DuckDBFramework, instant: datetime) -> DuckdbRelation:
+        """Build a single-row TIMESTAMPTZ relation on the framework's connection."""
+        conn = framework.get_framework_connection_object()
+        arrow_table = pa.table({"ts": pa.array([instant], type=pa.timestamp("us", tz="UTC"))})
+        return DuckdbRelation.from_arrow(conn, arrow_table)
+
+    @staticmethod
+    def _floored_instant(relation: DuckdbRelation) -> datetime:
+        """Force lazy materialization and return the floored instant normalized to UTC."""
+        arrow_result = relation.to_arrow_table()
+        value = arrow_result.column("ts").to_pylist()[0]
+        assert isinstance(value, datetime)
+        return value.astimezone(timezone.utc)
+
+    def test_date_trunc_day_floor_is_utc_via_project(
+        self, duckdb_framework: DuckDBFramework, non_utc_connection: Any, non_utc_zone: str
+    ) -> None:
+        """DATE_TRUNC day-flooring via the project() API must ignore the preset session tz."""
+        duckdb_framework.set_framework_connection_object(non_utc_connection)
+        relation = self._timestamptz_relation(duckdb_framework, self.KNOWN_INSTANT)
+        floored = relation.project('DATE_TRUNC(\'day\', "ts") AS "ts"')
+        result = self._floored_instant(floored)
+        assert result == self.EXPECTED_UTC_DAY_FLOOR, (
+            f"Day floor leaked session timezone {non_utc_zone!r}: expected {self.EXPECTED_UTC_DAY_FLOOR}, got {result}"
+        )
+
+    def test_date_trunc_day_floor_is_utc_via_query(
+        self, duckdb_framework: DuckDBFramework, non_utc_connection: Any, non_utc_zone: str
+    ) -> None:
+        """DATE_TRUNC day-flooring via the query() API must ignore the preset session tz."""
+        duckdb_framework.set_framework_connection_object(non_utc_connection)
+        relation = self._timestamptz_relation(duckdb_framework, self.KNOWN_INSTANT)
+        floored = relation.query("ts_rel", 'SELECT DATE_TRUNC(\'day\', "ts") AS "ts" FROM ts_rel')
+        result = self._floored_instant(floored)
+        assert result == self.EXPECTED_UTC_DAY_FLOOR, (
+            f"Day floor leaked session timezone {non_utc_zone!r}: expected {self.EXPECTED_UTC_DAY_FLOOR}, got {result}"
+        )
 
 
 @pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed. Skipping this test.")

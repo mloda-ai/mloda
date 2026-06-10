@@ -42,10 +42,12 @@ class DataAccessCollection:
             itself a dict, so the bare ``{connector_id: slot}`` shape would be
             read as ``{handle: value}``; the typed form removes that ambiguity
             and is unwrapped to a plain dict at registration. Named-form
-            credential values must be mappings (``dict``, ``HashableDict``, or
-            ``Credential``); anything else raises an early mis-wrap
-            ``ValueError``. ``HashableDict`` stays accepted for pre-0.7 call
-            sites. Credentials have no ``set`` form (dicts are unhashable).
+            credential values must be mappings (``dict`` or ``Credential``);
+            anything else raises an early mis-wrap ``ValueError``.
+            ``HashableDict`` is no longer accepted on the credentials path; the
+            class itself stays for hashability-required internals (e.g. ``Options``
+            hashing, ``ApiInputDataCollection``). Credentials have no ``set``
+            form (dicts are unhashable).
 
         ``column_to_file`` maps a column to either a file handle or a file path
         (paths are normalized to their handle).
@@ -89,13 +91,20 @@ class DataAccessCollection:
     @staticmethod
     def _unwrap_credential(value: Any) -> Any:
         if isinstance(value, Credential):
-            return value.data
+            value = value.data
+        if isinstance(value, HashableDict):
+            raise ValueError(
+                "HashableDict is no longer accepted as a credential value. "
+                "Pass Credential({...}) or a plain dict instead. "
+                "(HashableDict itself is not removed; it stays for hashability-required "
+                "internals such as Options hashing.)"
+            )
         return value
 
     @classmethod
     def _validated_credential_value(cls, handle: str, value: Any, context_keys: tuple[str, ...] | None = None) -> Any:
         unwrapped = cls._unwrap_credential(value)
-        if isinstance(unwrapped, (dict, HashableDict)):
+        if isinstance(unwrapped, dict):
             return unwrapped
         fields = ", ".join(f"'{key}': ..." for key in (context_keys if context_keys is not None else (handle,)))
         raise ValueError(
@@ -285,8 +294,6 @@ class DataAccessCollection:
 
     @staticmethod
     def _redacted_credential(value: Any) -> str:
-        if isinstance(value, HashableDict):
-            value = value.data
         if isinstance(value, dict):
             return "{" + ", ".join(f"'{key}': '***'" for key in value) + "}"
         return "'***'"

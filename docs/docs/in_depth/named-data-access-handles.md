@@ -59,7 +59,6 @@ Every kind accepts more than one input shape. Each shape earned its place at a d
 | Bare `set` / `list` | `files={"/data/tx.csv"}` | One source of a kind | Entries get internal auto-handles you never reference; naming a single source was pure boilerplate ([#449](https://github.com/mloda-ai/mloda/pull/449)) |
 | Typed `Credential(...)` | `credentials=Credential(sqlite="/x.db")` | Any credential (recommended) | A credential is itself a dict, so the bare dict shape collides with the named form; the type removes the nesting ambiguity ([#511](https://github.com/mloda-ai/mloda/issues/511)) |
 | `list` of credential dicts | `credentials=[{"host": "h"}]` | Several unnamed credentials | Credentials have no `set` form because dicts are unhashable |
-| `HashableDict` credential values | `credentials=[HashableDict({...})]` | Existing pre-0.7 call sites only | Before 0.7.0 credentials were force-wrapped in `HashableDict`; still accepted so those call sites keep working. New code should pass `Credential` or plain dicts here (`HashableDict` itself is not deprecated; it remains required where hashability matters, e.g. `Options` group values) |
 
 The named/auto split applies to the mutators as well:
 
@@ -215,6 +214,7 @@ Named handles collapse that bug class to one invariant: *if the registry has mor
 - **"Handle 'X' is registered under kind 'K1', but kind 'K2' was requested"**: you set `data_access_handle='X'`, but the registry has `X` under a different kind. A connection consumer cannot bind to a file handle even if the names match.
 - **"Ambiguous resolve for kind 'K': N candidates [...]; set 'data_access_handle' in Options to disambiguate"**: more than one entry of the requested kind matched. Set `data_access_handle` on the feature's `Options` to pick one, or remove the extras from the DAC.
 - **"credentials value for handle 'X' is not a mapping"**: you passed a bare `{connector_id: slot}` dict as `credentials`, which the named form reads as `{handle: credential}`. Use `credentials=Credential(...)`, the list form `credentials=[{...}]`, or the named form `{handle: {connector_id: slot}}`. See [Typed credentials](#typed-credentials-credential).
+- **"HashableDict is no longer accepted as a credential value"**: pre-0.7 call sites wrapped credentials in `HashableDict`. The credentials path no longer accepts it; pass `Credential(...)` or a plain dict instead. `HashableDict` is not removed from the library: it still backs hashability-required internals (for example `Options` hashing and `ApiInputDataCollection`). It is simply no longer unwrapped anywhere on the database credential / data-access path, so the `Options(group={"BaseInputData": (Reader, ...)})` route also expects a plain dict now.
 
 ## Related
 

@@ -72,8 +72,8 @@ class DuckDBFramework(ComputeFramework):
             if self.framework_connection_object is not framework_connection_object:
                 raise ValueError("A different connection is already set. Cannot replace an existing connection.")
             return
+        framework_connection_object.execute("SET TimeZone='UTC'")
         self.framework_connection_object = framework_connection_object
-        self.framework_connection_object.execute("SET TimeZone='UTC'")
 
     @classmethod
     def _connection_matches(cls, conn: Any) -> bool:

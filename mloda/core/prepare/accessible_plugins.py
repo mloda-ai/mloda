@@ -6,7 +6,11 @@ from copy import deepcopy
 from typing import Optional, cast
 
 from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
-from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
+from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import (
+    PluginCollector,
+    strict_mode_from_env,
+)
+from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
@@ -237,6 +241,16 @@ class PreFilterPlugins:
         accessible_feature_groups = dedup_feature_group_subclasses(
             accessible_feature_groups, allow_redefinition=allow_redefinition
         )
+
+        strict_mode = plugin_collector.strict_mode if plugin_collector is not None else strict_mode_from_env()
+        if strict_mode != "off":
+            registry = PluginRegistry.default()
+            if strict_mode == "strict":
+                accessible_feature_groups = {fg for fg in accessible_feature_groups if registry.is_registered(fg)}
+            else:
+                for fg in accessible_feature_groups:
+                    if not registry.is_registered(fg):
+                        logger.warning("FeatureGroup %s is not registered in the plugin registry.", fg.__name__)
 
         if len(accessible_feature_groups) == 0:
             raise ValueError("No feature groups are loaded. Did you call PluginLoader.all()?")

@@ -31,8 +31,22 @@ class DataAccessCollection:
     ) -> None:
         """Build the collection from named or auto-named resources.
 
-        Each resource kind accepts a ``dict[handle, value]`` to register named
-        resources, or a ``set``/``list`` whose entries get auto-assigned handles.
+        Accepted shapes, by intent:
+          * ``dict[handle, value]``: named resources, for multi-source setups
+            where a consumer is pointed at one entry via
+            ``Options(data_access_handle=...)``.
+          * ``set`` / ``list`` of bare values: single-source convenience;
+            entries get internal auto-handles the user never references.
+          * ``credentials`` additionally accepts a single ``Credential`` (or
+            ``Credential`` entries in the list/dict forms). A credential is
+            itself a dict, so the bare ``{connector_id: slot}`` shape would be
+            read as ``{handle: value}``; the typed form removes that ambiguity
+            and is unwrapped to a plain dict at registration. Named-form
+            credential values must be mappings (``dict``, ``HashableDict``, or
+            ``Credential``); anything else raises an early mis-wrap
+            ``ValueError``. ``HashableDict`` stays accepted for pre-0.7 call
+            sites. Credentials have no ``set`` form (dicts are unhashable).
+
         ``column_to_file`` maps a column to either a file handle or a file path
         (paths are normalized to their handle).
         """

@@ -49,19 +49,19 @@ assert dac.handles() == {
 }
 ```
 
-## Naming is optional
+## Accepted input shapes and why each exists
 
-You only need to name resources when there are multiple sources of the same kind that the resolver cannot tell apart. In the simple single-source case, pass bare values:
+Every kind accepts more than one input shape. Each shape earned its place at a different point in the API's history; pick by intent:
 
-``` py
-DataAccessCollection(files={"/data/tx.parquet"})       # set or list
-DataAccessCollection(connections={duckdb_conn})        # set
-DataAccessCollection(folders={"/data/raw"})            # set
-DataAccessCollection(credentials=Credential(host="h")) # typed single credential (recommended)
-DataAccessCollection(credentials=[{"host": "h"}])      # list (dicts are unhashable)
-```
+| Shape | Example | Use when | Why it exists |
+|-------|---------|----------|---------------|
+| Named dict `{handle: value}` | `files={"tx": "/data/tx.csv"}` | Several sources of one kind | Stable handles make resolution deterministic and per-feature addressable via `data_access_handle` ([#443](https://github.com/mloda-ai/mloda/issues/443)) |
+| Bare `set` / `list` | `files={"/data/tx.csv"}` | One source of a kind | Entries get internal auto-handles you never reference; naming a single source was pure boilerplate ([#449](https://github.com/mloda-ai/mloda/pull/449)) |
+| Typed `Credential(...)` | `credentials=Credential(sqlite="/x.db")` | Any credential (recommended) | A credential is itself a dict, so the bare dict shape collides with the named form; the type removes the nesting ambiguity ([#511](https://github.com/mloda-ai/mloda/issues/511)) |
+| `list` of credential dicts | `credentials=[{"host": "h"}]` | Several unnamed credentials | Credentials have no `set` form because dicts are unhashable |
+| `HashableDict` credential values | `credentials=[HashableDict({...})]` | Existing pre-0.7 call sites only | Before 0.7.0 credentials were force-wrapped in `HashableDict`; still accepted so those call sites keep working. New code should pass `Credential` or plain dicts here (`HashableDict` itself is not deprecated; it remains required where hashability matters, e.g. `Options` group values) |
 
-The same shape applies to the mutators:
+The named/auto split applies to the mutators as well:
 
 ``` py
 dac.add_file("/data/tx.parquet")                       # auto-named

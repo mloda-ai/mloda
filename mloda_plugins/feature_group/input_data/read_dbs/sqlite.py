@@ -116,8 +116,8 @@ class SQLITEReader(ReadDB):
     ```python
     from mloda.user import Credential, DataAccessCollection
 
-    # Typed form (recommended). A list of plain dicts is also accepted,
-    # as is HashableDict for backwards compatibility.
+    # Typed form (recommended). A list of plain dicts is also accepted, as is
+    # HashableDict, for compatibility with pre-0.7 credential call sites.
     data_access = DataAccessCollection(
         credentials=Credential(sqlite="/data/analytics.db")
     )

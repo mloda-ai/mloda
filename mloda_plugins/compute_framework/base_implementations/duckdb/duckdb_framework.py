@@ -52,7 +52,16 @@ class DuckDBFramework(ComputeFramework):
     """
 
     def set_framework_connection_object(self, framework_connection_object: Optional[Any] = None) -> None:
-        """Use given DuckDB connection."""
+        """Use given DuckDB connection.
+
+        Pins the DuckDB session timezone to UTC on first assignment so that timestamp
+        operations (DATE_TRUNC, time_bucket, EPOCH, ...) are deterministic regardless of
+        the incoming connection's preset TimeZone. This is a global set-and-leave, not a
+        save/restore: DuckdbRelation is lazy and the SQL only materializes at
+        to_arrow_table(), long after this method returns, so restoring the zone here would
+        revert it before any relation materializes. The zone persists for the connection's
+        lifetime under the framework, so it only needs to be set once at first assignment.
+        """
         if duckdb is None:
             raise ImportError("DuckDB is not installed. To be able to use this framework, please install duckdb.")
         if framework_connection_object is None:
@@ -64,6 +73,7 @@ class DuckDBFramework(ComputeFramework):
                 raise ValueError("A different connection is already set. Cannot replace an existing connection.")
             return
         self.framework_connection_object = framework_connection_object
+        self.framework_connection_object.execute("SET TimeZone='UTC'")
 
     @classmethod
     def _connection_matches(cls, conn: Any) -> bool:

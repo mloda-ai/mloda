@@ -11,6 +11,8 @@ from abc import ABC, abstractmethod
 from collections import Counter
 from typing import Any, Optional
 
+import pytest
+
 from mloda.user import Index
 from mloda.provider import BaseMergeEngine
 from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
@@ -212,3 +214,27 @@ class AsofMergeEngineTestBase(ABC):
 
         offending = [str(w.message) for w in recorded if "Sortedness" in str(w.message)]
         assert not offending, f"Unexpected 'Sortedness' warning(s) emitted: {offending}"
+
+    def test_string_time_column_raises_clear_error(self) -> None:
+        """A non-ordered (string/object) time column must raise a clear ValueError.
+
+        Forwarding ISO-date strings straight to the backend yields a cryptic error
+        (e.g. pandas' "both sides must have numeric dtype"). The guard instead raises a
+        uniform ValueError that names the offending time column ('t') and states the
+        datetime/numeric/timedelta requirement, consistently across every engine that
+        inherits this base class.
+        """
+        left_data = self.convert_dict_to_framework([{"k": "a", "t": "2025-06-01", "lv": 1}])
+        right_data = self.convert_dict_to_framework([{"k": "a", "t": "2025-05-01", "rv": 1.0}])
+
+        cfg = AsOfJoinConfig(left_time_column="t", right_time_column="t")
+
+        connection = self.get_connection()
+        engine = self.merge_engine_class()(connection) if connection else self.merge_engine_class()()
+
+        # Require the quoted column name 't' AND the requirement wording. A bare
+        # ``t.*(datetime|numeric)`` regex would be too loose: pandas' low-level MergeError
+        # ("...both sides must have numeric dtype") is itself a ValueError and would satisfy
+        # it. The clear guard message names the column, so we match on "'t'".
+        with pytest.raises(ValueError, match=r"'t'.*(datetime|numeric)"):
+            engine.merge_asof(left_data, right_data, Index(("k",)), Index(("k",)), cfg)

@@ -37,6 +37,7 @@ class DuckDBMergeEngine(SqlBaseMergeEngine):
         right_index: Index,
         asof_config: AsOfJoinConfig,
     ) -> Any:
+        self.validate_asof_time_columns(left_data, right_data, asof_config)
         if self.framework_connection is None:
             raise ValueError("Framework connection not set. SQL merge engine requires a connection from the framework.")
         if asof_config.direction == "nearest":
@@ -87,6 +88,13 @@ class DuckDBMergeEngine(SqlBaseMergeEngine):
         final_proj += [f"{quote_ident(rmap[c])} AS {quote_ident(c)}" for c in right_extra]
         result = picked.project(", ".join(final_proj))
         return DuckdbRelation(self.framework_connection, result)
+
+    def _asof_time_column_is_ordered(self, data: Any, column: str) -> bool:
+        idx = data.columns.index(column)
+        t = data.types[idx]
+        dtype_id = getattr(t, "id", str(t)).lower()
+        ordered = ("int", "decimal", "float", "double", "real", "numeric", "date", "time", "interval")
+        return any(k in dtype_id for k in ordered)
 
     def _set_alias(self, data: Any, alias: str) -> Any:
         return data.set_alias(alias)

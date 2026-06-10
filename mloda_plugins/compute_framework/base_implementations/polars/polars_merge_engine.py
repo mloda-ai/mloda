@@ -43,6 +43,7 @@ class PolarsMergeEngine(BaseMergeEngine):
         right_index: Index,
         asof_config: AsOfJoinConfig,
     ) -> Any:
+        self.validate_asof_time_columns(left_data, right_data, asof_config)
         by_left = list(left_index.index)
         by_right = list(right_index.index)
         lt, rt = asof_config.left_time_column, asof_config.right_time_column
@@ -75,6 +76,10 @@ class PolarsMergeEngine(BaseMergeEngine):
         present = self.get_column_names(result)
         result = result.select([c for c in desired if c in present])
         return result
+
+    def _asof_time_column_is_ordered(self, data: Any, column: str) -> bool:
+        dtype = data.collect_schema()[column]
+        return bool(dtype.is_numeric() or dtype.is_temporal())
 
     def get_column_names(self, data: Any) -> list[str]:
         """Get column names from data. Override in subclasses for different data types."""

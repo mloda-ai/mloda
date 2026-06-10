@@ -66,6 +66,33 @@ class BaseMergeEngine(ABC):
     ) -> Any:
         raise ValueError(f"JoinType asof is not yet implemented in {self.__class__.__name__}")
 
+    def validate_asof_time_columns(self, left_data: Any, right_data: Any, asof_config: AsOfJoinConfig) -> None:
+        """Guard that as-of time columns are ordered (datetime / numeric / timedelta).
+
+        Raises a clear ValueError naming the offending column instead of letting the
+        backend surface a cryptic low-level dtype error. This is the seam that opt-in
+        coercion (issue #513) will build on.
+        """
+        for data, column, side in (
+            (left_data, asof_config.left_time_column, "left"),
+            (right_data, asof_config.right_time_column, "right"),
+        ):
+            if not self._asof_time_column_is_ordered(data, column):
+                raise ValueError(
+                    f"As-of {side} time column '{column}' must be datetime, numeric, or timedelta, "
+                    f"but is a non-ordered (e.g. string/object) dtype; cast it before joining."
+                )
+
+    def _asof_time_column_is_ordered(self, data: Any, column: str) -> bool:
+        """Return True if `column` in `data` has an ordered (datetime/numeric/timedelta) dtype.
+
+        Overridden per engine with framework-native dtype detection. Default raises so an
+        asof-capable engine cannot silently skip the guard.
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} must implement _asof_time_column_is_ordered for as-of joins."
+        )
+
     @final
     def merge(self, left_data: Any, right_data: Any, link: Link) -> Any:
         self.check_import()

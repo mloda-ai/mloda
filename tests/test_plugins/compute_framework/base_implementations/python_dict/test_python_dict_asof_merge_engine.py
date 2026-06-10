@@ -56,6 +56,18 @@ class TestPythonDictAsofMergeEngine(AsofMergeEngineTestBase):
         assert len(result) == 1
         assert result[0]["rv"] == "A"
 
+    def test_mixed_time_column_raises_value_error(self) -> None:
+        """A heterogeneous time column (int then str) is not orderable. The guard must scan all
+        non-null values, not just the first, and raise a clear ValueError naming the column
+        instead of letting a raw comparison TypeError surface later."""
+        left = [{"k": "a", "t": 1, "lv": 1}, {"k": "a", "t": "2025-06-01", "lv": 2}]
+        right = [{"k": "a", "t": 1, "rv": 1.0}]
+
+        engine = PythonDictMergeEngine()
+        cfg = AsOfJoinConfig(left_time_column="t", right_time_column="t")
+        with pytest.raises(ValueError, match=r"'t'.*(datetime|numeric)"):
+            engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg)
+
     def test_tie_breaks_ascending_and_is_order_independent(self) -> None:
         """
         Tie determinism: two right rows share the identical boundary timestamp within a

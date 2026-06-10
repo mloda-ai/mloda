@@ -13,7 +13,17 @@ SQL injection prevention follows two layers:
 
 import math
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    import pyarrow as pa
+
+
+def is_ordered_arrow_type(t: "pa.DataType") -> bool:
+    """Return True if a pyarrow DataType is ordered (integer/float/decimal/temporal)."""
+    import pyarrow as pa
+
+    return bool(pa.types.is_integer(t) or pa.types.is_floating(t) or pa.types.is_decimal(t) or pa.types.is_temporal(t))
 
 
 def quote_ident(name: str) -> str:

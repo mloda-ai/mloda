@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from types import ModuleType
 from typing import Any
 
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -100,3 +101,16 @@ _default: PluginRegistry | None = None
 
 def register(cls: type[Any], *, name: str | None = None, source: str = "manual", replace: bool = False) -> str:
     return PluginRegistry.default().register(cls, name=name, source=source, replace=replace)
+
+
+def register_module_plugins(module: ModuleType, *, source: str = "loader") -> list[str]:
+    """Register all plugin classes defined in a module into the default registry."""
+    registry = PluginRegistry.default()
+    keys: list[str] = []
+    for obj in vars(module).values():
+        if not isinstance(obj, type) or obj in _PLUGIN_BASE_TYPES:
+            continue
+        if not issubclass(obj, _PLUGIN_BASE_TYPES) or obj.__module__ != module.__name__:
+            continue
+        keys.append(registry.register(obj, source=source, replace=True))
+    return keys

@@ -6,6 +6,8 @@ import logging
 from types import ModuleType
 from typing import ClassVar, Optional
 
+from mloda.core.abstract_plugins.plugin_registry.plugin_registry import register_module_plugins
+
 logger = logging.getLogger(__name__)
 
 # Missing modules NOT in this set are treated as genuine errors and re-raised; the set is intentionally
@@ -118,8 +120,10 @@ class PluginLoader:
         """Internal function to load a plugin."""
         full_module_name = f"{self.base_package}.{module_path}"
         if full_module_name in sys.modules:
-            self.plugins[full_module_name] = sys.modules[full_module_name]
+            cached_module = sys.modules[full_module_name]
+            self.plugins[full_module_name] = cached_module
             self._add_plugin_to_graph(full_module_name)
+            register_module_plugins(cached_module, source="loader")
             return
 
         try:
@@ -135,6 +139,7 @@ class PluginLoader:
 
         self.plugins[full_module_name] = module
         self._add_plugin_to_graph(full_module_name)
+        register_module_plugins(module, source="loader")
 
     def load_all_plugins(self) -> None:
         """Load all groups (top-level folders) and their plugins."""

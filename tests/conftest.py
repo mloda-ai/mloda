@@ -2,7 +2,17 @@ import os
 from typing import Any
 import pytest
 
+from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
 from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
+
+
+@pytest.fixture(autouse=True)
+def restore_default_plugin_registry() -> Any:
+    """Snapshot and restore the default plugin registry around every test."""
+    registry = PluginRegistry.default()
+    snapshot = registry.snapshot()
+    yield
+    registry.restore(snapshot)
 
 
 @pytest.fixture(autouse=True)

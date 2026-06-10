@@ -6,6 +6,7 @@ from mloda.core.api.plugin_docs import (
     get_feature_group_docs,
     get_compute_framework_docs,
     get_extender_docs,
+    list_registered,
     resolve_feature,
 )
 
@@ -25,6 +26,7 @@ __all__ = [
     "get_feature_group_docs",
     "get_compute_framework_docs",
     "get_extender_docs",
+    "list_registered",
     "resolve_feature",
     # Function extenders
     "Extender",

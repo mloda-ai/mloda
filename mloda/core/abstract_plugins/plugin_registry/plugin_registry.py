@@ -56,6 +56,12 @@ class PluginRegistry:
     ) -> str:
         plugin_type = _resolve_plugin_type(cls)
         key = name if name is not None else f"{cls.__module__}:{cls.__qualname__}"
+        existing_key = next((k for k, entry in self._entries.items() if entry.cls is cls), None)
+        if existing_key is not None and existing_key != key:
+            raise PluginRegistryCollisionError(
+                f"{cls!r} is already registered under key '{existing_key}'; a class holds exactly one key. "
+                f"To rename, unregister('{existing_key}') first, then register under the new key."
+            )
         existing = self._entries.get(key)
         if existing is not None and not replace:
             if existing.cls is cls:
@@ -120,7 +126,7 @@ _default: PluginRegistry | None = None
 _default_lock = threading.Lock()
 
 
-def register(cls: type[Any], *, name: str | None = None, source: str = "manual", replace: bool = False) -> str:
+def register_plugin(cls: type[Any], *, name: str | None = None, source: str = "manual", replace: bool = False) -> str:
     return PluginRegistry.default().register(cls, name=name, source=source, replace=replace)
 
 

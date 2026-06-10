@@ -2,7 +2,8 @@
 
 Defines the contract for PluginRegistry: instance and process-global default,
 register/unregister/get, collision handling, replace, type filtering,
-snapshot/restore, and the module-level register() convenience.
+snapshot/restore, the one-key-per-class invariant, and the module-level
+register_plugin() convenience.
 """
 
 import threading
@@ -17,7 +18,7 @@ from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import (
     PluginRegistry,
     PluginRegistryCollisionError,
-    register,
+    register_plugin,
 )
 
 
@@ -142,6 +143,51 @@ class TestPluginRegistryCollision:
         assert reg.get("replace_key") is _RegistryTestFGB
 
 
+class TestOneKeyPerClassInvariant:
+    """A class holds exactly one registry key; aliasing the same class under a second key must raise."""
+
+    def test_register_same_class_under_second_key_raises(self) -> None:
+        reg = PluginRegistry()
+        default_key = reg.register(_RegistryTestFGA)
+        with pytest.raises(PluginRegistryCollisionError) as exc_info:
+            reg.register(_RegistryTestFGA, name="alias")
+        assert default_key in str(exc_info.value), "the one-key-per-class collision message must name the existing key"
+
+    def test_register_default_key_after_custom_key_raises(self) -> None:
+        reg = PluginRegistry()
+        reg.register(_RegistryTestFGA, name="custom")
+        with pytest.raises(PluginRegistryCollisionError) as exc_info:
+            reg.register(_RegistryTestFGA)
+        assert "custom" in str(exc_info.value), "the one-key-per-class collision message must name the existing key"
+
+    def test_second_key_collision_keeps_only_original_entry(self) -> None:
+        reg = PluginRegistry()
+        default_key = reg.register(_RegistryTestFGA)
+        with pytest.raises(PluginRegistryCollisionError):
+            reg.register(_RegistryTestFGA, name="alias")
+        assert reg.get(default_key) is _RegistryTestFGA
+        assert reg.get("alias") is None
+
+    def test_replace_true_does_not_bypass_different_key_collision(self) -> None:
+        """replace=True only resolves same-key-different-class; a second key for the same class still raises."""
+        reg = PluginRegistry()
+        default_key = reg.register(_RegistryTestFGA)
+        with pytest.raises(PluginRegistryCollisionError) as exc_info:
+            reg.register(_RegistryTestFGA, name="alias", replace=True)
+        assert default_key in str(exc_info.value)
+        assert reg.get("alias") is None
+
+    def test_rename_via_unregister_then_register_succeeds(self) -> None:
+        """The legitimate rename path: unregister the existing key, then register under the new name."""
+        reg = PluginRegistry()
+        reg.register(_RegistryTestFGA, name="old_name")
+        reg.unregister("old_name")
+        key = reg.register(_RegistryTestFGA, name="new_name")
+        assert key == "new_name"
+        assert reg.get("new_name") is _RegistryTestFGA
+        assert reg.get("old_name") is None
+
+
 class TestPluginRegistryLookup:
     def test_get_unknown_key_returns_none(self) -> None:
         reg = PluginRegistry()
@@ -221,16 +267,14 @@ class TestPluginRegistryListRegistered:
         assert isinstance(result, list)
         assert result == [_RegistryTestFGA, _RegistryTestFGB]
 
-    def test_list_registered_dedupes_class_registered_under_multiple_keys(self) -> None:
-        """A class registered under several keys must appear exactly once in list_registered."""
+    def test_list_registered_lists_class_once_after_rejected_alias_attempt(self) -> None:
+        """Aliasing now raises, so the class stays listed exactly once under its original key."""
         reg = PluginRegistry()
         reg.register(_RegistryTestFGA)
-        reg.register(_RegistryTestFGA, name="alias")
+        with pytest.raises(PluginRegistryCollisionError):
+            reg.register(_RegistryTestFGA, name="alias")
         result = reg.list_registered(FeatureGroup)
-        assert _RegistryTestFGA in result
-        assert result.count(_RegistryTestFGA) == 1, (
-            f"list_registered must dedupe by class identity, got {result.count(_RegistryTestFGA)} occurrences"
-        )
+        assert result == [_RegistryTestFGA]
 
     def test_list_registered_is_registration_order_independent(self) -> None:
         reg_ab = PluginRegistry()
@@ -335,16 +379,23 @@ class TestPluginRegistrySnapshotRestore:
         assert reg.list_registered(ComputeFramework) == []
 
 
-class TestModuleLevelRegister:
-    def test_register_writes_into_default_registry(self, default_registry_guard: PluginRegistry) -> None:
-        key = register(_RegistryTestFGA)
+class TestModuleLevelRegisterPlugin:
+    def test_register_plugin_writes_into_default_registry(self, default_registry_guard: PluginRegistry) -> None:
+        key = register_plugin(_RegistryTestFGA)
         assert key == _default_key(_RegistryTestFGA)
         assert default_registry_guard.get(key) is _RegistryTestFGA
         assert PluginRegistry.default().get(key) is _RegistryTestFGA
 
-    def test_register_accepts_same_keyword_arguments(self, default_registry_guard: PluginRegistry) -> None:
-        key = register(_RegistryTestFGB, name="module_level_custom", source="notebook")
+    def test_register_plugin_accepts_same_keyword_arguments(self, default_registry_guard: PluginRegistry) -> None:
+        key = register_plugin(_RegistryTestFGB, name="module_level_custom", source="notebook")
         assert key == "module_level_custom"
         entry = default_registry_guard.get_entry("module_level_custom")
         assert entry.cls is _RegistryTestFGB
         assert entry.source == "notebook"
+
+    def test_old_register_name_removed_from_core_module(self) -> None:
+        """The convenience function is renamed to register_plugin; the old name must be gone."""
+        assert not hasattr(plugin_registry_module, "register"), (
+            "mloda.core.abstract_plugins.plugin_registry.plugin_registry must not expose 'register'; "
+            "the module-level convenience function is named register_plugin"
+        )

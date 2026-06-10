@@ -269,7 +269,7 @@ class PreFilterPlugins:
             if had_concrete and not has_concrete:
                 raise ValueError(
                     "Strict mode filtered out all FeatureGroups: none of the accessible FeatureGroups "
-                    "are registered in the plugin registry. Register them via mloda.user.register() or "
+                    "are registered in the plugin registry. Register them via mloda.user.register_plugin() or "
                     "relax MLODA_PLUGIN_REGISTRY_STRICT to disable strict mode."
                 )
 

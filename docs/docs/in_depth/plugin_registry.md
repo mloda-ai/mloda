@@ -6,7 +6,7 @@ The plugin registry is an explicit catalog of FeatureGroup, ComputeFramework, an
 
 Two kinds of plugin classes exist at runtime:
 
-- **Registered**: classes defined in modules loaded by `PluginLoader`, plus anything registered manually via `register()`.
+- **Registered**: classes defined in modules loaded by `PluginLoader`, plus anything registered manually via `register_plugin()`.
 - **Ad-hoc**: any other subclass, for example a notebook cell, a test double, or a class in a module that was imported but not loaded.
 
 Registration is additive. Defining a subclass and importing its module keeps working exactly as before:
@@ -49,37 +49,37 @@ Replace the assertion with whatever your project requires of every plugin: a doc
 
 ## Manual Registration (Notebooks, Third-Party Packages)
 
-Classes that do not live in loaded plugin modules opt in with `register()`. Registering the same class twice is a no-op. Registering a *different* class under an already taken key raises `PluginRegistryCollisionError`; this happens when a notebook cell that defines a class is edited and re-run, because the re-run creates a new class object under the same key. Pass `replace=True` to accept the newest definition. `unregister()` removes an entry by key.
+Classes that do not live in loaded plugin modules opt in with `register_plugin()`. Registering the same class twice is a no-op. Registering a *different* class under an already taken key raises `PluginRegistryCollisionError`; this happens when a notebook cell that defines a class is edited and re-run, because the re-run creates a new class object under the same key. Pass `replace=True` to accept the newest definition. `unregister()` removes an entry by key.
 
 ```python
 from mloda.provider import FeatureGroup
-from mloda.user import PluginRegistry, register
-from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistryCollisionError
+from mloda.steward import PluginRegistry
+from mloda.user import PluginRegistryCollisionError, register_plugin
 
 class MyFeatureGroup(FeatureGroup):
     """First definition."""
 
-key = register(MyFeatureGroup)
+key = register_plugin(MyFeatureGroup)
 assert PluginRegistry.default().get(key) is MyFeatureGroup
 
 class MyFeatureGroup(FeatureGroup):
     """Edited and re-run, as in a notebook cell: a new class under the same key."""
 
 try:
-    register(MyFeatureGroup)
+    register_plugin(MyFeatureGroup)
     raise AssertionError("expected a collision")
 except PluginRegistryCollisionError:
     pass
 
-register(MyFeatureGroup, replace=True)
+register_plugin(MyFeatureGroup, replace=True)
 assert PluginRegistry.default().get(key) is MyFeatureGroup
 
 PluginRegistry.default().unregister(key)
 ```
 
-`register()` also accepts `name=` for a custom key, for example `register(MyFeatureGroup, name="my_pkg:MyFeatureGroup")`.
+`register_plugin()` also accepts `name=` for a custom key, for example `register_plugin(MyFeatureGroup, name="my_pkg:MyFeatureGroup")`. A class holds exactly one key: registering an already registered class under a second key raises `PluginRegistryCollisionError` naming the existing key; rename by unregistering the existing key first.
 
-The registry does not watch `importlib.reload()`: reloading a module creates new class objects while the registry keeps the old ones, so strict mode and `registered_only=True` would treat the reloaded classes as unregistered. After a reload, re-run the `PluginLoader` scope that covers the module (loading is idempotent and re-registers) or call `register(..., replace=True)` for the affected classes.
+The registry does not watch `importlib.reload()`: reloading a module creates new class objects while the registry keeps the old ones, so strict mode and `registered_only=True` would treat the reloaded classes as unregistered. After a reload, re-run the `PluginLoader` scope that covers the module (loading is idempotent and re-registers) or call `register_plugin(..., replace=True)` for the affected classes.
 
 ## Strict Mode
 
@@ -109,7 +109,7 @@ Three behavioral notes:
 
 - Strict mode governs engine resolution only. The catalog APIs (`get_*_docs()`, `list_registered()`) never consult strict mode: the docs functions keep walking all subclasses unless you pass `registered_only=True`, so in strict mode the catalog can show plugins the engine will not resolve. Pass `registered_only=True` to keep catalog and engine views consistent.
 - In `"warn"` mode, each unregistered class is reported once per process, not once per run, so long-running services do not repeat identical warnings forever.
-- In `"strict"` mode, FeatureGroups explicitly enabled on the `PluginCollector` but missing from the registry are dropped with a warning naming them; if strict filtering removes every FeatureGroup, the run fails with an error that points to `register()` and the environment variable.
+- In `"strict"` mode, FeatureGroups explicitly enabled on the `PluginCollector` but missing from the registry are dropped with a warning naming them; if strict filtering removes every FeatureGroup, the run fails with an error that points to `register_plugin()` and the environment variable.
 
 Recommended rollout for deployments: stay on `"off"`, switch CI or staging to `"warn"` and watch the logs for "not registered" warnings, then move to `"strict"` once they are gone. This repository's own CI (tox) runs with `MLODA_PLUGIN_REGISTRY_STRICT=warn`.
 
@@ -133,7 +133,7 @@ def test_my_feature_group_registration(isolated_plugin_registry):
     assert isolated_plugin_registry.get(key) is MyFeatureGroup
 ```
 
-The fixture yields `PluginRegistry.default()`, so registrations made through it (or through plain `register()`) are rolled back on teardown.
+The fixture yields `PluginRegistry.default()`, so registrations made through it (or through plain `register_plugin()`) are rolled back on teardown.
 
 ## Related Documentation
 

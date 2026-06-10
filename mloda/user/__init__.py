@@ -30,7 +30,10 @@ from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 
 # Plugin registry
-from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry, register
+from mloda.core.abstract_plugins.plugin_registry.plugin_registry import (
+    PluginRegistryCollisionError,
+    register_plugin,
+)
 
 # Config loading
 from mloda.core.api.feature_config.loader import load_features_from_config
@@ -76,8 +79,8 @@ __all__ = [
     "PluginLoader",
     "PluginCollector",
     # Plugin registry
-    "PluginRegistry",
-    "register",
+    "PluginRegistryCollisionError",
+    "register_plugin",
     # Streaming API
     "stream_all",
     # Config loading

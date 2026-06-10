@@ -28,7 +28,7 @@ import pytest
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry, register
+from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry, register_plugin
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins, RedefinitionConflictError
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
@@ -170,7 +170,7 @@ class TestEngineStrictModeOff:
 
 class TestEngineStrictModeStrict:
     def test_strict_mode_keeps_only_registered_feature_groups(self) -> None:
-        register(_StrictRegisteredFG)
+        register_plugin(_StrictRegisteredFG)
         collector = PluginCollector().set_strict_mode("strict")
         accessible = PreFilterPlugins(_cfws(), collector).get_accessible_plugins()
         assert _StrictRegisteredFG in accessible
@@ -192,7 +192,7 @@ class TestEngineStrictModeStrict:
         )
         assert v1 is not v2, "sanity: two distinct class objects with the same (module, qualname)"
 
-        register(_StrictConflictBystanderFG)
+        register_plugin(_StrictConflictBystanderFG)
         collector = PluginCollector().set_strict_mode("strict")
 
         accessible = None
@@ -244,7 +244,7 @@ class TestEngineStrictModeEmptyResult:
 class TestEngineStrictModeEnabledButUnregistered:
     def test_strict_mode_warns_when_enabled_class_is_dropped(self, caplog: pytest.LogCaptureFixture) -> None:
         """Explicitly enabled but unregistered classes silently vanish today; that must warn."""
-        register(_StrictEnabledRegisteredFG)
+        register_plugin(_StrictEnabledRegisteredFG)
         collector = PluginCollector().set_strict_mode("strict")
         collector.add_enabled_feature_group_classes({_StrictEnabledUnregisteredFG, _StrictEnabledRegisteredFG})
         with caplog.at_level(logging.WARNING):
@@ -378,7 +378,7 @@ class TestEngineStrictModeAbstractClasses:
         off_accessible = PreFilterPlugins(_cfws(), PluginCollector()).get_accessible_plugins()
         assert _StrictAbstractInfraFG in off_accessible, "sanity: off mode resolves abstract subclasses"
 
-        register(_StrictRegisteredFG)
+        register_plugin(_StrictRegisteredFG)
         collector = PluginCollector().set_strict_mode("strict")
         accessible = PreFilterPlugins(_cfws(), collector).get_accessible_plugins()
         assert _StrictAbstractInfraFG in accessible, (
@@ -413,7 +413,7 @@ class TestEngineStrictModeAbstractClasses:
 class TestEnvWithoutCollector:
     def test_env_strict_applies_without_collector(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv(ENV_VAR, "strict")
-        register(_StrictRegisteredFG)
+        register_plugin(_StrictRegisteredFG)
         accessible = PreFilterPlugins(_cfws(), None).get_accessible_plugins()
         assert _StrictRegisteredFG in accessible
         assert _StrictUnregisteredFG not in accessible

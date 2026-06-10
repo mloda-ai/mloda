@@ -13,7 +13,7 @@ to this module; the autouse conftest fixture restores the default registry.
 from typing import Any, Optional
 
 from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet
-from mloda.user import Feature, PluginCollector, PluginLoader, mloda, register
+from mloda.user import Feature, PluginCollector, PluginLoader, mloda, register_plugin
 
 FEAT = "strict_e2e_run_all_feature_unique_xyz"
 
@@ -42,7 +42,7 @@ class TestStrictModeEndToEnd:
         # Non-regression guard for strict e2e.
         loader = PluginLoader()
         loader.load_matching("compute_framework", "*python_dict*")
-        register(StrictE2ERunAllFeatureGroup)
+        register_plugin(StrictE2ERunAllFeatureGroup)
 
         collector = PluginCollector().set_strict_mode("strict")
         result = mloda.run_all(

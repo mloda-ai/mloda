@@ -1,7 +1,8 @@
 """Tests for the registry-backed enumeration/docs rebuild (issue #526, work item 4).
 
 Contract: the registry becomes a first-class enumeration source next to the
-__subclasses__() walk. mloda.user exports PluginRegistry and register. A new
+__subclasses__() walk. mloda.user exports register_plugin but not PluginRegistry;
+PluginRegistry is a steward concern and lives in mloda.steward. A
 list_registered(plugin_type) lives in mloda.core.api.plugin_docs and is
 re-exported from mloda.user and mloda.steward; it returns the default-registry
 classes for a plugin base type, sorted by registry key. The docs functions gain
@@ -21,7 +22,7 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
-from mloda.core.abstract_plugins.plugin_registry.plugin_registry import register as registry_register
+from mloda.core.abstract_plugins.plugin_registry.plugin_registry import register_plugin as registry_register
 from mloda.core.api.plugin_docs import (
     get_compute_framework_docs,
     get_extender_docs,
@@ -30,14 +31,18 @@ from mloda.core.api.plugin_docs import (
 
 
 class TestPublicRegistryExports:
-    def test_user_exports_plugin_registry_and_register(self) -> None:
-        from mloda.user import PluginRegistry as user_plugin_registry
-        from mloda.user import register as user_register
+    def test_user_exports_register_plugin_but_not_plugin_registry(self) -> None:
+        from mloda.user import register_plugin as user_register_plugin
 
-        assert user_plugin_registry is PluginRegistry
-        assert user_register is registry_register
-        assert "PluginRegistry" in mloda.user.__all__
-        assert "register" in mloda.user.__all__
+        assert user_register_plugin is registry_register
+        assert "register_plugin" in mloda.user.__all__
+        assert "register" not in mloda.user.__all__, "the old 'register' name must be gone from mloda.user"
+        assert "PluginRegistry" not in mloda.user.__all__, "PluginRegistry is a steward export, not a user one"
+        assert not hasattr(mloda.user, "PluginRegistry")
+
+    def test_steward_exports_plugin_registry(self) -> None:
+        assert getattr(mloda.steward, "PluginRegistry") is PluginRegistry
+        assert "PluginRegistry" in mloda.steward.__all__
 
 
 class TestListRegisteredDocsApi:

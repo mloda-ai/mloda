@@ -24,8 +24,8 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import (
     PluginRegistry,
-    register,
     register_module_plugins,
+    register_plugin,
 )
 from mloda.user import PluginLoader
 
@@ -194,8 +194,8 @@ class TestLoaderIgnoresTransientSubclasses:
             "ad-hoc subclasses defined outside loaded plugin modules must stay out of the registry"
         )
 
-        key = register(_AdHocFeatureGroup)
-        assert registry.is_registered(_AdHocFeatureGroup), "explicit register() must opt a class in"
+        key = register_plugin(_AdHocFeatureGroup)
+        assert registry.is_registered(_AdHocFeatureGroup), "explicit register_plugin() must opt a class in"
         assert registry.get_entry(key).source == "manual"
 
         assert registry.is_registered(_python_dict_framework_cls()), (

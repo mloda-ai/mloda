@@ -16,6 +16,9 @@ from mloda.core.abstract_plugins.function_extender import (
     ExtenderHook,
 )
 
+# Plugin registry administration
+from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
+
 __all__ = [
     # Plugin inspection
     "FeatureGroupInfo",
@@ -31,4 +34,6 @@ __all__ = [
     # Function extenders
     "Extender",
     "ExtenderHook",
+    # Plugin registry administration
+    "PluginRegistry",
 ]

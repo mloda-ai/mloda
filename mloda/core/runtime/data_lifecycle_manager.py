@@ -125,6 +125,13 @@ class DataLifecycleManager:
                 "FlightServer, or use SYNC or THREADING mode."
             )
 
+        # A result with no visible columns has already been judged by the empty-result guard in
+        # run_validate_output_features: it only reaches here when the FeatureGroup opted in via
+        # allow_empty_result, or for PythonDict's schema-less empties. Selecting named columns from
+        # a schema-less result is meaningless and must not raise; the caller receives it unchanged.
+        if not cfw._extract_column_names(data):
+            return data
+
         return cfw.select_data_by_column_names(data, selected_feature_names, column_ordering=self.column_ordering)
 
     def get_results(self) -> list[Any]:

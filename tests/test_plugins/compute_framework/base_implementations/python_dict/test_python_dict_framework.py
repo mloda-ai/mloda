@@ -52,12 +52,26 @@ class TestPythonDictFramework:
         assert result == input_data
 
     def test_transform_empty_data_returns_empty_list(self) -> None:
-        """Empty data is propagated as [] (the framework never judges emptiness)."""
+        """The representational empties [] and {} are propagated as [] (the framework
+        never judges emptiness). None is NOT an empty: it raises, pinned by
+        ``test_transform_none_raises``."""
         framework = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
-        assert framework.transform(None, set()) == []
         assert framework.transform([], set()) == []
         assert framework.transform({}, set()) == []
+
+    def test_transform_none_raises(self) -> None:
+        """``None`` is a MISSING result (state A), not a representational empty.
+
+        Every schema-bearing framework rejects ``None`` in ``transform``; PythonDict must
+        do the same instead of silently converting it to ``[]``. Only ``[]`` and ``{}``
+        are PythonDict's representational empties; ``None`` must reach the
+        unsupported-data tail and raise.
+        """
+        framework = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+        with pytest.raises(ValueError, match="Data type .* is not supported"):
+            framework.transform(None, set())
 
     def test_transform_invalid_data(self) -> None:
         """Test that invalid data types raise errors."""
@@ -70,7 +84,7 @@ class TestPythonDictFramework:
     def test_transform_falsy_unsupported_data_raises(self, falsy_value: Any) -> None:
         """Falsy values of unsupported types are rejected, not swallowed as empty.
 
-        The empty short-circuit applies only to None, [] and {}. Other falsy
+        The empty short-circuit applies only to [] and {}. Other falsy
         values (0, False, "") must reach the unsupported-data tail and raise.
         """
         framework = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())

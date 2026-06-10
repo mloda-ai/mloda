@@ -11,10 +11,10 @@ FINAL requested features when ``feature_group.allow_empty_result()`` is False, a
   empty set).
 
 State A, a ``None`` result (no result at all), never reaches the guard: the method returns
-early when ``self.data is None``. A ``None`` result is rejected UPSTREAM instead:
-schema-bearing frameworks raise in ``transform`` (e.g. pandas: ``Data <class 'NoneType'>
-is not supported``), while python_dict's ``transform`` converts ``None`` to ``[]``, which
-then hits the guard as state B.
+early when ``self.data is None``. A ``None`` result is rejected UPSTREAM instead: every
+framework raises in ``transform`` (e.g. pandas: ``Data <class 'NoneType'> is not
+supported``; python_dict: ``Data type <class 'NoneType'> is not supported by
+PythonDictFramework``), so state A never reaches the guard on any backend.
 
 State C, a schema-bearing result with ZERO ROWS, MUST SUCCEED. This is the key behavior:
 a zero-row but column-bearing frame is a valid, well-typed empty result.
@@ -164,6 +164,35 @@ class EmptyResultAllowedFeatureGroup(FeatureGroup, _EmptyResultMatchData):
         return {"empty_result_allowed_col"}
 
 
+class EmptyResultSchemalessAllowedFeatureGroup(FeatureGroup, _EmptyResultMatchData):
+    """Root FeatureGroup that yields a ZERO-COLUMN result and DECLARES empty results are allowed.
+
+    Unlike ``EmptyResultAllowedFeatureGroup`` (one empty column, schema-less only on
+    python_dict), the ``{}`` returned here is schema-less (state B) on EVERY framework:
+    ``transform`` produces a frame with zero columns. With ``allow_empty_result()`` True the
+    output guard accepts it, and the framework must hand the zero-column result through to
+    the caller unchanged (result selection has no columns to match against and must not
+    re-judge what the guard already accepted).
+    """
+
+    @classmethod
+    def allow_empty_result(cls) -> bool:
+        return True
+
+    @classmethod
+    def input_data(cls) -> Optional[BaseInputData]:
+        return DataCreator(supports_features={"empty_result_schemaless_col"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        # Zero columns -> schema-less (state B) in every framework, accepted via the opt-in.
+        return {}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"empty_result_schemaless_col"}
+
+
 class EmptyResultNoneFeatureGroup(FeatureGroup, _EmptyResultMatchData):
     """Root FeatureGroup whose ``calculate_feature`` returns ``None`` (state A)."""
 
@@ -183,6 +212,7 @@ class EmptyResultNoneFeatureGroup(FeatureGroup, _EmptyResultMatchData):
 
 _ENABLED_DEFAULT = PluginCollector.enabled_feature_groups({EmptyResultDefaultFeatureGroup})
 _ENABLED_ALLOWED = PluginCollector.enabled_feature_groups({EmptyResultAllowedFeatureGroup})
+_ENABLED_SCHEMALESS_ALLOWED = PluginCollector.enabled_feature_groups({EmptyResultSchemalessAllowedFeatureGroup})
 _ENABLED_NONE = PluginCollector.enabled_feature_groups({EmptyResultNoneFeatureGroup})
 
 

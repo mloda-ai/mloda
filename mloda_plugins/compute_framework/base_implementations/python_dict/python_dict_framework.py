@@ -72,8 +72,8 @@ class PythonDictFramework(ComputeFramework):
 
     def _is_schemaless_empty(self, data: Any) -> bool:
         """``[]`` and ``{}`` are PythonDict's representational empties; ``transform``
-        collapses both to ``[]``. None is excluded: filter validation never sees a
-        None result path.
+        collapses both to ``[]``. None is excluded: ``transform`` rejects None as an
+        unsupported type, so filter validation never sees a None result path.
         """
         return isinstance(data, (list, dict)) and not data
 
@@ -122,7 +122,10 @@ class PythonDictFramework(ComputeFramework):
             ValueError: If data type is not supported
         """
 
-        if data is None or (isinstance(data, (list, dict)) and not data):
+        # Only the representational empties [] and {} short-circuit. None is a missing
+        # return value (state A), not an empty result, and falls through to the
+        # unsupported-type rejection below, regardless of allow_empty_result().
+        if isinstance(data, (list, dict)) and not data:
             return []
 
         transformed_data = self.apply_compute_framework_transformer(data)

@@ -15,6 +15,7 @@ from mloda.user import mloda
 from tests.test_plugins.compute_framework.test_tooling.empty_result_run_all_test_base import (
     EmptyResultRunAllTestBase,
     _ENABLED_NONE,
+    _ENABLED_SCHEMALESS_ALLOWED,
 )
 
 
@@ -48,3 +49,26 @@ def test_empty_result_none_raises_pandas(flight_server: Any) -> None:
             parallelization_modes={ParallelizationMode.SYNC},
             flight_server=flight_server,
         )
+
+
+def test_zero_column_allowed_succeeds_pandas(flight_server: Any) -> None:
+    """An opted-in FG returning ``{}`` (zero columns) must succeed end-to-end on pandas.
+
+    The output guard accepts the schema-less result because ``allow_empty_result()`` is
+    True; result selection must then pass the zero-column frame through unchanged instead
+    of trying (and failing) to match feature names against an empty column set. The caller
+    receives exactly one result that carries zero columns.
+    """
+    feature = Feature(name="empty_result_schemaless_col")
+
+    result = mloda.run_all(
+        [feature],
+        compute_frameworks=["PandasDataFrame"],
+        plugin_collector=_ENABLED_SCHEMALESS_ALLOWED,
+        parallelization_modes={ParallelizationMode.SYNC},
+        flight_server=flight_server,
+    )
+
+    assert len(result) == 1
+    # Tolerant zero-column check: pandas DataFrame and pa.Table both expose .columns.
+    assert len(result[0].columns) == 0

@@ -15,9 +15,11 @@ from typing import Any
 
 import pytest
 
+from mloda.core.abstract_plugins.components.credential import Credential
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.user import Options
 from mloda_plugins.feature_group.input_data.read_db import ReadDB
+from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
@@ -206,6 +208,25 @@ class TestReadDBHint:
         resolved = _AlwaysValidCredsDB.match_subclass_data_access(dac, feature_names=["any"], options=Options())
         assert isinstance(resolved, dict)
         assert resolved.get("db_path") == str(db_a)
+
+
+# ----------------------------------------------------------------------------
+# Typed Credential through the real SQLITEReader matcher (issue #511 pin).
+# ----------------------------------------------------------------------------
+
+
+class TestSqliteReaderMatchesTypedCredential:
+    """Regression pin: a typed ``Credential`` flows end-to-end through the
+    ReadDB matcher path and is matched as a plain credentials dict, never None.
+    """
+
+    def test_credential_kwarg_form_is_matched_by_sqlite_reader(self, two_sqlite_dbs: tuple[Path, Path]) -> None:
+        db_a, _ = two_sqlite_dbs
+        dac = DataAccessCollection(credentials=Credential(sqlite=str(db_a)))
+        resolved = SQLITEReader.match_subclass_data_access(dac, feature_names=["id"], options=Options())
+        assert resolved is not None
+        assert isinstance(resolved, dict)
+        assert resolved[SQLITEReader.db_path()] == str(db_a)
 
 
 # Sanity check that fixtures are isolated (parallel-safety smoke).

@@ -1,5 +1,8 @@
 from typing import Any, Callable
 
+from mloda.core.abstract_plugins.components.credential import Credential
+from mloda.core.abstract_plugins.components.hashable_dict import HashableDict
+
 
 _KIND_TO_ATTR: dict[str, str] = {
     "connection": "connections",
@@ -23,17 +26,33 @@ class DataAccessCollection:
         connections: dict[str, Any] | set[Any] | list[Any] | None = None,
         files: dict[str, str] | set[str] | list[str] | None = None,
         folders: dict[str, str] | set[str] | list[str] | None = None,
-        credentials: dict[str, Any] | list[Any] | None = None,
+        credentials: dict[str, Any] | list[Any] | Credential | None = None,
         column_to_file: dict[str, str] | None = None,
     ) -> None:
         """Build the collection from named or auto-named resources.
 
-        Each resource kind accepts a ``dict[handle, value]`` to register named
-        resources, or a ``set``/``list`` whose entries get auto-assigned handles.
+        Accepted shapes, by intent:
+          * ``dict[handle, value]``: named resources, for multi-source setups
+            where a consumer is pointed at one entry via
+            ``Options(data_access_handle=...)``.
+          * ``set`` / ``list`` of bare values: single-source convenience;
+            entries get internal auto-handles the user never references.
+          * ``credentials`` additionally accepts a single ``Credential`` (or
+            ``Credential`` entries in the list/dict forms). A credential is
+            itself a dict, so the bare ``{connector_id: slot}`` shape would be
+            read as ``{handle: value}``; the typed form removes that ambiguity
+            and is unwrapped to a plain dict at registration. Named-form
+            credential values must be mappings (``dict``, ``HashableDict``, or
+            ``Credential``); anything else raises an early mis-wrap
+            ``ValueError``. ``HashableDict`` stays accepted for pre-0.7 call
+            sites. Credentials have no ``set`` form (dicts are unhashable).
+
         ``column_to_file`` maps a column to either a file handle or a file path
         (paths are normalized to their handle).
         """
         self._auto_handles: set[str] = set()
+
+        credentials = self._normalize_credentials(credentials)
 
         # Start with user-supplied dict entries; collect non-dict inputs for a second pass
         # so that auto-handle numbering can dodge every user-supplied handle (across all kinds).
@@ -50,6 +69,41 @@ class DataAccessCollection:
         self._assign_auto_handles("credentials", self.credentials, credentials)
 
         self.column_to_file: dict[str, str] | None = self._normalize_column_to_file(column_to_file)
+
+    @classmethod
+    def _normalize_credentials(
+        cls, credentials: dict[str, Any] | list[Any] | Credential | None
+    ) -> dict[str, Any] | list[Any] | None:
+        if credentials is None:
+            return None
+        if isinstance(credentials, Credential):
+            return [credentials.data]
+        if isinstance(credentials, dict):
+            context_keys = tuple(credentials.keys())
+            return {
+                handle: cls._validated_credential_value(handle, value, context_keys)
+                for handle, value in credentials.items()
+            }
+        return [cls._unwrap_credential(entry) for entry in credentials]
+
+    @staticmethod
+    def _unwrap_credential(value: Any) -> Any:
+        if isinstance(value, Credential):
+            return value.data
+        return value
+
+    @classmethod
+    def _validated_credential_value(cls, handle: str, value: Any, context_keys: tuple[str, ...] | None = None) -> Any:
+        unwrapped = cls._unwrap_credential(value)
+        if isinstance(unwrapped, (dict, HashableDict)):
+            return unwrapped
+        fields = ", ".join(f"'{key}': ..." for key in (context_keys if context_keys is not None else (handle,)))
+        raise ValueError(
+            f"credentials value for handle '{handle}' is not a mapping. A bare dict is read as "
+            f"{{handle: credential}}, so a single credential must be wrapped: use the list form "
+            f"credentials=[{{{fields}}}], the typed form credentials=Credential({{{fields}}}), "
+            f"or the named form credentials={{'my-db': {{{fields}}}}}."
+        )
 
     @staticmethod
     def _copy_if_dict(value: Any) -> dict[str, Any]:
@@ -135,7 +189,7 @@ class DataAccessCollection:
         """Register credentials. ``add_credentials(value)`` auto-names them; ``add_credentials(handle, value)`` names them."""
         handle, value = self._resolve_mutator_args("credentials", args)
         self._reject_duplicate(handle)
-        self.credentials[handle] = value
+        self.credentials[handle] = self._validated_credential_value(handle, value)
 
     def _resolve_mutator_args(self, kind: str, args: tuple[Any, ...]) -> tuple[str, Any]:
         if len(args) == 1:
@@ -214,7 +268,10 @@ class DataAccessCollection:
         candidate_handles = [h for h, _ in matches]
         all_auto = all(h in self._auto_handles for h in candidate_handles)
         if all_auto:
-            bullets = "\n".join(f"  - {v}" for _, v in matches)
+            if kind == "credentials":
+                bullets = "\n".join(f"  - {self._redacted_credential(v)}" for _, v in matches)
+            else:
+                bullets = "\n".join(f"  - {v}" for _, v in matches)
             raise ValueError(
                 f"Ambiguous resolve for kind '{kind}': {len(matches)} matches:\n"
                 f"{bullets}\n"
@@ -225,3 +282,11 @@ class DataAccessCollection:
             f"Ambiguous resolve for kind '{kind}': {len(matches)} candidates {candidate_handles}; "
             f"set 'data_access_handle' in Options to disambiguate."
         )
+
+    @staticmethod
+    def _redacted_credential(value: Any) -> str:
+        if isinstance(value, HashableDict):
+            value = value.data
+        if isinstance(value, dict):
+            return "{" + ", ".join(f"'{key}': '***'" for key in value) + "}"
+        return "'***'"

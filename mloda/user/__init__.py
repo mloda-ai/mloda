@@ -19,6 +19,7 @@ from mloda.core.filter.filter_type_enum import FilterType
 
 # Data access
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.credential import Credential
 
 # Types
 from mloda.core.abstract_plugins.components.data_types import DataType
@@ -63,6 +64,7 @@ __all__ = [
     "FilterType",
     # Data access
     "DataAccessCollection",
+    "Credential",
     # Types
     "DataType",
     "ParallelizationMode",

@@ -22,7 +22,7 @@ A DAC holds resources of four kinds:
 
 1.  **Files:** the exact location of files, e.g. `path/folder/text.txt`.
 2.  **Folders:** directories where files are located, e.g. `path/folder/`.
-3.  **Credentials:** dicts with the information needed to reach a data source, e.g. `{host: example.com, password: example}`.
+3.  **Credentials:** the information needed to reach a data source, expressed as a typed `Credential` (recommended) or a plain dict, e.g. `Credential(host="example.com", password="example")`.
 4.  **Connections:** already-initialized connection objects (database connections, Spark sessions, Iceberg catalogs, etc.).
 
 When the collection holds more than one resource of the same kind, you can name them with stable handles and disambiguate per feature via `Options(context={"data_access_handle": "..."})`. See [Named Data Access Handles](named-data-access-handles.md) for the full naming model, the resolution rule, and the available error shapes; for the simple single-source cases below, naming is optional.
@@ -30,13 +30,14 @@ When the collection holds more than one resource of the same kind, you can name 
 You can apply these options like so:
 
 ``` python
+from mloda.user import Credential, DataAccessCollection
 
 data_access = DataAccessCollection()
 
 # Add file paths, folder paths, credentials, and connection objects
 data_access.add_file('path/to/folder/text.txt')
 data_access.add_folder('path/to/folder/')
-data_access.add_credentials({'host': 'example.com', 'password': 'example'})
+data_access.add_credentials(Credential(host='example.com', password='example'))
 data_access.add_connection('InitializedDBConnection')
 
 mloda.run_all(

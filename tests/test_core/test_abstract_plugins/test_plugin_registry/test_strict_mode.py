@@ -342,22 +342,25 @@ class TestEngineStrictModeWarn:
             type[FeatureGroup],
             type("WarnDedupSameNameFG", (FeatureGroup,), {"__module__": "warn_dedup_fake_module_b"}),
         )
-        assert fg_a is not fg_b, "sanity: two distinct class objects sharing __name__"
+        try:
+            assert fg_a is not fg_b, "sanity: two distinct class objects sharing __name__"
 
-        collector = PluginCollector().set_strict_mode("warn")
-        with caplog.at_level(logging.WARNING):
-            PreFilterPlugins(_cfws(), collector)
-        records = [
-            rec
-            for rec in caplog.records
-            if rec.name == "mloda.core.prepare.accessible_plugins" and "not registered" in rec.getMessage()
-        ]
-        message = " ".join(rec.getMessage() for rec in records)
-
-        # Drop strong refs before asserting so a failure cannot leak the classes
-        # into FeatureGroup.__subclasses__() for other tests in this worker.
-        del fg_a, fg_b
-        gc.collect()
+            collector = PluginCollector().set_strict_mode("warn")
+            with caplog.at_level(logging.WARNING):
+                PreFilterPlugins(_cfws(), collector)
+            records = [
+                rec
+                for rec in caplog.records
+                if rec.name == "mloda.core.prepare.accessible_plugins" and "not registered" in rec.getMessage()
+            ]
+            message = " ".join(rec.getMessage() for rec in records)
+        finally:
+            # Drop strong refs even when an assertion fails or PreFilterPlugins raises,
+            # so the fake-module classes cannot leak into FeatureGroup.__subclasses__()
+            # for other tests in this worker. caplog records hold only strings, so the
+            # message assertions below stay valid after the classes are collected.
+            del fg_a, fg_b
+            gc.collect()
 
         assert "warn_dedup_fake_module_a:WarnDedupSameNameFG" in message, (
             "warn mode must report unregistered classes with module-qualified identifiers"

@@ -13,6 +13,7 @@ and text_cleaning). The autouse conftest fixture restores the default registry
 around every test, so clearing it inside a test is safe.
 """
 
+import gc
 import inspect
 import sys
 import types
@@ -242,17 +243,29 @@ class TestLoaderRegistrationSkipsAbstractClasses:
         setattr(module, "_AbstractHelperBaseFG", _AbstractHelperBaseFG)
         setattr(module, "_ConcreteLeafProbeFG", _ConcreteLeafProbeFG)
 
-        assert inspect.isabstract(_AbstractHelperBaseFG), "sanity: the helper base double is abstract"
-        assert not inspect.isabstract(_ConcreteLeafProbeFG), "sanity: the leaf double is concrete"
+        try:
+            assert inspect.isabstract(_AbstractHelperBaseFG), "sanity: the helper base double is abstract"
+            assert not inspect.isabstract(_ConcreteLeafProbeFG), "sanity: the leaf double is concrete"
 
-        register_module_plugins(module)
+            register_module_plugins(module)
 
-        assert registry.is_registered(_ConcreteLeafProbeFG), (
-            "concrete plugin classes defined in a loaded module must be registered"
-        )
-        assert not registry.is_registered(_AbstractHelperBaseFG), (
-            "abstract helper base classes must not be auto-registered by register_module_plugins"
-        )
+            assert registry.is_registered(_ConcreteLeafProbeFG), (
+                "concrete plugin classes defined in a loaded module must be registered"
+            )
+            assert not registry.is_registered(_AbstractHelperBaseFG), (
+                "abstract helper base classes must not be auto-registered by register_module_plugins"
+            )
+        finally:
+            # Drop every strong ref to the fake-module doubles so they cannot poison
+            # other tests in this worker via FeatureGroup.__subclasses__(): their fake
+            # __module__ has no importable file, so version()/class_source_hash raises
+            # TypeError for them. The conftest fixture restores the registry snapshot
+            # after the test, so clearing the loader-registered entry here is safe.
+            registry.clear()
+            delattr(module, "_AbstractHelperBaseFG")
+            delattr(module, "_ConcreteLeafProbeFG")
+            del _AbstractHelperBaseFG, _ConcreteLeafProbeFG, module
+            gc.collect()
 
     def test_loaded_scope_registers_concrete_classes_but_not_abstract_bases(self) -> None:
         """End to end through PluginLoader: the text_cleaning scope is dependency-free and its

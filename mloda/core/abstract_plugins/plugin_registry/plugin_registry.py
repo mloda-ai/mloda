@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import threading
 from dataclasses import dataclass
 from types import ModuleType
@@ -134,6 +135,8 @@ def register_module_plugins(module: ModuleType, *, source: str = "loader") -> li
         if not isinstance(obj, type) or obj in _PLUGIN_BASE_TYPES:
             continue
         if not issubclass(obj, _PLUGIN_BASE_TYPES) or obj.__module__ != module.__name__:
+            continue
+        if inspect.isabstract(obj):
             continue
         keys.append(registry.register(obj, source=source, replace=True))
     return keys

@@ -15,11 +15,13 @@ env writes go through monkeypatch only.
 """
 
 import gc
+import inspect
 import linecache
 import logging
 import sys
 import textwrap
-from typing import cast
+from abc import abstractmethod
+from typing import Any, cast
 
 import pytest
 
@@ -55,6 +57,27 @@ class _StrictEnabledUnregisteredFG(FeatureGroup):
 
 class _StrictEnabledRegisteredFG(FeatureGroup):
     """Local double passed as enabled and registered, so strict resolution does not end empty."""
+
+
+class _StrictAbstractInfraFG(FeatureGroup):
+    """Abstract local double, never registered; strict and warn must treat it as infrastructure.
+
+    match_feature_group_criteria is overridden to False because the default falls back to
+    cls(), which raises TypeError on abstract classes. Real abstract bases override matching
+    too; this keeps the double inert for other tests' feature resolution in this worker.
+    """
+
+    @abstractmethod
+    def _strict_abstract_infra_hook(self) -> None: ...
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: Any,
+        options: Any,
+        data_access_collection: Any = None,
+    ) -> bool:
+        return False
 
 
 def _cfws() -> set[type[ComputeFramework]]:
@@ -341,6 +364,49 @@ class TestEngineStrictModeWarn:
         )
         assert "warn_dedup_fake_module_b:WarnDedupSameNameFG" in message, (
             "warn mode must report BOTH same-name classes from different modules, not collapse them on bare __name__"
+        )
+
+
+class TestEngineStrictModeAbstractClasses:
+    """Abstract classes never auto-register (they are infrastructure, not plugins), so strict and
+    warn modes must leave them alone instead of filtering or flagging them as unregistered."""
+
+    def test_strict_mode_keeps_unregistered_abstract_classes(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        assert inspect.isabstract(_StrictAbstractInfraFG), "sanity: the local double is abstract"
+
+        monkeypatch.delenv(ENV_VAR, raising=False)
+        off_accessible = PreFilterPlugins(_cfws(), PluginCollector()).get_accessible_plugins()
+        assert _StrictAbstractInfraFG in off_accessible, "sanity: off mode resolves abstract subclasses"
+
+        register(_StrictRegisteredFG)
+        collector = PluginCollector().set_strict_mode("strict")
+        accessible = PreFilterPlugins(_cfws(), collector).get_accessible_plugins()
+        assert _StrictAbstractInfraFG in accessible, (
+            "strict mode must not filter abstract infrastructure classes (parity with off mode); "
+            "abstract classes cannot be loader-registered, so filtering them breaks resolution"
+        )
+        assert _StrictUnregisteredFG not in accessible, (
+            "sanity: strict mode still filters concrete unregistered classes"
+        )
+
+    def test_warn_mode_does_not_name_abstract_classes(self, caplog: pytest.LogCaptureFixture) -> None:
+        assert inspect.isabstract(_StrictAbstractInfraFG), "sanity: the local double is abstract"
+
+        collector = PluginCollector().set_strict_mode("warn")
+        with caplog.at_level(logging.WARNING):
+            PreFilterPlugins(_cfws(), collector)
+        message = " ".join(
+            rec.getMessage()
+            for rec in caplog.records
+            if rec.name == "mloda.core.prepare.accessible_plugins" and "not registered" in rec.getMessage()
+        )
+        assert _StrictUnregisteredFG.__name__ in message, (
+            "sanity: the aggregated warning still names concrete unregistered classes"
+        )
+        abstract_identifier = f"{_StrictAbstractInfraFG.__module__}:{_StrictAbstractInfraFG.__qualname__}"
+        assert abstract_identifier not in message, (
+            "warn mode must not name abstract infrastructure classes as unregistered plugins; "
+            "they cannot be registered, so warning about them is pure noise"
         )
 
 

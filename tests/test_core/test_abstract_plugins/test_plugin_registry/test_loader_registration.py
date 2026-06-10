@@ -1,24 +1,32 @@
 """Tests for the loader -> registry discovery funnel (issue #526, work item 3).
 
-Contract: PluginLoader loads feed the default PluginRegistry. Every FeatureGroup,
-ComputeFramework, or Extender subclass DEFINED in a loaded module (cls.__module__
-equals the loaded module name) is registered exactly once under its defining module,
-with source="loader". Registration is idempotent, happens on the sys.modules cache
-path too (import-order and import-history independent), and never picks up ad-hoc
-subclasses defined outside loaded plugin modules.
+Contract: PluginLoader loads feed the default PluginRegistry. Every non-abstract
+FeatureGroup, ComputeFramework, or Extender subclass DEFINED in a loaded module
+(cls.__module__ equals the loaded module name) is registered exactly once under its
+defining module, with source="loader". Abstract classes (inspect.isabstract) are
+infrastructure, never plugins, and stay out. Registration is idempotent, happens on
+the sys.modules cache path too (import-order and import-history independent), and
+never picks up ad-hoc subclasses defined outside loaded plugin modules.
 
-All scopes used here import without optional dependencies (python_dict and sqlite).
-The autouse conftest fixture restores the default registry around every test, so
-clearing it inside a test is safe.
+All scopes used here import without optional dependencies (python_dict, sqlite,
+and text_cleaning). The autouse conftest fixture restores the default registry
+around every test, so clearing it inside a test is safe.
 """
 
+import inspect
 import sys
+import types
+from abc import abstractmethod
 from typing import Any
 
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender
-from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry, register
+from mloda.core.abstract_plugins.plugin_registry.plugin_registry import (
+    PluginRegistry,
+    register,
+    register_module_plugins,
+)
 from mloda.user import PluginLoader
 
 PYTHON_DICT_FRAMEWORK_MODULE = "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework"
@@ -192,4 +200,82 @@ class TestLoaderIgnoresTransientSubclasses:
 
         assert registry.is_registered(_python_dict_framework_cls()), (
             "loader-run plugins must be registered while ad-hoc subclasses are not"
+        )
+
+
+class TestLoaderRegistrationSkipsAbstractClasses:
+    """Abstract helper base classes are infrastructure, never plugins; they must not auto-register."""
+
+    def test_register_module_plugins_skips_abstract_classes(self) -> None:
+        registry = PluginRegistry.default()
+        registry.clear()
+
+        module = types.ModuleType("fake_registry_abstract_mod")
+
+        class _AbstractHelperBaseFG(FeatureGroup):
+            @abstractmethod
+            def _abstract_registry_probe_hook(self) -> None: ...
+
+            @classmethod
+            def match_feature_group_criteria(
+                cls,
+                feature_name: Any,
+                options: Any,
+                data_access_collection: Any = None,
+            ) -> bool:
+                # Inert for other tests' feature resolution in this worker; the default
+                # matching falls back to cls(), which raises TypeError on abstract classes.
+                return False
+
+        class _ConcreteLeafProbeFG(FeatureGroup):
+            @classmethod
+            def match_feature_group_criteria(
+                cls,
+                feature_name: Any,
+                options: Any,
+                data_access_collection: Any = None,
+            ) -> bool:
+                return False
+
+        _AbstractHelperBaseFG.__module__ = module.__name__
+        _ConcreteLeafProbeFG.__module__ = module.__name__
+        setattr(module, "_AbstractHelperBaseFG", _AbstractHelperBaseFG)
+        setattr(module, "_ConcreteLeafProbeFG", _ConcreteLeafProbeFG)
+
+        assert inspect.isabstract(_AbstractHelperBaseFG), "sanity: the helper base double is abstract"
+        assert not inspect.isabstract(_ConcreteLeafProbeFG), "sanity: the leaf double is concrete"
+
+        register_module_plugins(module)
+
+        assert registry.is_registered(_ConcreteLeafProbeFG), (
+            "concrete plugin classes defined in a loaded module must be registered"
+        )
+        assert not registry.is_registered(_AbstractHelperBaseFG), (
+            "abstract helper base classes must not be auto-registered by register_module_plugins"
+        )
+
+    def test_loaded_scope_registers_concrete_classes_but_not_abstract_bases(self) -> None:
+        """End to end through PluginLoader: the text_cleaning scope is dependency-free and its
+        base module defines an inspect.isabstract helper base."""
+        registry = PluginRegistry.default()
+        registry.clear()
+
+        loader = PluginLoader()
+        loader.load_matching("feature_group", "text_cleaning/*")
+
+        from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
+        from mloda_plugins.feature_group.experimental.text_cleaning.python_dict import (
+            PythonDictTextCleaningFeatureGroup,
+        )
+
+        assert inspect.isabstract(TextCleaningFeatureGroup), "sanity: the scope's base class is abstract"
+        assert not inspect.isabstract(PythonDictTextCleaningFeatureGroup), "sanity: the scope has a concrete class"
+
+        registered_feature_groups = registry.list_registered(FeatureGroup)
+        assert PythonDictTextCleaningFeatureGroup in registered_feature_groups, (
+            "loading a scope must register its concrete plugin classes"
+        )
+        assert TextCleaningFeatureGroup not in registered_feature_groups, (
+            "loading a scope must not register its abstract helper base class; abstract classes "
+            "pollute list_registered(), registered-only docs, and strict resolution"
         )

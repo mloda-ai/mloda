@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import logging
 import sys
 from copy import deepcopy
@@ -248,7 +249,9 @@ class PreFilterPlugins:
 
         if strict_mode == "strict":
             before_strict = accessible_feature_groups
-            accessible_feature_groups = {fg for fg in accessible_feature_groups if fg in registered}
+            accessible_feature_groups = {
+                fg for fg in accessible_feature_groups if fg in registered or inspect.isabstract(fg)
+            }
             if plugin_collector is not None:
                 dropped_enabled = sorted(
                     f"{fg.__module__}:{fg.__qualname__}"
@@ -261,7 +264,9 @@ class PreFilterPlugins:
                         "not registered in the plugin registry: %s.",
                         ", ".join(dropped_enabled),
                     )
-            if before_strict and not accessible_feature_groups:
+            had_concrete = any(not inspect.isabstract(fg) for fg in before_strict)
+            has_concrete = any(not inspect.isabstract(fg) for fg in accessible_feature_groups)
+            if had_concrete and not has_concrete:
                 raise ValueError(
                     "Strict mode filtered out all FeatureGroups: none of the accessible FeatureGroups "
                     "are registered in the plugin registry. Register them via mloda.user.register() or "
@@ -276,7 +281,9 @@ class PreFilterPlugins:
             unregistered = sorted(
                 f"{fg.__module__}:{fg.__qualname__}"
                 for fg in accessible_feature_groups
-                if fg not in registered and f"{fg.__module__}:{fg.__qualname__}" not in _warned_unregistered
+                if fg not in registered
+                and not inspect.isabstract(fg)
+                and f"{fg.__module__}:{fg.__qualname__}" not in _warned_unregistered
             )
             if unregistered:
                 _warned_unregistered.update(unregistered)

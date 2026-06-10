@@ -1,6 +1,6 @@
 # Plugin Registry
 
-The plugin registry is an explicit catalog of FeatureGroup, ComputeFramework, and Extender classes, keyed by a string name (default: `"module:qualname"`). The [PluginLoader](plugin-loader.md) feeds it automatically: every plugin class defined in a loaded module is registered with provenance `source="loader"`; manual registrations carry `source="manual"`. Registries are plain instances, and the engine and catalog APIs use the process-global default, `PluginRegistry.default()`.
+The plugin registry is an explicit catalog of FeatureGroup, ComputeFramework, and Extender classes, keyed by a string name (default: `"module:qualname"`). The [PluginLoader](plugin-loader.md) feeds it automatically: every concrete plugin class defined in a loaded module is registered with provenance `source="loader"`; manual registrations carry `source="manual"`. Abstract classes (`inspect.isabstract`) are infrastructure, never plugins: the loader skips them, and strict and warn modes ignore them. Registries are plain instances, and the engine and catalog APIs use the process-global default, `PluginRegistry.default()`.
 
 ## Registered vs Ad-Hoc Classes
 
@@ -78,6 +78,8 @@ PluginRegistry.default().unregister(key)
 ```
 
 `register()` also accepts `name=` for a custom key, for example `register(MyFeatureGroup, name="my_pkg:MyFeatureGroup")`.
+
+The registry does not watch `importlib.reload()`: reloading a module creates new class objects while the registry keeps the old ones, so strict mode and `registered_only=True` would treat the reloaded classes as unregistered. After a reload, re-run the `PluginLoader` scope that covers the module (loading is idempotent and re-registers) or call `register(..., replace=True)` for the affected classes.
 
 ## Strict Mode
 

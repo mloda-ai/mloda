@@ -13,9 +13,11 @@ exec'd classes (mirroring how IPython sets up ``<ipython-input-N-...>`` entries)
 
 from __future__ import annotations
 
+import gc
 import linecache
 import sys
 import textwrap
+import types
 from typing import Any, cast
 
 import pytest
@@ -25,7 +27,7 @@ from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.api.plugin_docs import get_feature_group_docs, resolve_feature
-from mloda.core.api.plugin_info import ResolvedFeature
+from mloda.core.api.plugin_info import FeatureGroupInfo, ResolvedFeature
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins, dedup_feature_group_subclasses
 
 
@@ -59,6 +61,27 @@ def _exec_fg_in_main(class_name: str, body: str, cell_label: str) -> type[Featur
     code_obj = compile(src, filename, "exec")
     exec(code_obj, main_mod.__dict__)  # nosec B102
     cls = main_mod.__dict__[class_name]
+    return cast(type[FeatureGroup], cls)
+
+
+def _exec_fg_in_module(class_name: str, body: str, cell_label: str, module: types.ModuleType) -> type[FeatureGroup]:
+    """Exec a FeatureGroup subclass into a synthetic real module, registering source in linecache.
+
+    Mirrors ``_exec_fg_in_main`` but targets a caller-provided module object (which the
+    caller has inserted into ``sys.modules``), simulating an ``importlib.reload`` flow
+    in a real (non-``__main__``) module. ``types.ModuleType`` sets ``__name__``
+    automatically, and exec'd class definitions pick up ``__module__`` from the
+    globals' ``__name__``, so the exec'd class reports the synthetic module as its
+    ``__module__``. Source is registered in ``linecache`` under a distinct synthetic
+    filename so source hashes resolve via the linecache AST fallback.
+    """
+    src = textwrap.dedent(body)
+    filename = f"<{cell_label}>"
+    src_lines = src.splitlines(keepends=True)
+    linecache.cache[filename] = (len(src), None, src_lines, filename)
+    code_obj = compile(src, filename, "exec")
+    exec(code_obj, module.__dict__)  # nosec B102
+    cls = module.__dict__[class_name]
     return cast(type[FeatureGroup], cls)
 
 
@@ -317,6 +340,21 @@ class MockCFW(ComputeFramework):
     @staticmethod
     def is_available() -> bool:
         return True
+
+
+# ---------------------------------------------------------------------------
+# Module-level catalog anchor for the get_feature_group_docs graceful-degradation
+# tests (cases 13, 19, 20). It lives in this test module (NOT __main__) and has
+# real source on disk, so it is always documentable. This guarantees the "rest
+# of the catalog" is non-empty even when this file runs in isolation, where no
+# other non-__main__ FeatureGroup subclasses are imported.
+# ---------------------------------------------------------------------------
+class DocsCatalogAnchorFG(FeatureGroup):
+    """Anchor feature group guaranteeing a non-empty documentable catalog in this module."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"docs_catalog_anchor_feature_unique_xyz"}
 
 
 # ---------------------------------------------------------------------------
@@ -621,13 +659,15 @@ def test_get_feature_group_docs_with_allow_redefinition_does_not_raise() -> None
 
 
 # ---------------------------------------------------------------------------
-# Case 13: get_feature_group_docs raises ValueError on conflict without flag
+# Case 13: get_feature_group_docs degrades gracefully on conflict without flag
 # ---------------------------------------------------------------------------
-def test_get_feature_group_docs_raises_on_redef_conflict_without_flag() -> None:
-    """Without the ``allow_redefinition`` flag, ``get_feature_group_docs`` must
-    propagate the dedup ``ValueError`` so users see the same diagnostic they get
-    from the other call sites. This is the discriminating test that locks in the
-    dedup wiring at ``plugin_docs.py`` — removing the call would make this fail.
+def test_get_feature_group_docs_degrades_gracefully_on_redef_conflict_without_flag() -> None:
+    """Without the ``allow_redefinition`` flag, a Jupyter-style different-source
+    redefinition must NOT crash ``get_feature_group_docs``. The docs API is a
+    read-only introspection entry point and mirrors ``resolve_feature`` (which
+    catches the dedup ``ValueError`` instead of propagating it): it must degrade
+    gracefully, returning a list of ``FeatureGroupInfo`` and still documenting
+    the rest of the catalog despite the conflicting ``__main__`` classes.
     """
     qualname = "MyFG_Test13_Docs"
     feature_name = "case13_feature_unique_xyz"
@@ -642,12 +682,13 @@ def test_get_feature_group_docs_raises_on_redef_conflict_without_flag() -> None:
     v2 = _exec_fg_in_main(qualname, src_v2, "cell-test13-v2")
     _REF_STORE.extend([v1, v2])
 
-    with pytest.raises(ValueError) as exc_info:
-        get_feature_group_docs()
+    result = get_feature_group_docs()
 
-    msg = str(exc_info.value)
-    assert "FeatureGroup redefined" in msg, f"Expected 'FeatureGroup redefined' in error, got: {msg}"
-    assert "set_allow_redefinition" in msg, f"Expected 'set_allow_redefinition' in error, got: {msg}"
+    assert isinstance(result, list), f"get_feature_group_docs must not raise on a redef conflict, got {type(result)}"
+    assert all(isinstance(item, FeatureGroupInfo) for item in result), (
+        f"all items must be FeatureGroupInfo, got: {[type(i).__name__ for i in result]}"
+    )
+    assert len(result) > 0, "the rest of the catalog must still be documented despite the conflict"
 
 
 # ---------------------------------------------------------------------------
@@ -801,3 +842,156 @@ def test_class_source_hash_fallback_extracts_class_local_segment(monkeypatch: py
         "Fallback must extract only the class-local source segment so "
         f"identical class bodies hash identically; got {h1[:16]}... vs {h2[:16]}..."
     )
+
+
+# ---------------------------------------------------------------------------
+# Case 19: get_feature_group_docs annotates unintrospectable classes
+# ---------------------------------------------------------------------------
+def test_get_feature_group_docs_annotates_unintrospectable_class_with_unavailable_version() -> None:
+    """A FeatureGroup subclass built at runtime via ``type(...)`` with a fake
+    ``__module__`` has no importable source file, so ``fg_class.version()`` raises
+    ``TypeError`` (from ``inspect.getsource`` inside
+    ``BaseFeatureGroupVersion.class_source_hash``). ``get_feature_group_docs`` must
+    degrade gracefully instead of crashing the whole catalog call: the
+    unintrospectable class is annotated with ``version == "unavailable"`` (not
+    skipped), and all other classes are still documented.
+
+    NOTE: this class is held only via a LOCAL reference (enough to keep it alive in
+    ``FeatureGroup.__subclasses__()`` during the call). It is deliberately NOT
+    appended to ``_REF_STORE``: that would permanently leak a non-``__main__``
+    class into every later ``get_feature_group_docs()`` result on the same xdist
+    worker. After the assertions the local ref is deleted and ``gc.collect()`` runs
+    so the class is unregistered from ``__subclasses__``.
+    """
+    fake_module = "some_fake_module_name_xyz_19"
+    fake_cls = cast(
+        type[FeatureGroup],
+        type("MyFG_Test19_FakeModule", (FeatureGroup,), {"__module__": fake_module}),
+    )
+
+    result = get_feature_group_docs()
+
+    assert isinstance(result, list), (
+        f"get_feature_group_docs must not raise on an unintrospectable class, got {type(result)}"
+    )
+    assert all(isinstance(item, FeatureGroupInfo) for item in result), (
+        f"all items must be FeatureGroupInfo, got: {[type(i).__name__ for i in result]}"
+    )
+
+    fake_entries = [item for item in result if item.module == fake_module]
+    assert len(fake_entries) == 1, (
+        f"the unintrospectable class must be documented (annotate, not skip); "
+        f"expected exactly one entry for module {fake_module!r}, got: {fake_entries}"
+    )
+    assert fake_entries[0].name == "MyFG_Test19_FakeModule"
+    assert fake_entries[0].version == "unavailable", (
+        f"version must be 'unavailable' when source introspection fails, got: {fake_entries[0].version!r}"
+    )
+
+    other_entries = [item for item in result if item.module != fake_module]
+    assert len(other_entries) > 0, "the rest of the catalog must still be documented alongside the annotated class"
+
+    # Cleanup: drop the only strong ref and collect so the fake class vanishes
+    # from FeatureGroup.__subclasses__() and cannot leak into later tests.
+    del fake_cls
+    gc.collect()
+
+
+# ---------------------------------------------------------------------------
+# Case 20: graceful redef handling must not leak __main__ classes into output
+# ---------------------------------------------------------------------------
+def test_get_feature_group_docs_redef_conflict_does_not_leak_main_classes() -> None:
+    """Graceful degradation on a redefinition conflict must not change the output
+    contract of ``get_feature_group_docs``: classes living in ``__main__``
+    (including the conflicting redefinitions themselves) stay filtered from the
+    documented catalog. Without any collector, the call returns a list and no
+    entry has ``module == "__main__"``.
+    """
+    qualname = "MyFG_Test20_Docs"
+    feature_name = "case20_feature_unique_xyz"
+    src_v1 = _make_fg_source(qualname, feature_name)
+    src_v2 = _make_fg_source(
+        qualname,
+        feature_name,
+        extra_body="    def extra_method(self):\n        return 20\n",
+    )
+
+    v1 = _exec_fg_in_main(qualname, src_v1, "cell-test20-v1")
+    v2 = _exec_fg_in_main(qualname, src_v2, "cell-test20-v2")
+    _REF_STORE.extend([v1, v2])
+
+    result = get_feature_group_docs()
+
+    assert isinstance(result, list), f"get_feature_group_docs must not raise on a redef conflict, got {type(result)}"
+    assert all(item.module != "__main__" for item in result), (
+        "conflicting __main__ classes must not leak into the documented catalog"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Case 21: redef conflict in a REAL module collapses to the live class
+# ---------------------------------------------------------------------------
+def test_get_feature_group_docs_reload_conflict_collapses_to_live_class() -> None:
+    """A redefinition conflict in a real (non-``__main__``) module (the
+    ``importlib.reload`` flow) must NOT surface both the stale and the live
+    version of the class in the docs output. ``get_feature_group_docs`` is a
+    "current state" catalog: on a redefinition conflict it must collapse each
+    conflicting group to the most recently defined live class (the behavior of
+    dedup with ``allow_redefinition=True``), so exactly ONE entry per
+    conflicting class appears, and it is the live version.
+
+    Today's graceful-degradation path unions ALL conflicting classes back into
+    the result, so this test fails with TWO entries for the synthetic module
+    (stale v1 plus live v2) instead of one.
+
+    Cleanup runs BEFORE the assertions: a red failure must not leave the
+    conflicting classes live in a real module in ``sys.modules``, or every
+    later dedup on the same xdist worker would see the conflict.
+    """
+    module_name = "fake_reload_mod_case21"
+    qualname = "MyFG_Case21_Reload"
+    feature_name = "case21_feature_unique_xyz"
+
+    mod = types.ModuleType(module_name)
+    sys.modules[module_name] = mod
+
+    src_v1 = _make_fg_source(qualname, feature_name)
+    src_v2 = _make_fg_source(
+        qualname,
+        feature_name,
+        extra_body="    def extra_method(self):\n        return 21\n",
+    )
+
+    # Local refs only (NOT _REF_STORE): these non-__main__ classes must vanish
+    # from FeatureGroup.__subclasses__() at the end of this test.
+    v1 = _exec_fg_in_module(qualname, src_v1, "reload-case21-v1", mod)
+    v2 = _exec_fg_in_module(qualname, src_v2, "reload-case21-v2", mod)
+
+    # Sanity: this is a genuine conflict scenario; the latest version is live
+    # in the module (exec rebinding) and the source hashes differ.
+    assert getattr(mod, qualname) is v2, "v2 must be the live class bound in the synthetic module"
+    v1_version = v1.version()
+    v2_version = v2.version()
+    assert v1_version != v2_version, "the two versions must have differing source hashes for a real conflict"
+
+    result = get_feature_group_docs()
+
+    # Snapshot plain data, then clean up so the assertions below cannot leak
+    # the live-module conflict into later tests on this worker.
+    entry_versions = [item.version for item in result if item.module == module_name]
+
+    sys.modules.pop(module_name, None)
+    del mod
+    del v1
+    del v2
+    gc.collect()
+
+    assert len(entry_versions) == 1, (
+        f"a redefinition conflict must collapse to the live class: expected exactly one "
+        f"docs entry for module {module_name!r}, got {len(entry_versions)}: {entry_versions}"
+    )
+    assert entry_versions[0] == v2_version, (
+        f"the single documented entry must be the live (most recent) version; "
+        f"expected {v2_version!r}, got {entry_versions[0]!r}"
+    )
+    assert entry_versions[0] != v1_version, "the stale (pre-reload) version must not be the documented entry"

@@ -26,7 +26,7 @@ from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRe
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.api.plugin_info import ComputeFrameworkInfo, ExtenderInfo, FeatureGroupInfo, ResolvedFeature
-from mloda.core.prepare.accessible_plugins import dedup_feature_group_subclasses
+from mloda.core.prepare.accessible_plugins import RedefinitionConflictError, dedup_feature_group_subclasses
 from mloda.core.prepare.identify_feature_group import split_frameworks_by_capability
 
 
@@ -46,13 +46,11 @@ def _safe_version(fg_class: type[FeatureGroup]) -> str:
 def _dedup_degrading_on_conflict(
     feature_groups: set[type[FeatureGroup]], allow_redefinition: bool
 ) -> set[type[FeatureGroup]]:
-    """Dedup feature groups, keeping all conflicting versions instead of raising on redefinition."""
+    """Dedup feature groups, collapsing each redefinition conflict to its live class instead of raising."""
     try:
         return dedup_feature_group_subclasses(feature_groups, allow_redefinition=allow_redefinition)
-    except ValueError as exc:
-        conflicts: set[type[FeatureGroup]] = set(getattr(exc, "conflicts", []))
-        survivors = dedup_feature_group_subclasses(feature_groups - conflicts, allow_redefinition=allow_redefinition)
-        return survivors | conflicts
+    except RedefinitionConflictError:
+        return dedup_feature_group_subclasses(feature_groups, allow_redefinition=True)
 
 
 def get_feature_group_docs(
@@ -69,8 +67,9 @@ def get_feature_group_docs(
     Returns the current state of loaded feature groups. Ensure plugins are loaded
     before calling this function (e.g., via PluginLoader.all()).
 
-    Returns gracefully on redefinition conflicts (all conflicting versions are
-    documented) and reports "unavailable" as version for classes whose source
+    Returns gracefully on redefinition conflicts: instead of raising, each
+    conflicting class is documented as its most recently defined (live)
+    version. Reports "unavailable" as version for classes whose source
     cannot be introspected.
 
     Args:

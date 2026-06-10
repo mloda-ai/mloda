@@ -1,6 +1,6 @@
 from typing import Any, Optional
 from mloda.user import DataAccessCollection
-from mloda.provider import FeatureSet, HashableDict, BaseInputData
+from mloda.provider import FeatureSet, BaseInputData
 from mloda.user import Options
 
 
@@ -61,7 +61,7 @@ class ReadDB(BaseInputData):
         if reader_data_access is None:
             raise ValueError(
                 f"'BaseInputData' key is missing or None in the provided Options for {self.__class__.__name__}. "
-                f"Set options with Options(group={{'BaseInputData': (ReaderClass, HashableDict({{...}}))}})."
+                f"Set options with Options(group={{'BaseInputData': (ReaderClass, {{...}})}})."
             )
 
         reader, data_access = reader_data_access
@@ -78,7 +78,7 @@ class ReadDB(BaseInputData):
             creds = data_access.resolve("credentials", hint=hint)
             if creds:
                 data_accesses.append(creds)
-        elif isinstance(data_access, (HashableDict, dict)):
+        elif isinstance(data_access, dict):
             data_accesses.append(data_access)
 
         if not data_accesses:

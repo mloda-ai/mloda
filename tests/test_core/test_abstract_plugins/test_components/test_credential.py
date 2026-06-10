@@ -194,22 +194,62 @@ class TestNamedFormRejectsNonMappingValues:
 
 
 class TestNamedFormAcceptsMappingValues:
-    """Legitimate named-form values (plain dict, HashableDict, Credential) keep working."""
+    """Legitimate named-form mapping values (plain dict, Credential) keep working."""
 
     def test_plain_dict_value_does_not_raise_and_is_stored_as_is(self) -> None:
         dac = DataAccessCollection(credentials={"pg-prod": {"host": "h"}})
         assert dac.credentials == {"pg-prod": {"host": "h"}}
         assert type(dac.credentials["pg-prod"]) is dict
 
-    def test_hashable_dict_value_does_not_raise_and_is_stored_as_is(self) -> None:
-        inner = HashableDict({"sqlite": "/x.db"})
-        dac = DataAccessCollection(credentials={"db": inner})
-        assert dac.credentials["db"] is inner
-
     def test_add_credentials_two_arg_mapping_value_still_works(self) -> None:
         dac = DataAccessCollection()
         dac.add_credentials("h", {"sqlite": "/x.db"})
         assert dac.credentials == {"h": {"sqlite": "/x.db"}}
+
+
+class TestCredentialsPathRejectsHashableDict:
+    """Issue #519: HashableDict is rejected as a credential VALUE on every entry path.
+
+    Before 0.7.0 ``DataAccessCollection`` force-wrapped credentials in HashableDict,
+    so readers grew isinstance branches for it. With the typed ``Credential`` class in
+    place, HashableDict on the credentials path is now a migration error. HashableDict
+    itself stays valid for Options group values; only the credentials path rejects it.
+
+    The migration ValueError must name ``Credential`` and ``dict`` (the supported
+    replacements), mention ``HashableDict`` (what was rejected), and never echo the
+    secret value.
+    """
+
+    SECRET = "/secret/credential/path.db"  # nosec B105
+
+    def _assert_migration_error(self, msg: str) -> None:
+        lowered = msg.lower()
+        assert "hashabledict" in lowered
+        assert "credential" in lowered
+        assert "dict" in lowered
+        assert self.SECRET not in msg
+
+    def test_named_form_rejects_hashable_dict_value(self) -> None:
+        with pytest.raises(ValueError) as excinfo:
+            DataAccessCollection(credentials={"db": HashableDict({"sqlite": self.SECRET})})
+        self._assert_migration_error(str(excinfo.value))
+
+    def test_list_form_rejects_hashable_dict_value(self) -> None:
+        with pytest.raises(ValueError) as excinfo:
+            DataAccessCollection(credentials=[HashableDict({"sqlite": self.SECRET})])
+        self._assert_migration_error(str(excinfo.value))
+
+    def test_add_credentials_single_arg_rejects_hashable_dict(self) -> None:
+        dac = DataAccessCollection()
+        with pytest.raises(ValueError) as excinfo:
+            dac.add_credentials(HashableDict({"sqlite": self.SECRET}))
+        self._assert_migration_error(str(excinfo.value))
+
+    def test_add_credentials_two_arg_rejects_hashable_dict_value(self) -> None:
+        dac = DataAccessCollection()
+        with pytest.raises(ValueError) as excinfo:
+            dac.add_credentials("named", HashableDict({"sqlite": self.SECRET}))
+        self._assert_migration_error(str(excinfo.value))
 
 
 class TestResolveAmbiguityRedactsCredentialValues:
@@ -235,20 +275,6 @@ class TestResolveAmbiguityRedactsCredentialValues:
         assert "host" in msg
         assert "password" in msg
         assert "data_access_handle" in msg
-
-    def test_hashable_dict_credentials_ambiguity_redacts_values_but_shows_keys(self) -> None:
-        dac = DataAccessCollection(
-            credentials=[
-                HashableDict({"token": "secret-a"}),  # nosec B105
-                HashableDict({"token": "secret-b"}),  # nosec B105
-            ]
-        )
-        with pytest.raises(ValueError) as excinfo:
-            dac.resolve("credentials")
-        msg = str(excinfo.value)
-        assert "secret-a" not in msg
-        assert "secret-b" not in msg
-        assert "token" in msg
 
     def test_auto_named_files_ambiguity_still_shows_values(self) -> None:
         """Guardrail: redaction is credentials-only; file paths stay visible in the listing."""

@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pyarrow as pa
 
 from mloda.user import Feature
-from mloda.provider import FeatureSet, HashableDict
+from mloda.provider import FeatureSet
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 
 
@@ -56,9 +56,8 @@ class TestSQLITEReader:
 
     @pytest.fixture(scope="class")
     def valid_credentials(self, temp_sqlite_db: Any) -> Any:
-        # Backwards-compat regression: keep one HashableDict-wrapped fixture so the legacy
-        # acceptor branch in SQLITEReader.connect / is_valid_credentials stays exercised.
-        return HashableDict({"sqlite": temp_sqlite_db})
+        # Credentials flow through SQLITEReader.connect / is_valid_credentials as plain dicts.
+        return {"sqlite": temp_sqlite_db}
 
     @pytest.fixture(scope="class")
     def invalid_credentials(self) -> Any:
@@ -124,6 +123,6 @@ class TestSQLITEReader:
             SQLITEReader.get_table(None)
 
     def test_get_table_missing_table_name(self) -> None:
-        options = MockOptions(("BaseInputData", HashableDict({})))
+        options = MockOptions(("BaseInputData", {}))
         with pytest.raises(KeyError, match="'table_name'"):
             SQLITEReader.get_table(options)  # type: ignore

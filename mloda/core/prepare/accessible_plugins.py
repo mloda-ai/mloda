@@ -18,6 +18,8 @@ from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 
 logger = logging.getLogger(__name__)
 
+_warned_unregistered: set[str] = set()
+
 
 FeatureGroupEnvironmentMapping = dict[type[FeatureGroup], set[type[ComputeFramework]]]
 
@@ -245,15 +247,39 @@ class PreFilterPlugins:
             registered = {entry.cls for entry in PluginRegistry.default().snapshot().values()}
 
         if strict_mode == "strict":
+            before_strict = accessible_feature_groups
             accessible_feature_groups = {fg for fg in accessible_feature_groups if fg in registered}
+            if plugin_collector is not None:
+                dropped_enabled = sorted(
+                    fg.__name__
+                    for fg in before_strict - accessible_feature_groups
+                    if fg in plugin_collector.enabled_feature_group_classes
+                )
+                if dropped_enabled:
+                    logger.warning(
+                        "Explicitly enabled FeatureGroups were dropped by strict mode because they are "
+                        "not registered in the plugin registry: %s.",
+                        ", ".join(dropped_enabled),
+                    )
+            if before_strict and not accessible_feature_groups:
+                raise ValueError(
+                    "Strict mode filtered out all FeatureGroups: none of the accessible FeatureGroups "
+                    "are registered in the plugin registry. Register them via mloda.user.register() or "
+                    "relax MLODA_PLUGIN_REGISTRY_STRICT to disable strict mode."
+                )
 
         accessible_feature_groups = dedup_feature_group_subclasses(
             accessible_feature_groups, allow_redefinition=allow_redefinition
         )
 
         if strict_mode == "warn":
-            unregistered = sorted(fg.__name__ for fg in accessible_feature_groups if fg not in registered)
+            unregistered = sorted(
+                fg.__name__
+                for fg in accessible_feature_groups
+                if fg not in registered and fg.__name__ not in _warned_unregistered
+            )
             if unregistered:
+                _warned_unregistered.update(unregistered)
                 logger.warning(
                     "FeatureGroups not registered in the plugin registry: %s.",
                     ", ".join(unregistered),

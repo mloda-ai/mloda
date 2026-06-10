@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass
 from types import ModuleType
 from typing import Any
@@ -43,8 +44,9 @@ class PluginRegistry:
     @classmethod
     def default(cls) -> PluginRegistry:
         global _default
-        if _default is None:
-            _default = cls()
+        with _default_lock:
+            if _default is None:
+                _default = cls()
         return _default
 
     def register(
@@ -57,7 +59,8 @@ class PluginRegistry:
             if existing.cls is cls:
                 return key
             raise PluginRegistryCollisionError(
-                f"Key '{key}' is already registered to {existing.cls!r}; cannot register {cls!r}."
+                f"Key '{key}' is already registered to {existing.cls!r}; cannot register {cls!r}. "
+                "Pass replace=True to replace the existing entry."
             )
         self._entries[key] = PluginRegistryEntry(
             cls=cls,
@@ -87,6 +90,11 @@ class PluginRegistry:
         return any(entry.cls is cls for entry in self._entries.values())
 
     def list_registered(self, plugin_type: type[Any]) -> list[type[Any]]:
+        if plugin_type not in _PLUGIN_BASE_TYPES:
+            raise ValueError(
+                f"{plugin_type!r} is not a valid plugin base type. "
+                "Valid types are: FeatureGroup, ComputeFramework, Extender."
+            )
         result: list[type[Any]] = []
         seen: set[type[Any]] = set()
         for _key, entry in sorted(self._entries.items()):
@@ -107,6 +115,7 @@ class PluginRegistry:
 
 
 _default: PluginRegistry | None = None
+_default_lock = threading.Lock()
 
 
 def register(cls: type[Any], *, name: str | None = None, source: str = "manual", replace: bool = False) -> str:

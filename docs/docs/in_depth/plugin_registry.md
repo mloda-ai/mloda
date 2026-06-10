@@ -101,9 +101,17 @@ Or process-wide via the environment variable, which also applies when no `Plugin
 export MLODA_PLUGIN_REGISTRY_STRICT=warn
 ```
 
-An explicit `set_strict_mode()` overrides the environment variable; invalid values raise a `ValueError`.
+An explicit `set_strict_mode()` overrides the environment variable; invalid values raise a `ValueError`. Environment variable values are case-insensitive (`WARN` works); `set_strict_mode()` accepts only the exact lowercase values.
+
+Three behavioral notes:
+
+- Strict mode governs engine resolution only. The catalog APIs (`get_*_docs()`, `list_registered()`) never consult strict mode: the docs functions keep walking all subclasses unless you pass `registered_only=True`, so in strict mode the catalog can show plugins the engine will not resolve. Pass `registered_only=True` to keep catalog and engine views consistent.
+- In `"warn"` mode, each unregistered class is reported once per process, not once per run, so long-running services do not repeat identical warnings forever.
+- In `"strict"` mode, FeatureGroups explicitly enabled on the `PluginCollector` but missing from the registry are dropped with a warning naming them; if strict filtering removes every FeatureGroup, the run fails with an error that points to `register()` and the environment variable.
 
 Recommended rollout for deployments: stay on `"off"`, switch CI or staging to `"warn"` and watch the logs for "not registered" warnings, then move to `"strict"` once they are gone. This repository's own CI (tox) runs with `MLODA_PLUGIN_REGISTRY_STRICT=warn`.
+
+Strict mode currently covers FeatureGroup resolution only: ComputeFrameworks and Extenders are registered and enumerable, but not yet enforced during resolution.
 
 ## Test Isolation for Plugin Authors
 

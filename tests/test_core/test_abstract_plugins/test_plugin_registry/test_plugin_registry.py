@@ -5,10 +5,12 @@ register/unregister/get, collision handling, replace, type filtering,
 snapshot/restore, and the module-level register() convenience.
 """
 
+import threading
 from collections.abc import Iterator
 
 import pytest
 
+import mloda.core.abstract_plugins.plugin_registry.plugin_registry as plugin_registry_module
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender
@@ -124,6 +126,14 @@ class TestPluginRegistryCollision:
             reg.register(_RegistryTestFGB, name="dup_key")
         assert reg.get("dup_key") is _RegistryTestFGA
 
+    def test_collision_error_message_teaches_replace_flag(self) -> None:
+        """The collision message must tell users how to opt into replacement."""
+        reg = PluginRegistry()
+        reg.register(_RegistryTestFGA, name="dup_key")
+        with pytest.raises(PluginRegistryCollisionError) as exc_info:
+            reg.register(_RegistryTestFGB, name="dup_key")
+        assert "replace=True" in str(exc_info.value), "collision error must mention replace=True so users learn the fix"
+
     def test_replace_true_replaces_entry(self) -> None:
         reg = PluginRegistry()
         reg.register(_RegistryTestFGA, name="replace_key")
@@ -230,6 +240,71 @@ class TestPluginRegistryListRegistered:
         reg_ba.register(_RegistryTestFGB)
         reg_ba.register(_RegistryTestFGA)
         assert reg_ab.list_registered(FeatureGroup) == reg_ba.list_registered(FeatureGroup)
+
+    def test_list_registered_rejects_concrete_subclass(self) -> None:
+        """A concrete subclass is not a valid plugin base type; silence would hide the bug."""
+        reg = PluginRegistry()
+        with pytest.raises(ValueError) as exc_info:
+            reg.list_registered(_RegistryTestFGA)
+        message = str(exc_info.value)
+        assert "FeatureGroup" in message
+        assert "ComputeFramework" in message
+        assert "Extender" in message
+
+    def test_list_registered_rejects_non_plugin_type(self) -> None:
+        reg = PluginRegistry()
+        with pytest.raises(ValueError) as exc_info:
+            reg.list_registered(int)
+        message = str(exc_info.value)
+        assert "FeatureGroup" in message
+        assert "ComputeFramework" in message
+        assert "Extender" in message
+
+    def test_list_registered_accepts_exact_base_types(self) -> None:
+        """The three exact plugin base types must keep working, even on an empty registry."""
+        reg = PluginRegistry()
+        assert reg.list_registered(FeatureGroup) == []
+        assert reg.list_registered(ComputeFramework) == []
+        assert reg.list_registered(Extender) == []
+
+    def test_module_level_list_registered_wrapper_rejects_non_plugin_type(self) -> None:
+        from mloda.core.api.plugin_docs import list_registered
+
+        with pytest.raises(ValueError):
+            list_registered(int)
+
+
+class TestPluginRegistryDefaultThreadSafety:
+    def test_default_lazy_init_is_thread_safe(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """default() lazy init must be guarded by a module-level lock and return one instance.
+
+        The lock-existence assertion makes this test fail deterministically before
+        the implementation lands; the threaded part pins the observable contract.
+        """
+        lock = getattr(plugin_registry_module, "_default_lock", None)
+        assert lock is not None, "plugin_registry must expose a module-level _default_lock for default()"
+        assert isinstance(lock, type(threading.Lock())), "_default_lock must be a threading lock"
+
+        monkeypatch.setattr(plugin_registry_module, "_default", None)
+        thread_count = 16
+        barrier = threading.Barrier(thread_count)
+        results: list[PluginRegistry] = []
+
+        def _call_default() -> None:
+            barrier.wait()
+            results.append(PluginRegistry.default())
+
+        threads = [threading.Thread(target=_call_default) for _ in range(thread_count)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        assert len(results) == thread_count
+        first = results[0]
+        assert all(result is first for result in results), (
+            "all threads racing default() must observe the same registry instance"
+        )
 
 
 class TestPluginRegistrySnapshotRestore:

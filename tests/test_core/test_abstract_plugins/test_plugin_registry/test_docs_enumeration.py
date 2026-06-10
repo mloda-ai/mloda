@@ -1,4 +1,4 @@
-"""Failing tests for the registry-backed enumeration/docs rebuild (issue #526, work item 4).
+"""Tests for the registry-backed enumeration/docs rebuild (issue #526, work item 4).
 
 Contract: the registry becomes a first-class enumeration source next to the
 __subclasses__() walk. mloda.user exports PluginRegistry and register. A new
@@ -29,7 +29,6 @@ from mloda.core.api.plugin_docs import (
 )
 
 
-# Fails today: PluginRegistry and register are not exported from mloda.user.
 class TestPublicRegistryExports:
     def test_user_exports_plugin_registry_and_register(self) -> None:
         from mloda.user import PluginRegistry as user_plugin_registry
@@ -41,7 +40,6 @@ class TestPublicRegistryExports:
         assert "register" in mloda.user.__all__
 
 
-# Fails today: list_registered does not exist in mloda.core.api.plugin_docs.
 class TestListRegisteredDocsApi:
     def test_list_registered_returns_registry_contents_for_base_type(self) -> None:
         from mloda.core.api.plugin_docs import list_registered
@@ -86,7 +84,6 @@ class TestListRegisteredDocsApi:
         assert "list_registered" in mloda.steward.__all__
 
 
-# Fails today: the docs functions do not accept a registered_only keyword.
 class TestRegisteredOnlyDocsFiltering:
     def test_feature_group_docs_registered_only_filters_to_registry(self) -> None:
         registry = PluginRegistry.default()

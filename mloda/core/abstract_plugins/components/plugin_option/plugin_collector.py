@@ -8,7 +8,7 @@ VALID_STRICT_MODES = ("off", "warn", "strict")
 
 def strict_mode_from_env() -> str:
     """Read the strict mode from the environment, defaulting to "off"."""
-    mode = os.environ.get(STRICT_MODE_ENV_VAR, "off")
+    mode = os.environ.get(STRICT_MODE_ENV_VAR, "off").lower()
     _validate_strict_mode(mode)
     return mode
 

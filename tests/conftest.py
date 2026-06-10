@@ -3,16 +3,29 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
+from mloda.core.prepare import accessible_plugins
 from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
+
+
+def _clear_warned_unregistered() -> None:
+    """Clear the warn-mode once-per-process dedup set if the implementation provides it."""
+    warned = getattr(accessible_plugins, "_warned_unregistered", None)
+    if warned is not None:
+        warned.clear()
 
 
 @pytest.fixture(autouse=True)
 def restore_default_plugin_registry() -> Any:
-    """Snapshot and restore the default plugin registry around every test."""
+    """Snapshot and restore the default plugin registry around every test.
+
+    Also clears the warn-mode dedup set so warn-mode tests stay independent.
+    """
     registry = PluginRegistry.default()
     snapshot = registry.snapshot()
+    _clear_warned_unregistered()
     yield
     registry.restore(snapshot)
+    _clear_warned_unregistered()
 
 
 @pytest.fixture(autouse=True)

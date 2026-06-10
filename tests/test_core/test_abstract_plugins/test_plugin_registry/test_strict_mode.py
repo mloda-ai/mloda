@@ -1,4 +1,4 @@
-"""Failing tests for the tri-state strict parameter (issue #526, work item 5).
+"""Tests for the tri-state strict parameter (issue #526, work item 5).
 
 Contract: PluginCollector carries a strict_mode of "off", "warn", or "strict",
 defaulting from the MLODA_PLUGIN_REGISTRY_STRICT env var ("off" when unset,
@@ -26,7 +26,7 @@ import pytest
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.core.abstract_plugins.plugin_registry.plugin_registry import register
+from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry, register
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins, RedefinitionConflictError
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
@@ -47,6 +47,14 @@ class _StrictRegisteredFG(FeatureGroup):
 
 class _StrictConflictBystanderFG(FeatureGroup):
     """Local double registered alongside an unregistered redefinition conflict."""
+
+
+class _StrictEnabledUnregisteredFG(FeatureGroup):
+    """Local double passed as enabled but never registered; strict mode must drop it loudly."""
+
+
+class _StrictEnabledRegisteredFG(FeatureGroup):
+    """Local double passed as enabled and registered, so strict resolution does not end empty."""
 
 
 def _cfws() -> set[type[ComputeFramework]]:
@@ -117,6 +125,17 @@ class TestEnvVarDefault:
         collector = PluginCollector().set_strict_mode("off")
         assert collector.strict_mode == "off"
 
+    @pytest.mark.parametrize(("raw", "normalized"), [("WARN", "warn"), ("Strict", "strict")])
+    def test_env_var_value_is_case_insensitive(
+        self, monkeypatch: pytest.MonkeyPatch, raw: str, normalized: str
+    ) -> None:
+        """The env var is user input, so casing must be normalized to lowercase.
+
+        set_strict_mode() stays exact-match; only the env var path normalizes.
+        """
+        monkeypatch.setenv(ENV_VAR, raw)
+        assert PluginCollector().strict_mode == normalized
+
 
 class TestEngineStrictModeOff:
     def test_off_mode_keeps_unregistered_feature_group(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -179,6 +198,48 @@ class TestEngineStrictModeStrict:
         )
 
 
+class TestEngineStrictModeEmptyResult:
+    def test_strict_empty_result_error_mentions_strict_mode_and_fix(self) -> None:
+        """With strict mode on and an empty registry, the error must teach the strict-mode fix.
+
+        At least one accessible FeatureGroup subclass exists (this module's doubles),
+        so the empty result is caused by strict filtering, not by missing plugins.
+        The generic "Did you call PluginLoader.all()?" hint would mislead here.
+        """
+        PluginRegistry.default().clear()
+        collector = PluginCollector().set_strict_mode("strict")
+        with pytest.raises(ValueError) as exc_info:
+            PreFilterPlugins(_cfws(), collector)
+        message = str(exc_info.value)
+        assert "strict" in message, "empty-result error under strict mode must mention strict mode"
+        assert "register" in message, "empty-result error under strict mode must say how to fix it"
+        assert "PluginLoader.all" not in message, (
+            "strict-mode empty result must not blame plugin loading when subclasses exist"
+        )
+
+
+class TestEngineStrictModeEnabledButUnregistered:
+    def test_strict_mode_warns_when_enabled_class_is_dropped(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Explicitly enabled but unregistered classes silently vanish today; that must warn."""
+        register(_StrictEnabledRegisteredFG)
+        collector = PluginCollector().set_strict_mode("strict")
+        collector.add_enabled_feature_group_classes({_StrictEnabledUnregisteredFG, _StrictEnabledRegisteredFG})
+        with caplog.at_level(logging.WARNING):
+            accessible = PreFilterPlugins(_cfws(), collector).get_accessible_plugins()
+        assert _StrictEnabledRegisteredFG in accessible
+        assert _StrictEnabledUnregisteredFG not in accessible
+        matching = [
+            record
+            for record in caplog.records
+            if _StrictEnabledUnregisteredFG.__name__ in record.getMessage()
+            and "enabled" in record.getMessage()
+            and "not registered" in record.getMessage()
+        ]
+        assert matching, (
+            "strict mode must warn that an explicitly enabled class was dropped because it is not registered"
+        )
+
+
 class TestEngineStrictModeWarn:
     def test_warn_mode_resolution_matches_off_mode(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(ENV_VAR, raising=False)
@@ -218,6 +279,28 @@ class TestEngineStrictModeWarn:
         assert _StrictUnregisteredFG.__name__ in message
         assert _StrictUnregisteredFG2.__name__ in message
         assert "not registered" in message
+
+    def test_warn_mode_warns_once_per_process_for_already_warned_classes(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Two constructions in a row must emit the aggregated warning only once.
+
+        Contract: accessible_plugins keeps a module-level set _warned_unregistered of
+        already-warned class names; the second construction finds every name already
+        warned and stays silent. The autouse conftest fixture clears the set per test,
+        so the per-construction warn tests above stay independent.
+        """
+        with caplog.at_level(logging.WARNING):
+            PreFilterPlugins(_cfws(), PluginCollector().set_strict_mode("warn"))
+            PreFilterPlugins(_cfws(), PluginCollector().set_strict_mode("warn"))
+        records = [
+            rec
+            for rec in caplog.records
+            if rec.name == "mloda.core.prepare.accessible_plugins" and "not registered" in rec.getMessage()
+        ]
+        assert len(records) == 1, (
+            f"warn mode must deduplicate already-warned class names per process, got {len(records)} records"
+        )
 
 
 class TestEnvWithoutCollector:

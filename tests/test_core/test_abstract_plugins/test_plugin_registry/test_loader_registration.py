@@ -1,4 +1,4 @@
-"""Failing tests for the loader -> registry discovery funnel (issue #526, work item 3).
+"""Tests for the loader -> registry discovery funnel (issue #526, work item 3).
 
 Contract: PluginLoader loads feed the default PluginRegistry. Every FeatureGroup,
 ComputeFramework, or Extender subclass DEFINED in a loaded module (cls.__module__

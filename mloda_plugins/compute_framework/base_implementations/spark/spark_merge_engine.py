@@ -53,6 +53,7 @@ class SparkMergeEngine(BaseMergeEngine):
                 f"{self.__class__.__name__} ASOF does not support a timedelta tolerance; provide a numeric "
                 "tolerance (e.g. epoch seconds matching the time column)."
             )
+        self.validate_asof_time_columns(left_data, right_data, asof_config)
         self.check_import()
         if asof_config.direction == "nearest":
             raise ValueError("SparkMergeEngine asof does not support direction='nearest'.")
@@ -112,6 +113,24 @@ class SparkMergeEngine(BaseMergeEngine):
         select_list = [F.col(c) for c in left_cols]
         select_list += [F.col(f"{prefix}{c}").alias(c) for c in right_keep]
         return ranked.select(*select_list)
+
+    def _asof_time_column_is_ordered(self, data: Any, column: str) -> bool:
+        dtype = dict(data.dtypes)[column]
+        ordered_prefixes = (
+            "tinyint",
+            "smallint",
+            "int",
+            "bigint",
+            "long",
+            "short",
+            "float",
+            "double",
+            "decimal",
+            "timestamp",
+            "date",
+            "interval",
+        )
+        return any(dtype.startswith(p) for p in ordered_prefixes)
 
     def _join_logic(
         self, join_type: str, left_data: Any, right_data: Any, left_index: Index, right_index: Index

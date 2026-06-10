@@ -5,7 +5,7 @@ from typing import Any
 from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 from mloda_plugins.compute_framework.base_implementations.sql.sql_base_merge_engine import SqlBaseMergeEngine
-from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
+from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import is_ordered_arrow_type, quote_ident
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation, _next_table_name
 
 
@@ -28,6 +28,7 @@ class SqliteMergeEngine(SqlBaseMergeEngine):
         right_index: Index,
         asof_config: AsOfJoinConfig,
     ) -> Any:
+        self.validate_asof_time_columns(left_data, right_data, asof_config)
         if self.framework_connection is None:
             raise ValueError("Framework connection not set. SQL merge engine requires a connection from the framework.")
         if asof_config.direction == "nearest":
@@ -88,6 +89,10 @@ class SqliteMergeEngine(SqlBaseMergeEngine):
             f") WHERE {rn} = 1"
         )
         return self._execute_sql(sql)
+
+    def _asof_time_column_is_ordered(self, data: Any, column: str) -> bool:
+        idx = data.columns.index(column)
+        return is_ordered_arrow_type(data.types[idx])
 
     def _execute_sql(self, sql: str) -> Any:
         if self.framework_connection is None:

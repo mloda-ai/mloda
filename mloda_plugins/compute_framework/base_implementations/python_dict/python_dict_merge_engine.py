@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 from mloda.provider import BaseMergeEngine
@@ -45,6 +45,7 @@ class PythonDictMergeEngine(BaseMergeEngine):
         right_index: Index,
         asof_config: AsOfJoinConfig,
     ) -> Any:
+        self.validate_asof_time_columns(left_data, right_data, asof_config)
         left_by = list(left_index.index)
         right_by = list(right_index.index)
         lt, rt = asof_config.left_time_column, asof_config.right_time_column
@@ -79,6 +80,14 @@ class PythonDictMergeEngine(BaseMergeEngine):
             result.append(merged)
 
         return result
+
+    def _asof_time_column_is_ordered(self, data: Any, column: str) -> bool:
+        for row in data:
+            v = row.get(column)
+            if v is None:
+                continue
+            return isinstance(v, (int, float, datetime, date, timedelta)) and not isinstance(v, bool)
+        return True
 
     @staticmethod
     def _select_asof_match(

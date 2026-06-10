@@ -7,8 +7,10 @@ from mloda.provider import BaseMergeEngine
 
 try:
     import pandas as pd
+    import pandas.api.types as pdt
 except ImportError:
     pd = None
+    pdt = None
 
 
 class PandasMergeEngine(BaseMergeEngine):
@@ -43,6 +45,7 @@ class PandasMergeEngine(BaseMergeEngine):
         right_index: Index,
         asof_config: AsOfJoinConfig,
     ) -> Any:
+        self.validate_asof_time_columns(left_data, right_data, asof_config)
         by_left = list(left_index.index)
         by_right = list(right_index.index)
         lt, rt = asof_config.left_time_column, asof_config.right_time_column
@@ -62,6 +65,12 @@ class PandasMergeEngine(BaseMergeEngine):
             left_by=by_left,
             right_by=by_right,
             **kwargs,
+        )
+
+    def _asof_time_column_is_ordered(self, data: Any, column: str) -> bool:
+        dtype = data[column].dtype
+        return bool(
+            pdt.is_numeric_dtype(dtype) or pdt.is_datetime64_any_dtype(dtype) or pdt.is_timedelta64_dtype(dtype)
         )
 
     def join_logic(

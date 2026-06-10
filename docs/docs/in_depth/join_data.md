@@ -93,6 +93,10 @@ Cross-backend caveats to be aware of:
     by-keys/time columns, `pandas`/`pyarrow` keep both with `_x`/`_y` suffixes, whereas the
     SQL/`polars`/`python_dict` backends keep the left column and drop the right one. Rename
     conflicting columns upstream if you need both.
+-   **Time-column dtype.** As-of time columns must be ordered (datetime, numeric, or timedelta). A
+    non-ordered column (e.g. ISO-date strings / object dtype) raises a clear `ValueError` naming the
+    column; cast it to a real datetime or numeric before joining. This is enforced uniformly across
+    all backends inside the merge engine at run time.
 -   **Ties.** When two right rows share the identical boundary timestamp within a by-key, the chosen
     row is backend-defined (each engine applies its own internal tie rule). `python_dict`,
     `sqlite`, and `spark` resolve ties deterministically (smallest surviving right column values

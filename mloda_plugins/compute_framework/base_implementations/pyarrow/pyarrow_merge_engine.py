@@ -7,7 +7,10 @@ from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 from mloda.user import Index
 from mloda.user import JoinType
 from mloda.provider import BaseMergeEngine
-from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import pick_helper_column_name
+from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
+    is_ordered_arrow_type,
+    pick_helper_column_name,
+)
 
 
 class PyArrowMergeEngine(BaseMergeEngine):
@@ -79,6 +82,7 @@ class PyArrowMergeEngine(BaseMergeEngine):
         right_index: Index,
         asof_config: AsOfJoinConfig,
     ) -> Any:
+        self.validate_asof_time_columns(left_data, right_data, asof_config)
         if asof_config.direction == "nearest":
             raise ValueError(f"{self.__class__.__name__} asof does not support direction='nearest'.")
 
@@ -150,6 +154,10 @@ class PyArrowMergeEngine(BaseMergeEngine):
             result = result.rename_columns(new_names)
 
         return result
+
+    def _asof_time_column_is_ordered(self, data: Any, column: str) -> bool:
+        t = data.schema.field(column).type
+        return is_ordered_arrow_type(t)
 
     def join_logic(
         self, join_type: str, left_data: Any, right_data: Any, left_index: Index, right_index: Index, jointype: JoinType

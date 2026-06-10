@@ -14,7 +14,12 @@ global counts. Registry writes are restored by the autouse conftest fixture;
 env writes go through monkeypatch only.
 """
 
+import gc
+import linecache
 import logging
+import sys
+import textwrap
+from typing import cast
 
 import pytest
 
@@ -22,7 +27,7 @@ from mloda.core.abstract_plugins.components.plugin_option.plugin_collector impor
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import register
-from mloda.core.prepare.accessible_plugins import PreFilterPlugins
+from mloda.core.prepare.accessible_plugins import PreFilterPlugins, RedefinitionConflictError
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
 ENV_VAR = "MLODA_PLUGIN_REGISTRY_STRICT"
@@ -32,12 +37,48 @@ class _StrictUnregisteredFG(FeatureGroup):
     """Local double that is never registered in the default registry."""
 
 
+class _StrictUnregisteredFG2(FeatureGroup):
+    """Second local double that is never registered, for warn-aggregation tests."""
+
+
 class _StrictRegisteredFG(FeatureGroup):
     """Local double that tests register explicitly in the default registry."""
 
 
+class _StrictConflictBystanderFG(FeatureGroup):
+    """Local double registered alongside an unregistered redefinition conflict."""
+
+
 def _cfws() -> set[type[ComputeFramework]]:
     return {PythonDictFramework}
+
+
+def _exec_fg_in_main(class_name: str, body: str, cell_label: str) -> type[FeatureGroup]:
+    """Exec a FeatureGroup subclass into ``__main__`` with linecache-backed source.
+
+    Mirrors the proven Jupyter-cell recipe from
+    tests/test_core/test_prepare/test_feature_group_dedup.py so
+    ``inspect.getsource`` works for the exec'd class.
+    """
+    main_mod = sys.modules["__main__"]
+    src = textwrap.dedent(body)
+    filename = f"<{cell_label}>"
+    linecache.cache[filename] = (len(src), None, src.splitlines(keepends=True), filename)
+    exec(compile(src, filename, "exec"), main_mod.__dict__)  # nosec B102
+    return cast(type[FeatureGroup], main_mod.__dict__[class_name])
+
+
+def _make_fg_source(class_name: str, feature_name: str, extra_body: str = "") -> str:
+    """Build FeatureGroup subclass source for exec into ``__main__``."""
+    return f"""
+from mloda.core.abstract_plugins.feature_group import FeatureGroup as _FG_BASE_
+
+class {class_name}(_FG_BASE_):
+    @classmethod
+    def feature_names_supported(cls):
+        return {{"{feature_name}"}}
+{extra_body}
+"""
 
 
 class TestSetStrictModeApi:
@@ -94,6 +135,51 @@ class TestEngineStrictModeStrict:
         assert _StrictUnregisteredFG not in accessible
 
 
+    def test_strict_filter_runs_before_dedup_so_unregistered_conflicts_cannot_poison(self) -> None:
+        """An unregistered same-name different-source pair must not break strict resolution.
+
+        Strict mode must filter unregistered classes BEFORE dedup runs, so a stale
+        redefinition conflict among unregistered classes never reaches dedup.
+        """
+        qualname = "StrictFG_RedConflictPair"
+        feature_name = "strict_red_conflict_feature_unique_xyz"
+        v1 = _exec_fg_in_main(qualname, _make_fg_source(qualname, feature_name), "cell-strict-red-v1")
+        v2 = _exec_fg_in_main(
+            qualname,
+            _make_fg_source(qualname, feature_name, extra_body="    def extra_method(self):\n        return 42\n"),
+            "cell-strict-red-v2",
+        )
+        assert v1 is not v2, "sanity: two distinct class objects with the same (module, qualname)"
+
+        register(_StrictConflictBystanderFG)
+        collector = PluginCollector().set_strict_mode("strict")
+
+        accessible = None
+        conflict_error = ""
+        try:
+            accessible = PreFilterPlugins(_cfws(), collector).get_accessible_plugins()
+        except RedefinitionConflictError as exc:
+            conflict_error = str(exc)
+        finally:
+            # Drop every strong ref to the conflicting pair so it cannot poison
+            # other tests in this worker process via FeatureGroup.__subclasses__().
+            sys.modules["__main__"].__dict__.pop(qualname, None)
+            linecache.cache.pop("<cell-strict-red-v1>", None)
+            linecache.cache.pop("<cell-strict-red-v2>", None)
+            del v1, v2
+            gc.collect()
+
+        if accessible is None:
+            pytest.fail(
+                "strict mode must filter unregistered classes before dedup; "
+                f"got RedefinitionConflictError: {conflict_error}"
+            )
+        assert _StrictConflictBystanderFG in accessible
+        assert not any(fg.__qualname__ == qualname for fg in accessible), (
+            "unregistered conflicting classes must not appear in strict accessible plugins"
+        )
+
+
 class TestEngineStrictModeWarn:
     def test_warn_mode_resolution_matches_off_mode(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(ENV_VAR, raising=False)
@@ -113,6 +199,26 @@ class TestEngineStrictModeWarn:
             if _StrictUnregisteredFG.__name__ in record.getMessage() and "not registered" in record.getMessage()
         ]
         assert matching, "warn mode must log a warning naming the unregistered class and saying 'not registered'"
+
+    def test_warn_mode_aggregates_all_unregistered_classes_into_one_record(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """One PreFilterPlugins construction must emit exactly ONE warning record.
+
+        The single aggregated record names every unregistered class instead of
+        emitting one record per class.
+        """
+        collector = PluginCollector().set_strict_mode("warn")
+        with caplog.at_level(logging.WARNING):
+            PreFilterPlugins(_cfws(), collector)
+        records = [rec for rec in caplog.records if rec.name == "mloda.core.prepare.accessible_plugins"]
+        assert len(records) == 1, (
+            f"warn mode must aggregate unregistered classes into one record per construction, got {len(records)}"
+        )
+        message = records[0].getMessage()
+        assert _StrictUnregisteredFG.__name__ in message
+        assert _StrictUnregisteredFG2.__name__ in message
+        assert "not registered" in message
 
 
 class TestEnvWithoutCollector:

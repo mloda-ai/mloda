@@ -78,13 +78,23 @@ class PluginRegistry:
         return entry.cls if entry is not None else None
 
     def get_entry(self, name: str) -> PluginRegistryEntry:
-        return self._entries[name]
+        entry = self._entries.get(name)
+        if entry is None:
+            raise ValueError(f"No plugin registered under key '{name}'.")
+        return entry
 
     def is_registered(self, cls: type[Any]) -> bool:
         return any(entry.cls is cls for entry in self._entries.values())
 
     def list_registered(self, plugin_type: type[Any]) -> list[type[Any]]:
-        return [entry.cls for key, entry in sorted(self._entries.items()) if entry.plugin_type is plugin_type]
+        result: list[type[Any]] = []
+        seen: set[type[Any]] = set()
+        for _key, entry in sorted(self._entries.items()):
+            if entry.plugin_type is not plugin_type or entry.cls in seen:
+                continue
+            seen.add(entry.cls)
+            result.append(entry.cls)
+        return result
 
     def snapshot(self) -> PluginRegistrySnapshot:
         return dict(self._entries)
@@ -104,7 +114,10 @@ def register(cls: type[Any], *, name: str | None = None, source: str = "manual",
 
 
 def register_module_plugins(module: ModuleType, *, source: str = "loader") -> list[str]:
-    """Register all plugin classes defined in a module into the default registry."""
+    """Register all plugin classes defined in a module into the default registry.
+
+    Last-write-wins (replace=True) so importlib.reload updates entries; provenance may flip to "loader".
+    """
     registry = PluginRegistry.default()
     keys: list[str] = []
     for obj in vars(module).values():

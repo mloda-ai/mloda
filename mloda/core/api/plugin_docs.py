@@ -63,8 +63,8 @@ def get_feature_group_docs(
     allow_redefinition = plugin_collector.allow_redefinition if plugin_collector is not None else False
     all_feature_groups: set[type[FeatureGroup]] = get_all_subclasses(FeatureGroup)
     if registered_only:
-        registry = PluginRegistry.default()
-        all_feature_groups = {fg for fg in all_feature_groups if registry.is_registered(fg)}
+        registered = {entry.cls for entry in PluginRegistry.default().snapshot().values()}
+        all_feature_groups = {fg for fg in all_feature_groups if fg in registered}
     if plugin_collector is not None:
         all_feature_groups = {fg for fg in all_feature_groups if plugin_collector.applicable_feature_group_class(fg)}
     all_feature_groups = dedup_feature_group_subclasses(all_feature_groups, allow_redefinition=allow_redefinition)
@@ -134,8 +134,8 @@ def get_compute_framework_docs(
     """
     all_compute_frameworks = get_all_subclasses(ComputeFramework)
     if registered_only:
-        registry = PluginRegistry.default()
-        all_compute_frameworks = {cfw for cfw in all_compute_frameworks if registry.is_registered(cfw)}
+        registered = {entry.cls for entry in PluginRegistry.default().snapshot().values()}
+        all_compute_frameworks = {cfw for cfw in all_compute_frameworks if cfw in registered}
     results = []
 
     for cfw_class in all_compute_frameworks:
@@ -210,8 +210,8 @@ def get_extender_docs(
     """
     all_extenders = get_all_subclasses(Extender)
     if registered_only:
-        registry = PluginRegistry.default()
-        all_extenders = {ext for ext in all_extenders if registry.is_registered(ext)}
+        registered = {entry.cls for entry in PluginRegistry.default().snapshot().values()}
+        all_extenders = {ext for ext in all_extenders if ext in registered}
     results = []
 
     for ext_class in all_extenders:

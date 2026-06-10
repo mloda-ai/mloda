@@ -148,6 +148,12 @@ class TestPluginRegistryLookup:
         with pytest.raises(ValueError):
             reg.unregister("does_not_exist")
 
+    def test_get_entry_unknown_key_raises_value_error(self) -> None:
+        """get_entry on an unknown key must raise ValueError, not a bare KeyError."""
+        reg = PluginRegistry()
+        with pytest.raises(ValueError):
+            reg.get_entry("nope:Missing")
+
     def test_is_registered_true_for_registered_class(self) -> None:
         reg = PluginRegistry()
         reg.register(_RegistryTestFGA, name="any_key")
@@ -204,6 +210,17 @@ class TestPluginRegistryListRegistered:
         result = reg.list_registered(FeatureGroup)
         assert isinstance(result, list)
         assert result == [_RegistryTestFGA, _RegistryTestFGB]
+
+    def test_list_registered_dedupes_class_registered_under_multiple_keys(self) -> None:
+        """A class registered under several keys must appear exactly once in list_registered."""
+        reg = PluginRegistry()
+        reg.register(_RegistryTestFGA)
+        reg.register(_RegistryTestFGA, name="alias")
+        result = reg.list_registered(FeatureGroup)
+        assert _RegistryTestFGA in result
+        assert result.count(_RegistryTestFGA) == 1, (
+            f"list_registered must dedupe by class identity, got {result.count(_RegistryTestFGA)} occurrences"
+        )
 
     def test_list_registered_is_registration_order_independent(self) -> None:
         reg_ab = PluginRegistry()

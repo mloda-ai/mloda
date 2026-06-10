@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import sys
 from copy import deepcopy
-from typing import Optional, cast
+from typing import Any, Optional, cast
 
 from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import (
@@ -238,19 +238,26 @@ class PreFilterPlugins:
                     accessible_feature_groups.remove(accessible_fg)
 
         allow_redefinition = plugin_collector.allow_redefinition if plugin_collector is not None else False
+        strict_mode = plugin_collector.strict_mode if plugin_collector is not None else strict_mode_from_env()
+
+        registered: set[type[Any]] = set()
+        if strict_mode != "off":
+            registered = {entry.cls for entry in PluginRegistry.default().snapshot().values()}
+
+        if strict_mode == "strict":
+            accessible_feature_groups = {fg for fg in accessible_feature_groups if fg in registered}
+
         accessible_feature_groups = dedup_feature_group_subclasses(
             accessible_feature_groups, allow_redefinition=allow_redefinition
         )
 
-        strict_mode = plugin_collector.strict_mode if plugin_collector is not None else strict_mode_from_env()
-        if strict_mode != "off":
-            registry = PluginRegistry.default()
-            if strict_mode == "strict":
-                accessible_feature_groups = {fg for fg in accessible_feature_groups if registry.is_registered(fg)}
-            else:
-                for fg in accessible_feature_groups:
-                    if not registry.is_registered(fg):
-                        logger.warning("FeatureGroup %s is not registered in the plugin registry.", fg.__name__)
+        if strict_mode == "warn":
+            unregistered = sorted(fg.__name__ for fg in accessible_feature_groups if fg not in registered)
+            if unregistered:
+                logger.warning(
+                    "FeatureGroups not registered in the plugin registry: %s.",
+                    ", ".join(unregistered),
+                )
 
         if len(accessible_feature_groups) == 0:
             raise ValueError("No feature groups are loaded. Did you call PluginLoader.all()?")

@@ -1,6 +1,8 @@
 from pathlib import PosixPath
 from mloda.user import Feature
-from mloda_plugins.feature_group.experimental.llm.list_directory_feature_group import ListDirectoryFeatureGroup
+from mloda_plugins.feature_group.experimental.environment.list_directory_feature_group import (
+    ListDirectoryFeatureGroup,
+)
 from mloda.provider import FeatureSet
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda.user import mloda

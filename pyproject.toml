@@ -179,6 +179,3 @@ constraint-dependencies = [
     "mistune>=3.2.1",
     "nbconvert>=7.17.1",
 ]
-
-[project.scripts]
-mloda = "mloda_plugins.feature_group.experimental.llm.cli:main"

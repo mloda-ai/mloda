@@ -34,9 +34,7 @@ tests/
     ├── feature_group/          # Tests for feature group plugins
     │   ├── experimental/       # Tests for experimental features
     │   │   ├── dynamic_feature_group_factory/  # Tests for dynamic feature groups
-    │   │   ├── llm/            # Tests for LLM-related features
-    │   │   │   ├── cli_features/  # Tests for CLI features
-    │   │   │   └── tools/      # Tests for LLM tools
+    │   │   ├── environment/    # Tests for environment feature groups
     │   │   └── test_source_input_features/  # Tests for source input features
     │   └── input_data/         # Tests for input data handling
     │       ├── test_classes/   # Tests for input classes

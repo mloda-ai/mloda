@@ -259,9 +259,6 @@ PARALLELIZATION_MODES_ALL = pytest.mark.parametrize(
     [
         ({ParallelizationMode.SYNC}),
         ({ParallelizationMode.THREADING}),
-        # MULTIPROCESSING spawns worker processes plus a flight server; under
-        # `pytest -n 8` load, process spawn/join latency alone can eat most of
-        # the global 10s budget and flake. Give only this variant more room.
-        pytest.param({ParallelizationMode.MULTIPROCESSING}, marks=pytest.mark.timeout(30)),
+        ({ParallelizationMode.MULTIPROCESSING}),
     ],
 )

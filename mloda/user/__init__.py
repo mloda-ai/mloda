@@ -29,6 +29,12 @@ from mloda.core.abstract_plugins.components.parallelization_modes import Paralle
 from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 
+# Plugin registry
+from mloda.core.abstract_plugins.plugin_registry.plugin_registry import (
+    PluginRegistryCollisionError,
+    register_plugin,
+)
+
 # Config loading
 from mloda.core.api.feature_config.loader import load_features_from_config
 
@@ -37,6 +43,7 @@ from mloda.core.api.plugin_docs import (
     get_feature_group_docs,
     get_compute_framework_docs,
     get_extender_docs,
+    list_registered,
     resolve_feature,
 )
 
@@ -71,6 +78,9 @@ __all__ = [
     # Plugin discovery
     "PluginLoader",
     "PluginCollector",
+    # Plugin registry
+    "PluginRegistryCollisionError",
+    "register_plugin",
     # Streaming API
     "stream_all",
     # Config loading
@@ -79,5 +89,6 @@ __all__ = [
     "get_feature_group_docs",
     "get_compute_framework_docs",
     "get_extender_docs",
+    "list_registered",
     "resolve_feature",
 ]

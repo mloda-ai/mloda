@@ -72,6 +72,12 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.framework_transformer.base_transformer import BaseTransformer
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
 
+# Plugin registry
+from mloda.core.abstract_plugins.plugin_registry.plugin_registry import (
+    PluginRegistryCollisionError,
+    register_plugin,
+)
+
 # Engines
 from mloda.core.filter.filter_engine import BaseFilterEngine
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
@@ -119,6 +125,9 @@ __all__ = [
     # Transformers
     "BaseTransformer",
     "ComputeFrameworkTransformer",
+    # Plugin registry
+    "PluginRegistryCollisionError",
+    "register_plugin",
     # Engines
     "BaseFilterEngine",
     "BaseMaskEngine",

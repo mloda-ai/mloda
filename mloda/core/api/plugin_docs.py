@@ -15,18 +15,24 @@ Example:
     docs = get_feature_group_docs()
 """
 
-from typing import Optional
+from typing import Any, Optional
 
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender
+from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.api.plugin_info import ComputeFrameworkInfo, ExtenderInfo, FeatureGroupInfo, ResolvedFeature
 from mloda.core.prepare.accessible_plugins import dedup_feature_group_subclasses
 from mloda.core.prepare.identify_feature_group import split_frameworks_by_capability
+
+
+def list_registered(plugin_type: type[Any]) -> list[type[Any]]:
+    """Return the default-registry classes for a plugin base type, sorted by registry key."""
+    return PluginRegistry.default().list_registered(plugin_type)
 
 
 def get_feature_group_docs(
@@ -35,6 +41,7 @@ def get_feature_group_docs(
     compute_framework: Optional[str | type[ComputeFramework]] = None,
     version_contains: Optional[str] = None,
     plugin_collector: Optional[PluginCollector] = None,
+    registered_only: bool = False,
 ) -> list[FeatureGroupInfo]:
     """
     Get documentation for feature groups with optional filtering.
@@ -48,12 +55,16 @@ def get_feature_group_docs(
         compute_framework: Filter by compute framework name or class.
         version_contains: Filter by version substring.
         plugin_collector: Filter using plugin collector's applicability check.
+        registered_only: If True, only document classes registered in the default registry.
 
     Returns:
         List of FeatureGroupInfo objects sorted by name.
     """
     allow_redefinition = plugin_collector.allow_redefinition if plugin_collector is not None else False
     all_feature_groups: set[type[FeatureGroup]] = get_all_subclasses(FeatureGroup)
+    if registered_only:
+        registered = {entry.cls for entry in PluginRegistry.default().snapshot().values()}
+        all_feature_groups = {fg for fg in all_feature_groups if fg in registered}
     if plugin_collector is not None:
         all_feature_groups = {fg for fg in all_feature_groups if plugin_collector.applicable_feature_group_class(fg)}
     all_feature_groups = dedup_feature_group_subclasses(all_feature_groups, allow_redefinition=allow_redefinition)
@@ -104,6 +115,7 @@ def get_compute_framework_docs(
     name: Optional[str] = None,
     search: Optional[str] = None,
     available_only: bool = True,
+    registered_only: bool = False,
 ) -> list[ComputeFrameworkInfo]:
     """
     Get documentation for compute frameworks with optional filtering.
@@ -115,11 +127,15 @@ def get_compute_framework_docs(
         name: Filter by compute framework name (case-insensitive partial match).
         search: Search in compute framework description (case-insensitive partial match).
         available_only: If True, only return available frameworks (default True).
+        registered_only: If True, only document classes registered in the default registry.
 
     Returns:
         List of ComputeFrameworkInfo objects sorted by name.
     """
     all_compute_frameworks = get_all_subclasses(ComputeFramework)
+    if registered_only:
+        registered = {entry.cls for entry in PluginRegistry.default().snapshot().values()}
+        all_compute_frameworks = {cfw for cfw in all_compute_frameworks if cfw in registered}
     results = []
 
     for cfw_class in all_compute_frameworks:
@@ -175,6 +191,7 @@ def get_extender_docs(
     name: Optional[str] = None,
     search: Optional[str] = None,
     wraps: Optional[str] = None,
+    registered_only: bool = False,
 ) -> list[ExtenderInfo]:
     """
     Get documentation for extenders with optional filtering.
@@ -186,11 +203,15 @@ def get_extender_docs(
         name: Filter by extender name (case-insensitive partial match).
         search: Search in extender description (case-insensitive partial match).
         wraps: Filter by wrapped function type (case-insensitive exact match).
+        registered_only: If True, only document classes registered in the default registry.
 
     Returns:
         List of ExtenderInfo objects sorted by name.
     """
     all_extenders = get_all_subclasses(Extender)
+    if registered_only:
+        registered = {entry.cls for entry in PluginRegistry.default().snapshot().values()}
+        all_extenders = {ext for ext in all_extenders if ext in registered}
     results = []
 
     for ext_class in all_extenders:

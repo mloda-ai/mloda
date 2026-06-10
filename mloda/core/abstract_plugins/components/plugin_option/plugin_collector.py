@@ -1,4 +1,21 @@
+import os
+
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+
+STRICT_MODE_ENV_VAR = "MLODA_PLUGIN_REGISTRY_STRICT"
+VALID_STRICT_MODES = ("off", "warn", "strict")
+
+
+def strict_mode_from_env() -> str:
+    """Read the strict mode from the environment, defaulting to "off"."""
+    mode = os.environ.get(STRICT_MODE_ENV_VAR, "off").lower()
+    _validate_strict_mode(mode)
+    return mode
+
+
+def _validate_strict_mode(mode: str) -> None:
+    if mode not in VALID_STRICT_MODES:
+        raise ValueError(f"Invalid strict mode {mode!r}. Valid modes are: {', '.join(VALID_STRICT_MODES)}.")
 
 
 class PluginCollector:
@@ -21,10 +38,17 @@ class PluginCollector:
         self.disabled_feature_group_classes: set[type[FeatureGroup]] = set()
         self.enabled_feature_group_classes: set[type[FeatureGroup]] = set()
         self.allow_redefinition: bool = False
+        self.strict_mode: str = strict_mode_from_env()
 
     def set_allow_redefinition(self, allow: bool = True) -> "PluginCollector":
         """Allow keeping the most recently defined class when duplicates differ in source."""
         self.allow_redefinition = allow
+        return self
+
+    def set_strict_mode(self, mode: str) -> "PluginCollector":
+        """Set the registry strict mode: "off", "warn", or "strict"."""
+        _validate_strict_mode(mode)
+        self.strict_mode = mode
         return self
 
     def add_disabled_feature_group_classes(self, feature_group_cls: set[type[FeatureGroup]]) -> None:

@@ -1,18 +1,25 @@
 from __future__ import annotations
 
+import inspect
 import logging
 import sys
 from copy import deepcopy
-from typing import Optional, cast
+from typing import Any, Optional, cast
 
 from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
-from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
+from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import (
+    PluginCollector,
+    strict_mode_from_env,
+)
+from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 
 
 logger = logging.getLogger(__name__)
+
+_warned_unregistered: set[str] = set()
 
 
 FeatureGroupEnvironmentMapping = dict[type[FeatureGroup], set[type[ComputeFramework]]]
@@ -234,9 +241,56 @@ class PreFilterPlugins:
                     accessible_feature_groups.remove(accessible_fg)
 
         allow_redefinition = plugin_collector.allow_redefinition if plugin_collector is not None else False
+        strict_mode = plugin_collector.strict_mode if plugin_collector is not None else strict_mode_from_env()
+
+        registered: set[type[Any]] = set()
+        if strict_mode != "off":
+            registered = {entry.cls for entry in PluginRegistry.default().snapshot().values()}
+
+        if strict_mode == "strict":
+            before_strict = accessible_feature_groups
+            accessible_feature_groups = {
+                fg for fg in accessible_feature_groups if fg in registered or inspect.isabstract(fg)
+            }
+            if plugin_collector is not None:
+                dropped_enabled = sorted(
+                    f"{fg.__module__}:{fg.__qualname__}"
+                    for fg in before_strict - accessible_feature_groups
+                    if fg in plugin_collector.enabled_feature_group_classes
+                )
+                if dropped_enabled:
+                    logger.warning(
+                        "Explicitly enabled FeatureGroups were dropped by strict mode because they are "
+                        "not registered in the plugin registry: %s.",
+                        ", ".join(dropped_enabled),
+                    )
+            had_concrete = any(not inspect.isabstract(fg) for fg in before_strict)
+            has_concrete = any(not inspect.isabstract(fg) for fg in accessible_feature_groups)
+            if had_concrete and not has_concrete:
+                raise ValueError(
+                    "Strict mode filtered out all FeatureGroups: none of the accessible FeatureGroups "
+                    "are registered in the plugin registry. Register them via mloda.user.register_plugin() or "
+                    "relax MLODA_PLUGIN_REGISTRY_STRICT to disable strict mode."
+                )
+
         accessible_feature_groups = dedup_feature_group_subclasses(
             accessible_feature_groups, allow_redefinition=allow_redefinition
         )
+
+        if strict_mode == "warn":
+            unregistered = sorted(
+                f"{fg.__module__}:{fg.__qualname__}"
+                for fg in accessible_feature_groups
+                if fg not in registered
+                and not inspect.isabstract(fg)
+                and f"{fg.__module__}:{fg.__qualname__}" not in _warned_unregistered
+            )
+            if unregistered:
+                _warned_unregistered.update(unregistered)
+                logger.warning(
+                    "FeatureGroups not registered in the plugin registry: %s.",
+                    ", ".join(unregistered),
+                )
 
         if len(accessible_feature_groups) == 0:
             raise ValueError("No feature groups are loaded. Did you call PluginLoader.all()?")

@@ -104,6 +104,51 @@ must be pure functions with no side effects.
 }
 ```
 
+### Declared Defaults Must Be Honored
+
+When a key uses `strict_validation: True`, a declared `default` must be a value the
+key actually accepts. mloda enforces this at class-definition time: defining a
+`FeatureGroup` subclass whose `PROPERTY_MAPPING` declares a strict default outside
+the accepted set (or one that fails the key's `validation_function`) raises
+`ValueError` immediately, naming the class, the key, the declared default, and the
+accepted values.
+
+This closes a silent gap: option validation only inspects keys present in the
+`Options` object, so omitting the key applies the default without revalidating it.
+Without the invariant, a subclass that narrows a key's accepted values to exclude
+the inherited default would validate successfully when the key is omitted, then run
+under a default it does not honor.
+
+``` python
+# Rejected at class definition: "mul" is not in the accepted set.
+PROPERTY_MAPPING = {
+    "operation_type": {
+        "add": "Addition",
+        "sub": "Subtraction",
+        DefaultOptionKeys.strict_validation: True,
+        DefaultOptionKeys.default: "mul",  # ValueError: not an accepted value
+    },
+}
+```
+
+To resolve a rejection, pick one of:
+
+- **Add the default to the accepted values** so it is honored.
+- **Remove the default**, which makes the key required by omission. A key with no
+  declared default (and no `required_when`) is unconditionally required, so it can
+  never silently run under an unhonored default.
+
+`required_when` does NOT exempt a key from this check. A `required_when` predicate
+expresses a *conditional* requirement: when the predicate returns `False` and the
+key is omitted, the declared default is still applied. A default outside the
+accepted set would therefore still slip through on that branch, so it is rejected
+regardless of `required_when`.
+
+A `default` of `None` is always legal: it is the conventional "unset" sentinel and
+is exempt from the check even under `strict_validation: True`. The check is also a
+no-op when `strict_validation` is `False`, where listed values are illustrative
+rather than enforced.
+
 ## Usage in Feature Groups
 
 ``` python

@@ -10,6 +10,7 @@ from mloda.core.abstract_plugins.components.data_types import DataType
 
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
@@ -75,6 +76,10 @@ class FeatureGroup(ABC):
     ``DefaultOptionKeys.strict_validation``, etc.), and optional validators.
     See ``docs/in_depth/property-mapping.md`` for the full specification.
     """
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        FeatureChainParser.validate_property_mapping_defaults(cls.__name__, cls.PROPERTY_MAPPING)
 
     def __init__(self) -> None:
         pass

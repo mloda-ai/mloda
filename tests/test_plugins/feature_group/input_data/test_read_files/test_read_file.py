@@ -22,6 +22,7 @@ from mloda.provider import FeatureSet
 from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda.user import mloda
+from tests.test_core.test_integration.test_core.test_runner_one_compute_framework import SumFeature  # noqa: F401
 
 
 class OverwrittenReadCsvInputDataTestFeatureGroup(ReadFileFeature):

@@ -19,6 +19,16 @@ def _noop_target(*args: Any, **kwargs: Any) -> None:
     return None
 
 
+def _loop_forever_target(command_queue: Any, result_queue: Any) -> None:
+    """Picklable worker target that never exits on its own.
+
+    Module-level so it pickles under the spawn context. create_worker_process
+    prepends command_queue and result_queue to the args it passes to the target.
+    """
+    while True:
+        time.sleep(0.1)
+
+
 class TestWorkerManagerInit:
     """Test WorkerManager initialization."""
 
@@ -433,6 +443,37 @@ class TestWorkerManagerJoinAll:
         # Second process should still be joined despite first failure
         mock_process2.terminate.assert_called_once()
         mock_process2.join.assert_called_once()
+
+    @pytest.mark.timeout(30)
+    def test_join_all_terminates_real_spawn_worker_process(self) -> None:
+        """join_all should terminate a real spawn-context worker and return promptly.
+
+        create_worker_process builds workers from the spawn context, so they are
+        multiprocessing.context.SpawnProcess instances, which subclass BaseProcess
+        and are NOT instances of multiprocessing.Process. join_all's isinstance
+        check therefore never calls terminate() on real workers, and join() blocks
+        forever on a worker that does not exit on its own (GitHub issue #514).
+        """
+        manager = WorkerManager()
+        process, _, _ = manager.create_worker_process(cfw_uuid=uuid4(), target=_loop_forever_target, args=())
+
+        join_thread = threading.Thread(target=manager.join_all, daemon=True)
+        join_thread.start()
+        try:
+            deadline = time.time() + 5.0
+            while join_thread.is_alive() and time.time() < deadline:
+                join_thread.join(timeout=0.1)
+
+            assert not join_thread.is_alive(), "join_all() did not terminate the spawn worker process; it hung"
+        finally:
+            # Never leak the worker or hang the suite: kill it directly so the
+            # daemon join_all thread can finish its blocking join().
+            process.terminate()
+            process.join(timeout=5)
+            if process.is_alive():
+                process.kill()
+                process.join(timeout=5)
+            join_thread.join(timeout=1.0)
 
 
 class TestWorkerManagerIntegration:

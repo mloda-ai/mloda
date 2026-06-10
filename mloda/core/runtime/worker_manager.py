@@ -89,7 +89,7 @@ class WorkerManager:
         failed = False
         for task in self.tasks:
             try:
-                if isinstance(task, multiprocessing.Process):
+                if isinstance(task, BaseProcess):
                     task.terminate()
                 task.join()
             except Exception as e:

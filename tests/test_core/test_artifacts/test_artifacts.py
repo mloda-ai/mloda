@@ -69,12 +69,15 @@ class TestBaseArtifacts:
     def get_features(self, feature_list: list[str], options: dict[str, Any] = {}) -> Features:
         return Features([Feature(name=f_name, options=options, initial_requested_data=True) for f_name in feature_list])
 
-    def test_basic_artifact_feature(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
+    def test_basic_artifact_feature_save(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         _features = "BaseTestArtifactFeature"
 
         features = self.get_features([_features])
         result = MlodaTestRunner.run_api(features, parallelization_modes=modes, flight_server=flight_server)
         assert result.artifacts == {"BaseTestArtifactFeature": "DummyArtifact"}
+
+    def test_basic_artifact_feature_load(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
+        _features = "BaseTestArtifactFeature"
 
         features = self.get_features([_features], options={"BaseTestArtifactFeature": "DummyArtifact"})
         result = MlodaTestRunner.run_api(features, parallelization_modes=modes, flight_server=flight_server)

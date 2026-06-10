@@ -91,21 +91,10 @@ class DuckDBMergeEngine(SqlBaseMergeEngine):
 
     def _asof_time_column_is_ordered(self, data: Any, column: str) -> bool:
         idx = data.columns.index(column)
-        dtype_str = str(data.types[idx]).upper()
-        ordered = (
-            "INT",
-            "DECIMAL",
-            "DOUBLE",
-            "FLOAT",
-            "REAL",
-            "NUMERIC",
-            "HUGEINT",
-            "DATE",
-            "TIME",
-            "TIMESTAMP",
-            "INTERVAL",
-        )
-        return any(k in dtype_str for k in ordered)
+        t = data.types[idx]
+        dtype_id = getattr(t, "id", str(t)).lower()
+        ordered = ("int", "decimal", "float", "double", "real", "numeric", "date", "time", "interval")
+        return any(k in dtype_id for k in ordered)
 
     def _set_alias(self, data: Any, alias: str) -> Any:
         return data.set_alias(alias)

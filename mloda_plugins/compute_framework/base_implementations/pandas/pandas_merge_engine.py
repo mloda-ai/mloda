@@ -70,7 +70,8 @@ class PandasMergeEngine(BaseMergeEngine):
     def _asof_time_column_is_ordered(self, data: Any, column: str) -> bool:
         dtype = data[column].dtype
         return bool(
-            pdt.is_numeric_dtype(dtype) or pdt.is_datetime64_any_dtype(dtype) or pdt.is_timedelta64_dtype(dtype)
+            (pdt.is_numeric_dtype(dtype) or pdt.is_datetime64_any_dtype(dtype) or pdt.is_timedelta64_dtype(dtype))
+            and not pdt.is_bool_dtype(dtype)
         )
 
     def join_logic(

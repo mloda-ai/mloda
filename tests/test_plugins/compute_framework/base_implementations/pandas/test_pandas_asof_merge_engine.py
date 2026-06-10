@@ -94,6 +94,18 @@ class TestPandasAsofMergeEngine(AsofMergeEngineTestBase):
         assert rows[pd.Timestamp("2021-01-01 00:00:10")] == 7
         assert rows[pd.Timestamp("2021-01-01 00:01:42")] is None
 
+    def test_boolean_time_column_raises_value_error(self) -> None:
+        """A boolean time column is not orderable for an as-of join. pandas would otherwise pass
+        it via is_numeric_dtype; the guard must reject it consistently with the other engines and
+        raise a clear ValueError naming the column."""
+        left = pd.DataFrame({"k": [1], "t": [True], "lv": [1]})
+        right = pd.DataFrame({"k": [1], "t": [False], "rv": [7]})
+
+        engine = PandasMergeEngine()
+        cfg = AsOfJoinConfig(left_time_column="t", right_time_column="t")
+        with pytest.raises(ValueError, match=r"'t'.*(datetime|numeric)"):
+            engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg)
+
     def test_config_and_factories_accept_timedelta_tolerance(self) -> None:
         """AsOfJoinConfig, Link.asof and Link.asof_on accept a timedelta tolerance and carry it
         through unchanged (type-widening characterization)."""

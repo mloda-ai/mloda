@@ -86,7 +86,8 @@ class PythonDictMergeEngine(BaseMergeEngine):
             v = row.get(column)
             if v is None:
                 continue
-            return isinstance(v, (int, float, datetime, date, timedelta)) and not isinstance(v, bool)
+            if isinstance(v, bool) or not isinstance(v, (int, float, datetime, date, timedelta)):
+                return False
         return True
 
     @staticmethod

@@ -121,8 +121,6 @@ class SparkMergeEngine(BaseMergeEngine):
             "smallint",
             "int",
             "bigint",
-            "long",
-            "short",
             "float",
             "double",
             "decimal",

@@ -134,7 +134,6 @@ class TestEngineStrictModeStrict:
         assert _StrictRegisteredFG in accessible
         assert _StrictUnregisteredFG not in accessible
 
-
     def test_strict_filter_runs_before_dedup_so_unregistered_conflicts_cannot_poison(self) -> None:
         """An unregistered same-name different-source pair must not break strict resolution.
 

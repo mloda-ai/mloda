@@ -1,6 +1,7 @@
 """
 Shared base for the FeatureGroup-declared ``allow_empty_result`` policy, driven
-end-to-end through the public API ``mloda.run_all``.
+end-to-end through the public API ``mloda.run_all``. It is the canonical first consumer
+of the generic ``PolicyRunAllTestBase``.
 
 A feature computation must return a SCHEMA-BEARING result: at least one column. Rows are
 optional. The guard in ``ComputeFramework.run_validate_output_features`` fires only for
@@ -34,7 +35,6 @@ FeatureGroup.
 This module is intentionally NOT collected as tests (no ``Test`` prefix).
 """
 
-from abc import ABC, abstractmethod
 from typing import Any, Optional
 
 import pytest
@@ -46,51 +46,16 @@ from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.provider import MatchData
 from mloda.user import DataAccessCollection
-from mloda.user import Feature
 from mloda.user import Options
 from mloda.user import ParallelizationMode
 from mloda.user import PluginCollector
-from mloda.user import mloda
 
-import logging
-
-logger = logging.getLogger(__name__)
-
-try:
-    import polars as pl
-except ImportError:
-    logger.warning("Polars is not installed. Some tests will be skipped.")
-    pl = None  # type: ignore[assignment]
-
-try:
-    import pyarrow as pa
-except ImportError:
-    logger.warning("PyArrow is not installed. Some tests will be skipped.")
-    pa = None  # type: ignore[assignment]
-
-
-def _records_from_frame(data: Any) -> list[dict[str, Any]]:
-    """Extract native frame rows to plain Python row dicts across backends.
-
-    Mirrors ``AsofRunAllTestBase._records_from_frame`` so the empty-result assertion is
-    framework-agnostic: a zero-row result is simply ``len(_records_from_frame(result)) == 0``.
-    """
-    records: list[dict[str, Any]]
-    if pl is not None and isinstance(data, pl.LazyFrame):
-        records = data.collect().to_dicts()
-    elif pl is not None and isinstance(data, pl.DataFrame):
-        records = data.to_dicts()
-    elif pa is not None and isinstance(data, pa.Table):
-        records = data.to_pylist()
-    elif isinstance(data, list):
-        records = data
-    elif hasattr(data, "to_dicts"):
-        records = data.to_dicts()
-    elif hasattr(data, "to_dict"):
-        records = data.to_dict("records")
-    else:
-        records = data.df().to_dict("records")
-    return records
+from tests.test_plugins.compute_framework.test_tooling.policy_run_all_test_base import (
+    PolicyRaises,
+    PolicyRunAllTestBase,
+    PolicySuccess,
+    records_from_frame,
+)
 
 
 class _EmptyResultMatchData(MatchData):
@@ -216,7 +181,13 @@ _ENABLED_SCHEMALESS_ALLOWED = PluginCollector.enabled_feature_groups({EmptyResul
 _ENABLED_NONE = PluginCollector.enabled_feature_groups({EmptyResultNoneFeatureGroup})
 
 
-class EmptyResultRunAllTestBase(ABC):
+def _assert_single_empty_result(result: list[Any]) -> None:
+    """A run_all result that is exactly one schema-bearing frame with zero rows."""
+    assert len(result) == 1
+    assert len(records_from_frame(result[0])) == 0
+
+
+class EmptyResultRunAllTestBase(PolicyRunAllTestBase):
     """Drives the ``allow_empty_result`` policy end-to-end through ``run_all``.
 
     Subclasses implement ``compute_framework_name`` and, for connection-backed frameworks,
@@ -224,10 +195,8 @@ class EmptyResultRunAllTestBase(ABC):
     """
 
     @classmethod
-    @abstractmethod
-    def compute_framework_name(cls) -> str:
-        """Return the compute framework name string for ``compute_frameworks=[...]``."""
-        pass
+    def connection_keyed_feature_groups(cls) -> set[type[FeatureGroup]]:
+        return {EmptyResultDefaultFeatureGroup, EmptyResultAllowedFeatureGroup}
 
     @classmethod
     def default_empty_is_schemaless(cls) -> bool:
@@ -239,71 +208,40 @@ class EmptyResultRunAllTestBase(ABC):
         """
         return False
 
-    def get_connection(self) -> Optional[Any]:
-        """Return a framework connection object, or None when none is needed."""
-        return None
+    def _run_default_case(self, mode: ParallelizationMode, flight_server: Any) -> None:
+        if self.default_empty_is_schemaless():
+            expectation: PolicySuccess | PolicyRaises = PolicyRaises(match_substring=EmptyResultError.__name__)
+        else:
+            expectation = PolicySuccess(assert_result=_assert_single_empty_result)
 
-    def _feature_and_dac(self, feature_name: str) -> tuple[Feature, Optional[DataAccessCollection]]:
-        conn = self.get_connection()
-        if conn is not None:
-            feature = Feature(
-                name=feature_name,
-                options={
-                    EmptyResultDefaultFeatureGroup.get_class_name(): conn,
-                    EmptyResultAllowedFeatureGroup.get_class_name(): conn,
-                },
-            )
-            return feature, DataAccessCollection(connections={conn})
-        return Feature(name=feature_name), None
+        self.assert_policy_case(
+            feature_name="empty_result_default_col",
+            plugin_collector=_ENABLED_DEFAULT,
+            expectation=expectation,
+            mode=mode,
+            flight_server=flight_server,
+        )
 
-    def test_empty_result_default(self, flight_server: Any) -> None:
+    def _run_allowed_case(self, mode: ParallelizationMode, flight_server: Any) -> None:
+        self.assert_policy_case(
+            feature_name="empty_result_allowed_col",
+            plugin_collector=_ENABLED_ALLOWED,
+            expectation=PolicySuccess(assert_result=_assert_single_empty_result),
+            mode=mode,
+            flight_server=flight_server,
+        )
+
+    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
+    def test_empty_result_default(self, mode: ParallelizationMode, flight_server: Any) -> None:
         """Default (not-allowed) FG requested as a final feature.
 
         Schema-bearing frameworks return a schema-bearing zero-row result (state C) and
         SUCCEED. python_dict drops the schema (state B) and raises ``EmptyResultError``.
+        SYNC-only frameworks (DuckDB / SQLite) override these methods to run SYNC only.
         """
-        feature, dac = self._feature_and_dac("empty_result_default_col")
+        self._run_default_case(mode, flight_server)
 
-        if self.default_empty_is_schemaless():
-            # run_all wraps the framework-raised EmptyResultError in a plain Exception, so we
-            # assert on the type NAME surfaced in the wrapped message (stable across the
-            # green-phase message change) rather than the exception class or its text.
-            with pytest.raises(Exception) as excinfo:
-                mloda.run_all(
-                    [feature],
-                    compute_frameworks=[self.compute_framework_name()],
-                    plugin_collector=_ENABLED_DEFAULT,
-                    parallelization_modes={ParallelizationMode.SYNC},
-                    flight_server=flight_server,
-                    data_access_collection=dac,
-                )
-            assert EmptyResultError.__name__ in str(excinfo.value)
-            return
-
-        result = mloda.run_all(
-            [feature],
-            compute_frameworks=[self.compute_framework_name()],
-            plugin_collector=_ENABLED_DEFAULT,
-            parallelization_modes={ParallelizationMode.SYNC},
-            flight_server=flight_server,
-            data_access_collection=dac,
-        )
-
-        assert len(result) == 1
-        assert len(_records_from_frame(result[0])) == 0
-
-    def test_empty_result_allowed_succeeds(self, flight_server: Any) -> None:
+    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
+    def test_empty_result_allowed_succeeds(self, mode: ParallelizationMode, flight_server: Any) -> None:
         """A FeatureGroup that overrides allow_empty_result()->True succeeds with an empty result."""
-        feature, dac = self._feature_and_dac("empty_result_allowed_col")
-
-        result = mloda.run_all(
-            [feature],
-            compute_frameworks=[self.compute_framework_name()],
-            plugin_collector=_ENABLED_ALLOWED,
-            parallelization_modes={ParallelizationMode.SYNC},
-            flight_server=flight_server,
-            data_access_collection=dac,
-        )
-
-        assert len(result) == 1
-        assert len(_records_from_frame(result[0])) == 0
+        self._run_allowed_case(mode, flight_server)

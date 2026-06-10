@@ -10,6 +10,8 @@ from typing import Any, Optional
 
 import pytest
 
+from mloda.user import ParallelizationMode
+
 from tests.test_plugins.compute_framework.test_tooling.empty_result_run_all_test_base import (
     EmptyResultRunAllTestBase,
 )
@@ -43,3 +45,13 @@ class TestSqliteAllowEmptyResultRunAll(EmptyResultRunAllTestBase):
         """Close the sqlite3 connection opened by get_connection, if any."""
         if hasattr(self, "_connection"):
             self._connection.close()
+
+    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC])
+    def test_empty_result_default(self, mode: ParallelizationMode, flight_server: Any) -> None:
+        """SqliteFramework only supports SYNC; run the inherited default case SYNC only."""
+        self._run_default_case(mode, flight_server)
+
+    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC])
+    def test_empty_result_allowed_succeeds(self, mode: ParallelizationMode, flight_server: Any) -> None:
+        """SqliteFramework only supports SYNC; run the inherited allowed case SYNC only."""
+        self._run_allowed_case(mode, flight_server)

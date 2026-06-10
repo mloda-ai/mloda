@@ -13,6 +13,9 @@ from tests.test_plugins.compute_framework.base_implementations.datatype_validato
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
     DtypeExtractionTestMixin,
 )
+from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
+    EmptyResultFrameworkTestMixin,
+)
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
     assert_unavailable_when_import_blocked,
 )
@@ -273,6 +276,40 @@ class TestIcebergDtypeExtraction(DtypeExtractionTestMixin):
             NestedField(3, "float_col", DoubleType()),
         )
         return TestIcebergDataTypeValidator._wrap_schema(schema)
+
+
+@pytest.mark.skipif(
+    pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
+)
+class TestIcebergEmptyResult(EmptyResultFrameworkTestMixin):
+    """Test IcebergFramework schema detection via shared mixin, covering both branches.
+
+    ``IcebergFramework._extract_column_names`` has two branches and the fixtures exercise
+    one each:
+
+    - ``empty_data`` is a real zero-row PyArrow table. ``IcebergFramework.transform`` emits
+      a pa.Table for dict input, so post-transform working data takes the pa.Table branch
+      (``set(data.schema.names)``); this pins that a zero-row pa.Table still exposes its
+      schema (state C).
+    - ``non_empty_data`` is a ``Mock`` typed as ``IcebergTable`` (catalog context is needed
+      to construct a real one, mirroring ``test_iceberg_integration.py``) whose
+      ``schema().column_names`` returns a known column list, pinning the native-table
+      branch's access pattern.
+    """
+
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return IcebergFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+    @pytest.fixture
+    def empty_data(self) -> Any:
+        return pa.table({"a": pa.array([], pa.int64())})
+
+    @pytest.fixture
+    def non_empty_data(self) -> Any:
+        mock_table = Mock(spec=IcebergTable)
+        mock_table.schema.return_value.column_names = ["a"]
+        return mock_table
 
 
 from tests.test_plugins.compute_framework.base_implementations.tfs_connection_test_mixin import TfsConnectionInitMixin  # noqa: E402

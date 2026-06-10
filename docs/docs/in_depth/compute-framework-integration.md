@@ -57,6 +57,79 @@ inspector does not know the caller's `Options`), and a feature that matches a
 group but is unsupported on every installed framework resolves to
 `feature_group=None` with a capability error rather than appearing runnable.
 
+### Allowing Empty Results
+
+The contract is: a **final** requested feature must return a *schema-bearing*
+result, meaning at least one column. **Zero rows is a valid result; zero columns
+is not.** A filter that excludes every row, a join with no matches, or a time
+window with no events all return a well-typed frame with the right columns and
+no rows, and mloda passes these through unchanged.
+
+The error fires only when a final requested result carries *no schema at all*. If
+`calculate_feature` produces a result with no columns,
+`ComputeFramework.run_validate_output_features` raises:
+
+```
+EmptyResultError: Result carries no schema (no columns): <FeatureGroupClassName>. ...
+```
+
+`EmptyResultError` is a `ValueError` subclass and is importable from the public
+API: `from mloda.provider import EmptyResultError`. Intermediate feature groups
+(those whose output feeds another feature group rather than the caller directly)
+are never subject to this check.
+
+#### The schema-presence gate
+
+The guard detects a missing schema via the framework's existing
+`ComputeFramework._extract_column_names(self, data) -> set[str]`: an empty set
+means no schema, which is the error condition. Every framework already implements
+this off schema metadata, so it works on a zero-row frame and costs nothing extra
+(no row scan, collect, or count). No per-framework opt-in is needed when you
+implement a new compute framework, as long as `_extract_column_names` returns the
+columns for a zero-row frame.
+
+There is one representational caveat. The schema-bearing frameworks (PyArrow,
+Pandas, Polars, DuckDB, SQLite, Spark, Iceberg) carry their schema as metadata
+even at zero rows, so a zero-row result keeps its columns and passes. The
+PythonDict framework represents data as `list[dict]`, where the schema lives in
+each row's keys, so its only empty value is `[]`, which has no columns. A
+PythonDict result that is empty is therefore always treated as schema-less and
+must opt in via `allow_empty_result()` (see below) to be accepted. One
+consequence: on any schema-less result on any framework (PythonDict's empty
+list, or a zero-column frame from an opted-in feature group), column selection
+returns the result as is, so a misspelled requested column on schema-less data
+does not produce a "column not found" error.
+
+#### Opting in to empty results
+
+Override `allow_empty_result` on a feature group to declare that a schema-less
+empty result is a legitimate outcome for that group:
+
+``` python
+class KnowledgeGraphFeatureGroup(FeatureGroup):
+    @classmethod
+    def allow_empty_result(cls) -> bool:
+        """Zero matches is a valid answer for graph traversals."""
+        return True
+```
+
+When `allow_empty_result()` returns `True`, the result flows through to the
+caller unchanged regardless of schema: result selection passes a schema-less
+result through unchanged on every framework, never trying to match requested
+column names against an empty column set. Typical use cases include knowledge
+graphs, search, agent memory, and authorization filters, especially on the
+PythonDict framework where an empty match cannot carry a schema.
+
+#### Filter column validation
+
+`_validate_filter_columns` skips its column-presence and dtype checks only when
+the data is a schema-less empty result (in practice PythonDict's empty list),
+regardless of the `allow_empty_result()` policy. Filtering an empty result is a
+no-op, so neither the column check nor row elimination has anything to do.
+Judging whether emptiness is acceptable belongs solely to the output guard
+above. Data on which the framework cannot see columns but that is not an empty
+result still fails the missing-filter-column check loudly.
+
 ### Framework-Specific Implementations
 
 Feature groups follow a layered architecture:

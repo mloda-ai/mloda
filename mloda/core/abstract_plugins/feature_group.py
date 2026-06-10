@@ -462,6 +462,18 @@ class FeatureGroup(ABC):
         return rule
 
     @classmethod
+    def allow_empty_result(cls) -> bool:
+        """Whether a SCHEMA-LESS empty result (no columns) is a valid outcome for this feature group.
+
+        Zero rows with a schema is always valid and never needs this flag. Returns False
+        by default: a final requested result that carries no schema raises EmptyResultError.
+        Non-tabular domains whose queries can legitimately match nothing (knowledge graphs,
+        search, memory, authz filters) override this to return True; in practice this matters
+        on frameworks whose empty representation cannot carry a schema (PythonDict's ``[]``).
+        """
+        return False
+
+    @classmethod
     def supports_compute_framework(
         cls,
         feature_name: FeatureName | str,

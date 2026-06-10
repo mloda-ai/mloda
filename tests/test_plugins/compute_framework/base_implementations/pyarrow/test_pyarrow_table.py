@@ -2,6 +2,7 @@ from typing import Any, Optional
 import pytest
 import pyarrow as pa
 
+from mloda.provider import EmptyResultError
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -14,6 +15,9 @@ from tests.test_plugins.compute_framework.base_implementations.datatype_validato
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
     DtypeExtractionTestMixin,
+)
+from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
+    EmptyResultFrameworkTestMixin,
 )
 
 
@@ -115,3 +119,85 @@ class TestPyArrowDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
 
     def from_arrow(self, table: pa.Table) -> pa.Table:
         return table
+
+
+class TestPyArrowEmptyResult(EmptyResultFrameworkTestMixin):
+    """Test PyArrowTable schema detection via shared mixin (zero-row table keeps columns)."""
+
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return PyArrowTable(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+    @pytest.fixture
+    def empty_data(self) -> Any:
+        return pa.table({"a": pa.array([], pa.int64())})
+
+    @pytest.fixture
+    def non_empty_data(self) -> Any:
+        return pa.table({"a": [1]})
+
+
+class _FakeGuardFeatureGroup:
+    """Minimal FeatureGroup stand-in for the empty-result guard.
+
+    ``run_validate_output_features`` reads ``allow_empty_result()`` (False so the guard
+    is armed), ``get_class_name()`` for the error message, and finally calls
+    ``validate_output_features`` (no-op). Mirrors ``_FakeFeatureGroup`` in the
+    python_dict policy test file.
+    """
+
+    def allow_empty_result(self) -> bool:
+        return False
+
+    def get_class_name(self) -> str:
+        return "FakeGuardFeatureGroup"
+
+    def validate_output_features(self, data: Any, features: Any) -> None:
+        return None
+
+
+class _FakeGuardFeatures:
+    """Minimal FeatureSet stand-in for the empty-result guard.
+
+    The guard reads ``get_initial_requested_features()`` (non-empty so the guard
+    applies to a final feature). Past the guard, ``DataTypeValidator.validate``
+    iterates ``features.features``; an empty list makes validation a no-op.
+    """
+
+    def __init__(self) -> None:
+        self.features: list[Any] = []
+
+    def get_initial_requested_features(self) -> set[str]:
+        return {"a"}
+
+
+class TestPyArrowEmptyResultGuard:
+    """Direct unit tests for the EmptyResultError guard on a schema-bearing framework.
+
+    The guard firing end-to-end is only exercised via python_dict; this pins the guard
+    contract directly on PyArrow: zero COLUMNS raises, zero ROWS with a schema does not.
+    """
+
+    def test_zero_columns_raises_empty_result_error(self) -> None:
+        """A schema-less result (zero-column table) trips the guard for a final feature."""
+        framework = PyArrowTable(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+        framework.data = pa.table({})
+        # run_calculation always sets column names before validating; the direct call mirrors that sequence.
+        framework.set_column_names()
+
+        with pytest.raises(EmptyResultError):
+            framework.run_validate_output_features(_FakeGuardFeatureGroup(), _FakeGuardFeatures())
+
+    def test_zero_rows_with_schema_does_not_raise(self) -> None:
+        """A zero-row but column-bearing table is a valid result; the guard must not fire.
+
+        The call proceeds through DataTypeValidator.validate (no-op: no features with
+        declared data types) and validate_output_features (no-op fake).
+        """
+        framework = PyArrowTable(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+        framework.data = pa.table({"a": pa.array([], pa.int64())})
+        # run_calculation always sets column names before validating; the direct call mirrors that sequence.
+        framework.set_column_names()
+
+        # Must not raise.
+        framework.run_validate_output_features(_FakeGuardFeatureGroup(), _FakeGuardFeatures())

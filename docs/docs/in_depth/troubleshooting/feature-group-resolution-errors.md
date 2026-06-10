@@ -102,6 +102,59 @@ Pass this collector through to `mloda.run_all`, `resolve_feature`, or any other 
 
 Restarting the Jupyter kernel clears `Out[N]` history and unloads all stale class objects. Use this when you want a fully clean state and do not need to preserve other notebook state.
 
+## EmptyResultError
+
+### The Problem
+
+```
+EmptyResultError: Result carries no schema (no columns): MyFeatureGroup. ...
+```
+
+This error fires when a **final** requested feature group returns a result with
+*no schema* (zero columns) and `allow_empty_result()` is `False` (the default).
+Note that **zero rows is not an error**: a well-typed frame with the right
+columns and no rows is a valid result and passes through. Only a result that
+carries no columns at all is rejected.
+
+In practice you hit this on the PythonDict framework, whose empty value (`[]`)
+cannot carry a schema, or when a feature genuinely produces a column-less result.
+
+If the schema-less result is genuine (a bug, missing data, wrong filter), this
+error is correct behavior: it protects callers from silently receiving output
+they cannot interpret.
+
+### When to fix it
+
+Override `allow_empty_result` only when a schema-less empty result is a
+legitimate answer for your domain, for example: graph traversals that may find no
+path, search queries that may match nothing, authorization filters that may deny
+all rows, or agent memory that may have no relevant entries. This is most often
+needed on the PythonDict framework.
+
+``` python
+class MyFeatureGroup(FeatureGroup):
+    @classmethod
+    def allow_empty_result(cls) -> bool:
+        return True
+```
+
+With the override in place, empty data flows through to the caller without
+raising. The public import `from mloda.provider import EmptyResultError` (a
+`ValueError` subclass) supports a typed `except` when you invoke framework or
+plugin code directly. When calling `mloda.run_all`, worker errors are wrapped
+in a generic `Exception` whose message embeds the original traceback, so match
+on the `EmptyResultError` name in the raised exception's message instead.
+
+### Intermediates are exempt
+
+The check applies only to features that were explicitly requested by the caller.
+Intermediate feature groups, meaning those whose output feeds another feature
+group rather than the final result, are never subject to `EmptyResultError`,
+even if `allow_empty_result()` is `False`.
+
+For full details on how the guard works and the schema-presence gate, see
+[Allowing Empty Results](../compute-framework-integration.md#allowing-empty-results).
+
 ## Related Documentation
 
 - [Feature Group Matching](../feature-group-matching.md)

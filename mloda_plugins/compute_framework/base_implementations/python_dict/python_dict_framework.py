@@ -50,7 +50,7 @@ class PythonDictFramework(ComputeFramework):
         column_ordering: Optional[str] = None,
     ) -> list[dict[str, Any]]:
         if not data:
-            raise ValueError(f"Data cannot be empty: {selected_feature_names}")
+            return []
 
         # Get all unique column names from all rows
         column_names: set[str] = set()
@@ -69,6 +69,13 @@ class PythonDictFramework(ComputeFramework):
             if isinstance(row, dict):
                 all_columns.update(row.keys())
         return all_columns
+
+    def _is_schemaless_empty(self, data: Any) -> bool:
+        """``[]`` and ``{}`` are PythonDict's representational empties; ``transform``
+        collapses both to ``[]``. None is excluded: ``transform`` rejects None as an
+        unsupported type, so filter validation never sees a None result path.
+        """
+        return isinstance(data, (list, dict)) and not data
 
     def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
         for row in data:
@@ -115,8 +122,11 @@ class PythonDictFramework(ComputeFramework):
             ValueError: If data type is not supported
         """
 
-        if not data:
-            raise ValueError("Data cannot be empty")
+        # Only the representational empties [] and {} short-circuit. None is a missing
+        # return value (state A), not an empty result, and falls through to the
+        # unsupported-type rejection below, regardless of allow_empty_result().
+        if isinstance(data, (list, dict)) and not data:
+            return []
 
         transformed_data = self.apply_compute_framework_transformer(data)
         if transformed_data is not None:

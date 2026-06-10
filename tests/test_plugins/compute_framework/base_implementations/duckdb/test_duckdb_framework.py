@@ -15,6 +15,9 @@ from tests.test_plugins.compute_framework.base_implementations.datatype_validato
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
     DtypeExtractionTestMixin,
 )
+from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
+    EmptyResultFrameworkTestMixin,
+)
 
 import logging
 
@@ -184,6 +187,28 @@ class TestDuckDBDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
     @pytest.fixture
     def precision_sample_data(self, connection: Any) -> Any:
         return DuckdbRelation.from_arrow(connection, self._arrow_table(self.PRECISION_COLUMNS))
+
+
+@pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed. Skipping this test.")
+class TestDuckDBEmptyResult(EmptyResultFrameworkTestMixin):
+    """Test DuckDBFramework schema detection via shared mixin.
+
+    DuckDB data is a relation, so the data fixtures are built via ``from_arrow`` and pull in
+    the shared ``connection`` fixture, mirroring the DataTypeValidator consumer. A zero-row
+    relation still carries its columns (state C).
+    """
+
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return DuckDBFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+    @pytest.fixture
+    def empty_data(self, connection: Any) -> Any:
+        return DuckdbRelation.from_arrow(connection, pa.table({"a": pa.array([], pa.int64())}))
+
+    @pytest.fixture
+    def non_empty_data(self, connection: Any) -> Any:
+        return DuckdbRelation.from_arrow(connection, pa.table({"a": [1]}))
 
 
 from tests.test_plugins.compute_framework.base_implementations.tfs_connection_test_mixin import TfsConnectionInitMixin  # noqa: E402

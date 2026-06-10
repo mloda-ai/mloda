@@ -28,6 +28,11 @@ def _require_pyarrow() -> None:
         raise ImportError("pyarrow is required for this operation. Install it with: pip install 'mloda[pyarrow]'")
 
 
+class EmptyResultError(ValueError):
+    """Raised when a final requested feature's result carries no schema (zero columns)
+    while allow_empty_result() is False; zero rows with a schema is valid."""
+
+
 class ComputeFramework(ABC):
     """
     Documentation ComputeFramework:
@@ -300,6 +305,11 @@ class ComputeFramework(ABC):
             return
 
         data_columns = self._extract_column_names(data)
+        # Skip only the framework's schema-less empty representation (framework-owned hook);
+        # non-empty data without visible columns must still fail loudly.
+        if not data_columns and self._is_schemaless_empty(data):
+            return
+
         fg_name = feature_group.get_class_name() if feature_group is not None else "Unknown"
         for single_filter in applicable:
             col = single_filter.filter_feature.name
@@ -439,6 +449,17 @@ class ComputeFramework(ABC):
         """
         raise NotImplementedError
 
+    def _is_schemaless_empty(self, data: Any) -> bool:
+        """Framework-representational hook: return True only when ``data`` is this
+        framework's schema-less EMPTY representation (an empty result that cannot
+        carry a schema).
+
+        Used by ``_validate_filter_columns`` to skip the filter-column check, since
+        filtering an empty result is a no-op. Judging whether emptiness is acceptable
+        stays with the output guard in ``run_validate_output_features``.
+        """
+        return False
+
     def _extract_column_dtype(self, data: Any, column_name: str) -> Optional[str]:
         """Extract the dtype of a specific column as a human-readable string.
 
@@ -507,6 +528,17 @@ class ComputeFramework(ABC):
     def run_validate_output_features(self, feature_group: Any, features: Any) -> None:
         if self.data is None:
             return
+
+        if (
+            features.get_initial_requested_features()
+            and not feature_group.allow_empty_result()
+            and not self.column_names
+        ):
+            raise EmptyResultError(
+                f"Result carries no schema (no columns): {feature_group.get_class_name()}. "
+                "A feature must return a schema; zero rows is a valid result, zero columns is not. "
+                "If a schema-less empty result is legitimate, override allow_empty_result() to return True."
+            )
 
         from mloda.core.abstract_plugins.components.validators.datatype_validator import DataTypeValidator
 

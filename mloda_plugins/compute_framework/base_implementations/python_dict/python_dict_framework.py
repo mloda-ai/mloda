@@ -70,6 +70,13 @@ class PythonDictFramework(ComputeFramework):
                 all_columns.update(row.keys())
         return all_columns
 
+    def _is_schemaless_empty(self, data: Any) -> bool:
+        """``[]`` and ``{}`` are PythonDict's representational empties; ``transform``
+        collapses both to ``[]``. None is excluded: filter validation never sees a
+        None result path.
+        """
+        return isinstance(data, (list, dict)) and not data
+
     def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
         for row in data:
             if isinstance(row, dict) and column_name in row and row[column_name] is not None:

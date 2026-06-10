@@ -182,6 +182,8 @@ class TestPyArrowEmptyResultGuard:
         """A schema-less result (zero-column table) trips the guard for a final feature."""
         framework = PyArrowTable(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         framework.data = pa.table({})
+        # run_calculation always sets column names before validating; the direct call mirrors that sequence.
+        framework.set_column_names()
 
         with pytest.raises(EmptyResultError):
             framework.run_validate_output_features(_FakeGuardFeatureGroup(), _FakeGuardFeatures())
@@ -194,6 +196,8 @@ class TestPyArrowEmptyResultGuard:
         """
         framework = PyArrowTable(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         framework.data = pa.table({"a": pa.array([], pa.int64())})
+        # run_calculation always sets column names before validating; the direct call mirrors that sequence.
+        framework.set_column_names()
 
         # Must not raise.
         framework.run_validate_output_features(_FakeGuardFeatureGroup(), _FakeGuardFeatures())

@@ -16,8 +16,10 @@ from mloda.user import Feature
 from mloda.user import ParallelizationMode
 from mloda.user import mloda
 from tests.test_plugins.compute_framework.test_tooling.empty_result_run_all_test_base import (
+    _ENABLED_ALLOWED,
     _ENABLED_DEFAULT,
     EmptyResultRunAllTestBase,
+    _records_from_frame,
 )
 
 
@@ -51,3 +53,25 @@ def test_empty_result_default_raises_threading(flight_server: Any) -> None:
             flight_server=flight_server,
         )
     assert EmptyResultError.__name__ in str(excinfo.value)
+
+
+def test_empty_result_allowed_succeeds_multiprocessing(flight_server: Any) -> None:
+    """The allow-empty success path survives the flight-server upload in MULTIPROCESSING.
+
+    Mirrors the base's ``test_empty_result_allowed_succeeds`` (state B with
+    ``allow_empty_result()`` True succeeds) but runs with
+    ``ParallelizationMode.MULTIPROCESSING``: the zero-row result must round-trip
+    through the flight server upload from the process worker and come back as one
+    result with zero rows. ``_records_from_frame`` keeps the row-count assertion
+    tolerant of the wire format (PyArrow table or list of row dicts).
+    """
+    result = mloda.run_all(
+        [Feature(name="empty_result_allowed_col")],
+        compute_frameworks=["PythonDictFramework"],
+        plugin_collector=_ENABLED_ALLOWED,
+        parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+        flight_server=flight_server,
+    )
+
+    assert len(result) == 1
+    assert len(_records_from_frame(result[0])) == 0

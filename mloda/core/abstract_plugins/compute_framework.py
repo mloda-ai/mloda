@@ -305,8 +305,9 @@ class ComputeFramework(ABC):
             return
 
         data_columns = self._extract_column_names(data)
-        # Skip only a schema-less empty result; non-empty data without visible columns must still fail loudly.
-        if not data_columns and isinstance(data, list) and not data:
+        # Skip only the framework's schema-less empty representation (framework-owned hook);
+        # non-empty data without visible columns must still fail loudly.
+        if not data_columns and self._is_schemaless_empty(data):
             return
 
         fg_name = feature_group.get_class_name() if feature_group is not None else "Unknown"
@@ -448,6 +449,17 @@ class ComputeFramework(ABC):
         """
         raise NotImplementedError
 
+    def _is_schemaless_empty(self, data: Any) -> bool:
+        """Framework-representational hook: return True only when ``data`` is this
+        framework's schema-less EMPTY representation (an empty result that cannot
+        carry a schema).
+
+        Used by ``_validate_filter_columns`` to skip the filter-column check, since
+        filtering an empty result is a no-op. Judging whether emptiness is acceptable
+        stays with the output guard in ``run_validate_output_features``.
+        """
+        return False
+
     def _extract_column_dtype(self, data: Any, column_name: str) -> Optional[str]:
         """Extract the dtype of a specific column as a human-readable string.
 
@@ -520,7 +532,7 @@ class ComputeFramework(ABC):
         if (
             features.get_initial_requested_features()
             and not feature_group.allow_empty_result()
-            and not self._extract_column_names(self.data)
+            and not self.column_names
         ):
             raise EmptyResultError(
                 f"Result carries no schema (no columns): {feature_group.get_class_name()}. "

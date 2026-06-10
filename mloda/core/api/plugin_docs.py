@@ -35,6 +35,26 @@ def list_registered(plugin_type: type[Any]) -> list[type[Any]]:
     return PluginRegistry.default().list_registered(plugin_type)
 
 
+def _safe_version(fg_class: type[FeatureGroup]) -> str:
+    """Return the feature group version or "unavailable" if source introspection fails."""
+    try:
+        return fg_class.version()
+    except (OSError, TypeError):
+        return "unavailable"
+
+
+def _dedup_degrading_on_conflict(
+    feature_groups: set[type[FeatureGroup]], allow_redefinition: bool
+) -> set[type[FeatureGroup]]:
+    """Dedup feature groups, keeping all conflicting versions instead of raising on redefinition."""
+    try:
+        return dedup_feature_group_subclasses(feature_groups, allow_redefinition=allow_redefinition)
+    except ValueError as exc:
+        conflicts: set[type[FeatureGroup]] = set(getattr(exc, "conflicts", []))
+        survivors = dedup_feature_group_subclasses(feature_groups - conflicts, allow_redefinition=allow_redefinition)
+        return survivors | conflicts
+
+
 def get_feature_group_docs(
     name: Optional[str] = None,
     search: Optional[str] = None,
@@ -48,6 +68,10 @@ def get_feature_group_docs(
 
     Returns the current state of loaded feature groups. Ensure plugins are loaded
     before calling this function (e.g., via PluginLoader.all()).
+
+    Returns gracefully on redefinition conflicts (all conflicting versions are
+    documented) and reports "unavailable" as version for classes whose source
+    cannot be introspected.
 
     Args:
         name: Filter by feature group name (case-insensitive partial match).
@@ -67,7 +91,7 @@ def get_feature_group_docs(
         all_feature_groups = {fg for fg in all_feature_groups if fg in registered}
     if plugin_collector is not None:
         all_feature_groups = {fg for fg in all_feature_groups if plugin_collector.applicable_feature_group_class(fg)}
-    all_feature_groups = dedup_feature_group_subclasses(all_feature_groups, allow_redefinition=allow_redefinition)
+    all_feature_groups = _dedup_degrading_on_conflict(all_feature_groups, allow_redefinition=allow_redefinition)
     results = []
 
     for fg_class in all_feature_groups:
@@ -76,7 +100,7 @@ def get_feature_group_docs(
 
         fg_name = fg_class.get_class_name()
         description = fg_class.description()
-        version = fg_class.version()
+        version = _safe_version(fg_class)
         module = fg_class.__module__
         compute_frameworks = [cfw.__name__ for cfw in fg_class.compute_framework_definition()]
         supported_feature_names = fg_class.feature_names_supported()

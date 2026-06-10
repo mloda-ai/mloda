@@ -208,6 +208,67 @@ class FeatureChainParser:
         return property_value
 
     @classmethod
+    def validate_property_mapping_defaults(cls, owner_name: str, property_mapping: dict[str, Any] | None) -> None:
+        """Validate declared PROPERTY_MAPPING defaults at class-definition time.
+
+        For every key whose spec is a dict and declares a non-``None``
+        ``DefaultOptionKeys.default`` under strict validation, the declared default
+        must be in the accepted set or pass the key's ``validation_function``.
+        A ``validation_function`` that itself errors when called with the default is
+        reported as having raised (with the original exception chained as the cause),
+        which is distinct from the function running and rejecting the default.
+        ``DefaultOptionKeys.required_when`` does NOT exempt this check: it is a
+        conditional requirement, so the default still applies on the predicate-false
+        branch. The remedies are to add the default to the accepted values or to
+        remove the default (a key with no default is required).
+        """
+        if property_mapping is None:
+            return
+
+        def _message(key: str, default: Any, detail: str) -> str:
+            return (
+                f"{owner_name}.PROPERTY_MAPPING['{key}'] declares default {default!r}, "
+                f"but {detail} under strict_validation. "
+                f"Add the default to the accepted values, or remove the default "
+                f"(a key with no default is required)."
+            )
+
+        for key, spec in property_mapping.items():
+            if not isinstance(spec, dict):
+                continue
+            if DefaultOptionKeys.default not in spec:
+                continue
+
+            default = spec[DefaultOptionKeys.default]
+            if default is None:
+                continue
+
+            validation_function = cls._get_validation_function(spec)
+            if validation_function is not None:
+                if not cls._is_strict_validation(spec):
+                    continue
+                try:
+                    verdict = validation_function(default)
+                except Exception as exc:
+                    raise ValueError(
+                        _message(
+                            key, default, "the key's validation_function raised an error when called with that default"
+                        )
+                    ) from exc
+                if not verdict:
+                    raise ValueError(
+                        _message(key, default, "that default is rejected by the key's validation_function")
+                    )
+                continue
+
+            extracted = cls._extract_property_values(spec)
+            try:
+                cls._validate_property_value(default, extracted, key, spec)
+            except (ValueError, TypeError) as exc:
+                detail = f"that default is not one of the accepted values {sorted(extracted, key=repr)}"
+                raise ValueError(_message(key, default, detail)) from exc
+
+    @classmethod
     def _process_found_property_value(
         cls, found_property_value: Any, property_value: Any, property_name: str, original_property_config: Any
     ) -> set[str]:

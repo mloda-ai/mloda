@@ -22,6 +22,7 @@ from mloda.user import Index
 from mloda.user import Link, JoinSpec
 from mloda.user import Options
 from mloda.user import mloda
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable  # noqa: F401
 from tests.test_plugins.feature_group.input_data.test_classes.test_input_classes import (
     DBInputDataTestFeatureGroup,
 )

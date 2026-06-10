@@ -15,6 +15,8 @@ from mloda.user import ParallelizationMode
 from mloda.user import PluginCollector
 from mloda.user import mloda
 
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame  # noqa: F401
+
 
 class NonRootJoinTestFeature(FeatureGroup):
     @classmethod

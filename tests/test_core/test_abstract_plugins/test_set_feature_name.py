@@ -7,6 +7,8 @@ from mloda.provider import FeatureSet
 from mloda.user import Options
 from mloda.user import mloda
 
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable  # noqa: F401
+
 
 class ATestSetFeatureNameBase(FeatureGroup):
     @classmethod

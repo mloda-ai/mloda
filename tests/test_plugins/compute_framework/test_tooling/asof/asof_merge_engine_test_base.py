@@ -219,10 +219,10 @@ class AsofMergeEngineTestBase(ABC):
         """A non-ordered (string/object) time column must raise a clear ValueError.
 
         Forwarding ISO-date strings straight to the backend yields a cryptic error
-        (e.g. pandas' "both sides must have numeric dtype"). The intended behavior is
-        a uniform ValueError that names the offending time column ('t') and states
-        the datetime/numeric/timedelta requirement. This guard does not exist yet, so
-        the test fails for every engine that inherits this base class.
+        (e.g. pandas' "both sides must have numeric dtype"). The guard instead raises a
+        uniform ValueError that names the offending time column ('t') and states the
+        datetime/numeric/timedelta requirement, consistently across every engine that
+        inherits this base class.
         """
         left_data = self.convert_dict_to_framework([{"k": "a", "t": "2025-06-01", "lv": 1}])
         right_data = self.convert_dict_to_framework([{"k": "a", "t": "2025-05-01", "rv": 1.0}])
@@ -232,10 +232,9 @@ class AsofMergeEngineTestBase(ABC):
         connection = self.get_connection()
         engine = self.merge_engine_class()(connection) if connection else self.merge_engine_class()()
 
-        # Require the quoted column name 't' AND the requirement wording. This is
-        # deliberately stricter than a bare ``t.*(datetime|numeric)`` regex: pandas'
-        # current cryptic MergeError ("...both sides must have numeric dtype") is itself
-        # a ValueError and would accidentally satisfy a loose pattern, masking the
-        # missing guard. The clear message must name the column, so we match on "'t'".
+        # Require the quoted column name 't' AND the requirement wording. A bare
+        # ``t.*(datetime|numeric)`` regex would be too loose: pandas' low-level MergeError
+        # ("...both sides must have numeric dtype") is itself a ValueError and would satisfy
+        # it. The clear guard message names the column, so we match on "'t'".
         with pytest.raises(ValueError, match=r"'t'.*(datetime|numeric)"):
             engine.merge_asof(left_data, right_data, Index(("k",)), Index(("k",)), cfg)

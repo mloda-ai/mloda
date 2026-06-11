@@ -5,6 +5,7 @@
 - **Orchestration Only**: Coordinate Test-Driven Development cycles between specialized agents
 - **No Code Implementation**: NEVER write implementation code or tests directly
 - **Agent Delegation**: Use Red Agent for test writing, Green Agent for implementation
+- **Session root**: `.claude/agents/red-agent.md` and `.claude/agents/green-agent.md` are only auto-loaded when Claude Code's session is rooted at this repository. If working from a parent or workspace directory, start a session inside the clone (`cd code/mloda && claude`) so the agents are available natively.
 
 ## TDD Workflow
 
@@ -79,6 +80,12 @@ source .venv/bin/activate
 - **Supply chain**: `[tool.uv] exclude-newer = "7 days"` in `pyproject.toml` defers new dependency releases by 7 days. Do not edit this without a reason.
 - **Licenses**: dependencies must satisfy the allowlist in `tox.ini` (Apache-2.0, BSD, MIT, MPL-2.0, PSF, ISC, LGPLv2+). Adding a dependency with a non-listed license fails tox.
 - **Commits**: use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `chore:`, `docs:`, `test:`, `refactor:`, `minor:`). semantic-release computes the next version. This project deviates from the standard: the minor version (middle number) bumps only on `minor:` commits; `feat:` is treated as a patch bump.
+
+### mypy iteration notes
+
+- `mypy --strict --ignore-missing-imports .` (what tox runs) checks `tests/` as well as `mloda/` and `mloda_plugins/`. Running `mypy mloda/` locally will miss test-tree type errors that block the tox gate. `tox` (or `tox -e python310`) is the only trustworthy mypy invocation.
+- A stray `pip build` creates a `build/` directory. mypy picks it up and reports spurious errors. Clean it with `rm -rf build/` before running tox. The `[tool.mypy]` exclude list in `pyproject.toml` now includes `build/` to prevent this.
+- Running `mypy --strict .` in the dev venv (outside tox) may surface pyspark-related errors that tox's isolated env does not see; ignore those when iterating inside tox.
 
 ## Issue Creation
 

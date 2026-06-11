@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 import threading
 from dataclasses import dataclass
+from enum import Enum
 from types import ModuleType
 from typing import Any
 
@@ -19,13 +20,31 @@ class PluginRegistryCollisionError(ValueError):
     """Raised when a different class is registered under an already taken key."""
 
 
+class PluginSource(str, Enum):
+    """Provenance of a registry entry."""
+
+    MANUAL = "manual"
+    LOADER = "loader"
+    ENTRY_POINT = "entry_point"
+
+
+def _normalize_source(source: PluginSource | str) -> PluginSource:
+    if isinstance(source, PluginSource):
+        return source
+    members = {member.value: member for member in PluginSource}
+    if source not in members:
+        valid = ", ".join(member.value for member in PluginSource)
+        raise ValueError(f"Invalid plugin source {source!r}. Valid values are: {valid}.")
+    return members[source]
+
+
 @dataclass(frozen=True)
 class PluginRegistryEntry:
     cls: type[Any]
     name: str
     plugin_type: type[Any]
     source_module: str
-    source: str
+    source: PluginSource
 
 
 PluginRegistrySnapshot = dict[str, PluginRegistryEntry]
@@ -52,8 +71,14 @@ class PluginRegistry:
         return _default
 
     def register(
-        self, cls: type[Any], *, name: str | None = None, source: str = "manual", replace: bool = False
+        self,
+        cls: type[Any],
+        *,
+        name: str | None = None,
+        source: PluginSource | str = PluginSource.MANUAL,
+        replace: bool = False,
     ) -> str:
+        normalized_source = _normalize_source(source)
         plugin_type = _resolve_plugin_type(cls)
         key = name if name is not None else f"{cls.__module__}:{cls.__qualname__}"
         existing_key = next((k for k, entry in self._entries.items() if entry.cls is cls), None)
@@ -75,7 +100,7 @@ class PluginRegistry:
             name=key,
             plugin_type=plugin_type,
             source_module=cls.__module__,
-            source=source,
+            source=normalized_source,
         )
         return key
 
@@ -112,6 +137,9 @@ class PluginRegistry:
             result.append(entry.cls)
         return result
 
+    def registered_classes(self) -> set[type[Any]]:
+        return {entry.cls for entry in self._entries.values()}
+
     def snapshot(self) -> PluginRegistrySnapshot:
         return dict(self._entries)
 
@@ -126,11 +154,13 @@ _default: PluginRegistry | None = None
 _default_lock = threading.Lock()
 
 
-def register_plugin(cls: type[Any], *, name: str | None = None, source: str = "manual", replace: bool = False) -> str:
+def register_plugin(
+    cls: type[Any], *, name: str | None = None, source: PluginSource | str = PluginSource.MANUAL, replace: bool = False
+) -> str:
     return PluginRegistry.default().register(cls, name=name, source=source, replace=replace)
 
 
-def register_module_plugins(module: ModuleType, *, source: str = "loader") -> list[str]:
+def register_module_plugins(module: ModuleType, *, source: PluginSource | str = PluginSource.LOADER) -> list[str]:
     """Register all plugin classes defined in a module into the default registry.
 
     Last-write-wins (replace=True) so importlib.reload updates entries; provenance may flip to "loader".

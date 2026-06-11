@@ -245,7 +245,7 @@ class PreFilterPlugins:
 
         registered: set[type[Any]] = set()
         if strict_mode != "off":
-            registered = {entry.cls for entry in PluginRegistry.default().snapshot().values()}
+            registered = PluginRegistry.default().registered_classes()
 
         if strict_mode == "strict":
             before_strict = accessible_feature_groups

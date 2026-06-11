@@ -179,6 +179,60 @@ class TestSparkAsofMergeEngine:
         rows = {(r["k1"], r["k2"]): r["rv"] for r in result.collect()}
         assert rows == {(1, "a"): 10, (1, "b"): 20}
 
+    def test_coerce_time_columns_opt_in_iso_strings(self, spark_session: Any) -> None:
+        """With coerce_time_columns=True, ISO string time columns are coerced via
+        to_timestamp and the as-of join succeeds; rv values match the backward semantics."""
+        left_data = spark_session.createDataFrame(
+            [{"k": "a", "t": "2025-06-03", "lv": 1}, {"k": "a", "t": "2025-06-05", "lv": 2}]
+        )
+        right_data = spark_session.createDataFrame(
+            [{"k": "a", "t": "2025-06-01", "rv": 1.0}, {"k": "a", "t": "2025-06-04", "rv": 2.0}]
+        )
+
+        engine = SparkMergeEngine(spark_session)
+        result = engine.merge_asof(
+            left_data,
+            right_data,
+            Index(("k",)),
+            Index(("k",)),
+            AsOfJoinConfig(
+                left_time_column="t",
+                right_time_column="t",
+                direction="backward",
+                coerce_time_columns=True,
+            ),
+        )
+
+        rows = sorted(result.collect(), key=lambda r: r["lv"])
+        assert [r["lv"] for r in rows] == [1, 2]
+        assert [r["rv"] for r in rows] == [1.0, 2.0]
+
+    def test_coerce_unparseable_string_raises(self, spark_session: Any) -> None:
+        """An unparseable time string must raise ValueError (null-introduction check), never
+        silently become null. Spark is lazy, so collect() stays inside the raises block."""
+        left_data = spark_session.createDataFrame(
+            [{"k": "a", "t": "2025-06-03", "lv": 1}, {"k": "a", "t": "2025-06-05", "lv": 2}]
+        )
+        right_data = spark_session.createDataFrame(
+            [{"k": "a", "t": "2025-06-01", "rv": 1.0}, {"k": "a", "t": "not-a-date", "rv": 9.0}]
+        )
+
+        engine = SparkMergeEngine(spark_session)
+        with pytest.raises(ValueError):
+            result = engine.merge_asof(
+                left_data,
+                right_data,
+                Index(("k",)),
+                Index(("k",)),
+                AsOfJoinConfig(
+                    left_time_column="t",
+                    right_time_column="t",
+                    direction="backward",
+                    coerce_time_columns=True,
+                ),
+            )
+            result.collect()
+
     def test_nearest_raises_value_error(self, spark_session: Any) -> None:
         """direction='nearest' is unsupported and must raise ValueError mentioning nearest."""
         left_data = spark_session.createDataFrame([{"k": 1, "t": 10, "lv": 100}])

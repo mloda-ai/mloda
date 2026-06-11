@@ -50,6 +50,36 @@ class TestDuckDBAsofMergeEngine(AsofMergeEngineTestBase):
             self._connection = duckdb.connect()
         return self._connection
 
+    @classmethod
+    def coercion_error_types(cls) -> tuple[type[BaseException], ...]:
+        """DuckDB raises duckdb.Error subclasses on CAST AS TIMESTAMP failures (lazy, so
+        possibly at materialization)."""
+        return (duckdb.Error, ValueError)
+
+    def test_coerce_offset_string_raises(self) -> None:
+        """DuckDB's CAST AS TIMESTAMP silently DROPS a UTC offset ('2025-06-01T05:00:00+02:00'
+        becomes 05:00 local wall time, true UTC is 03:00), which corrupts as-of ordering.
+        With coerce_time_columns=True, any time string carrying a UTC offset or a trailing 'Z'
+        must therefore raise ValueError eagerly (before the cast), naming the column 't' and
+        mentioning the offset/timezone problem."""
+        cfg = AsOfJoinConfig(
+            left_time_column="t",
+            right_time_column="t",
+            direction="backward",
+            coerce_time_columns=True,
+        )
+        engine = DuckDBMergeEngine(self.get_connection())
+
+        left_offset = self.convert_dict_to_framework([{"k": "a", "t": "2025-06-03T00:00:00+02:00", "lv": 1}])
+        right_offset = self.convert_dict_to_framework([{"k": "a", "t": "2025-06-01T00:00:00+02:00", "rv": 1.0}])
+        with pytest.raises(ValueError, match=r"'t'.*(offset|timezone|tz)"):
+            engine.merge_asof(left_offset, right_offset, Index(("k",)), Index(("k",)), cfg)
+
+        left_z = self.convert_dict_to_framework([{"k": "a", "t": "2025-06-03T00:00:00Z", "lv": 1}])
+        right_z = self.convert_dict_to_framework([{"k": "a", "t": "2025-06-01T00:00:00Z", "rv": 1.0}])
+        with pytest.raises(ValueError, match=r"'t'.*(offset|timezone|tz)"):
+            engine.merge_asof(left_z, right_z, Index(("k",)), Index(("k",)), cfg)
+
     def test_nearest_raises_value_error(self) -> None:
         """Vector F: DuckDB native ASOF cannot express 'nearest' in v1 -> ValueError."""
         import duckdb as _duckdb  # noqa: PLC0415

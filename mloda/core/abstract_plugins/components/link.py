@@ -41,7 +41,8 @@ class AsOfJoinConfig:
 
     The by-keys (the join Index) drive the equi match; the time columns drive the
     inequality match. ``direction``/``tolerance``/``allow_exact_matches`` follow
-    pandas ``merge_asof`` semantics.
+    pandas ``merge_asof`` semantics. ``coerce_time_columns`` opts in to ISO-8601
+    string coercion; the default keeps the strict error.
     """
 
     left_time_column: str
@@ -49,6 +50,7 @@ class AsOfJoinConfig:
     direction: Literal["backward", "forward", "nearest"] = "backward"
     tolerance: float | int | timedelta | None = None
     allow_exact_matches: bool = True
+    coerce_time_columns: bool = False
 
     def __post_init__(self) -> None:
         if self.direction not in ("backward", "forward", "nearest"):
@@ -447,6 +449,7 @@ class Link:
         direction: Literal["backward", "forward", "nearest"] = "backward",
         tolerance: float | int | timedelta | None = None,
         allow_exact_matches: bool = True,
+        coerce_time_columns: bool = False,
         left_discriminator: Optional[dict[str, Any]] = None,
         right_discriminator: Optional[dict[str, Any]] = None,
     ) -> "Link":
@@ -457,6 +460,7 @@ class Link:
             direction=direction,
             tolerance=tolerance,
             allow_exact_matches=allow_exact_matches,
+            coerce_time_columns=coerce_time_columns,
         )
         return cls(
             JoinType.ASOF,
@@ -478,6 +482,7 @@ class Link:
         direction: Literal["backward", "forward", "nearest"] = "backward",
         tolerance: float | int | timedelta | None = None,
         allow_exact_matches: bool = True,
+        coerce_time_columns: bool = False,
         left_index: int = 0,
         right_index: int = 0,
         left_discriminator: Optional[dict[str, Any]] = None,
@@ -492,6 +497,7 @@ class Link:
             direction=direction,
             tolerance=tolerance,
             allow_exact_matches=allow_exact_matches,
+            coerce_time_columns=coerce_time_columns,
         )
         return cls(
             JoinType.ASOF,

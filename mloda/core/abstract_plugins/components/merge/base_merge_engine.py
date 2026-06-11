@@ -66,22 +66,43 @@ class BaseMergeEngine(ABC):
     ) -> Any:
         raise ValueError(f"JoinType asof is not yet implemented in {self.__class__.__name__}")
 
-    def validate_asof_time_columns(self, left_data: Any, right_data: Any, asof_config: AsOfJoinConfig) -> None:
+    def validate_asof_time_columns(
+        self, left_data: Any, right_data: Any, asof_config: AsOfJoinConfig
+    ) -> tuple[Any, Any]:
         """Guard that as-of time columns are ordered (datetime / numeric / timedelta).
 
         Raises a clear ValueError naming the offending column instead of letting the
-        backend surface a cryptic low-level dtype error. This is the seam that opt-in
-        coercion (issue #513) will build on.
+        backend surface a cryptic low-level dtype error. This is the opt-in coercion
+        seam of issue #513: with asof_config.coerce_time_columns, a non-ordered side is
+        replaced via _coerce_asof_time_column and the (possibly transformed) pair is
+        returned.
         """
-        for data, column, side in (
-            (left_data, asof_config.left_time_column, "left"),
-            (right_data, asof_config.right_time_column, "right"),
+        sides = {"left": left_data, "right": right_data}
+        for side, column in (
+            ("left", asof_config.left_time_column),
+            ("right", asof_config.right_time_column),
         ):
-            if not self._asof_time_column_is_ordered(data, column):
-                raise ValueError(
-                    f"As-of {side} time column '{column}' must be datetime, numeric, or timedelta, "
-                    f"but is a non-ordered (e.g. string/object) dtype; cast it before joining."
-                )
+            if not self._asof_time_column_is_ordered(sides[side], column):
+                if not asof_config.coerce_time_columns:
+                    raise ValueError(
+                        f"As-of {side} time column '{column}' must be datetime, numeric, or timedelta, "
+                        f"but is a non-ordered (e.g. string/object) dtype; cast it before joining. "
+                        f"Set coerce_time_columns=True to opt in to ISO-8601 string coercion."
+                    )
+                sides[side] = self._coerce_asof_time_column(sides[side], column)
+        return sides["left"], sides["right"]
+
+    def _coerce_asof_time_column(self, data: Any, column: str) -> Any:
+        """Coerce an ISO-8601 string as-of time column to a temporal/numeric dtype.
+
+        Engines override this with framework-native coercion that fails hard on
+        unparseable values. The base implementation raises so engines without
+        coercion support fail loudly.
+        """
+        raise ValueError(
+            f"{self.__class__.__name__} does not support coerce_time_columns; "
+            f"cannot coerce as-of time column '{column}'."
+        )
 
     def _asof_time_column_is_ordered(self, data: Any, column: str) -> bool:
         """Return True if `column` in `data` has an ordered (datetime/numeric/timedelta) dtype.

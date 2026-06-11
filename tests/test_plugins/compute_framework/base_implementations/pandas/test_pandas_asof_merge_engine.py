@@ -133,3 +133,26 @@ class TestPandasAsofMergeEngine(AsofMergeEngineTestBase):
         )
         assert link_on.asof_config is not None
         assert link_on.asof_config.tolerance == td
+
+    def test_coerce_mixed_tz_naive_and_aware_raises(self) -> None:
+        """Coercion of a column mixing tz-aware and tz-naive ISO strings must raise: pandas'
+        pd.to_datetime(format='ISO8601') rejects mixed timezone-awareness with ValueError, and
+        the engine forwards that hard failure instead of silently producing NaT matches."""
+        left = pd.DataFrame(
+            {
+                "k": ["a", "a"],
+                "t": ["2025-06-01T00:00:00+00:00", "2025-06-01T01:00:00"],
+                "lv": [1, 2],
+            }
+        )
+        right = pd.DataFrame({"k": ["a"], "t": ["2025-05-01T00:00:00"], "rv": [1.0]})
+
+        engine = PandasMergeEngine()
+        cfg = AsOfJoinConfig(
+            left_time_column="t",
+            right_time_column="t",
+            direction="backward",
+            coerce_time_columns=True,
+        )
+        with pytest.raises(ValueError):
+            engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg)

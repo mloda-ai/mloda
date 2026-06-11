@@ -82,7 +82,7 @@ class PyArrowMergeEngine(BaseMergeEngine):
         right_index: Index,
         asof_config: AsOfJoinConfig,
     ) -> Any:
-        self.validate_asof_time_columns(left_data, right_data, asof_config)
+        left_data, right_data = self.validate_asof_time_columns(left_data, right_data, asof_config)
         if asof_config.direction == "nearest":
             raise ValueError(f"{self.__class__.__name__} asof does not support direction='nearest'.")
 
@@ -154,6 +154,11 @@ class PyArrowMergeEngine(BaseMergeEngine):
             result = result.rename_columns(new_names)
 
         return result
+
+    def _coerce_asof_time_column(self, data: Any, column: str) -> Any:
+        index = data.schema.get_field_index(column)
+        casted = pc.cast(data.column(column), pa.timestamp("us"))
+        return data.set_column(index, pa.field(column, pa.timestamp("us")), casted)
 
     def _asof_time_column_is_ordered(self, data: Any, column: str) -> bool:
         t = data.schema.field(column).type

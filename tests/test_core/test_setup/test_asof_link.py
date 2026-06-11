@@ -216,3 +216,39 @@ class TestAsofLinkEqHash:
         )
         link_set = {link_backward, link_forward}
         assert len(link_set) == 2
+
+
+# ============================================================================
+# coerce_time_columns flag (opt-in ISO-8601 string coercion, issue #513)
+# ============================================================================
+class TestAsofCoerceTimeColumns:
+    def test_config_defaults_coerce_time_columns_false(self) -> None:
+        """AsOfJoinConfig defaults coerce_time_columns to False (coercion is opt-in)."""
+        from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
+
+        cfg = AsOfJoinConfig(left_time_column="t", right_time_column="t")
+        assert cfg.coerce_time_columns is False
+
+    def test_asof_forwards_coerce_time_columns(self) -> None:
+        """Link.asof plumbs coerce_time_columns=True into the built AsOfJoinConfig."""
+        link = Link.asof(
+            JoinSpec(AsofFGa, "k"),
+            JoinSpec(AsofFGb, "k"),
+            left_time_column="t",
+            right_time_column="t",
+            coerce_time_columns=True,
+        )
+        assert link.asof_config is not None
+        assert link.asof_config.coerce_time_columns is True
+
+    def test_asof_on_forwards_coerce_time_columns(self) -> None:
+        """Link.asof_on plumbs coerce_time_columns=True into the built AsOfJoinConfig."""
+        link = Link.asof_on(
+            AsofFGa,
+            AsofFGb,
+            left_time_column="t",
+            right_time_column="t",
+            coerce_time_columns=True,
+        )
+        assert link.asof_config is not None
+        assert link.asof_config.coerce_time_columns is True

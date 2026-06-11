@@ -97,6 +97,16 @@ Cross-backend caveats to be aware of:
     non-ordered column (e.g. ISO-date strings / object dtype) raises a clear `ValueError` naming the
     column; cast it to a real datetime or numeric before joining. This is enforced uniformly across
     all backends inside the merge engine at run time.
+-   **`coerce_time_columns`** (opt-in flag on `Link.asof(...)` / `Link.asof_on(...)` /
+    `AsOfJoinConfig`, default `False`). With the default, the strict `ValueError` above applies.
+    When `True`, ISO-8601 string time columns are coerced per backend: `pandas`, `polars`,
+    `pyarrow`, and `spark` cast to native timestamps, `python_dict` to `datetime` (a trailing `Z`
+    is accepted as `+00:00`), and `sqlite` to `julianday` NUMERIC (so a numeric `tolerance` is in
+    days). `duckdb` rejects strings carrying a UTC offset or trailing `Z` (cast manually), and
+    `sqlite` additionally rejects one-sided string-vs-numeric coercion (cast manually). Coercion
+    fails hard on unparseable or non-ISO values and never produces silent null matches; mixed
+    tz-naive/tz-aware values are rejected where the backend can detect them (the full tz/unit
+    contract is tracked in issue #518).
 -   **Ties.** When two right rows share the identical boundary timestamp within a by-key, the chosen
     row is backend-defined (each engine applies its own internal tie rule). `python_dict`,
     `sqlite`, and `spark` resolve ties deterministically (smallest surviving right column values

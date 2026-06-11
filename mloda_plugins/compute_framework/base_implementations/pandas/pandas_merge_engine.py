@@ -45,7 +45,7 @@ class PandasMergeEngine(BaseMergeEngine):
         right_index: Index,
         asof_config: AsOfJoinConfig,
     ) -> Any:
-        self.validate_asof_time_columns(left_data, right_data, asof_config)
+        left_data, right_data = self.validate_asof_time_columns(left_data, right_data, asof_config)
         by_left = list(left_index.index)
         by_right = list(right_index.index)
         lt, rt = asof_config.left_time_column, asof_config.right_time_column
@@ -66,6 +66,9 @@ class PandasMergeEngine(BaseMergeEngine):
             right_by=by_right,
             **kwargs,
         )
+
+    def _coerce_asof_time_column(self, data: Any, column: str) -> Any:
+        return data.assign(**{column: pd.to_datetime(data[column], format="ISO8601")})
 
     def _asof_time_column_is_ordered(self, data: Any, column: str) -> bool:
         dtype = data[column].dtype

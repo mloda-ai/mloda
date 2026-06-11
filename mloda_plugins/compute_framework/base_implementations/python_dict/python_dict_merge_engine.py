@@ -45,7 +45,7 @@ class PythonDictMergeEngine(BaseMergeEngine):
         right_index: Index,
         asof_config: AsOfJoinConfig,
     ) -> Any:
-        self.validate_asof_time_columns(left_data, right_data, asof_config)
+        left_data, right_data = self.validate_asof_time_columns(left_data, right_data, asof_config)
         left_by = list(left_index.index)
         right_by = list(right_index.index)
         lt, rt = asof_config.left_time_column, asof_config.right_time_column
@@ -80,6 +80,31 @@ class PythonDictMergeEngine(BaseMergeEngine):
             result.append(merged)
 
         return result
+
+    def _coerce_asof_time_column(self, data: Any, column: str) -> Any:
+        coerced: list[dict[str, Any]] = []
+        parsed_values: list[datetime] = []
+        for row in data:
+            new_row = dict(row)
+            v = row.get(column)
+            if v is not None:
+                if not isinstance(v, str):
+                    raise ValueError(
+                        f"Cannot coerce as-of time column '{column}': expected ISO-8601 string or None, "
+                        f"got {type(v).__name__}."
+                    )
+                # Python 3.10's fromisoformat rejects a trailing 'Z'; normalize it to '+00:00'.
+                parse_input = v[:-1] + "+00:00" if v.endswith("Z") else v
+                new_row[column] = datetime.fromisoformat(parse_input)
+                parsed_values.append(new_row[column])
+            coerced.append(new_row)
+        has_naive = any(p.tzinfo is None for p in parsed_values)
+        has_aware = any(p.tzinfo is not None for p in parsed_values)
+        if has_naive and has_aware:
+            raise ValueError(
+                f"Cannot coerce as-of time column '{column}': mixed tz-naive and tz-aware values are not allowed."
+            )
+        return coerced
 
     def _asof_time_column_is_ordered(self, data: Any, column: str) -> bool:
         for row in data:

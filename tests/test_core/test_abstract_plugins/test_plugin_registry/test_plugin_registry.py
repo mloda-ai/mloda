@@ -387,11 +387,11 @@ class TestModuleLevelRegisterPlugin:
         assert PluginRegistry.default().get(key) is _RegistryTestFGA
 
     def test_register_plugin_accepts_same_keyword_arguments(self, default_registry_guard: PluginRegistry) -> None:
-        key = register_plugin(_RegistryTestFGB, name="module_level_custom", source="notebook")
+        key = register_plugin(_RegistryTestFGB, name="module_level_custom", source="loader")
         assert key == "module_level_custom"
         entry = default_registry_guard.get_entry("module_level_custom")
         assert entry.cls is _RegistryTestFGB
-        assert entry.source == "notebook"
+        assert entry.source == "loader"
 
     def test_old_register_name_removed_from_core_module(self) -> None:
         """The convenience function is renamed to register_plugin; the old name must be gone."""

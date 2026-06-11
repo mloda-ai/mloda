@@ -14,6 +14,7 @@ from mloda.core.abstract_plugins.components.plugin_option.plugin_collector impor
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 
 
@@ -23,6 +24,49 @@ _warned_unregistered: set[str] = set()
 
 
 FeatureGroupEnvironmentMapping = dict[type[FeatureGroup], set[type[ComputeFramework]]]
+
+
+def registry_for(plugin_collector: PluginCollector | None) -> PluginRegistry:
+    """Return the collector's injected registry when set, else the default registry."""
+    if plugin_collector is not None and plugin_collector.registry is not None:
+        return plugin_collector.registry
+    return PluginRegistry.default()
+
+
+def _is_bundled_plugin(cls: type[Any]) -> bool:
+    """True for classes shipped in the bundled plugin distribution (mloda_plugins)."""
+    return cls.__module__.split(".", 1)[0] == "mloda_plugins"
+
+
+def filter_extenders_by_strict_mode(
+    extenders: set[Extender] | None,
+    plugin_collector: PluginCollector | None,
+) -> set[Extender] | None:
+    """Filter function-extender instances by the registry strict mode."""
+    if extenders is None:
+        return extenders
+
+    strict_mode = plugin_collector.strict_mode if plugin_collector is not None else strict_mode_from_env()
+    if strict_mode == "off":
+        return extenders
+
+    registered = registry_for(plugin_collector).registered_classes()
+    unregistered = {extender for extender in extenders if type(extender) not in registered}
+    unregistered_names = sorted({f"{type(e).__module__}:{type(e).__qualname__}" for e in unregistered})
+
+    if strict_mode == "warn":
+        new_names = [name for name in unregistered_names if name not in _warned_unregistered]
+        if new_names:
+            _warned_unregistered.update(new_names)
+            logger.warning("Extenders not registered in the plugin registry: %s.", ", ".join(new_names))
+        return extenders
+
+    if unregistered:
+        logger.warning(
+            "Strict mode dropped Extenders not registered in the plugin registry: %s.",
+            ", ".join(unregistered_names),
+        )
+    return extenders - unregistered
 
 
 class RedefinitionConflictError(ValueError):
@@ -223,7 +267,7 @@ class PreFilterPlugins:
         plugin_collector: Optional[PluginCollector] = None,
     ) -> None:
         feature_groups = self._set_feature_groups(plugin_collector)
-        compute_frameworks = self._set_compute_frameworks(compute_frameworks)
+        compute_frameworks = self._set_compute_frameworks(compute_frameworks, plugin_collector)
 
         self.accessible_plugins = self.resolve_feature_group_compute_framework_limitations(
             feature_groups, compute_frameworks
@@ -245,7 +289,7 @@ class PreFilterPlugins:
 
         registered: set[type[Any]] = set()
         if strict_mode != "off":
-            registered = {entry.cls for entry in PluginRegistry.default().snapshot().values()}
+            registered = registry_for(plugin_collector).registered_classes()
 
         if strict_mode == "strict":
             before_strict = accessible_feature_groups
@@ -299,8 +343,40 @@ class PreFilterPlugins:
     def _set_compute_frameworks(
         self,
         compute_frameworks: set[type[ComputeFramework]],
+        plugin_collector: Optional[PluginCollector] = None,
     ) -> set[type[ComputeFramework]]:
-        return compute_frameworks.intersection(self.get_cfw_subclasses())
+        compute_frameworks = compute_frameworks.intersection(self.get_cfw_subclasses())
+
+        strict_mode = plugin_collector.strict_mode if plugin_collector is not None else strict_mode_from_env()
+        if strict_mode == "off":
+            return compute_frameworks
+
+        registered = registry_for(plugin_collector).registered_classes()
+        # Bundled plugin frameworks ship with mloda, like abstract classes: never filtered or flagged.
+        unregistered = {
+            cfw
+            for cfw in compute_frameworks
+            if cfw not in registered and not inspect.isabstract(cfw) and not _is_bundled_plugin(cfw)
+        }
+        unregistered_names = sorted(f"{cfw.__module__}:{cfw.__qualname__}" for cfw in unregistered)
+
+        if strict_mode == "warn":
+            new_names = [name for name in unregistered_names if name not in _warned_unregistered]
+            if new_names:
+                _warned_unregistered.update(new_names)
+                logger.warning("ComputeFrameworks not registered in the plugin registry: %s.", ", ".join(new_names))
+            return compute_frameworks
+
+        surviving = compute_frameworks - unregistered
+        had_concrete = any(not inspect.isabstract(cfw) for cfw in compute_frameworks)
+        has_concrete = any(not inspect.isabstract(cfw) for cfw in surviving)
+        if had_concrete and not has_concrete:
+            raise ValueError(
+                "Strict mode filtered out all ComputeFrameworks: none of the requested ComputeFrameworks "
+                "are registered in the plugin registry. Register them via mloda.user.register_plugin() or "
+                "relax MLODA_PLUGIN_REGISTRY_STRICT to disable strict mode."
+            )
+        return surviving
 
     def resolve_feature_group_compute_framework_limitations(
         self, feature_groups: set[type[FeatureGroup]], compute_frameworks: set[type[ComputeFramework]]

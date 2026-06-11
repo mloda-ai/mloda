@@ -11,8 +11,11 @@ from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRe
 
 @pytest.fixture
 def isolated_plugin_registry() -> Iterator[PluginRegistry]:
-    """Snapshot the default registry, yield it, and restore the snapshot on teardown."""
+    """Snapshot the default registry and policy, yield it, and restore both on teardown."""
     registry = PluginRegistry.default()
     snapshot = registry.snapshot()
+    policy = registry.policy
     yield registry
     registry.restore(snapshot)
+    registry.set_policy(policy)
+    registry._policy_warned_keys.clear()

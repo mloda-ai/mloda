@@ -91,6 +91,9 @@ all = [
     "mloda[docs]",
 ]
 
+[project.entry-points.pytest11]
+mloda = "mloda.core.abstract_plugins.plugin_registry.fixtures"
+
 [project.urls]
 "Bug Tracker" = "https://github.com/mloda-ai/mloda/issues"
 "Documentation" = "https://mloda-ai.github.io/mloda/"

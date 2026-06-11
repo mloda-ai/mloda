@@ -1,12 +1,24 @@
 import importlib
+import importlib.metadata
+import inspect
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 import logging
 from types import ModuleType
-from typing import ClassVar, Optional
+from typing import Any, ClassVar, Optional
 
-from mloda.core.abstract_plugins.plugin_registry.plugin_registry import register_module_plugins
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.function_extender import Extender
+from mloda.core.abstract_plugins.plugin_registry.plugin_policy import PluginPolicyViolationError
+from mloda.core.abstract_plugins.plugin_registry.plugin_registry import (
+    PluginRegistry,
+    PluginSource,
+    register_module_plugins,
+    warn_policy_denied,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +45,12 @@ OPTIONAL_PLUGIN_DEPENDENCIES: frozenset[str] = frozenset(
         "yaml",
     }
 )
+
+ENTRY_POINT_GROUPS: dict[str, type[Any]] = {
+    "mloda.feature_groups": FeatureGroup,
+    "mloda.compute_frameworks": ComputeFramework,
+    "mloda.extenders": Extender,
+}
 
 
 class PluginLoader:
@@ -74,7 +92,57 @@ class PluginLoader:
     def all() -> "PluginLoader":
         plugin_loader = PluginLoader()
         plugin_loader.load_all_plugins()
+        plugin_loader.load_entry_points()
         return plugin_loader
+
+    def load_entry_points(self, group: str | None = None) -> list[str]:
+        """Discover installed entry-point manifests and register their plugin classes."""
+        if group is not None and group not in ENTRY_POINT_GROUPS:
+            valid = ", ".join(ENTRY_POINT_GROUPS)
+            raise ValueError(f"Unknown entry-point group '{group}'. Valid groups are: {valid}.")
+        groups = [group] if group is not None else list(ENTRY_POINT_GROUPS)
+        keys: list[str] = []
+        for group_name in groups:
+            base_type = ENTRY_POINT_GROUPS[group_name]
+            for entry_point in importlib.metadata.entry_points(group=group_name):
+                try:
+                    manifest = entry_point.load()
+                except ModuleNotFoundError as e:
+                    root = e.name.split(".")[0] if e.name else None
+                    if root in OPTIONAL_PLUGIN_DEPENDENCIES:
+                        logger.debug(
+                            "Skipping entry point %s: missing optional dependency %s", entry_point.name, e.name
+                        )
+                        continue
+                    raise
+                keys.extend(self._register_manifest(entry_point.name, group_name, base_type, manifest))
+        return sorted(set(keys))
+
+    def _register_manifest(self, label: str, group_name: str, base_type: type[Any], manifest: Any) -> list[str]:
+        """Validate a manifest sequence and register its concrete classes."""
+        if isinstance(manifest, (str, bytes)) or not isinstance(manifest, Sequence):
+            raise TypeError(
+                f"Entry point '{label}' must resolve to a list or tuple of plugin classes, got {manifest!r}."
+            )
+        registry = PluginRegistry.default()
+        keys: list[str] = []
+        for cls in manifest:
+            if not isinstance(cls, type):
+                raise TypeError(f"Entry point '{label}' manifest contains a non-class item: {cls!r}.")
+            if not issubclass(cls, base_type):
+                raise TypeError(
+                    f"Entry-point group '{group_name}' requires subclasses of {base_type.__name__}; "
+                    f"got {cls.__qualname__}."
+                )
+            if inspect.isabstract(cls):
+                continue
+            try:
+                key = registry.register(cls, source=PluginSource.ENTRY_POINT, replace=False)
+            except PluginPolicyViolationError:
+                warn_policy_denied(registry, f"{cls.__module__}:{cls.__qualname__}")
+                continue
+            keys.append(key)
+        return keys
 
     def __repr__(self) -> str:
         return f"PluginLoader plugins: {self.plugins}"

@@ -2,21 +2,66 @@
 
 from __future__ import annotations
 
+import dataclasses
 import inspect
+import logging
 import threading
 from dataclasses import dataclass
+from enum import Enum
 from types import ModuleType
 from typing import Any
 
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender
+from mloda.core.abstract_plugins.plugin_registry.plugin_policy import (
+    ApprovalStatus,
+    PluginPolicy,
+    PluginPolicyViolationError,
+)
+
+logger = logging.getLogger(__name__)
 
 _PLUGIN_BASE_TYPES: tuple[type[Any], ...] = (FeatureGroup, ComputeFramework, Extender)
 
 
+class _Unset:
+    """Sentinel type marking an argument as not passed."""
+
+
+_UNSET = _Unset()
+
+
 class PluginRegistryCollisionError(ValueError):
     """Raised when a different class is registered under an already taken key."""
+
+
+class PluginSource(str, Enum):
+    """Provenance of a registry entry."""
+
+    MANUAL = "manual"
+    LOADER = "loader"
+    ENTRY_POINT = "entry_point"
+
+
+def _normalize_source(source: PluginSource | str) -> PluginSource:
+    if isinstance(source, PluginSource):
+        return source
+    members = {member.value: member for member in PluginSource}
+    if source not in members:
+        valid = ", ".join(member.value for member in PluginSource)
+        raise ValueError(f"Invalid plugin source {source!r}. Valid values are: {valid}.")
+    return members[source]
+
+
+def _normalize_approval(approval: ApprovalStatus | str) -> ApprovalStatus:
+    if isinstance(approval, ApprovalStatus):
+        return approval
+    members = {member.value: member for member in ApprovalStatus}
+    if approval not in members:
+        valid = ", ".join(member.value for member in ApprovalStatus)
+        raise ValueError(f"Invalid approval status {approval!r}. Valid values are: {valid}.")
+    return members[approval]
 
 
 @dataclass(frozen=True)
@@ -25,7 +70,9 @@ class PluginRegistryEntry:
     name: str
     plugin_type: type[Any]
     source_module: str
-    source: str
+    source: PluginSource
+    owner: str | None = None
+    approval: ApprovalStatus = ApprovalStatus.UNREVIEWED
 
 
 PluginRegistrySnapshot = dict[str, PluginRegistryEntry]
@@ -42,6 +89,8 @@ class PluginRegistry:
     def __init__(self) -> None:
         # Only default() lazy init is locked; registration is expected single-threaded at import/startup time.
         self._entries: dict[str, PluginRegistryEntry] = {}
+        self._policy: PluginPolicy | None = None
+        self._policy_warned_keys: set[str] = set()
 
     @classmethod
     def default(cls) -> PluginRegistry:
@@ -51,23 +100,51 @@ class PluginRegistry:
                 _default = cls()
         return _default
 
+    @property
+    def policy(self) -> PluginPolicy | None:
+        return self._policy
+
+    def set_policy(self, policy: PluginPolicy | None) -> None:
+        self._policy = policy
+
     def register(
-        self, cls: type[Any], *, name: str | None = None, source: str = "manual", replace: bool = False
+        self,
+        cls: type[Any],
+        *,
+        name: str | None = None,
+        source: PluginSource | str = PluginSource.MANUAL,
+        replace: bool = False,
+        owner: str | _Unset | None = _UNSET,
+        approval: ApprovalStatus | str | _Unset = _UNSET,
     ) -> str:
+        normalized_source = _normalize_source(source)
+        explicit_approval = None if isinstance(approval, _Unset) else _normalize_approval(approval)
         plugin_type = _resolve_plugin_type(cls)
         key = name if name is not None else f"{cls.__module__}:{cls.__qualname__}"
+        previous = self._entries.get(key)
+        carried = previous if previous is not None and previous.cls is cls else None
+        effective_owner: str | None
+        if isinstance(owner, _Unset):
+            effective_owner = carried.owner if carried is not None else None
+        else:
+            effective_owner = owner
+        if explicit_approval is not None:
+            effective_approval = explicit_approval
+        else:
+            effective_approval = carried.approval if carried is not None else ApprovalStatus.UNREVIEWED
+        if self._policy is not None and not self._policy.allows(key, cls.__module__, effective_approval):
+            raise PluginPolicyViolationError(f"Plugin '{key}' is denied by the installed plugin policy.")
         existing_key = next((k for k, entry in self._entries.items() if entry.cls is cls), None)
         if existing_key is not None and existing_key != key:
             raise PluginRegistryCollisionError(
                 f"{cls!r} is already registered under key '{existing_key}'; a class holds exactly one key. "
                 f"To rename, unregister('{existing_key}') first, then register under the new key."
             )
-        existing = self._entries.get(key)
-        if existing is not None and not replace:
-            if existing.cls is cls:
+        if previous is not None and not replace:
+            if previous.cls is cls:
                 return key
             raise PluginRegistryCollisionError(
-                f"Key '{key}' is already registered to {existing.cls!r}; cannot register {cls!r}. "
+                f"Key '{key}' is already registered to {previous.cls!r}; cannot register {cls!r}. "
                 "Pass replace=True to replace the existing entry."
             )
         self._entries[key] = PluginRegistryEntry(
@@ -75,9 +152,17 @@ class PluginRegistry:
             name=key,
             plugin_type=plugin_type,
             source_module=cls.__module__,
-            source=source,
+            source=normalized_source,
+            owner=effective_owner,
+            approval=effective_approval,
         )
         return key
+
+    def set_approval(self, name: str, approval: ApprovalStatus | str, owner: str | None = None) -> None:
+        normalized_approval = _normalize_approval(approval)
+        entry = self.get_entry(name)
+        new_owner = owner if owner is not None else entry.owner
+        self._entries[name] = dataclasses.replace(entry, approval=normalized_approval, owner=new_owner)
 
     def unregister(self, name: str) -> None:
         if name not in self._entries:
@@ -112,6 +197,9 @@ class PluginRegistry:
             result.append(entry.cls)
         return result
 
+    def registered_classes(self) -> set[type[Any]]:
+        return {entry.cls for entry in self._entries.values()}
+
     def snapshot(self) -> PluginRegistrySnapshot:
         return dict(self._entries)
 
@@ -126,14 +214,33 @@ _default: PluginRegistry | None = None
 _default_lock = threading.Lock()
 
 
-def register_plugin(cls: type[Any], *, name: str | None = None, source: str = "manual", replace: bool = False) -> str:
-    return PluginRegistry.default().register(cls, name=name, source=source, replace=replace)
+def register_plugin(
+    cls: type[Any],
+    *,
+    name: str | None = None,
+    source: PluginSource | str = PluginSource.MANUAL,
+    replace: bool = False,
+    owner: str | _Unset | None = _UNSET,
+    approval: ApprovalStatus | str | _Unset = _UNSET,
+) -> str:
+    return PluginRegistry.default().register(
+        cls, name=name, source=source, replace=replace, owner=owner, approval=approval
+    )
 
 
-def register_module_plugins(module: ModuleType, *, source: str = "loader") -> list[str]:
+def warn_policy_denied(registry: PluginRegistry, key: str) -> None:
+    """Log one WARNING per policy-denied key per registry instance."""
+    if key in registry._policy_warned_keys:
+        return
+    registry._policy_warned_keys.add(key)
+    logger.warning("Plugin '%s' was denied by the installed plugin policy and not registered.", key)
+
+
+def register_module_plugins(module: ModuleType, *, source: PluginSource | str = PluginSource.LOADER) -> list[str]:
     """Register all plugin classes defined in a module into the default registry.
 
     Last-write-wins (replace=True) so importlib.reload updates entries; provenance may flip to "loader".
+    Policy-denied classes are skipped with one warning per denied key per registry instance.
     """
     registry = PluginRegistry.default()
     keys: list[str] = []
@@ -144,5 +251,10 @@ def register_module_plugins(module: ModuleType, *, source: str = "loader") -> li
             continue
         if inspect.isabstract(obj):
             continue
-        keys.append(registry.register(obj, source=source, replace=True))
+        try:
+            key = registry.register(obj, source=source, replace=True)
+        except PluginPolicyViolationError:
+            warn_policy_denied(registry, f"{obj.__module__}:{obj.__qualname__}")
+            continue
+        keys.append(key)
     return keys

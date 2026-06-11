@@ -12,14 +12,14 @@
 | charset-normalizer                     | 3.4.7           | MIT                                                |
 | click                                  | 8.4.1           | BSD-3-Clause                                       |
 | comm                                   | 0.2.3           | BSD License                                        |
-| cyclonedx-python-lib                   | 11.7.0          | Apache Software License                            |
+| cyclonedx-python-lib                   | 11.8.0          | Apache Software License                            |
 | debugpy                                | 1.8.21          | MIT License                                        |
 | decorator                              | 5.3.1           | BSD-2-Clause                                       |
 | defusedxml                             | 0.7.1           | Python Software Foundation License                 |
 | duckdb                                 | 1.5.3           | MIT License                                        |
 | execnet                                | 2.1.2           | MIT License                                        |
 | executing                              | 2.2.1           | MIT License                                        |
-| filelock                               | 3.29.0          | MIT License                                        |
+| filelock                               | 3.29.1          | MIT License                                        |
 | fsspec                                 | 2026.4.0        | BSD-3-Clause                                       |
 | idna                                   | 3.18            | BSD-3-Clause                                       |
 | iniconfig                              | 2.3.0           | MIT                                                |
@@ -99,7 +99,7 @@
 | tomli_w                                | 1.2.0           | MIT License                                        |
 | tornado                                | 6.5.6           | Apache Software License                            |
 | tqdm                                   | 4.67.3          | MPL-2.0 AND MIT                                    |
-| traitlets                              | 5.15.0          | BSD License                                        |
+| traitlets                              | 5.15.1          | BSD License                                        |
 | typeguard                              | 4.5.2           | MIT                                                |
 | types-PyYAML                           | 6.0.12.20260518 | Apache-2.0                                         |
 | types-requests                         | 2.33.0.20260518 | Apache-2.0                                         |

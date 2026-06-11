@@ -3,17 +3,18 @@
 Contract: the module-level registration function is named register_plugin.
 mloda.user exports register_plugin, list_registered, and PluginRegistryCollisionError,
 but NOT PluginRegistry. mloda.provider exports register_plugin and
-PluginRegistryCollisionError. mloda.steward exports PluginRegistry and
-list_registered. Every export is the identical object from its core module
-and is listed in the namespace's __all__.
+PluginRegistryCollisionError. mloda.steward exports PluginRegistry,
+list_registered, and the governance objects PluginPolicy, ApprovalStatus, and
+PluginPolicyViolationError. Every export is the identical object from its core
+module and is listed in the namespace's __all__. Governance objects are
+steward-only: mloda.user and mloda.provider gain nothing.
 """
 
+import importlib
 from types import ModuleType
 
 import pytest
 
-import mloda.core.abstract_plugins.plugin_registry.plugin_registry as core_registry
-import mloda.core.api.plugin_docs as plugin_docs
 import mloda.provider
 import mloda.steward
 import mloda.user
@@ -24,10 +25,17 @@ _NAMESPACES: dict[str, ModuleType] = {
     "steward": mloda.steward,
 }
 
-_SOURCES: dict[str, ModuleType] = {
-    "core_registry": core_registry,
-    "plugin_docs": plugin_docs,
+# Source modules are resolved lazily so a missing source module fails only its own matrix rows.
+_SOURCE_MODULES: dict[str, str] = {
+    "core_registry": "mloda.core.abstract_plugins.plugin_registry.plugin_registry",
+    "plugin_docs": "mloda.core.api.plugin_docs",
+    "core_policy": "mloda.core.abstract_plugins.plugin_registry.plugin_policy",
 }
+
+
+def _source_module(source_name: str) -> ModuleType:
+    return importlib.import_module(_SOURCE_MODULES[source_name])
+
 
 # (namespace, symbol, source module holding the canonical object)
 EXPORT_MATRIX: list[tuple[str, str, str]] = [
@@ -38,9 +46,14 @@ EXPORT_MATRIX: list[tuple[str, str, str]] = [
     ("provider", "PluginRegistryCollisionError", "core_registry"),
     ("steward", "PluginRegistry", "core_registry"),
     ("steward", "list_registered", "plugin_docs"),
+    ("steward", "PluginPolicy", "core_policy"),
+    ("steward", "ApprovalStatus", "core_policy"),
+    ("steward", "PluginPolicyViolationError", "core_policy"),
 ]
 
 _MATRIX_IDS = [f"{namespace}-{symbol}" for namespace, symbol, _source in EXPORT_MATRIX]
+
+_GOVERNANCE_SYMBOLS = ["PluginPolicy", "ApprovalStatus", "PluginPolicyViolationError"]
 
 
 class TestPersonaExportMatrix:
@@ -52,7 +65,7 @@ class TestPersonaExportMatrix:
     @pytest.mark.parametrize(("namespace_name", "symbol", "source_name"), EXPORT_MATRIX, ids=_MATRIX_IDS)
     def test_symbol_is_identical_to_core_object(self, namespace_name: str, symbol: str, source_name: str) -> None:
         namespace = _NAMESPACES[namespace_name]
-        source = _SOURCES[source_name]
+        source = _source_module(source_name)
         assert hasattr(source, symbol), f"{source.__name__} must define '{symbol}'"
         assert hasattr(namespace, symbol), f"mloda.{namespace_name} must expose '{symbol}'"
         assert getattr(namespace, symbol) is getattr(source, symbol), (
@@ -70,3 +83,12 @@ class TestUserDoesNotExportPluginRegistry:
         assert not hasattr(mloda.user, "PluginRegistry"), (
             "mloda.user must not expose a PluginRegistry attribute; stewards use mloda.steward.PluginRegistry"
         )
+
+
+class TestGovernanceExportsAreStewardOnly:
+    @pytest.mark.parametrize("symbol", _GOVERNANCE_SYMBOLS)
+    def test_governance_symbol_absent_from_user_and_provider(self, symbol: str) -> None:
+        for namespace_name in ("user", "provider"):
+            namespace = _NAMESPACES[namespace_name]
+            assert symbol not in namespace.__all__, f"mloda.{namespace_name} must not list '{symbol}' in __all__"
+            assert not hasattr(namespace, symbol), f"mloda.{namespace_name} must not expose '{symbol}'"

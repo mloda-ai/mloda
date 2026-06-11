@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import dataclasses
 import inspect
+import logging
 import threading
 from dataclasses import dataclass
 from enum import Enum
@@ -12,6 +14,13 @@ from typing import Any
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender
+from mloda.core.abstract_plugins.plugin_registry.plugin_policy import (
+    ApprovalStatus,
+    PluginPolicy,
+    PluginPolicyViolationError,
+)
+
+logger = logging.getLogger(__name__)
 
 _PLUGIN_BASE_TYPES: tuple[type[Any], ...] = (FeatureGroup, ComputeFramework, Extender)
 
@@ -38,6 +47,16 @@ def _normalize_source(source: PluginSource | str) -> PluginSource:
     return members[source]
 
 
+def _normalize_approval(approval: ApprovalStatus | str) -> ApprovalStatus:
+    if isinstance(approval, ApprovalStatus):
+        return approval
+    members = {member.value: member for member in ApprovalStatus}
+    if approval not in members:
+        valid = ", ".join(member.value for member in ApprovalStatus)
+        raise ValueError(f"Invalid approval status {approval!r}. Valid values are: {valid}.")
+    return members[approval]
+
+
 @dataclass(frozen=True)
 class PluginRegistryEntry:
     cls: type[Any]
@@ -45,6 +64,8 @@ class PluginRegistryEntry:
     plugin_type: type[Any]
     source_module: str
     source: PluginSource
+    owner: str | None = None
+    approval: ApprovalStatus = ApprovalStatus.UNREVIEWED
 
 
 PluginRegistrySnapshot = dict[str, PluginRegistryEntry]
@@ -61,6 +82,8 @@ class PluginRegistry:
     def __init__(self) -> None:
         # Only default() lazy init is locked; registration is expected single-threaded at import/startup time.
         self._entries: dict[str, PluginRegistryEntry] = {}
+        self._policy: PluginPolicy | None = None
+        self._policy_warned_keys: set[str] = set()
 
     @classmethod
     def default(cls) -> PluginRegistry:
@@ -70,6 +93,13 @@ class PluginRegistry:
                 _default = cls()
         return _default
 
+    @property
+    def policy(self) -> PluginPolicy | None:
+        return self._policy
+
+    def set_policy(self, policy: PluginPolicy | None) -> None:
+        self._policy = policy
+
     def register(
         self,
         cls: type[Any],
@@ -77,10 +107,20 @@ class PluginRegistry:
         name: str | None = None,
         source: PluginSource | str = PluginSource.MANUAL,
         replace: bool = False,
-    ) -> str:
+        owner: str | None = None,
+        approval: ApprovalStatus | str = ApprovalStatus.UNREVIEWED,
+    ) -> str | None:
         normalized_source = _normalize_source(source)
+        normalized_approval = _normalize_approval(approval)
         plugin_type = _resolve_plugin_type(cls)
         key = name if name is not None else f"{cls.__module__}:{cls.__qualname__}"
+        if self._policy is not None and not self._policy.allows(key, cls.__module__, normalized_approval):
+            if normalized_source is PluginSource.MANUAL:
+                raise PluginPolicyViolationError(f"Plugin '{key}' is denied by the installed plugin policy.")
+            if key not in self._policy_warned_keys:
+                self._policy_warned_keys.add(key)
+                logger.warning("Plugin '%s' was denied by the installed plugin policy and not registered.", key)
+            return None
         existing_key = next((k for k, entry in self._entries.items() if entry.cls is cls), None)
         if existing_key is not None and existing_key != key:
             raise PluginRegistryCollisionError(
@@ -101,8 +141,16 @@ class PluginRegistry:
             plugin_type=plugin_type,
             source_module=cls.__module__,
             source=normalized_source,
+            owner=owner,
+            approval=normalized_approval,
         )
         return key
+
+    def set_approval(self, name: str, approval: ApprovalStatus | str, owner: str | None = None) -> None:
+        normalized_approval = _normalize_approval(approval)
+        entry = self.get_entry(name)
+        new_owner = owner if owner is not None else entry.owner
+        self._entries[name] = dataclasses.replace(entry, approval=normalized_approval, owner=new_owner)
 
     def unregister(self, name: str) -> None:
         if name not in self._entries:
@@ -155,9 +203,17 @@ _default_lock = threading.Lock()
 
 
 def register_plugin(
-    cls: type[Any], *, name: str | None = None, source: PluginSource | str = PluginSource.MANUAL, replace: bool = False
-) -> str:
-    return PluginRegistry.default().register(cls, name=name, source=source, replace=replace)
+    cls: type[Any],
+    *,
+    name: str | None = None,
+    source: PluginSource | str = PluginSource.MANUAL,
+    replace: bool = False,
+    owner: str | None = None,
+    approval: ApprovalStatus | str = ApprovalStatus.UNREVIEWED,
+) -> str | None:
+    return PluginRegistry.default().register(
+        cls, name=name, source=source, replace=replace, owner=owner, approval=approval
+    )
 
 
 def register_module_plugins(module: ModuleType, *, source: PluginSource | str = PluginSource.LOADER) -> list[str]:
@@ -174,5 +230,7 @@ def register_module_plugins(module: ModuleType, *, source: PluginSource | str = 
             continue
         if inspect.isabstract(obj):
             continue
-        keys.append(registry.register(obj, source=source, replace=True))
+        key = registry.register(obj, source=source, replace=True)
+        if key is not None:
+            keys.append(key)
     return keys

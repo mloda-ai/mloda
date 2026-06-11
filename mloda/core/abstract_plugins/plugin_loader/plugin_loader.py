@@ -132,7 +132,9 @@ class PluginLoader:
                 )
             if inspect.isabstract(cls):
                 continue
-            keys.append(registry.register(cls, source=PluginSource.ENTRY_POINT, replace=False))
+            key = registry.register(cls, source=PluginSource.ENTRY_POINT, replace=False)
+            if key is not None:
+                keys.append(key)
         return keys
 
     def __repr__(self) -> str:

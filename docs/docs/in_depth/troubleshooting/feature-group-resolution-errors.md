@@ -55,7 +55,7 @@ two sources that both declare a join key like `subject_token`), disabling one of
 not an option: you need both enabled, but a single request for the shared column is
 ambiguous. Scope the feature to the source it should come from:
 
-```python
+``` python
 from mloda.user import Feature
 
 # By class name
@@ -82,7 +82,7 @@ share a read with its sibling features. The parameter form leaves options untouc
 The scope matches on the class name only. Two feature group classes that share the same
 class name in different modules still collide and raise "Multiple feature groups found".
 
-```python
+``` python
 class NewestClaimPerSubject(FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {

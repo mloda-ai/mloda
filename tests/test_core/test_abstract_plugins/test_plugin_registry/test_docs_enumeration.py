@@ -14,7 +14,10 @@ The autouse conftest fixture restores the default registry around every test,
 so clearing it inside a test is safe.
 """
 
+import gc
 from typing import Any
+
+import pytest
 
 import mloda.steward
 import mloda.user
@@ -28,6 +31,19 @@ from mloda.core.api.plugin_docs import (
     get_extender_docs,
     get_feature_group_docs,
 )
+
+
+@pytest.fixture(autouse=True)
+def _reap_pending_dead_plugin_classes() -> None:
+    """Collect dead test-local plugin classes before each test.
+
+    Plugin docs enumeration walks live __subclasses__() registries. Local plugin
+    classes from earlier tests on the same worker stay visible there until a gc
+    pass runs, so a pass landing between two enumeration calls inside one test
+    changes the result mid-test. Collecting up front makes enumeration stable
+    for the duration of each test.
+    """
+    gc.collect()
 
 
 class TestPublicRegistryExports:

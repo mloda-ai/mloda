@@ -15,7 +15,14 @@ class ApprovalStatus(str, Enum):
 
 
 class PluginPolicyViolationError(Exception):
-    """Raised when a manual registration violates the installed plugin policy."""
+    """Raised when a registration violates the installed plugin policy."""
+
+
+def _module_matches_prefix(module: str, prefix: str) -> bool:
+    """Boundary-aware match: "p" matches "p" and "p.sub"; "p." matches submodules only."""
+    if prefix.endswith("."):
+        return module.startswith(prefix)
+    return module == prefix or module.startswith(prefix + ".")
 
 
 @dataclass(frozen=True)
@@ -32,11 +39,11 @@ class PluginPolicy:
         """Return True if the plugin may register under this policy."""
         if key in self.denied_keys:
             return False
-        if any(module.startswith(prefix) for prefix in self.denied_module_prefixes):
+        if any(_module_matches_prefix(module, prefix) for prefix in self.denied_module_prefixes):
             return False
         if key not in self.allowed_keys:
             if self.allowed_module_prefixes is not None and not any(
-                module.startswith(prefix) for prefix in self.allowed_module_prefixes
+                _module_matches_prefix(module, prefix) for prefix in self.allowed_module_prefixes
             ):
                 return False
         if self.require_approval and approval is not ApprovalStatus.APPROVED:

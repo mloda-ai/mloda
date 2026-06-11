@@ -6,8 +6,11 @@ Contract under test:
 - PluginLoader.load_entry_points(group=None) discovers installed distributions' entry points via
   importlib.metadata, loads each manifest attribute (a sequence of plugin classes), registers the
   classes into PluginRegistry.default() with source=PluginSource.ENTRY_POINT under module:qualname
-  keys, and returns the sorted list of registered keys. The entry-point NAME is a label, never a key.
-- Validation is loud (non-sequence manifests, wrong base types), abstract classes are skipped,
+  keys, and returns the sorted, DEDUPLICATED list of registered keys (a manifest listing the same
+  class twice yields its key once). The entry-point NAME is a label, never a key.
+- Validation is loud (a non-sequence manifest raises an error naming the entry-point label and
+  saying a list or tuple of plugin classes is expected; wrong base types raise naming group and
+  class), abstract classes are skipped,
   missing optional dependencies skip only the affected entry point, key conflicts raise
   PluginRegistryCollisionError, double loads are idempotent, and PluginLoader.all() folds
   entry points in after the mloda_plugins scan.
@@ -313,21 +316,36 @@ class TestLoadEntryPointsGroupFilter:
 
 
 class TestLoadEntryPointsValidation:
-    @pytest.mark.parametrize(
-        ("slug", "manifest_value"),
-        [
-            ("int", "42"),
-            ("strings", '["not_a_class"]'),
-        ],
-    )
-    def test_manifest_not_a_sequence_of_classes_raises_naming_entry_point(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, slug: str, manifest_value: str
+    def test_non_sequence_manifest_error_names_label_and_expects_list_or_tuple(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        pkg = f"eptest_badmanifest_{slug}_pkg"
+        pkg = "eptest_badmanifest_int_pkg"
         _build_distribution(
             tmp_path,
             pkg,
-            f"FEATURE_GROUPS = {manifest_value}\n",
+            "FEATURE_GROUPS = 42\n",
+            f"""
+            [mloda.feature_groups]
+            broken_label = {pkg}.manifest:FEATURE_GROUPS
+            """,
+        )
+        monkeypatch.syspath_prepend(str(tmp_path))
+
+        with pytest.raises((TypeError, ValueError)) as exc_info:
+            PluginLoader().load_entry_points()
+        message = str(exc_info.value)
+        assert "broken_label" in message, "the error must name the entry-point label"
+        assert "list" in message, "the error must say a list or tuple of plugin classes is expected"
+        assert "tuple" in message, "the error must say a list or tuple of plugin classes is expected"
+
+    def test_manifest_with_non_class_items_raises_naming_entry_point(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        pkg = "eptest_badmanifest_strings_pkg"
+        _build_distribution(
+            tmp_path,
+            pkg,
+            'FEATURE_GROUPS = ["not_a_class"]\n',
             f"""
             [mloda.feature_groups]
             broken_label = {pkg}.manifest:FEATURE_GROUPS
@@ -487,6 +505,42 @@ class TestLoadEntryPointsIdempotencyAndCollisions:
         with pytest.raises(PluginRegistryCollisionError):
             PluginLoader().load_entry_points()
         assert PluginRegistry.default().get(conflicting_key) is _PreexistingConflictFG
+
+
+_DUP_FG_MANIFEST = """
+    from mloda.core.abstract_plugins.feature_group import FeatureGroup
+
+
+    class DupEpFeatureGroup(FeatureGroup):
+        pass
+
+
+    FEATURE_GROUPS = [DupEpFeatureGroup, DupEpFeatureGroup]
+"""
+
+
+class TestLoadEntryPointsDeduplication:
+    def test_manifest_listing_same_class_twice_yields_key_once(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        pkg = "eptest_dupclass_pkg"
+        _build_distribution(
+            tmp_path,
+            pkg,
+            _DUP_FG_MANIFEST,
+            f"""
+            [mloda.feature_groups]
+            demo = {pkg}.manifest:FEATURE_GROUPS
+            """,
+        )
+        monkeypatch.syspath_prepend(str(tmp_path))
+
+        keys = PluginLoader().load_entry_points()
+
+        expected_key = f"{pkg}.manifest:DupEpFeatureGroup"
+        assert keys.count(expected_key) == 1, "a class listed twice in one manifest must yield its key once"
+        assert keys == sorted(set(keys)), "load_entry_points must return a sorted, deduplicated key list"
+        assert PluginRegistry.default().get_entry(expected_key).cls is _manifest_class(pkg, "DupEpFeatureGroup")
 
 
 class TestEntryPointNameIsLabelOnly:

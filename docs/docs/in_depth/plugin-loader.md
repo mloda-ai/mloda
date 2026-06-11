@@ -30,7 +30,7 @@ Loads only files within a group whose filename matches a glob pattern (e.g. `"*t
 Loads all plugin groups.
 
 ### `load_entry_points(group: str | None = None)`
-Discovers plugins from installed packages that declare [entry points](#entry-points). Pass a group name to restrict discovery to one group; `None` loads all three. Returns the sorted list of registry keys it registered.
+Discovers plugins from installed packages that declare [entry points](#entry-points). Pass a group name to restrict discovery to one group; `None` loads all three. Returns the sorted, deduplicated list of registry keys it registered.
 
 ### `disable_auto_load(group: str)`
 Prevents a group from being auto-loaded lazily. Call this before any plugin discovery if you want full control over what is loaded.
@@ -102,9 +102,9 @@ from mloda.user import PluginLoader
 
 loader = PluginLoader()
 
-# All three groups; returns the sorted registry keys that were registered.
+# All three groups; returns the sorted, deduplicated registry keys that were registered.
 keys = loader.load_entry_points()
-assert keys == sorted(keys)
+assert keys == sorted(set(keys))
 
 # One group only; unknown group names raise ValueError.
 fg_keys = loader.load_entry_points(group="mloda.feature_groups")
@@ -112,8 +112,8 @@ fg_keys = loader.load_entry_points(group="mloda.feature_groups")
 
 ### Behavior Notes
 
-- **Validation is loud.** A manifest that is not a sequence of classes, or that contains classes of the wrong base type for its group, raises `TypeError` naming the entry point.
+- **Validation is loud, by design.** A malformed entry point fails discovery with an error instead of being skipped: a manifest that is not a list or tuple of plugin classes, or that contains classes of the wrong base type for its group, raises `TypeError` naming the entry point.
 - **Abstract classes are skipped** silently; manifests may list a shared abstract base alongside its concrete subclasses.
 - **Collisions raise.** If a different class already holds a manifest class's `module:qualname` key, loading raises `PluginRegistryCollisionError`. Loading the same manifests twice is idempotent.
 - **Missing optional dependencies skip.** If importing a manifest fails on a module listed in `OPTIONAL_PLUGIN_DEPENDENCIES` (pandas, polars, duckdb, ...), only that entry point is skipped; any other `ModuleNotFoundError` is re-raised.
-- **Policies apply.** Entry-point registrations denied by an installed [plugin policy](plugin_registry.md#governance) are skipped with one warning per key.
+- **Policies apply, after import.** A registration denied by an installed [plugin policy](plugin_registry.md#governance) raises inside `register()`; the loader catches the denial, skips the class, leaves its key out of the returned list, and logs one warning per denied key per registry instance. The policy gates registration only, not import: the manifest module is imported before the policy applies, so installing a package implies trusting its import side effects.

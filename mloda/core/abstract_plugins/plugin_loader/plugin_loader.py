@@ -12,10 +12,12 @@ from typing import Any, ClassVar, Optional
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender
+from mloda.core.abstract_plugins.plugin_registry.plugin_policy import PluginPolicyViolationError
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import (
     PluginRegistry,
     PluginSource,
     register_module_plugins,
+    warn_policy_denied,
 )
 
 logger = logging.getLogger(__name__)
@@ -114,12 +116,14 @@ class PluginLoader:
                         continue
                     raise
                 keys.extend(self._register_manifest(entry_point.name, group_name, base_type, manifest))
-        return sorted(keys)
+        return sorted(set(keys))
 
     def _register_manifest(self, label: str, group_name: str, base_type: type[Any], manifest: Any) -> list[str]:
         """Validate a manifest sequence and register its concrete classes."""
         if isinstance(manifest, (str, bytes)) or not isinstance(manifest, Sequence):
-            raise TypeError(f"Entry point '{label}' must resolve to a sequence of plugin classes, got {manifest!r}.")
+            raise TypeError(
+                f"Entry point '{label}' must resolve to a list or tuple of plugin classes, got {manifest!r}."
+            )
         registry = PluginRegistry.default()
         keys: list[str] = []
         for cls in manifest:
@@ -132,9 +136,12 @@ class PluginLoader:
                 )
             if inspect.isabstract(cls):
                 continue
-            key = registry.register(cls, source=PluginSource.ENTRY_POINT, replace=False)
-            if key is not None:
-                keys.append(key)
+            try:
+                key = registry.register(cls, source=PluginSource.ENTRY_POINT, replace=False)
+            except PluginPolicyViolationError:
+                warn_policy_denied(registry, f"{cls.__module__}:{cls.__qualname__}")
+                continue
+            keys.append(key)
         return keys
 
     def __repr__(self) -> str:

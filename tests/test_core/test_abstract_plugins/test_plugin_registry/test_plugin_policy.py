@@ -8,6 +8,12 @@ PluginPolicy.allows(key, module, approval) evaluates deny-first:
 allowed_keys bypasses the module-prefix constraint but NOT require_approval,
 4) allowed_module_prefixes (None = unrestricted, () = nothing passes),
 5) require_approval admits only ApprovalStatus.APPROVED.
+
+Module-prefix matching is boundary-aware on both the denied and allowed
+sides: prefix "acme.plugins" matches the module "acme.plugins" itself and
+any submodule "acme.plugins.sub", but never a sibling like
+"acme.plugins_evil". The trailing-dot form "acme.plugins." matches only
+submodules: "acme.plugins.sub" yes, "acme.plugins" and "acme.plugins_evil" no.
 """
 
 import dataclasses
@@ -27,7 +33,7 @@ class TestPolicyModuleContract:
         assert ApprovalStatus.UNREVIEWED.value == "unreviewed"
         assert ApprovalStatus.APPROVED.value == "approved"
         assert ApprovalStatus.REJECTED.value == "rejected"
-        assert ApprovalStatus.APPROVED == "approved"
+        assert ApprovalStatus("approved") is ApprovalStatus.APPROVED
 
     def test_violation_error_is_exception_subclass(self) -> None:
         assert issubclass(PluginPolicyViolationError, Exception)
@@ -84,3 +90,29 @@ class TestPolicyAllows:
         assert policy.allows("pkg.mod:Cls", "pkg.mod", ApprovalStatus.APPROVED) is True
         assert policy.allows("pkg.mod:Cls", "pkg.mod", ApprovalStatus.UNREVIEWED) is False
         assert policy.allows("pkg.mod:Cls", "pkg.mod", ApprovalStatus.REJECTED) is False
+
+
+class TestPolicyPrefixBoundaryMatching:
+    def test_denied_prefix_matches_exact_module_and_submodules_but_not_siblings(self) -> None:
+        policy = PluginPolicy(denied_module_prefixes=("acme.plugins",))
+        assert policy.allows("k:Cls", "acme.plugins", ApprovalStatus.APPROVED) is False
+        assert policy.allows("k:Cls", "acme.plugins.sub", ApprovalStatus.APPROVED) is False
+        assert policy.allows("k:Cls", "acme.plugins_evil", ApprovalStatus.APPROVED) is True
+
+    def test_denied_prefix_trailing_dot_matches_submodules_only(self) -> None:
+        policy = PluginPolicy(denied_module_prefixes=("acme.plugins.",))
+        assert policy.allows("k:Cls", "acme.plugins.sub", ApprovalStatus.APPROVED) is False
+        assert policy.allows("k:Cls", "acme.plugins", ApprovalStatus.APPROVED) is True
+        assert policy.allows("k:Cls", "acme.plugins_evil", ApprovalStatus.APPROVED) is True
+
+    def test_allowed_prefix_matches_exact_module_and_submodules_but_not_siblings(self) -> None:
+        policy = PluginPolicy(allowed_module_prefixes=("acme.plugins",))
+        assert policy.allows("k:Cls", "acme.plugins", ApprovalStatus.UNREVIEWED) is True
+        assert policy.allows("k:Cls", "acme.plugins.sub", ApprovalStatus.UNREVIEWED) is True
+        assert policy.allows("k:Cls", "acme.plugins_evil", ApprovalStatus.UNREVIEWED) is False
+
+    def test_allowed_prefix_trailing_dot_matches_submodules_only(self) -> None:
+        policy = PluginPolicy(allowed_module_prefixes=("acme.plugins.",))
+        assert policy.allows("k:Cls", "acme.plugins.sub", ApprovalStatus.UNREVIEWED) is True
+        assert policy.allows("k:Cls", "acme.plugins", ApprovalStatus.UNREVIEWED) is False
+        assert policy.allows("k:Cls", "acme.plugins_evil", ApprovalStatus.UNREVIEWED) is False

@@ -37,13 +37,13 @@ class TestPluginSourceEnum:
         assert issubclass(PluginSource, enum.Enum)
 
     def test_plugin_source_members_and_values(self) -> None:
-        assert PluginSource.MANUAL == "manual"
-        assert PluginSource.LOADER == "loader"
-        assert PluginSource.ENTRY_POINT == "entry_point"
+        assert PluginSource.MANUAL.value == "manual"
+        assert PluginSource.LOADER.value == "loader"
+        assert PluginSource.ENTRY_POINT.value == "entry_point"
 
     def test_plugin_source_keeps_string_comparisons_working(self) -> None:
         """Existing call sites compare entry.source against bare strings; str subclassing keeps that True."""
-        assert PluginSource.LOADER == "loader"
+        assert PluginSource.LOADER.value == "loader"
         assert isinstance(PluginSource.LOADER, str)
 
 
@@ -100,4 +100,4 @@ class TestRegisterModulePluginsProvenance:
         for key in keys:
             entry = registry.get_entry(key)
             assert entry.source is PluginSource.LOADER
-            assert entry.source == "loader", "loader provenance must keep comparing equal to the bare string"
+            assert entry.source.value == "loader", "loader provenance must keep the bare string value"

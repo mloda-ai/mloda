@@ -25,6 +25,13 @@ logger = logging.getLogger(__name__)
 _PLUGIN_BASE_TYPES: tuple[type[Any], ...] = (FeatureGroup, ComputeFramework, Extender)
 
 
+class _Unset:
+    """Sentinel type marking an argument as not passed."""
+
+
+_UNSET = _Unset()
+
+
 class PluginRegistryCollisionError(ValueError):
     """Raised when a different class is registered under an already taken key."""
 
@@ -107,32 +114,37 @@ class PluginRegistry:
         name: str | None = None,
         source: PluginSource | str = PluginSource.MANUAL,
         replace: bool = False,
-        owner: str | None = None,
-        approval: ApprovalStatus | str = ApprovalStatus.UNREVIEWED,
-    ) -> str | None:
+        owner: str | _Unset | None = _UNSET,
+        approval: ApprovalStatus | str | _Unset = _UNSET,
+    ) -> str:
         normalized_source = _normalize_source(source)
-        normalized_approval = _normalize_approval(approval)
+        explicit_approval = None if isinstance(approval, _Unset) else _normalize_approval(approval)
         plugin_type = _resolve_plugin_type(cls)
         key = name if name is not None else f"{cls.__module__}:{cls.__qualname__}"
-        if self._policy is not None and not self._policy.allows(key, cls.__module__, normalized_approval):
-            if normalized_source is PluginSource.MANUAL:
-                raise PluginPolicyViolationError(f"Plugin '{key}' is denied by the installed plugin policy.")
-            if key not in self._policy_warned_keys:
-                self._policy_warned_keys.add(key)
-                logger.warning("Plugin '%s' was denied by the installed plugin policy and not registered.", key)
-            return None
+        previous = self._entries.get(key)
+        carried = previous if previous is not None and previous.cls is cls else None
+        effective_owner: str | None
+        if isinstance(owner, _Unset):
+            effective_owner = carried.owner if carried is not None else None
+        else:
+            effective_owner = owner
+        if explicit_approval is not None:
+            effective_approval = explicit_approval
+        else:
+            effective_approval = carried.approval if carried is not None else ApprovalStatus.UNREVIEWED
+        if self._policy is not None and not self._policy.allows(key, cls.__module__, effective_approval):
+            raise PluginPolicyViolationError(f"Plugin '{key}' is denied by the installed plugin policy.")
         existing_key = next((k for k, entry in self._entries.items() if entry.cls is cls), None)
         if existing_key is not None and existing_key != key:
             raise PluginRegistryCollisionError(
                 f"{cls!r} is already registered under key '{existing_key}'; a class holds exactly one key. "
                 f"To rename, unregister('{existing_key}') first, then register under the new key."
             )
-        existing = self._entries.get(key)
-        if existing is not None and not replace:
-            if existing.cls is cls:
+        if previous is not None and not replace:
+            if previous.cls is cls:
                 return key
             raise PluginRegistryCollisionError(
-                f"Key '{key}' is already registered to {existing.cls!r}; cannot register {cls!r}. "
+                f"Key '{key}' is already registered to {previous.cls!r}; cannot register {cls!r}. "
                 "Pass replace=True to replace the existing entry."
             )
         self._entries[key] = PluginRegistryEntry(
@@ -141,8 +153,8 @@ class PluginRegistry:
             plugin_type=plugin_type,
             source_module=cls.__module__,
             source=normalized_source,
-            owner=owner,
-            approval=normalized_approval,
+            owner=effective_owner,
+            approval=effective_approval,
         )
         return key
 
@@ -208,18 +220,27 @@ def register_plugin(
     name: str | None = None,
     source: PluginSource | str = PluginSource.MANUAL,
     replace: bool = False,
-    owner: str | None = None,
-    approval: ApprovalStatus | str = ApprovalStatus.UNREVIEWED,
-) -> str | None:
+    owner: str | _Unset | None = _UNSET,
+    approval: ApprovalStatus | str | _Unset = _UNSET,
+) -> str:
     return PluginRegistry.default().register(
         cls, name=name, source=source, replace=replace, owner=owner, approval=approval
     )
+
+
+def warn_policy_denied(registry: PluginRegistry, key: str) -> None:
+    """Log one WARNING per policy-denied key per registry instance."""
+    if key in registry._policy_warned_keys:
+        return
+    registry._policy_warned_keys.add(key)
+    logger.warning("Plugin '%s' was denied by the installed plugin policy and not registered.", key)
 
 
 def register_module_plugins(module: ModuleType, *, source: PluginSource | str = PluginSource.LOADER) -> list[str]:
     """Register all plugin classes defined in a module into the default registry.
 
     Last-write-wins (replace=True) so importlib.reload updates entries; provenance may flip to "loader".
+    Policy-denied classes are skipped with one warning per denied key per registry instance.
     """
     registry = PluginRegistry.default()
     keys: list[str] = []
@@ -230,7 +251,10 @@ def register_module_plugins(module: ModuleType, *, source: PluginSource | str = 
             continue
         if inspect.isabstract(obj):
             continue
-        key = registry.register(obj, source=source, replace=True)
-        if key is not None:
-            keys.append(key)
+        try:
+            key = registry.register(obj, source=source, replace=True)
+        except PluginPolicyViolationError:
+            warn_policy_denied(registry, f"{obj.__module__}:{obj.__qualname__}")
+            continue
+        keys.append(key)
     return keys

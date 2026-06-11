@@ -4,14 +4,20 @@ Contract: PluginRegistry.set_policy installs a deployment-scoped PluginPolicy,
 exposed via the read-only `policy` property (default None = allow everything).
 register() evaluates the policy after source normalization and before any state
 mutation, against the would-be key, cls.__module__, and the approval being
-registered. Denied manual registrations raise PluginPolicyViolationError naming
-the key; denied loader/entry_point registrations register nothing, return None,
-and warn once per key per registry instance. Entries carry owner/approval
-metadata (approval strings normalized like source; invalid values raise
-ValueError listing the valid ones). set_approval updates existing entries and
-raises the get_entry error type for unknown names. The discovery funnels
-(register_module_plugins, PluginLoader.load_entry_points) exclude denied
-classes from their returned key lists without error.
+registered. A denied registration always raises PluginPolicyViolationError
+naming the would-be key, regardless of source (manual, loader, entry_point);
+otherwise register() returns the key string (never None). The discovery
+funnels (register_module_plugins, PluginLoader.load_entry_points) catch the
+denial themselves: they skip denied classes, exclude them from their returned
+key lists, and log one WARNING per denied key per registry instance (a second
+funnel call for the same denied key logs nothing new). Entries carry
+owner/approval metadata (approval strings normalized like source; invalid
+values raise ValueError listing the valid ones). Benign re-registration
+(replace=True, same class and key) with default owner/approval keeps the
+existing entry's governance metadata; an explicit owner or approval updates
+it; replacing with a different class resets it to defaults (owner None,
+UNREVIEWED). set_approval updates existing entries and raises the get_entry
+error type for unknown names.
 """
 
 import gc
@@ -53,6 +59,10 @@ class _PolicyEnfFGC(FeatureGroup):
 
 
 class _PolicyEnfFGD(FeatureGroup):
+    pass
+
+
+class _PolicyEnfFGE(FeatureGroup):
     pass
 
 
@@ -121,29 +131,25 @@ class TestPolicyDenialBySource:
         with pytest.raises(ValueError, match="bogus_source"):
             reg.register(_PolicyEnfFGA, source="bogus_source")
 
-    def test_loader_denied_returns_none_and_warns_once_per_key(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_loader_denied_raises_naming_key_and_mutates_nothing(self) -> None:
         reg = PluginRegistry()
-        denied_a = _key(_PolicyEnfFGA)
-        denied_b = _key(_PolicyEnfFGB)
-        reg.set_policy(PluginPolicy(denied_keys=(denied_a, denied_b)))
-        with caplog.at_level(logging.WARNING):
-            assert reg.register(_PolicyEnfFGA, source="loader") is None
-            assert len(_warning_messages(caplog, denied_a)) == 1
-            assert reg.register(_PolicyEnfFGA, source="loader") is None
-            assert len(_warning_messages(caplog, denied_a)) == 1, "second denial of the same key must not warn again"
-            assert reg.register(_PolicyEnfFGB, source="loader") is None
-            assert len(_warning_messages(caplog, denied_b)) == 1, "a different denied key warns on its own"
+        denied = _key(_PolicyEnfFGA)
+        reg.set_policy(PluginPolicy(denied_keys=(denied,)))
+        with pytest.raises(PluginPolicyViolationError) as exc_info:
+            reg.register(_PolicyEnfFGA, source="loader")
+        assert denied in str(exc_info.value)
         assert not reg.is_registered(_PolicyEnfFGA)
-        assert not reg.is_registered(_PolicyEnfFGB)
+        assert reg.snapshot() == {}
 
-    def test_entry_point_denied_returns_none_and_warns(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_entry_point_denied_raises_naming_key_and_mutates_nothing(self) -> None:
         reg = PluginRegistry()
         denied = _key(_PolicyEnfFGC)
         reg.set_policy(PluginPolicy(denied_keys=(denied,)))
-        with caplog.at_level(logging.WARNING):
-            assert reg.register(_PolicyEnfFGC, source=PluginSource.ENTRY_POINT) is None
-        assert len(_warning_messages(caplog, denied)) == 1
+        with pytest.raises(PluginPolicyViolationError) as exc_info:
+            reg.register(_PolicyEnfFGC, source=PluginSource.ENTRY_POINT)
+        assert denied in str(exc_info.value)
         assert reg.get(denied) is None
+        assert reg.snapshot() == {}
 
 
 class TestApprovalMetadata:
@@ -222,9 +228,66 @@ class TestModuleLevelRegisterPluginForwarding:
         assert entry.owner == "carol"
         assert entry.approval is ApprovalStatus.APPROVED
 
+    @pytest.mark.parametrize("source", [PluginSource.MANUAL, "loader", PluginSource.ENTRY_POINT])
+    def test_register_plugin_denied_raises_for_every_source(
+        self, source: PluginSource | str, default_registry_policy_guard: PluginRegistry
+    ) -> None:
+        registry = default_registry_policy_guard
+        denied = _key(_PolicyEnfFGE)
+        registry.set_policy(PluginPolicy(denied_keys=(denied,)))
+        with pytest.raises(PluginPolicyViolationError) as exc_info:
+            register_plugin(_PolicyEnfFGE, source=source)
+        assert denied in str(exc_info.value)
+        assert not registry.is_registered(_PolicyEnfFGE)
+
+
+class TestReplacePreservesGovernanceMetadata:
+    def test_replace_same_class_with_defaults_keeps_owner_and_approval(self) -> None:
+        reg = PluginRegistry()
+        reg.register(_PolicyEnfFGA, owner="alice", approval=ApprovalStatus.APPROVED)
+        reg.register(_PolicyEnfFGA, replace=True)
+        entry = reg.get_entry(_key(_PolicyEnfFGA))
+        assert entry.owner == "alice"
+        assert entry.approval is ApprovalStatus.APPROVED
+
+    def test_replace_same_class_explicit_owner_updates_owner_and_keeps_approval(self) -> None:
+        reg = PluginRegistry()
+        reg.register(_PolicyEnfFGA, owner="alice", approval=ApprovalStatus.APPROVED)
+        reg.register(_PolicyEnfFGA, replace=True, owner="bob")
+        entry = reg.get_entry(_key(_PolicyEnfFGA))
+        assert entry.owner == "bob"
+        assert entry.approval is ApprovalStatus.APPROVED
+
+    def test_replace_same_class_explicit_approval_updates_approval_and_keeps_owner(self) -> None:
+        reg = PluginRegistry()
+        reg.register(_PolicyEnfFGA, owner="alice", approval=ApprovalStatus.APPROVED)
+        reg.register(_PolicyEnfFGA, replace=True, approval="rejected")
+        entry = reg.get_entry(_key(_PolicyEnfFGA))
+        assert entry.approval is ApprovalStatus.REJECTED
+        assert entry.owner == "alice"
+
+    def test_replace_same_class_under_explicit_key_keeps_metadata(self) -> None:
+        reg = PluginRegistry()
+        reg.register(_PolicyEnfFGA, name="governed_meta_key", owner="alice", approval="approved")
+        reg.register(_PolicyEnfFGA, name="governed_meta_key", replace=True)
+        entry = reg.get_entry("governed_meta_key")
+        assert entry.owner == "alice"
+        assert entry.approval is ApprovalStatus.APPROVED
+
+    def test_replace_with_different_class_resets_metadata_to_defaults(self) -> None:
+        reg = PluginRegistry()
+        reg.register(_PolicyEnfFGA, name="governed_shared_key", owner="alice", approval=ApprovalStatus.APPROVED)
+        reg.register(_PolicyEnfFGB, name="governed_shared_key", replace=True)
+        entry = reg.get_entry("governed_shared_key")
+        assert entry.cls is _PolicyEnfFGB
+        assert entry.owner is None
+        assert entry.approval is ApprovalStatus.UNREVIEWED
+
 
 class TestRegisterModulePluginsSkipsDenied:
-    def test_register_module_plugins_excludes_denied(self, default_registry_policy_guard: PluginRegistry) -> None:
+    def test_register_module_plugins_excludes_denied_and_warns_once(
+        self, caplog: pytest.LogCaptureFixture, default_registry_policy_guard: PluginRegistry
+    ) -> None:
         registry = default_registry_policy_guard
         module = types.ModuleType("policy_gate_fake_mod")
 
@@ -251,12 +314,21 @@ class TestRegisterModulePluginsSkipsDenied:
         denied_key = f"{module.__name__}:{_ModDeniedFG.__qualname__}"
         try:
             registry.set_policy(PluginPolicy(denied_keys=(denied_key,)))
-            keys = register_module_plugins(module)
+            with caplog.at_level(logging.WARNING):
+                keys = register_module_plugins(module)
             assert all(isinstance(key, str) for key in keys), "denied classes must not surface as None results"
             assert allowed_key in keys
             assert denied_key not in keys
             assert registry.is_registered(_ModAllowedFG)
             assert not registry.is_registered(_ModDeniedFG)
+            assert len(_warning_messages(caplog, denied_key)) == 1, "the funnel warns once for a denied key"
+            with caplog.at_level(logging.WARNING):
+                keys_again = register_module_plugins(module)
+            assert denied_key not in keys_again
+            assert allowed_key in keys_again
+            assert len(_warning_messages(caplog, denied_key)) == 1, (
+                "a second funnel call for the same denied key must not warn again on the same registry instance"
+            )
         finally:
             # Drop every strong ref to the fake-module doubles so they cannot poison
             # other tests in this worker via FeatureGroup.__subclasses__(); the autouse
@@ -299,8 +371,12 @@ def _build_distribution(base_dir: Path, pkg_name: str, manifest_source: str, ent
 
 
 class TestLoadEntryPointsSkipsDenied:
-    def test_load_entry_points_excludes_denied(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, default_registry_policy_guard: PluginRegistry
+    def test_load_entry_points_excludes_denied_and_warns_once(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+        default_registry_policy_guard: PluginRegistry,
     ) -> None:
         pkg = "eptest_policy_denied_pkg"
         _build_distribution(
@@ -318,13 +394,23 @@ class TestLoadEntryPointsSkipsDenied:
         registry = default_registry_policy_guard
         registry.set_policy(PluginPolicy(denied_keys=(denied_key,)))
 
-        keys = PluginLoader().load_entry_points()
+        with caplog.at_level(logging.WARNING):
+            keys = PluginLoader().load_entry_points()
 
         assert allowed_key in keys
         assert denied_key not in keys
         assert all(isinstance(key, str) for key in keys), "denied classes must not surface as None results"
         assert registry.get(denied_key) is None
         assert registry.get_entry(allowed_key).source == PluginSource.ENTRY_POINT
+        assert len(_warning_messages(caplog, denied_key)) == 1, "the funnel warns once for a denied key"
+
+        with caplog.at_level(logging.WARNING):
+            keys_again = PluginLoader().load_entry_points()
+
+        assert denied_key not in keys_again
+        assert len(_warning_messages(caplog, denied_key)) == 1, (
+            "a second funnel call for the same denied key must not warn again on the same registry instance"
+        )
 
 
 class TestDualImportAwareness:
@@ -353,7 +439,9 @@ class TestDualImportAwareness:
 
             governed.set_policy(PluginPolicy(allowed_module_prefixes=(canonical_module,)))
             assert governed.register(_DualCanonicalFG) == canonical_key
-            assert governed.register(_DualAliasFG, source="loader") is None
+            with pytest.raises(PluginPolicyViolationError) as exc_info:
+                governed.register(_DualAliasFG, source="loader")
+            assert alias_key in str(exc_info.value)
             assert governed.is_registered(_DualCanonicalFG)
             assert not governed.is_registered(_DualAliasFG)
         finally:

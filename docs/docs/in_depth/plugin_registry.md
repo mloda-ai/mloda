@@ -127,7 +127,9 @@ Stewards can install a `PluginPolicy` on a registry to control what may register
 
 `PluginPolicy` is a frozen dataclass evaluated deny-first on every registration: `denied_keys` first, then `denied_module_prefixes`, then the allowlist (`allowed_keys` admits individual keys; `allowed_module_prefixes`, when not `None`, requires the class module to match a prefix), then `require_approval`. `allows(key, module, approval)` exposes the decision directly.
 
-Enforcement depends on provenance: a denied *manual* registration raises `PluginPolicyViolationError`; denied loader and entry-point registrations are skipped with one warning per key, so an installed policy never breaks `PluginLoader.all()`.
+Module-prefix matching is boundary-aware on both the denied and allowed sides: the prefix `"acme.plugins"` matches the module `acme.plugins` itself and submodules such as `acme.plugins.churn`, but never a sibling like `acme.plugins_evil`. The trailing-dot form `"acme.plugins."` matches submodules only. For `allowed_module_prefixes`, `None` (the default) leaves modules unrestricted, while the empty tuple `()` denies everything that is not in `allowed_keys`.
+
+Enforcement is uniform across provenance: a denied `register()` raises `PluginPolicyViolationError` naming the would-be key, whether the source is manual, loader, or entry-point. The discovery funnels (the loader's module scans and entry-point loading) catch that denial themselves: they skip the denied class, leave it out of their returned keys, and log one warning per denied key per registry instance, so an installed policy never breaks `PluginLoader.all()`.
 
 ```python
 from mloda.provider import FeatureGroup
@@ -140,8 +142,8 @@ registry = PluginRegistry()
 policy = PluginPolicy(allowed_module_prefixes=(GovernedFeatureGroup.__module__,))
 registry.set_policy(policy)
 
-# Outside the allowlist: allows() is False, and a manual register()
-# of such a class would raise PluginPolicyViolationError.
+# Outside the allowlist: allows() is False, and register() of such a
+# class raises PluginPolicyViolationError, regardless of source.
 assert not policy.allows("acme.plugins:Alien", "acme.plugins", ApprovalStatus.UNREVIEWED)
 
 # Inside the allowlist: registration succeeds.
@@ -183,6 +185,8 @@ assert registry.get(key) is None
 
 A policy is checked only when `register()` runs. Installing or tightening a policy later does not evict entries that are already registered: audit them via `snapshot()` and remove offenders with `unregister()`. The same applies to approval: `set_approval(key, "rejected")` records the decision but keeps the entry until the steward unregisters it.
 
+The policy gates registration only, not import: `PluginLoader.all()` imports entry-point manifest modules before the policy applies, so installing a package implies trusting its import side effects. A policy keeps denied plugins out of the registry; it is not a sandbox for untrusted code.
+
 ### Dual-Import Caveat
 
 A module importable under two paths (for example `my_pkg.churn` via the installed package and `churn` via a stray `sys.path` entry) produces two distinct class objects and therefore two registry keys. A key-based allowlist cannot tell them apart. Allowlist by canonical module prefix (`allowed_module_prefixes=("my_pkg.",)`) so only classes imported under the canonical path register.
@@ -203,7 +207,7 @@ Pass the collector into the API via the `plugin_collector=` keyword, as with str
 
 ## Test Isolation for Plugin Authors
 
-Manual registrations mutate the process-global default registry, so tests can leak state into each other. mloda ships a pytest plugin (registered through the `pytest11` entry point in its packaging) that provides the `isolated_plugin_registry` fixture: it snapshots the default registry before each test and restores it afterwards. Any project with mloda installed gets the fixture automatically; no `conftest.py` re-export is needed. Request it in tests that register plugins:
+Manual registrations mutate the process-global default registry, so tests can leak state into each other. mloda ships a pytest plugin (registered through the `pytest11` entry point in its packaging) that provides the `isolated_plugin_registry` fixture: it snapshots the default registry and its installed policy before each test and restores both afterwards, also resetting the policy-denial warning dedup. Any project with mloda installed gets the fixture automatically; no `conftest.py` re-export is needed. Request it in tests that register plugins:
 
 ```python title="test_my_plugin.py"
 def test_my_feature_group_registration(isolated_plugin_registry):

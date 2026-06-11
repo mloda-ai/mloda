@@ -199,6 +199,32 @@ class TestFeatureEqualityWithScope:
         assert hash(first) == hash(second)
 
 
+class TestEmptyStringScopeNormalization:
+    """An empty-string scope means 'no scope', mirroring ``Feature(domain="")``."""
+
+    def test_empty_string_parameter_normalizes_to_none(self) -> None:
+        feature = Feature("x", feature_group="")
+
+        assert feature.feature_group_class_name is None
+
+    def test_empty_string_in_options_normalizes_to_none(self) -> None:
+        feature = Feature("x", options={"feature_group": ""})
+
+        assert feature.feature_group_class_name is None
+
+
+class TestInvalidScopeTypeRaisesTypeError:
+    """A scope that is neither a string nor a feature group class raises a clear TypeError."""
+
+    def test_int_scope_raises_type_error_mentioning_feature_group(self) -> None:
+        with pytest.raises(TypeError, match="feature_group"):
+            Feature("x", feature_group=123)  # type: ignore[arg-type]
+
+    def test_arbitrary_instance_scope_raises_type_error_mentioning_feature_group(self) -> None:
+        with pytest.raises(TypeError, match="feature_group"):
+            Feature("x", feature_group=object())  # type: ignore[arg-type]
+
+
 # ============================================================================
 # PART B - integration through mloda.run_all (issue #508 definition of done)
 # ============================================================================

@@ -74,6 +74,14 @@ derived feature group's `input_features`, which is the typical place you need it
 derived feature group reading a subset of one source's columns can pull in the shared
 join key from that same source.
 
+Prefer the `feature_group` parameter over the options form. The options form keeps the
+`feature_group` key inside the feature's options, which feeds into feature grouping and
+into the options the resolved feature group receives, so a scoped feature may no longer
+share a read with its sibling features. The parameter form leaves options untouched.
+
+The scope matches on the class name only. Two feature group classes that share the same
+class name in different modules still collide and raise "Multiple feature groups found".
+
 ```python
 class NewestClaimPerSubject(FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:

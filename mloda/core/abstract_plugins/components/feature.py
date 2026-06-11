@@ -254,12 +254,17 @@ class Feature:
         feature_group: str | type[FeatureGroup] | None,
         feature_group_options: str | type[FeatureGroup] | None,
     ) -> str | None:
-        resolved = feature_group if feature_group is not None else feature_group_options
-        if resolved is None:
+        resolved = feature_group if feature_group else feature_group_options
+        if not resolved:
             return None
         if isinstance(resolved, str):
             return resolved
-        return resolved.get_class_name()
+        if isinstance(resolved, type) and hasattr(resolved, "get_class_name"):
+            return resolved.get_class_name()
+        raise TypeError(
+            f"feature_group must be a feature group class name string or a FeatureGroup class, "
+            f"got {type(resolved).__name__}"
+        )
 
     def _set_compute_framework(
         self, compute_framework: Optional[str], compute_framework_options: Optional[str]

@@ -98,3 +98,46 @@ class TestPythonDictAsofMergeEngine(AsofMergeEngineTestBase):
         result_b = PythonDictMergeEngine().merge_asof(left, right_b, Index(("k",)), Index(("k",)), cfg)
         assert len(result_b) == 1
         assert result_b[0]["rv"] == 2
+
+    def test_coerce_z_suffix_utc_strings_join(self) -> None:
+        """datetime.fromisoformat on Python 3.10 rejects a trailing 'Z'. The engine must
+        normalize 'Z' to '+00:00' before parsing so Z-suffixed UTC strings coerce on every
+        supported interpreter. All values are tz-aware, so no mixed-tz error: the join
+        succeeds with one row matching the earlier right row (rv == 1.0)."""
+        left = [{"k": "a", "t": "2025-06-03T00:00:00Z", "lv": 1}]
+        right = [
+            {"k": "a", "t": "2025-06-01T00:00:00Z", "rv": 1.0},
+            {"k": "a", "t": "2025-06-04T00:00:00Z", "rv": 2.0},
+        ]
+
+        engine = PythonDictMergeEngine()
+        cfg = AsOfJoinConfig(
+            left_time_column="t",
+            right_time_column="t",
+            direction="backward",
+            coerce_time_columns=True,
+        )
+        result = engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg)
+
+        assert len(result) == 1
+        assert result[0]["rv"] == 1.0
+
+    def test_coerce_mixed_tz_naive_and_aware_raises(self) -> None:
+        """Coercion of a column mixing tz-aware and tz-naive ISO strings must raise ValueError:
+        datetime.fromisoformat parses both, but naive and aware datetimes are not mutually
+        orderable, so the engine must reject the mix explicitly instead of failing later."""
+        left = [
+            {"k": "a", "t": "2025-06-01T00:00:00+00:00", "lv": 1},
+            {"k": "a", "t": "2025-06-01T01:00:00", "lv": 2},
+        ]
+        right = [{"k": "a", "t": "2025-05-01T00:00:00", "rv": 1.0}]
+
+        engine = PythonDictMergeEngine()
+        cfg = AsOfJoinConfig(
+            left_time_column="t",
+            right_time_column="t",
+            direction="backward",
+            coerce_time_columns=True,
+        )
+        with pytest.raises(ValueError):
+            engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg)

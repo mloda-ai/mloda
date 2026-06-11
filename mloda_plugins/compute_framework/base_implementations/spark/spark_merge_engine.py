@@ -5,6 +5,7 @@ from typing import Any
 from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 from mloda.user import Index
 from mloda.provider import BaseMergeEngine
+from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import pick_helper_column_name
 
 try:
     from pyspark.sql import DataFrame, Window
@@ -53,7 +54,7 @@ class SparkMergeEngine(BaseMergeEngine):
                 f"{self.__class__.__name__} ASOF does not support a timedelta tolerance; provide a numeric "
                 "tolerance (e.g. epoch seconds matching the time column)."
             )
-        self.validate_asof_time_columns(left_data, right_data, asof_config)
+        left_data, right_data = self.validate_asof_time_columns(left_data, right_data, asof_config)
         self.check_import()
         if asof_config.direction == "nearest":
             raise ValueError("SparkMergeEngine asof does not support direction='nearest'.")
@@ -113,6 +114,21 @@ class SparkMergeEngine(BaseMergeEngine):
         select_list = [F.col(c) for c in left_cols]
         select_list += [F.col(f"{prefix}{c}").alias(c) for c in right_keep]
         return ranked.select(*select_list)
+
+    def _coerce_asof_time_column(self, data: Any, column: str) -> Any:
+        """Coerce an ISO-8601 string time column to timestamp, failing hard on null introduction.
+
+        to_timestamp silently yields NULL for unparseable values, so an eager count guards first.
+        """
+        helper = pick_helper_column_name(taken=set(data.columns), prefix="_mloda_coerced")
+        coerced = data.withColumn(helper, F.to_timestamp(F.col(column)))
+        bad_count = coerced.filter(F.col(column).isNotNull() & F.col(helper).isNull()).count()
+        if bad_count > 0:
+            raise ValueError(
+                f"As-of time column '{column}' contains {bad_count} value(s) that are not ISO-8601 "
+                f"and cannot be coerced to timestamp."
+            )
+        return data.withColumn(column, F.to_timestamp(F.col(column)))
 
     def _asof_time_column_is_ordered(self, data: Any, column: str) -> bool:
         dtype = dict(data.dtypes)[column]

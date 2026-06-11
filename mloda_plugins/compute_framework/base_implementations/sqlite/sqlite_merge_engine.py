@@ -1,6 +1,9 @@
 import sqlite3
+from collections.abc import Sequence
 from datetime import timedelta
-from typing import Any
+from typing import Any, Optional
+
+import pyarrow as pa
 
 from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
@@ -28,7 +31,7 @@ class SqliteMergeEngine(SqlBaseMergeEngine):
         right_index: Index,
         asof_config: AsOfJoinConfig,
     ) -> Any:
-        self.validate_asof_time_columns(left_data, right_data, asof_config)
+        left_data, right_data = self.validate_asof_time_columns(left_data, right_data, asof_config)
         if self.framework_connection is None:
             raise ValueError("Framework connection not set. SQL merge engine requires a connection from the framework.")
         if asof_config.direction == "nearest":
@@ -90,17 +93,54 @@ class SqliteMergeEngine(SqlBaseMergeEngine):
         )
         return self._execute_sql(sql)
 
+    def validate_asof_time_columns(
+        self, left_data: Any, right_data: Any, asof_config: AsOfJoinConfig
+    ) -> tuple[Any, Any]:
+        # One-sided coercion is unsafe: julianday day numbers cannot be assumed compatible
+        # with an already-numeric column of unknown unit (e.g. epoch seconds).
+        if asof_config.coerce_time_columns:
+            left_ordered = self._asof_time_column_is_ordered(left_data, asof_config.left_time_column)
+            right_ordered = self._asof_time_column_is_ordered(right_data, asof_config.right_time_column)
+            if left_ordered != right_ordered:
+                column = asof_config.right_time_column if left_ordered else asof_config.left_time_column
+                raise ValueError(
+                    f"Cannot coerce as-of time column '{column}': sqlite coercion yields julianday day "
+                    f"numbers, which cannot be assumed compatible with the other side's existing numeric "
+                    f"column; cast the column manually before joining."
+                )
+        return super().validate_asof_time_columns(left_data, right_data, asof_config)
+
     def _asof_time_column_is_ordered(self, data: Any, column: str) -> bool:
         idx = data.columns.index(column)
         return is_ordered_arrow_type(data.types[idx])
 
-    def _execute_sql(self, sql: str) -> Any:
+    def _coerce_asof_time_column(self, data: Any, column: str) -> Any:
+        """Coerce an ISO-8601 TEXT time column to julianday NUMERIC (days since epoch origin).
+
+        julianday silently yields NULL for non-ISO values, so an eager check fails hard first.
+        """
+        qc = quote_ident(column)
+        table_ref = quote_ident(data.table_name)
+        check_sql = f"SELECT COUNT(*) FROM {table_ref} WHERE {qc} IS NOT NULL AND julianday({qc}) IS NULL"  # nosec
+        bad_count: int = data.connection.execute(check_sql).fetchone()[0]
+        if bad_count > 0:
+            raise ValueError(
+                f"As-of time column '{column}' contains {bad_count} non-ISO-8601 value(s) that "
+                f"cannot be coerced via julianday."
+            )
+        projection = ", ".join(
+            f"julianday({quote_ident(c)}) AS {quote_ident(c)}" if c == column else quote_ident(c) for c in data.columns
+        )
+        types = [pa.float64() if c == column else t for c, t in zip(data.columns, data.types)]
+        return self._execute_sql(f"SELECT {projection} FROM {table_ref}", types=types)  # nosec
+
+    def _execute_sql(self, sql: str, types: Optional[Sequence[pa.DataType | None]] = None) -> Any:
         if self.framework_connection is None:
             raise ValueError("Framework connection is not set.")
         conn: sqlite3.Connection = self.framework_connection
         new_table = _next_table_name()
         conn.execute(f"CREATE TEMP VIEW {quote_ident(new_table)} AS {sql}")  # nosec
-        return SqliteRelation(conn, new_table, _is_view=True)
+        return SqliteRelation(conn, new_table, _is_view=True, _types=types)
 
     def _set_alias(self, data: Any, alias: str) -> Any:
         return data.set_alias(alias)

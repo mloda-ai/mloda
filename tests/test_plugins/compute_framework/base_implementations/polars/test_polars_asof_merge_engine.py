@@ -42,6 +42,11 @@ class TestPolarsAsofMergeEngine(AsofMergeEngineTestBase):
     def get_connection(self) -> Optional[Any]:
         return None
 
+    @classmethod
+    def coercion_error_types(cls) -> tuple[type[BaseException], ...]:
+        """Polars raises its own exception types on strict str.to_datetime failures."""
+        return (pl.exceptions.ComputeError, pl.exceptions.InvalidOperationError, ValueError)
+
 
 @pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
 class TestPolarsLazyAsofMergeEngine(AsofMergeEngineTestBase):
@@ -59,3 +64,8 @@ class TestPolarsLazyAsofMergeEngine(AsofMergeEngineTestBase):
 
     def get_connection(self) -> Optional[Any]:
         return None
+
+    @classmethod
+    def coercion_error_types(cls) -> tuple[type[BaseException], ...]:
+        """Lazy polars surfaces strict str.to_datetime failures at collect time."""
+        return (pl.exceptions.ComputeError, pl.exceptions.InvalidOperationError, ValueError)

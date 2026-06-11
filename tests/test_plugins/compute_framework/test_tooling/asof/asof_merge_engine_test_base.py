@@ -60,6 +60,18 @@ class AsofMergeEngineTestBase(ABC):
         """Return framework connection object, or None if not needed."""
         pass
 
+    # ==================== OVERRIDABLE HOOKS ====================
+
+    @classmethod
+    def coercion_error_types(cls) -> tuple[type[BaseException], ...]:
+        """Exception types expected when opt-in time-column coercion hits an unparseable value.
+
+        Coercion fails HARD: engines raise their native backend error for values that are
+        not ISO-8601, so subclasses override this where the backend error is not a plain
+        ValueError (e.g. polars ComputeError, duckdb.Error).
+        """
+        return (ValueError,)
+
     # ==================== HELPER METHODS ====================
 
     def convert_dict_to_framework(self, data: list[dict[str, Any]]) -> Any:
@@ -77,6 +89,19 @@ class AsofMergeEngineTestBase(ABC):
         if isinstance(value, float) and math.isnan(value):
             return None
         return value
+
+    def _normalize_time_value(self, value: Any) -> Any:
+        """Normalize NULL-like time values (None, NaN, NaT) to Python None.
+
+        Extends _normalize_value with a self-inequality check: NaT (pandas/numpy)
+        compares unequal to itself, just like NaN, so it counts as null here.
+        """
+        normalized = self._normalize_value(value)
+        if normalized is None:
+            return None
+        if normalized != normalized:
+            return None
+        return normalized
 
     def _run_asof_test(self, scenario_key: str) -> None:
         """
@@ -238,3 +263,145 @@ class AsofMergeEngineTestBase(ABC):
         # it. The clear guard message names the column, so we match on "'t'".
         with pytest.raises(ValueError, match=r"'t'.*(datetime|numeric)"):
             engine.merge_asof(left_data, right_data, Index(("k",)), Index(("k",)), cfg)
+
+    def test_coerce_time_columns_opt_in_iso_strings(self) -> None:
+        """With coerce_time_columns=True, ISO-8601 string time columns are coerced and the
+        as-of join SUCCEEDS instead of raising the #509 guard ValueError.
+
+        The coerced 't' column's resulting type is engine-specific (datetime, timestamp,
+        julianday float, ...), so we assert only on lv/rv values, not on the time type.
+        """
+        left_data = self.convert_dict_to_framework(
+            [{"k": "a", "t": "2025-06-03", "lv": 1}, {"k": "a", "t": "2025-06-05", "lv": 2}]
+        )
+        right_data = self.convert_dict_to_framework(
+            [{"k": "a", "t": "2025-06-01", "rv": 1.0}, {"k": "a", "t": "2025-06-04", "rv": 2.0}]
+        )
+
+        cfg = AsOfJoinConfig(
+            left_time_column="t",
+            right_time_column="t",
+            direction="backward",
+            coerce_time_columns=True,
+        )
+
+        connection = self.get_connection()
+        engine = self.merge_engine_class()(connection) if connection else self.merge_engine_class()()
+
+        result = engine.merge_asof(left_data, right_data, Index(("k",)), Index(("k",)), cfg)
+        result_dicts = self.convert_framework_to_dict(result)
+        result_dicts.sort(key=lambda row: row["lv"])
+
+        assert [row["lv"] for row in result_dicts] == [1, 2], "Every left row must survive the as-of join"
+        actual_rv = [self._normalize_value(row["rv"]) for row in result_dicts]
+        assert actual_rv == [1.0, 2.0], f"rv mismatch after coercion: got {actual_rv}, expected [1.0, 2.0]"
+
+    def test_coerce_unparseable_string_raises(self) -> None:
+        """Coercion fails HARD: a value that is not ISO-8601 must raise, never silently
+        become null/NaT and produce a wrong match.
+
+        Lazy engines (polars lazy, duckdb) surface the backend error only at
+        materialization, so the conversion back to dicts is inside the raises block too.
+        """
+        left_data = self.convert_dict_to_framework(
+            [{"k": "a", "t": "2025-06-03", "lv": 1}, {"k": "a", "t": "2025-06-05", "lv": 2}]
+        )
+        right_data = self.convert_dict_to_framework(
+            [{"k": "a", "t": "2025-06-01", "rv": 1.0}, {"k": "a", "t": "not-a-date", "rv": 9.0}]
+        )
+
+        cfg = AsOfJoinConfig(
+            left_time_column="t",
+            right_time_column="t",
+            direction="backward",
+            coerce_time_columns=True,
+        )
+
+        connection = self.get_connection()
+        engine = self.merge_engine_class()(connection) if connection else self.merge_engine_class()()
+
+        with pytest.raises(self.coercion_error_types()):
+            result = engine.merge_asof(left_data, right_data, Index(("k",)), Index(("k",)), cfg)
+            self.convert_framework_to_dict(result)
+
+    def test_coerce_mixed_format_raises(self) -> None:
+        """A non-ISO format ('06/03/2025') mixed into otherwise ISO strings must raise.
+
+        Same lazy-engine rule as test_coerce_unparseable_string_raises: the conversion
+        back to dicts stays inside the raises block.
+        """
+        left_data = self.convert_dict_to_framework(
+            [{"k": "a", "t": "2025-06-03", "lv": 1}, {"k": "a", "t": "2025-06-05", "lv": 2}]
+        )
+        right_data = self.convert_dict_to_framework(
+            [{"k": "a", "t": "2025-06-01", "rv": 1.0}, {"k": "a", "t": "06/03/2025", "rv": 2.0}]
+        )
+
+        cfg = AsOfJoinConfig(
+            left_time_column="t",
+            right_time_column="t",
+            direction="backward",
+            coerce_time_columns=True,
+        )
+
+        connection = self.get_connection()
+        engine = self.merge_engine_class()(connection) if connection else self.merge_engine_class()()
+
+        with pytest.raises(self.coercion_error_types()):
+            result = engine.merge_asof(left_data, right_data, Index(("k",)), Index(("k",)), cfg)
+            self.convert_framework_to_dict(result)
+
+    def test_coerce_preserves_nulls_and_transforms_strings(self) -> None:
+        """validate_asof_time_columns returns the (left, right) pair; with coercion on, ISO
+        strings become non-string ordered values while pre-existing nulls stay null.
+
+        Calls the hook DIRECTLY (no merge) and unpacks the returned tuple, which also pins
+        the new return contract (the old implementation returned None).
+        """
+        rows: list[dict[str, Any]] = [{"k": "a", "t": "2025-06-01", "lv": 1}, {"k": "a", "t": None, "lv": 2}]
+        left_data = self.convert_dict_to_framework(rows)
+        right_data = self.convert_dict_to_framework(rows)
+
+        cfg = AsOfJoinConfig(
+            left_time_column="t",
+            right_time_column="t",
+            coerce_time_columns=True,
+        )
+
+        connection = self.get_connection()
+        engine = self.merge_engine_class()(connection) if connection else self.merge_engine_class()()
+
+        left_out, right_out = engine.validate_asof_time_columns(left_data, right_data, cfg)
+        assert right_out is not None
+
+        left_dicts = self.convert_framework_to_dict(left_out)
+        by_lv = {row["lv"]: row for row in left_dicts}
+
+        coerced = by_lv[1]["t"]
+        assert self._normalize_time_value(coerced) is not None, "Coerced ISO string must not become null"
+        assert not isinstance(coerced, str), f"'t' must no longer be a string after coercion, got {coerced!r}"
+
+        assert self._normalize_time_value(by_lv[2]["t"]) is None, "Pre-existing null must stay null after coercion"
+
+    def test_coerce_flag_noop_on_ordered_columns(self) -> None:
+        """coerce_time_columns=True is a no-op when the time columns are already ordered
+        (numeric here): the join succeeds exactly as without the flag."""
+        left_data = self.convert_dict_to_framework([{"k": 1, "t": 10, "lv": 100}])
+        right_data = self.convert_dict_to_framework([{"k": 1, "t": 5, "rv": 1.0}])
+
+        cfg = AsOfJoinConfig(
+            left_time_column="t",
+            right_time_column="t",
+            direction="backward",
+            coerce_time_columns=True,
+        )
+
+        connection = self.get_connection()
+        engine = self.merge_engine_class()(connection) if connection else self.merge_engine_class()()
+
+        result = engine.merge_asof(left_data, right_data, Index(("k",)), Index(("k",)), cfg)
+        result_dicts = self.convert_framework_to_dict(result)
+
+        assert len(result_dicts) == 1
+        actual_rv = [self._normalize_value(row["rv"]) for row in result_dicts]
+        assert actual_rv == [1.0], f"rv mismatch with no-op coercion flag: got {actual_rv}, expected [1.0]"

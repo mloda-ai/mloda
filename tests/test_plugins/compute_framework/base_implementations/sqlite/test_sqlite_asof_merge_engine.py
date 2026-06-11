@@ -49,6 +49,34 @@ class TestSqliteAsofMergeEngine(AsofMergeEngineTestBase):
             self._connection.create_function("REGEXP", 2, _regexp)
         return self._connection
 
+    def test_coerce_one_sided_string_vs_numeric_raises(self) -> None:
+        """sqlite coercion turns ISO TEXT into julianday() day numbers. If only ONE side is a
+        string column and the other side is already numeric (unknown unit, e.g. epoch seconds),
+        the join would silently compare julian day numbers against epoch values. With
+        coerce_time_columns=True, when exactly one side's time column needs coercion and the
+        other is already ordered, the engine must raise ValueError naming the coerced column
+        and advising to cast manually."""
+        cfg = AsOfJoinConfig(
+            left_time_column="t",
+            right_time_column="t",
+            direction="backward",
+            coerce_time_columns=True,
+        )
+        engine = SqliteMergeEngine(self.get_connection())
+
+        left_string = self.convert_dict_to_framework([{"k": "a", "t": "2025-06-03T00:00:00", "lv": 1}])
+        right_numeric = self.convert_dict_to_framework(
+            [{"k": "a", "t": 1.0, "rv": 1.0}, {"k": "a", "t": 2.0, "rv": 2.0}]
+        )
+        with pytest.raises(ValueError, match=r"'t'.*cast"):
+            engine.merge_asof(left_string, right_numeric, Index(("k",)), Index(("k",)), cfg)
+
+        # Symmetric case: left numeric, right string must raise as well.
+        left_numeric = self.convert_dict_to_framework([{"k": "a", "t": 1.0, "lv": 1}, {"k": "a", "t": 2.0, "lv": 2}])
+        right_string = self.convert_dict_to_framework([{"k": "a", "t": "2025-06-03T00:00:00", "rv": 1.0}])
+        with pytest.raises(ValueError, match=r"'t'.*cast"):
+            engine.merge_asof(left_numeric, right_string, Index(("k",)), Index(("k",)), cfg)
+
     def test_nearest_raises_value_error(self) -> None:
         """Vector F: SQLite native ASOF cannot express 'nearest' in v1 -> ValueError."""
         left = self.convert_dict_to_framework([{"k": 1, "t": 10, "lv": 100}])

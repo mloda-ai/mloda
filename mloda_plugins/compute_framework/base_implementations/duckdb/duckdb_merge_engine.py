@@ -37,7 +37,7 @@ class DuckDBMergeEngine(SqlBaseMergeEngine):
         right_index: Index,
         asof_config: AsOfJoinConfig,
     ) -> Any:
-        self.validate_asof_time_columns(left_data, right_data, asof_config)
+        left_data, right_data = self.validate_asof_time_columns(left_data, right_data, asof_config)
         if self.framework_connection is None:
             raise ValueError("Framework connection not set. SQL merge engine requires a connection from the framework.")
         if asof_config.direction == "nearest":
@@ -88,6 +88,20 @@ class DuckDBMergeEngine(SqlBaseMergeEngine):
         final_proj += [f"{quote_ident(rmap[c])} AS {quote_ident(c)}" for c in right_extra]
         result = picked.project(", ".join(final_proj))
         return DuckdbRelation(self.framework_connection, result)
+
+    def _coerce_asof_time_column(self, data: Any, column: str) -> Any:
+        qc = quote_ident(column)
+        # CAST AS TIMESTAMP silently drops UTC offsets, corrupting as-of ordering, so fail eagerly.
+        offset_pattern = "([+-][0-9]{2}:?[0-9]{2}|Z)$"
+        offending = data.filter(f"{qc} IS NOT NULL AND regexp_matches(CAST({qc} AS VARCHAR), '{offset_pattern}')")
+        offset_count = len(offending)
+        if offset_count > 0:
+            raise ValueError(
+                f"As-of time column '{column}' contains {offset_count} value(s) with a UTC offset or "
+                f"trailing 'Z'; duckdb's CAST AS TIMESTAMP silently drops the offset. Cast the column "
+                f"manually (e.g. via TIMESTAMPTZ) before joining."
+            )
+        return data.project(f"* REPLACE (CAST({qc} AS TIMESTAMP) AS {qc})")
 
     def _asof_time_column_is_ordered(self, data: Any, column: str) -> bool:
         idx = data.columns.index(column)

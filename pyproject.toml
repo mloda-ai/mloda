@@ -134,10 +134,12 @@ skips = [
 explicit_package_bases = true
 namespace_packages = true
 # marimo notebooks are unannotated reactive cells; validated by execution, not mypy.
+# build/ is excluded so a stray local build artifact does not break the gate.
 exclude = [
     'docs/docs/examples/base_usage\.py$',
     'docs/docs/examples/sklearn_integration_basic\.py$',
     'docs/docs/examples/mloda_basics/\d.*\.py$',
+    '^build/',
 ]
 
 [[tool.mypy.overrides]]

@@ -21,9 +21,20 @@ Example: Input Feature Validation Using Custom Validators
 ```python
 from typing import Any, Optional, Set
 from mloda.user import mloda
-from mloda.provider import FeatureGroup, FeatureSet
+from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Options, FeatureName, Feature
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+
+
+class BaseValidateInputFeaturesBase(FeatureGroup):
+
+    @classmethod
+    def input_data(cls) -> Optional[BaseInputData]:
+        return DataCreator({cls.get_class_name()})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {cls.get_class_name(): [1, 2]}
 
 
 class DocSimpleValidateInputFeatures(FeatureGroup):
@@ -46,10 +57,12 @@ class DocSimpleValidateInputFeatures(FeatureGroup):
 As we run it, it will return an error.
 
 ``` python
-results = mloda.run_all(
-            ["DocSimpleValidateInputFeatures"], {PyArrowTable}
-        )
-ValueError: Data should have 3 elements
+try:
+    results = mloda.run_all(
+                ["DocSimpleValidateInputFeatures"], {PyArrowTable}
+            )
+except ValueError as exc:
+    assert "Data should have 3 elements" in str(exc)
 ```
 
 ###### Loading a validator based on BaseValidator

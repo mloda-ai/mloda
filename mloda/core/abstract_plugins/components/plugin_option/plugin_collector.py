@@ -1,6 +1,10 @@
 import os
+from typing import TYPE_CHECKING
 
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+
+if TYPE_CHECKING:
+    from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
 
 STRICT_MODE_ENV_VAR = "MLODA_PLUGIN_REGISTRY_STRICT"
 VALID_STRICT_MODES = ("off", "warn", "strict")
@@ -39,6 +43,7 @@ class PluginCollector:
         self.enabled_feature_group_classes: set[type[FeatureGroup]] = set()
         self.allow_redefinition: bool = False
         self.strict_mode: str = strict_mode_from_env()
+        self.registry: "PluginRegistry | None" = None
 
     def set_allow_redefinition(self, allow: bool = True) -> "PluginCollector":
         """Allow keeping the most recently defined class when duplicates differ in source."""
@@ -49,6 +54,11 @@ class PluginCollector:
         """Set the registry strict mode: "off", "warn", or "strict"."""
         _validate_strict_mode(mode)
         self.strict_mode = mode
+        return self
+
+    def set_registry(self, registry: "PluginRegistry") -> "PluginCollector":
+        """Inject the plugin registry consulted by strict and warn modes."""
+        self.registry = registry
         return self
 
     def add_disabled_feature_group_classes(self, feature_group_cls: set[type[FeatureGroup]]) -> None:

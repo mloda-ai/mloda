@@ -7,6 +7,7 @@ from mloda.core.abstract_plugins.components.input_data.api.api_input_data_collec
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.core.engine import Engine
 from mloda.core.api.prepare.setup_compute_framework import SetupComputeFramework
+from mloda.core.prepare.accessible_plugins import filter_extenders_by_strict_mode
 from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -332,7 +333,8 @@ class mlodaAPI:
         api_data: Optional[dict[str, Any]],
         artifacts: Optional[dict[str, Any]] = None,
     ) -> None:
-        """Enters the runner context."""
+        """Enters the runner context with strict-mode-filtered extenders."""
+        function_extender = filter_extenders_by_strict_mode(function_extender, self.plugin_collector)
         runner.__enter__(parallelization_modes, function_extender, api_data, artifacts)
 
     def _exit_runner_context(self, runner: ExecutionOrchestrator) -> None:

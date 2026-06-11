@@ -1147,3 +1147,57 @@ def test_class_source_hash_getsource_wrong_text_no_fallback_raises(monkeypatch: 
 
     with pytest.raises(OSError):
         BaseFeatureGroupVersion.class_source_hash(dyn_cls)
+
+
+# ---------------------------------------------------------------------------
+# Case 25 (regression): nested class with a flush-left multiline string must
+# be accepted by the getsource validation, not rejected.
+# ---------------------------------------------------------------------------
+def test_class_source_hash_accepts_nested_class_with_flush_left_multiline_string() -> None:
+    """A function-local FeatureGroup subclass whose body contains a triple-quoted
+    multiline string with a flush-left (column 0) line must hash the legitimate
+    ``inspect.getsource`` text.
+
+    ``_source_defines_class`` validates getsource output via
+    ``ast.parse(textwrap.dedent(source))``. ``textwrap.dedent`` computes the
+    common indent over ALL nonblank lines, including lines INSIDE string
+    literals, so a flush-left line inside the multiline string makes dedent a
+    no-op. The still-indented nested-class source then raises
+    ``IndentationError`` (a ``SyntaxError`` subclass) in ``ast.parse``,
+    validation returns False, ``_linecache_source_for_class`` returns None for
+    real on-disk files, and ``class_source_hash`` raises ``OSError`` for a
+    perfectly valid class that hashed fine before the validation was added.
+
+    Cleanup: the class is held only via a LOCAL reference (NOT ``_REF_STORE``)
+    and is deleted plus ``gc.collect()``'d at the end so it does not leak into
+    other tests' ``FeatureGroup.__subclasses__()`` views.
+    """
+    import hashlib
+    import inspect
+
+    from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
+
+    class MyFG_NestedFlushLeft25(FeatureGroup):
+        DOC_TEMPLATE = """
+case25 flush-left line at column zero
+"""
+
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {"case25_feature_unique_xyz"}
+
+    source = inspect.getsource(MyFG_NestedFlushLeft25)
+    expected = hashlib.sha256(source.encode("utf-8")).hexdigest()
+
+    h = BaseFeatureGroupVersion.class_source_hash(MyFG_NestedFlushLeft25)
+
+    assert h == expected, (
+        "class_source_hash must accept the legitimate getsource text of a nested "
+        "class containing a flush-left multiline string; "
+        f"expected {expected[:16]}..., got {h[:16]}..."
+    )
+
+    # Cleanup: drop the only strong ref and collect so the nested class vanishes
+    # from FeatureGroup.__subclasses__() and cannot leak into later tests.
+    del MyFG_NestedFlushLeft25
+    gc.collect()

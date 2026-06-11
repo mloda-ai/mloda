@@ -5,7 +5,6 @@ import importlib.metadata
 import inspect
 import linecache
 import hashlib
-import textwrap
 from typing import Any
 from abc import ABC
 
@@ -94,14 +93,23 @@ def _source_defines_class(source: str, class_name: str) -> bool:
 
     On Python 3.13+, ``inspect.getsource`` slices lines out of whatever file the
     class's module resolves to (via ``__firstlineno__``), so it can succeed with
-    text that does not define the class at all. The text is dedented before
-    parsing because nested classes come back indented; a ``SyntaxError`` counts
-    as not defining the class.
+    text that does not define the class at all.
+
+    Nested classes come back indented, so the text is parsed twice: first as-is
+    (top-level classes), then wrapped in an ``if True:`` block so the indented
+    text becomes a valid block body. ``textwrap.dedent`` is NOT used here: it
+    computes the common indent over all nonblank lines including lines inside
+    string literals, so a flush-left line inside a multiline string makes dedent
+    a no-op and the still-indented text would be wrongly rejected. If neither
+    parse succeeds, the source does not define the class.
     """
     try:
-        tree = ast.parse(textwrap.dedent(source))
+        tree = ast.parse(source)
     except SyntaxError:
-        return False
+        try:
+            tree = ast.parse("if True:\n" + source)
+        except SyntaxError:
+            return False
     for node in ast.walk(tree):
         if isinstance(node, ast.ClassDef) and node.name == class_name:
             return True

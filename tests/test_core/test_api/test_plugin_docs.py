@@ -1,3 +1,5 @@
+import gc
+
 import pytest
 from mloda.core.api.plugin_info import (
     FeatureGroupInfo,
@@ -16,6 +18,19 @@ from mloda.user import PluginLoader
 def load_plugins() -> None:
     """Load all plugins before running tests in this module."""
     PluginLoader.all()
+
+
+@pytest.fixture(autouse=True)
+def _reap_pending_dead_plugin_classes() -> None:
+    """Collect dead test-local plugin classes before each test.
+
+    Plugin docs enumeration walks live __subclasses__() registries. Local plugin
+    classes from earlier tests on the same worker stay visible there until a gc
+    pass runs, so a pass landing between two enumeration calls inside one test
+    changes the result mid-test. Collecting up front makes enumeration stable
+    for the duration of each test.
+    """
+    gc.collect()
 
 
 class TestFeatureGroupInfo:

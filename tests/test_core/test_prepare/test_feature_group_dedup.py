@@ -995,3 +995,209 @@ def test_get_feature_group_docs_reload_conflict_collapses_to_live_class() -> Non
         f"expected {v2_version!r}, got {entry_versions[0]!r}"
     )
     assert entry_versions[0] != v1_version, "the stale (pre-reload) version must not be the documented entry"
+
+
+# ---------------------------------------------------------------------------
+# Cases 22-24 (issue 540): class_source_hash must reject getsource text that
+# does not define the target class. On Python 3.13+, inspect.getsource slices
+# lines out of whatever file the class's module resolves to (via
+# __firstlineno__), so for exec-defined __main__ classes it can SUCCEED with
+# text that does not contain the class at all. These tests monkeypatch
+# inspect.getsource to succeed with wrong text so they fail on ALL versions.
+# ---------------------------------------------------------------------------
+def test_class_source_hash_rejects_getsource_text_not_defining_class(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``class_source_hash`` must not hash ``inspect.getsource`` output that does
+    not define the target class.
+
+    Simulates the Python 3.13+ ``__firstlineno__`` failure mode: ``getsource``
+    SUCCEEDS but returns text from an unrelated file (e.g. ``pytest/__main__.py``)
+    that never defines the class. Two genuinely different exec-defined versions
+    of the same class then get IDENTICAL meaningless hashes and dedup silently
+    collapses them instead of raising a redefinition conflict.
+
+    Today this FAILS: the same bogus text is hashed for both versions, so the
+    hashes are equal. After the fix, the bogus text is rejected (no ``ClassDef``
+    named after the class in its AST) and the linecache AST fallback extracts
+    the real, differing class segments, so the hashes differ.
+    """
+    import inspect
+
+    from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
+
+    qualname = "MyFG_BogusSrc22"
+    feature_name = "case22_feature_unique_xyz"
+    src_v1 = _make_fg_source(qualname, feature_name)
+    src_v2 = _make_fg_source(
+        qualname,
+        feature_name,
+        extra_body="    def extra_method(self):\n        return 22\n",
+    )
+
+    v1 = _exec_fg_in_main(qualname, src_v1, "cell-bogus-src22-v1")
+    v2 = _exec_fg_in_main(qualname, src_v2, "cell-bogus-src22-v2")
+    _REF_STORE.extend([v1, v2])
+
+    def wrong_getsource(obj: Any) -> str:
+        # Valid Python, but it does NOT define the target class.
+        return "import sys\n\nx = 1\n"
+
+    monkeypatch.setattr(inspect, "getsource", wrong_getsource)
+
+    h1 = BaseFeatureGroupVersion.class_source_hash(v1)
+    h2 = BaseFeatureGroupVersion.class_source_hash(v2)
+
+    assert h1 != h2, (
+        "Different class sources must produce different hashes even when "
+        "inspect.getsource succeeds with text that does not define the class "
+        f"(both hashed to {h1[:16]}...)"
+    )
+
+
+def test_class_source_hash_getsource_wrong_text_identical_bodies_hash_equal(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When ``inspect.getsource`` succeeds with wrong text, the fallback must
+    extract only the class-local segment, so byte-identical class bodies hash
+    identically even when surrounding cell content differs.
+
+    The monkeypatched ``getsource`` returns DIFFERENT unrelated text per call
+    (mirroring distinct slices of an unrelated file per version). Today this
+    FAILS: the two wrong texts are hashed directly, so the hashes differ for
+    identical class bodies. After the fix, both texts are rejected and the
+    linecache AST fallback extracts the identical class segments.
+    """
+    import inspect
+
+    from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
+
+    qualname = "MyFG_BogusSrc23"
+
+    class_body = textwrap.dedent(
+        f"""
+        class {qualname}(_FG_):
+            @classmethod
+            def feature_names_supported(cls):
+                return {{"case23_feature_unique_xyz"}}
+        """
+    )
+
+    cell_v1 = (
+        f"from mloda.core.abstract_plugins.feature_group import FeatureGroup as _FG_\n\nunrelated_var = 1\n{class_body}"
+    )
+    cell_v2 = (
+        "from mloda.core.abstract_plugins.feature_group import FeatureGroup as _FG_\n"
+        "\n"
+        "unrelated_var = 99\n"
+        f"{class_body}"
+    )
+
+    v1 = _exec_fg_in_main(qualname, cell_v1, "cell-bogus-src23-v1")
+    _REF_STORE.append(v1)
+    v2 = _exec_fg_in_main(qualname, cell_v2, "cell-bogus-src23-v2")
+    _REF_STORE.append(v2)
+
+    call_count = [0]
+
+    def wrong_getsource(obj: Any) -> str:
+        # Different unrelated text per call, never defining the class.
+        call_count[0] += 1
+        return f"import sys\n\nbogus_marker_{call_count[0]} = {call_count[0]}\n"
+
+    monkeypatch.setattr(inspect, "getsource", wrong_getsource)
+
+    h1 = BaseFeatureGroupVersion.class_source_hash(v1)
+    h2 = BaseFeatureGroupVersion.class_source_hash(v2)
+
+    assert h1 == h2, (
+        "Identical class bodies must hash identically even when inspect.getsource "
+        "succeeds with differing text that does not define the class; "
+        f"got {h1[:16]}... vs {h2[:16]}..."
+    )
+
+
+def test_class_source_hash_getsource_wrong_text_no_fallback_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When ``inspect.getsource`` succeeds with text that does not define the
+    class AND no linecache fallback is available, ``class_source_hash`` must
+    raise ``OSError`` instead of silently hashing the wrong text.
+
+    The class is built via ``type(...)`` so its only ``__code__``-bearing method
+    points at this real test file (not a synthetic ``<...>`` filename), making
+    ``_linecache_source_for_class`` return ``None``. Today this FAILS with
+    DID NOT RAISE: the bogus text is hashed and returned.
+    """
+    import inspect
+
+    from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
+
+    qualname = "MyFG_BogusSrc24"
+    feature_name = "case24_feature_unique_xyz"
+
+    # __module__ = "__main__" mirrors a Jupyter factory pattern and keeps the
+    # class out of get_feature_group_docs results in later tests on this worker.
+    body: dict[str, Any] = {
+        "feature_names_supported": classmethod(lambda cls: {feature_name}),
+        "__module__": "__main__",
+    }
+    dyn_cls = cast(type[FeatureGroup], type(qualname, (FeatureGroup,), body))
+    _REF_STORE.append(dyn_cls)
+
+    def wrong_getsource(obj: Any) -> str:
+        # Succeeds, but the text does not define the class.
+        return "import sys\n\nx = 1\n"
+
+    monkeypatch.setattr(inspect, "getsource", wrong_getsource)
+
+    with pytest.raises(OSError):
+        BaseFeatureGroupVersion.class_source_hash(dyn_cls)
+
+
+# ---------------------------------------------------------------------------
+# Case 25 (regression): nested class with a flush-left multiline string must
+# be accepted by the getsource validation, not rejected.
+# ---------------------------------------------------------------------------
+def test_class_source_hash_accepts_nested_class_with_flush_left_multiline_string() -> None:
+    """A function-local FeatureGroup subclass whose body contains a triple-quoted
+    multiline string with a flush-left (column 0) line must hash the legitimate
+    ``inspect.getsource`` text.
+
+    ``_source_defines_class`` validates getsource output via
+    ``ast.parse(textwrap.dedent(source))``. ``textwrap.dedent`` computes the
+    common indent over ALL nonblank lines, including lines INSIDE string
+    literals, so a flush-left line inside the multiline string makes dedent a
+    no-op. The still-indented nested-class source then raises
+    ``IndentationError`` (a ``SyntaxError`` subclass) in ``ast.parse``,
+    validation returns False, ``_linecache_source_for_class`` returns None for
+    real on-disk files, and ``class_source_hash`` raises ``OSError`` for a
+    perfectly valid class that hashed fine before the validation was added.
+
+    Cleanup: the class is held only via a LOCAL reference (NOT ``_REF_STORE``)
+    and is deleted plus ``gc.collect()``'d at the end so it does not leak into
+    other tests' ``FeatureGroup.__subclasses__()`` views.
+    """
+    import hashlib
+    import inspect
+
+    from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
+
+    class MyFG_NestedFlushLeft25(FeatureGroup):
+        DOC_TEMPLATE = """
+case25 flush-left line at column zero
+"""
+
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {"case25_feature_unique_xyz"}
+
+    source = inspect.getsource(MyFG_NestedFlushLeft25)
+    expected = hashlib.sha256(source.encode("utf-8")).hexdigest()
+
+    h = BaseFeatureGroupVersion.class_source_hash(MyFG_NestedFlushLeft25)
+
+    assert h == expected, (
+        "class_source_hash must accept the legitimate getsource text of a nested "
+        "class containing a flush-left multiline string; "
+        f"expected {expected[:16]}..., got {h[:16]}..."
+    )
+
+    # Cleanup: drop the only strong ref and collect so the nested class vanishes
+    # from FeatureGroup.__subclasses__() and cannot leak into later tests.
+    del MyFG_NestedFlushLeft25
+    gc.collect()

@@ -7,6 +7,7 @@ mloda supports optional data type declarations on Features, enabling runtime val
 Use typed constructors to declare the expected data type:
 
 ```python
+from typing import Any, Optional
 from mloda.user import Feature
 
 # Typed features - will be validated at runtime
@@ -120,7 +121,6 @@ The contract:
 A custom framework imports `DataType` from the public API:
 
 ```python
-from typing import Any, Optional
 from mloda.user import DataType
 from mloda.provider import ComputeFramework
 

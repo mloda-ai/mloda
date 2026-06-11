@@ -1,7 +1,7 @@
 import sqlite3
 from collections.abc import Sequence
 from datetime import timedelta
-from typing import Any, Optional
+from typing import Any
 
 import pyarrow as pa
 
@@ -134,7 +134,7 @@ class SqliteMergeEngine(SqlBaseMergeEngine):
         types = [pa.float64() if c == column else t for c, t in zip(data.columns, data.types)]
         return self._execute_sql(f"SELECT {projection} FROM {table_ref}", types=types)  # nosec
 
-    def _execute_sql(self, sql: str, types: Optional[Sequence[pa.DataType | None]] = None) -> Any:
+    def _execute_sql(self, sql: str, types: Sequence[pa.DataType | None] | None = None) -> Any:
         if self.framework_connection is None:
             raise ValueError("Framework connection is not set.")
         conn: sqlite3.Connection = self.framework_connection

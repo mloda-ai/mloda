@@ -154,5 +154,5 @@ class TestPandasAsofMergeEngine(AsofMergeEngineTestBase):
             direction="backward",
             coerce_time_columns=True,
         )
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=r"(?i)mix"):
             engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg)

@@ -5,6 +5,7 @@ import importlib.metadata
 import inspect
 import linecache
 import hashlib
+import textwrap
 from typing import Any
 from abc import ABC
 
@@ -26,6 +27,11 @@ class BaseFeatureGroupVersion(ABC):
         """
         Returns a SHA-256 hash of the target class's source code.
 
+        Text returned by ``inspect.getsource`` is validated: it must actually
+        define the target class (Python 3.13+ can return unrelated file content
+        for exec-defined classes via ``__firstlineno__``). Invalid text is
+        treated like a getsource failure.
+
         Falls back to a linecache-based lookup via the class's methods'
         ``__code__.co_filename`` when ``inspect.getsource`` cannot resolve the
         class (common for classes defined in long-lived namespaces such as
@@ -45,6 +51,15 @@ class BaseFeatureGroupVersion(ABC):
             if fallback is None:
                 raise
             source = fallback
+        else:
+            if not _source_defines_class(source, target_class.__name__):
+                fallback = _linecache_source_for_class(target_class)
+                if fallback is None:
+                    raise OSError(
+                        f"inspect.getsource returned text that does not define {target_class.__name__!r} "
+                        "and no linecache fallback was available"
+                    )
+                source = fallback
         return hashlib.sha256(source.encode("utf-8")).hexdigest()
 
     @classmethod
@@ -72,6 +87,25 @@ class BaseFeatureGroupVersion(ABC):
             raise ValueError(f"target_class must be a subclass of FeatureGroup: {target_class}")
 
         return f"{cls.mloda_version()}-{cls.module_name(target_class)}-{cls.class_source_hash(target_class)}"
+
+
+def _source_defines_class(source: str, class_name: str) -> bool:
+    """Returns True when the source text contains a ``ClassDef`` named ``class_name``.
+
+    On Python 3.13+, ``inspect.getsource`` slices lines out of whatever file the
+    class's module resolves to (via ``__firstlineno__``), so it can succeed with
+    text that does not define the class at all. The text is dedented before
+    parsing because nested classes come back indented; a ``SyntaxError`` counts
+    as not defining the class.
+    """
+    try:
+        tree = ast.parse(textwrap.dedent(source))
+    except SyntaxError:
+        return False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and node.name == class_name:
+            return True
+    return False
 
 
 def _linecache_source_for_class(target_class: type[Any]) -> str | None:

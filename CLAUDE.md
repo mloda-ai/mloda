@@ -84,8 +84,8 @@ source .venv/bin/activate
 ### mypy iteration notes
 
 - `mypy --strict --ignore-missing-imports .` (what tox runs) checks `tests/` as well as `mloda/` and `mloda_plugins/`. Running `mypy mloda/` locally will miss test-tree type errors that block the tox gate. `tox` (or `tox -e python310`) is the only trustworthy mypy invocation.
-- A stray `pip build` creates a `build/` directory. mypy picks it up and reports spurious errors. Clean it with `rm -rf build/` before running tox. The `[tool.mypy]` exclude list in `pyproject.toml` now includes `build/` to prevent this.
-- Running `mypy --strict .` in the dev venv (outside tox) may surface pyspark-related errors that tox's isolated env does not see; ignore those when iterating inside tox.
+- A stray local build (`python -m build` or `pip wheel .`) creates a `build/` directory. mypy picks it up and reports spurious errors. Clean it with `rm -rf build/` before running tox. The `[tool.mypy]` exclude list in `pyproject.toml` includes `build/` to prevent this at the gate.
+- Running `mypy --strict .` in the dev venv (outside tox) may surface pyspark-related errors that tox's isolated env does not see; trust the tox run as the source of truth.
 
 ## Issue Creation
 

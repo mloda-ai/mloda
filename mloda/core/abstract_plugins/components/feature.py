@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import copy
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 from uuid import uuid4
 from mloda.core.abstract_plugins.components.data_types import DataType
 
@@ -14,6 +14,9 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.components.validators.feature_validator import FeatureValidator
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
+
+if TYPE_CHECKING:
+    from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
 
 class Feature:
@@ -28,6 +31,7 @@ class Feature:
         initial_requested_data (bool): Whether the data was initially requested.
         link (Optional[Link]): The link associated with the feature.
         index (Optional[Index]): The index associated with the feature.
+        feature_group_class_name (Optional[str]): Scopes resolution to a single feature group class.
 
     Quick start (recommended progression)::
 
@@ -75,12 +79,16 @@ class Feature:
         initial_requested_data: bool = False,
         link: Optional[Link] = None,
         index: Optional[Index] = None,
+        feature_group: str | type[FeatureGroup] | None = None,
     ):
         if options is None:
             options = {}
         self.name = FeatureName(name) if isinstance(name, str) else name
         self.options = Options(options) if isinstance(options, dict) else options
         self.domain = self._set_domain(domain, self.options.get("domain"))
+        self.feature_group_class_name = self._set_feature_group_class_name(
+            feature_group, self.options.get("feature_group")
+        )
 
         cf = self._set_compute_framework(compute_framework, self.options.get("compute_framework"))
         self.compute_frameworks = {cf} if cf else None
@@ -175,6 +183,7 @@ class Feature:
             and self.options == other.options
             and self.options.context == other.options.context
             and self.domain == other.domain
+            and self.feature_group_class_name == other.feature_group_class_name
             and self.compute_frameworks == other.compute_frameworks
             and self.data_type == other.data_type
             and self.child_options == other.child_options
@@ -198,7 +207,17 @@ class Feature:
                 if isinstance(val, Feature):
                     child_options.group[DefaultOptionKeys.in_features] = val.name
 
-        return hash((self.name, self.options, self.domain, compute_frameworks_hashable, self.data_type, child_options))
+        return hash(
+            (
+                self.name,
+                self.options,
+                self.domain,
+                self.feature_group_class_name,
+                compute_frameworks_hashable,
+                self.data_type,
+                child_options,
+            )
+        )
 
     def is_different_data_type(self, other: Feature) -> bool:
         return self.name == other.name and self.data_type != other.data_type
@@ -229,6 +248,18 @@ class Feature:
         elif domain_options:
             return Domain(domain_options)
         return None
+
+    def _set_feature_group_class_name(
+        self,
+        feature_group: str | type[FeatureGroup] | None,
+        feature_group_options: str | type[FeatureGroup] | None,
+    ) -> str | None:
+        resolved = feature_group if feature_group is not None else feature_group_options
+        if resolved is None:
+            return None
+        if isinstance(resolved, str):
+            return resolved
+        return resolved.get_class_name()
 
     def _set_compute_framework(
         self, compute_framework: Optional[str], compute_framework_options: Optional[str]

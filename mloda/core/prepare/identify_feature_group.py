@@ -71,6 +71,9 @@ class IdentifyFeatureGroupClass:
             if not self._filter_feature_group_by_domain(feature_group, feature):
                 continue
 
+            if not self._filter_feature_group_by_scope(feature_group, feature):
+                continue
+
             self._criteria_matched_feature_groups.add(feature_group)
 
             supported_frameworks = {
@@ -120,6 +123,12 @@ class IdentifyFeatureGroupClass:
 
     def _filter_feature_group_by_domain(self, feature_group: type[FeatureGroup], feature: Feature) -> bool:
         return not feature.domain or feature_group.get_domain() == feature.domain
+
+    def _filter_feature_group_by_scope(self, feature_group: type[FeatureGroup], feature: Feature) -> bool:
+        return (
+            feature.feature_group_class_name is None
+            or feature_group.get_class_name() == feature.feature_group_class_name
+        )
 
     def _filter_feature_group_by_framework(
         self,
@@ -184,6 +193,8 @@ class IdentifyFeatureGroupClass:
 
         feature_name = str(feature.name)
         msg = f"No feature groups found for feature name: '{feature_name}'."
+        if feature.feature_group_class_name is not None:
+            msg += f" Scoped to feature group '{feature.feature_group_class_name}'."
 
         if not accessible_plugins:
             msg += "\nNo plugins are loaded. Did you call PluginLoader.all()?"

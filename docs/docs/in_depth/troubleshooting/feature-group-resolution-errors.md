@@ -48,6 +48,50 @@ def get_domain(cls):
     return "sales"  # Makes this FG only handle 'sales' domain features
 ```
 
+#### 4. Scope the feature to a specific feature group
+
+When two different feature group classes legitimately share a column name (for example,
+two sources that both declare a join key like `subject_token`), disabling one of them is
+not an option: you need both enabled, but a single request for the shared column is
+ambiguous. Scope the feature to the source it should come from:
+
+``` python
+from mloda.user import Feature
+
+# By class name
+Feature("subject_token", feature_group="ClaimsReader")
+
+# By class object
+Feature("subject_token", feature_group=ClaimsReader)
+
+# Or via options
+Feature("subject_token", options={"feature_group": "ClaimsReader"})
+```
+
+The feature then resolves only against the named feature group class, so the
+"Multiple feature groups found" collision does not occur. This also works inside a
+derived feature group's `input_features`, which is the typical place you need it: a
+derived feature group reading a subset of one source's columns can pull in the shared
+join key from that same source.
+
+Prefer the `feature_group` parameter over the options form. The options form keeps the
+`feature_group` key inside the feature's options, which feeds into feature grouping and
+into the options the resolved feature group receives, so a scoped feature may no longer
+share a read with its sibling features. The parameter form leaves options untouched.
+
+The scope matches on the class name only. Two feature group classes that share the same
+class name in different modules still collide and raise "Multiple feature groups found".
+
+``` python
+class NewestClaimPerSubject(FeatureGroup):
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {
+            Feature("claim_date"),
+            Feature("dx_code"),
+            Feature("subject_token", feature_group=ClaimsReader),
+        }
+```
+
 ## FeatureGroup Redefinition Errors
 
 ### The Problem

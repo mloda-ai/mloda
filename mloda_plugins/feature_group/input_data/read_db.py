@@ -14,20 +14,58 @@ class ReadDB(BaseInputData):
     To suppress auto-loading:
         PluginLoader.disable_auto_load("feature_group/input_data/read_dbs")
 
-    The following methods should be implemented in the child classes:
-    - load_data
-    - connect
-    - build_query
-    - is_valid_credentials
-    - check_feature_in_data_access
+    load_data is a template method exposing an opt-in lifecycle seam: a new
+    backend implements ``produce_rows``, ``connect``, and ``is_valid_credentials``
+    (optionally ``prepare_credentials``/``build_query``/``check_feature_in_data_access``)
+    instead of overriding ``load_data`` wholesale. Overriding ``load_data`` directly
+    is still supported.
     """
 
     _auto_load_group: str = "feature_group/input_data/read_dbs"
 
+    @staticmethod
+    def _underlying(member: Any) -> Any:
+        """Underlying function of a classmethod/staticmethod/plain override, for identity comparison."""
+        return getattr(member, "__func__", member)
+
+    @classmethod
+    def prepare_credentials(cls, data_access: Any, features: FeatureSet) -> Any:
+        """Overridable hook to normalize/validate credentials before connecting; default is pass-through."""
+        return data_access
+
+    @classmethod
+    def produce_rows(cls, connection: Any, features: FeatureSet) -> Any:
+        """The per-backend row hook; a new backend implements THIS (plus connect and is_valid_credentials)
+        instead of overriding load_data wholesale."""
+        raise NotImplementedError
+
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-        """This function should be implemented by child classes."""
-        raise NotImplementedError
+        """Template method: probe the row hook, prepare credentials, connect, produce rows, then close."""
+        if cls._underlying(cls.produce_rows) is cls._underlying(ReadDB.produce_rows):
+            raise NotImplementedError
+
+        credentials = cls.prepare_credentials(data_access, features)
+        connection = cls.get_connection(credentials)
+        try:
+            return cls.produce_rows(connection, features)
+        finally:
+            cls.close_connection(connection)
+
+    @classmethod
+    def supports_scoped_data_access(cls) -> bool:
+        # A ReadDB subclass is a final scoped reader if it overrides load_data
+        # wholesale (e.g. SQLITEReader), or implements BOTH the per-backend row hook
+        # (produce_rows) and connect. Decided structurally via _underlying() so plugin
+        # discovery never executes the lifecycle (no connect()/produce_rows() side
+        # effects, no escaping exceptions) and works for classmethod/staticmethod/plain
+        # overrides alike. Requiring connect screens out intermediate bases that supply
+        # a shared produce_rows but leave connect abstract.
+        if cls._underlying(cls.load_data) is not cls._underlying(ReadDB.load_data):
+            return True
+        return cls._underlying(cls.produce_rows) is not cls._underlying(ReadDB.produce_rows) and cls._underlying(
+            cls.connect
+        ) is not cls._underlying(ReadDB.connect)
 
     @classmethod
     def connect(cls, credentials: Any) -> Any:

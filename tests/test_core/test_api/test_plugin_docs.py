@@ -1,4 +1,5 @@
 import gc
+import inspect
 
 import pytest
 from mloda.core.api.plugin_info import (
@@ -201,6 +202,32 @@ class TestGetFeatureGroupDocs:
             assert len(filtered_lower) == len(filtered_upper)
             assert len(filtered_lower) >= 1
 
+    def test_get_feature_group_docs_compute_framework_filter_case_insensitive(self) -> None:
+        """Test that the compute_framework filter matches the framework name case-insensitively.
+
+        Issue #537 requirement 2: the compute_framework filter compares names
+        case-sensitively, so a casing mismatch wrongly returns an empty list.
+        """
+        all_results = get_feature_group_docs()
+        assert len(all_results) > 0, "Need at least one feature group for filtering"
+
+        # Pick a real framework name that at least one feature group supports.
+        canonical_name: str | None = None
+        for fg in all_results:
+            if len(fg.compute_frameworks) > 0:
+                canonical_name = fg.compute_frameworks[0]
+                break
+        assert canonical_name is not None, "Need a feature group with at least one compute framework"
+
+        canonical_filtered = get_feature_group_docs(compute_framework=canonical_name)
+        assert len(canonical_filtered) >= 1, "Canonical-case filter should match at least one feature group"
+
+        lower_filtered = get_feature_group_docs(compute_framework=canonical_name.lower())
+        upper_filtered = get_feature_group_docs(compute_framework=canonical_name.upper())
+
+        assert len(lower_filtered) == len(canonical_filtered)
+        assert len(upper_filtered) == len(canonical_filtered)
+
 
 class TestGetComputeFrameworkDocs:
     def test_get_compute_framework_docs_returns_list(self) -> None:
@@ -330,6 +357,26 @@ class TestGetComputeFrameworkDocs:
 
         # available_only=False should return same or more frameworks than available_only=True
         assert len(all_results) >= len(available_only_results)
+
+    def test_get_compute_framework_docs_available_only_default_lists_all(self) -> None:
+        """Test that the default call does not filter by availability.
+
+        Issue #537 requirement 1: the default should be available_only=False so a
+        bare doc call lists ALL frameworks (with is_available as a flag) rather
+        than silently dropping frameworks whose backing library is not importable.
+
+        The behavioral set-equality assertion below only diverges when some
+        framework is unavailable, which is not guaranteed in every environment
+        (e.g. an all-extras venv has every backing library installed). The
+        signature-default assertion encodes the requirement deterministically:
+        the default must be available_only=False.
+        """
+        default_value = inspect.signature(get_compute_framework_docs).parameters["available_only"].default
+        assert default_value is False, "Default of available_only should be False so a bare call lists all frameworks"
+
+        default_names = {cfw.name for cfw in get_compute_framework_docs()}
+        all_names = {cfw.name for cfw in get_compute_framework_docs(available_only=False)}
+        assert default_names == all_names
 
 
 class TestGetExtenderDocs:

@@ -75,7 +75,7 @@ def get_feature_group_docs(
     Args:
         name: Filter by feature group name (case-insensitive partial match).
         search: Search in feature group description (case-insensitive partial match).
-        compute_framework: Filter by compute framework name or class.
+        compute_framework: Filter by compute framework name or class (case-insensitive match).
         version_contains: Filter by version substring.
         plugin_collector: Filter using plugin collector's applicability check.
         registered_only: If True, only document classes registered in the default registry.
@@ -113,7 +113,7 @@ def get_feature_group_docs(
 
         if compute_framework is not None:
             cfw_name = compute_framework if isinstance(compute_framework, str) else compute_framework.__name__
-            if cfw_name not in compute_frameworks:
+            if cfw_name.lower() not in {c.lower() for c in compute_frameworks}:
                 continue
 
         if version_contains is not None and version_contains not in version:
@@ -137,7 +137,7 @@ def get_feature_group_docs(
 def get_compute_framework_docs(
     name: Optional[str] = None,
     search: Optional[str] = None,
-    available_only: bool = True,
+    available_only: bool = False,
     registered_only: bool = False,
 ) -> list[ComputeFrameworkInfo]:
     """
@@ -149,7 +149,7 @@ def get_compute_framework_docs(
     Args:
         name: Filter by compute framework name (case-insensitive partial match).
         search: Search in compute framework description (case-insensitive partial match).
-        available_only: If True, only return available frameworks (default True).
+        available_only: If True, only return importable frameworks; by default all frameworks are listed with is_available as the flag (default False).
         registered_only: If True, only document classes registered in the default registry.
 
     Returns:

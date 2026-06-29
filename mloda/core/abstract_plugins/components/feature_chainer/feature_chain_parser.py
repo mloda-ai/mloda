@@ -10,7 +10,7 @@ from typing import Any, Optional
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
-from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
+from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys, RESERVED_PROPERTY_KEYS
 
 # Separator constants for feature name parsing
 CHAIN_SEPARATOR = "__"  # Separates chained transformations (source→suffix)
@@ -190,21 +190,16 @@ class FeatureChainParser:
 
     @classmethod
     def _extract_property_values(cls, property_value: Any) -> Any:
-        """Extract property values, removing metadata keys."""
+        """Extract a spec's declared value space.
+
+        Prefers an explicit ``DefaultOptionKeys.allowed_values`` field; otherwise
+        falls back to the legacy flattened form (all entries minus the reserved
+        metadata keys).
+        """
         if isinstance(property_value, dict):
-            # Remove metadata keys, keep only the actual valid values
-            metadata_keys = {
-                # Plain string metadata key used for human-readable documentation
-                "explanation",
-                DefaultOptionKeys.default,
-                DefaultOptionKeys.context,
-                DefaultOptionKeys.group,
-                DefaultOptionKeys.strict_validation,
-                DefaultOptionKeys.validation_function,
-                DefaultOptionKeys.required_when,
-                DefaultOptionKeys.type_validator,
-            }
-            return {k: v for k, v in property_value.items() if k not in metadata_keys}
+            if DefaultOptionKeys.allowed_values in property_value:
+                return property_value[DefaultOptionKeys.allowed_values]
+            return {k: v for k, v in property_value.items() if k not in RESERVED_PROPERTY_KEYS}
         return property_value
 
     @classmethod

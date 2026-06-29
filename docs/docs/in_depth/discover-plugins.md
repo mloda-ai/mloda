@@ -57,11 +57,11 @@ Get documentation for compute frameworks:
 ``` python
 from mloda.steward import get_compute_framework_docs
 
-# Get all available frameworks
+# List every framework (is_available flags whether each is importable)
 frameworks = get_compute_framework_docs()
 
-# Include unavailable frameworks
-all_frameworks = get_compute_framework_docs(available_only=False)
+# Filter to importable frameworks only
+available_frameworks = get_compute_framework_docs(available_only=True)
 ```
 
 ## Inspecting Extenders

@@ -149,7 +149,8 @@ def get_compute_framework_docs(
     Args:
         name: Filter by compute framework name (case-insensitive partial match).
         search: Search in compute framework description (case-insensitive partial match).
-        available_only: If True, only return importable frameworks; by default all frameworks are listed with is_available as the flag (default False).
+        available_only: If True, only return importable frameworks. By default (False) all frameworks
+            are listed, with is_available as the flag indicating importability.
         registered_only: If True, only document classes registered in the default registry.
 
     Returns:

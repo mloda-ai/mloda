@@ -219,14 +219,16 @@ class TestGetFeatureGroupDocs:
                 break
         assert canonical_name is not None, "Need a feature group with at least one compute framework"
 
-        canonical_filtered = get_feature_group_docs(compute_framework=canonical_name)
-        assert len(canonical_filtered) >= 1, "Canonical-case filter should match at least one feature group"
+        # Derive the expected match count from the single unfiltered enumeration
+        # above, so we do not pay for an extra canonical-case enumeration here.
+        expected = sum(1 for fg in all_results if canonical_name.lower() in {c.lower() for c in fg.compute_frameworks})
+        assert expected >= 1, "Canonical framework should match at least one feature group"
 
         lower_filtered = get_feature_group_docs(compute_framework=canonical_name.lower())
         upper_filtered = get_feature_group_docs(compute_framework=canonical_name.upper())
 
-        assert len(lower_filtered) == len(canonical_filtered)
-        assert len(upper_filtered) == len(canonical_filtered)
+        assert len(lower_filtered) == expected
+        assert len(upper_filtered) == expected
 
 
 class TestGetComputeFrameworkDocs:
@@ -344,7 +346,7 @@ class TestGetComputeFrameworkDocs:
             assert len(filtered_lower) >= 1
 
     def test_get_compute_framework_docs_available_only_true_filters_correctly(self) -> None:
-        """Test that available_only=True (default) filters to only available frameworks."""
+        """Test that available_only=True filters to only available frameworks."""
         result = get_compute_framework_docs(available_only=True)
         # All results should have is_available=True
         for cfw_info in result:

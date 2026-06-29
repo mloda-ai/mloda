@@ -2,6 +2,7 @@ from typing import Any
 
 import pytest
 
+from mloda.core.abstract_plugins.components.default_options_key import RESERVED_PROPERTY_KEYS
 from mloda.provider import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.clustering.base import ClusteringFeatureGroup
@@ -31,17 +32,11 @@ ALL_PLUGINS: list[type[Any]] = [
     TimeWindowFeatureGroup,
 ]
 
-METADATA_KEYS: tuple[Any, ...] = (
-    DefaultOptionKeys.context,
-    DefaultOptionKeys.default,
-    DefaultOptionKeys.strict_validation,
-    DefaultOptionKeys.validation_function,
-    DefaultOptionKeys.required_when,
-    DefaultOptionKeys.type_validator,
-    DefaultOptionKeys.in_features,
-    DefaultOptionKeys.group,
-    "explanation",
-)
+# Derive from the single source of truth so this set can never drift again.
+# ``in_features`` is intentionally NOT in RESERVED_PROPERTY_KEYS (it is a property
+# NAME, not a spec-internal metadata flag), but the consistency tests still treat
+# it as metadata, so add it here.
+METADATA_KEYS: frozenset[Any] = RESERVED_PROPERTY_KEYS | {DefaultOptionKeys.in_features}
 
 DOK_VALUES: list[str] = [dok.value for dok in DefaultOptionKeys]
 

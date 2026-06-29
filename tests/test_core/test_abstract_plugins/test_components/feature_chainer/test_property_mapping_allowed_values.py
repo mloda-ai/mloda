@@ -1,0 +1,237 @@
+"""Tests for the allowed_values-aware PROPERTY_MAPPING extractor/validator (issue #543).
+
+PROPERTY_MAPPING specs historically conflated allowed-value->docstring entries,
+``DefaultOptionKeys`` flag keys, and a magic plain-string ``"explanation"`` doc key
+in one namespace. ``FeatureChainParser._extract_property_values`` recovered the
+allowed-value set by subtracting a hardcoded blocklist. This module pins the
+additive, backward-compatible improvement:
+
+* a single ``RESERVED_PROPERTY_KEYS`` frozenset is the one source of truth for
+  spec-internal metadata keys,
+* a new ``DefaultOptionKeys.allowed_values`` member lets authors declare the
+  allowed-value mapping explicitly,
+* ``_extract_property_values`` honors ``allowed_values`` when present and falls
+  back to the legacy flattened form otherwise, so both membership validation and
+  the class-definition default invariant follow automatically.
+
+Reject semantics: ``match_configuration_feature_chain_parser`` raises ``ValueError``
+for a strict value outside the accepted set (verified against the existing parser),
+so rejection is asserted via ``pytest.raises(ValueError)``.
+"""
+
+from __future__ import annotations
+
+import gc
+from typing import Any
+
+import pytest
+
+from mloda.core.abstract_plugins.components.default_options_key import (
+    DefaultOptionKeys,
+    RESERVED_PROPERTY_KEYS,
+)
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
+    FeatureChainParser,
+)
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
+    FeatureChainParserMixin,
+)
+from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.utils import get_all_subclasses
+from mloda.core.abstract_plugins.feature_group import FeatureGroup
+
+
+@pytest.fixture(autouse=True)
+def _no_feature_group_registry_pollution() -> Any:
+    """Guarantee this module never leaks throwaway FeatureGroup subclasses.
+
+    Copied from ``test_property_mapping_default_invariant.py``: tests below define
+    FeatureGroup subclasses to exercise ``FeatureGroup.__init_subclass__``. Those
+    class objects sit in reference cycles, so we force a collection after each test
+    and assert that none of this module's classes remain registered.
+    """
+    yield
+    gc.collect()
+    gc.collect()
+    leaked = [c for c in get_all_subclasses(FeatureGroup) if c.__module__ == __name__]
+    assert not leaked, f"Leaked FeatureGroup subclasses from {__name__}: {[c.__name__ for c in leaked]}"
+
+
+class TestReservedPropertyKeys:
+    """``RESERVED_PROPERTY_KEYS`` is the single source of truth for metadata keys."""
+
+    def test_reserved_property_keys_importable_and_complete(self) -> None:
+        """The frozenset is importable and contains every spec-internal metadata key."""
+        assert isinstance(RESERVED_PROPERTY_KEYS, frozenset)
+        for member in (
+            DefaultOptionKeys.default,
+            DefaultOptionKeys.context,
+            DefaultOptionKeys.group,
+            DefaultOptionKeys.strict_validation,
+            DefaultOptionKeys.validation_function,
+            DefaultOptionKeys.required_when,
+            DefaultOptionKeys.type_validator,
+            DefaultOptionKeys.allowed_values,
+        ):
+            assert member in RESERVED_PROPERTY_KEYS
+        assert "explanation" in RESERVED_PROPERTY_KEYS
+
+    def test_allowed_values_enum_member_exists(self) -> None:
+        """``DefaultOptionKeys.allowed_values`` exists and stringifies to ``allowed_values``."""
+        assert str(DefaultOptionKeys.allowed_values) == "allowed_values"
+        assert DefaultOptionKeys.allowed_values.value == "allowed_values"
+
+
+class TestStrictMembershipViaAllowedValues:
+    """Strict membership flows through the explicit ``allowed_values`` field."""
+
+    def test_allowed_values_field_accepts_and_rejects(self) -> None:
+        """A spec using ``allowed_values`` accepts members and rejects non-members."""
+
+        class AllowedValuesFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+            PREFIX_PATTERN = r".*__([\w]+)_op$"
+            PROPERTY_MAPPING = {
+                "operation_type": {
+                    DefaultOptionKeys.allowed_values: {"add": "Addition", "sub": "Subtraction"},
+                    DefaultOptionKeys.context: True,
+                    DefaultOptionKeys.strict_validation: True,
+                }
+            }
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                return data
+
+        property_mapping = AllowedValuesFeatureGroup.PROPERTY_MAPPING
+
+        assert (
+            FeatureChainParser.match_configuration_feature_chain_parser(
+                "any_feature", Options(context={"operation_type": "add"}), property_mapping
+            )
+            is True
+        )
+        with pytest.raises(ValueError, match="mul"):
+            FeatureChainParser.match_configuration_feature_chain_parser(
+                "any_feature", Options(context={"operation_type": "mul"}), property_mapping
+            )
+
+    def test_legacy_flattened_form_still_validates(self) -> None:
+        """An equivalent legacy spec (top-level entries) gives the same accept/reject results."""
+
+        class LegacyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+            PREFIX_PATTERN = r".*__([\w]+)_op$"
+            PROPERTY_MAPPING = {
+                "operation_type": {
+                    "add": "Addition",
+                    "sub": "Subtraction",
+                    DefaultOptionKeys.context: True,
+                    DefaultOptionKeys.strict_validation: True,
+                }
+            }
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                return data
+
+        property_mapping = LegacyFeatureGroup.PROPERTY_MAPPING
+
+        assert (
+            FeatureChainParser.match_configuration_feature_chain_parser(
+                "any_feature", Options(context={"operation_type": "add"}), property_mapping
+            )
+            is True
+        )
+        with pytest.raises(ValueError, match="mul"):
+            FeatureChainParser.match_configuration_feature_chain_parser(
+                "any_feature", Options(context={"operation_type": "mul"}), property_mapping
+            )
+
+
+class TestClassDefinitionDefaultInvariantHonorsAllowedValues:
+    """The class-definition default invariant reads accepted values from ``allowed_values``."""
+
+    def test_rejects_strict_default_outside_allowed_values(self) -> None:
+        """A strict default outside the ``allowed_values`` set rejects at class definition."""
+        with pytest.raises(ValueError) as exc_info:
+
+            class BadAllowedValuesDefault(FeatureChainParserMixin, FeatureGroup):
+                PREFIX_PATTERN = r".*__([\w]+)_op$"
+                PROPERTY_MAPPING = {
+                    "operation_type": {
+                        DefaultOptionKeys.allowed_values: {"add": "Addition", "sub": "Subtraction"},
+                        DefaultOptionKeys.context: True,
+                        DefaultOptionKeys.strict_validation: True,
+                        DefaultOptionKeys.default: "mul",
+                    }
+                }
+
+                @classmethod
+                def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                    return data
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "BadAllowedValuesDefault" in message
+        assert "operation_type" in message
+        assert "mul" in message
+        assert "add" in message
+        assert "sub" in message
+
+    def test_accepts_strict_default_in_allowed_values(self) -> None:
+        """A strict default inside the ``allowed_values`` set defines without error."""
+
+        class GoodAllowedValuesDefault(FeatureChainParserMixin, FeatureGroup):
+            PREFIX_PATTERN = r".*__([\w]+)_op$"
+            PROPERTY_MAPPING = {
+                "operation_type": {
+                    DefaultOptionKeys.allowed_values: {"add": "Addition", "sub": "Subtraction"},
+                    DefaultOptionKeys.context: True,
+                    DefaultOptionKeys.strict_validation: True,
+                    DefaultOptionKeys.default: "add",
+                }
+            }
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                return data
+
+        assert GoodAllowedValuesDefault.PROPERTY_MAPPING["operation_type"][DefaultOptionKeys.default] == "add"
+
+
+class TestNoSilentWidening:
+    """An extra top-level doc key is never promoted to an allowed value."""
+
+    def test_extra_doc_key_not_treated_as_allowed_value(self) -> None:
+        """When ``allowed_values`` is present, extraction returns exactly that mapping."""
+        spec = {
+            DefaultOptionKeys.allowed_values: {"add": "Addition"},
+            "explanation": "operation_type chooses the arithmetic operation",
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
+        }
+
+        extracted = FeatureChainParser._extract_property_values(spec)
+        assert extracted == {"add": "Addition"}
+
+    def test_doc_key_name_rejected_by_strict_validation(self) -> None:
+        """The doc key name (``explanation``) is not a member, so strict validation rejects it."""
+        property_mapping = {
+            "operation_type": {
+                DefaultOptionKeys.allowed_values: {"add": "Addition"},
+                "explanation": "operation_type chooses the arithmetic operation",
+                DefaultOptionKeys.context: True,
+                DefaultOptionKeys.strict_validation: True,
+            }
+        }
+
+        assert (
+            FeatureChainParser.match_configuration_feature_chain_parser(
+                "any_feature", Options(context={"operation_type": "add"}), property_mapping
+            )
+            is True
+        )
+        with pytest.raises(ValueError, match="explanation"):
+            FeatureChainParser.match_configuration_feature_chain_parser(
+                "any_feature", Options(context={"operation_type": "explanation"}), property_mapping
+            )

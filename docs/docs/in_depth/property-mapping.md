@@ -24,6 +24,55 @@ PROPERTY_MAPPING = {
 }
 ```
 
+In this flattened form, the allowed values share one dict namespace with the
+metadata flag keys. The parser recovers the value space by subtracting the
+reserved metadata keys (`RESERVED_PROPERTY_KEYS`: `explanation`, `allowed_values`,
+`default`, `context`, `group`, `strict_validation`, `validation_function`,
+`required_when`, `type_validator`). The flattened form stays fully supported.
+
+## Recommended: explicit `allowed_values`
+
+To keep the value space separate from the flags (so a doc-only key can never
+widen an allowed set), declare it under `DefaultOptionKeys.allowed_values`:
+
+``` python
+"operation_type": {
+    DefaultOptionKeys.allowed_values: {"add": "Addition", "sub": "Subtraction"},
+    DefaultOptionKeys.context: True,
+    DefaultOptionKeys.strict_validation: True,
+}
+```
+
+When `allowed_values` is present the parser uses it directly and ignores any
+other non-flag keys. `allowed_values` may be a mapping of value to one-line
+docstring, or a re-iterable collection of values (list, tuple, set). Do not
+pass a one-shot iterator (e.g. a generator) in a hand-written spec: the parser
+iterates the value space more than once, so an exhausted iterator would behave
+like an empty set. (`property_spec` materializes iterables for you.)
+
+`allowed_values` and `explanation` are reserved key names. A spec cannot use
+either as a literal accepted value; both are recovered as metadata, not values.
+
+### Builder: `property_spec`
+
+`property_spec` builds the same dict and validates its invariants at
+construction (strict needs a non-empty `allowed_values`; `allowed_values`
+without strict is rejected as a no-op; a strict `default` must be in the
+allowed set). The contract stays a plain dict, so this is optional sugar:
+
+``` python
+from mloda.provider import property_spec
+
+PROPERTY_MAPPING = {
+    "operation_type": property_spec(
+        "Arithmetic operation",
+        strict=True,
+        allowed_values={"add": "Addition", "sub": "Subtraction"},
+        default="add",
+    ),
+}
+```
+
 ## Parameter Classification
 
 ``` python

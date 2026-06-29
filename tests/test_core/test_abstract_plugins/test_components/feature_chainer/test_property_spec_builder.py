@@ -149,3 +149,63 @@ class TestPropertySpecRoundTrip:
             FeatureChainParser.match_configuration_feature_chain_parser(
                 "any_feature", Options(context={"operation_type": "mul"}), property_mapping
             )
+
+
+class TestPropertySpecDefaultOmission:
+    """A builder call with no default must NOT emit a spurious ``default`` key.
+
+    The parser's ``_can_skip_required_check`` treats the mere PRESENCE of the
+    ``default`` key as "this option is optional". Emitting ``default=None``
+    therefore silently makes an otherwise-required strict property optional.
+    The fix is for ``property_spec`` to emit the ``default`` key only when the
+    caller passes a non-``None`` default.
+    """
+
+    def test_builder_without_default_omits_default_key(self) -> None:
+        """No default argument -> the spec carries no ``default`` key at all."""
+        spec = property_spec("op", strict=True, allowed_values={"add": "Addition", "sub": "Subtraction"})
+
+        assert DefaultOptionKeys.default not in spec
+
+    def test_builder_without_default_makes_strict_property_required(self) -> None:
+        """A defaultless strict property is REQUIRED: absent option -> no match.
+
+        With the spurious ``default`` key the parser wrongly skips the required
+        check, so an absent option matches. After the fix the option is required,
+        so an absent option yields False while a present, valid option yields True.
+        """
+
+        class RequiredOpFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+            PREFIX_PATTERN = r".*__([\w]+)_op$"
+            PROPERTY_MAPPING = {
+                "operation_type": property_spec(
+                    "op",
+                    strict=True,
+                    allowed_values={"add": "Addition", "sub": "Subtraction"},
+                )
+            }
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                return data
+
+        property_mapping = RequiredOpFeatureGroup.PROPERTY_MAPPING
+
+        assert (
+            FeatureChainParser.match_configuration_feature_chain_parser(
+                "any_feature", Options(context={}), property_mapping
+            )
+            is False
+        )
+        assert (
+            FeatureChainParser.match_configuration_feature_chain_parser(
+                "any_feature", Options(context={"operation_type": "add"}), property_mapping
+            )
+            is True
+        )
+
+    def test_builder_with_explicit_default_keeps_default_key(self) -> None:
+        """An explicit, valid default is preserved (we did not over-correct)."""
+        spec = property_spec("op", strict=True, allowed_values={"add": "Addition"}, default="add")
+
+        assert spec[DefaultOptionKeys.default] == "add"

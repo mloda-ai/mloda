@@ -45,7 +45,13 @@ widen an allowed set), declare it under `DefaultOptionKeys.allowed_values`:
 
 When `allowed_values` is present the parser uses it directly and ignores any
 other non-flag keys. `allowed_values` may be a mapping of value to one-line
-docstring, or a plain iterable of values.
+docstring, or a re-iterable collection of values (list, tuple, set). Do not
+pass a one-shot iterator (e.g. a generator) in a hand-written spec: the parser
+iterates the value space more than once, so an exhausted iterator would behave
+like an empty set. (`property_spec` materializes iterables for you.)
+
+`allowed_values` and `explanation` are reserved key names. A spec cannot use
+either as a literal accepted value; both are recovered as metadata, not values.
 
 ### Builder: `property_spec`
 

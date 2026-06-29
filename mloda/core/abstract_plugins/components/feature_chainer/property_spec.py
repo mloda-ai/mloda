@@ -41,5 +41,6 @@ def property_spec(
         spec[DefaultOptionKeys.allowed_values] = allowed_values
     spec[DefaultOptionKeys.context] = context
     spec[DefaultOptionKeys.strict_validation] = strict
-    spec[DefaultOptionKeys.default] = default
+    if default is not None:
+        spec[DefaultOptionKeys.default] = default
     return spec

@@ -79,7 +79,7 @@ class Feature:
         initial_requested_data: bool = False,
         link: Optional[Link] = None,
         index: Optional[Index] = None,
-        feature_group: "str | type[FeatureGroup] | None" = None,
+        feature_group: str | type[FeatureGroup] | None = None,
     ):
         if options is None:
             options = {}
@@ -116,13 +116,15 @@ class Feature:
         self.feature_group_scope = self._set_feature_group_scope(feature_group)
 
     def _set_feature_group_scope(
-        self, feature_group: "str | type[FeatureGroup] | None"
-    ) -> "str | type[FeatureGroup] | None":
-        if feature_group is None or feature_group == "":
+        self, feature_group: str | type[FeatureGroup] | None
+    ) -> str | type[FeatureGroup] | None:
+        if feature_group is None:
             return None
         if isinstance(feature_group, str):
-            return feature_group
-        if isinstance(feature_group, type) and hasattr(feature_group, "get_class_name"):
+            return feature_group or None
+        from mloda.core.abstract_plugins.feature_group import FeatureGroup
+
+        if isinstance(feature_group, type) and issubclass(feature_group, FeatureGroup):
             return feature_group
         raise TypeError(
             f"feature_group must be a FeatureGroup subclass, a class-name string, or None, "

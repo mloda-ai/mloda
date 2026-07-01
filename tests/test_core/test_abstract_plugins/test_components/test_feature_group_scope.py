@@ -14,10 +14,13 @@ The resolution behaviour itself is covered in
 tests/test_core/test_prepare/test_feature_group_scope_resolution.py.
 """
 
+import copy
+
 import pytest
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 
 class _ScopeDummyFeatureGroup(FeatureGroup):
@@ -26,6 +29,19 @@ class _ScopeDummyFeatureGroup(FeatureGroup):
 
 class _OtherScopeDummyFeatureGroup(FeatureGroup):
     """A second concrete FeatureGroup, distinct from the first."""
+
+
+class _NotAFeatureGroup:
+    """A non-FeatureGroup class that nonetheless exposes get_class_name().
+
+    ComputeFramework and several other mloda base classes also expose a
+    ``get_class_name`` classmethod, so a mere ``hasattr(x, "get_class_name")``
+    guard is not sufficient to prove ``x`` is a FeatureGroup subclass.
+    """
+
+    @classmethod
+    def get_class_name(cls) -> str:
+        return "X"
 
 
 # ---------------------------------------------------------------------------
@@ -137,3 +153,56 @@ def test_scoped_and_unscoped_collapse_in_set() -> None:
         Feature("subject_token"),
     }
     assert len(collection) == 1
+
+
+# ---------------------------------------------------------------------------
+# Constructor guard: only FeatureGroup subclasses (or names) are valid scopes
+# ---------------------------------------------------------------------------
+
+
+def test_scope_compute_framework_class_raises_typeerror() -> None:
+    """A ComputeFramework subclass must be rejected, not silently accepted.
+
+    ComputeFramework exposes get_class_name(), so a hasattr-based guard wrongly
+    treats it as a valid FeatureGroup scope. The scope must reject any class that
+    is not a FeatureGroup subclass, with a TypeError naming feature_group.
+    """
+    with pytest.raises(TypeError) as exc_info:
+        Feature("x", feature_group=PandasDataFrame)  # type: ignore[arg-type]
+    message = str(exc_info.value)
+    assert "feature_group" in message
+    assert "unexpected keyword" not in message
+
+
+def test_scope_non_feature_group_class_raises_typeerror() -> None:
+    """An unrelated class exposing get_class_name() must be rejected.
+
+    Guards against the hasattr(x, "get_class_name") shortcut: presence of that
+    method does not make a class a FeatureGroup subclass.
+    """
+    with pytest.raises(TypeError) as exc_info:
+        Feature("x", feature_group=_NotAFeatureGroup)  # type: ignore[arg-type]
+    message = str(exc_info.value)
+    assert "feature_group" in message
+    assert "unexpected keyword" not in message
+
+
+# ---------------------------------------------------------------------------
+# deepcopy characterization: class-object scope survives the engine copy path
+# ---------------------------------------------------------------------------
+
+
+def test_class_scope_survives_deepcopy() -> None:
+    """A class-object scope survives copy.deepcopy and preserves identity.
+
+    Characterization/guard test for the engine's deepcopy path: deepcopying a
+    Feature must keep the same FeatureGroup class object as the scope (classes
+    deepcopy to themselves) while equality/hash stay independent of the scope.
+    """
+    f = Feature("subject_token", feature_group=_ScopeDummyFeatureGroup)
+    g = copy.deepcopy(f)
+
+    assert g.feature_group_scope is f.feature_group_scope
+    assert g.feature_group_scope is _ScopeDummyFeatureGroup
+    assert g == f
+    assert hash(g) == hash(f)

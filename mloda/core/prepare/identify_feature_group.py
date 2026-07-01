@@ -156,10 +156,17 @@ class IdentifyFeatureGroupClass:
         if len(feature_group) > 1:
             from mloda.core.abstract_plugins.feature_group import format_feature_group_classes
 
+            scope = feature.feature_group_scope
+            scope_callout = ""
+            if scope is not None:
+                scope_name = scope.get_class_name() if isinstance(scope, type) else scope
+                scope_callout = f" Scoped to feature group: '{scope_name}'."
+
             raise ValueError(
                 f"Multiple feature groups found for feature '{feature.name}':\n"
                 f"{format_feature_group_classes(feature_group.keys(), include_domain=True)}\n"
                 "For troubleshooting guide, see: https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/"
+                f"{scope_callout}"
             )
 
         feature_group_class, compute_frameworks = next(iter(feature_group.items()))

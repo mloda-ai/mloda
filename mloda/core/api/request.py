@@ -167,6 +167,20 @@ class mlodaAPI:
             function_extender=function_extender,
         )
 
+    @staticmethod
+    def to_json_records(result: Any) -> list[dict[str, Any]]:
+        """Serialize a single ``run_all`` result to a list of row dicts."""
+        from mloda.core.api.result_serializer import to_json_records
+
+        return to_json_records(result)
+
+    @staticmethod
+    def to_csv(result: Any) -> str:
+        """Serialize a single ``run_all`` result to a CSV string."""
+        from mloda.core.api.result_serializer import to_csv
+
+        return to_csv(result)
+
     @classmethod
     def stream_all(
         cls,

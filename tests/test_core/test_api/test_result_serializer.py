@@ -15,6 +15,8 @@ so they never skip (which would break the tox EXPECTED_SKIP_COUNT). The tests
 are expected to FAIL until the helpers are implemented.
 """
 
+import csv
+import io
 from typing import Any, Optional
 
 import pandas as pd
@@ -140,6 +142,81 @@ class TestPyarrowTableDirectly:
         lines = [line for line in csv_str.splitlines() if line != ""]
         assert lines[0] == "a,b", f"First line must be the header, got: {lines[0]!r}"
         assert lines[1:] == ["1,x", "2,y"], f"Rows must match the table values, got: {lines[1:]!r}"
+
+
+class TestSparsePythonDictRecords:
+    """python_dict ``list[dict]`` results with sparse keys keep all columns.
+
+    The KEY regression: ``to_csv`` must emit the UNION of keys across all
+    records, not just the keys present in the first record. Missing values
+    become empty CSV cells.
+    """
+
+    def test_sparse_records_to_json_records_unchanged(self) -> None:
+        records = [{"a": 1}, {"b": 2}]
+        assert mloda.to_json_records(records) == [{"a": 1}, {"b": 2}]
+
+    def test_sparse_records_to_csv_keeps_all_columns(self) -> None:
+        records = [{"a": 1}, {"b": 2}]
+        csv_str = mloda.to_csv(records)
+
+        lines = [line for line in csv_str.splitlines() if line != ""]
+        header = lines[0]
+        assert set(header.split(",")) == {"a", "b"}, f"Header must be union of keys, got: {header!r}"
+
+        parsed = list(csv.DictReader(io.StringIO(csv_str)))
+        assert parsed == [{"a": "1", "b": ""}, {"a": "", "b": "2"}]
+
+
+class TestFloatsAndNullsPyarrow:
+    """Floats and nulls via a ``pa.Table`` serialize cleanly."""
+
+    def test_floats_and_nulls_to_json_records(self) -> None:
+        table = pa.table({"a": [1.5, None], "b": ["x", None]})
+        assert mloda.to_json_records(table) == [{"a": 1.5, "b": "x"}, {"a": None, "b": None}]
+
+    def test_floats_and_nulls_to_csv(self) -> None:
+        table = pa.table({"a": [1.5, None], "b": ["x", None]})
+        csv_str = mloda.to_csv(table)
+
+        lines = [line for line in csv_str.splitlines() if line != ""]
+        assert lines[0] == "a,b", f"First line must be the header, got: {lines[0]!r}"
+
+        parsed = list(csv.DictReader(io.StringIO(csv_str)))
+        assert parsed == [{"a": "1.5", "b": "x"}, {"a": "", "b": ""}]
+
+
+class TestCsvEscaping:
+    """Values containing commas, quotes, and newlines round-trip correctly."""
+
+    def test_special_characters_round_trip(self) -> None:
+        records = [
+            {"a": "x,y", "b": 'he said "hi"'},
+            {"a": "line1\nline2", "b": "plain"},
+        ]
+        csv_str = mloda.to_csv(records)
+
+        parsed = list(csv.DictReader(io.StringIO(csv_str)))
+        assert parsed == [
+            {"a": "x,y", "b": 'he said "hi"'},
+            {"a": "line1\nline2", "b": "plain"},
+        ]
+
+
+class TestEmptyTableWithSchema:
+    """An empty ``pa.Table`` that still carries a schema yields header-only CSV."""
+
+    def test_empty_table_to_json_records(self) -> None:
+        table = pa.table({"a": pa.array([], type=pa.int64()), "b": pa.array([], type=pa.string())})
+        assert mloda.to_json_records(table) == []
+
+    def test_empty_table_to_csv_header_only(self) -> None:
+        table = pa.table({"a": pa.array([], type=pa.int64()), "b": pa.array([], type=pa.string())})
+        csv_str = mloda.to_csv(table)
+
+        lines = [line for line in csv_str.splitlines() if line != ""]
+        assert len(lines) == 1, f"Empty table must yield header-only CSV, got: {lines!r}"
+        assert set(lines[0].split(",")) == {"a", "b"}
 
 
 class TestAmbiguousListRaises:

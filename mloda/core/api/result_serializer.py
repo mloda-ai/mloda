@@ -3,6 +3,14 @@
 Each ``result`` is a SINGLE compute-framework object (one element of the
 ``run_all`` list), e.g. a ``pd.DataFrame``, ``pa.Table``, polars DataFrame, or a
 python_dict result (``list[dict]``).
+
+Notes:
+- Record-list (python_dict) results serialize with the stdlib only. Framework
+  objects (pandas, polars, pyarrow Table, ...) go through the pyarrow hub, so
+  pyarrow is required for non-python_dict framework results.
+- ``to_json_records`` values are Python natives produced by the compute
+  framework and may include non-JSON-primitive types (e.g. ``datetime``) for
+  such columns, mirroring pandas' ``to_dict("records")``.
 """
 
 import csv
@@ -29,62 +37,68 @@ def _is_record_list(result: Any) -> bool:
     return isinstance(result, list) and (len(result) == 0 or all(isinstance(item, dict) for item in result))
 
 
-def _to_pyarrow_table(result: Any) -> "pa.Table":
+def _ambiguous_list_error() -> ValueError:
+    return ValueError(
+        "Expected a single run_all result object, got a list whose elements are not all dicts. "
+        "Pass a single result element, e.g. results[0], not the whole run_all() list."
+    )
+
+
+def _record_union_fieldnames(records: list[dict[str, Any]]) -> list[str]:
+    """Union of all keys across all records, preserving first-seen order."""
+    fieldnames: list[str] = []
+    seen: set[str] = set()
+    for record in records:
+        for key in record:
+            if key not in seen:
+                seen.add(key)
+                fieldnames.append(key)
+    return fieldnames
+
+
+def _rows_to_csv(fieldnames: list[str], rows: list[dict[str, Any]]) -> str:
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=fieldnames, lineterminator="\n", extrasaction="ignore")
+    writer.writeheader()
+    writer.writerows(rows)
+    return buf.getvalue()
+
+
+def _framework_to_pyarrow_table(result: Any) -> "pa.Table":
     _require_pyarrow()
 
     if isinstance(result, pa.Table):
         return result
 
-    if _is_record_list(result):
-        return pa.Table.from_pylist(result)
-
-    transformer = ComputeFrameworkTransformer()
     from_framework = type(result)
-    chain = transformer.get_transformation_chain(from_framework, pa.Table)
+    chain = ComputeFrameworkTransformer().get_transformation_chain(from_framework, pa.Table)
 
     if chain is None:
         raise ValueError(f"No transformation path found from {from_framework} to pyarrow.Table.")
+    if len(chain) != 1:
+        raise ValueError(
+            f"Unexpected multi-step transformation chain from {from_framework} to pyarrow.Table; "
+            "a direct transformer was expected."
+        )
 
-    data = result
-    current_fw = from_framework
-    for i, transformer_cls in enumerate(chain):
-        if i == len(chain) - 1:
-            target_fw = pa.Table
-        else:
-            for (src, dst), trans in transformer.transformer_map.items():
-                if trans == transformer_cls and src == current_fw:
-                    target_fw = dst
-                    break
-        data = transformer_cls.transform(current_fw, target_fw, data, None)
-        current_fw = target_fw
-
-    return data
+    return chain[0].transform(from_framework, pa.Table, result, None)
 
 
 def to_json_records(result: Any) -> list[dict[str, Any]]:
     if isinstance(result, list):
         if _is_record_list(result):
             return list(result)
-        raise ValueError(
-            f"Expected a single run_all result object, got a list of {type(result[0])}. "
-            "Pass a single result element, e.g. results[0], not the whole run_all() list."
-        )
+        raise _ambiguous_list_error()
 
-    table = _to_pyarrow_table(result)
-    records: list[dict[str, Any]] = table.to_pylist()
+    records: list[dict[str, Any]] = _framework_to_pyarrow_table(result).to_pylist()
     return records
 
 
 def to_csv(result: Any) -> str:
-    if isinstance(result, list) and not _is_record_list(result):
-        raise ValueError(
-            f"Expected a single run_all result object, got a list of {type(result[0])}. "
-            "Pass a single result element, e.g. results[0], not the whole run_all() list."
-        )
+    if isinstance(result, list):
+        if _is_record_list(result):
+            return _rows_to_csv(_record_union_fieldnames(result), result)
+        raise _ambiguous_list_error()
 
-    table = _to_pyarrow_table(result)
-    buf = io.StringIO()
-    writer = csv.DictWriter(buf, fieldnames=table.column_names, lineterminator="\n")
-    writer.writeheader()
-    writer.writerows(table.to_pylist())
-    return buf.getvalue()
+    table = _framework_to_pyarrow_table(result)
+    return _rows_to_csv(table.column_names, table.to_pylist())

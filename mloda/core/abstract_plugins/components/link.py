@@ -176,6 +176,12 @@ class Link:
         The _on methods require feature groups to have index_columns() defined.
         Use left_index/right_index to select which index when multiple are available.
 
+        **Star factory** - joins every spoke to a shared-index hub:
+            - Link.star(HubFG, SpokeAFG, SpokeBFG, index_column="row_id")
+
+        The first feature group is the hub; each remaining group is joined to it with
+        an INNER join on the shared index. Returns a set of Links.
+
         **ASOF factories** - point-in-time / as-of joins:
             - Link.asof(left_joinspec, right_joinspec, left_time_column=..., right_time_column=...)
             - Link.asof_on(LeftFG, RightFG, left_time_column=..., right_time_column=...)
@@ -362,6 +368,28 @@ class Link:
         return cls._from_feature_groups(
             JoinType.INNER, left, right, left_index, right_index, left_discriminator, right_discriminator
         )
+
+    @classmethod
+    def star(
+        cls,
+        *feature_groups: type[Any],
+        index_column: Index | tuple[str, ...] | str,
+    ) -> set["Link"]:
+        """Create INNER links joining every spoke to a shared-index hub.
+
+        The first feature group is the hub; each remaining group is joined to it on the
+        shared index. Returns a set of INNER Links (duplicate spokes collapse in the set).
+        Targets joins between distinct feature-group classes and does not support
+        left/right discriminators, so it cannot disambiguate multiple same-class nodes
+        (use ``Link.inner`` with discriminators for that).
+        """
+        if len(feature_groups) < 2:
+            raise ValueError("Link.star needs at least two feature groups: a hub plus at least one spoke.")
+
+        # coerce/validate index_column (str/tuple/Index) into a shared Index reused on both sides
+        idx = JoinSpec(feature_groups[0], index_column).index
+        hub = feature_groups[0]
+        return {cls.inner(JoinSpec(hub, idx), JoinSpec(spoke, idx)) for spoke in feature_groups[1:]}
 
     @classmethod
     def left_on(

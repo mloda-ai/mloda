@@ -6,11 +6,17 @@ from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMas
 class PythonDictMaskEngine(BaseMaskEngine):
     @classmethod
     def supported_data_type(cls) -> type[Any]:
-        return list
+        return dict
+
+    @staticmethod
+    def _row_count(data: dict[str, list[Any]]) -> int:
+        for column in data.values():
+            return len(column)
+        return 0
 
     @classmethod
     def all_true(cls, data: Any) -> list[Any]:
-        return [True] * len(data)
+        return [True] * cls._row_count(data)
 
     @classmethod
     def combine(cls, mask1: Any, mask2: Any) -> list[Any]:
@@ -18,25 +24,25 @@ class PythonDictMaskEngine(BaseMaskEngine):
 
     @classmethod
     def equal(cls, data: Any, column: str, value: Any) -> list[Any]:
-        return [row.get(column) == value for row in data]
+        return [v == value for v in data.get(column, [])]
 
     @classmethod
     def greater_equal(cls, data: Any, column: str, value: Any) -> list[Any]:
-        return [row.get(column) is not None and row.get(column) >= value for row in data]
+        return [v is not None and v >= value for v in data.get(column, [])]
 
     @classmethod
     def less_equal(cls, data: Any, column: str, value: Any) -> list[Any]:
-        return [row.get(column) is not None and row.get(column) <= value for row in data]
+        return [v is not None and v <= value for v in data.get(column, [])]
 
     @classmethod
     def less_than(cls, data: Any, column: str, value: Any) -> list[Any]:
-        return [row.get(column) is not None and row.get(column) < value for row in data]
+        return [v is not None and v < value for v in data.get(column, [])]
 
     @classmethod
     def greater_than(cls, data: Any, column: str, value: Any) -> list[Any]:
-        return [row.get(column) is not None and row.get(column) > value for row in data]
+        return [v is not None and v > value for v in data.get(column, [])]
 
     @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> list[Any]:
         allowed = set(values) if isinstance(values, (list, tuple)) else {values}
-        return [row.get(column) in allowed for row in data]
+        return [v in allowed for v in data.get(column, [])]

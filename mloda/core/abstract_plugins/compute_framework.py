@@ -29,8 +29,8 @@ def _require_pyarrow() -> None:
 
 
 class EmptyResultError(ValueError):
-    """Raised when a final requested feature's result carries no schema (zero columns)
-    while allow_empty_result() is False; zero rows with a schema is valid."""
+    """Raised when a final requested feature's result carries no schema (zero columns);
+    zero rows with a schema is valid."""
 
 
 class ComputeFramework(ABC):
@@ -529,15 +529,10 @@ class ComputeFramework(ABC):
         if self.data is None:
             return
 
-        if (
-            features.get_initial_requested_features()
-            and not feature_group.allow_empty_result()
-            and not self.column_names
-        ):
+        if features.get_initial_requested_features() and not self.column_names:
             raise EmptyResultError(
                 f"Result carries no schema (no columns): {feature_group.get_class_name()}. "
-                "A feature must return a schema; zero rows is a valid result, zero columns is not. "
-                "If a schema-less empty result is legitimate, override allow_empty_result() to return True."
+                "A feature must return a schema; zero rows is a valid result, zero columns is not."
             )
 
         from mloda.core.abstract_plugins.components.validators.datatype_validator import DataTypeValidator

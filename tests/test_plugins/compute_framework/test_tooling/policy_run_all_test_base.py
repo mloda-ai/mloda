@@ -52,6 +52,13 @@ def records_from_frame(data: Any) -> list[dict[str, Any]]:
         records = data.to_dicts()
     elif pa is not None and isinstance(data, pa.Table):
         records = data.to_pylist()
+    elif isinstance(data, dict):
+        # PythonDict columnar frame: {"col": [v0, v1, ...]}. Zero columns -> zero rows.
+        if not data:
+            records = []
+        else:
+            length = len(next(iter(data.values())))
+            records = [{k: data[k][i] for k in data} for i in range(length)]
     elif isinstance(data, list):
         records = data
     elif hasattr(data, "to_dicts"):

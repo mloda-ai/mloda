@@ -31,25 +31,30 @@ class TestPythonDictFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTes
 
     @pytest.fixture
     def sample_data(self) -> Any:
-        """Create a sample list of dicts for testing."""
-        return [
-            {"id": 1, "age": 25, "name": "Alice", "category": "A"},
-            {"id": 2, "age": 30, "name": "Bob", "category": "B"},
-            {"id": 3, "age": 35, "name": "Charlie", "category": "A"},
-            {"id": 4, "age": 40, "name": "David", "category": "C"},
-            {"id": 5, "age": 45, "name": "Eve", "category": "B"},
-        ]
+        """Create a sample columnar dict for testing."""
+        return {
+            "id": [1, 2, 3, 4, 5],
+            "age": [25, 30, 35, 40, 45],
+            "name": ["Alice", "Bob", "Charlie", "David", "Eve"],
+            "category": ["A", "B", "A", "C", "B"],
+        }
+
+    def result_row_count(self, result: Any) -> int:
+        """A columnar dict's row count is the length of any of its columns."""
+        for column in result.values():
+            return len(column)
+        return 0
 
     def get_column_values(self, result: Any, column: str) -> list[Any]:
-        """Extract column values from list of dicts."""
-        return [row[column] for row in result]
+        """Extract column values from a columnar dict."""
+        return list(result[column])
 
     @pytest.fixture
     def sample_time_data(self) -> Any:
-        return [{"id": SAMPLE_IDS[i], "ts": SAMPLE_TIMESTAMPS[i]} for i in range(len(SAMPLE_IDS))]
+        return {"id": list(SAMPLE_IDS), "ts": list(SAMPLE_TIMESTAMPS)}
 
     def get_id_column_values(self, result: Any) -> list[int]:
-        return [row["id"] for row in result]
+        return list(result["id"])
 
     # Framework-specific tests below
 
@@ -95,7 +100,12 @@ class TestPythonDictFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTes
 
     def test_filter_with_none_values(self, sample_data: Any) -> None:
         """Test filtering with None values in data."""
-        data_with_none = sample_data + [{"id": 6, "age": None, "name": "Frank", "category": "A"}]
+        data_with_none = {
+            "id": sample_data["id"] + [6],
+            "age": sample_data["age"] + [None],
+            "name": sample_data["name"] + ["Frank"],
+            "category": sample_data["category"] + ["A"],
+        }
 
         feature = Feature("age")
         filter_type = FilterType.MIN
@@ -104,7 +114,7 @@ class TestPythonDictFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTes
 
         result = PythonDictFilterEngine.do_min_filter(data_with_none, single_filter)
 
-        assert len(result) == 4
-        ages = [row["age"] for row in result]
+        assert self.result_row_count(result) == 4
+        ages = list(result["age"])
         assert None not in ages
         assert ages == [30, 35, 40, 45]

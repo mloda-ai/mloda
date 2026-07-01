@@ -180,13 +180,10 @@ def test_python_dict_tz_aware_time_range_filter() -> None:
 
         @classmethod
         def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-            return [
-                {
-                    "temperature": TEMPERATURES[i],
-                    DefaultOptionKeys.reference_time: TIMESTAMPS_UTC[i],
-                }
-                for i in range(len(TIMESTAMPS_UTC))
-            ]
+            return {
+                "temperature": list(TEMPERATURES),
+                DefaultOptionKeys.reference_time: list(TIMESTAMPS_UTC),
+            }
 
         @classmethod
         def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -204,17 +201,17 @@ def test_python_dict_tz_aware_time_range_filter() -> None:
         global_filter=global_filter,
     )
 
-    rows = None
+    frame = None
     for candidate in result:
-        if candidate and isinstance(candidate, list) and "temperature" in candidate[0]:
-            rows = candidate
+        if isinstance(candidate, dict) and "temperature" in candidate:
+            frame = candidate
             break
 
-    assert rows is not None, "python_dict result with temperature column not found"
+    assert frame is not None, "python_dict result with temperature column not found"
 
-    actual_temps = sorted(row["temperature"] for row in rows)
+    actual_temps = sorted(frame["temperature"])
     assert actual_temps == EXPECTED_TEMPERATURES
-    assert len(rows) == EXPECTED_ROW_COUNT
+    assert len(frame["temperature"]) == EXPECTED_ROW_COUNT
 
 
 @pytest.mark.skipif(pl is None, reason="Polars is not installed")

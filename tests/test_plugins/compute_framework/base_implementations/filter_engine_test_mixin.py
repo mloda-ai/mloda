@@ -53,6 +53,15 @@ class FilterEngineTestMixin:
         """
         raise NotImplementedError
 
+    def result_row_count(self, result: Any) -> int:
+        """Return the number of rows in a filter result.
+
+        Defaults to ``len(result)`` (correct for row-shaped frames: pandas, polars,
+        pyarrow). Columnar frameworks (PythonDict's ``dict[str, list]``) override this,
+        since ``len`` on a columnar dict counts columns, not rows.
+        """
+        return len(result)
+
     def _assert_values_equal(self, actual: list[Any], expected: list[Any]) -> None:
         """Assert values are equal regardless of order."""
         assert sorted(actual) == sorted(expected)
@@ -66,7 +75,7 @@ class FilterEngineTestMixin:
 
         result = filter_engine.do_range_filter(sample_data, single_filter)
 
-        assert len(result) == 3
+        assert self.result_row_count(result) == 3
         self._assert_values_equal(self.get_column_values(result, "age"), [30, 35, 40])
         self._assert_values_equal(self.get_column_values(result, "id"), [2, 3, 4])
 
@@ -79,7 +88,7 @@ class FilterEngineTestMixin:
 
         result = filter_engine.do_range_filter(sample_data, single_filter)
 
-        assert len(result) == 2
+        assert self.result_row_count(result) == 2
         self._assert_values_equal(self.get_column_values(result, "age"), [30, 35])
         self._assert_values_equal(self.get_column_values(result, "id"), [2, 3])
 
@@ -92,7 +101,7 @@ class FilterEngineTestMixin:
 
         result = filter_engine.do_min_filter(sample_data, single_filter)
 
-        assert len(result) == 2
+        assert self.result_row_count(result) == 2
         self._assert_values_equal(self.get_column_values(result, "age"), [40, 45])
         self._assert_values_equal(self.get_column_values(result, "id"), [4, 5])
 
@@ -105,7 +114,7 @@ class FilterEngineTestMixin:
 
         result = filter_engine.do_max_filter(sample_data, single_filter)
 
-        assert len(result) == 2
+        assert self.result_row_count(result) == 2
         self._assert_values_equal(self.get_column_values(result, "age"), [25, 30])
         self._assert_values_equal(self.get_column_values(result, "id"), [1, 2])
 
@@ -118,7 +127,7 @@ class FilterEngineTestMixin:
 
         result = filter_engine.do_max_filter(sample_data, single_filter)
 
-        assert len(result) == 2
+        assert self.result_row_count(result) == 2
         self._assert_values_equal(self.get_column_values(result, "age"), [25, 30])
         self._assert_values_equal(self.get_column_values(result, "id"), [1, 2])
 
@@ -131,7 +140,7 @@ class FilterEngineTestMixin:
 
         result = filter_engine.do_equal_filter(sample_data, single_filter)
 
-        assert len(result) == 1
+        assert self.result_row_count(result) == 1
         assert self.get_column_values(result, "age")[0] == 35
         assert self.get_column_values(result, "id")[0] == 3
 
@@ -144,7 +153,7 @@ class FilterEngineTestMixin:
 
         result = filter_engine.do_regex_filter(sample_data, single_filter)
 
-        assert len(result) == 1
+        assert self.result_row_count(result) == 1
         assert self.get_column_values(result, "name")[0] == "Alice"
         assert self.get_column_values(result, "id")[0] == 1
 
@@ -157,7 +166,7 @@ class FilterEngineTestMixin:
 
         result = filter_engine.do_categorical_inclusion_filter(sample_data, single_filter)
 
-        assert len(result) == 4
+        assert self.result_row_count(result) == 4
         assert set(self.get_column_values(result, "category")) == {"A", "B"}
         assert set(self.get_column_values(result, "id")) == {1, 2, 3, 5}
 
@@ -180,7 +189,7 @@ class FilterEngineTestMixin:
 
         result = filter_engine.apply_filters(sample_data, feature_set)
 
-        assert len(result) == 1
+        assert self.result_row_count(result) == 1
         assert self.get_column_values(result, "age")[0] == 35
         assert self.get_column_values(result, "category")[0] == "A"
         assert self.get_column_values(result, "id")[0] == 3

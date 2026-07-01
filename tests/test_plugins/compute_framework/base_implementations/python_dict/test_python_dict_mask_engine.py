@@ -18,12 +18,10 @@ class TestPythonDictMaskEngine(MaskEngineTestMixin):
 
     @pytest.fixture
     def sample_data(self) -> Any:
-        return [
-            {"status": "active", "value": 10},
-            {"status": "inactive", "value": 20},
-            {"status": "active", "value": 30},
-            {"status": "inactive", "value": 40},
-        ]
+        return {
+            "status": ["active", "inactive", "active", "inactive"],
+            "value": [10, 20, 30, 40],
+        }
 
     def evaluate_mask(self, mask: Any, data: Any) -> list[bool]:
         return list(mask)

@@ -18,13 +18,13 @@ class TestPythonDictMergeEngine:
 
     @pytest.fixture
     def left_data(self) -> Any:
-        """Create sample left dataset."""
-        return [{"idx": 1, "col1": "a"}, {"idx": 3, "col1": "b"}]
+        """Create sample columnar left dataset."""
+        return {"idx": [1, 3], "col1": ["a", "b"]}
 
     @pytest.fixture
     def right_data(self) -> Any:
-        """Create sample right dataset."""
-        return [{"idx": 1, "col2": "x"}, {"idx": 2, "col2": "z"}]
+        """Create sample columnar right dataset."""
+        return {"idx": [1, 2], "col2": ["x", "z"]}
 
     def test_check_import(self) -> None:
         """Test that check_import passes without errors."""
@@ -36,59 +36,51 @@ class TestPythonDictMergeEngine:
         engine = PythonDictMergeEngine()
         result = engine.merge_inner(left_data, right_data, index_obj, index_obj)
 
-        expected = [{"idx": 1, "col1": "a", "col2": "x"}]
-        assert result == expected
+        assert result == {"idx": [1], "col1": ["a"], "col2": ["x"]}
 
     def test_merge_left(self, left_data: Any, right_data: Any, index_obj: Any) -> None:
         """Test left join."""
         engine = PythonDictMergeEngine()
         result = engine.merge_left(left_data, right_data, index_obj, index_obj)
 
-        expected = [{"idx": 1, "col1": "a", "col2": "x"}, {"idx": 3, "col1": "b", "col2": None}]
-        assert result == expected
+        assert result == {"idx": [1, 3], "col1": ["a", "b"], "col2": ["x", None]}
 
     def test_merge_right(self, left_data: Any, right_data: Any, index_obj: Any) -> None:
         """Test right join."""
         engine = PythonDictMergeEngine()
         result = engine.merge_right(left_data, right_data, index_obj, index_obj)
 
-        expected = [{"idx": 1, "col1": "a", "col2": "x"}, {"idx": 2, "col1": None, "col2": "z"}]
-        assert result == expected
+        assert result == {"idx": [1, 2], "col2": ["x", "z"], "col1": ["a", None]}
 
     def test_merge_full_outer(self, left_data: Any, right_data: Any, index_obj: Any) -> None:
         """Test outer join."""
         engine = PythonDictMergeEngine()
         result = engine.merge_full_outer(left_data, right_data, index_obj, index_obj)
 
-        # Sort by idx for consistent comparison
-        result_sorted = sorted(result, key=lambda x: x["idx"])
-        expected = [
-            {"idx": 1, "col1": "a", "col2": "x"},
-            {"idx": 2, "col1": None, "col2": "z"},
-            {"idx": 3, "col1": "b", "col2": None},
-        ]
-        assert result_sorted == expected
+        assert result == {"idx": [1, 3, 2], "col1": ["a", "b", None], "col2": ["x", None, "z"]}
 
     def test_merge_append(self, left_data: Any, right_data: Any, index_obj: Any) -> None:
-        """Test append operation."""
+        """Test append operation (column-wise concatenation with the union of columns)."""
         engine = PythonDictMergeEngine()
         result = engine.merge_append(left_data, right_data, index_obj, index_obj)
 
-        expected = left_data + right_data
-        assert result == expected
+        assert result == {
+            "idx": [1, 3, 1, 2],
+            "col1": ["a", "b", None, None],
+            "col2": [None, None, "x", "z"],
+        }
 
     def test_merge_union(self, left_data: Any, right_data: Any, index_obj: Any) -> None:
         """Test union operation (removes duplicates)."""
         engine = PythonDictMergeEngine()
         result = engine.merge_union(left_data, right_data, index_obj, index_obj)
 
-        expected = [{"idx": 1, "col1": "a"}, {"idx": 3, "col1": "b"}, {"idx": 2, "col2": "z"}]
-        assert result == expected
+        assert result == {"idx": [1, 3, 2], "col1": ["a", "b", None], "col2": [None, None, "z"]}
 
     def test_merge_with_different_join_columns(self) -> None:
         """Test merge with different column names for join."""
-        left_data = [{"left_id": 1, "col1": "a"}, {"left_id": 2, "col1": "b"}]
-        right_data = [{"right_id": 1, "col2": "x"}, {"right_id": 3, "col2": "z"}]
+        left_data = {"left_id": [1, 2], "col1": ["a", "b"]}
+        right_data = {"right_id": [1, 3], "col2": ["x", "z"]}
 
         left_index = Index(("left_id",))
         right_index = Index(("right_id",))
@@ -96,72 +88,68 @@ class TestPythonDictMergeEngine:
         engine = PythonDictMergeEngine()
         result = engine.merge_inner(left_data, right_data, left_index, right_index)
 
-        expected = [{"left_id": 1, "col1": "a", "right_id": 1, "col2": "x"}]
-        assert result == expected
+        assert result == {"left_id": [1], "col1": ["a"], "right_id": [1], "col2": ["x"]}
 
     def test_merge_with_empty_datasets(self, index_obj: Any) -> None:
-        """Test merge operations with empty datasets."""
+        """Test merge operations with empty datasets (schema-bearing zero-row frames)."""
         engine = PythonDictMergeEngine()
 
-        # Empty left
-        result = engine.merge_inner([], [{"idx": 1, "col": "a"}], index_obj, index_obj)
-        assert result == []
+        # Empty left carries its schema; the right side contributes its columns.
+        result = engine.merge_inner({"idx": [], "col1": []}, {"idx": [1], "col": ["a"]}, index_obj, index_obj)
+        assert result == {"idx": [], "col1": [], "col": []}
 
-        # Empty right
-        result = engine.merge_inner([{"idx": 1, "col": "a"}], [], index_obj, index_obj)
-        assert result == []
+        # Empty right.
+        result = engine.merge_inner({"idx": [1], "col": ["a"]}, {"idx": [], "col2": []}, index_obj, index_obj)
+        assert result == {"idx": [], "col": [], "col2": []}
 
-        # Both empty
-        result = engine.merge_inner([], [], index_obj, index_obj)
-        assert result == []
+        # Both empty.
+        result = engine.merge_inner({"idx": []}, {"idx": []}, index_obj, index_obj)
+        assert result == {"idx": []}
 
     def test_merge_with_complex_data(self) -> None:
         """Test merge with more complex data structures."""
-        left_data = [
-            {"id": 1, "name": "Alice", "age": 25},
-            {"id": 2, "name": "Bob", "age": 30},
-            {"id": 3, "name": "Charlie", "age": 35},
-        ]
+        left_data = {
+            "id": [1, 2, 3],
+            "name": ["Alice", "Bob", "Charlie"],
+            "age": [25, 30, 35],
+        }
 
-        right_data = [
-            {"id": 1, "city": "New York", "country": "USA"},
-            {"id": 2, "city": "London", "country": "UK"},
-            {"id": 4, "city": "Tokyo", "country": "Japan"},
-        ]
+        right_data = {
+            "id": [1, 2, 4],
+            "city": ["New York", "London", "Tokyo"],
+            "country": ["USA", "UK", "Japan"],
+        }
 
         index_obj = Index(("id",))
         engine = PythonDictMergeEngine()
 
-        # Test inner join
         result = engine.merge_inner(left_data, right_data, index_obj, index_obj)
-        expected = [
-            {"id": 1, "name": "Alice", "age": 25, "city": "New York", "country": "USA"},
-            {"id": 2, "name": "Bob", "age": 30, "city": "London", "country": "UK"},
-        ]
-        assert result == expected
+        assert result == {
+            "id": [1, 2],
+            "name": ["Alice", "Bob"],
+            "age": [25, 30],
+            "city": ["New York", "London"],
+            "country": ["USA", "UK"],
+        }
 
     def test_merge_with_none_values(self) -> None:
         """Test merge operations with None values in join columns."""
-        left_data = [{"id": 1, "col1": "a"}, {"id": None, "col1": "b"}]
-        right_data = [{"id": 1, "col2": "x"}, {"id": None, "col2": "y"}]
+        left_data = {"id": [1, None], "col1": ["a", "b"]}
+        right_data = {"id": [1, None], "col2": ["x", "y"]}
 
         index_obj = Index(("id",))
         engine = PythonDictMergeEngine()
 
         result = engine.merge_inner(left_data, right_data, index_obj, index_obj)
-        expected = [{"id": 1, "col1": "a", "col2": "x"}, {"id": None, "col1": "b", "col2": "y"}]
-        assert result == expected
+        assert result == {"id": [1, None], "col1": ["a", "b"], "col2": ["x", "y"]}
 
     def test_join_logic_integration(self, left_data: Any, right_data: Any, index_obj: Any) -> None:
         """Test that join_logic method works correctly."""
         engine = PythonDictMergeEngine()
 
-        # Test inner join through join_logic
         result = engine.join_logic("inner", left_data, right_data, index_obj, index_obj, JoinType.INNER)
-        expected = [{"idx": 1, "col1": "a", "col2": "x"}]
-        assert result == expected
+        assert result == {"idx": [1], "col1": ["a"], "col2": ["x"]}
 
-        # Test unsupported join type
         with pytest.raises(ValueError, match="Join type unsupported is not supported"):
             engine.join_logic("unsupported", left_data, right_data, index_obj, index_obj, JoinType.INNER)
 
@@ -169,14 +157,11 @@ class TestPythonDictMergeEngine:
         """Test the main merge method that dispatches to specific join types."""
         engine = PythonDictMergeEngine()
 
-        # Test all join types through the main merge method
         result = engine.merge(left_data, right_data, make_merge_link(JoinType.INNER, index_obj, index_obj))
-        expected = [{"idx": 1, "col1": "a", "col2": "x"}]
-        assert result == expected
+        assert result == {"idx": [1], "col1": ["a"], "col2": ["x"]}
 
         result = engine.merge(left_data, right_data, make_merge_link(JoinType.LEFT, index_obj, index_obj))
-        expected = [{"idx": 1, "col1": "a", "col2": "x"}, {"idx": 3, "col1": "b", "col2": None}]
-        assert result == expected
+        assert result == {"idx": [1, 3], "col1": ["a", "b"], "col2": ["x", None]}
 
 
 class TestPythonDictMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):
@@ -189,8 +174,8 @@ class TestPythonDictMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):
 
     @classmethod
     def framework_type(cls) -> type[Any]:
-        """Return list type (PythonDict uses List[Dict])."""
-        return list
+        """Return dict type (PythonDict uses a columnar dict)."""
+        return dict
 
     def get_connection(self) -> Optional[Any]:
         """PythonDict does not require a connection object."""

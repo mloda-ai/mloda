@@ -109,11 +109,7 @@ class EmptyResultDefaultFeatureGroup(FeatureGroup, _EmptyResultMatchData):
 
 
 class EmptyResultAllowedFeatureGroup(FeatureGroup, _EmptyResultMatchData):
-    """Root FeatureGroup that yields zero rows and DECLARES empty results are allowed."""
-
-    @classmethod
-    def allow_empty_result(cls) -> bool:
-        return True
+    """Root FeatureGroup that yields a schema-bearing zero-row result (one empty column)."""
 
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
@@ -130,19 +126,12 @@ class EmptyResultAllowedFeatureGroup(FeatureGroup, _EmptyResultMatchData):
 
 
 class EmptyResultSchemalessAllowedFeatureGroup(FeatureGroup, _EmptyResultMatchData):
-    """Root FeatureGroup that yields a ZERO-COLUMN result and DECLARES empty results are allowed.
+    """Root FeatureGroup that yields a ZERO-COLUMN (schema-less) ``{}`` result.
 
-    Unlike ``EmptyResultAllowedFeatureGroup`` (one empty column, schema-less only on
-    python_dict), the ``{}`` returned here is schema-less (state B) on EVERY framework:
-    ``transform`` produces a frame with zero columns. With ``allow_empty_result()`` True the
-    output guard accepts it, and the framework must hand the zero-column result through to
-    the caller unchanged (result selection has no columns to match against and must not
-    re-judge what the guard already accepted).
+    The ``{}`` returned here is schema-less (state B) on EVERY framework: ``transform``
+    produces a frame with zero columns. With ``allow_empty_result()`` retired, the output
+    guard now RAISES ``EmptyResultError`` for this result on every backend.
     """
-
-    @classmethod
-    def allow_empty_result(cls) -> bool:
-        return True
 
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
@@ -150,7 +139,7 @@ class EmptyResultSchemalessAllowedFeatureGroup(FeatureGroup, _EmptyResultMatchDa
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        # Zero columns -> schema-less (state B) in every framework, accepted via the opt-in.
+        # Zero columns -> schema-less (state B) in every framework, now always raises.
         return {}
 
     @classmethod
@@ -202,9 +191,8 @@ class EmptyResultRunAllTestBase(PolicyRunAllTestBase):
     def default_empty_is_schemaless(cls) -> bool:
         """Whether the default FG's empty result is schema-less (state B) on this framework.
 
-        Schema-bearing frameworks keep the column at zero rows (state C -> success); the
-        python_dict subclass overrides this to True because ``transform`` collapses the
-        columnar dict to ``[]`` (state B -> raises).
+        Every backend now keeps the single empty column at zero rows (state C -> success),
+        including python_dict under the columnar model, so this returns False everywhere.
         """
         return False
 

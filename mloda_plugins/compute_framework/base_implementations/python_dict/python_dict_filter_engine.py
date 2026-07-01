@@ -1,5 +1,5 @@
 import re
-from typing import Any, Callable
+from typing import Any, Callable, cast
 from mloda.provider import BaseFilterEngine
 from mloda.user import SingleFilter
 
@@ -19,7 +19,18 @@ class PythonDictFilterEngine(BaseFilterEngine):
         return True
 
     @staticmethod
-    def _apply_keep(data: dict[str, list[Any]], column_name: str, predicate: Callable[[Any], bool]) -> Any:
+    def _to_columnar(data: Any) -> dict[str, list[Any]]:
+        """Normalize a row-wise ``list[dict]`` to columnar. Columnar dict input passes through."""
+        if isinstance(data, list):
+            if not data:
+                return {}
+            keys = list(data[0].keys())
+            return {key: [row[key] for row in data] for key in keys}
+        return cast(dict[str, list[Any]], data)
+
+    @classmethod
+    def _apply_keep(cls, data: Any, column_name: str, predicate: Callable[[Any], bool]) -> Any:
+        data = cls._to_columnar(data)
         column = data.get(column_name, [])
         keep = [i for i, value in enumerate(column) if predicate(value)]
         return {c: [data[c][i] for i in keep] for c in data}
@@ -41,7 +52,10 @@ class PythonDictFilterEngine(BaseFilterEngine):
     def do_min_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
         column_name = filter_feature.name
 
+        # A pure min filter may carry its threshold under "value" (canonical) or "min".
         value = filter_feature.parameter.value
+        if value is None:
+            value = filter_feature.parameter.min_value
 
         if value is None:
             raise ValueError(f"Filter parameter 'value' not found in {filter_feature.parameter}")

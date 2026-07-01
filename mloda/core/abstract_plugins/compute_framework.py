@@ -126,6 +126,14 @@ class ComputeFramework(ABC):
             return transformed_data
         return data
 
+    def validate_native_data(self, data: Any) -> None:
+        """Hook: validate that an already-native result satisfies the framework's contract.
+
+        Called when transform() is skipped because the result is already the expected type.
+        Default no-op; frameworks whose native type is too loose to be self-validating override it.
+        """
+        return None
+
     @final
     def apply_compute_framework_transformer(self, data: Any) -> Any:
         """
@@ -237,16 +245,21 @@ class ComputeFramework(ABC):
         features = self.set_filter_engine(features)
         features = self.set_mask_engine(features)
         data = self.run_calculate_feature(feature_group, features)
-        data = self.run_final_filter(data, features, feature_group)
 
         names = features.get_all_names()
 
         if not isinstance(data, self.expected_data_framework()):
             # if data is not in the expected data framework, we need to transform it and for this, we may need the framework connection object
             self.set_framework_connection_object(features.get_options_key(feature_group.get_class_name()))
-            self.data = self.transform(data, names)
+            data = self.transform(data, names)
         else:
-            self.data = data
+            # already the native type: transform is skipped, so enforce the framework's
+            # native-representation contract here before it is stored / filtered.
+            self.validate_native_data(data)
+
+        # filter runs on the normalized native representation, not the raw FG output
+        data = self.run_final_filter(data, features, feature_group)
+        self.data = data
 
         self.set_column_names()
 

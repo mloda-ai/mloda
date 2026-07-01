@@ -140,14 +140,10 @@ class TestPyArrowEmptyResult(EmptyResultFrameworkTestMixin):
 class _FakeGuardFeatureGroup:
     """Minimal FeatureGroup stand-in for the empty-result guard.
 
-    ``run_validate_output_features`` reads ``allow_empty_result()`` (False so the guard
-    is armed), ``get_class_name()`` for the error message, and finally calls
-    ``validate_output_features`` (no-op). Mirrors ``_FakeFeatureGroup`` in the
-    python_dict policy test file.
+    ``run_validate_output_features`` uses ``get_class_name()`` for the error message and
+    finally calls ``validate_output_features`` (no-op). The guard now keys purely on schema
+    presence (zero columns), so there is no opt-in flag to declare.
     """
-
-    def allow_empty_result(self) -> bool:
-        return False
 
     def get_class_name(self) -> str:
         return "FakeGuardFeatureGroup"

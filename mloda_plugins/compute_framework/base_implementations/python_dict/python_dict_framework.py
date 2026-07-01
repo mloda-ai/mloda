@@ -66,6 +66,9 @@ class PythonDictFramework(ComputeFramework):
     def _extract_column_names(self, data: Any) -> set[str]:
         if isinstance(data, dict):
             return set(data.keys())
+        # Row-wise list[dict] (still an accepted pre-transform shape): columns are the keys.
+        if isinstance(data, list) and data and isinstance(data[0], dict):
+            return set(data[0].keys())
         return set()
 
     def _is_schemaless_empty(self, data: Any) -> bool:
@@ -74,14 +77,21 @@ class PythonDictFramework(ComputeFramework):
         """
         return isinstance(data, dict) and not data
 
+    @staticmethod
+    def _column_values(data: Any, column_name: str) -> list[Any]:
+        """Return the values of ``column_name`` for either columnar dict or row-wise list[dict]."""
+        if isinstance(data, list):
+            return [row.get(column_name) for row in data if isinstance(row, dict)]
+        return data.get(column_name, [])  # type: ignore[no-any-return]
+
     def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
-        for value in data.get(column_name, []):
+        for value in self._column_values(data, column_name):
             if value is not None:
                 return type(value).__name__
         return None
 
     def _extract_column_data_type(self, data: Any, column_name: str) -> Optional[DataType]:
-        for val in data.get(column_name, []):
+        for val in self._column_values(data, column_name):
             if val is None:
                 continue
             if isinstance(val, bool):
@@ -102,6 +112,34 @@ class PythonDictFramework(ComputeFramework):
                 return DataType.DECIMAL
             return None
         return None
+
+    @staticmethod
+    def _validate_columnar_dict(data: dict[str, Any]) -> None:
+        """Enforce the columnar contract on a dict: every value is a list and all value-lists
+        share one length. ``{}`` is schema-less and always valid. Shared by ``transform`` and
+        ``validate_native_data`` so both agree on what a valid columnar frame is.
+        """
+        if not data:
+            return
+
+        if not all(isinstance(v, list) for v in data.values()):
+            raise ValueError(
+                f"Columnar dict values must all be lists (rows must arrive as a list of dicts). Got: {data}"
+            )
+
+        lengths = {len(v) for v in data.values()}
+        if len(lengths) > 1:
+            raise ValueError(f"All columns must have the same length. Got column lengths {lengths}.")
+
+    def validate_native_data(self, data: Any) -> None:
+        """Enforce the columnar contract when a dict result bypasses ``transform``.
+
+        A scalar/mixed dict such as ``{"a": 1}`` is the expected framework type (``dict``) and
+        would otherwise be stored without validation. This raises the same ``ValueError``
+        ``transform`` raises for a malformed columnar dict.
+        """
+        if isinstance(data, dict):
+            self._validate_columnar_dict(data)
 
     def transform(self, data: Any, feature_names: set[str]) -> dict[str, list[Any]]:
         """
@@ -131,16 +169,7 @@ class PythonDictFramework(ComputeFramework):
             return transformed_data  # type: ignore[no-any-return]
 
         if isinstance(data, dict):
-            # Columnar format: every value must be a list of equal length.
-            if not all(isinstance(v, list) for v in data.values()):
-                raise ValueError(
-                    f"Columnar dict values must all be lists (rows must arrive as a list of dicts). Got: {data}"
-                )
-
-            lengths = {len(v) for v in data.values()}
-            if len(lengths) > 1:
-                raise ValueError(f"All columns must have the same length. Got column lengths {lengths}.")
-
+            self._validate_columnar_dict(data)
             return data
 
         if isinstance(data, list):

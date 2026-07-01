@@ -7,8 +7,9 @@ TDD: Red writes failing tests, Green implements, `tox` gates each phase.
 
 - [x] Phase 0 - Foundation: `comparison_contract.py` (SemanticDimension, ComparisonContract,
       ColumnSemantics, validate). Pure-logic unit tests. No behavior change. tox GREEN.
-- [ ] Phase 1 - Per-framework `column_semantics()` for pandas, polars (+lazy), pyarrow,
-      duckdb, sqlite, spark, python_dict, iceberg. Consolidate `is_ordered_arrow_type`.
+- [x] Phase 1 - Per-framework `column_semantics()` for pandas, polars (+lazy), pyarrow,
+      sql-family (duckdb/sqlite via arrow), spark, python_dict. Single arrow source of truth
+      in sql_type_semantics. tox GREEN (skip count 171).
 - [ ] Phase 2 - Port as-of joins onto the contract (behavior-preserving). Keep coercion
       seam + sqlite julianday path. Add tz/unit dimension tests.
 - [ ] Phase 3 - Equi-joins on temporal keys. Enforce tz/unit compatibility across sides

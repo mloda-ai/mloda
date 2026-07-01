@@ -17,48 +17,40 @@ class TestPythonDictFramework:
     """Test suite for PythonDict compute framework."""
 
     def test_expected_data_framework(self) -> None:
-        assert PythonDictFramework.expected_data_framework() is list
+        assert PythonDictFramework.expected_data_framework() is dict
 
-    def test_transform_dict_to_list(self) -> None:
-        """Test transformation from columnar dict to list of dicts."""
+    def test_transform_columnar_dict_passthrough(self) -> None:
+        """A columnar dict with equal-length lists is returned as-is."""
         framework = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
-        # Test columnar dict transformation
         input_data = {"col1": [1, 2, 3], "col2": ["a", "b", "c"]}
-        expected = [{"col1": 1, "col2": "a"}, {"col1": 2, "col2": "b"}, {"col1": 3, "col2": "c"}]
 
         result = framework.transform(input_data, set())
-        assert result == expected
+        assert result == {"col1": [1, 2, 3], "col2": ["a", "b", "c"]}
 
-    def test_transform_single_dict(self) -> None:
-        """Test transformation from single dict to list of dicts."""
+    def test_transform_single_dict_raises(self) -> None:
+        """A single row dict (non-list values) is invalid columnar input and raises."""
         framework = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
-        # Test single dict transformation
-        input_data = {"col1": 1, "col2": "a"}
-        expected = [{"col1": 1, "col2": "a"}]
+        with pytest.raises(ValueError):
+            framework.transform({"col1": 1, "col2": "a"}, set())
 
-        result = framework.transform(input_data, set())
-        assert result == expected
-
-    def test_transform_list_passthrough(self) -> None:
-        """Test that list of dicts passes through unchanged."""
+    def test_transform_list_of_rows_becomes_columnar(self) -> None:
+        """A list of row dicts pivots into a columnar dict."""
         framework = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
-        # Test list passthrough
         input_data = [{"col1": 1, "col2": "a"}, {"col1": 2, "col2": "b"}]
 
         result = framework.transform(input_data, set())
-        assert result == input_data
+        assert result == {"col1": [1, 2], "col2": ["a", "b"]}
 
-    def test_transform_empty_data_returns_empty_list(self) -> None:
-        """The representational empties [] and {} are propagated as [] (the framework
-        never judges emptiness). None is NOT an empty: it raises, pinned by
-        ``test_transform_none_raises``."""
+    def test_transform_empty_data_returns_empty_dict(self) -> None:
+        """The representational empties [] and {} normalize to the schema-less {}.
+        None is NOT an empty: it raises, pinned by ``test_transform_none_raises``."""
         framework = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
-        assert framework.transform([], set()) == []
-        assert framework.transform({}, set()) == []
+        assert framework.transform([], set()) == {}
+        assert framework.transform({}, set()) == {}
 
     def test_transform_none_raises(self) -> None:
         """``None`` is a MISSING result (state A), not a representational empty.
@@ -93,31 +85,29 @@ class TestPythonDictFramework:
             framework.transform(falsy_value, set())
 
     def test_select_data_by_column_names(self) -> None:
-        """Test column selection functionality."""
+        """Test columnar column selection functionality."""
         framework = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
-        data = [{"col1": 1, "col2": "a", "col3": 10}, {"col1": 2, "col2": "b", "col3": 20}]
+        data: dict[str, list[Any]] = {"col1": [1, 2], "col2": ["a", "b"], "col3": [10, 20]}
 
         feature_names = {FeatureName("col1"), FeatureName("col2")}
 
         result = framework.select_data_by_column_names(data, feature_names)
-        expected = [{"col1": 1, "col2": "a"}, {"col1": 2, "col2": "b"}]
+        assert result == {"col1": [1, 2], "col2": ["a", "b"]}
 
-        assert result == expected
-
-    def test_select_data_empty_returns_empty_list(self) -> None:
-        """Empty data is propagated as [] in column selection (no judgement)."""
+    def test_select_data_empty_returns_empty_dict(self) -> None:
+        """Empty data ({}) is propagated as {} in column selection (no judgement)."""
         framework = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
         feature_names = {FeatureName("col1")}
 
-        assert framework.select_data_by_column_names([], feature_names) == []
+        assert framework.select_data_by_column_names({}, feature_names) == {}
 
     def test_set_column_names(self) -> None:
-        """Test setting column names from data."""
+        """Test setting column names from columnar data."""
         framework = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
-        framework.data = [{"col1": 1, "col2": "a"}, {"col1": 2, "col2": "b", "col3": 10}]
+        framework.data = {"col1": [1, 2], "col2": ["a", "b"], "col3": [None, 10]}
 
         framework.set_column_names()
 
@@ -125,10 +115,10 @@ class TestPythonDictFramework:
         assert framework.column_names == expected_columns
 
     def test_set_column_names_empty_data(self) -> None:
-        """Test that empty data produces an empty column set."""
+        """Test that the schema-less empty ({}) produces an empty column set."""
         framework = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
-        framework.data = []
+        framework.data = {}
         framework.set_column_names()
         assert framework.column_names == set()
 
@@ -160,11 +150,11 @@ class TestPythonDictDtypeExtraction(DtypeExtractionTestMixin):
 
     @pytest.fixture
     def dtype_sample_data(self) -> Any:
-        return [
-            {"int_col": 1, "str_col": "a", "float_col": 1.0},
-            {"int_col": 2, "str_col": "b", "float_col": 2.0},
-            {"int_col": 3, "str_col": "c", "float_col": 3.0},
-        ]
+        return {
+            "int_col": [1, 2, 3],
+            "str_col": ["a", "b", "c"],
+            "float_col": [1.0, 2.0, 3.0],
+        }
 
 
 class TestPythonDictDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
@@ -182,7 +172,7 @@ class TestPythonDictDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
         return PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
     def from_arrow(self, table: pa.Table) -> Any:
-        return table.to_pylist()
+        return table.to_pydict()
 
     def test_int32_column_strict_int32_passes(self, framework_instance: Any, precision_sample_data: Any) -> None:
         pytest.skip("Python type.__name__ collapses int widths; the int32 column reports INT64, not INT32")

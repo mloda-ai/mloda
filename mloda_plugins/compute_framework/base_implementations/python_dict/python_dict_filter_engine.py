@@ -1,20 +1,39 @@
 import re
-from typing import Any
+from typing import Any, Callable, cast
 from mloda.provider import BaseFilterEngine
 from mloda.user import SingleFilter
 
 
 class PythonDictFilterEngine(BaseFilterEngine):
     """
-    Filter engine for PythonDict framework using List[Dict[str, Any]] data structure.
+    Filter engine for PythonDict framework using a COLUMNAR ``dict[str, list[Any]]``.
 
-    Implements filtering operations using list comprehensions and Python built-in functions.
+    Each filter computes a keep-index list over the target column, then slices every
+    column by those indices. A missing column or the schema-less ``{}`` is handled
+    without crashing (yields an empty keep set / passes through).
     """
 
     @classmethod
     def final_filters(cls) -> bool:
         """Filters are applied after the feature calculation."""
         return True
+
+    @staticmethod
+    def _to_columnar(data: Any) -> dict[str, list[Any]]:
+        """Normalize a row-wise ``list[dict]`` to columnar. Columnar dict input passes through."""
+        if isinstance(data, list):
+            if not data:
+                return {}
+            keys = list(data[0].keys())
+            return {key: [row[key] for row in data] for key in keys}
+        return cast(dict[str, list[Any]], data)
+
+    @classmethod
+    def _apply_keep(cls, data: Any, column_name: str, predicate: Callable[[Any], bool]) -> Any:
+        data = cls._to_columnar(data)
+        column = data.get(column_name, [])
+        keep = [i for i, value in enumerate(column) if predicate(value)]
+        return {c: [data[c][i] for i in keep] for c in data}
 
     @classmethod
     def do_range_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
@@ -26,86 +45,64 @@ class PythonDictFilterEngine(BaseFilterEngine):
         column_name = filter_feature.name
 
         if max_operator is True:
-            # Exclusive max
-            return [
-                row
-                for row in data
-                if row.get(column_name) is not None and min_parameter <= row.get(column_name) < max_parameter
-            ]
-        else:
-            # Inclusive max
-            return [
-                row
-                for row in data
-                if row.get(column_name) is not None and min_parameter <= row.get(column_name) <= max_parameter
-            ]
+            return cls._apply_keep(data, column_name, lambda v: v is not None and min_parameter <= v < max_parameter)
+        return cls._apply_keep(data, column_name, lambda v: v is not None and min_parameter <= v <= max_parameter)
 
     @classmethod
     def do_min_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
         column_name = filter_feature.name
 
-        # Extract the value from the parameter
-
+        # A pure min filter may carry its threshold under "value" (canonical) or "min".
         value = filter_feature.parameter.value
+        if value is None:
+            value = filter_feature.parameter.min_value
 
         if value is None:
             raise ValueError(f"Filter parameter 'value' not found in {filter_feature.parameter}")
 
-        return [row for row in data if row.get(column_name) is not None and row.get(column_name) >= value]
+        return cls._apply_keep(data, column_name, lambda v: v is not None and v >= value)
 
     @classmethod
     def _apply_max_exclusive_filter(cls, data: Any, column_name: str, threshold: Any) -> Any:
-        return [row for row in data if row.get(column_name) is not None and row.get(column_name) < threshold]
+        return cls._apply_keep(data, column_name, lambda v: v is not None and v < threshold)
 
     @classmethod
     def _apply_max_inclusive_filter(cls, data: Any, column_name: str, threshold: Any) -> Any:
-        return [row for row in data if row.get(column_name) is not None and row.get(column_name) <= threshold]
+        return cls._apply_keep(data, column_name, lambda v: v is not None and v <= threshold)
 
     @classmethod
     def do_equal_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
         column_name = filter_feature.name
 
-        # Extract the value from the parameter
-
         value = filter_feature.parameter.value
 
         if value is None:
             raise ValueError(f"Filter parameter 'value' not found in {filter_feature.parameter}")
 
-        return [row for row in data if row.get(column_name) == value]
+        return cls._apply_keep(data, column_name, lambda v: v == value)
 
     @classmethod
     def do_regex_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
         column_name = filter_feature.name
 
-        # Extract the value from the parameter
-
         value = filter_feature.parameter.value
 
         if value is None:
             raise ValueError(f"Filter parameter 'value' not found in {filter_feature.parameter}")
 
-        # Compile regex pattern for efficiency
         compiled_pattern = re.compile(value)
 
-        return [
-            row
-            for row in data
-            if row.get(column_name) is not None and compiled_pattern.match(str(row.get(column_name)))
-        ]
+        return cls._apply_keep(data, column_name, lambda v: v is not None and bool(compiled_pattern.match(str(v))))
 
     @classmethod
     def do_categorical_inclusion_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
         column_name = filter_feature.name
-
-        # Extract the values from the parameter
 
         values = filter_feature.parameter.values
 
         if values is None:
             raise ValueError(f"Filter parameter 'values' not found in {filter_feature.parameter}")
 
-        # Convert to set for faster lookup
         allowed_set = set(values) if isinstance(values, (list, tuple)) else {values}
 
-        return [row for row in data if row.get(column_name) in allowed_set]
+        return cls._apply_keep(data, column_name, lambda v: v in allowed_set)

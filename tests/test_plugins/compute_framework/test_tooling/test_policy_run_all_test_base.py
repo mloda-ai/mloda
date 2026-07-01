@@ -14,7 +14,7 @@ from mloda.user import ParallelizationMode
 
 from tests.test_plugins.compute_framework.test_tooling.empty_result_run_all_test_base import (
     _ENABLED_ALLOWED,
-    _ENABLED_DEFAULT,
+    _ENABLED_SCHEMALESS_ALLOWED,
 )
 from tests.test_plugins.compute_framework.test_tooling.policy_run_all_test_base import (
     PolicyRaises,
@@ -54,12 +54,12 @@ def test_policy_base_drives_success_case(flight_server: Any) -> None:
 
 
 def test_policy_base_drives_raises_case(flight_server: Any) -> None:
-    """A policy raises expectation: python_dict default empty result is schema-less and raises."""
+    """A policy raises expectation: a zero-column ``{}`` result is schema-less and raises."""
     conformance = _PythonDictPolicyConformance()
 
     result = conformance.assert_policy_case(
-        feature_name="empty_result_default_col",
-        plugin_collector=_ENABLED_DEFAULT,
+        feature_name="empty_result_schemaless_col",
+        plugin_collector=_ENABLED_SCHEMALESS_ALLOWED,
         expectation=PolicyRaises(match_substring=EmptyResultError.__name__),
         mode=ParallelizationMode.SYNC,
         flight_server=flight_server,

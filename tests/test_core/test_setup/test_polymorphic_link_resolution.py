@@ -105,10 +105,9 @@ class AssemblerWithConcreteLinks(FeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        # Extract from joined data
-        row = data[0] if isinstance(data, list) else data
-        a = row.get(BaseFeatureGroupA.FEATURE_NAME, "MISSING_A")
-        b = row.get(BaseFeatureGroupB.FEATURE_NAME, "MISSING_B")
+        # Extract the first row from the joined columnar data
+        a = data.get(BaseFeatureGroupA.FEATURE_NAME, ["MISSING_A"])[0]
+        b = data.get(BaseFeatureGroupB.FEATURE_NAME, ["MISSING_B"])[0]
         return {cls.FEATURE_NAME: [f"a={a}, b={b}"]}
 
 
@@ -137,10 +136,9 @@ class AssemblerWithPolymorphicLinks(FeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        # Extract from joined data
-        row = data[0] if isinstance(data, list) else data
-        a = row.get(BaseFeatureGroupA.FEATURE_NAME, "MISSING_A")
-        b = row.get(BaseFeatureGroupB.FEATURE_NAME, "MISSING_B")
+        # Extract the first row from the joined columnar data
+        a = data.get(BaseFeatureGroupA.FEATURE_NAME, ["MISSING_A"])[0]
+        b = data.get(BaseFeatureGroupB.FEATURE_NAME, ["MISSING_B"])[0]
         return {cls.FEATURE_NAME: [f"a={a}, b={b}"]}
 
 
@@ -172,7 +170,7 @@ class TestPolymorphicLinkResolution:
             ),
         )
 
-        result = results[0][0][AssemblerWithConcreteLinks.FEATURE_NAME]
+        result = results[0][AssemblerWithConcreteLinks.FEATURE_NAME][0]
         assert result == "a=value_a, b=value_b", f"Got: {result}"
 
     def test_polymorphic_links_resolve_correctly(self) -> None:
@@ -187,7 +185,7 @@ class TestPolymorphicLinkResolution:
             ),
         )
 
-        result = results[0][0][AssemblerWithPolymorphicLinks.FEATURE_NAME]
+        result = results[0][AssemblerWithPolymorphicLinks.FEATURE_NAME][0]
         assert result == "a=value_a, b=value_b", f"Got: {result}"
 
 
@@ -222,10 +220,9 @@ class AssemblerWithMixedLink(FeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        # Extract from joined data
-        row = data[0] if isinstance(data, list) else data
-        a = row.get(BaseFeatureGroupA.FEATURE_NAME, "MISSING_A")
-        query = row.get("user_query", "MISSING_QUERY")
+        # Extract the first row from the joined columnar data
+        a = data.get(BaseFeatureGroupA.FEATURE_NAME, ["MISSING_A"])[0]
+        query = data.get("user_query", ["MISSING_QUERY"])[0]
         return {cls.FEATURE_NAME: [f"a={a}, query={query}"]}
 
 
@@ -245,5 +242,5 @@ class TestAsymmetricPolymorphicLinkResolution:
             ),
         )
 
-        result = results[0][0][AssemblerWithMixedLink.FEATURE_NAME]
+        result = results[0][AssemblerWithMixedLink.FEATURE_NAME][0]
         assert result == "a=value_a, query=test query", f"Got: {result}"

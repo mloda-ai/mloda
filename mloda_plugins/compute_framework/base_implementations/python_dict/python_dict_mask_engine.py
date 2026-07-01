@@ -6,37 +6,54 @@ from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMas
 class PythonDictMaskEngine(BaseMaskEngine):
     @classmethod
     def supported_data_type(cls) -> type[Any]:
-        return list
+        return dict
+
+    @staticmethod
+    def _row_count(data: dict[str, list[Any]]) -> int:
+        for column in data.values():
+            return len(column)
+        return 0
 
     @classmethod
     def all_true(cls, data: Any) -> list[Any]:
-        return [True] * len(data)
+        return [True] * cls._row_count(data)
 
     @classmethod
     def combine(cls, mask1: Any, mask2: Any) -> list[Any]:
         return [a and b for a, b in zip(mask1, mask2)]
 
+    @staticmethod
+    def _column_or_nulls(data: dict[str, list[Any]], column: str) -> list[Any]:
+        """Return the column values, or a row-count-length list of ``None`` for a missing column.
+
+        A missing column must yield a mask of length = row count (all comparisons against
+        ``None`` are False), not a length-0 list that would truncate ``combine``'s ``zip``.
+        """
+        if column in data:
+            return data[column]
+        return [None] * PythonDictMaskEngine._row_count(data)
+
     @classmethod
     def equal(cls, data: Any, column: str, value: Any) -> list[Any]:
-        return [row.get(column) == value for row in data]
+        return [v == value for v in cls._column_or_nulls(data, column)]
 
     @classmethod
     def greater_equal(cls, data: Any, column: str, value: Any) -> list[Any]:
-        return [row.get(column) is not None and row.get(column) >= value for row in data]
+        return [v is not None and v >= value for v in cls._column_or_nulls(data, column)]
 
     @classmethod
     def less_equal(cls, data: Any, column: str, value: Any) -> list[Any]:
-        return [row.get(column) is not None and row.get(column) <= value for row in data]
+        return [v is not None and v <= value for v in cls._column_or_nulls(data, column)]
 
     @classmethod
     def less_than(cls, data: Any, column: str, value: Any) -> list[Any]:
-        return [row.get(column) is not None and row.get(column) < value for row in data]
+        return [v is not None and v < value for v in cls._column_or_nulls(data, column)]
 
     @classmethod
     def greater_than(cls, data: Any, column: str, value: Any) -> list[Any]:
-        return [row.get(column) is not None and row.get(column) > value for row in data]
+        return [v is not None and v > value for v in cls._column_or_nulls(data, column)]
 
     @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> list[Any]:
         allowed = set(values) if isinstance(values, (list, tuple)) else {values}
-        return [row.get(column) in allowed for row in data]
+        return [v in allowed for v in cls._column_or_nulls(data, column)]

@@ -307,11 +307,11 @@ class TestComputeFrameworksColumnOrdering:
 
     def test_python_dict_accepts_column_ordering(self) -> None:
         cfw = PythonDictFramework(ParallelizationMode.SYNC, frozenset(), uuid4())
-        # PythonDictFramework expects List[Dict] format (rows)
-        data = [{"Z": 1, "A": 2, "M": 3}]
+        # PythonDictFramework expects a columnar dict format
+        data = {"Z": [1], "A": [2], "M": [3]}
         features = {FeatureName("Z"), FeatureName("A"), FeatureName("M")}
         result = cfw.select_data_by_column_names(data, features, column_ordering="alphabetical")
-        assert list(result[0].keys()) == ["A", "M", "Z"]
+        assert list(result.keys()) == ["A", "M", "Z"]
 
 
 # --- End-to-End Test Features ---

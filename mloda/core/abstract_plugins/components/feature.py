@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import copy
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 from uuid import uuid4
 from mloda.core.abstract_plugins.components.data_types import DataType
+
+if TYPE_CHECKING:
+    from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -28,6 +31,7 @@ class Feature:
         initial_requested_data (bool): Whether the data was initially requested.
         link (Optional[Link]): The link associated with the feature.
         index (Optional[Index]): The index associated with the feature.
+        feature_group_scope (str | type[FeatureGroup] | None): Resolution-only scope; excluded from identity.
 
     Quick start (recommended progression)::
 
@@ -75,6 +79,7 @@ class Feature:
         initial_requested_data: bool = False,
         link: Optional[Link] = None,
         index: Optional[Index] = None,
+        feature_group: str | type[FeatureGroup] | None = None,
     ):
         if options is None:
             options = {}
@@ -106,6 +111,25 @@ class Feature:
         # LINK and INDEX are excluded from equality and hash, because this way, we can define a single feature of a group with these properties.
         self.link = link
         self.index = index  # Index is a feature currently only used for append/union features.
+
+        # feature_group_scope is resolution-only metadata, excluded from equality and hash like link/index.
+        self.feature_group_scope = self._set_feature_group_scope(feature_group)
+
+    def _set_feature_group_scope(
+        self, feature_group: str | type[FeatureGroup] | None
+    ) -> str | type[FeatureGroup] | None:
+        if feature_group is None:
+            return None
+        if isinstance(feature_group, str):
+            return feature_group or None
+        from mloda.core.abstract_plugins.feature_group import FeatureGroup
+
+        if isinstance(feature_group, type) and issubclass(feature_group, FeatureGroup):
+            return feature_group
+        raise TypeError(
+            f"feature_group must be a FeatureGroup subclass, a class-name string, or None, "
+            f"got {type(feature_group).__name__}"
+        )
 
     @classmethod
     def not_typed(cls, name: str | FeatureName, options: Optional[dict[str, Any]] = None) -> Feature:

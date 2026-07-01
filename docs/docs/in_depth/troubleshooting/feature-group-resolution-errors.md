@@ -48,6 +48,22 @@ def get_domain(cls):
     return "sales"  # Makes this FG only handle 'sales' domain features
 ```
 
+#### 4. Scope a feature to one source (shared keys across sources)
+When two enabled sources declare the same column (for example a shared join key), requesting that column by bare name is ambiguous. Scope the request to one source. The scope is resolution-only and does not affect feature identity.
+
+``` python
+# RECOMMENDED: class object, collision-proof
+Feature("subject_token", feature_group=ClaimsReader)
+
+# class-name string form
+Feature("subject_token", feature_group="ClaimsReader")
+```
+
+Caveats:
+
+- The string form matches on class name only, so two classes with the same name in different modules stay ambiguous. Prefer the class object.
+- The scope is resolution-only and excluded from Feature identity, so requesting the SAME column name scoped to two different sources in ONE request collapses to one feature (they compare equal). To compare two sources side by side, differentiate them another way (for example distinct derived feature names).
+
 ## FeatureGroup Redefinition Errors
 
 ### The Problem

@@ -1,6 +1,7 @@
 from abc import ABC
 from typing import Any, Optional, final
 
+from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics, ComparisonContract
 from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.link import AsOfJoinConfig, JoinType, Link
 
@@ -78,11 +79,12 @@ class BaseMergeEngine(ABC):
         returned.
         """
         sides = {"left": left_data, "right": right_data}
-        for side, column in (
-            ("left", asof_config.left_time_column),
-            ("right", asof_config.right_time_column),
-        ):
-            if not self._asof_time_column_is_ordered(sides[side], column):
+        cols = {"left": asof_config.left_time_column, "right": asof_config.right_time_column}
+        sems: dict[str, ColumnSemantics] = {}
+        for side in ("left", "right"):
+            column = cols[side]
+            sem = self._column_semantics(sides[side], column)
+            if not sem.is_ordered:
                 if not asof_config.coerce_time_columns:
                     raise ValueError(
                         f"As-of {side} time column '{column}' must be datetime, numeric, or timedelta, "
@@ -90,7 +92,28 @@ class BaseMergeEngine(ABC):
                         f"Set coerce_time_columns=True to opt in to ISO-8601 string coercion."
                     )
                 sides[side] = self._coerce_asof_time_column(sides[side], column)
+                sem = self._column_semantics(sides[side], column)
+            sems[side] = sem
+        ComparisonContract(required=frozenset()).require_compatible(
+            sems["left"], sems["right"], cols["left"], cols["right"]
+        )
         return sides["left"], sides["right"]
+
+    def _column_semantics(self, data: Any, column: str) -> ColumnSemantics:
+        """Observed semantics of an as-of time column, used by validate_asof_time_columns.
+
+        The default preserves current behavior: it uses the existing ordered detector and marks
+        nothing temporal, so the cross-side timezone/unit check never fires for engines that do
+        not override this. Engines that can expose timezone/unit override this to delegate to
+        their framework-native ColumnSemantics introspector.
+        """
+        return ColumnSemantics(
+            is_ordered=self._asof_time_column_is_ordered(data, column),
+            is_temporal=False,
+            is_numeric=False,
+            unit=None,
+            is_tz_aware=False,
+        )
 
     def _coerce_asof_time_column(self, data: Any, column: str) -> Any:
         """Coerce an ISO-8601 string as-of time column to a temporal/numeric dtype.

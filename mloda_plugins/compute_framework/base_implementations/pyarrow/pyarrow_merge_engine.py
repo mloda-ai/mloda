@@ -3,10 +3,12 @@ from typing import Any, cast
 import pyarrow as pa
 import pyarrow.compute as pc
 
+from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
 from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 from mloda.user import Index
 from mloda.user import JoinType
 from mloda.provider import BaseMergeEngine
+from mloda_plugins.compute_framework.base_implementations.pyarrow import pyarrow_type_semantics
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
     is_ordered_arrow_type,
     pick_helper_column_name,
@@ -159,6 +161,9 @@ class PyArrowMergeEngine(BaseMergeEngine):
         index = data.schema.get_field_index(column)
         casted = pc.cast(data.column(column), pa.timestamp("us"))
         return data.set_column(index, pa.field(column, pa.timestamp("us")), casted)
+
+    def _column_semantics(self, data: Any, column: str) -> ColumnSemantics:
+        return pyarrow_type_semantics.column_semantics(data, column)
 
     def _asof_time_column_is_ordered(self, data: Any, column: str) -> bool:
         t = data.schema.field(column).type

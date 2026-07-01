@@ -134,6 +134,55 @@ class TestPandasAsofMergeEngine(AsofMergeEngineTestBase):
         assert link_on.asof_config is not None
         assert link_on.asof_config.tolerance == td
 
+    def test_asof_tz_aware_left_naive_right_raises(self) -> None:
+        """Cross-side timezone guard (epic #518, Phase 2): joining a tz-AWARE left time column
+        against a tz-NAIVE right time column must raise a clear ValueError mentioning timezone.
+
+        Both columns are ordered datetime64 dtypes, so the existing ordered-only guard passes
+        them through; the naive-vs-aware mix is the silent footgun the epic targets. The new
+        ComparisonContract.require_compatible cross-side check must reject it BEFORE pandas'
+        merge_asof surfaces its low-level 'incompatible merge keys' dtype error.
+        """
+        left = pd.DataFrame(
+            {
+                "k": [1, 1],
+                "t": [
+                    pd.Timestamp("2021-01-01 00:00:10", tz="UTC"),
+                    pd.Timestamp("2021-01-01 00:00:20", tz="UTC"),
+                ],
+                "lv": [1, 2],
+            }
+        )
+        right = pd.DataFrame({"k": [1], "t": [pd.Timestamp("2021-01-01 00:00:08")], "rv": [7.0]})
+
+        engine = PandasMergeEngine()
+        cfg = AsOfJoinConfig(left_time_column="t", right_time_column="t", direction="backward")
+        with pytest.raises(ValueError, match=r"(?i)time[ -]?zone"):
+            engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg)
+
+    def test_asof_both_tz_aware_succeeds(self) -> None:
+        """False-positive guard for the cross-side timezone check: when BOTH sides are
+        tz-aware (same tz), the as-of join must still succeed and every left row matches."""
+        left = pd.DataFrame(
+            {
+                "k": [1, 1],
+                "t": [
+                    pd.Timestamp("2021-01-01 00:00:10", tz="UTC"),
+                    pd.Timestamp("2021-01-01 00:00:20", tz="UTC"),
+                ],
+                "lv": [1, 2],
+            }
+        )
+        right = pd.DataFrame({"k": [1], "t": [pd.Timestamp("2021-01-01 00:00:08", tz="UTC")], "rv": [7.0]})
+
+        engine = PandasMergeEngine()
+        cfg = AsOfJoinConfig(left_time_column="t", right_time_column="t", direction="backward")
+        result = engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg)
+
+        rows = {row["lv"]: self._normalize_value(row["rv"]) for _, row in result.iterrows()}
+        assert rows[1] == 7.0
+        assert rows[2] == 7.0
+
     def test_coerce_mixed_tz_naive_and_aware_raises(self) -> None:
         """Coercion of a column mixing tz-aware and tz-naive ISO strings must raise: pandas'
         pd.to_datetime(format='ISO8601') rejects mixed timezone-awareness with ValueError, and

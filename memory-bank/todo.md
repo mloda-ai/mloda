@@ -10,8 +10,9 @@ TDD: Red writes failing tests, Green implements, `tox` gates each phase.
 - [x] Phase 1 - Per-framework `column_semantics()` for pandas, polars (+lazy), pyarrow,
       sql-family (duckdb/sqlite via arrow), spark, python_dict. Single arrow source of truth
       in sql_type_semantics. tox GREEN (skip count 171).
-- [ ] Phase 2 - Port as-of joins onto the contract (behavior-preserving). Keep coercion
-      seam + sqlite julianday path. Add tz/unit dimension tests.
+- [x] Phase 2 - Port as-of joins onto the contract. `_column_semantics` hook (default
+      ordered-only; pandas/polars/pyarrow/sqlite override for tz). require_compatible
+      adds strict naive-vs-aware guard. Ordered-error + coercion preserved. tox GREEN.
 - [ ] Phase 3 - Equi-joins on temporal keys. Enforce tz/unit compatibility across sides
       ONLY when both keys temporal; string/ID equi-joins stay legal.
 - [ ] Phase 4 - Range/min/max filters. Validate order-compatibility with native datetime

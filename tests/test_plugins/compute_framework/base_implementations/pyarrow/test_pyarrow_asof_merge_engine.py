@@ -5,7 +5,7 @@ Consumes the shared AsofMergeEngineTestBase. PyArrow is both the framework
 under test and the interchange format used by the DataConverter.
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 import pytest
@@ -181,6 +181,67 @@ class TestPyArrowAsofMergeEngine(AsofMergeEngineTestBase):
         assert result.column_names.count("shared") == 1
         assert rows[0]["shared"] == "L"
         assert rows[0]["rv"] == "X"
+
+    def test_asof_tz_aware_left_naive_right_raises(self) -> None:
+        """Cross-side timezone guard (epic #518, Phase 2): a tz-AWARE left time column joined
+        against a tz-NAIVE right time column must raise a clear ValueError mentioning timezone.
+
+        Both columns are ordered timestamps, so the ordered-only guard admits them; the new
+        ComparisonContract.require_compatible cross-side check must reject the naive-vs-aware
+        mix BEFORE Acero surfaces its low-level on-key type-mismatch error.
+        """
+        left = pa.Table.from_pydict(
+            {
+                "k": [1, 1],
+                "t": pa.array(
+                    [
+                        datetime(2021, 1, 1, 0, 0, 10, tzinfo=timezone.utc),
+                        datetime(2021, 1, 1, 0, 0, 20, tzinfo=timezone.utc),
+                    ],
+                    type=pa.timestamp("us", tz="UTC"),
+                ),
+                "lv": [1, 2],
+            }
+        )
+        right = pa.Table.from_pydict(
+            {
+                "k": [1],
+                "t": pa.array([datetime(2021, 1, 1, 0, 0, 8)], type=pa.timestamp("us")),
+                "rv": ["A"],
+            }
+        )
+
+        engine = PyArrowMergeEngine()
+        cfg = AsOfJoinConfig(left_time_column="t", right_time_column="t", direction="backward")
+        with pytest.raises(ValueError, match=r"(?i)time[ -]?zone"):
+            engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg)
+
+    def test_asof_both_tz_aware_succeeds(self) -> None:
+        """False-positive guard for the cross-side timezone check: when BOTH sides are
+        tz-aware (same tz), the as-of join must still succeed and match the prior right row."""
+        left = pa.Table.from_pydict(
+            {
+                "k": [1],
+                "t": pa.array([datetime(2021, 1, 1, 0, 0, 10, tzinfo=timezone.utc)], type=pa.timestamp("us", tz="UTC")),
+                "lv": [100],
+            }
+        )
+        right = pa.Table.from_pydict(
+            {
+                "k": [1],
+                "t": pa.array([datetime(2021, 1, 1, 0, 0, 8, tzinfo=timezone.utc)], type=pa.timestamp("us", tz="UTC")),
+                "rv": ["A"],
+            }
+        )
+
+        engine = PyArrowMergeEngine()
+        cfg = AsOfJoinConfig(left_time_column="t", right_time_column="t", direction="backward")
+        result = engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg)
+
+        rows = result.to_pylist()
+        assert len(rows) == 1
+        assert rows[0]["lv"] == 100
+        assert rows[0]["rv"] == "A"
 
     def test_differing_string_key_carry(self) -> None:
         """Differing-name string by-keys (lk vs rk) survive via the carry column."""

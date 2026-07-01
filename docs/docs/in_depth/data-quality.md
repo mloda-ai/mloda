@@ -21,9 +21,19 @@ Example: Input Feature Validation Using Custom Validators
 ```python
 from typing import Any, Optional, Set
 from mloda.user import mloda
-from mloda.provider import FeatureGroup, FeatureSet
+from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Options, FeatureName, Feature
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+
+
+class DocBaseValidateInputFeaturesBase(FeatureGroup):
+    @classmethod
+    def input_data(cls) -> Optional[BaseInputData]:
+        return DataCreator({cls.get_class_name()})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {cls.get_class_name(): [1, 2, 3]}
 
 
 class DocSimpleValidateInputFeatures(FeatureGroup):
@@ -33,13 +43,13 @@ class DocSimpleValidateInputFeatures(FeatureGroup):
         return {cls.get_class_name(): [1, 2, 3]}
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
-        return {Feature(name="BaseValidateInputFeaturesBase", options=options)}
+        return {Feature(name="DocBaseValidateInputFeaturesBase", options=options)}
 
     @classmethod
     def validate_input_features(cls, data: Any, features: FeatureSet) -> None:
         """This function is a naive implementation of a validator."""
 
-        if len(data["BaseValidateInputFeaturesBase"]) != 3:
+        if len(data["DocBaseValidateInputFeaturesBase"]) != 3:
             raise ValueError("Data should have 3 elements")
 ```
 
@@ -68,7 +78,7 @@ class DocCustomValidateInputFeatures(DocSimpleValidateInputFeatures):
         """This function should be used to validate the input data."""
 
         validation_rules = {
-            "BaseValidateInputFeaturesBase": Column(int, Check.in_range(1, 2)),
+            "DocBaseValidateInputFeaturesBase": Column(int, Check.in_range(1, 2)),
         }
 
         # Loading from feature config

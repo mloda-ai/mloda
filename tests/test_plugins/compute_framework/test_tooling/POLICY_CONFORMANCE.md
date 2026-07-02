@@ -1,7 +1,7 @@
 # Policy conformance is mandatory
 
-Every new FeatureGroup-level policy flag (anything in the spirit of
-`allow_empty_result()`: a class method on `FeatureGroup` that changes how the pipeline
+Every new pipeline-level result policy (anything in the spirit of the schema-based
+empty-result contract: a rule or FeatureGroup-level flag that changes how the pipeline
 treats a result) MUST ship a `run_all`-driven conformance suite.
 
 ## What "conformance suite" means
@@ -17,11 +17,13 @@ Build it on `PolicyRunAllTestBase` (see `policy_run_all_test_base.py`). The suit
 ## Template
 
 - `policy_run_all_test_base.py` is the generic base.
-- `empty_result_run_all_test_base.py` is the canonical first consumer; copy its shape.
+- `empty_result_run_all_test_base.py` is the canonical worked example: it validates the
+  schema-based empty-result contract (zero columns raise, zero rows succeed). Copy its shape.
 
 ## Why this bar exists
 
-`allow_empty_result()` had THREE enforcement surfaces. The third one, in
+The now-retired `allow_empty_result()` flag, the historical motivation for this bar,
+had THREE enforcement surfaces. The third one, in
 `DataLifecycleManager.get_result_data`, shipped broken. Unit tests against the first two
 surfaces all passed. The defect was only caught because the full pipeline runs for every
 framework and every parallelization mode through `run_all`. A policy flag that is not

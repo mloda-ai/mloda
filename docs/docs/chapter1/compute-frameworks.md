@@ -132,7 +132,7 @@ In this case, the feature group ExampleB will only run on the PyArrowTable frame
 | **DuckDBFramework** | DuckDB Relations | SQL interface, fast analytics, OLAP queries | Analytical workloads, SQL-based transformations, data warehousing | duckdb |
 | **IcebergFramework** | Apache Iceberg Tables | Schema evolution, time travel, data lake management | Data lake scenarios, versioned datasets, large-scale analytics | pyiceberg, pyarrow |
 | **SparkFramework** | Apache Spark DataFrames | Distributed processing, scalability, fault tolerance | Big data, distributed computing, production clusters | pyspark, Java 8+ |
-| **PythonDictFramework** | List[Dict[str, Any]] | Zero dependencies, simple, lightweight | Minimal environments, education, prototyping | None (Python stdlib only) |
+| **PythonDictFramework** | dict[str, list[Any]] (columnar) | Zero dependencies, simple, lightweight | Minimal environments, education, prototyping | None (Python stdlib only) |
 
 ##### Automatic Dependency Detection
 
@@ -156,8 +156,10 @@ result = mloda.run_all(
     [feature],
     data_access_collection=data_access_collection
 )
-result[0]  # Returns List[Dict[str, Any]]
+result[0]  # Returns dict[str, list[Any]] (columnar)
 ```
+
+A feature group running on PythonDictFramework may also return row-wise data as a list of dicts; it is normalized to the columnar form, and all rows must have identical keys.
 
 Example using Polars frameworks:
 ``` python

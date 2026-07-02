@@ -126,8 +126,8 @@ class DataLifecycleManager:
             )
 
         # A result with no visible columns has already been judged by the empty-result guard in
-        # run_validate_output_features: it only reaches here when the FeatureGroup opted in via
-        # allow_empty_result, or for PythonDict's schema-less empties. Selecting named columns from
+        # run_validate_output_features: a truly column-less result raises there, so anything that
+        # reaches here with no columns is a schema-less pass-through. Selecting named columns from
         # a schema-less result is meaningless and must not raise; the caller receives it unchanged.
         if not cfw._extract_column_names(data):
             return data

@@ -111,13 +111,14 @@ EmptyResultError: Result carries no schema (no columns): MyFeatureGroup. ...
 ```
 
 This error fires when a **final** requested feature group returns a result with
-*no schema* (zero columns) and `allow_empty_result()` is `False` (the default).
-Note that **zero rows is not an error**: a well-typed frame with the right
-columns and no rows is a valid result and passes through. Only a result that
-carries no columns at all is rejected.
+*no schema* (zero columns). There is no opt-in or opt-out: the rule applies
+uniformly on every compute framework. Note that **zero rows is not an error**: a
+well-typed frame with the right columns and no rows is a valid result and
+passes through. Only a result that carries no columns at all is rejected.
 
-In practice you hit this on the PythonDict framework, whose empty value (`[]`)
-cannot carry a schema, or when a feature genuinely produces a column-less result.
+On the PythonDict framework, whose native representation is a columnar
+`dict[str, list]`, the schema is the set of keys: `{"col": []}` carries a
+schema, while `{}` (zero columns) is the only schema-less value and raises.
 
 If the schema-less result is genuine (a bug, missing data, wrong filter), this
 error is correct behavior: it protects callers from silently receiving output
@@ -125,35 +126,36 @@ they cannot interpret.
 
 ### When to fix it
 
-Override `allow_empty_result` only when a schema-less empty result is a
-legitimate answer for your domain, for example: graph traversals that may find no
-path, search queries that may match nothing, authorization filters that may deny
-all rows, or agent memory that may have no relevant entries. This is most often
-needed on the PythonDict framework.
+If an empty result is a legitimate answer for your domain, for example: graph
+traversals that may find no path, search queries that may match nothing,
+authorization filters that may deny all rows, or agent memory that may have no
+relevant entries, return a *schema-bearing* empty result: keep the columns and
+drop the rows. On PythonDict that is a dict with empty column lists; on the
+other frameworks it is an empty typed table or frame with the right columns.
 
 ``` python
 class MyFeatureGroup(FeatureGroup):
     @classmethod
-    def allow_empty_result(cls) -> bool:
-        return True
+    def calculate_feature(cls, data, features):
+        ...
+        return {"my_feature": []}  # schema-bearing, zero rows: valid
 ```
 
-With the override in place, empty data flows through to the caller without
-raising. The public import `from mloda.provider import EmptyResultError` (a
-`ValueError` subclass) supports a typed `except` when you invoke framework or
-plugin code directly. When calling `mloda.run_all`, worker errors are wrapped
-in a generic `Exception` whose message embeds the original traceback, so match
-on the `EmptyResultError` name in the raised exception's message instead.
+A schema-bearing empty result flows through to the caller without raising. The
+public import `from mloda.provider import EmptyResultError` (a `ValueError`
+subclass) supports a typed `except` when you invoke framework or plugin code
+directly. When calling `mloda.run_all`, worker errors are wrapped in a generic
+`Exception` whose message embeds the original traceback, so match on the
+`EmptyResultError` name in the raised exception's message instead.
 
 ### Intermediates are exempt
 
 The check applies only to features that were explicitly requested by the caller.
 Intermediate feature groups, meaning those whose output feeds another feature
-group rather than the final result, are never subject to `EmptyResultError`,
-even if `allow_empty_result()` is `False`.
+group rather than the final result, are never subject to `EmptyResultError`.
 
 For full details on how the guard works and the schema-presence gate, see
-[Allowing Empty Results](../compute-framework-integration.md#allowing-empty-results).
+[Empty Results](../compute-framework-integration.md#empty-results).
 
 ## Related Documentation
 

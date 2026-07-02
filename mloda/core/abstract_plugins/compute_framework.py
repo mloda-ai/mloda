@@ -29,8 +29,8 @@ def _require_pyarrow() -> None:
 
 
 class EmptyResultError(ValueError):
-    """Raised when a final requested feature's result carries no schema (zero columns)
-    while allow_empty_result() is False; zero rows with a schema is valid."""
+    """Raised when a final requested feature's result carries no schema (zero columns);
+    zero rows with a schema is valid."""
 
 
 class ComputeFramework(ABC):
@@ -125,6 +125,14 @@ class ComputeFramework(ABC):
         if transformed_data is not None:
             return transformed_data
         return data
+
+    def validate_native_data(self, data: Any) -> None:
+        """Hook: validate that an already-native result satisfies the framework's contract.
+
+        Called when transform() is skipped because the result is already the expected type.
+        Default no-op; frameworks whose native type is too loose to be self-validating override it.
+        """
+        return None
 
     @final
     def apply_compute_framework_transformer(self, data: Any) -> Any:
@@ -237,16 +245,21 @@ class ComputeFramework(ABC):
         features = self.set_filter_engine(features)
         features = self.set_mask_engine(features)
         data = self.run_calculate_feature(feature_group, features)
-        data = self.run_final_filter(data, features, feature_group)
 
         names = features.get_all_names()
 
         if not isinstance(data, self.expected_data_framework()):
             # if data is not in the expected data framework, we need to transform it and for this, we may need the framework connection object
             self.set_framework_connection_object(features.get_options_key(feature_group.get_class_name()))
-            self.data = self.transform(data, names)
+            data = self.transform(data, names)
         else:
-            self.data = data
+            # already the native type: transform is skipped, so enforce the framework's
+            # native-representation contract here before it is stored / filtered.
+            self.validate_native_data(data)
+
+        # filter runs on the normalized native representation, not the raw FG output
+        data = self.run_final_filter(data, features, feature_group)
+        self.data = data
 
         self.set_column_names()
 
@@ -529,15 +542,10 @@ class ComputeFramework(ABC):
         if self.data is None:
             return
 
-        if (
-            features.get_initial_requested_features()
-            and not feature_group.allow_empty_result()
-            and not self.column_names
-        ):
+        if features.get_initial_requested_features() and not self.column_names:
             raise EmptyResultError(
                 f"Result carries no schema (no columns): {feature_group.get_class_name()}. "
-                "A feature must return a schema; zero rows is a valid result, zero columns is not. "
-                "If a schema-less empty result is legitimate, override allow_empty_result() to return True."
+                "A feature must return a schema; zero rows is a valid result, zero columns is not."
             )
 
         from mloda.core.abstract_plugins.components.validators.datatype_validator import DataTypeValidator

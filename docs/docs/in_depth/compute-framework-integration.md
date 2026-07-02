@@ -57,7 +57,7 @@ inspector does not know the caller's `Options`), and a feature that matches a
 group but is unsupported on every installed framework resolves to
 `feature_group=None` with a capability error rather than appearing runnable.
 
-### Allowing Empty Results
+### Empty Results
 
 The contract is: a **final** requested feature must return a *schema-bearing*
 result, meaning at least one column. **Zero rows is a valid result; zero columns
@@ -91,44 +91,23 @@ columns for a zero-row frame.
 There is one representational caveat. The schema-bearing frameworks (PyArrow,
 Pandas, Polars, DuckDB, SQLite, Spark, Iceberg) carry their schema as metadata
 even at zero rows, so a zero-row result keeps its columns and passes. The
-PythonDict framework represents data as `list[dict]`, where the schema lives in
-each row's keys, so its only empty value is `[]`, which has no columns. A
-PythonDict result that is empty is therefore always treated as schema-less and
-must opt in via `allow_empty_result()` (see below) to be accepted. One
-consequence: on any schema-less result on any framework (PythonDict's empty
-list, or a zero-column frame from an opted-in feature group), column selection
-returns the result as is, so a misspelled requested column on schema-less data
-does not produce a "column not found" error.
-
-#### Opting in to empty results
-
-Override `allow_empty_result` on a feature group to declare that a schema-less
-empty result is a legitimate outcome for that group:
-
-``` python
-class KnowledgeGraphFeatureGroup(FeatureGroup):
-    @classmethod
-    def allow_empty_result(cls) -> bool:
-        """Zero matches is a valid answer for graph traversals."""
-        return True
-```
-
-When `allow_empty_result()` returns `True`, the result flows through to the
-caller unchanged regardless of schema: result selection passes a schema-less
-result through unchanged on every framework, never trying to match requested
-column names against an empty column set. Typical use cases include knowledge
-graphs, search, agent memory, and authorization filters, especially on the
-PythonDict framework where an empty match cannot carry a schema.
+PythonDict framework represents data as a columnar `dict[str, list]`, where the
+schema is the set of keys and is present even at zero rows: `{"col": []}` is a
+valid schema-bearing zero-row frame, while `{}` (zero columns) is the only
+schema-less value. Emptiness is judged purely on schema presence, with no
+opt-in: a zero-column result raises `EmptyResultError` uniformly on every
+framework. One consequence: on a schema-less result (a zero-column frame),
+column selection returns the result as is, so a misspelled requested column on
+schema-less data does not produce a "column not found" error.
 
 #### Filter column validation
 
 `_validate_filter_columns` skips its column-presence and dtype checks only when
-the data is a schema-less empty result (in practice PythonDict's empty list),
-regardless of the `allow_empty_result()` policy. Filtering an empty result is a
-no-op, so neither the column check nor row elimination has anything to do.
-Judging whether emptiness is acceptable belongs solely to the output guard
-above. Data on which the framework cannot see columns but that is not an empty
-result still fails the missing-filter-column check loudly.
+the data is the schema-less empty result (in practice PythonDict's `{}`).
+Filtering an empty result is a no-op, so neither the column check nor row
+elimination has anything to do. Data on which the framework cannot see columns
+but that is not an empty result still fails the missing-filter-column check
+loudly.
 
 ### Framework-Specific Implementations
 

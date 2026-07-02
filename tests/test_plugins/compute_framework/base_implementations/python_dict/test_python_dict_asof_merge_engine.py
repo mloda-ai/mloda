@@ -1,9 +1,8 @@
 """
 Tests for PythonDictMergeEngine.merge_asof (point-in-time / as-of join).
 
-Consumes the shared AsofMergeEngineTestBase. PythonDict's native format is
-list[dict], so conversion is a passthrough; the DataConverter still routes
-through PyArrow for other frameworks, so PyArrow must be available.
+Consumes the shared AsofMergeEngineTestBase. PythonDict's native format is a
+columnar dict; the DataConverter routes through PyArrow, so PyArrow must be available.
 """
 
 from typing import Any, Optional
@@ -39,29 +38,29 @@ class TestPythonDictAsofMergeEngine(AsofMergeEngineTestBase):
 
     @classmethod
     def framework_type(cls) -> type[Any]:
-        return list
+        return dict
 
     def get_connection(self) -> Optional[Any]:
         return None
 
     def test_nearest_direction(self) -> None:
         """Vector F: PythonDict supports 'nearest' -> closer right row (t=8, gap 2) matched."""
-        left = [{"k": 1, "t": 10, "lv": 100}]
-        right = [{"k": 1, "t": 8, "rv": "A"}, {"k": 1, "t": 15, "rv": "B"}]
+        left = {"k": [1], "t": [10], "lv": [100]}
+        right = {"k": [1, 1], "t": [8, 15], "rv": ["A", "B"]}
 
         engine = PythonDictMergeEngine()
         cfg = AsOfJoinConfig(left_time_column="t", right_time_column="t", direction="nearest")
         result = engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg)
 
-        assert len(result) == 1
-        assert result[0]["rv"] == "A"
+        assert len(result["rv"]) == 1
+        assert result["rv"][0] == "A"
 
     def test_mixed_time_column_raises_value_error(self) -> None:
         """A heterogeneous time column (int then str) is not orderable. The guard must scan all
         non-null values, not just the first, and raise a clear ValueError naming the column
         instead of letting a raw comparison TypeError surface later."""
-        left = [{"k": "a", "t": 1, "lv": 1}, {"k": "a", "t": "2025-06-01", "lv": 2}]
-        right = [{"k": "a", "t": 1, "rv": 1.0}]
+        left = {"k": ["a", "a"], "t": [1, "2025-06-01"], "lv": [1, 2]}
+        right = {"k": ["a"], "t": [1], "rv": [1.0]}
 
         engine = PythonDictMergeEngine()
         cfg = AsOfJoinConfig(left_time_column="t", right_time_column="t")
@@ -79,9 +78,9 @@ class TestPythonDictAsofMergeEngine(AsofMergeEngineTestBase):
         default True): {k:1, t:10, rv:5} and {k:1, t:10, rv:2}. Expected exactly one row with
         rv==2 regardless of which order the tied right rows are supplied in.
         """
-        left = [{"k": 1, "t": 10, "lv": 1}]
-        right_a = [{"k": 1, "t": 10, "rv": 5}, {"k": 1, "t": 10, "rv": 2}]
-        right_b = [{"k": 1, "t": 10, "rv": 2}, {"k": 1, "t": 10, "rv": 5}]
+        left = {"k": [1], "t": [10], "lv": [1]}
+        right_a = {"k": [1, 1], "t": [10, 10], "rv": [5, 2]}
+        right_b = {"k": [1, 1], "t": [10, 10], "rv": [2, 5]}
 
         cfg = AsOfJoinConfig(
             left_time_column="t",
@@ -91,24 +90,25 @@ class TestPythonDictAsofMergeEngine(AsofMergeEngineTestBase):
         )
 
         result_a = PythonDictMergeEngine().merge_asof(left, right_a, Index(("k",)), Index(("k",)), cfg)
-        assert len(result_a) == 1
-        assert result_a[0]["rv"] == 2
+        assert len(result_a["rv"]) == 1
+        assert result_a["rv"][0] == 2
 
         # Order-independence: reversed right input must yield the identical winner.
         result_b = PythonDictMergeEngine().merge_asof(left, right_b, Index(("k",)), Index(("k",)), cfg)
-        assert len(result_b) == 1
-        assert result_b[0]["rv"] == 2
+        assert len(result_b["rv"]) == 1
+        assert result_b["rv"][0] == 2
 
     def test_coerce_z_suffix_utc_strings_join(self) -> None:
         """datetime.fromisoformat on Python 3.10 rejects a trailing 'Z'. The engine must
         normalize 'Z' to '+00:00' before parsing so Z-suffixed UTC strings coerce on every
         supported interpreter. All values are tz-aware, so no mixed-tz error: the join
         succeeds with one row matching the earlier right row (rv == 1.0)."""
-        left = [{"k": "a", "t": "2025-06-03T00:00:00Z", "lv": 1}]
-        right = [
-            {"k": "a", "t": "2025-06-01T00:00:00Z", "rv": 1.0},
-            {"k": "a", "t": "2025-06-04T00:00:00Z", "rv": 2.0},
-        ]
+        left = {"k": ["a"], "t": ["2025-06-03T00:00:00Z"], "lv": [1]}
+        right = {
+            "k": ["a", "a"],
+            "t": ["2025-06-01T00:00:00Z", "2025-06-04T00:00:00Z"],
+            "rv": [1.0, 2.0],
+        }
 
         engine = PythonDictMergeEngine()
         cfg = AsOfJoinConfig(
@@ -119,18 +119,19 @@ class TestPythonDictAsofMergeEngine(AsofMergeEngineTestBase):
         )
         result = engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg)
 
-        assert len(result) == 1
-        assert result[0]["rv"] == 1.0
+        assert len(result["rv"]) == 1
+        assert result["rv"][0] == 1.0
 
     def test_coerce_mixed_tz_naive_and_aware_raises(self) -> None:
         """Coercion of a column mixing tz-aware and tz-naive ISO strings must raise ValueError:
         datetime.fromisoformat parses both, but naive and aware datetimes are not mutually
         orderable, so the engine must reject the mix explicitly instead of failing later."""
-        left = [
-            {"k": "a", "t": "2025-06-01T00:00:00+00:00", "lv": 1},
-            {"k": "a", "t": "2025-06-01T01:00:00", "lv": 2},
-        ]
-        right = [{"k": "a", "t": "2025-05-01T00:00:00", "rv": 1.0}]
+        left = {
+            "k": ["a", "a"],
+            "t": ["2025-06-01T00:00:00+00:00", "2025-06-01T01:00:00"],
+            "lv": [1, 2],
+        }
+        right = {"k": ["a"], "t": ["2025-05-01T00:00:00"], "rv": [1.0]}
 
         engine = PythonDictMergeEngine()
         cfg = AsOfJoinConfig(

@@ -1,12 +1,12 @@
 """
-Shared base for the FeatureGroup-declared ``allow_empty_result`` policy, driven
-end-to-end through the public API ``mloda.run_all``. It is the canonical first consumer
-of the generic ``PolicyRunAllTestBase``.
+Shared base for the schema-based empty-result contract, driven end-to-end through the
+public API ``mloda.run_all``. It is the canonical first consumer of the generic
+``PolicyRunAllTestBase``.
 
 A feature computation must return a SCHEMA-BEARING result: at least one column. Rows are
 optional. The guard in ``ComputeFramework.run_validate_output_features`` fires only for
-FINAL requested features when ``feature_group.allow_empty_result()`` is False, and raises
-``EmptyResultError`` for:
+FINAL requested features, with no per-FeatureGroup opt-in, and raises ``EmptyResultError``
+for:
 
 - State B: a schema-less result (zero columns, i.e. ``_extract_column_names`` returns an
   empty set).
@@ -20,17 +20,16 @@ PythonDictFramework``), so state A never reaches the guard on any backend.
 State C, a schema-bearing result with ZERO ROWS, MUST SUCCEED. This is the key behavior:
 a zero-row but column-bearing frame is a valid, well-typed empty result.
 
-Both empty-producing FeatureGroups emit a columnar dict with a single empty column.
-``transform`` turns this into a zero-row frame in every schema-bearing framework (PyArrow,
-Pandas, Polars, DuckDB, SQLite, Spark, Iceberg): the schema is carried as metadata even at
-zero rows, so these are state C and SUCCEED. For ``python_dict`` (``List[Dict[str, Any]]``)
-``transform`` collapses ``{"col": []}`` to ``[]``, which has no schema: that is state B and
-STILL RAISES (unless ``allow_empty_result()`` is True).
+Both zero-row FeatureGroups emit a columnar dict with a single empty column. ``transform``
+turns this into a zero-row frame in every framework: the schema-bearing frameworks (PyArrow,
+Pandas, Polars, DuckDB, SQLite, Spark, Iceberg) carry the schema as metadata even at zero
+rows, and ``python_dict`` (columnar ``dict[str, list]``) keeps ``{"col": []}`` as a
+schema-bearing zero-row frame. All of these are state C and SUCCEED. Only the schema-less
+``{}`` (zero columns) is state B and RAISES, uniformly on every backend.
 
 Subclasses implement only ``compute_framework_name`` (and, for connection-backed frameworks
-such as DuckDB / SQLite / Spark / Iceberg, ``get_connection``). The python_dict subclass also
-overrides ``default_empty_is_schemaless`` to opt into the "raises" expectation for the default
-FeatureGroup.
+such as DuckDB / SQLite / Spark / Iceberg, ``get_connection``). ``default_empty_is_schemaless``
+remains as an override point but is False for every built-in framework.
 
 This module is intentionally NOT collected as tests (no ``Test`` prefix).
 """
@@ -91,7 +90,7 @@ class _EmptyResultMatchData(MatchData):
 
 
 class EmptyResultDefaultFeatureGroup(FeatureGroup, _EmptyResultMatchData):
-    """Root FeatureGroup that yields zero rows and does NOT allow empty results."""
+    """Root FeatureGroup that yields a schema-bearing zero-row result under default behavior."""
 
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
@@ -100,7 +99,7 @@ class EmptyResultDefaultFeatureGroup(FeatureGroup, _EmptyResultMatchData):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         # Columnar dict with one empty column -> zero rows after transform.
-        # Schema-bearing frameworks keep the column (state C); python_dict drops it (state B).
+        # Every framework keeps the column at zero rows (state C), including python_dict.
         return {"empty_result_default_col": []}
 
     @classmethod
@@ -109,11 +108,7 @@ class EmptyResultDefaultFeatureGroup(FeatureGroup, _EmptyResultMatchData):
 
 
 class EmptyResultAllowedFeatureGroup(FeatureGroup, _EmptyResultMatchData):
-    """Root FeatureGroup that yields zero rows and DECLARES empty results are allowed."""
-
-    @classmethod
-    def allow_empty_result(cls) -> bool:
-        return True
+    """Root FeatureGroup that yields a schema-bearing zero-row result (one empty column)."""
 
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
@@ -130,19 +125,12 @@ class EmptyResultAllowedFeatureGroup(FeatureGroup, _EmptyResultMatchData):
 
 
 class EmptyResultSchemalessAllowedFeatureGroup(FeatureGroup, _EmptyResultMatchData):
-    """Root FeatureGroup that yields a ZERO-COLUMN result and DECLARES empty results are allowed.
+    """Root FeatureGroup that yields a ZERO-COLUMN (schema-less) ``{}`` result.
 
-    Unlike ``EmptyResultAllowedFeatureGroup`` (one empty column, schema-less only on
-    python_dict), the ``{}`` returned here is schema-less (state B) on EVERY framework:
-    ``transform`` produces a frame with zero columns. With ``allow_empty_result()`` True the
-    output guard accepts it, and the framework must hand the zero-column result through to
-    the caller unchanged (result selection has no columns to match against and must not
-    re-judge what the guard already accepted).
+    The ``{}`` returned here is schema-less (state B) on EVERY framework: ``transform``
+    produces a frame with zero columns. With ``allow_empty_result()`` retired, the output
+    guard now RAISES ``EmptyResultError`` for this result on every backend.
     """
-
-    @classmethod
-    def allow_empty_result(cls) -> bool:
-        return True
 
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
@@ -150,7 +138,7 @@ class EmptyResultSchemalessAllowedFeatureGroup(FeatureGroup, _EmptyResultMatchDa
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        # Zero columns -> schema-less (state B) in every framework, accepted via the opt-in.
+        # Zero columns -> schema-less (state B) in every framework, now always raises.
         return {}
 
     @classmethod
@@ -188,7 +176,7 @@ def _assert_single_empty_result(result: list[Any]) -> None:
 
 
 class EmptyResultRunAllTestBase(PolicyRunAllTestBase):
-    """Drives the ``allow_empty_result`` policy end-to-end through ``run_all``.
+    """Drives the schema-based empty-result contract end-to-end through ``run_all``.
 
     Subclasses implement ``compute_framework_name`` and, for connection-backed frameworks,
     ``get_connection`` (plus a ``teardown_method`` to close it).
@@ -202,9 +190,8 @@ class EmptyResultRunAllTestBase(PolicyRunAllTestBase):
     def default_empty_is_schemaless(cls) -> bool:
         """Whether the default FG's empty result is schema-less (state B) on this framework.
 
-        Schema-bearing frameworks keep the column at zero rows (state C -> success); the
-        python_dict subclass overrides this to True because ``transform`` collapses the
-        columnar dict to ``[]`` (state B -> raises).
+        Every backend now keeps the single empty column at zero rows (state C -> success),
+        including python_dict under the columnar model, so this returns False everywhere.
         """
         return False
 
@@ -233,15 +220,15 @@ class EmptyResultRunAllTestBase(PolicyRunAllTestBase):
 
     @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
     def test_empty_result_default(self, mode: ParallelizationMode, flight_server: Any) -> None:
-        """Default (not-allowed) FG requested as a final feature.
+        """Default FG requested as a final feature.
 
-        Schema-bearing frameworks return a schema-bearing zero-row result (state C) and
-        SUCCEED. python_dict drops the schema (state B) and raises ``EmptyResultError``.
+        Every framework, python_dict included, returns a schema-bearing zero-row result
+        (state C) and SUCCEEDS.
         SYNC-only frameworks (DuckDB / SQLite) override these methods to run SYNC only.
         """
         self._run_default_case(mode, flight_server)
 
     @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
     def test_empty_result_allowed_succeeds(self, mode: ParallelizationMode, flight_server: Any) -> None:
-        """A FeatureGroup that overrides allow_empty_result()->True succeeds with an empty result."""
+        """A FeatureGroup returning a schema-bearing zero-row result succeeds on every backend."""
         self._run_allowed_case(mode, flight_server)

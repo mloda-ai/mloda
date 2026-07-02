@@ -270,18 +270,17 @@ For more details on artifacts, refer to the [artifact documentation](artifacts.m
 
 `run_validate_output_features` runs a schema-presence check **before** data-type
 enforcement and before the custom `validate_output_features` hook. If the result
-carries no schema (zero columns) and `allow_empty_result()` is `False` (the
-default), it raises `EmptyResultError` immediately. A zero-*row* result with a
-valid schema is not an error and flows through normally. As a consequence, custom
-output validators are not reached on a schema-less result unless the feature
-group has opted in by returning `True` from `allow_empty_result()`.
+carries no schema (zero columns), it raises `EmptyResultError` immediately. A
+zero-*row* result with a valid schema is not an error and flows through normally.
+As a consequence, custom output validators are not reached on a schema-less
+result.
 
 This ordering ensures that schema-level validators never receive a column-less
 result they were not designed to handle, and that the error message is clear and
 actionable rather than a downstream type error.
 
-For details on opting in and the underlying schema-presence gate, see
-[Allowing Empty Results](compute-framework-integration.md#allowing-empty-results).
+For details on the underlying schema-presence gate, see
+[Empty Results](compute-framework-integration.md#empty-results).
 
 #### Conclusion
 

@@ -1,6 +1,6 @@
 """Generic policy-conformance tooling for FeatureGroup-level policy flags.
 
-Drives any FeatureGroup-declared policy flag (such as ``allow_empty_result()``) end-to-end
+Drives any pipeline result policy (such as the schema-based empty-result contract) end-to-end
 through the public API ``mloda.run_all``, across every built-in compute framework and at
 least one worker-based parallelization mode. A policy case is expressed as an expectation:
 either ``PolicySuccess`` (run_all returns results that satisfy an assertion) or
@@ -52,6 +52,13 @@ def records_from_frame(data: Any) -> list[dict[str, Any]]:
         records = data.to_dicts()
     elif pa is not None and isinstance(data, pa.Table):
         records = data.to_pylist()
+    elif isinstance(data, dict):
+        # PythonDict columnar frame: {"col": [v0, v1, ...]}. Zero columns -> zero rows.
+        if not data:
+            records = []
+        else:
+            length = len(next(iter(data.values())))
+            records = [{k: data[k][i] for k in data} for i in range(length)]
     elif isinstance(data, list):
         records = data
     elif hasattr(data, "to_dicts"):

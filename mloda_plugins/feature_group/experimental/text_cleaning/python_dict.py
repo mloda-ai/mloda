@@ -12,6 +12,7 @@ from typing import Any
 from mloda.provider import ComputeFramework
 
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils import row_count
 from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
 
 # Optional NLTK support - gracefully handle if not available
@@ -30,8 +31,9 @@ class PythonDictTextCleaningFeatureGroup(TextCleaningFeatureGroup):
     """
     PythonDict implementation for text cleaning feature groups.
 
-    This implementation uses pure Python operations on List[Dict[str, Any]] data structures
-    to perform text cleaning operations without external dependencies (except optional NLTK).
+    This implementation uses pure Python operations on columnar ``dict[str, list[Any]]``
+    data structures to perform text cleaning operations without external dependencies
+    (except optional NLTK).
     """
 
     @classmethod
@@ -39,13 +41,11 @@ class PythonDictTextCleaningFeatureGroup(TextCleaningFeatureGroup):
         return {PythonDictFramework}
 
     @classmethod
-    def _check_source_features_exist(cls, data: list[dict[str, Any]], feature_names: list[str]) -> None:
+    def _check_source_features_exist(cls, data: dict[str, list[Any]], feature_names: list[str]) -> None:
         if not data:
             raise ValueError("Data cannot be empty")
 
-        available_features: set[str] = set()
-        for row in data:
-            available_features.update(row.keys())
+        available_features = set(data.keys())
         missing_features = [f for f in feature_names if f not in available_features]
         if missing_features:
             raise ValueError(
@@ -54,45 +54,44 @@ class PythonDictTextCleaningFeatureGroup(TextCleaningFeatureGroup):
             )
 
     @classmethod
-    def _get_source_text(cls, data: list[dict[str, Any]], feature_name: str) -> list[str]:
+    def _get_source_text(cls, data: dict[str, list[Any]], feature_name: str) -> list[str]:
         """
         Get the source text from the data.
 
         Args:
-            data: The List[Dict] data structure
+            data: The columnar dict data structure
             feature_name: The name of the feature to get
 
         Returns:
             The source text as a list of strings
         """
         # Convert to string if not already and handle None values
-        return [str(row.get(feature_name, "")) if row.get(feature_name) is not None else "" for row in data]
+        return [str(value) if value is not None else "" for value in data.get(feature_name, [])]
 
     @classmethod
     def _add_result_to_data(
-        cls, data: list[dict[str, Any]], feature_name: str, result: list[str]
-    ) -> list[dict[str, Any]]:
+        cls, data: dict[str, list[Any]], feature_name: str, result: list[str]
+    ) -> dict[str, list[Any]]:
         """
         Add the cleaning result to the data.
 
         Args:
-            data: The List[Dict] data structure
+            data: The columnar dict data structure
             feature_name: The name of the feature to add
             result: The cleaning result as a list of strings
 
         Returns:
             The updated data with the cleaning result added
         """
-        if len(result) != len(data):
-            raise ValueError(f"Result length {len(result)} does not match data length {len(data)}")
+        if len(result) != row_count(data):
+            raise ValueError(f"Result length {len(result)} does not match data length {row_count(data)}")
 
-        for i, row in enumerate(data):
-            row[feature_name] = result[i]
+        data[feature_name] = list(result)
 
         return data
 
     @classmethod
-    def _apply_operation(cls, data: list[dict[str, Any]], text: list[str], operation: str) -> list[str]:
+    def _apply_operation(cls, data: dict[str, list[Any]], text: list[str], operation: str) -> list[str]:
         """
         Apply a cleaning operation to the text.
 

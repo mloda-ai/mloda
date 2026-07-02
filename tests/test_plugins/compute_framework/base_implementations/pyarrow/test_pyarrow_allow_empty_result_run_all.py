@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+from mloda.core.abstract_plugins.compute_framework import EmptyResultError
 from mloda.user import Feature
 from mloda.user import ParallelizationMode
 from mloda.user import mloda
@@ -37,23 +38,21 @@ class TestPyArrowAllowEmptyResultRunAll(EmptyResultRunAllTestBase):
 
 
 @pytest.mark.skipif(pa is None, reason="PyArrow is not installed. Skipping this test.")
-def test_zero_column_allowed_succeeds_pyarrow(flight_server: Any) -> None:
-    """An opted-in FG returning ``{}`` (zero columns) must succeed end-to-end on PyArrow.
+def test_zero_column_raises_pyarrow(flight_server: Any) -> None:
+    """A FG returning ``{}`` (zero columns) raises ``EmptyResultError`` end-to-end on PyArrow.
 
-    The output guard accepts the schema-less result because ``allow_empty_result()`` is
-    True; result selection must then pass the zero-column table through unchanged instead
-    of trying (and failing) to match feature names against an empty column set. The caller
-    receives exactly one result: a ``pa.Table`` with zero columns.
+    With ``allow_empty_result`` retired, a schema-less result is never legitimate: the
+    output guard raises for the zero-column table. ``run_all`` re-wraps the framework error,
+    so the assertion targets the type NAME in the wrapped message.
     """
     feature = Feature(name="empty_result_schemaless_col")
 
-    result = mloda.run_all(
-        [feature],
-        compute_frameworks=["PyArrowTable"],
-        plugin_collector=_ENABLED_SCHEMALESS_ALLOWED,
-        parallelization_modes={ParallelizationMode.SYNC},
-        flight_server=flight_server,
-    )
-
-    assert len(result) == 1
-    assert result[0].num_columns == 0
+    with pytest.raises(Exception) as excinfo:
+        mloda.run_all(
+            [feature],
+            compute_frameworks=["PyArrowTable"],
+            plugin_collector=_ENABLED_SCHEMALESS_ALLOWED,
+            parallelization_modes={ParallelizationMode.SYNC},
+            flight_server=flight_server,
+        )
+    assert EmptyResultError.__name__ in str(excinfo.value)

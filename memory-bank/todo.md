@@ -20,7 +20,9 @@ TDD: Red writes failing tests, Green implements, `tox` gates each phase.
 - [x] Phase 4 - Range/min/max filters. `BaseFilterEngine.do_filter` validates datetime-bound
       tz-awareness vs the column via require_compatible (only fires when a bound is a datetime).
       Mandatory `_column_semantics` classmethod hook wired on all 8 filter engines. tox GREEN.
-- [ ] Phase 5 - Time windows + forecasting via `TimeReferenceMixin` (tz/unit aware).
+- [x] Phase 5 - Time windows + forecasting: reference-time check unified onto the contract
+      via TimeReferenceMixin._validate_reference_time_column (required TEMPORAL+ORDERED),
+      fed by the Phase-1 readers. Messages now contract-sourced. tox GREEN.
 - [ ] Phase 6 - Docs (per-engine capability matrix) + reconcile EXPECTED_SKIP_COUNT.
 
 ## Deferred (follow-up issues, per scoping decision)

@@ -158,6 +158,6 @@ class TestPyArrowTimeWindowFeatureGroup:
 
         with pytest.raises(
             ValueError,
-            match=f"Reference time column '{DefaultOptionKeys.reference_time}' must be a timestamp column.*",
+            match=f"Column '{DefaultOptionKeys.reference_time}' must be temporal.*",
         ):
             PyArrowTimeWindowFeatureGroup.calculate_feature(table, feature_set)

@@ -12,6 +12,7 @@ import pyarrow.compute as pc
 
 from mloda.provider import ComputeFramework
 
+from mloda_plugins.compute_framework.base_implementations.pyarrow import pyarrow_type_semantics
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 
@@ -33,12 +34,8 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
     @classmethod
     def _check_reference_time_column_is_datetime(cls, data: pa.Table, reference_time_column: str) -> None:
         """Check if the reference time column is a datetime column."""
-        time_column = data.column(reference_time_column)
-        if not pa.types.is_timestamp(time_column.type):
-            raise ValueError(
-                f"Reference time column '{reference_time_column}' must be a timestamp column. "
-                f"Current type: {time_column.type}"
-            )
+        semantics = pyarrow_type_semantics.column_semantics(data, reference_time_column)
+        cls._validate_reference_time_column(semantics, reference_time_column)
 
     @classmethod
     def _get_available_columns(cls, data: pa.Table) -> set[str]:

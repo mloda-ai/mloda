@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from typing import Optional
 
+from mloda.core.abstract_plugins.components.contract.comparison_contract import (
+    ColumnSemantics,
+    ComparisonContract,
+    SemanticDimension,
+)
 from mloda.user import Options
 from mloda.provider import DefaultOptionKeys
 
@@ -41,3 +46,10 @@ class TimeReferenceMixin:
                 )
             return reference_time
         return DefaultOptionKeys.reference_time
+
+    @classmethod
+    def _validate_reference_time_column(cls, semantics: ColumnSemantics, reference_time_column: str) -> None:
+        """Validate the reference-time column against the shared temporal + ordered contract."""
+        ComparisonContract(required=frozenset({SemanticDimension.TEMPORAL, SemanticDimension.ORDERED})).validate(
+            semantics, reference_time_column
+        )

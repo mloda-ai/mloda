@@ -174,9 +174,13 @@ class mlodaAPI:
         )
 
     @staticmethod
-    def to_framework(result: Any, framework: "str | type[ComputeFramework]") -> Any:
+    def to_framework(
+        result: Any,
+        framework: "str | type[ComputeFramework]",
+        framework_connection_object: Any = None,
+    ) -> Any:
         """Convert a single ``run_all`` result to the native object of the target framework."""
-        return _to_framework(result, framework)
+        return _to_framework(result, framework, framework_connection_object)
 
     @staticmethod
     def to_records(result: Any) -> list[dict[str, Any]]:

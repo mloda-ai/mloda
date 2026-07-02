@@ -66,11 +66,18 @@ def _rows_to_csv(fieldnames: list[str], rows: list[dict[str, Any]]) -> str:
     return buf.getvalue()
 
 
+def _normalize_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Rewrite records to the UNION of all keys, filling missing keys with ``None``."""
+    fieldnames = _record_union_fieldnames(records)
+    return [{name: rec.get(name) for name in fieldnames} for rec in records]
+
+
 def _load_compute_frameworks() -> None:
     from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 
     if "compute_framework" not in PluginLoader._disabled_groups:
         PluginLoader().load_group("compute_framework")
+    PluginLoader().load_entry_points()
 
 
 def _resolve_framework(framework: str | type[ComputeFramework]) -> type[ComputeFramework]:
@@ -93,7 +100,11 @@ def _resolve_framework(framework: str | type[ComputeFramework]) -> type[ComputeF
     )
 
 
-def to_framework(result: Any, framework: str | type[ComputeFramework]) -> Any:
+def to_framework(
+    result: Any,
+    framework: str | type[ComputeFramework],
+    framework_connection_object: Any = None,
+) -> Any:
     """Convert a single run_all result into the native object of the target compute framework."""
     if isinstance(result, list) and not _is_record_list(result):
         raise _ambiguous_list_error()
@@ -108,12 +119,15 @@ def to_framework(result: Any, framework: str | type[ComputeFramework]) -> Any:
     if source_type == target_type:
         return result
 
+    data = result
+    if _is_record_list(result):
+        data = _normalize_records(result)
+
     transformer = ComputeFrameworkTransformer()
     chain = transformer.get_transformation_chain(source_type, target_type)
     if chain is None:
         raise ValueError(f"No transformation path found from {source_type} to {target_type}.")
 
-    data = result
     current_fw = source_type
     for i, transformer_cls in enumerate(chain):
         if i == len(chain) - 1:
@@ -129,7 +143,7 @@ def to_framework(result: Any, framework: str | type[ComputeFramework]) -> Any:
                     f"Could not determine intermediate target for transformer {transformer_cls} from {current_fw}."
                 )
 
-        data = transformer_cls.transform(current_fw, step_target, data, None)
+        data = transformer_cls.transform(current_fw, step_target, data, framework_connection_object)
         current_fw = step_target
 
     return data

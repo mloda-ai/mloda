@@ -309,3 +309,45 @@ class TestAmbiguousListRaises:
 
         with pytest.raises(ValueError):
             mloda.to_csv(whole_output)
+
+
+class TestToFrameworkSparseRecords:
+    """Sparse ``list[dict]`` converted to a DIFFERENT framework unions keys.
+
+    Matches ``to_csv`` behavior: the target frame carries the UNION of keys
+    across all records, with missing values represented as null.
+    """
+
+    def test_sparse_records_to_pandas_unions_columns(self) -> None:
+        records = [{"a": 1}, {"b": 2}]
+        df = mloda.to_framework(records, "PandasDataFrame")
+
+        assert isinstance(df, pd.DataFrame)
+        assert set(df.columns) == {"a", "b"}
+        assert len(df) == 2
+        assert df.loc[0, "a"] == 1
+        assert df.loc[1, "b"] == 2
+
+    def test_sparse_records_to_arrow_unions_columns(self) -> None:
+        records = [{"a": 1}, {"b": 2}]
+        table = mloda.to_arrow(records)
+
+        assert isinstance(table, pa.Table)
+        assert set(table.column_names) == {"a", "b"}
+
+        rows = table.to_pylist()
+        assert len(rows) == 2
+        assert rows[0] == {"a": 1, "b": None}
+        assert rows[1] == {"a": None, "b": 2}
+
+
+class TestToFrameworkConnectionArg:
+    """``to_framework`` accepts an optional ``framework_connection_object``."""
+
+    def test_to_framework_accepts_connection_kwarg(self) -> None:
+        table = pa.table({"a": [1, 2]})
+        result = mloda.to_framework(table, "PyArrowTable", framework_connection_object=None)
+
+        assert isinstance(result, pa.Table)
+        assert result.column_names == table.column_names
+        assert result.to_pylist() == table.to_pylist()

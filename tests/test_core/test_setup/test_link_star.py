@@ -150,3 +150,103 @@ class TestLinkStar:
         """Test Link.star raises ValueError when no feature groups are provided."""
         with pytest.raises(ValueError):
             Link.star(index_column="row_id")
+
+
+# ============================================================================
+# Test Link.star jointype Parameter
+# ============================================================================
+class TestLinkStarJoinType:
+    """Test the keyword-only jointype parameter on Link.star."""
+
+    def test_star_left_yields_left_links(self) -> None:
+        """Test jointype=JoinType.LEFT yields LEFT links: hub left, spoke right, shared index."""
+        links = Link.star(HubFG, SpokeAFG, index_column="row_id", jointype=JoinType.LEFT)
+
+        assert len(links) == 1
+        link = next(iter(links))
+        assert link.jointype == JoinType.LEFT
+        assert link.left_feature_group is HubFG
+        assert link.right_feature_group is SpokeAFG
+        assert link.left_index == ROW_INDEX
+        assert link.right_index == ROW_INDEX
+
+    def test_star_left_string_form_yields_left_links(self) -> None:
+        """Test the string form jointype="left" yields LEFT links."""
+        links = Link.star(HubFG, SpokeAFG, index_column="row_id", jointype="left")
+
+        assert len(links) == 1
+        link = next(iter(links))
+        assert link.jointype == JoinType.LEFT
+
+    def test_star_outer_yields_outer_links(self) -> None:
+        """Test jointype=JoinType.OUTER yields OUTER links."""
+        links = Link.star(HubFG, SpokeAFG, index_column="row_id", jointype=JoinType.OUTER)
+
+        assert len(links) == 1
+        link = next(iter(links))
+        assert link.jointype == JoinType.OUTER
+        assert link.left_feature_group is HubFG
+        assert link.right_feature_group is SpokeAFG
+
+    def test_star_string_and_enum_forms_are_equivalent(self) -> None:
+        """Test the string and enum forms of jointype produce equal link sets."""
+        links_str = Link.star(HubFG, SpokeAFG, index_column="row_id", jointype="left")
+        links_enum = Link.star(HubFG, SpokeAFG, index_column="row_id", jointype=JoinType.LEFT)
+
+        assert links_str == links_enum
+
+    def test_star_multi_spoke_left_returns_two_left_links(self) -> None:
+        """Test jointype=JoinType.LEFT with two spokes returns two LEFT links anchored on the hub."""
+        links = Link.star(HubFG, SpokeAFG, SpokeBFG, index_column="row_id", jointype=JoinType.LEFT)
+
+        assert len(links) == 2
+        for link in links:
+            assert link.jointype == JoinType.LEFT
+            assert link.left_feature_group is HubFG
+
+        spokes = {link.right_feature_group for link in links}
+        assert spokes == {SpokeAFG, SpokeBFG}
+
+    def test_star_right_jointype_raises_value_error(self) -> None:
+        """Test jointype=JoinType.RIGHT is rejected: a star join anchors on the hub."""
+        with pytest.raises(ValueError):
+            Link.star(HubFG, SpokeAFG, index_column="row_id", jointype=JoinType.RIGHT)
+
+    def test_star_append_jointype_raises_value_error(self) -> None:
+        """Test jointype=JoinType.APPEND is rejected for star joins."""
+        with pytest.raises(ValueError):
+            Link.star(HubFG, SpokeAFG, index_column="row_id", jointype=JoinType.APPEND)
+
+    def test_star_union_jointype_raises_value_error(self) -> None:
+        """Test jointype=JoinType.UNION is rejected for star joins."""
+        with pytest.raises(ValueError):
+            Link.star(HubFG, SpokeAFG, index_column="row_id", jointype=JoinType.UNION)
+
+    def test_star_asof_jointype_raises_value_error(self) -> None:
+        """Test jointype=JoinType.ASOF is rejected for star joins."""
+        with pytest.raises(ValueError):
+            Link.star(HubFG, SpokeAFG, index_column="row_id", jointype=JoinType.ASOF)
+
+    def test_star_invalid_jointype_string_raises_value_error(self) -> None:
+        """Test an unknown jointype string is rejected (JoinType("banana") raises ValueError)."""
+        with pytest.raises(ValueError):
+            Link.star(HubFG, SpokeAFG, index_column="row_id", jointype="banana")
+
+    def test_star_right_string_form_raises_value_error(self) -> None:
+        """Test the string form "right" is rejected: it converts to JoinType.RIGHT then fails the allowed set."""
+        with pytest.raises(ValueError):
+            Link.star(HubFG, SpokeAFG, index_column="row_id", jointype="right")
+
+    def test_star_rejection_message_names_allowed_set(self) -> None:
+        """Test the rejection message names the allowed set of join types."""
+        with pytest.raises(ValueError, match="only inner, left, or outer"):
+            Link.star(HubFG, SpokeAFG, index_column="row_id", jointype=JoinType.RIGHT)
+
+    def test_star_hub_as_spoke_raises_value_error(self) -> None:
+        """Test the hub class cannot also be a spoke: a star cannot self-join the hub.
+
+        Self-joining a class requires left/right discriminators to disambiguate the two
+        same-class nodes, which Link.star does not support, so this must be rejected.
+        """
+        with pytest.raises(ValueError, match="hub"):
+            Link.star(HubFG, HubFG, index_column="row_id")

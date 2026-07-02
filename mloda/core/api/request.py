@@ -7,6 +7,7 @@ from mloda.core.abstract_plugins.components.input_data.api.api_input_data_collec
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.core.engine import Engine
 from mloda.core.api.prepare.setup_compute_framework import SetupComputeFramework
+from mloda.core.api.result_serializer import to_csv as _to_csv, to_json_records as _to_json_records
 from mloda.core.prepare.accessible_plugins import filter_extenders_by_strict_mode
 from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.runtime.run import ExecutionOrchestrator
@@ -170,16 +171,12 @@ class mlodaAPI:
     @staticmethod
     def to_json_records(result: Any) -> list[dict[str, Any]]:
         """Serialize a single ``run_all`` result to a list of row dicts."""
-        from mloda.core.api.result_serializer import to_json_records
-
-        return to_json_records(result)
+        return _to_json_records(result)
 
     @staticmethod
     def to_csv(result: Any) -> str:
         """Serialize a single ``run_all`` result to a CSV string."""
-        from mloda.core.api.result_serializer import to_csv
-
-        return to_csv(result)
+        return _to_csv(result)
 
     @classmethod
     def stream_all(

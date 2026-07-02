@@ -5,8 +5,11 @@ Each ``result`` is a SINGLE compute-framework object (one element of the
 python_dict result (``list[dict]``).
 
 Notes:
-- Conversions dispatch through mloda's compute-framework registry. Only
-  python_dict record-list CSV output stays pyarrow-free; all other framework
+- Conversions rely on mloda's compute-framework transformer registry. Names are
+  resolved only against ALREADY-LOADED frameworks; no plugin auto-loading is
+  triggered. ``to_framework`` therefore requires the named framework to be
+  imported first, exactly as you would before passing it to ``run_all``.
+- Only python_dict record-list CSV output stays pyarrow-free; all other framework
   conversions go through the pyarrow hub, so pyarrow is required for
   non-python_dict framework results.
 - Record values are Python natives produced by the target compute framework and
@@ -72,22 +75,10 @@ def _normalize_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [{name: rec.get(name) for name in fieldnames} for rec in records]
 
 
-def _load_compute_frameworks() -> None:
-    from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
-
-    if "compute_framework" not in PluginLoader._disabled_groups:
-        PluginLoader().load_group("compute_framework")
-
-
 def _resolve_framework(framework: str | type[ComputeFramework]) -> type[ComputeFramework]:
     if isinstance(framework, type) and issubclass(framework, ComputeFramework):
         return framework
 
-    for cls in get_all_subclasses(ComputeFramework):
-        if cls.get_class_name() == framework:
-            return cls
-
-    _load_compute_frameworks()
     sub_classes = get_all_subclasses(ComputeFramework)
     for cls in sub_classes:
         if cls.get_class_name() == framework:
@@ -95,24 +86,14 @@ def _resolve_framework(framework: str | type[ComputeFramework]) -> type[ComputeF
 
     available_names = sorted(cls.get_class_name() for cls in sub_classes)
     raise ValueError(
-        f"No compute framework named '{framework}' found in available compute frameworks: {available_names}."
+        f"No compute framework named '{framework}' found in loaded compute frameworks: {available_names}. "
+        "Import the framework module (as you would before passing it to run_all)."
     )
 
 
-def to_framework(
-    result: Any,
-    framework: str | type[ComputeFramework],
-    framework_connection_object: Any = None,
-) -> Any:
-    """Convert a single run_all result into the native object of the target compute framework."""
+def _convert(result: Any, target_type: Any, framework_connection_object: Any = None) -> Any:
     if isinstance(result, list) and not _is_record_list(result):
         raise _ambiguous_list_error()
-
-    target_cls = _resolve_framework(framework)
-
-    target_type = target_cls.expected_data_framework()
-    if target_type is None:
-        raise ValueError(f"Compute framework '{target_cls.get_class_name()}' does not declare a native data type.")
 
     source_type = type(result)
     if source_type == target_type:
@@ -148,16 +129,31 @@ def to_framework(
     return data
 
 
+def to_framework(
+    result: Any,
+    framework: str | type[ComputeFramework],
+    framework_connection_object: Any = None,
+) -> Any:
+    """Convert a single run_all result into the native object of the target compute framework."""
+    target_cls = _resolve_framework(framework)
+
+    target_type = target_cls.expected_data_framework()
+    if target_type is None:
+        raise ValueError(f"Compute framework '{target_cls.get_class_name()}' does not declare a native data type.")
+
+    return _convert(result, target_type, framework_connection_object)
+
+
 def to_records(result: Any) -> list[dict[str, Any]]:
     """Serialize a single ``run_all`` result to a list of row dicts (python_dict native)."""
-    records: list[dict[str, Any]] = to_framework(result, "PythonDictFramework")
+    records: list[dict[str, Any]] = _convert(result, list)
     return records
 
 
 def to_arrow(result: Any) -> "pa.Table":
     """Serialize a single ``run_all`` result to a pyarrow Table."""
     _require_pyarrow()
-    return to_framework(result, "PyArrowTable")
+    return _convert(result, pa.Table)
 
 
 def to_csv(result: Any) -> str:
@@ -167,5 +163,6 @@ def to_csv(result: Any) -> str:
             return _rows_to_csv(_record_union_fieldnames(result), result)
         raise _ambiguous_list_error()
 
-    table = to_arrow(result)
+    _require_pyarrow()
+    table = _convert(result, pa.Table)
     return _rows_to_csv(table.column_names, table.to_pylist())

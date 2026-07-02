@@ -3,8 +3,9 @@
 Defines the not-yet-implemented module-level function ``column_semantics(sdf, column)``
 in ``mloda_plugins.compute_framework.base_implementations.spark.spark_type_semantics``.
 
-Spark exposes no sub-type unit, so ``unit`` must be None for all columns. Timezone
-awareness maps to the Spark type: ``TimestampType`` => aware, ``TimestampNTZType`` => naive.
+Spark exposes no sub-type unit, so ``unit`` must be None for all columns. Spark
+timezone-awareness is deferred (set to False) for BOTH ``TimestampType`` and
+``TimestampNTZType`` to avoid false positives on naive filter bounds.
 Expected to fail at import time (ModuleNotFoundError) until Green implements it.
 """
 
@@ -67,11 +68,13 @@ class TestSparkColumnSemantics:
         assert sem.unit is None
 
     def test_ts_aware(self, sdf: Any) -> None:
+        # Fix 4: spark tz-awareness is deferred (set to False) for TimestampType too,
+        # to avoid false positives on naive filter bounds. is_temporal stays True.
         sem = column_semantics(sdf, "ts_aware")
         assert sem.is_ordered is True
         assert sem.is_temporal is True
         assert sem.is_numeric is False
-        assert sem.is_tz_aware is True
+        assert sem.is_tz_aware is False
         assert sem.unit is None
 
     def test_num(self, sdf: Any) -> None:

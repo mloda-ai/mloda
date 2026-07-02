@@ -18,8 +18,8 @@ def column_semantics(data: Any, column: str) -> ColumnSemantics:
     logical_type = data.types[data.columns.index(column)]
     type_id = getattr(logical_type, "id", str(logical_type)).lower()
 
-    is_numeric = any(token in type_id for token in _NUMERIC_TOKENS)
     is_temporal = any(token in type_id for token in _TEMPORAL_TOKENS)
+    is_numeric = any(token in type_id for token in _NUMERIC_TOKENS) and not is_temporal
     is_ordered = is_numeric or is_temporal
 
     is_tz_aware = "with time zone" in type_id or "timestamp_tz" in type_id or "timestamptz" in type_id

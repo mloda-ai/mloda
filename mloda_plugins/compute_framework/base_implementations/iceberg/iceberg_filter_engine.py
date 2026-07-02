@@ -2,7 +2,6 @@ from typing import Any, Optional
 from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
 from mloda.provider import BaseFilterEngine
 from mloda.user import SingleFilter
-from mloda_plugins.compute_framework.base_implementations.pyarrow import pyarrow_type_semantics
 from mloda_plugins.compute_framework.base_implementations.sql.sql_type_semantics import column_semantics_from_arrow
 
 try:
@@ -52,6 +51,9 @@ class IcebergFilterEngine(BaseFilterEngine):
         if IcebergTable is not None and isinstance(data, IcebergTable):
             arrow_schema = data.schema().as_arrow()
             return column_semantics_from_arrow(arrow_schema.field(column).type)
+
+        from mloda_plugins.compute_framework.base_implementations.pyarrow import pyarrow_type_semantics
+
         return pyarrow_type_semantics.column_semantics(data, column)
 
     @classmethod

@@ -102,6 +102,36 @@ class TestPandasEquiJoinTimezoneContract:
         assert rows[0]["lv"] == 1
         assert rows[0]["rv"] == 7.0
 
+    def test_inner_equi_join_differing_resolution_same_tz_succeeds(self) -> None:
+        """False-positive guard (Fix 1): an equi-join whose keys differ ONLY in datetime
+        resolution (datetime64[ns] on the left, datetime64[us] on the right) with the same
+        tz-awareness must NOT raise. Cross-side unit enforcement was dropped because it
+        produced false positives on ns-vs-us joins."""
+        left = pd.DataFrame(
+            {
+                "t": pd.to_datetime(["2021-01-01 00:00:10", "2021-01-01 00:00:20"]).astype("datetime64[ns]"),
+                "lv": [1, 2],
+            }
+        )
+        right = pd.DataFrame(
+            {
+                "t": pd.to_datetime(["2021-01-01 00:00:10"]).astype("datetime64[us]"),
+                "rv": [7.0],
+            }
+        )
+
+        assert str(left["t"].dtype) == "datetime64[ns]"
+        assert str(right["t"].dtype) == "datetime64[us]"
+
+        engine = PandasMergeEngine()
+        link = make_merge_link(JoinType.INNER, Index(("t",)), Index(("t",)))
+        result = engine.merge(left, right, link)
+
+        rows = result.to_dict(orient="records")
+        assert len(rows) == 1
+        assert rows[0]["lv"] == 1
+        assert rows[0]["rv"] == 7.0
+
     def test_inner_equi_join_string_keys_still_legal(self) -> None:
         """Narrow-policy guard: a STRING-key equi-join must not be touched by the temporal
         timezone guard and must keep working exactly as before."""

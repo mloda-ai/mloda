@@ -231,17 +231,18 @@ class TestRequireCompatibleTimezone:
 
 
 class TestRequireCompatibleUnit:
-    """require_compatible() compares units only when both are known."""
+    """require_compatible() no longer enforces cross-side units.
 
-    def test_differing_units_raise_with_both_units(self) -> None:
+    Cross-side unit enforcement was dropped: it caused false positives on
+    ns-vs-us joins and contradicts the deferral. require_compatible only
+    guards naive-vs-aware timezone mixing now; differing units must NOT raise.
+    """
+
+    def test_differing_units_do_not_raise(self) -> None:
         contract = ComparisonContract(required=frozenset({SemanticDimension.TEMPORAL}))
         left = ColumnSemantics(is_ordered=False, is_temporal=True, is_numeric=False, unit="s")
         right = ColumnSemantics(is_ordered=False, is_temporal=True, is_numeric=False, unit="ms")
-        with pytest.raises(ValueError) as exc_info:
-            contract.require_compatible(left, right, "left_ts", "right_ts")
-        message = str(exc_info.value)
-        assert "s" in message
-        assert "ms" in message
+        contract.require_compatible(left, right, "left_ts", "right_ts")  # must not raise
 
     def test_matching_units_return_none(self) -> None:
         contract = ComparisonContract(required=frozenset({SemanticDimension.TEMPORAL}))

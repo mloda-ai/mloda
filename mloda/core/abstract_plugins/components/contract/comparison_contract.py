@@ -71,9 +71,3 @@ class ComparisonContract:
 
         if left.is_tz_aware != right.is_tz_aware:
             raise ValueError(f"Columns '{left_column}' and '{right_column}' have incompatible timezone awareness.")
-
-        if left.unit is not None and right.unit is not None and left.unit != right.unit:
-            raise ValueError(
-                f"Columns '{left_column}' and '{right_column}' have incompatible units "
-                f"'{left.unit}' and '{right.unit}'."
-            )

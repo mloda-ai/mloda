@@ -14,6 +14,11 @@ def column_semantics(df: "pd.DataFrame", column: str) -> ColumnSemantics:
 
     dtype = df[column].dtype
 
+    from mloda_plugins.compute_framework.base_implementations.sql.sql_type_semantics import column_semantics_from_arrow
+
+    if isinstance(dtype, pd.ArrowDtype):
+        return column_semantics_from_arrow(dtype.pyarrow_dtype)
+
     is_bool = pd.api.types.is_bool_dtype(dtype)
     is_numeric = bool(pd.api.types.is_numeric_dtype(dtype)) and not is_bool
     is_datetime = bool(pd.api.types.is_datetime64_any_dtype(dtype))

@@ -44,7 +44,7 @@ skipping validation.
 | pyarrow | yes | yes | yes |
 | duckdb | yes | yes (`TIMESTAMP WITH TIME ZONE`) | partial |
 | sqlite | yes | only for native timestamp columns | only for native timestamp columns |
-| spark | yes | yes (`TimestampType` vs `TimestampNTZType`) | no |
+| spark | yes | no (deferred) | no |
 | python_dict | yes (value scan) | yes (value scan) | no |
 
 ## Deferred
@@ -52,5 +52,7 @@ skipping validation.
 - **Value inspection on dynamically typed storage.** sqlite stores datetimes as ISO-8601 text, so
   timezone and unit are not visible from its schema; these are read only when the column is a native
   temporal type. A value-scanning fallback is intentionally not implemented yet.
-- **Unit enforcement.** The time unit is carried and compared when both sides expose it, but it is
-  not promoted to a hard, independently enforced gate.
+- **Unit enforcement.** The time unit is derived and carried on `ColumnSemantics`, but it is not
+  enforced across sides: differing resolutions (for example nanoseconds vs microseconds) are aligned
+  natively by the backends, so `require_compatible` does not reject them. A unit is only checked when
+  a `ComparisonContract.unit` is explicitly declared (the single-column `validate` path).

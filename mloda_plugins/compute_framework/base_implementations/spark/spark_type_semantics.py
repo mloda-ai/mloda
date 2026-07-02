@@ -1,7 +1,8 @@
 """Column-semantics introspector for pyspark DataFrames (epic #518, Phase 1).
 
-Spark exposes no sub-type unit, so ``unit`` is always None. Timezone awareness
-maps to the Spark type: ``TimestampType`` => aware, ``TimestampNTZType`` => naive.
+Spark exposes no sub-type unit, so ``unit`` is always None. Timezone awareness is
+deferred: Spark's session-tz ``TimestampType`` would raise false positives on naive
+filter bounds, so ``is_tz_aware`` is always False for now.
 """
 
 from typing import Any
@@ -45,7 +46,7 @@ def column_semantics(sdf: Any, column: str) -> ColumnSemantics:
     is_numeric = isinstance(data_type, _NUMERIC_TYPES)
     is_temporal = isinstance(data_type, _TEMPORAL_TYPES)
     is_ordered = is_numeric or is_temporal
-    is_tz_aware = TimestampType is not None and isinstance(data_type, TimestampType)
+    is_tz_aware = False
 
     return ColumnSemantics(
         is_ordered=is_ordered,

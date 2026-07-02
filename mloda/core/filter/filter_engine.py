@@ -1,6 +1,11 @@
 from abc import ABC
+from datetime import datetime
 from typing import Any
 
+from mloda.core.abstract_plugins.components.contract.comparison_contract import (
+    ColumnSemantics,
+    ComparisonContract,
+)
 from mloda.core.filter.single_filter import SingleFilter
 
 
@@ -39,6 +44,9 @@ class BaseFilterEngine(ABC):
     def do_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
         if filter_feature.filter_type is None:
             raise ValueError(f"Filter type evaluates to None {filter_feature.filter_feature.name}.")
+
+        if filter_feature.filter_type in ("range", "min", "max"):
+            cls._validate_temporal_filter_bounds(data, filter_feature)
 
         if filter_feature.filter_type == "range":
             return cls.do_range_filter(data, filter_feature)
@@ -122,6 +130,48 @@ class BaseFilterEngine(ABC):
     @classmethod
     def do_custom_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
         raise NotImplementedError
+
+    @classmethod
+    def _column_semantics(cls, data: Any, column: str) -> ColumnSemantics:
+        """Observed semantics of a column, used by the temporal filter-bound guard.
+
+        Mandatory hook (epic #518, Phase 4): every filter engine must expose its
+        framework-native ColumnSemantics so the tz-awareness guard on datetime
+        range/min/max bounds can fire. The base raises rather than silently skipping.
+        """
+        raise NotImplementedError(
+            f"{cls.__name__} must implement _column_semantics(data, column) "
+            f"to support timezone validation for temporal filters."
+        )
+
+    @classmethod
+    def _validate_temporal_filter_bounds(cls, data: Any, filter_feature: SingleFilter) -> None:
+        """Guard that native datetime range/min/max bounds match the column's tz-awareness.
+
+        Only reads column semantics when a bound is actually a ``datetime`` (pandas
+        ``Timestamp`` is a ``datetime`` subclass, so it is included). Numeric/string
+        filters never touch ``_column_semantics``. ``require_compatible`` no-ops unless
+        both the column and the bound are temporal, so non-temporal columns are not
+        falsely flagged.
+        """
+        param = filter_feature.parameter
+        candidates = [param.value, param.min_value, param.max_value]
+        datetime_bounds = [b for b in candidates if isinstance(b, datetime)]
+        if not datetime_bounds:
+            return
+
+        column = filter_feature.name
+        col_sem = cls._column_semantics(data, column)
+        contract = ComparisonContract(required=frozenset())
+        for bound in datetime_bounds:
+            bound_sem = ColumnSemantics(
+                is_ordered=True,
+                is_temporal=True,
+                is_numeric=False,
+                unit=None,
+                is_tz_aware=bound.tzinfo is not None,
+            )
+            contract.require_compatible(col_sem, bound_sem, column, "filter bound")
 
     @classmethod
     def get_min_max_operator(cls, filter_feature: SingleFilter) -> Any:

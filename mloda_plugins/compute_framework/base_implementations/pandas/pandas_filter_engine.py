@@ -1,6 +1,8 @@
 from typing import Any
+from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
 from mloda.provider import BaseFilterEngine
 from mloda.user import SingleFilter
+from mloda_plugins.compute_framework.base_implementations.pandas import pandas_type_semantics
 
 
 class PandasFilterEngine(BaseFilterEngine):
@@ -8,6 +10,10 @@ class PandasFilterEngine(BaseFilterEngine):
     def final_filters(cls) -> bool:
         """Filters are applied after the feature calculation."""
         return True
+
+    @classmethod
+    def _column_semantics(cls, data: Any, column: str) -> ColumnSemantics:
+        return pandas_type_semantics.column_semantics(data, column)
 
     @classmethod
     def do_range_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:

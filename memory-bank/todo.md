@@ -17,8 +17,9 @@ TDD: Red writes failing tests, Green implements, `tox` gates each phase.
       on key pairs; string/ID joins stay legal. `_column_semantics` now a MANDATORY hook
       (base raises actionable error); wired all 7 built-ins incl new duckdb reader +
       python_dict + spark. tox GREEN.
-- [ ] Phase 4 - Range/min/max filters. Validate order-compatibility with native datetime
-      bound in `BaseFilterEngine.do_filter`.
+- [x] Phase 4 - Range/min/max filters. `BaseFilterEngine.do_filter` validates datetime-bound
+      tz-awareness vs the column via require_compatible (only fires when a bound is a datetime).
+      Mandatory `_column_semantics` classmethod hook wired on all 8 filter engines. tox GREEN.
 - [ ] Phase 5 - Time windows + forecasting via `TimeReferenceMixin` (tz/unit aware).
 - [ ] Phase 6 - Docs (per-engine capability matrix) + reconcile EXPECTED_SKIP_COUNT.
 

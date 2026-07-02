@@ -138,19 +138,19 @@ def _polars_ids(result: Any) -> list[int]:
 
 
 def _python_dict_aware() -> Any:
-    return [{"id": IDS[i], "ts": TS_AWARE[i]} for i in range(len(IDS))]
+    return {"id": list(IDS), "ts": list(TS_AWARE)}
 
 
 def _python_dict_naive() -> Any:
-    return [{"id": IDS[i], "ts": TS_NAIVE[i]} for i in range(len(IDS))]
+    return {"id": list(IDS), "ts": list(TS_NAIVE)}
 
 
 def _python_dict_numeric() -> Any:
-    return [{"id": IDS[i], "age": AGES[i]} for i in range(len(IDS))]
+    return {"id": list(IDS), "age": list(AGES)}
 
 
 def _python_dict_ids(result: Any) -> list[int]:
-    return [int(row["id"]) for row in result]
+    return [int(v) for v in result["id"]]
 
 
 SPECS: list[FrameworkSpec] = [

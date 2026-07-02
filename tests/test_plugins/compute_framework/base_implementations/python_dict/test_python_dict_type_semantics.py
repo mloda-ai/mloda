@@ -16,24 +16,19 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 
 
 class TestPythonDictColumnSemantics:
-    def rows(self) -> list[dict[str, Any]]:
-        return [
-            {
-                "ts_naive": datetime(2021, 1, 1),
-                "ts_aware": datetime(2021, 1, 1, tzinfo=timezone.utc),
-                "num": 1,
-                "s": "a",
-            },
-            {
-                "ts_naive": datetime(2021, 1, 2),
-                "ts_aware": datetime(2021, 1, 2, tzinfo=timezone.utc),
-                "num": 2,
-                "s": "b",
-            },
-        ]
+    def data(self) -> dict[str, list[Any]]:
+        return {
+            "ts_naive": [datetime(2021, 1, 1), datetime(2021, 1, 2)],
+            "ts_aware": [
+                datetime(2021, 1, 1, tzinfo=timezone.utc),
+                datetime(2021, 1, 2, tzinfo=timezone.utc),
+            ],
+            "num": [1, 2],
+            "s": ["a", "b"],
+        }
 
     def test_ts_naive(self) -> None:
-        sem = column_semantics(self.rows(), "ts_naive")
+        sem = column_semantics(self.data(), "ts_naive")
         assert isinstance(sem, ColumnSemantics)
         assert sem.is_ordered is True
         assert sem.is_temporal is True
@@ -42,7 +37,7 @@ class TestPythonDictColumnSemantics:
         assert sem.unit is None
 
     def test_ts_aware(self) -> None:
-        sem = column_semantics(self.rows(), "ts_aware")
+        sem = column_semantics(self.data(), "ts_aware")
         assert sem.is_ordered is True
         assert sem.is_temporal is True
         assert sem.is_numeric is False
@@ -50,7 +45,7 @@ class TestPythonDictColumnSemantics:
         assert sem.unit is None
 
     def test_num(self) -> None:
-        sem = column_semantics(self.rows(), "num")
+        sem = column_semantics(self.data(), "num")
         assert sem.is_ordered is True
         assert sem.is_temporal is False
         assert sem.is_numeric is True
@@ -58,7 +53,7 @@ class TestPythonDictColumnSemantics:
         assert sem.unit is None
 
     def test_s(self) -> None:
-        sem = column_semantics(self.rows(), "s")
+        sem = column_semantics(self.data(), "s")
         assert sem.is_ordered is False
         assert sem.is_temporal is False
         assert sem.is_numeric is False

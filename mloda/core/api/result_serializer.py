@@ -77,7 +77,6 @@ def _load_compute_frameworks() -> None:
 
     if "compute_framework" not in PluginLoader._disabled_groups:
         PluginLoader().load_group("compute_framework")
-    PluginLoader().load_entry_points()
 
 
 def _resolve_framework(framework: str | type[ComputeFramework]) -> type[ComputeFramework]:

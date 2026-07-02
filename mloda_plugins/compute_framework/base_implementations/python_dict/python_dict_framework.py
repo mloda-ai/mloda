@@ -15,29 +15,35 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_mask_engine import (
     PythonDictMaskEngine,
 )
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils import rows_to_columnar
 
 
 class PythonDictFramework(ComputeFramework):
     """
     PythonDict Compute Framework
 
-    Uses List[Dict[str, Any]] as the data structure for tabular data.
+    Uses a COLUMNAR ``dict[str, list[Any]]`` as the data structure for tabular data.
     This framework provides a simple, dependency-free implementation using
     native Python data structures.
 
     Data Structure:
-        List[Dict[str, Any]] - Each dict represents a row, keys are column names
+        dict[str, list[Any]] - Each key is a column name, each value is that column's
+        list of cell values. All value-lists share one length (= the row count). The
+        schema is the set of keys, present even at zero rows.
 
     Example:
-        [
-            {"col1": 1, "col2": "a"},
-            {"col1": 2, "col2": "b"}
-        ]
+        {
+            "col1": [1, 2],
+            "col2": ["a", "b"],
+        }
+
+    ``{"a": []}`` is a valid schema-bearing zero-row frame (one known column). ``{}`` is
+    the only schema-less value (zero columns).
     """
 
     @classmethod
     def expected_data_framework(cls) -> Any:
-        return list
+        return dict
 
     @classmethod
     def merge_engine(cls) -> type[BaseMergeEngine]:
@@ -45,49 +51,51 @@ class PythonDictFramework(ComputeFramework):
 
     def select_data_by_column_names(
         self,
-        data: list[dict[str, Any]],
+        data: dict[str, list[Any]],
         selected_feature_names: set[FeatureName],
         column_ordering: Optional[str] = None,
-    ) -> list[dict[str, Any]]:
+    ) -> dict[str, list[Any]]:
         if not data:
-            return []
-
-        # Get all unique column names from all rows
-        column_names: set[str] = set()
-        for row in data:
-            column_names.update(row.keys())
+            return {}
 
         _selected_feature_names = self.identify_naming_convention(
-            selected_feature_names, column_names, ordering=column_ordering
+            selected_feature_names, set(data.keys()), ordering=column_ordering
         )
 
-        return [{k: record.get(k) for k in _selected_feature_names if k in record} for record in data]
+        # Copy the column lists so mutating the selection cannot mutate framework internals.
+        return {k: list(data[k]) for k in _selected_feature_names if k in data}
 
     def _extract_column_names(self, data: Any) -> set[str]:
-        all_columns: set[str] = set()
-        for row in data:
-            if isinstance(row, dict):
-                all_columns.update(row.keys())
-        return all_columns
+        if isinstance(data, dict):
+            return set(data.keys())
+        # Row-wise list[dict] (still an accepted pre-transform shape): columns are the keys.
+        if isinstance(data, list) and data and isinstance(data[0], dict):
+            return set(data[0].keys())
+        return set()
 
     def _is_schemaless_empty(self, data: Any) -> bool:
-        """``[]`` and ``{}`` are PythonDict's representational empties; ``transform``
-        collapses both to ``[]``. None is excluded: ``transform`` rejects None as an
-        unsupported type, so filter validation never sees a None result path.
+        """Only the empty dict ``{}`` (zero columns) is schema-less. A zero-row but
+        column-bearing frame such as ``{"a": []}`` carries a schema and is NOT schema-less.
         """
-        return isinstance(data, (list, dict)) and not data
+        return isinstance(data, dict) and not data
+
+    @staticmethod
+    def _column_values(data: Any, column_name: str) -> list[Any]:
+        """Return the values of ``column_name`` for either columnar dict or row-wise list[dict]."""
+        if isinstance(data, list):
+            return [row.get(column_name) for row in data if isinstance(row, dict)]
+        return data.get(column_name, [])  # type: ignore[no-any-return]
 
     def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
-        for row in data:
-            if isinstance(row, dict) and column_name in row and row[column_name] is not None:
-                return type(row[column_name]).__name__
+        for value in self._column_values(data, column_name):
+            if value is not None:
+                return type(value).__name__
         return None
 
     def _extract_column_data_type(self, data: Any, column_name: str) -> Optional[DataType]:
-        for row in data:
-            if not isinstance(row, dict) or column_name not in row or row[column_name] is None:
+        for val in self._column_values(data, column_name):
+            if val is None:
                 continue
-            val = row[column_name]
             if isinstance(val, bool):
                 return DataType.BOOLEAN
             if isinstance(val, int):
@@ -107,62 +115,68 @@ class PythonDictFramework(ComputeFramework):
             return None
         return None
 
-    def transform(self, data: Any, feature_names: set[str]) -> list[dict[str, Any]]:
+    @staticmethod
+    def _validate_columnar_dict(data: dict[str, Any]) -> None:
+        """Enforce the columnar contract on a dict: every value is a list and all value-lists
+        share one length. ``{}`` is schema-less and always valid. Shared by ``transform`` and
+        ``validate_native_data`` so both agree on what a valid columnar frame is.
         """
-        Transforms data to the PythonDict framework format.
+        if not data:
+            return
+
+        if not all(isinstance(v, list) for v in data.values()):
+            raise ValueError(
+                f"Columnar dict values must all be lists (rows must arrive as a list of dicts). Got: {data}"
+            )
+
+        lengths = {len(v) for v in data.values()}
+        if len(lengths) > 1:
+            raise ValueError(f"All columns must have the same length. Got column lengths {lengths}.")
+
+    def validate_native_data(self, data: Any) -> None:
+        """Enforce the columnar contract when a dict result bypasses ``transform``.
+
+        A scalar/mixed dict such as ``{"a": 1}`` is the expected framework type (``dict``) and
+        would otherwise be stored without validation. This raises the same ``ValueError``
+        ``transform`` raises for a malformed columnar dict.
+        """
+        if isinstance(data, dict):
+            self._validate_columnar_dict(data)
+
+    def transform(self, data: Any, feature_names: set[str]) -> dict[str, list[Any]]:
+        """
+        Transforms data to the COLUMNAR PythonDict framework format.
 
         Args:
             data: Input data to transform
             feature_names: Set of feature names being processed
 
         Returns:
-            List[Dict]: Data in PythonDict format
+            dict[str, list[Any]]: Data in columnar PythonDict format
 
         Raises:
             ValueError: If data type is not supported
         """
 
-        # Only the representational empties [] and {} short-circuit. None is a missing
-        # return value (state A), not an empty result, and falls through to the
-        # unsupported-type rejection below, regardless of allow_empty_result().
-        if isinstance(data, (list, dict)) and not data:
-            return []
+        # The representational empties [] and {} normalize to the schema-less {}. None is a
+        # missing return value (state A), not an empty result, and falls through to the
+        # unsupported-type rejection below.
+        if isinstance(data, list) and not data:
+            return {}
+        if isinstance(data, dict) and not data:
+            return {}
 
         transformed_data = self.apply_compute_framework_transformer(data)
         if transformed_data is not None:
             return transformed_data  # type: ignore[no-any-return]
 
         if isinstance(data, dict):
-            """Initial data: Transform columnar dict to row-based list of dicts"""
-            if all(isinstance(v, list) for v in data.values()):
-                # Columnar format: {"col1": [1,2], "col2": [3,4]}
-                # Convert to: [{"col1":1,"col2":3}, {"col1":2,"col2":4}]
-
-                # Get the length from the first column
-                first_key = next(iter(data.keys()))
-                length = len(data[first_key])
-
-                # Verify all columns have the same length
-                for key, values in data.items():
-                    if len(values) != length:
-                        raise ValueError(
-                            f"All columns must have the same length. Column '{key}' has length {len(values)}, expected {length}"
-                        )
-
-                return [{key: data[key][i] for key in data.keys()} for i in range(length)]
-            else:
-                # Single row dict: {"col1": 1, "col2": 2} -> [{"col1": 1, "col2": 2}]
-                return [data]
+            self._validate_columnar_dict(data)
+            return data
 
         if isinstance(data, list):
-            """Data is already in list format"""
-
-            # Verify it's a list of dicts
-            for i, item in enumerate(data):
-                if not isinstance(item, dict):
-                    raise ValueError(f"Expected list of dictionaries, but item at index {i} is {type(item)}")
-
-            return data
+            # List of row dicts -> pivot to columnar. Keys must be homogeneous across rows.
+            return rows_to_columnar(data)
 
         raise ValueError(f"Data type {type(data)} is not supported by {self.__class__.__name__}")
 

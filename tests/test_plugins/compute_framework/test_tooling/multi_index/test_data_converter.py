@@ -67,16 +67,16 @@ class DataConverter:
         if target_framework_type is list:
             return data
 
-        # Step 1: List[Dict] → PyArrow
-        try:
-            transformer_list_to_arrow = self.transformer.transformer_map[(list, pa.Table)]
-            arrow_data = transformer_list_to_arrow.transform(list, pa.Table, data, None)
-        except KeyError:
-            raise KeyError("No transformer found for list → PyArrow. Ensure PythonDictPyarrowTransformer is available.")
+        # Step 1: List[Dict] → PyArrow (built directly; the canonical test format is List[Dict])
+        arrow_data = pa.Table.from_pylist(data)
 
         # Special case: if target is PyArrow, we're done
         if target_framework_type == pa.Table:
             return arrow_data
+
+        # Special case: PythonDict is a COLUMNAR dict; PyArrow -> columnar dict
+        if target_framework_type is dict:
+            return arrow_data.to_pydict()
 
         # Step 2: PyArrow → Target Framework
         try:
@@ -111,8 +111,10 @@ class DataConverter:
             assert isinstance(data, list), "Expected list data"
             return data
 
-        # Special case: if source is PyArrow, skip the first step
-        if source_framework_type == pa.Table:
+        # Special case: PythonDict is a COLUMNAR dict; columnar dict -> PyArrow
+        if source_framework_type is dict:
+            arrow_data = pa.table(data)
+        elif source_framework_type == pa.Table:
             arrow_data = data
         else:
             # Step 1: Source Framework → PyArrow
@@ -125,10 +127,6 @@ class DataConverter:
                     f"Ensure the framework has a PyArrow transformer."
                 )
 
-        # Step 2: PyArrow → List[Dict]
-        try:
-            transformer_arrow_to_list = self.transformer.transformer_map[(pa.Table, list)]
-            result: list[dict[str, Any]] = transformer_arrow_to_list.transform(pa.Table, list, arrow_data, None)
-            return result
-        except KeyError:
-            raise KeyError("No transformer found for PyArrow → list. Ensure PythonDictPyarrowTransformer is available.")
+        # Step 2: PyArrow → List[Dict] (built directly; the canonical test format is List[Dict])
+        result: list[dict[str, Any]] = arrow_data.to_pylist()
+        return result

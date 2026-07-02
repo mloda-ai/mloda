@@ -81,7 +81,7 @@ For more in-depth information about feature groups, check out these advanced top
 - [Data Type Enforcement](../in_depth/data-type-enforcement.md) - Runtime validation of declared feature data types
 - [Filter Handling in FeatureGroups](../in_depth/filter_data.md#handling-filters-in-a-featuregroup) - Row elimination and `final_filters()`
 - [Mask Engine](../in_depth/mask_engine.md) - Inline masking with `features.mask_engine`
-- [Empty Result Handling](../in_depth/compute-framework-integration.md#allowing-empty-results) - Zero rows is always valid; `allow_empty_result` opts into schema-less empty results
+- [Empty Result Handling](../in_depth/compute-framework-integration.md#empty-results) - Zero rows is always valid; a zero-column (schema-less) result raises `EmptyResultError`
 
 #### 6. Discovering Feature Groups
 

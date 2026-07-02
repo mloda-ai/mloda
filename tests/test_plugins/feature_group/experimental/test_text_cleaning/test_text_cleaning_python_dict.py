@@ -52,39 +52,30 @@ class PythonDictTextCleaningTestDataCreator(ATestDataCreator):
         }
 
     @classmethod
-    def transform_format_for_testing(cls, data: dict[str, Any]) -> list[dict[str, Any]]:
-        """Transform the data to PythonDict format (List[Dict[str, Any]])."""
-        # Convert columnar format to row-based format
-        if not data:
-            return []
+    def transform_format_for_testing(cls, data: dict[str, Any]) -> dict[str, Any]:
+        """PythonDict's native format is already columnar; return it unchanged."""
+        return data
 
-        # Get the length from the first column
-        first_key = next(iter(data.keys()))
-        length = len(data[first_key])
 
-        # Verify all columns have the same length
-        for key, values in data.items():
-            if len(values) != length:
-                raise ValueError(
-                    f"All columns must have the same length. Column '{key}' has length {len(values)}, expected {length}"
-                )
-
-        return [{key: data[key][i] for key in data.keys()} for i in range(length)]
+def _copy_columnar(data: dict[str, Any]) -> dict[str, Any]:
+    """Deep-copy a columnar dict so tests don't mutate the shared fixture."""
+    return {key: list(values) for key, values in data.items()}
 
 
 class TestPythonDictTextCleaningFeatureGroup:
     """Tests for the PythonDictTextCleaningFeatureGroup implementation."""
 
     def setup_method(self) -> None:
-        """Set up test data."""
-        # Create test data
-        self.data = [
-            {"text": "Hello World!"},
-            {"text": "TESTING text normalization"},
-            {"text": "This is a test with punctuation, special chars, and extra   spaces."},
-            {"text": "Visit https://example.com or email test@example.com"},
-            {"text": "This contains stopwords like the and is and a"},
-        ]
+        """Set up columnar test data."""
+        self.data = {
+            "text": [
+                "Hello World!",
+                "TESTING text normalization",
+                "This is a test with punctuation, special chars, and extra   spaces.",
+                "Visit https://example.com or email test@example.com",
+                "This contains stopwords like the and is and a",
+            ]
+        }
 
     def test_compute_framework_rule(self) -> None:
         """Test compute_framework_rule method."""
@@ -103,33 +94,32 @@ class TestPythonDictTextCleaningFeatureGroup:
 
         # Empty data
         with pytest.raises(ValueError, match="Data cannot be empty"):
-            PythonDictTextCleaningFeatureGroup._check_source_features_exist([], ["text"])
+            PythonDictTextCleaningFeatureGroup._check_source_features_exist({}, ["text"])
 
     def test_get_source_text(self) -> None:
         """Test that the source text is correctly retrieved."""
         result = PythonDictTextCleaningFeatureGroup._get_source_text(self.data, "text")
 
         assert isinstance(result, list)
-        assert len(result) == len(self.data)
+        assert len(result) == len(self.data["text"])
         assert result[0] == "Hello World!"
         assert result[1] == "TESTING text normalization"
 
         # Test with None values
-        data_with_none: list[dict[str, Any]] = [{"text": "Hello"}, {"text": None}, {"text": "World"}]
+        data_with_none: dict[str, Any] = {"text": ["Hello", None, "World"]}
         result_with_none = PythonDictTextCleaningFeatureGroup._get_source_text(data_with_none, "text")
         assert result_with_none == ["Hello", "", "World"]
 
     def test_add_result_to_data(self) -> None:
         """Test that the result is correctly added to the data."""
         result = ["test1", "test2", "test3", "test4", "test5"]
-        data_copy = [row.copy() for row in self.data]
+        data_copy = _copy_columnar(self.data)
 
         updated_data = PythonDictTextCleaningFeatureGroup._add_result_to_data(data_copy, "new_column", result)
 
-        assert len(updated_data) == len(self.data)
-        assert "new_column" in updated_data[0]
-        assert updated_data[0]["new_column"] == "test1"
-        assert updated_data[4]["new_column"] == "test5"
+        assert "new_column" in updated_data
+        assert updated_data["new_column"][0] == "test1"
+        assert updated_data["new_column"][4] == "test5"
 
         # Test mismatched lengths
         with pytest.raises(ValueError, match="Result length 3 does not match data length 5"):
@@ -227,13 +217,13 @@ class TestPythonDictTextCleaningFeatureGroup:
         feature_set.add(feature)
 
         # Apply feature
-        data_copy = [row.copy() for row in self.data]
+        data_copy = _copy_columnar(self.data)
         result = PythonDictTextCleaningFeatureGroup.calculate_feature(data_copy, feature_set)
 
         # Check results
-        assert "text__cleaned_text" in result[0]
-        assert result[0]["text__cleaned_text"] == "hello world!"
-        assert result[1]["text__cleaned_text"] == "testing text normalization"
+        assert "text__cleaned_text" in result
+        assert result["text__cleaned_text"][0] == "hello world!"
+        assert result["text__cleaned_text"][1] == "testing text normalization"
 
     def test_calculate_feature_multiple_operations(self) -> None:
         """Test calculate_feature with multiple operations."""
@@ -254,14 +244,14 @@ class TestPythonDictTextCleaningFeatureGroup:
         feature_set.add(feature)
 
         # Apply feature
-        data_copy = [row.copy() for row in self.data]
+        data_copy = _copy_columnar(self.data)
         result = PythonDictTextCleaningFeatureGroup.calculate_feature(data_copy, feature_set)
 
         # Check results
-        assert "text__cleaned_text" in result[0]
-        assert result[0]["text__cleaned_text"] == "hello world"  # Lowercase and no punctuation
-        assert "," not in result[2]["text__cleaned_text"]  # No punctuation
-        assert "   " not in result[2]["text__cleaned_text"]  # No extra spaces
+        assert "text__cleaned_text" in result
+        assert result["text__cleaned_text"][0] == "hello world"  # Lowercase and no punctuation
+        assert "," not in result["text__cleaned_text"][2]  # No punctuation
+        assert "   " not in result["text__cleaned_text"][2]  # No extra spaces
 
     def test_calculate_feature_missing_source(self) -> None:
         """Test calculate_feature with a missing source feature."""
@@ -278,7 +268,7 @@ class TestPythonDictTextCleaningFeatureGroup:
         feature_set.add(feature)
 
         # Apply feature
-        data_copy = [row.copy() for row in self.data]
+        data_copy = _copy_columnar(self.data)
         with pytest.raises(ValueError) as excinfo:
             PythonDictTextCleaningFeatureGroup.calculate_feature(data_copy, feature_set)
 
@@ -299,7 +289,7 @@ class TestPythonDictTextCleaningFeatureGroup:
         feature_set.add(feature)
 
         # Apply feature
-        data_copy = [row.copy() for row in self.data]
+        data_copy = _copy_columnar(self.data)
         with pytest.raises(ValueError) as excinfo:
             PythonDictTextCleaningFeatureGroup.calculate_feature(data_copy, feature_set)
 
@@ -343,24 +333,22 @@ class TestTextCleaningPythonDictIntegration:
         # Validate that the text cleaning features are present
         assert len(result) == 2, "Expected 2 results: one for original data and one for cleaned features"
 
-        # Result is a list of dictionaries (PythonDict format)
-        data = result[1]  # Get the first result (which is the list of rows)
-        first_row = data[0]  # Get the first row
+        # Result is a columnar dict (PythonDict format)
+        data = result[1]
 
         # Check that cleaning was applied (text should be lowercase and without punctuation)
-        assert first_row["text__cleaned_text"] == "hello world"
-        assert "!" not in first_row["review__cleaned_text"]
-        assert first_row["review__cleaned_text"].islower()
+        assert data["text__cleaned_text"][0] == "hello world"
+        assert "!" not in data["review__cleaned_text"][0]
+        assert data["review__cleaned_text"][0].islower()
 
         # Check that cleaned features are present
-        assert "text__cleaned_text" in first_row
-        assert "review__cleaned_text" in first_row
-        assert "description__cleaned_text" in first_row
+        assert "text__cleaned_text" in data
+        assert "review__cleaned_text" in data
+        assert "description__cleaned_text" in data
 
         data = result[0]
-        first_row = data[0]
 
         # Check that original features are present
-        assert "text" in first_row
-        assert "review" in first_row
-        assert "description" in first_row
+        assert "text" in data
+        assert "review" in data
+        assert "description" in data

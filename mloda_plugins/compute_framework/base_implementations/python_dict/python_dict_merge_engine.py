@@ -4,13 +4,15 @@ from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 from mloda.provider import BaseMergeEngine
 from mloda.user import Index
 from mloda.user import JoinType
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils import row_count
 
 
 class PythonDictMergeEngine(BaseMergeEngine):
     """
-    Merge engine for PythonDict framework using List[Dict[str, Any]] data structure.
+    Merge engine for PythonDict framework using a COLUMNAR ``dict[str, list[Any]]``.
 
-    Implements hash-based joins using dictionary lookups.
+    Joins are computed over row-index views built from the columnar data and produce
+    columnar dicts with the union of columns; the absent side is null-filled with ``None``.
     """
 
     def check_import(self) -> None:
@@ -18,6 +20,27 @@ class PythonDictMergeEngine(BaseMergeEngine):
         No external dependencies required for PythonDict framework.
         """
         pass
+
+    # -- columnar helpers ----------------------------------------------------
+
+    @classmethod
+    def _to_rows(cls, data: dict[str, list[Any]]) -> list[dict[str, Any]]:
+        n = row_count(data)
+        return [{col: data[col][i] for col in data} for i in range(n)]
+
+    @staticmethod
+    def _to_columnar(rows: list[dict[str, Any]], columns: list[str]) -> dict[str, list[Any]]:
+        # None-fills missing keys because join outputs are ragged by design.
+        return {col: [row.get(col) for row in rows] for col in columns}
+
+    @staticmethod
+    def _ordered_columns(*column_groups: Any) -> list[str]:
+        ordered: list[str] = []
+        for group in column_groups:
+            for col in group:
+                if col not in ordered:
+                    ordered.append(col)
+        return ordered
 
     def merge_inner(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
         return self.join_logic("inner", left_data, right_data, left_index, right_index, JoinType.INNER)
@@ -32,7 +55,10 @@ class PythonDictMergeEngine(BaseMergeEngine):
         return self.join_logic("outer", left_data, right_data, left_index, right_index, JoinType.OUTER)
 
     def merge_append(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
-        return left_data + right_data
+        columns = self._ordered_columns(left_data.keys(), right_data.keys())
+        left_rows = self._to_rows(left_data)
+        right_rows = self._to_rows(right_data)
+        return self._to_columnar(left_rows + right_rows, columns)
 
     def merge_union(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
         return self.join_logic("union", left_data, right_data, left_index, right_index, JoinType.UNION)
@@ -53,22 +79,20 @@ class PythonDictMergeEngine(BaseMergeEngine):
         allow_exact = asof_config.allow_exact_matches
         tolerance = asof_config.tolerance
 
+        left_rows = self._to_rows(left_data)
+        right_rows = self._to_rows(right_data)
+
         right_by_groups: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
-        for r in right_data:
+        for r in right_rows:
             key = tuple(r.get(col) for col in right_by)
             right_by_groups.setdefault(key, []).append(r)
 
-        left_keys = set()
-        for left in left_data:
-            left_keys.update(left.keys())
-        right_extra_cols = []
-        for r in right_data:
-            for col in r.keys():
-                if col not in left_keys and col not in right_extra_cols:
-                    right_extra_cols.append(col)
+        left_keys = set(left_data.keys())
+        right_extra_cols = [col for col in right_data.keys() if col not in left_keys]
+        out_columns = self._ordered_columns(left_data.keys(), right_extra_cols)
 
-        result = []
-        for left in left_data:
+        result_rows = []
+        for left in left_rows:
             key = tuple(left.get(col) for col in left_by)
             left_time = left.get(lt)
             match = self._select_asof_match(
@@ -77,38 +101,40 @@ class PythonDictMergeEngine(BaseMergeEngine):
             merged = {**left}
             for col in right_extra_cols:
                 merged[col] = match.get(col) if match is not None else None
-            result.append(merged)
+            result_rows.append(merged)
 
-        return result
+        return self._to_columnar(result_rows, out_columns)
 
     def _coerce_asof_time_column(self, data: Any, column: str) -> Any:
-        coerced: list[dict[str, Any]] = []
+        column_values = data.get(column, [])
+        new_column: list[Any] = []
         parsed_values: list[datetime] = []
-        for row in data:
-            new_row = dict(row)
-            v = row.get(column)
-            if v is not None:
-                if not isinstance(v, str):
-                    raise ValueError(
-                        f"Cannot coerce as-of time column '{column}': expected ISO-8601 string or None, "
-                        f"got {type(v).__name__}."
-                    )
-                # Python 3.10's fromisoformat rejects a trailing 'Z'; normalize it to '+00:00'.
-                parse_input = v[:-1] + "+00:00" if v.endswith("Z") else v
-                new_row[column] = datetime.fromisoformat(parse_input)
-                parsed_values.append(new_row[column])
-            coerced.append(new_row)
+        for v in column_values:
+            if v is None:
+                new_column.append(None)
+                continue
+            if not isinstance(v, str):
+                raise ValueError(
+                    f"Cannot coerce as-of time column '{column}': expected ISO-8601 string or None, "
+                    f"got {type(v).__name__}."
+                )
+            # Python 3.10's fromisoformat rejects a trailing 'Z'; normalize it to '+00:00'.
+            parse_input = v[:-1] + "+00:00" if v.endswith("Z") else v
+            parsed = datetime.fromisoformat(parse_input)
+            new_column.append(parsed)
+            parsed_values.append(parsed)
         has_naive = any(p.tzinfo is None for p in parsed_values)
         has_aware = any(p.tzinfo is not None for p in parsed_values)
         if has_naive and has_aware:
             raise ValueError(
                 f"Cannot coerce as-of time column '{column}': mixed tz-naive and tz-aware values are not allowed."
             )
+        coerced = dict(data)
+        coerced[column] = new_column
         return coerced
 
     def _asof_time_column_is_ordered(self, data: Any, column: str) -> bool:
-        for row in data:
-            v = row.get(column)
+        for v in data.get(column, []):
             if v is None:
                 continue
             if isinstance(v, bool) or not isinstance(v, (int, float, datetime, date, timedelta)):
@@ -173,14 +199,14 @@ class PythonDictMergeEngine(BaseMergeEngine):
 
         Args:
             join_type: Type of join ("inner", "left", "right", "outer", "union")
-            left_data: Left dataset as List[Dict]
-            right_data: Right dataset as List[Dict]
+            left_data: Left dataset as a columnar dict
+            right_data: Right dataset as a columnar dict
             left_index: Index object containing left join columns
             right_index: Index object containing right join columns
             jointype: JoinType enum value
 
         Returns:
-            List[Dict]: Joined result
+            dict[str, list[Any]]: Joined result as a columnar dict
         """
         left_cols = left_index.index
         right_cols = right_index.index
@@ -202,102 +228,91 @@ class PythonDictMergeEngine(BaseMergeEngine):
         self, left_data: Any, right_data: Any, left_cols: tuple[str, ...], right_cols: tuple[str, ...]
     ) -> Any:
         """Performs inner join."""
-        right_index_map = {tuple(r.get(col) for col in right_cols): r for r in right_data}
+        left_rows = self._to_rows(left_data)
+        right_rows = self._to_rows(right_data)
+        right_index_map = {tuple(r.get(col) for col in right_cols): r for r in right_rows}
 
+        out_columns = self._ordered_columns(left_data.keys(), right_data.keys())
         result = []
-        for left in left_data:
+        for left in left_rows:
             key = tuple(left.get(col) for col in left_cols)
             if key in right_index_map:
-                merged = {**left, **right_index_map[key]}
-                result.append(merged)
+                result.append({**left, **right_index_map[key]})
 
-        return result
+        return self._to_columnar(result, out_columns)
 
     def _left_join(
         self, left_data: Any, right_data: Any, left_cols: tuple[str, ...], right_cols: tuple[str, ...]
     ) -> Any:
         """Performs left join."""
-        right_index_map = {tuple(r.get(col) for col in right_cols): r for r in right_data}
+        left_rows = self._to_rows(left_data)
+        right_rows = self._to_rows(right_data)
+        right_index_map = {tuple(r.get(col) for col in right_cols): r for r in right_rows}
 
-        # Get right columns for null filling
-        right_columns = set()
-        for r in right_data:
-            right_columns.update(r.keys())
-        right_columns = right_columns - set(right_cols)
-
-        left_columns = set()
-        for left in left_data:
-            left_columns.update(left.keys())
-        right_columns = right_columns - left_columns
+        out_columns = self._ordered_columns(left_data.keys(), right_data.keys())
+        right_columns = [col for col in right_data.keys() if col not in set(right_cols) and col not in left_data]
 
         result = []
-        for left in left_data:
+        for left in left_rows:
             key = tuple(left.get(col) for col in left_cols)
             if key in right_index_map:
-                merged = {**left, **right_index_map[key]}
-                result.append(merged)
+                result.append({**left, **right_index_map[key]})
             else:
                 merged = {**left}
                 for col in right_columns:
                     merged[col] = None
                 result.append(merged)
 
-        return result
+        return self._to_columnar(result, out_columns)
 
     def _right_join(
         self, left_data: Any, right_data: Any, left_cols: tuple[str, ...], right_cols: tuple[str, ...]
     ) -> Any:
         """Performs right join."""
-        left_index_map = {tuple(left.get(col) for col in left_cols): left for left in left_data}
+        left_rows = self._to_rows(left_data)
+        right_rows = self._to_rows(right_data)
+        left_index_map = {tuple(left.get(col) for col in left_cols): left for left in left_rows}
 
-        # Get left columns for null filling
-        left_columns = set()
-        for left in left_data:
-            left_columns.update(left.keys())
-        left_columns = left_columns - set(left_cols)
-
-        right_columns = set()
-        for r in right_data:
-            right_columns.update(r.keys())
-        left_columns = left_columns - right_columns
+        out_columns = self._ordered_columns(right_data.keys(), left_data.keys())
+        left_columns = [col for col in left_data.keys() if col not in set(left_cols) and col not in right_data]
 
         result = []
-        for r in right_data:
+        for r in right_rows:
             key = tuple(r.get(col) for col in right_cols)
             if key in left_index_map:
-                merged = {**left_index_map[key], **r}
-                result.append(merged)
+                result.append({**left_index_map[key], **r})
             else:
                 merged = {**r}
                 for col in left_columns:
                     merged[col] = None
                 result.append(merged)
 
-        return result
+        return self._to_columnar(result, out_columns)
 
     def _outer_join(
         self, left_data: Any, right_data: Any, left_cols: tuple[str, ...], right_cols: tuple[str, ...]
     ) -> Any:
         """Performs outer join."""
-        left_index_map = {tuple(left.get(col) for col in left_cols): left for left in left_data}
-        right_index_map = {tuple(r.get(col) for col in right_cols): r for r in right_data}
+        left_rows = self._to_rows(left_data)
+        right_rows = self._to_rows(right_data)
+        left_index_map = {tuple(left.get(col) for col in left_cols): left for left in left_rows}
+        right_index_map = {tuple(r.get(col) for col in right_cols): r for r in right_rows}
 
-        all_keys = set(left_index_map.keys()) | set(right_index_map.keys())
+        all_keys = list(left_index_map.keys())
+        for key in right_index_map.keys():
+            if key not in left_index_map:
+                all_keys.append(key)
 
-        # Get all column names
-        left_columns = set()
-        right_columns = set()
-        for left in left_data:
-            left_columns.update(left.keys())
-        for r in right_data:
-            right_columns.update(r.keys())
+        left_columns = list(left_data.keys())
+        right_columns = list(right_data.keys())
+        out_columns = self._ordered_columns(left_columns, right_columns)
 
         result = []
         for key in all_keys:
             left_row = left_index_map.get(key, {})
             right_row = right_index_map.get(key, {})
 
-            merged = {}
+            merged: dict[str, Any] = {}
 
             # Start with the key values
             if left_cols == right_cols:
@@ -311,39 +326,39 @@ class PythonDictMergeEngine(BaseMergeEngine):
                     for i, col in enumerate(right_cols):
                         merged[col] = key[i]
 
-            # Add left columns (excluding join columns)
             for col in left_columns:
                 if col not in left_cols:
                     merged[col] = left_row.get(col)
 
-            # Add right columns (excluding join columns)
             for col in right_columns:
                 if col not in right_cols:
                     merged[col] = right_row.get(col)
 
             result.append(merged)
 
-        return result
+        return self._to_columnar(result, out_columns)
 
     def _union_join(
         self, left_data: Any, right_data: Any, left_cols: tuple[str, ...], right_cols: tuple[str, ...]
     ) -> Any:
         """Performs union (removes duplicates based on join columns)."""
+        left_rows = self._to_rows(left_data)
+        right_rows = self._to_rows(right_data)
+        out_columns = self._ordered_columns(left_data.keys(), right_data.keys())
+
         seen_keys: set[Any] = set()
         result = []
 
-        # Add left rows
-        for row in left_data:
+        for row in left_rows:
             key = tuple(row.get(col) for col in left_cols)
             if key not in seen_keys:
                 seen_keys.add(key)
                 result.append(row)
 
-        # Add right rows that haven't been seen
-        for row in right_data:
+        for row in right_rows:
             key = tuple(row.get(col) for col in right_cols)
             if key not in seen_keys:
                 seen_keys.add(key)
                 result.append(row)
 
-        return result
+        return self._to_columnar(result, out_columns)

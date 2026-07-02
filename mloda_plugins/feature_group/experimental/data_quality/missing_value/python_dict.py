@@ -11,6 +11,7 @@ from typing import Any, Optional
 from mloda.provider import ComputeFramework
 
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils import row_count
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 
 
@@ -18,8 +19,8 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
     """
     PythonDict implementation for missing value imputation feature groups.
 
-    This implementation uses pure Python operations on List[Dict[str, Any]] data structures
-    to perform missing value imputation without external dependencies.
+    This implementation uses pure Python operations on columnar ``dict[str, list[Any]]``
+    data structures to perform missing value imputation without external dependencies.
     """
 
     @classmethod
@@ -27,18 +28,12 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
         return {PythonDictFramework}
 
     @classmethod
-    def _get_available_columns(cls, data: list[dict[str, Any]]) -> set[str]:
+    def _get_available_columns(cls, data: dict[str, list[Any]]) -> set[str]:
         """Get the set of available column names from the data."""
-        if not data:
-            return set()
-        # Collect all keys from all dictionaries
-        all_keys: set[str] = set()
-        for row in data:
-            all_keys.update(row.keys())
-        return all_keys
+        return set(data.keys())
 
     @classmethod
-    def _check_source_features_exist(cls, data: list[dict[str, Any]], feature_names: list[str]) -> None:
+    def _check_source_features_exist(cls, data: dict[str, list[Any]], feature_names: list[str]) -> None:
         """Check if the resolved source features exist in the data."""
         if not data:
             raise ValueError("Data cannot be empty")
@@ -55,21 +50,20 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
 
     @classmethod
     def _add_result_to_data(
-        cls, data: list[dict[str, Any]], feature_name: str, result: list[Any]
-    ) -> list[dict[str, Any]]:
+        cls, data: dict[str, list[Any]], feature_name: str, result: list[Any]
+    ) -> dict[str, list[Any]]:
         """Add the result to the data."""
-        if len(result) != len(data):
-            raise ValueError(f"Result length {len(result)} does not match data length {len(data)}")
+        if len(result) != row_count(data):
+            raise ValueError(f"Result length {len(result)} does not match data length {row_count(data)}")
 
-        for i, row in enumerate(data):
-            row[feature_name] = result[i]
+        data[feature_name] = list(result)
 
         return data
 
     @classmethod
     def _perform_imputation(
         cls,
-        data: list[dict[str, Any]],
+        data: dict[str, list[Any]],
         imputation_method: str,
         in_features: list[str],
         constant_value: Optional[Any] = None,
@@ -96,7 +90,7 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
         if len(in_features) == 1:
             source_feature = in_features[0]
             # Extract the source feature values
-            source_values = [row.get(source_feature) for row in data]
+            source_values = list(data.get(source_feature, []))
 
             # If there are no missing values, return the original values
             if not any(value is None for value in source_values):
@@ -127,8 +121,8 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
             # Multi-column case: impute across columns (row-wise)
             # For multi-column features, we compute imputation values across columns for each row
             result = []
-            for row in data:
-                row_values = [row.get(col) for col in in_features]
+            for i in range(row_count(data)):
+                row_values = [data[col][i] if col in data else None for col in in_features]
 
                 if imputation_method == "mean":
                     non_null = [v for v in row_values if v is not None]
@@ -162,7 +156,7 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
     @classmethod
     def _perform_grouped_imputation(
         cls,
-        data: list[dict[str, Any]],
+        data: dict[str, list[Any]],
         imputation_method: str,
         in_features: str,  # Note: grouped imputation only supports single column
         constant_value: Optional[Any],
@@ -183,14 +177,14 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
         """
         # Create groups based on group_by_features
         groups: dict[tuple[Any, ...], list[int]] = {}
-        for i, row in enumerate(data):
-            group_key = tuple(row.get(feature) for feature in group_by_features)
+        for i in range(row_count(data)):
+            group_key = tuple(data[feature][i] if feature in data else None for feature in group_by_features)
             if group_key not in groups:
                 groups[group_key] = []
             groups[group_key].append(i)
 
         # Initialize result with original values
-        result = [row.get(in_features) for row in data]
+        result = list(data.get(in_features, []))
 
         if imputation_method == "constant":
             # Constant imputation is the same regardless of groups

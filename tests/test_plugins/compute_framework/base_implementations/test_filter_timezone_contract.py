@@ -26,6 +26,7 @@ None of these is the clear, contract-level ``ValueError`` the negatives assert f
 so every negative fails today for the right reason.
 """
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -34,18 +35,38 @@ from typing import Any
 import pytest
 
 import pandas as pd
-import polars as pl
-import pyarrow as pa
 
 from mloda.provider import BaseFilterEngine
 from mloda.user import Feature, FilterType, SingleFilter
 
 from mloda_plugins.compute_framework.base_implementations.pandas.pandas_filter_engine import PandasFilterEngine
-from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_filter_engine import PyArrowFilterEngine
-from mloda_plugins.compute_framework.base_implementations.polars.polars_filter_engine import PolarsFilterEngine
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_filter_engine import (
     PythonDictFilterEngine,
 )
+
+logger = logging.getLogger(__name__)
+
+try:
+    import polars as pl
+    from mloda_plugins.compute_framework.base_implementations.polars.polars_filter_engine import PolarsFilterEngine
+
+    POLARS_AVAILABLE = True
+except ImportError:
+    logger.warning("Polars is not installed. Polars framework cases will not be parametrized.")
+    pl = None  # type: ignore
+    PolarsFilterEngine = None  # type: ignore
+    POLARS_AVAILABLE = False
+
+try:
+    import pyarrow as pa
+    from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_filter_engine import PyArrowFilterEngine
+
+    PYARROW_AVAILABLE = True
+except ImportError:
+    logger.warning("PyArrow is not installed. PyArrow framework cases will not be parametrized.")
+    pa = None  # type: ignore
+    PyArrowFilterEngine = None  # type: ignore
+    PYARROW_AVAILABLE = False
 
 
 IDS: list[int] = [1, 2, 3, 4, 5, 6]
@@ -155,8 +176,6 @@ def _python_dict_ids(result: Any) -> list[int]:
 
 SPECS: list[FrameworkSpec] = [
     FrameworkSpec("pandas", PandasFilterEngine, _pandas_aware, _pandas_naive, _pandas_numeric, _pandas_ids),
-    FrameworkSpec("pyarrow", PyArrowFilterEngine, _pyarrow_aware, _pyarrow_naive, _pyarrow_numeric, _pyarrow_ids),
-    FrameworkSpec("polars", PolarsFilterEngine, _polars_aware, _polars_naive, _polars_numeric, _polars_ids),
     FrameworkSpec(
         "python_dict",
         PythonDictFilterEngine,
@@ -166,6 +185,16 @@ SPECS: list[FrameworkSpec] = [
         _python_dict_ids,
     ),
 ]
+
+if PYARROW_AVAILABLE:
+    SPECS.append(
+        FrameworkSpec("pyarrow", PyArrowFilterEngine, _pyarrow_aware, _pyarrow_naive, _pyarrow_numeric, _pyarrow_ids)
+    )
+
+if POLARS_AVAILABLE:
+    SPECS.append(
+        FrameworkSpec("polars", PolarsFilterEngine, _polars_aware, _polars_naive, _polars_numeric, _polars_ids)
+    )
 
 SPEC_IDS: list[str] = [spec.name for spec in SPECS]
 

@@ -107,3 +107,86 @@ class TestPluginLoader:
         assert all("transformer" in m for m in loaded), f"Non-transformer file loaded: {loaded}"
         assert any("transformer" in m for m in loaded), "No transformer files were loaded"
         assert not any("dataframe" in m for m in loaded), f"Dataframe file loaded unexpectedly: {loaded}"
+
+    def test_all_returns_cached_instance(self) -> None:
+        """Repeated all() calls return the identical cached PluginLoader instance."""
+        PluginLoader.reset_cache()
+        try:
+            first = PluginLoader.all()
+            second = PluginLoader.all()
+            assert first is second
+        finally:
+            PluginLoader.reset_cache()
+
+    def test_all_second_call_skips_load_work(self) -> None:
+        """The second all() call reuses the cache and does not re-run the load work."""
+        from unittest.mock import MagicMock
+
+        PluginLoader.reset_cache()
+        try:
+            with patch.object(PluginLoader, "load_all_plugins", MagicMock()) as mock_load_all:
+                with patch.object(PluginLoader, "load_entry_points", MagicMock()) as mock_entry_points:
+                    PluginLoader.all()
+                    PluginLoader.all()
+                    mock_load_all.assert_called_once()
+                    mock_entry_points.assert_called_once()
+        finally:
+            PluginLoader.reset_cache()
+
+    def test_all_force_reload_rebuilds(self) -> None:
+        """all(force_reload=True) rebuilds and returns a different instance than the cached one."""
+        PluginLoader.reset_cache()
+        try:
+            first = PluginLoader.all()
+            second = PluginLoader.all(force_reload=True)
+            assert first is not second
+        finally:
+            PluginLoader.reset_cache()
+
+    def test_reset_cache_forces_rebuild(self) -> None:
+        """After reset_cache(), the next all() rebuilds a fresh instance."""
+        PluginLoader.reset_cache()
+        try:
+            first = PluginLoader.all()
+            PluginLoader.reset_cache()
+            second = PluginLoader.all()
+            assert first is not second
+        finally:
+            PluginLoader.reset_cache()
+
+    def test_all_thread_safe_single_build(self) -> None:
+        """Concurrent all() calls build the loader exactly once under contention."""
+        import threading
+        import time
+        from unittest.mock import MagicMock
+
+        # Widen the double-checked-locking contention window so threads actually
+        # overlap inside the build; without this the mocked build is instantaneous.
+        def slow_build(*args: object, **kwargs: object) -> None:
+            time.sleep(0.02)
+
+        PluginLoader.reset_cache()
+        try:
+            with patch.object(PluginLoader, "load_all_plugins", MagicMock(side_effect=slow_build)) as mock_load_all:
+                with patch.object(PluginLoader, "load_entry_points", MagicMock()) as mock_entry_points:
+                    barrier = threading.Barrier(10)
+                    results: list[PluginLoader] = []
+                    results_lock = threading.Lock()
+
+                    def worker() -> None:
+                        barrier.wait()
+                        loader = PluginLoader.all()
+                        with results_lock:
+                            results.append(loader)
+
+                    threads = [threading.Thread(target=worker) for _ in range(10)]
+                    for thread in threads:
+                        thread.start()
+                    for thread in threads:
+                        thread.join()
+
+                    mock_load_all.assert_called_once()
+                    mock_entry_points.assert_called_once()
+                    assert all(loader is results[0] for loader in results)
+        finally:
+            PluginLoader.reset_cache()

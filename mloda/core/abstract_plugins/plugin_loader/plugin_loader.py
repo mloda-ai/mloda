@@ -2,6 +2,7 @@ import importlib
 import importlib.metadata
 import inspect
 import sys
+import threading
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -55,6 +56,8 @@ ENTRY_POINT_GROUPS: dict[str, type[Any]] = {
 
 class PluginLoader:
     _disabled_groups: ClassVar[set[str]] = set()
+    _cached_loader: ClassVar[Optional["PluginLoader"]] = None
+    _cache_lock: ClassVar[threading.Lock] = threading.Lock()
 
     @classmethod
     def disable_auto_load(cls, group: str) -> None:
@@ -88,12 +91,34 @@ class PluginLoader:
         self.plugins: dict[str, ModuleType] = {}
         self.plugin_graph: dict[str, list[str]] = {}  # Graph representation of plugins
 
-    @staticmethod
-    def all() -> "PluginLoader":
-        plugin_loader = PluginLoader()
-        plugin_loader.load_all_plugins()
-        plugin_loader.load_entry_points()
-        return plugin_loader
+    @classmethod
+    def all(cls, force_reload: bool = False) -> "PluginLoader":
+        """Return a fully loaded PluginLoader, building and caching it on first use.
+
+        The result is cached: repeated calls return the same loader without redoing the load work.
+
+        Pass ``force_reload=True`` (or call ``reset_cache()`` first) to rebuild, for example after the
+        default plugin registry has been cleared/restored or to pick up newly installed entry points.
+        This is the supported way to re-populate registry state.
+
+        Must not be called re-entrantly from within plugin import / entry-point loading: the cache lock
+        is non-reentrant, so a re-entrant call during the initial build would deadlock. Treat the returned
+        loader as read-only (do not mutate its ``plugins``/``plugin_graph``), since it is shared across callers.
+        """
+        if not force_reload and cls._cached_loader is not None:
+            return cls._cached_loader
+        with cls._cache_lock:
+            if force_reload or cls._cached_loader is None:
+                plugin_loader = cls()
+                plugin_loader.load_all_plugins()
+                plugin_loader.load_entry_points()
+                cls._cached_loader = plugin_loader
+            return cls._cached_loader
+
+    @classmethod
+    def reset_cache(cls) -> None:
+        with cls._cache_lock:
+            cls._cached_loader = None
 
     def load_entry_points(self, group: str | None = None) -> list[str]:
         """Discover installed entry-point manifests and register their plugin classes."""

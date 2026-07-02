@@ -584,9 +584,12 @@ class TestPluginLoaderAllLoadsEntryPoints:
         )
         monkeypatch.syspath_prepend(str(tmp_path))
 
-        PluginLoader.all()
+        try:
+            PluginLoader.all(force_reload=True)
 
-        registry = PluginRegistry.default()
-        key = f"{pkg}.manifest:EpFeatureGroup"
-        assert registry.is_registered(_manifest_class(pkg, "EpFeatureGroup"))
-        assert registry.get_entry(key).source == PluginSource.ENTRY_POINT
+            registry = PluginRegistry.default()
+            key = f"{pkg}.manifest:EpFeatureGroup"
+            assert registry.is_registered(_manifest_class(pkg, "EpFeatureGroup"))
+            assert registry.get_entry(key).source == PluginSource.ENTRY_POINT
+        finally:
+            PluginLoader.reset_cache()

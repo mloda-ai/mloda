@@ -23,7 +23,8 @@ TDD: Red writes failing tests, Green implements, `tox` gates each phase.
 - [x] Phase 5 - Time windows + forecasting: reference-time check unified onto the contract
       via TimeReferenceMixin._validate_reference_time_column (required TEMPORAL+ORDERED),
       fed by the Phase-1 readers. Messages now contract-sourced. tox GREEN.
-- [ ] Phase 6 - Docs (per-engine capability matrix) + reconcile EXPECTED_SKIP_COUNT.
+- [x] Phase 6 - Docs: in_depth/comparison-contract.md (concept + per-engine capability matrix +
+      deferred notes), added to mkdocs nav. EXPECTED_SKIP_COUNT reconciled in Phase 1 (171).
 
 ## Deferred (follow-up issues, per scoping decision)
 

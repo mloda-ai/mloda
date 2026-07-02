@@ -7,7 +7,12 @@ from mloda.core.abstract_plugins.components.input_data.api.api_input_data_collec
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.core.engine import Engine
 from mloda.core.api.prepare.setup_compute_framework import SetupComputeFramework
-from mloda.core.api.result_serializer import to_csv as _to_csv, to_json_records as _to_json_records
+from mloda.core.api.result_serializer import (
+    to_framework as _to_framework,
+    to_records as _to_records,
+    to_arrow as _to_arrow,
+    to_csv as _to_csv,
+)
 from mloda.core.prepare.accessible_plugins import filter_extenders_by_strict_mode
 from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.runtime.run import ExecutionOrchestrator
@@ -169,9 +174,19 @@ class mlodaAPI:
         )
 
     @staticmethod
-    def to_json_records(result: Any) -> list[dict[str, Any]]:
+    def to_framework(result: Any, framework: "str | type[ComputeFramework]") -> Any:
+        """Convert a single ``run_all`` result to the native object of the target framework."""
+        return _to_framework(result, framework)
+
+    @staticmethod
+    def to_records(result: Any) -> list[dict[str, Any]]:
         """Serialize a single ``run_all`` result to a list of row dicts."""
-        return _to_json_records(result)
+        return _to_records(result)
+
+    @staticmethod
+    def to_arrow(result: Any) -> Any:
+        """Serialize a single ``run_all`` result to a pyarrow Table."""
+        return _to_arrow(result)
 
     @staticmethod
     def to_csv(result: Any) -> str:

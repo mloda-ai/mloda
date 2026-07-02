@@ -106,6 +106,15 @@ def _convert(result: Any, target_type: Any, framework_connection_object: Any = N
     transformer = ComputeFrameworkTransformer()
     chain = transformer.get_transformation_chain(source_type, target_type)
     if chain is None:
+        # The transformer registry may be only partially populated (its auto-load
+        # is skipped once any transformer is registered). Force-load the transformer
+        # plugins (transformers only, not frameworks) and retry once.
+        from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
+
+        PluginLoader().load_matching("compute_framework", "*transformer*")
+        transformer = ComputeFrameworkTransformer()
+        chain = transformer.get_transformation_chain(source_type, target_type)
+    if chain is None:
         raise ValueError(f"No transformation path found from {source_type} to {target_type}.")
 
     current_fw = source_type
@@ -145,8 +154,15 @@ def to_framework(
 
 
 def to_records(result: Any) -> list[dict[str, Any]]:
-    """Serialize a single ``run_all`` result to a list of row dicts (python_dict native)."""
-    records: list[dict[str, Any]] = _convert(result, list)
+    """Serialize a single ``run_all`` result to a list of row dicts.
+
+    A python_dict result (``list[dict]``) is returned as-is (no pyarrow). Any
+    other framework object is routed through the pyarrow hub, which only needs
+    that object's own transformer (loaded by the run that produced it).
+    """
+    if _is_record_list(result):
+        return list(result)
+    records: list[dict[str, Any]] = to_arrow(result).to_pylist()
     return records
 
 

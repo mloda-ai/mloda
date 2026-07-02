@@ -2,9 +2,11 @@ from datetime import timedelta
 from functools import reduce
 from typing import Any
 
+from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
 from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 from mloda.user import Index
 from mloda.provider import BaseMergeEngine
+from mloda_plugins.compute_framework.base_implementations.spark import spark_type_semantics
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import pick_helper_column_name
 
 try:
@@ -129,6 +131,9 @@ class SparkMergeEngine(BaseMergeEngine):
                 f"and cannot be coerced to timestamp."
             )
         return data.withColumn(column, F.to_timestamp(F.col(column)))
+
+    def _column_semantics(self, data: Any, column: str) -> ColumnSemantics:
+        return spark_type_semantics.column_semantics(data, column)
 
     def _asof_time_column_is_ordered(self, data: Any, column: str) -> bool:
         dtype = dict(data.dtypes)[column]

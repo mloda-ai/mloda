@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Any, Optional
 import pytest
 
@@ -162,6 +163,49 @@ class TestPythonDictMergeEngine:
 
         result = engine.merge(left_data, right_data, make_merge_link(JoinType.LEFT, index_obj, index_obj))
         assert result == {"idx": [1, 3], "col1": ["a", "b"], "col2": ["x", None]}
+
+
+class TestPythonDictEquiJoinTimezoneGuard:
+    """Phase 3b: extend the temporal cross-side timezone guard to python_dict equi-joins.
+
+    python_dict's Phase-1 column_semantics reads temporal/tz from the first non-null value's
+    tzinfo, so once Green wires PythonDictMergeEngine._column_semantics to it, an INNER equi-join
+    whose key is tz-aware on one side and tz-naive on the other must raise a ValueError naming the
+    timezone mismatch. Today no override is wired, so the guard never fires.
+    """
+
+    def test_inner_equi_join_tz_aware_vs_naive_raises(self) -> None:
+        """NEGATIVE: tz-aware datetime key on the left, tz-naive on the right must be rejected."""
+        engine = PythonDictMergeEngine()
+        idx = Index(("t",))
+        left_data = [{"t": datetime(2021, 1, 1, 12, 0, tzinfo=timezone.utc), "lv": "a"}]
+        right_data = [{"t": datetime(2021, 1, 1, 12, 0), "rv": "x"}]
+        link = make_merge_link(JoinType.INNER, idx, idx)
+
+        with pytest.raises(ValueError, match=r"(?i)time[ -]?zone"):
+            engine.merge(left_data, right_data, link)
+
+    def test_inner_equi_join_both_naive_succeeds(self) -> None:
+        """POSITIVE: both-naive datetime keys are legal and join normally."""
+        engine = PythonDictMergeEngine()
+        idx = Index(("t",))
+        left_data = [{"t": datetime(2021, 1, 1, 12, 0), "lv": "a"}]
+        right_data = [{"t": datetime(2021, 1, 1, 12, 0), "rv": "x"}]
+        link = make_merge_link(JoinType.INNER, idx, idx)
+
+        result = engine.merge(left_data, right_data, link)
+        assert result == [{"t": datetime(2021, 1, 1, 12, 0), "lv": "a", "rv": "x"}]
+
+    def test_inner_equi_join_string_key_is_legal(self) -> None:
+        """POSITIVE: a non-temporal (string) equi-join key stays unaffected by the guard."""
+        engine = PythonDictMergeEngine()
+        idx = Index(("k",))
+        left_data = [{"k": "a", "lv": 1}]
+        right_data = [{"k": "a", "rv": 2}]
+        link = make_merge_link(JoinType.INNER, idx, idx)
+
+        result = engine.merge(left_data, right_data, link)
+        assert result == [{"k": "a", "lv": 1, "rv": 2}]
 
 
 class TestPythonDictMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):

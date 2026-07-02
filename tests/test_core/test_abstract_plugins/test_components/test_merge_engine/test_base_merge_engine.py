@@ -4,6 +4,7 @@ import pytest
 import pandas as pd
 import pandas.testing as pdt
 from typing import Any, Optional
+from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
 from mloda.user import FeatureName
@@ -235,6 +236,11 @@ class TestBaseMergeEngine:
         sentinel = object()
 
         class NonAsofMergeEngine(BaseMergeEngine):
+            def _column_semantics(self, data: Any, column: str) -> ColumnSemantics:
+                return ColumnSemantics(
+                    is_ordered=True, is_temporal=False, is_numeric=False, unit=None, is_tz_aware=False
+                )
+
             def merge_inner(
                 self, left_data: Any, right_data: Any, left_index: CoreIndex, right_index: CoreIndex
             ) -> Any:
@@ -266,6 +272,30 @@ class TestBaseMergeEngine:
 
         result = engine.merge(None, None, link)
         assert result is sentinel
+
+    def test_column_semantics_is_mandatory_for_equi_join(self) -> None:
+        """A subclass that overrides only merge_inner must fail an INNER equi-join with an
+        actionable error naming _column_semantics.
+
+        Phase 3b makes BaseMergeEngine._column_semantics a REQUIRED hook: the base
+        implementation must raise a clear error mentioning `_column_semantics` (and ideally
+        the subclass name) rather than silently skipping the cross-side guard. Real (non-None)
+        small data and a single-column Index drive the equi-join validation path.
+        """
+        from mloda.user import JoinType
+
+        class OnlyInnerMergeEngine(BaseMergeEngine):
+            def merge_inner(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
+                return left_data
+
+        engine = OnlyInnerMergeEngine()
+        idx = Index(("k",))
+        left = pd.DataFrame({"k": [1, 2], "v": [10, 20]})
+        right = pd.DataFrame({"k": [1, 3], "w": [30, 40]})
+        link = make_merge_link(JoinType.INNER, idx, idx)
+
+        with pytest.raises((NotImplementedError, ValueError), match=r"_column_semantics"):
+            engine.merge(left, right, link)
 
     def test_dependent_append_multiple_features_v3(self) -> None:
         feature = Feature(

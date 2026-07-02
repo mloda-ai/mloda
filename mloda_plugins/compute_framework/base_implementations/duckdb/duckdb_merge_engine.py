@@ -1,8 +1,10 @@
 from datetime import timedelta
 from typing import Any
 
+from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
 from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
+from mloda_plugins.compute_framework.base_implementations.duckdb import duckdb_type_semantics
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
 from mloda_plugins.compute_framework.base_implementations.sql.sql_base_merge_engine import SqlBaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
@@ -102,6 +104,9 @@ class DuckDBMergeEngine(SqlBaseMergeEngine):
                 f"manually (e.g. via TIMESTAMPTZ) before joining."
             )
         return data.project(f"* REPLACE (CAST({qc} AS TIMESTAMP) AS {qc})")
+
+    def _column_semantics(self, data: Any, column: str) -> ColumnSemantics:
+        return duckdb_type_semantics.column_semantics(data, column)
 
     def _asof_time_column_is_ordered(self, data: Any, column: str) -> bool:
         idx = data.columns.index(column)

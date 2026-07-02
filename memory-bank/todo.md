@@ -13,8 +13,10 @@ TDD: Red writes failing tests, Green implements, `tox` gates each phase.
 - [x] Phase 2 - Port as-of joins onto the contract. `_column_semantics` hook (default
       ordered-only; pandas/polars/pyarrow/sqlite override for tz). require_compatible
       adds strict naive-vs-aware guard. Ordered-error + coercion preserved. tox GREEN.
-- [ ] Phase 3 - Equi-joins on temporal keys. Enforce tz/unit compatibility across sides
-      ONLY when both keys temporal; string/ID equi-joins stay legal.
+- [x] Phase 3 - Equi-joins on temporal keys (INNER/LEFT/RIGHT/OUTER) via require_compatible
+      on key pairs; string/ID joins stay legal. `_column_semantics` now a MANDATORY hook
+      (base raises actionable error); wired all 7 built-ins incl new duckdb reader +
+      python_dict + spark. tox GREEN.
 - [ ] Phase 4 - Range/min/max filters. Validate order-compatibility with native datetime
       bound in `BaseFilterEngine.do_filter`.
 - [ ] Phase 5 - Time windows + forecasting via `TimeReferenceMixin` (tz/unit aware).

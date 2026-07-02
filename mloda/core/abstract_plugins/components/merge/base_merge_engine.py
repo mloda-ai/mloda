@@ -100,19 +100,15 @@ class BaseMergeEngine(ABC):
         return sides["left"], sides["right"]
 
     def _column_semantics(self, data: Any, column: str) -> ColumnSemantics:
-        """Observed semantics of an as-of time column, used by validate_asof_time_columns.
+        """Observed semantics of a column, used by both as-of and equi-join validation.
 
-        The default preserves current behavior: it uses the existing ordered detector and marks
-        nothing temporal, so the cross-side timezone/unit check never fires for engines that do
-        not override this. Engines that can expose timezone/unit override this to delegate to
-        their framework-native ColumnSemantics introspector.
+        This is a mandatory hook (epic #518, Phase 3b): every engine must expose its
+        framework-native ColumnSemantics so the cross-side timezone/unit guard can fire.
+        The base raises rather than silently skipping the guard.
         """
-        return ColumnSemantics(
-            is_ordered=self._asof_time_column_is_ordered(data, column),
-            is_temporal=False,
-            is_numeric=False,
-            unit=None,
-            is_tz_aware=False,
+        raise NotImplementedError(
+            f"{self.__class__.__name__} must implement _column_semantics(data, column) "
+            f"to support timezone/ordered validation for joins."
         )
 
     def _coerce_asof_time_column(self, data: Any, column: str) -> Any:
@@ -137,6 +133,26 @@ class BaseMergeEngine(ABC):
             f"{self.__class__.__name__} must implement _asof_time_column_is_ordered for as-of joins."
         )
 
+    def _validate_equi_join_time_columns(
+        self, left_data: Any, right_data: Any, left_index: Index, right_index: Index
+    ) -> None:
+        """Guard that aligned equi-join key pairs are timezone/unit compatible.
+
+        Reuses the as-of ComparisonContract machinery: require_compatible no-ops unless
+        BOTH key columns are temporal, so string/integer/mismatched-type keys are
+        unaffected (narrow policy). Engines that do not override _column_semantics report
+        is_temporal=False, so no check fires there.
+        """
+        left_cols = list(left_index.index)
+        right_cols = list(right_index.index)
+        if len(left_cols) != len(right_cols):
+            return
+        contract = ComparisonContract(required=frozenset())
+        for left_col, right_col in zip(left_cols, right_cols):
+            left_sem = self._column_semantics(left_data, left_col)
+            right_sem = self._column_semantics(right_data, right_col)
+            contract.require_compatible(left_sem, right_sem, left_col, right_col)
+
     @final
     def merge(self, left_data: Any, right_data: Any, link: Link) -> Any:
         self.check_import()
@@ -152,6 +168,9 @@ class BaseMergeEngine(ABC):
                     f"Left has {len(left_index.index)} columns {left_index.index}, "
                     f"right has {len(right_index.index)} columns {right_index.index}."
                 )
+
+        if jointype in (JoinType.INNER, JoinType.LEFT, JoinType.RIGHT, JoinType.OUTER):
+            self._validate_equi_join_time_columns(left_data, right_data, left_index, right_index)
 
         if jointype == JoinType.INNER:
             return self.merge_inner(left_data, right_data, left_index, right_index)

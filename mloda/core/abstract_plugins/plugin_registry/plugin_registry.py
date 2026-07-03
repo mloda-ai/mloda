@@ -91,10 +91,21 @@ class PluginRegistry:
         self._entries: dict[str, PluginRegistryEntry] = {}
         self._policy: PluginPolicy | None = None
         self._policy_warned_keys: set[str] = set()
+        self._generation: int = 0
+
+    @property
+    def generation(self) -> int:
+        """Bulk-invalidation counter: bumped by clear() and by restore() to different content only."""
+        return self._generation
 
     @classmethod
     def default(cls) -> PluginRegistry:
         global _default
+        # Lock-free fast path: production code assigns _default exactly once and never resets it to
+        # None, and reading the reference is atomic under the GIL, so a non-None read is always valid.
+        existing = _default
+        if existing is not None:
+            return existing
         with _default_lock:
             if _default is None:
                 _default = cls()
@@ -204,10 +215,16 @@ class PluginRegistry:
         return dict(self._entries)
 
     def restore(self, snapshot: PluginRegistrySnapshot) -> None:
-        self._entries = dict(snapshot)
+        new_entries = dict(snapshot)
+        if new_entries != self._entries:
+            # Non-atomic read-modify-write (here and in clear()), covered by the documented
+            # single-threaded registration model (see the comment in __init__).
+            self._generation += 1
+        self._entries = new_entries
 
     def clear(self) -> None:
         self._entries.clear()
+        self._generation += 1
 
 
 _default: PluginRegistry | None = None

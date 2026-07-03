@@ -379,6 +379,53 @@ class TestPluginRegistrySnapshotRestore:
         assert reg.list_registered(ComputeFramework) == []
 
 
+class TestPluginRegistryGeneration:
+    """Contract for the public read-only generation counter used for cache invalidation.
+
+    generation changes exactly when the registry content is bulk-replaced with different
+    content (clear(), restore() to different content); incremental register()/unregister()
+    and restore() to identical content leave it untouched.
+    """
+
+    def test_fresh_registry_has_stable_integer_generation(self) -> None:
+        reg = PluginRegistry()
+        generation = reg.generation
+        assert isinstance(generation, int)
+        assert reg.generation == generation
+
+    def test_clear_increments_generation(self) -> None:
+        reg = PluginRegistry()
+        reg.register(_RegistryTestFGA)
+        before = reg.generation
+        reg.clear()
+        assert reg.generation > before
+
+    def test_restore_to_different_content_increments_generation(self) -> None:
+        reg = PluginRegistry()
+        reg.register(_RegistryTestFGA)
+        snap = reg.snapshot()
+        reg.register(_RegistryTestFGB)
+        before = reg.generation
+        reg.restore(snap)
+        assert reg.generation > before
+
+    def test_restore_to_identical_content_does_not_increment_generation(self) -> None:
+        reg = PluginRegistry()
+        reg.register(_RegistryTestFGA)
+        snap = reg.snapshot()
+        before = reg.generation
+        reg.restore(snap)
+        assert reg.generation == before
+
+    def test_register_and_unregister_do_not_increment_generation(self) -> None:
+        reg = PluginRegistry()
+        before = reg.generation
+        key = reg.register(_RegistryTestFGA)
+        assert reg.generation == before
+        reg.unregister(key)
+        assert reg.generation == before
+
+
 class TestModuleLevelRegisterPlugin:
     def test_register_plugin_writes_into_default_registry(self, default_registry_guard: PluginRegistry) -> None:
         key = register_plugin(_RegistryTestFGA)

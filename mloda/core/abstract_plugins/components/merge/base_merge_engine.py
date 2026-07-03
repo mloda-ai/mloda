@@ -140,8 +140,9 @@ class BaseMergeEngine(ABC):
 
         Reuses the as-of ComparisonContract machinery: require_compatible no-ops unless
         BOTH key columns are temporal, so string/integer/mismatched-type keys are
-        unaffected (narrow policy). Engines that do not override _column_semantics report
-        is_temporal=False, so no check fires there.
+        unaffected (narrow policy). _column_semantics is a mandatory hook (Phase 3b): the
+        base raises NotImplementedError, so every concrete engine must supply it; the guard
+        then only fires an error for temporal-vs-temporal key pairs.
         """
         left_cols = list(left_index.index)
         right_cols = list(right_index.index)

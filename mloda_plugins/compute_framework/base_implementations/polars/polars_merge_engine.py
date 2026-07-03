@@ -1,9 +1,11 @@
 from typing import Any
 
+from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
 from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 from mloda.user import Index
 from mloda.user import JoinType
 from mloda.provider import BaseMergeEngine
+from mloda_plugins.compute_framework.base_implementations.polars import polars_type_semantics
 
 try:
     import polars as pl
@@ -12,6 +14,8 @@ except ImportError:
 
 
 class PolarsMergeEngine(BaseMergeEngine):
+    provides_column_semantics = True
+
     def check_import(self) -> None:
         if pl is None:
             raise ImportError("Polars is not installed. To be able to use this framework, please install polars.")
@@ -76,6 +80,9 @@ class PolarsMergeEngine(BaseMergeEngine):
         present = self.get_column_names(result)
         result = result.select([c for c in desired if c in present])
         return result
+
+    def _column_semantics(self, data: Any, column: str) -> ColumnSemantics:
+        return polars_type_semantics.column_semantics(data, column)
 
     def _asof_time_column_is_ordered(self, data: Any, column: str) -> bool:
         dtype = data.collect_schema()[column]

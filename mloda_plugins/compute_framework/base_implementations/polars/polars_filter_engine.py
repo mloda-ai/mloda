@@ -1,6 +1,8 @@
 from typing import Any
+from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
 from mloda.provider import BaseFilterEngine
 from mloda.user import SingleFilter
+from mloda_plugins.compute_framework.base_implementations.polars import polars_type_semantics
 
 try:
     import polars as pl
@@ -9,10 +11,16 @@ except ImportError:
 
 
 class PolarsFilterEngine(BaseFilterEngine):
+    provides_column_semantics = True
+
     @classmethod
     def final_filters(cls) -> bool:
         """Filters are applied after the feature calculation."""
         return True
+
+    @classmethod
+    def _column_semantics(cls, data: Any, column: str) -> ColumnSemantics:
+        return polars_type_semantics.column_semantics(data, column)
 
     @classmethod
     def do_range_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:

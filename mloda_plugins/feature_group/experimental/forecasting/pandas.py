@@ -9,6 +9,7 @@ from typing import Any, Optional, cast
 from datetime import datetime, timedelta
 
 from mloda.provider import ComputeFramework
+from mloda_plugins.compute_framework.base_implementations.pandas import pandas_type_semantics
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.forecasting.base import ForecastingFeatureGroup
 
@@ -72,11 +73,8 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         Raises:
             ValueError: If the reference time column is not a datetime column
         """
-        if not pd.api.types.is_datetime64_any_dtype(data[reference_time_column]):
-            raise ValueError(
-                f"Reference time column '{reference_time_column}' must be a datetime column. "
-                f"Current dtype: {data[reference_time_column].dtype}"
-            )
+        semantics = pandas_type_semantics.column_semantics(data, reference_time_column)
+        cls._validate_reference_time_column(semantics, reference_time_column)
 
     @classmethod
     def _check_source_features_exist(cls, data: pd.DataFrame, feature_names: list[str]) -> None:

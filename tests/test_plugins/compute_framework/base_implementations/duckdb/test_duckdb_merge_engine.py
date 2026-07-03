@@ -356,6 +356,79 @@ class TestDuckDBMergeEngineViewLeak:
 
 
 @pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB or PyArrow is not installed. Skipping this test.")
+class TestDuckDBEquiJoinTimezoneGuard:
+    """Temporal cross-side timezone guard on duckdb equi-joins.
+
+    A TIMESTAMP WITH TIME ZONE column (arrow timestamp with tz) on one side and a plain
+    TIMESTAMP column (arrow timestamp without tz) on the other must be rejected by the
+    ComparisonContract. DuckDBMergeEngine opts into the guard
+    (`provides_column_semantics = True`) and implements _column_semantics.
+    """
+
+    @staticmethod
+    def _rel(connection: Any, table: Any) -> Any:
+        return DuckdbRelation.from_arrow(connection, table)
+
+    def test_inner_equi_join_tz_aware_vs_naive_raises(self, connection: Any) -> None:
+        """NEGATIVE: TIMESTAMPTZ key on the left, plain TIMESTAMP on the right must be rejected."""
+        import datetime as dt
+
+        left_arrow = pa.table(
+            {
+                "t": pa.array(
+                    [dt.datetime(2021, 1, 1, 12, 0, tzinfo=dt.timezone.utc)], type=pa.timestamp("us", tz="UTC")
+                ),
+                "lv": ["a"],
+            }
+        )
+        right_arrow = pa.table(
+            {
+                "t": pa.array([dt.datetime(2021, 1, 1, 12, 0)], type=pa.timestamp("us")),
+                "rv": ["x"],
+            }
+        )
+        left_data = self._rel(connection, left_arrow)
+        right_data = self._rel(connection, right_arrow)
+        idx = Index(("t",))
+        engine = DuckDBMergeEngine(connection)
+
+        with pytest.raises(ValueError, match=r"(?i)time[ -]?zone"):
+            engine.merge(left_data, right_data, make_merge_link(JoinType.INNER, idx, idx))
+
+    def test_inner_equi_join_both_plain_timestamp_succeeds(self, connection: Any) -> None:
+        """POSITIVE: both-plain-TIMESTAMP keys are legal and join normally."""
+        import datetime as dt
+
+        left_arrow = pa.table({"t": pa.array([dt.datetime(2021, 1, 1, 12, 0)], type=pa.timestamp("us")), "lv": ["a"]})
+        right_arrow = pa.table({"t": pa.array([dt.datetime(2021, 1, 1, 12, 0)], type=pa.timestamp("us")), "rv": ["x"]})
+        left_data = self._rel(connection, left_arrow)
+        right_data = self._rel(connection, right_arrow)
+        idx = Index(("t",))
+        engine = DuckDBMergeEngine(connection)
+
+        result = engine.merge(left_data, right_data, make_merge_link(JoinType.INNER, idx, idx))
+        result_df = result.df()
+        assert len(result_df) == 1
+        assert result_df["lv"].tolist()[0] == "a"
+        assert result_df["rv"].tolist()[0] == "x"
+
+    def test_inner_equi_join_string_key_is_legal(self, connection: Any) -> None:
+        """POSITIVE: a non-temporal (string) equi-join key stays unaffected by the guard."""
+        left_arrow = pa.table({"k": ["a"], "lv": [1]})
+        right_arrow = pa.table({"k": ["a"], "rv": [2]})
+        left_data = self._rel(connection, left_arrow)
+        right_data = self._rel(connection, right_arrow)
+        idx = Index(("k",))
+        engine = DuckDBMergeEngine(connection)
+
+        result = engine.merge(left_data, right_data, make_merge_link(JoinType.INNER, idx, idx))
+        result_df = result.df()
+        assert len(result_df) == 1
+        assert result_df["lv"].tolist()[0] == 1
+        assert result_df["rv"].tolist()[0] == 2
+
+
+@pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB or PyArrow is not installed. Skipping this test.")
 class TestDuckDBMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):
     """Test DuckDBMergeEngine multi-index support using shared test scenarios."""
 

@@ -46,6 +46,7 @@ nav:
       - Plugin Loader: in_depth/plugin-loader.md
       - Plugin Registry: in_depth/plugin_registry.md
     - Data Type Enforcement: in_depth/data-type-enforcement.md
+    - Comparison Contract: in_depth/comparison-contract.md
     - Troubleshooting:
       - Feature Group Resolution Errors: in_depth/troubleshooting/feature-group-resolution-errors.md
     

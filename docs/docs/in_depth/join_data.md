@@ -105,8 +105,8 @@ Cross-backend caveats to be aware of:
     days). `duckdb` rejects strings carrying a UTC offset or trailing `Z` (cast manually), and
     `sqlite` additionally rejects one-sided string-vs-numeric coercion (cast manually). Coercion
     fails hard on unparseable or non-ISO values and never produces silent null matches; mixed
-    tz-naive/tz-aware values are rejected where the backend can detect them (the full tz/unit
-    contract is tracked in issue #518).
+    tz-naive/tz-aware values are rejected where the backend can detect them (via the
+    [comparison contract](comparison-contract.md)).
 -   **Ties.** When two right rows share the identical boundary timestamp within a by-key, the chosen
     row is backend-defined (each engine applies its own internal tie rule). `python_dict`,
     `sqlite`, and `spark` resolve ties deterministically (smallest surviving right column values

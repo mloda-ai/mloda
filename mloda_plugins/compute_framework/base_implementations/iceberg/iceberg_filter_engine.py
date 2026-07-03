@@ -1,6 +1,8 @@
 from typing import Any, Optional
+from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
 from mloda.provider import BaseFilterEngine
 from mloda.user import SingleFilter
+from mloda_plugins.compute_framework.base_implementations.sql.sql_type_semantics import column_semantics_from_arrow
 
 try:
     from pyiceberg.table import Table as IcebergTable
@@ -32,10 +34,29 @@ class IcebergFilterEngine(BaseFilterEngine):
     for optimal performance through predicate pushdown.
     """
 
+    provides_column_semantics = True
+
     @classmethod
     def final_filters(cls) -> bool:
         """Iceberg filters are applied during scan, not after feature calculation."""
         return False
+
+    @classmethod
+    def _column_semantics(cls, data: Any, column: str) -> ColumnSemantics:
+        """Derive column semantics from the arrow schema of the iceberg data.
+
+        Iceberg filters run via predicate pushdown in ``apply_filters`` rather than the
+        ``do_filter`` dispatch, so this hook is only used for completeness. An iceberg
+        ``Table`` exposes its schema as arrow; an already-materialized pyarrow table is
+        introspected directly.
+        """
+        if IcebergTable is not None and isinstance(data, IcebergTable):
+            arrow_schema = data.schema().as_arrow()
+            return column_semantics_from_arrow(arrow_schema.field(column).type)
+
+        from mloda_plugins.compute_framework.base_implementations.pyarrow import pyarrow_type_semantics
+
+        return pyarrow_type_semantics.column_semantics(data, column)
 
     @classmethod
     def apply_filters(cls, data: Any, features: Any) -> Any:

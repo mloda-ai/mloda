@@ -109,6 +109,20 @@ elimination has anything to do. Data on which the framework cannot see columns
 but that is not an empty result still fails the missing-filter-column check
 loudly.
 
+### Timezone and unit validation (merge and filter engines)
+
+A custom compute framework's merge and filter engines can opt into the
+[comparison contract](comparison-contract.md), which rejects incompatible
+timezone/unit combinations in equi-joins, as-of joins, and datetime filter bounds.
+The guard is **opt-in**: set `provides_column_semantics = True` on your
+`BaseMergeEngine` / `BaseFilterEngine` subclass and implement
+`_column_semantics(data, column)` to report the column's native semantics. Leave the
+flag at its default `False` (for a framework with no temporal intent) and the guard
+is skipped entirely, so you are never forced to implement the hook. An engine that
+opts in but forgets the hook raises a clear error rather than silently skipping
+validation. As-of joins always require `_column_semantics` regardless of the flag,
+since ordered time columns are intrinsic to the operation.
+
 ### Framework-Specific Implementations
 
 Feature groups follow a layered architecture:

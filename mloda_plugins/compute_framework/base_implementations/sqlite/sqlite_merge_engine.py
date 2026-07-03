@@ -5,14 +5,18 @@ from typing import Any
 
 import pyarrow as pa
 
+from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
 from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
+from mloda_plugins.compute_framework.base_implementations.sql import sql_type_semantics
 from mloda_plugins.compute_framework.base_implementations.sql.sql_base_merge_engine import SqlBaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import is_ordered_arrow_type, quote_ident
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation, _next_table_name
 
 
 class SqliteMergeEngine(SqlBaseMergeEngine):
+    provides_column_semantics = True
+
     def _merge_relations(self, left_data: Any, right_data: Any, union_all: bool) -> Any:
         if self.framework_connection is None:
             raise ValueError("Framework connection is not set. Please set the framework connection before merging.")
@@ -109,6 +113,11 @@ class SqliteMergeEngine(SqlBaseMergeEngine):
                     f"column; cast the column manually before joining."
                 )
         return super().validate_asof_time_columns(left_data, right_data, asof_config)
+
+    def _column_semantics(self, data: Any, column: str) -> ColumnSemantics:
+        return sql_type_semantics.column_semantics_from_arrow(
+            data.types[data.columns.index(column)], is_string_storage=True
+        )
 
     def _asof_time_column_is_ordered(self, data: Any, column: str) -> bool:
         idx = data.columns.index(column)

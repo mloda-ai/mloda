@@ -1,6 +1,7 @@
 from abc import ABC
 from typing import Any, Optional, final
 
+from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics, ComparisonContract
 from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.link import AsOfJoinConfig, JoinType, Link
 
@@ -13,6 +14,8 @@ class BaseMergeEngine(ABC):
     between two datasets, based on the specified join type. Subclasses are expected to
     implement the merge methods for specific join types as needed.
     """
+
+    provides_column_semantics: bool = False
 
     def __init__(self, framework_connection: Optional[Any] = None) -> None:
         """
@@ -78,11 +81,12 @@ class BaseMergeEngine(ABC):
         returned.
         """
         sides = {"left": left_data, "right": right_data}
-        for side, column in (
-            ("left", asof_config.left_time_column),
-            ("right", asof_config.right_time_column),
-        ):
-            if not self._asof_time_column_is_ordered(sides[side], column):
+        cols = {"left": asof_config.left_time_column, "right": asof_config.right_time_column}
+        sems: dict[str, ColumnSemantics] = {}
+        for side in ("left", "right"):
+            column = cols[side]
+            sem = self._column_semantics(sides[side], column)
+            if not sem.is_ordered:
                 if not asof_config.coerce_time_columns:
                     raise ValueError(
                         f"As-of {side} time column '{column}' must be datetime, numeric, or timedelta, "
@@ -90,7 +94,26 @@ class BaseMergeEngine(ABC):
                         f"Set coerce_time_columns=True to opt in to ISO-8601 string coercion."
                     )
                 sides[side] = self._coerce_asof_time_column(sides[side], column)
+                sem = self._column_semantics(sides[side], column)
+            sems[side] = sem
+        ComparisonContract(required=frozenset()).require_compatible(
+            sems["left"], sems["right"], cols["left"], cols["right"]
+        )
         return sides["left"], sides["right"]
+
+    def _column_semantics(self, data: Any, column: str) -> ColumnSemantics:
+        """Observed semantics of a column, used by both as-of and equi-join validation.
+
+        Opt-in hook (Option B, epic #518): the equi-join timezone/unit guard only calls
+        this when the engine sets ``provides_column_semantics = True``. An engine that
+        opts in promises to expose its framework-native ColumnSemantics; the base raises
+        NotImplementedError so a forgotten override fails loudly. As-of engines override
+        this unconditionally, so the as-of path always relies on it.
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} must implement _column_semantics(data, column) "
+            f"to support timezone/ordered validation for joins."
+        )
 
     def _coerce_asof_time_column(self, data: Any, column: str) -> Any:
         """Coerce an ISO-8601 string as-of time column to a temporal/numeric dtype.
@@ -114,6 +137,32 @@ class BaseMergeEngine(ABC):
             f"{self.__class__.__name__} must implement _asof_time_column_is_ordered for as-of joins."
         )
 
+    def _validate_equi_join_time_columns(
+        self, left_data: Any, right_data: Any, left_index: Index, right_index: Index
+    ) -> None:
+        """Guard that aligned equi-join key pairs are timezone/unit compatible.
+
+        Reuses the as-of ComparisonContract machinery: require_compatible no-ops unless
+        BOTH key columns are temporal, so string/integer/mismatched-type keys are
+        unaffected (narrow policy). The guard is opt-in (Option B, epic #518): it is
+        skipped entirely unless the engine sets ``provides_column_semantics = True``, so a
+        time-agnostic engine author is never forced to implement ``_column_semantics``.
+        When opted in, ``_column_semantics`` is required; the base raises
+        NotImplementedError if an opted-in engine forgot to implement it, and the guard
+        then only fires an error for temporal-vs-temporal key pairs.
+        """
+        if not self.provides_column_semantics:
+            return
+        left_cols = list(left_index.index)
+        right_cols = list(right_index.index)
+        if len(left_cols) != len(right_cols):
+            return
+        contract = ComparisonContract(required=frozenset())
+        for left_col, right_col in zip(left_cols, right_cols):
+            left_sem = self._column_semantics(left_data, left_col)
+            right_sem = self._column_semantics(right_data, right_col)
+            contract.require_compatible(left_sem, right_sem, left_col, right_col)
+
     @final
     def merge(self, left_data: Any, right_data: Any, link: Link) -> Any:
         self.check_import()
@@ -129,6 +178,9 @@ class BaseMergeEngine(ABC):
                     f"Left has {len(left_index.index)} columns {left_index.index}, "
                     f"right has {len(right_index.index)} columns {right_index.index}."
                 )
+
+        if jointype in (JoinType.INNER, JoinType.LEFT, JoinType.RIGHT, JoinType.OUTER):
+            self._validate_equi_join_time_columns(left_data, right_data, left_index, right_index)
 
         if jointype == JoinType.INNER:
             return self.merge_inner(left_data, right_data, left_index, right_index)

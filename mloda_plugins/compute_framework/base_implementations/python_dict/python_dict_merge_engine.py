@@ -1,10 +1,13 @@
+from dataclasses import replace
 from datetime import date, datetime, timedelta
 from typing import Any
+from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
 from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 from mloda.provider import BaseMergeEngine
 from mloda.user import Index
 from mloda.user import JoinType
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils import row_count
+from mloda_plugins.compute_framework.base_implementations.python_dict import python_dict_type_semantics
 
 
 class PythonDictMergeEngine(BaseMergeEngine):
@@ -14,6 +17,8 @@ class PythonDictMergeEngine(BaseMergeEngine):
     Joins are computed over row-index views built from the columnar data and produce
     columnar dicts with the union of columns; the absent side is null-filled with ``None``.
     """
+
+    provides_column_semantics = True
 
     def check_import(self) -> None:
         """
@@ -132,6 +137,13 @@ class PythonDictMergeEngine(BaseMergeEngine):
         coerced = dict(data)
         coerced[column] = new_column
         return coerced
+
+    def _column_semantics(self, data: Any, column: str) -> ColumnSemantics:
+        # The Phase-1 reader infers type/tz from the first non-null value; keep the robust
+        # all-values ordered scan so a heterogeneous (e.g. int-then-string) time column is
+        # still rejected before a raw comparison error can surface.
+        sem = python_dict_type_semantics.column_semantics(data, column)
+        return replace(sem, is_ordered=self._asof_time_column_is_ordered(data, column))
 
     def _asof_time_column_is_ordered(self, data: Any, column: str) -> bool:
         for v in data.get(column, []):

@@ -1,8 +1,10 @@
 import re
 from typing import Any, Callable, cast
+from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
 from mloda.provider import BaseFilterEngine
 from mloda.user import SingleFilter
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils import rows_to_columnar
+from mloda_plugins.compute_framework.base_implementations.python_dict import python_dict_type_semantics
 
 
 class PythonDictFilterEngine(BaseFilterEngine):
@@ -13,6 +15,8 @@ class PythonDictFilterEngine(BaseFilterEngine):
     column by those indices. A missing column or the schema-less ``{}`` is handled
     without crashing (yields an empty keep set / passes through).
     """
+
+    provides_column_semantics = True
 
     @classmethod
     def final_filters(cls) -> bool:
@@ -32,6 +36,10 @@ class PythonDictFilterEngine(BaseFilterEngine):
         column = data.get(column_name, [])
         keep = [i for i, value in enumerate(column) if predicate(value)]
         return {c: [data[c][i] for i in keep] for c in data}
+
+    @classmethod
+    def _column_semantics(cls, data: Any, column: str) -> ColumnSemantics:
+        return python_dict_type_semantics.column_semantics(data, column)
 
     @classmethod
     def do_range_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:

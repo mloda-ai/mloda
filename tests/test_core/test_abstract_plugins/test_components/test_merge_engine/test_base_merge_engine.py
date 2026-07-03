@@ -4,6 +4,7 @@ import pytest
 import pandas as pd
 import pandas.testing as pdt
 from typing import Any, Optional
+from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
 from mloda.user import FeatureName
@@ -235,6 +236,11 @@ class TestBaseMergeEngine:
         sentinel = object()
 
         class NonAsofMergeEngine(BaseMergeEngine):
+            def _column_semantics(self, data: Any, column: str) -> ColumnSemantics:
+                return ColumnSemantics(
+                    is_ordered=True, is_temporal=False, is_numeric=False, unit=None, is_tz_aware=False
+                )
+
             def merge_inner(
                 self, left_data: Any, right_data: Any, left_index: CoreIndex, right_index: CoreIndex
             ) -> Any:
@@ -266,6 +272,87 @@ class TestBaseMergeEngine:
 
         result = engine.merge(None, None, link)
         assert result is sentinel
+
+    def test_equi_join_guard_skipped_without_opt_in(self) -> None:
+        """Burden reduction (Option B, epic #518): a subclass overriding ONLY merge_inner,
+        without opting in (no ``provides_column_semantics``) and without implementing
+        ``_column_semantics``, must run an INNER equi-join WITHOUT raising and return the
+        merge_inner result. The cross-side timezone/unit guard is skipped entirely so a
+        time-agnostic engine author is never forced to implement ``_column_semantics``.
+
+        Real (non-None) small data and a single-column Index drive the equi-join path.
+        """
+        from mloda.user import JoinType
+
+        class OnlyInnerMergeEngine(BaseMergeEngine):
+            def merge_inner(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
+                return left_data
+
+        engine = OnlyInnerMergeEngine()
+        idx = Index(("k",))
+        left = pd.DataFrame({"k": [1, 2], "v": [10, 20]})
+        right = pd.DataFrame({"k": [1, 3], "w": [30, 40]})
+        link = make_merge_link(JoinType.INNER, idx, idx)
+
+        result = engine.merge(left, right, link)
+        pdt.assert_frame_equal(result, left)
+
+    def test_column_semantics_required_when_opted_in(self) -> None:
+        """Opt-in fail-loud (Option B, epic #518): an engine that OPTS IN via
+        ``provides_column_semantics = True`` but does NOT override ``_column_semantics`` must
+        raise ``NotImplementedError`` naming ``_column_semantics`` on an INNER equi-join.
+
+        Opting in is a promise to expose framework-native ColumnSemantics; the base hook
+        still raises so the promise is enforced. Engines that do NOT opt in skip the guard
+        (see ``test_equi_join_guard_skipped_without_opt_in``).
+        """
+        from mloda.user import JoinType
+
+        class OptedInMergeEngine(BaseMergeEngine):
+            provides_column_semantics = True
+
+            def merge_inner(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
+                return left_data
+
+        engine = OptedInMergeEngine()
+        idx = Index(("k",))
+        left = pd.DataFrame({"k": [1, 2], "v": [10, 20]})
+        right = pd.DataFrame({"k": [1, 3], "w": [30, 40]})
+        link = make_merge_link(JoinType.INNER, idx, idx)
+
+        with pytest.raises(NotImplementedError, match=r"_column_semantics"):
+            engine.merge(left, right, link)
+
+    def test_temporal_equi_join_enforces_tz_guard_when_opted_in(self) -> None:
+        """An engine that opts in AND implements ``_column_semantics`` still ENFORCES the
+        cross-side guard: a tz-aware vs tz-naive temporal key pair must raise a ValueError
+        mentioning timezone on an INNER equi-join. Opt-in does not weaken the guard for
+        engines that do provide semantics.
+        """
+        from mloda.user import JoinType
+
+        class TemporalMergeEngine(BaseMergeEngine):
+            provides_column_semantics = True
+
+            def _column_semantics(self, data: Any, column: str) -> ColumnSemantics:
+                # left side reports tz-aware, right side reports tz-naive -> incompatible.
+                return ColumnSemantics(
+                    is_ordered=True,
+                    is_temporal=True,
+                    is_numeric=False,
+                    unit=None,
+                    is_tz_aware=(data == "left"),
+                )
+
+            def merge_inner(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
+                return left_data
+
+        engine = TemporalMergeEngine()
+        idx = Index(("k",))
+        link = make_merge_link(JoinType.INNER, idx, idx)
+
+        with pytest.raises(ValueError, match=r"(?i)time[ -]?zone"):
+            engine.merge("left", "right", link)
 
     def test_dependent_append_multiple_features_v3(self) -> None:
         feature = Feature(

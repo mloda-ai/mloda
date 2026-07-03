@@ -1,9 +1,11 @@
 from typing import Any
 
+from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
 from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 from mloda.user import Index
 from mloda.user import JoinType
 from mloda.provider import BaseMergeEngine
+from mloda_plugins.compute_framework.base_implementations.pandas import pandas_type_semantics
 
 try:
     import pandas as pd
@@ -14,6 +16,8 @@ except ImportError:
 
 
 class PandasMergeEngine(BaseMergeEngine):
+    provides_column_semantics = True
+
     def check_import(self) -> None:
         if pd is None:
             raise ImportError("Pandas is not installed. To be able to use this framework, please install pandas.")
@@ -66,6 +70,9 @@ class PandasMergeEngine(BaseMergeEngine):
             right_by=by_right,
             **kwargs,
         )
+
+    def _column_semantics(self, data: Any, column: str) -> ColumnSemantics:
+        return pandas_type_semantics.column_semantics(data, column)
 
     def _coerce_asof_time_column(self, data: Any, column: str) -> Any:
         return data.assign(**{column: pd.to_datetime(data[column], format="ISO8601")})

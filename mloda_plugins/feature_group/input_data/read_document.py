@@ -28,8 +28,9 @@ class ReadDocument(BaseInputData):
 
     load_data is a template method exposing an opt-in lifecycle seam: a new
     reader implements ``produce_document`` (optionally ``document_file_type``)
-    instead of overriding ``load_data`` wholesale. Overriding ``load_data``
-    directly is still supported.
+    plus ``suffix`` instead of overriding ``load_data`` wholesale; both are
+    required for the class to be discovered as a final reader. Overriding
+    ``load_data`` directly is still supported.
     """
 
     _auto_load_group: str = "feature_group/input_data/read_files"
@@ -63,13 +64,16 @@ class ReadDocument(BaseInputData):
     @classmethod
     def supports_scoped_data_access(cls) -> bool:
         # A ReadDocument subclass is a final scoped reader if it overrides load_data
-        # wholesale, or implements the per-format parse hook (produce_document).
-        # Decided structurally via _is_overridden() so plugin discovery never
-        # executes the lifecycle (no produce_document() side effects, no escaping
-        # exceptions) and works for classmethod/staticmethod/plain overrides alike.
+        # wholesale, or implements BOTH the per-format parse hook (produce_document)
+        # and suffix. Decided structurally via _is_overridden() so plugin discovery
+        # never executes the lifecycle (no produce_document() side effects, no
+        # escaping exceptions) and works for classmethod/staticmethod/plain overrides
+        # alike. Requiring suffix screens out intermediate bases that share
+        # produce_document but leave suffix abstract, mirroring ReadDB's connect
+        # requirement.
         if cls._is_overridden(ReadDocument, "load_data"):
             return True
-        return cls._is_overridden(ReadDocument, "produce_document")
+        return cls._is_overridden(ReadDocument, "produce_document") and cls._is_overridden(ReadDocument, "suffix")
 
     @classmethod
     def suffix(cls) -> tuple[str, ...]:

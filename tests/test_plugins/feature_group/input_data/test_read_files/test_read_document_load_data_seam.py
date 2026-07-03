@@ -331,3 +331,78 @@ class TestPyFileReaderStaysOnTheSeam:
         """PyFileReader keeps inheriting from TextFileReader and still classifies as final."""
         assert issubclass(PyFileReader, TextFileReader)
         assert PyFileReader.supports_scoped_data_access() is True
+
+
+# --------------------------------------------------------------------------------------
+# Module-scope readers pinning the review-gap fix: a parse hook alone is NOT final.
+#
+# supports_scoped_data_access() classifies a reader as final from the produce_document
+# override alone, mirroring the ReadFile hole the reviewers found: a class without a
+# suffix override still classifies final, yet the default document_file_type calls
+# cls.suffix(), so load_data would crash on the abstract suffix(). Document *matching*
+# is guarded (_document_file_matches checks _has_suffix, and match_document_data_access
+# swallows the NotImplementedError), so a leaked suffix-less class is already harmless
+# in sibling discovery, but the classification screen must still mirror the family
+# pattern (ReadDB requires produce_rows AND connect; ReadFile requires produce_table AND
+# suffix AND _pyarrow_module): a ReadDocument subclass is "final via the seam" only if
+# produce_document AND suffix are BOTH overridden relative to ReadDocument.
+# --------------------------------------------------------------------------------------
+
+
+class _DocHookNoSuffixDoc(ReadDocument):
+    """Overrides produce_document but NOT suffix: cannot match or label files, so not final.
+
+    The default document_file_type calls cls.suffix(), so load_data on this shape would
+    raise NotImplementedError; the classification screen must reject it up front (like
+    _RowHookNoConnectDB in the ReadDB seam tests).
+    """
+
+    @classmethod
+    def produce_document(cls, file_path: str) -> Any:
+        return "no-suffix"
+
+
+class _DocHookNoSuffixBaseDoc(ReadDocument):
+    """Intermediate base: overrides produce_document, leaves suffix abstract; not final.
+
+    The reviewer-reported shape: a shared parse base for a family of document formats.
+    Only concrete children that add suffix complete the hook set.
+    """
+
+    @classmethod
+    def produce_document(cls, file_path: str) -> Any:
+        return "base"
+
+
+class _SuffixOnlyChildDoc(_DocHookNoSuffixBaseDoc):
+    """Concrete child completing the base with only a sentinel suffix: the full hook set, final."""
+
+    @classmethod
+    def suffix(cls) -> tuple[str, ...]:
+        return (".zzzdocseamsfxchild",)
+
+
+class TestReadDocumentSeamClassificationScreensMissingSuffix:
+    """Final via the seam iff produce_document AND suffix are both overridden."""
+
+    def test_parse_hook_without_suffix_is_not_final(self) -> None:
+        """A parse hook without a suffix override cannot label documents, so it must be screened out.
+
+        Fails today: the structural check returns True from the produce_document override
+        alone, ignoring that document_file_type would crash on the abstract suffix().
+        """
+        assert _DocHookNoSuffixDoc.supports_scoped_data_access() is False
+
+    def test_intermediate_parse_base_without_suffix_is_not_final(self) -> None:
+        """An intermediate parse base (produce_document, no suffix) is not final.
+
+        Fails today: the produce_document override alone classifies the base as final.
+        """
+        assert _DocHookNoSuffixBaseDoc.supports_scoped_data_access() is False
+
+    def test_concrete_child_completing_the_hook_set_is_final(self) -> None:
+        """Regression guard: a child adding only suffix on top of a parse base stays final.
+
+        Passes today; pins that tightening the screen must not reject inherited overrides.
+        """
+        assert _SuffixOnlyChildDoc.supports_scoped_data_access() is True

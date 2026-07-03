@@ -372,3 +372,125 @@ class TestCsvReaderEndToEndParity:
         assert sorted(table.column_names) == ["beta", "id"]
         assert table.column("beta").to_pylist() == [100, 200]
         assert table.column("id").to_pylist() == [1, 2]
+
+
+# --------------------------------------------------------------------------------------
+# Module-scope readers pinning the review-gap fix: a partial hook set is NOT final.
+#
+# Two reviews converged on the same hole: supports_scoped_data_access() classifies a
+# reader as final from the produce_table override alone. An intermediate base that
+# overrides produce_table but leaves suffix() (or _pyarrow_module()) abstract then
+# enters plugin discovery as a final scoped reader, and match_subclass_data_access ->
+# _file_matches calls the abstract suffix(), raising NotImplementedError and crashing
+# file resolution. Mirroring the ReadDB family pattern (_RowHookNoConnectDB requires
+# BOTH produce_rows AND connect), a ReadFile subclass is "final via the seam" only if
+# produce_table AND suffix AND _pyarrow_module are ALL overridden relative to ReadFile.
+#
+# The suffix-less classes below are exactly the hazardous shape, so each one overrides
+# match_subclass_data_access to return None: even while misclassified as final (today,
+# before the fix), a leaked registry entry can never be probed into the abstract
+# suffix() by a sibling test's file resolution. supports_scoped_data_access() is
+# structural and never consults match_subclass_data_access, so the guard does not
+# distort any assertion below.
+# --------------------------------------------------------------------------------------
+
+
+class _TableHookNoSuffixFile(ReadFile):
+    """Overrides produce_table and _pyarrow_module but NOT suffix: cannot match files, so not final.
+
+    A reader with an abstract suffix() would crash _file_matches during discovery, so the
+    classification screen must reject it (like _RowHookNoConnectDB in the ReadDB seam tests).
+    """
+
+    @classmethod
+    def produce_table(cls, data_access: Any, column_names: list[str]) -> Any:
+        return {"table": "no-suffix"}
+
+    @classmethod
+    def _pyarrow_module(cls) -> Any:
+        return object()
+
+    @classmethod
+    def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Any) -> Any:
+        return None
+
+
+class _TableHookNoBackendFile(ReadFile):
+    """Overrides produce_table and suffix (sentinel) but NOT _pyarrow_module: not final.
+
+    Without a _pyarrow_module override the centralized backend guard itself is abstract,
+    so load_data cannot even decide whether the backend exists; the classification screen
+    must reject the class. The sentinel suffix matches no real file anywhere.
+    """
+
+    @classmethod
+    def suffix(cls) -> tuple[str, ...]:
+        return (".zzzfileseamnopa",)
+
+    @classmethod
+    def produce_table(cls, data_access: Any, column_names: list[str]) -> Any:
+        return {"table": "no-backend"}
+
+
+class _TableHookNoSuffixBaseFile(ReadFile):
+    """Intermediate base: overrides produce_table and _pyarrow_module, leaves suffix abstract.
+
+    This is the exact reviewer-reported shape: a shared backend base for a family of
+    formats. It must classify as NOT final; only concrete children that add suffix are.
+    """
+
+    @classmethod
+    def produce_table(cls, data_access: Any, column_names: list[str]) -> Any:
+        return {"table": "base"}
+
+    @classmethod
+    def _pyarrow_module(cls) -> Any:
+        return object()
+
+    @classmethod
+    def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Any) -> Any:
+        return None
+
+
+class _SuffixOnlyChildFile(_TableHookNoSuffixBaseFile):
+    """Concrete child completing the base with only a sentinel suffix: the full hook set, final."""
+
+    @classmethod
+    def suffix(cls) -> tuple[str, ...]:
+        return (".zzzfileseamsfxchild",)
+
+
+class TestReadFileSeamClassificationScreensPartialHookSets:
+    """Final via the seam iff produce_table AND suffix AND _pyarrow_module are all overridden."""
+
+    def test_table_hook_without_suffix_is_not_final(self) -> None:
+        """A read hook without a suffix override cannot match files, so it must be screened out.
+
+        Fails today: the structural check returns True from the produce_table override
+        alone, and discovery would then crash in _file_matches on the abstract suffix().
+        """
+        assert _TableHookNoSuffixFile.supports_scoped_data_access() is False
+
+    def test_table_hook_without_pyarrow_module_is_not_final(self) -> None:
+        """A read hook without a _pyarrow_module override has no backend guard, so it is not final.
+
+        Fails today: the structural check ignores that _pyarrow_module is still the
+        abstract base default, so load_data would raise NotImplementedError inside
+        check_pyarrow_backend instead of running the seam.
+        """
+        assert _TableHookNoBackendFile.supports_scoped_data_access() is False
+
+    def test_intermediate_backend_base_without_suffix_is_not_final(self) -> None:
+        """An intermediate backend base (produce_table + _pyarrow_module, no suffix) is not final.
+
+        Fails today: the produce_table override alone classifies the base as final, so it
+        enters discovery and _file_matches calls the abstract suffix().
+        """
+        assert _TableHookNoSuffixBaseFile.supports_scoped_data_access() is False
+
+    def test_concrete_child_completing_the_hook_set_is_final(self) -> None:
+        """Regression guard: a child adding only suffix on top of a backend base stays final.
+
+        Passes today; pins that tightening the screen must not reject inherited overrides.
+        """
+        assert _SuffixOnlyChildFile.supports_scoped_data_access() is True

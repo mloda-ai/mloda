@@ -28,8 +28,10 @@ class ReadFile(BaseInputData):
     load_data is a template method exposing an opt-in lifecycle seam: a new
     backend implements ``produce_table``, ``_pyarrow_module``, and
     ``_file_format_label`` (optionally ``get_column_names``) plus ``suffix``
-    instead of overriding ``load_data`` wholesale. Overriding ``load_data``
-    directly is still supported.
+    instead of overriding ``load_data`` wholesale; ``produce_table``,
+    ``suffix``, and ``_pyarrow_module`` are all required for the class to be
+    discovered as a final reader. Overriding ``load_data`` directly is still
+    supported.
 
     If get_column_names is not implemented, the class will assume the columns are there.
     """
@@ -86,13 +88,20 @@ class ReadFile(BaseInputData):
     @classmethod
     def supports_scoped_data_access(cls) -> bool:
         # A ReadFile subclass is a final scoped reader if it overrides load_data
-        # wholesale, or implements the per-format read hook (produce_table).
-        # Decided structurally via _is_overridden() so plugin discovery never
-        # executes the lifecycle (no _pyarrow_module()/produce_table() side
-        # effects, no escaping exceptions).
+        # wholesale, or implements ALL of the per-format read hook (produce_table),
+        # suffix, and _pyarrow_module. Decided structurally via _is_overridden() so
+        # plugin discovery never executes the lifecycle (no _pyarrow_module()/
+        # produce_table() side effects, no escaping exceptions). Requiring suffix and
+        # _pyarrow_module screens out intermediate bases that share produce_table but
+        # leave suffix or the backend guard abstract, mirroring ReadDB's connect
+        # requirement.
         if cls._is_overridden(ReadFile, "load_data"):
             return True
-        return cls._is_overridden(ReadFile, "produce_table")
+        return (
+            cls._is_overridden(ReadFile, "produce_table")
+            and cls._is_overridden(ReadFile, "suffix")
+            and cls._is_overridden(ReadFile, "_pyarrow_module")
+        )
 
     @classmethod
     def suffix(cls) -> tuple[str, ...]:

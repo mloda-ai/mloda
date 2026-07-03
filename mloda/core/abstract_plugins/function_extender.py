@@ -53,16 +53,25 @@ class Extender(ABC):
 
     @staticmethod
     def feature_group_name(func: Any) -> str:
-        """Resolve the owning feature group class name of the hooked callable."""
-        unwrapped = inspect.unwrap(func)
-        if hasattr(unwrapped, "__self__"):
-            owner = unwrapped.__self__
+        """Resolve the owning feature group class name of the hooked callable.
+
+        Returns the string sentinel "unknown" (never None) when the owner cannot be resolved.
+        """
+
+        def owner_name(candidate: Any) -> str:
+            owner = candidate.__self__
             if isinstance(owner, type):
                 return str(owner.__name__)
             return str(owner.__class__.__name__)
+
+        if hasattr(func, "__self__"):
+            return owner_name(func)
+        unwrapped = inspect.unwrap(func)
+        if hasattr(unwrapped, "__self__"):
+            return owner_name(unwrapped)
         qualname = getattr(unwrapped, "__qualname__", "")
         parts = qualname.split(".")
-        if len(parts) >= 2:
+        if len(parts) >= 2 and parts[-2] != "<locals>":
             return str(parts[-2])
         return "unknown"
 

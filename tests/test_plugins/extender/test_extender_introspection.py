@@ -67,6 +67,28 @@ def make_opaque_wrapper(inner: Any) -> Any:
     return wrapper
 
 
+def make_bare_closure(inner: Any) -> Any:
+    """Wrap without functools.wraps and without __wrapped__: nothing links back to the inner callable."""
+
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        return inner(*args, **kwargs)
+
+    return wrapper
+
+
+def _unrelated_top_level(*args: Any, **kwargs: Any) -> Any:
+    return None
+
+
+class DecoratedFeatureGroup:
+    """FeatureGroup whose classmethod carries a __wrapped__ chain to an unrelated top-level function."""
+
+    @classmethod
+    @functools.wraps(_unrelated_top_level)
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data
+
+
 class TestFeatureGroupName:
     """Extender.feature_group_name resolves the owning class name of the hooked callable."""
 
@@ -106,6 +128,18 @@ class TestFeatureGroupName:
         once = make_opaque_wrapper(SampleFeatureGroup.calculate_feature)
         twice = make_opaque_wrapper(once)
         assert Extender.feature_group_name(twice) == "SampleFeatureGroup"
+
+    def test_bare_closure_qualname_returns_unknown_not_locals(self) -> None:
+        # A bare closure has qualname `make_bare_closure.<locals>.wrapper`; the
+        # `<locals>` scope marker is not a feature group name, so the helper
+        # must fall back to the unresolved sentinel "unknown".
+        assert Extender.feature_group_name(make_bare_closure(top_level_function)) == "unknown"
+
+    def test_decorated_bound_classmethod_prefers_raw_self_over_wrapped_chain(self) -> None:
+        # The raw bound classmethod carries __self__ pointing at its owning
+        # class; that must win over the __wrapped__ chain leading to an
+        # unrelated top-level function.
+        assert Extender.feature_group_name(DecoratedFeatureGroup.calculate_feature) == "DecoratedFeatureGroup"
 
 
 class TestFeatureSetHelper:

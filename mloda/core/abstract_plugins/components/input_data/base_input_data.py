@@ -138,7 +138,32 @@ class BaseInputData(ABC):
         options.add_to_group("BaseInputData", (cls_to_be_added, matched_data_access))
 
     def init_reader(self, options: Optional[Options]) -> tuple["BaseInputData", Any]:
-        raise NotImplementedError
+        if options is None:
+            raise ValueError(
+                f"Options were not set for {self.__class__.__name__}.init_reader().\n"
+                "Provide an Options object with a 'BaseInputData' key mapping to a tuple of "
+                "(ReaderClass, data_access).\n"
+                "Example:\n"
+                "  options = Options(context={\n"
+                "      'BaseInputData': (ReaderClass, data_access)\n"
+                "  })"
+            )
+
+        reader_data_access = options.get("BaseInputData")
+
+        if reader_data_access is None:
+            raise ValueError(
+                f"'BaseInputData' key is missing or None in the provided Options for {self.__class__.__name__}.\n"
+                "The 'BaseInputData' key in Options must map to a tuple of "
+                "(ReaderClass, data_access).\n"
+                "Example:\n"
+                "  options = Options(context={\n"
+                "      'BaseInputData': (ReaderClass, data_access)\n"
+                "  })"
+            )
+
+        reader, data_access = reader_data_access
+        return reader(), data_access
 
     def load(self, features: FeatureSet) -> Any:
         _options = None

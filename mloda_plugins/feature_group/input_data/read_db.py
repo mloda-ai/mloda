@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 from mloda.user import DataAccessCollection
 from mloda.provider import FeatureSet, BaseInputData
 from mloda.user import Options
@@ -78,25 +78,6 @@ class ReadDB(BaseInputData):
     def check_feature_in_data_access(cls, feature_name: str, data_access: Any) -> bool:
         """Obligatory function to check if the feature is in the data access."""
         raise NotImplementedError
-
-    def init_reader(self, options: Optional[Options]) -> tuple["ReadDB", Any]:
-        if options is None:
-            raise ValueError(
-                f"Options were not set for {self.__class__.__name__}. "
-                f"Provide an Options object containing a 'BaseInputData' key "
-                f"with a (reader_class, data_access) tuple."
-            )
-
-        reader_data_access = options["BaseInputData"]
-
-        if reader_data_access is None:
-            raise ValueError(
-                f"'BaseInputData' key is missing or None in the provided Options for {self.__class__.__name__}. "
-                f"Set options with Options(group={{'BaseInputData': (ReaderClass, {{...}})}})."
-            )
-
-        reader, data_access = reader_data_access
-        return reader(), data_access
 
     @classmethod
     def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:

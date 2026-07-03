@@ -75,18 +75,6 @@ class ReadDocument(BaseInputData):
     def suffix(cls) -> tuple[str, ...]:
         raise NotImplementedError
 
-    def init_reader(self, options: Optional[Options]) -> tuple["ReadDocument", Any]:
-        if options is None:
-            raise ValueError("Options were not set.")
-
-        reader_data_access = options.get("BaseInputData")
-
-        if reader_data_access is None:
-            raise ValueError("Reader data access was not set.")
-
-        reader, data_access = reader_data_access
-        return reader(), data_access
-
     @classmethod
     def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
         if isinstance(data_access, DataAccessCollection):

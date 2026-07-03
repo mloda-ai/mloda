@@ -40,6 +40,15 @@ def split_frameworks_by_capability(
     return supported, rejected
 
 
+def _scope_callout(feature: Feature) -> str | None:
+    """Render the shared scope callout, or None when the feature is unscoped."""
+    scope = feature.feature_group_scope
+    if scope is None:
+        return None
+    scope_name = scope.get_class_name() if isinstance(scope, type) else scope
+    return f"Scoped to feature group: '{scope_name}'."
+
+
 class IdentifyFeatureGroupClass:
     def __init__(
         self,
@@ -69,6 +78,9 @@ class IdentifyFeatureGroupClass:
                 continue
 
             if not self._filter_feature_group_by_domain(feature_group, feature):
+                continue
+
+            if not self._filter_feature_group_by_scope(feature_group, feature):
                 continue
 
             self._criteria_matched_feature_groups.add(feature_group)
@@ -121,6 +133,14 @@ class IdentifyFeatureGroupClass:
     def _filter_feature_group_by_domain(self, feature_group: type[FeatureGroup], feature: Feature) -> bool:
         return not feature.domain or feature_group.get_domain() == feature.domain
 
+    def _filter_feature_group_by_scope(self, feature_group: type[FeatureGroup], feature: Feature) -> bool:
+        scope = feature.feature_group_scope
+        if scope is None:
+            return True
+        if isinstance(scope, type):
+            return issubclass(feature_group, scope)
+        return feature_group.get_class_name() == scope
+
     def _filter_feature_group_by_framework(
         self,
         compute_frameworks: set[type[ComputeFramework]],
@@ -145,9 +165,13 @@ class IdentifyFeatureGroupClass:
         if len(feature_group) > 1:
             from mloda.core.abstract_plugins.feature_group import format_feature_group_classes
 
+            scope_callout = _scope_callout(feature)
+            scope_line = f"{scope_callout}\n" if scope_callout else ""
+
             raise ValueError(
                 f"Multiple feature groups found for feature '{feature.name}':\n"
                 f"{format_feature_group_classes(feature_group.keys(), include_domain=True)}\n"
+                f"{scope_line}"
                 "For troubleshooting guide, see: https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/"
             )
 
@@ -178,12 +202,19 @@ class IdentifyFeatureGroupClass:
     def _build_no_feature_group_error(
         self, feature: Feature, accessible_plugins: FeatureGroupEnvironmentMapping
     ) -> str:
+        scope_callout = _scope_callout(feature)
+
         capability_message = self._capability_rejection_message(feature)
         if capability_message is not None:
+            if scope_callout:
+                return f"{capability_message} {scope_callout}"
             return capability_message
 
         feature_name = str(feature.name)
         msg = f"No feature groups found for feature name: '{feature_name}'."
+
+        if scope_callout:
+            msg += f" {scope_callout}"
 
         if not accessible_plugins:
             msg += "\nNo plugins are loaded. Did you call PluginLoader.all()?"

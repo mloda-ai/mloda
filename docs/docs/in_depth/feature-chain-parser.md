@@ -426,9 +426,11 @@ must forward that value explicitly on the child `Feature` it constructs.
 ### Why a bare `Feature(name)` can fail resolution
 
 The group auto-merge also copies the parent's own query-specific group keys (for
-example `query_text`, `top_k`) onto the child. The child's feature group matcher does
-not expect those keys, so resolution fails with `No feature groups found ...` and no
-hint about why:
+example `query_text`, `top_k`) onto the child. The child's matcher (its
+`match_feature_group_criteria` / `PROPERTY_MAPPING`) does not accept those extra keys,
+so resolution fails with `No feature groups found ...` and no hint about why. (Reserved
+keys such as `feature_chainer_parser_key` are ignored by matching, so it is only the
+parent's own query-specific keys that break the match.)
 
 ``` python
 def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
@@ -472,11 +474,14 @@ semantics it does not cover.
 
 ### Upstream feature deduplication
 
-Declaring the same source feature as an input of several parents does not compute it
-several times. The engine deduplicates identical upstream features, so requesting a
-source feature directly and via a parent's `input_features` still computes it once.
-Forwarding options as above does not change this: it keeps the child's group identity
-stable, which is what lets the engine recognize the shared feature.
+The engine deduplicates upstream features that share the same group identity. Declaring
+the same source feature as the input of several parents therefore computes it once,
+**provided those parents forward the same options to it**. Forwarded options become part
+of the child's group identity, so two parents that call `forward_for_input_feature` with
+identical arguments share a single computed feature, while a plain request of the same
+name (or one carrying different options) is a distinct identity and is computed
+separately. Keep the forwarded options identical across parents when you want them to
+share the computation.
 
 ## Multiple Result Columns with ~ Pattern
 

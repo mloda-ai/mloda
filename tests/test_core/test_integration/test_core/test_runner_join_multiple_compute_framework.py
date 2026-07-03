@@ -303,14 +303,7 @@ class TestEngineMultipleJoinCfw:
     def test_runner_join_multiple_cfw2_join_to_same_base(
         self, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
-        idx = Index(
-            ("idx",),
-        )
-
-        left = JoinSpec(JoinCfwTest1, idx)
-        right_1 = JoinSpec(JoinCfwTest2, idx)
-        right_2 = JoinSpec(JoinCfwTest3, idx)
-        links = {Link("inner", left, right_1), Link("inner", left, right_2)}
+        links = Link.star(JoinCfwTest1, JoinCfwTest2, JoinCfwTest3, index_column="idx")
 
         self.base_join_runner(modes, flight_server, links)
 

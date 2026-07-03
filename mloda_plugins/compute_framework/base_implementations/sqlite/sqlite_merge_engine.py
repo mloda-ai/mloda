@@ -1,5 +1,6 @@
 import sqlite3
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import timedelta
 from typing import Any
 
@@ -12,6 +13,7 @@ from mloda_plugins.compute_framework.base_implementations.sql import sql_type_se
 from mloda_plugins.compute_framework.base_implementations.sql.sql_base_merge_engine import SqlBaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import is_ordered_arrow_type, quote_ident
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation, _next_table_name
+from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_value_sample import sample_string_values
 
 
 class SqliteMergeEngine(SqlBaseMergeEngine):
@@ -115,9 +117,15 @@ class SqliteMergeEngine(SqlBaseMergeEngine):
         return super().validate_asof_time_columns(left_data, right_data, asof_config)
 
     def _column_semantics(self, data: Any, column: str) -> ColumnSemantics:
-        return sql_type_semantics.column_semantics_from_arrow(
-            data.types[data.columns.index(column)], is_string_storage=True
+        arrow_type = data.types[data.columns.index(column)]
+        value_sample = sample_string_values(data, column) if pa.types.is_string(arrow_type) else None
+        sem = sql_type_semantics.column_semantics_from_arrow(
+            arrow_type, is_string_storage=True, value_sample=value_sample
         )
+        # Value-inspection may recognize an ISO-TEXT column as temporal, but the as-of gate
+        # keys off physical order: TEXT storage still needs coercion, so is_ordered is pinned
+        # to the arrow-type check (mirrors PythonDictMergeEngine).
+        return replace(sem, is_ordered=self._asof_time_column_is_ordered(data, column))
 
     def _asof_time_column_is_ordered(self, data: Any, column: str) -> bool:
         idx = data.columns.index(column)

@@ -85,7 +85,7 @@
 | regex                                  | 2026.5.9        | Apache-2.0 AND CNRI-Python                         |
 | requests                               | 2.34.2          | Apache Software License                            |
 | rich                                   | 14.3.4          | MIT License                                        |
-| ruff                                   | 0.15.19         | MIT                                                |
+| ruff                                   | 0.15.20         | MIT                                                |
 | scikit-learn                           | 1.9.0           | BSD-3-Clause                                       |
 | scipy                                  | 1.18.0          | BSD License                                        |
 | six                                    | 1.17.0          | MIT License                                        |

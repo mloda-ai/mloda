@@ -18,12 +18,14 @@ from typing import Any, Optional
 
 import pandas as pd
 import polars as pl
+import pyarrow as pa
 import pytest
 
 from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Feature, PluginCollector, mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame  # noqa: F401
 from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame  # noqa: F401
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable  # noqa: F401
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (  # noqa: F401
     PythonDictFramework,
 )
@@ -51,6 +53,30 @@ class Rc564DictFeatureGroup(FeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {"rc564_dict_feature": [1, 2]}
+
+
+class Rc564ArrowFeatureGroup(FeatureGroup):
+    """Root FG producing a single pyarrow column for the run_one tests."""
+
+    @classmethod
+    def input_data(cls) -> Optional[BaseInputData]:
+        return DataCreator({"rc564_arrow_feature"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({"rc564_arrow_feature": [1, 2]})
+
+
+class Rc564PolarsFeatureGroup(FeatureGroup):
+    """Root FG producing a single polars column for the run_one tests."""
+
+    @classmethod
+    def input_data(cls) -> Optional[BaseInputData]:
+        return DataCreator({"rc564_polars_feature"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pl.DataFrame({"rc564_polars_feature": [1, 2]})
 
 
 class Rc568PandasLeftFeatureGroup(FeatureGroup):
@@ -127,6 +153,8 @@ class Rc568DictFeatureGroup(FeatureGroup):
 
 _RC564_PANDAS = PluginCollector.enabled_feature_groups({Rc564PandasFeatureGroup})
 _RC564_DICT = PluginCollector.enabled_feature_groups({Rc564DictFeatureGroup})
+_RC564_ARROW = PluginCollector.enabled_feature_groups({Rc564ArrowFeatureGroup})
+_RC564_POLARS = PluginCollector.enabled_feature_groups({Rc564PolarsFeatureGroup})
 _RC568_PANDAS_PAIR = PluginCollector.enabled_feature_groups({Rc568PandasLeftFeatureGroup, Rc568PandasRightFeatureGroup})
 _RC568_PANDAS_SINGLE = PluginCollector.enabled_feature_groups({Rc568PandasLeftFeatureGroup})
 _RC568_PANDAS_MISMATCH = PluginCollector.enabled_feature_groups(
@@ -158,6 +186,26 @@ class TestRunOne:
         )
 
         assert result == [{"rc564_dict_feature": 1}, {"rc564_dict_feature": 2}]
+
+    def test_run_one_pyarrow_returns_flat_row_dicts(self) -> None:
+        """A pyarrow-backed single feature comes back as a flat list of row dicts."""
+        result = mlodaAPI.run_one(
+            Feature("rc564_arrow_feature"),
+            compute_frameworks=["PyArrowTable"],
+            plugin_collector=_RC564_ARROW,
+        )
+
+        assert result == [{"rc564_arrow_feature": 1}, {"rc564_arrow_feature": 2}]
+
+    def test_run_one_polars_returns_flat_row_dicts(self) -> None:
+        """A polars-backed single feature comes back as a flat list of row dicts."""
+        result = mlodaAPI.run_one(
+            Feature("rc564_polars_feature"),
+            compute_frameworks=["PolarsDataFrame"],
+            plugin_collector=_RC564_POLARS,
+        )
+
+        assert result == [{"rc564_polars_feature": 1}, {"rc564_polars_feature": 2}]
 
     def test_run_one_rejects_list_input(self) -> None:
         """Passing a list instead of a single feature raises a clear ValueError."""

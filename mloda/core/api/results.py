@@ -8,12 +8,16 @@ def results_by_feature(results: list[Any]) -> dict[str, Any]:
 
     A multi-output column "feature~suffix" is also reachable via its base name "feature".
     First occurrence wins on duplicate names. Looking up a missing name raises KeyError.
+    Caveat: a literal column name containing "~" also registers its base name, which can
+    shadow a same-named column from a later result.
     """
     mapping: dict[str, Any] = {}
     for element in results:
         if isinstance(element, dict):
             column_names = list(element.keys())
         elif isinstance(element, list):
+            if element and not isinstance(element[0], dict):
+                raise ValueError(f"Unsupported result element type: list of {type(element[0]).__name__}")
             column_names = list(element[0].keys()) if element else []
         elif hasattr(element, "column_names"):
             column_names = list(element.column_names)
@@ -35,8 +39,11 @@ def results_by_feature(results: list[Any]) -> dict[str, Any]:
 def _to_rows(result: Any) -> list[dict[str, Any]]:
     """Convert one run_all result element to a flat list of row dicts."""
     if isinstance(result, list):
-        return result
+        return list(result)
     if isinstance(result, dict):
+        column_lengths = {len(values) for values in result.values()}
+        if len(column_lengths) > 1:
+            raise ValueError(f"Columnar dict has mismatched column lengths: {sorted(column_lengths)}.")
         keys = list(result.keys())
         return [dict(zip(keys, values)) for values in zip(*result.values())]
     if hasattr(result, "to_pylist"):
@@ -48,21 +55,43 @@ def _to_rows(result: Any) -> list[dict[str, Any]]:
     if hasattr(result, "to_dict") and hasattr(result, "columns"):
         records_rows: list[dict[str, Any]] = result.to_dict("records")
         return records_rows
+    if hasattr(result, "collect"):
+        collected = result.collect()
+        if hasattr(collected, "to_dicts"):
+            collected_rows: list[dict[str, Any]] = collected.to_dicts()
+            return collected_rows
+        if isinstance(collected, list):
+            return [row.asDict() if hasattr(row, "asDict") else row for row in collected]
+    if hasattr(result, "df"):
+        return _to_rows(result.df())
     raise ValueError(f"Unsupported result element type: {type(result).__name__}")
 
 
 def _concat_frames(results: list[Any]) -> Any:
     """Horizontally combine run_all results into one pandas or polars DataFrame."""
-    frames = [
-        element
+    elements = [
+        element.collect()
+        if type(element).__module__.split(".")[0] == "polars" and hasattr(element, "collect")
+        else element
         for element in results
-        if type(element).__module__.split(".")[0] in ("pandas", "polars") and hasattr(element, "columns")
     ]
+
+    frames: list[Any] = []
+    non_frames: list[Any] = []
+    for element in elements:
+        if type(element).__module__.split(".")[0] in ("pandas", "polars") and hasattr(element, "columns"):
+            frames.append(element)
+        else:
+            non_frames.append(element)
+
     if not frames:
         raise ValueError(
             "run_all produced no DataFrame results; use results_by_feature or run_one "
             "for non-DataFrame compute frameworks."
         )
+    if non_frames:
+        non_frame_types = ", ".join(sorted({type(element).__name__ for element in non_frames}))
+        raise ValueError(f"run_all produced non-DataFrame results that cannot be concatenated: {non_frame_types}.")
     if len(frames) == 1:
         return frames[0]
 

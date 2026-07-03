@@ -56,9 +56,10 @@ either as a literal accepted value; both are recovered as metadata, not values.
 ### Builder: `property_spec`
 
 `property_spec` builds the same dict and validates its invariants at
-construction (strict needs a non-empty `allowed_values`; `allowed_values`
-without strict is rejected as a no-op; a strict `default` must be in the
-allowed set). The contract stays a plain dict, so this is optional sugar:
+construction (strict needs a non-empty `allowed_values` or a
+`validation_function`; `allowed_values` without strict is rejected as a no-op;
+a strict `default` must be in the allowed set). The contract stays a plain
+dict, so this is optional sugar:
 
 ``` python
 from mloda.provider import property_spec
@@ -72,6 +73,18 @@ PROPERTY_MAPPING = {
     ),
 }
 ```
+
+The builder also accepts three optional callable passthroughs, emitted only
+when provided (an omitted passthrough leaves no key in the dict):
+
+- `validation_function`: must be callable and requires `strict=True` (like
+  `allowed_values`, it is only enforced under strict validation). With a
+  `validation_function`, strict no longer needs `allowed_values`, and a
+  declared `default` is checked through the function instead of by membership.
+- `required_when`: conditional-requirement predicate; callable-checked, no
+  strict requirement.
+- `type_validator`: raw-value shape check; callable-checked, no strict
+  requirement.
 
 ## Parameter Classification
 

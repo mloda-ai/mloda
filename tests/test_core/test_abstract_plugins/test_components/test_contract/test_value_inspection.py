@@ -121,6 +121,35 @@ class TestSeparatorlessFormsRejected:
             assert sem.is_tz_aware is aware
 
 
+class TestSeparatorRejected:
+    """Only 'T' or a single space is a valid ISO-8601 date/time separator.
+
+    fromisoformat is lenient on 3.11+ and accepts an arbitrary single character between the
+    date and the time (e.g. '_' or '/'), so such strings would falsely classify as temporal.
+    The classifier requires the character at index 10 to be 'T' or ' ' when a time part exists.
+    """
+
+    def test_underscore_separator_returns_none(self) -> None:
+        assert iso8601_string_semantics(["2024-01-01_00:00:00"]) is None
+
+    def test_slash_separator_returns_none(self) -> None:
+        assert iso8601_string_semantics(["2024-01-01/00:00:00"]) is None
+
+    def test_letter_separator_returns_none(self) -> None:
+        assert iso8601_string_semantics(["2024-01-01x00:00:00"]) is None
+
+    def test_space_separator_still_accepted(self) -> None:
+        sem = iso8601_string_semantics(["2024-01-01 00:00:00"])
+        assert sem is not None
+        assert sem.is_temporal is True
+        assert sem.is_tz_aware is False
+
+    def test_t_separator_still_accepted(self) -> None:
+        sem = iso8601_string_semantics(["2024-01-01T00:00:00"])
+        assert sem is not None
+        assert sem.is_temporal is True
+
+
 class TestIsIso8601String:
     """``is_iso8601_string`` is a fast single-value ISO-8601 date/datetime probe.
 
@@ -156,6 +185,18 @@ class TestIsIso8601String:
 
     def test_none_is_false(self) -> None:
         assert is_iso8601_string(None) is False
+
+    def test_underscore_separator_is_false(self) -> None:
+        assert is_iso8601_string("2024-01-01_00:00:00") is False
+
+    def test_slash_separator_is_false(self) -> None:
+        assert is_iso8601_string("2024-01-01/00:00:00") is False
+
+    def test_letter_separator_is_false(self) -> None:
+        assert is_iso8601_string("2024-01-01x00:00:00") is False
+
+    def test_space_separator_is_true(self) -> None:
+        assert is_iso8601_string("2024-01-01 00:00:00") is True
 
 
 class TestMixedTimezoneAwareness:

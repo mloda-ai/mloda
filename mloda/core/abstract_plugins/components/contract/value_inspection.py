@@ -21,6 +21,11 @@ def _parse_iso(value: str) -> date | datetime | None:
     date_part = value.split("T", 1)[0].split(" ", 1)[0]
     if "-" not in date_part or "w" in value.lower():
         return None
+    # fromisoformat is lenient on 3.11+ and accepts an arbitrary single character between the
+    # extended date (YYYY-MM-DD, 10 chars) and the time. Only 'T' or a single space are valid
+    # ISO-8601 separators, so reject anything else before trusting fromisoformat.
+    if len(value) > 10 and value[10] not in ("T", " "):
+        return None
     # Python 3.10's fromisoformat rejects a trailing 'Z'; normalize it to '+00:00'.
     parse_input = value[:-1] + "+00:00" if value.endswith("Z") else value
     try:

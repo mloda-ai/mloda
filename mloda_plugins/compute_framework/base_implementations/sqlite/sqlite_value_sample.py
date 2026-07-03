@@ -29,7 +29,7 @@ def sample_string_values(data: Any, column: str) -> list[Any]:
         return []
     first_value = probe_rows[0][0]
     if not is_iso8601_string(first_value):
-        return [first_value]
+        return []
     sql = f"SELECT {qc} FROM {table_ref} WHERE {qc} IS NOT NULL LIMIT {_SAMPLE_LIMIT}"  # nosec
     rows = data.connection.execute(sql).fetchall()
     return [row[0] for row in rows]

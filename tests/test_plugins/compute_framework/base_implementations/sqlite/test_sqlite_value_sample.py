@@ -58,7 +58,7 @@ class TestStagedSampling:
         result = sample_string_values(data, "c")
 
         assert len(connection.executed_sql) == 1
-        assert result == ["abc123"]
+        assert result == []
 
     def test_iso_first_value_issues_probe_then_full_sample(self) -> None:
         connection = _FakeConnection(

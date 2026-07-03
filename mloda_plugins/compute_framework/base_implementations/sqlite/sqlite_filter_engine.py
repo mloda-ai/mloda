@@ -18,9 +18,7 @@ class SqliteFilterEngine(SqlBaseFilterEngine):
         # a per-relation sample cache is a possible future optimization.
         is_string_like = sql_type_semantics.is_string_like_arrow_type(arrow_type)
         value_sample = sample_string_values(data, column) if is_string_like else None
-        return sql_type_semantics.column_semantics_from_arrow(
-            arrow_type, is_string_storage=True, value_sample=value_sample
-        )
+        return sql_type_semantics.column_semantics_from_arrow(arrow_type, value_sample=value_sample)
 
     @classmethod
     def _build_regex_condition(cls, column_name: str, value: str) -> tuple[str, tuple[Any, ...]]:

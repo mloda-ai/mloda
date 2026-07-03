@@ -1,7 +1,7 @@
 """Failing tests for the SQL-family column-semantics helper (epic #518, Phase 1).
 
 Defines the not-yet-implemented module-level function
-``column_semantics_from_arrow(arrow_type, is_string_storage=False)`` in
+``column_semantics_from_arrow(arrow_type, value_sample=None)`` in
 ``mloda_plugins.compute_framework.base_implementations.sql.sql_type_semantics``.
 This helper backs both duckdb and sqlite (which store datetimes as ISO TEXT).
 Expected to fail at import time (ModuleNotFoundError) until Green implements it.
@@ -59,9 +59,9 @@ class TestSqlColumnSemanticsFromArrow:
         assert sem.unit is None
 
     def test_string_storage_flag_does_not_value_scan(self) -> None:
-        # sqlite stores datetimes as ISO TEXT: with is_string_storage=True and a string
-        # type, we do NOT value-scan, so it stays a plain non-ordered string.
-        sem = column_semantics_from_arrow(pa.string(), is_string_storage=True)
+        # sqlite stores datetimes as ISO TEXT: with a bare string type and no value_sample,
+        # we do NOT value-scan, so it stays a plain non-ordered string.
+        sem = column_semantics_from_arrow(pa.string())
         assert sem.is_ordered is False
         assert sem.is_temporal is False
         assert sem.is_numeric is False

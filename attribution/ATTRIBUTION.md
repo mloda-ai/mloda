@@ -24,7 +24,7 @@
 | idna                                   | 3.18            | BSD-3-Clause                                       |
 | iniconfig                              | 2.3.0           | MIT                                                |
 | ipykernel                              | 7.3.0           | BSD-3-Clause                                       |
-| ipython                                | 9.14.1          | BSD-3-Clause                                       |
+| ipython                                | 9.15.0          | BSD-3-Clause                                       |
 | ipython_pygments_lexers                | 1.1.1           | BSD License                                        |
 | jedi                                   | 0.20.0          | MIT License                                        |
 | joblib                                 | 1.5.3           | BSD-3-Clause                                       |

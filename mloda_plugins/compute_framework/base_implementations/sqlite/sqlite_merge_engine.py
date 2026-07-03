@@ -123,9 +123,7 @@ class SqliteMergeEngine(SqlBaseMergeEngine):
         # a per-relation sample cache is a possible future optimization.
         is_string_like = sql_type_semantics.is_string_like_arrow_type(arrow_type)
         value_sample = sample_string_values(data, column) if is_string_like else None
-        sem = sql_type_semantics.column_semantics_from_arrow(
-            arrow_type, is_string_storage=True, value_sample=value_sample
-        )
+        sem = sql_type_semantics.column_semantics_from_arrow(arrow_type, value_sample=value_sample)
         # Value-inspection may recognize an ISO-TEXT column as temporal, but the as-of gate
         # keys off physical order: TEXT storage still needs coercion, so is_ordered is pinned
         # to the arrow-type check (mirrors PythonDictMergeEngine).

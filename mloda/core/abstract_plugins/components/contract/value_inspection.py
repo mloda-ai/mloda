@@ -33,6 +33,15 @@ def _parse_iso(value: str) -> date | datetime | None:
         return None
 
 
+def is_iso8601_string(value: Any) -> bool:
+    """True iff ``value`` is a str parseable as an ISO-8601 date/datetime via ``_parse_iso``.
+
+    Shares the ISO shape rules with the private classifier (dashes required, week/bare-digit
+    rejected), so a single non-str or non-ISO probe value can fast-reject a column.
+    """
+    return isinstance(value, str) and _parse_iso(value) is not None
+
+
 def iso8601_string_semantics(values: Iterable[Any], sample_size: int = 100) -> ColumnSemantics | None:
     """Classify a column of ISO-8601 date/datetime strings from a bounded value sample.
 

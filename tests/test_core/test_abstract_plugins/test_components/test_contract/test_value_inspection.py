@@ -16,7 +16,10 @@ module.
 from typing import Any
 
 from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
-from mloda.core.abstract_plugins.components.contract.value_inspection import iso8601_string_semantics
+from mloda.core.abstract_plugins.components.contract.value_inspection import (
+    is_iso8601_string,
+    iso8601_string_semantics,
+)
 
 
 class TestReturnsNone:
@@ -116,6 +119,43 @@ class TestSeparatorlessFormsRejected:
             assert sem is not None, value
             assert sem.is_temporal is True
             assert sem.is_tz_aware is aware
+
+
+class TestIsIso8601String:
+    """``is_iso8601_string`` is a fast single-value ISO-8601 date/datetime probe.
+
+    It uses the same shape rules as the private ``_parse_iso`` classifier: it requires a
+    dash-bearing extended calendar date and rejects bare-digit codes, week dates, ordinal
+    dates and any non-str input. It lets the sqlite value sampler fast-reject genuine
+    string ID join keys after a single probed value, avoiding a full bounded sample query.
+    """
+
+    def test_iso_date_is_true(self) -> None:
+        assert is_iso8601_string("2024-01-01") is True
+
+    def test_naive_iso_datetime_is_true(self) -> None:
+        assert is_iso8601_string("2024-01-01T00:00:00") is True
+
+    def test_offset_iso_datetime_is_true(self) -> None:
+        assert is_iso8601_string("2024-01-01T00:00:00+00:00") is True
+
+    def test_trailing_z_iso_datetime_is_true(self) -> None:
+        assert is_iso8601_string("2024-01-01T00:00:00Z") is True
+
+    def test_bare_digits_is_false(self) -> None:
+        assert is_iso8601_string("20240101") is False
+
+    def test_week_date_is_false(self) -> None:
+        assert is_iso8601_string("2024-W01-1") is False
+
+    def test_plain_string_is_false(self) -> None:
+        assert is_iso8601_string("hello") is False
+
+    def test_non_string_int_is_false(self) -> None:
+        assert is_iso8601_string(5) is False
+
+    def test_none_is_false(self) -> None:
+        assert is_iso8601_string(None) is False
 
 
 class TestMixedTimezoneAwareness:

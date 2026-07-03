@@ -1,10 +1,9 @@
 """Column-semantics helper for arrow-typed SQL-family frameworks (epic #518, Phase 1).
 
 Single source of truth for deriving :class:`ColumnSemantics` from a pyarrow
-``DataType``. Backs both duckdb and sqlite; sqlite stores datetimes as ISO TEXT,
-so it may pass ``is_string_storage=True``. When a ``value_sample`` is provided for a
-string-typed column, its ISO-8601 values are classified as temporal via
-``iso8601_string_semantics``.
+``DataType``. Backs both duckdb and sqlite; sqlite stores datetimes as ISO TEXT.
+When a ``value_sample`` is provided for a string-typed column, its ISO-8601 values
+are classified as temporal via ``iso8601_string_semantics``.
 """
 
 from typing import TYPE_CHECKING, Any
@@ -36,13 +35,11 @@ def is_string_like_arrow_type(arrow_type: "pa.DataType") -> bool:
 
 def column_semantics_from_arrow(
     arrow_type: "pa.DataType",
-    is_string_storage: bool = False,
     value_sample: list[Any] | None = None,
 ) -> ColumnSemantics:
     """Derive :class:`ColumnSemantics` from a pyarrow ``DataType``.
 
-    ``is_string_storage`` is accepted so string-backed backends (e.g. sqlite) can
-    pass it. When the arrow type is a string type and ``value_sample`` is provided,
+    When the arrow type is a string type and ``value_sample`` is provided,
     ISO-8601 datetime/date strings are classified as temporal via value-inspection.
     """
     import pyarrow as pa

@@ -20,6 +20,7 @@ and because ``MlodaRunError`` does not yet exist.
 
 from __future__ import annotations
 
+import threading
 from typing import Any, Optional
 
 import pytest
@@ -230,3 +231,89 @@ def test_check_for_error_raises_mloda_run_error_when_no_exception_captured() -> 
 
     with pytest.raises(MlodaRunError):
         orchestrator._check_for_error()
+
+
+# --------------------------------------------------------------------------- #
+# 6. MULTIPROCESSING: picklable vs non-picklable worker exceptions (issue #563
+#    regression guard). In MULTIPROCESSING mode ``cfw_register`` is a
+#    ``multiprocessing.managers`` proxy, so ``set_error(exception=e)`` PICKLES
+#    the exception. A picklable exception type must survive (already works). A
+#    NON-picklable exception must NOT hang the orchestrator loop: the worker's
+#    except block must still send STOP so ``run_all`` raises promptly instead of
+#    freezing.
+# --------------------------------------------------------------------------- #
+
+
+class UnpicklableError(RuntimeError):
+    """A RuntimeError whose instance carries a non-picklable payload.
+
+    ``threading.Lock()`` cannot be pickled, so ``set_error(exception=self)`` on
+    the multiprocessing manager proxy fails to serialize this instance.
+    """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.lock = threading.Lock()  # not picklable
+
+
+class UnpicklableErrorFeatureGroup(FeatureGroup):
+    """Root FG whose ``calculate_feature`` raises a non-picklable exception."""
+
+    @classmethod
+    def input_data(cls) -> Optional[BaseInputData]:
+        return DataCreator(supports_features={"exc_unpicklable_col"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        raise UnpicklableError("boom")
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"exc_unpicklable_col"}
+
+
+_ENABLED_UNPICKLABLE = PluginCollector.enabled_feature_groups({UnpicklableErrorFeatureGroup})
+
+
+def test_multiprocessing_preserves_picklable_exception_type(flight_server: Any) -> None:
+    """MULTIPROCESSING ``run_all`` must surface the original ``ImportError`` type.
+
+    Regression guard: a PICKLABLE worker exception round-trips through the
+    ``multiprocessing.managers`` proxy in ``set_error(exception=e)`` and is
+    re-raised with its original type. This already passes today; it pins that
+    the forthcoming pickle-failure guard does not degrade the happy path.
+    """
+    with pytest.raises(ImportError, match="bm25s"):
+        mloda.run_all(
+            [Feature(name="exc_import_error_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_ENABLED_IMPORT_ERROR,
+            parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+            flight_server=flight_server,
+        )
+
+
+@pytest.mark.timeout(15)
+def test_multiprocessing_unpicklable_exception_does_not_hang(flight_server: Any) -> None:
+    """A NON-picklable worker exception must not hang the orchestrator loop.
+
+    FAILS today: in MULTIPROCESSING mode ``cfw_register`` is a manager proxy, so
+    ``set_error(exception=e)`` tries to PICKLE the ``UnpicklableError`` instance
+    (it holds a ``threading.Lock``). Pickling raises inside the worker's except
+    block BEFORE STOP is sent, so the orchestrator loop never terminates and the
+    run HANGS. The ``@pytest.mark.timeout(15)`` turns that hang into a red
+    ``Failed`` state instead of freezing the suite.
+
+    The requirement: ``run_all`` must RAISE (any Exception) PROMPTLY. Once the
+    production guard degrades ``set_error(exception=e)`` to ``set_error(msg,
+    exc_info)`` on pickle failure, this surfaces as ``MlodaRunError`` and the
+    test passes without timing out.
+    """
+    with pytest.raises(Exception):
+        mloda.run_all(
+            [Feature(name="exc_unpicklable_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_ENABLED_UNPICKLABLE,
+            parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+            flight_server=flight_server,
+        )

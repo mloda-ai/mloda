@@ -35,6 +35,9 @@ from mloda.core.abstract_plugins.plugin_registry.plugin_registry import (
     register_plugin,
 )
 
+# Result reading
+from mloda.core.api.results import results_by_feature
+
 # Config loading
 from mloda.core.api.feature_config.loader import load_features_from_config
 
@@ -83,6 +86,8 @@ __all__ = [
     "register_plugin",
     # Streaming API
     "stream_all",
+    # Result reading
+    "results_by_feature",
     # Config loading
     "load_features_from_config",
     # Plugin documentation / discovery

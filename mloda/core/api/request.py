@@ -18,6 +18,7 @@ from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
+from mloda.core.api.results import _concat_frames, _to_rows
 
 
 class mlodaAPI:
@@ -166,6 +167,28 @@ class mlodaAPI:
             flight_server=flight_server,
             function_extender=function_extender,
         )
+
+    @classmethod
+    def run_one(cls, feature: Feature | str, **run_all_kwargs: Any) -> list[dict[str, Any]]:
+        """Run a single feature and return its result as a flat list of row dicts (issue #564).
+
+        Accepts the same keyword arguments as ``run_all``.
+        """
+        if not isinstance(feature, (Feature, str)):
+            raise ValueError("run_one takes a single feature; use run_all for multiple features.")
+        results = cls.run_all([feature], **run_all_kwargs)
+        if len(results) != 1:
+            raise ValueError(f"run_one expected exactly one result, got {len(results)}.")
+        return _to_rows(results[0])
+
+    @classmethod
+    def run_all_as_dataframe(cls, features: Features | list[Feature | str], **run_all_kwargs: Any) -> Any:
+        """Run like ``run_all`` and return one horizontally concatenated DataFrame (issue #568).
+
+        Accepts the same keyword arguments as ``run_all``. Raises ValueError on mismatched
+        row counts or when the results are not pandas/polars DataFrames.
+        """
+        return _concat_frames(cls.run_all(features, **run_all_kwargs))
 
     @classmethod
     def stream_all(

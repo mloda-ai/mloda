@@ -360,6 +360,42 @@ AInputFeatureGroup
 
 As the input features can be fulfilled by **multiple other features**, we can have the same processes running in different environments, migrations and processes.
 
+#### Convenience helpers: run_one, run_all_as_dataframe, results_by_feature
+
+`run_all` returns a list with one result object per feature group, so reading a value requires knowing that nesting. Three helpers cover the common cases: use `run_one` for a single feature (it returns the rows as a flat list of dicts), `run_all_as_dataframe` for one horizontally concatenated DataFrame (pandas or polars; it raises `ValueError` on mismatched row counts or non-DataFrame frameworks), and `results_by_feature` to pick a `run_all` result by column name (multi-output columns like `feature~suffix` are also reachable via their base name; missing names raise `KeyError`).
+
+Reusing the feature groups from the previous example:
+
+```python
+from mloda.user import results_by_feature
+
+plugin_collector = PluginCollector.enabled_feature_groups({AInputFeatureGroup, AFeatureInputCreator})
+
+# Single feature: flat rows, no nesting to unpack
+rows = mloda.run_one("AFeatureInputCreator", compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
+print(rows)
+
+# All features combined into one wide DataFrame
+df = mloda.run_all_as_dataframe(
+    feature_list, compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector
+)
+print(sorted(df.columns))
+
+# Pick a result from a plain run_all output by column name
+by_name = results_by_feature(result)
+print(by_name["AInputFeatureGroup"])
+```
+
+Output:
+
+``` python
+[{'AFeatureInputCreator': 'TestValue5'}, {'AFeatureInputCreator': 'TestValue6'}]
+['AFeatureInputCreator', 'AInputFeatureGroup']
+   AInputFeatureGroup
+0                   2
+1                   2
+```
+
 #### Combining Data Sources with Links
 
 When input features come from different sources (e.g., ApiData and DataCreator), you can join them using Links. Create a `Link` in `input_features()` and attach it to a `Feature`:

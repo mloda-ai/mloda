@@ -196,6 +196,17 @@ When several feature groups share one row-index column and all join back to a si
 
 ```python
 from mloda.user import Link, JoinType
+from mloda.provider import FeatureGroup
+
+# A hub feature group and two spokes that share the "row_id" column:
+class HubFG(FeatureGroup):
+    pass
+
+class SpokeAFG(FeatureGroup):
+    pass
+
+class SpokeBFG(FeatureGroup):
+    pass
 
 # First feature group is the hub; every remaining group is a spoke joined to it
 # on the shared index column. Returns a set of Links.

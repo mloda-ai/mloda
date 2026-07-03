@@ -3,11 +3,15 @@
 from typing import Any
 
 import pandas as pd
-import polars as pl
 import pyarrow as pa
 import pytest
 
 from mloda.core.api.results import _concat_frames, _to_rows, results_by_feature
+
+try:
+    import polars as pl
+except ImportError:
+    pl = None  # type: ignore[assignment]
 
 
 class _SparkRowStub:
@@ -87,6 +91,7 @@ class TestResultsByFeatureColumnExtraction:
         assert mapping["col_a"] is element
         assert mapping["col_b"] is element
 
+    @pytest.mark.skipif(pl is None, reason="polars is not installed")
     def test_polars_dataframe_maps_columns_to_element(self) -> None:
         element = pl.DataFrame({"col_a": [1, 2], "col_b": [3, 4]})
         results: list[Any] = [element]
@@ -188,6 +193,7 @@ class TestToRows:
 
         assert rows == [{"col_a": 1, "col_b": 3}, {"col_a": 2, "col_b": 4}]
 
+    @pytest.mark.skipif(pl is None, reason="polars is not installed")
     def test_polars_dataframe_converts_to_dicts_rows(self) -> None:
         frame = pl.DataFrame({"col_a": [1, 2], "col_b": [3, 4]})
 
@@ -195,6 +201,7 @@ class TestToRows:
 
         assert rows == [{"col_a": 1, "col_b": 3}, {"col_a": 2, "col_b": 4}]
 
+    @pytest.mark.skipif(pl is None, reason="polars is not installed")
     def test_polars_lazyframe_collects_to_rows(self) -> None:
         lazy = pl.DataFrame({"col_a": [1, 2], "col_b": [3, 4]}).lazy()
 
@@ -262,6 +269,7 @@ class TestConcatFrames:
         assert list(combined["col_a"]) == [1, 2]
         assert list(combined["col_b"]) == [3, 4]
 
+    @pytest.mark.skipif(pl is None, reason="polars is not installed")
     def test_overlapping_columns_polars_keeps_first_frame_values(self) -> None:
         first = pl.DataFrame({"col_a": [1, 2], "shared": [10, 20]})
         second = pl.DataFrame({"shared": [99, 98], "col_b": [3, 4]})
@@ -282,6 +290,7 @@ class TestConcatFrames:
         assert list(combined.columns) == ["col_a", "col_b"]
         assert len(combined) == 0
 
+    @pytest.mark.skipif(pl is None, reason="polars is not installed")
     def test_polars_lazyframes_are_collected_and_concatenated(self) -> None:
         first = pl.DataFrame({"col_a": [1, 2]}).lazy()
         second = pl.DataFrame({"col_b": [3, 4]}).lazy()

@@ -17,18 +17,23 @@ and parallel-safe under pytest-xdist.
 from typing import Any, Optional
 
 import pandas as pd
-import polars as pl
 import pyarrow as pa
 import pytest
 
 from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Feature, PluginCollector, mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame  # noqa: F401
-from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame  # noqa: F401
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable  # noqa: F401
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (  # noqa: F401
     PythonDictFramework,
 )
+
+try:
+    import polars as pl
+    from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame  # noqa: F401
+except ImportError:
+    pl = None  # type: ignore[assignment]
+    PolarsDataFrame = None  # type: ignore[assignment, misc]
 
 
 class Rc564PandasFeatureGroup(FeatureGroup):
@@ -197,6 +202,7 @@ class TestRunOne:
 
         assert result == [{"rc564_arrow_feature": 1}, {"rc564_arrow_feature": 2}]
 
+    @pytest.mark.skipif(pl is None, reason="polars is not installed")
     def test_run_one_polars_returns_flat_row_dicts(self) -> None:
         """A polars-backed single feature comes back as a flat list of row dicts."""
         result = mlodaAPI.run_one(
@@ -246,6 +252,7 @@ class TestRunAllAsDataframe:
         assert "rc568_pd_left" in result.columns
         assert list(result["rc568_pd_left"]) == [1, 2, 3]
 
+    @pytest.mark.skipif(pl is None, reason="polars is not installed")
     def test_polars_two_groups_concat_into_one_frame(self) -> None:
         """Two polars feature-group results are horizontally concatenated into ONE frame."""
         result = mlodaAPI.run_all_as_dataframe(

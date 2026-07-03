@@ -205,7 +205,9 @@ class BaseInputData(ABC):
         The anchor is the most-derived class in cls.__mro__ that declares _final_reader_requires
         in its own __dict__. A wholesale load_data override relative to the anchor is always
         final; otherwise cls is final iff the anchor's required hooks are non-empty and all
-        overridden relative to the anchor.
+        overridden relative to the anchor. A class that declares _final_reader_requires is a
+        family base and is therefore never final itself: both branches compare relative to the
+        anchor, and nothing is overridden relative to itself.
         """
         anchor = next(klass for klass in cls.__mro__ if "_final_reader_requires" in klass.__dict__)
         if cls._is_overridden(anchor, "load_data"):

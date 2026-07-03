@@ -193,6 +193,23 @@ class _SubFamilyWholesale(_SubFamilyBase):
         return {"unused_synthetic_column": [3]}
 
 
+class _AnchorWithOwnLoadData(_FamilyBase):
+    """Redeclares the anchor and defines its own load_data body in the same class."""
+
+    @classmethod
+    def _final_reader_requires(cls) -> tuple[str, ...]:
+        return ("hook_c",)
+
+    @classmethod
+    def hook_c(cls) -> Any:
+        raise NotImplementedError
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        cls.hook_a()
+        return cls.hook_c()
+
+
 class TestOldNameRemoved:
     def test_supports_scoped_data_access_is_gone_from_base(self) -> None:
         assert not hasattr(BaseInputData, "supports_scoped_data_access")
@@ -244,6 +261,12 @@ class TestAnchorRedeclaration:
 
     def test_child_overriding_load_data_relative_to_new_anchor_is_final(self) -> None:
         assert _is_final_reader(_SubFamilyWholesale) is True
+
+    def test_anchor_redeclaring_requires_with_own_load_data_is_not_final(self) -> None:
+        """Pins the reviewed-and-kept semantics: declaring a requires tuple makes a class a
+        family base, and a family base is never final even with its own load_data; a
+        concrete reader must not redeclare the tuple."""
+        assert _is_final_reader(_AnchorWithOwnLoadData) is False
 
 
 class TestLoudValidation:

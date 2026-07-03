@@ -190,6 +190,46 @@ Available `_on` methods: `inner_on`, `left_on`, `right_on`, `outer_on`, `append_
 
 **Note:** Explicit `JoinSpec` (Option 1 above) works regardless of whether the feature group defines `index_columns()`. The engine automatically injects the join columns specified in the `JoinSpec` into that feature group's feature set. The `_on` shorthand requires `index_columns()`.
 
+#### Star Joins (Link.star)
+
+When several feature groups share one row-index column and all join back to a single hub, `Link.star` builds the whole set of links in one call instead of a hand-rolled loop of `Link.inner(...)`:
+
+```python
+from mloda.user import Link, JoinType
+from mloda.provider import FeatureGroup
+
+# A hub feature group and two spokes that share the "row_id" column:
+class HubFG(FeatureGroup):
+    pass
+
+class SpokeAFG(FeatureGroup):
+    pass
+
+class SpokeBFG(FeatureGroup):
+    pass
+
+# First feature group is the hub; every remaining group is a spoke joined to it
+# on the shared index column. Returns a set of Links.
+links = Link.star(HubFG, SpokeAFG, SpokeBFG, index_column="row_id")
+
+# Equivalent to building, by hand:
+#   Link.inner(JoinSpec(HubFG, Index(("row_id",))), JoinSpec(SpokeAFG, Index(("row_id",))))
+#   Link.inner(JoinSpec(HubFG, Index(("row_id",))), JoinSpec(SpokeBFG, Index(("row_id",))))
+```
+
+- **`index_column`** is keyword-only and accepts a `str`, a `tuple[str, ...]` (multi-column), or an explicit `Index`. It is normalized once and reused on both sides of every link, so all three forms are equivalent.
+- **`jointype`** is keyword-only and defaults to `JoinType.INNER`. It accepts a `JoinType` or its string form and must be one of `inner`, `left`, or `outer`; the same type is applied to every spoke:
+
+```python
+links = Link.star(HubFG, SpokeAFG, SpokeBFG, index_column="row_id", jointype=JoinType.LEFT)
+```
+
+- `right`, `append`, and `union` are rejected with a `ValueError` (a star anchors on the hub, so they do not fit); `asof` joins need `Link.asof(...)`.
+- At least two feature groups are required (a hub plus one spoke), and the hub class cannot also appear as a spoke. Duplicate spokes collapse in the returned set.
+- **Scope:** `Link.star` targets joins between distinct feature-group classes and does not carry discriminators, so it cannot disambiguate multiple same-class nodes. For same-class self-joins, use `Link.inner` with discriminators (see below).
+
+The returned set is passed straight to `mlodaAPI` like any other link set.
+
 #### Same-Class Joins with Discriminators
 
 When joining a feature group with itself (or two nodes of the same class loading different data sources), you need to distinguish between the left and right instances using **discriminators**.

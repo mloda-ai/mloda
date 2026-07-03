@@ -4,7 +4,7 @@ from dataclasses import FrozenInstanceError, dataclass
 from datetime import timedelta
 from enum import Enum
 from uuid import uuid4
-from typing import Any, Literal, Optional
+from typing import Any, ClassVar, Literal, Optional
 
 
 from mloda.core.abstract_plugins.components.index.index import Index
@@ -176,6 +176,14 @@ class Link:
         The _on methods require feature groups to have index_columns() defined.
         Use left_index/right_index to select which index when multiple are available.
 
+        **Star factory** - joins every spoke to a shared-index hub:
+            - Link.star(HubFG, SpokeAFG, SpokeBFG, index_column="row_id")
+            - Link.star(HubFG, SpokeAFG, index_column="row_id", jointype=JoinType.LEFT)
+
+        The first feature group is the hub; each remaining group is joined to it on the
+        shared index. The optional ``jointype`` (inner/left/outer, default inner) sets the
+        join type for every spoke. Returns a set of Links.
+
         **ASOF factories** - point-in-time / as-of joins:
             - Link.asof(left_joinspec, right_joinspec, left_time_column=..., right_time_column=...)
             - Link.asof_on(LeftFG, RightFG, left_time_column=..., right_time_column=...)
@@ -230,6 +238,9 @@ class Link:
         3. **Most specific wins**: Among valid matches, the link closest in the
            inheritance hierarchy is selected.
     """
+
+    # Join types Link.star supports: the hub anchors every spoke, so only these three apply.
+    _STAR_JOIN_TYPES: ClassVar[frozenset[JoinType]] = frozenset({JoinType.INNER, JoinType.LEFT, JoinType.OUTER})
 
     def __init__(
         self,
@@ -362,6 +373,46 @@ class Link:
         return cls._from_feature_groups(
             JoinType.INNER, left, right, left_index, right_index, left_discriminator, right_discriminator
         )
+
+    @classmethod
+    def star(
+        cls,
+        *feature_groups: type[Any],
+        index_column: Index | tuple[str, ...] | str,
+        jointype: JoinType | str = JoinType.INNER,
+    ) -> set["Link"]:
+        """Create links joining every spoke to a shared-index hub.
+
+        The first feature group is the hub; each remaining group is joined to it on the
+        shared index using ``jointype`` (default inner). Returns a set of Links (duplicate
+        spokes collapse in the set). ``jointype`` may be a ``JoinType`` or its string form
+        and must be one of inner, left, or outer; right/append/union are not supported for
+        star joins and asof needs ``Link.asof``.
+        Targets joins between distinct feature-group classes and does not support
+        left/right discriminators, so it cannot disambiguate multiple same-class nodes
+        (use ``Link.inner`` with discriminators for that). The hub class cannot also
+        appear as a spoke; spokes must be distinct classes from the hub.
+        """
+        if len(feature_groups) < 2:
+            raise ValueError("Link.star needs at least two feature groups: a hub plus at least one spoke.")
+
+        hub = feature_groups[0]
+        if any(spoke is hub for spoke in feature_groups[1:]):
+            raise ValueError(
+                "Link.star cannot join the hub feature group to itself: the hub class "
+                f"{hub.__name__} also appears as a spoke. Star joins target distinct feature-group classes."
+            )
+
+        jointype = JoinType(jointype) if isinstance(jointype, str) else jointype
+        if jointype not in cls._STAR_JOIN_TYPES:
+            raise ValueError(
+                f"Link.star supports only inner, left, or outer joins, got {getattr(jointype, 'value', jointype)}. "
+                "right/append/union are not supported for star joins; use Link.asof for asof joins."
+            )
+
+        # coerce/validate index_column (str/tuple/Index) into a shared Index reused on both sides
+        idx = JoinSpec(hub, index_column).index
+        return {cls(jointype, JoinSpec(hub, idx), JoinSpec(spoke, idx)) for spoke in feature_groups[1:]}
 
     @classmethod
     def left_on(

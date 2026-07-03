@@ -151,7 +151,7 @@ class BaseMergeEngine(ABC):
         NotImplementedError if an opted-in engine forgot to implement it, and the guard
         then only fires an error for temporal-vs-temporal key pairs.
         """
-        if self.provides_column_semantics is False:
+        if not self.provides_column_semantics:
             return
         left_cols = list(left_index.index)
         right_cols = list(right_index.index)

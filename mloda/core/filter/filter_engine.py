@@ -160,7 +160,7 @@ class BaseFilterEngine(ABC):
         both the column and the bound are temporal, so non-temporal columns are not
         falsely flagged.
         """
-        if cls.provides_column_semantics is False:
+        if not cls.provides_column_semantics:
             return
 
         param = filter_feature.parameter

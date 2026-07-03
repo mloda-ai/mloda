@@ -38,7 +38,10 @@ def property_spec(
     if validation_function is not None and not strict:
         raise ValueError(f"property_spec({explanation!r}): validation_function is never enforced without strict=True.")
 
-    if strict and not allowed_values and validation_function is None:
+    if strict and allowed_values is not None and not allowed_values:
+        raise ValueError(f"property_spec({explanation!r}): an empty allowed_values would reject every value.")
+
+    if strict and allowed_values is None and validation_function is None:
         raise ValueError(
             f"property_spec({explanation!r}): strict=True needs a non-empty allowed_values or a validation_function."
         )
@@ -48,7 +51,13 @@ def property_spec(
 
     if strict and default is not None:
         if validation_function is not None:
-            if not validation_function(default):
+            try:
+                verdict = validation_function(default)
+            except Exception as exc:
+                raise ValueError(
+                    f"property_spec({explanation!r}): validation_function raised an error when called with default {default!r}."
+                ) from exc
+            if not verdict:
                 raise ValueError(
                     f"property_spec({explanation!r}): default {default!r} is rejected by the validation_function."
                 )

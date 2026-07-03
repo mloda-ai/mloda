@@ -81,6 +81,9 @@ when provided (an omitted passthrough leaves no key in the dict):
   `allowed_values`, it is only enforced under strict validation). With a
   `validation_function`, strict no longer needs `allowed_values`, and a
   declared `default` is checked through the function instead of by membership.
+  If the function raises when called with the default, the builder wraps it as
+  a `ValueError` with the original exception chained as `__cause__`, mirroring
+  core's class-definition check.
 - `required_when`: conditional-requirement predicate; callable-checked, no
   strict requirement.
 - `type_validator`: raw-value shape check; callable-checked, no strict

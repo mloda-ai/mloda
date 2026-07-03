@@ -231,6 +231,11 @@ def _is_list_of_strings(value: Any) -> bool:
     return isinstance(value, list) and all(isinstance(item, str) for item in value)
 
 
+def _boom(value: Any) -> bool:
+    """Validator that raises instead of returning a verdict (issue #536)."""
+    raise RuntimeError("boom")
+
+
 class TestPropertySpecValidationFunction:
     """``validation_function`` passthrough (issue #536).
 
@@ -398,3 +403,82 @@ class TestPropertySpecValidationFunctionRoundTrip:
 
         FeatureChainParser.validate_property_mapping_defaults("Built", {"window_size": built})
         FeatureChainParser.validate_property_mapping_defaults("HandWritten", {"window_size": hand_written})
+
+
+class TestPropertySpecRaisingValidationFunction:
+    """A ``validation_function`` that raises on the default is wrapped (issue #536).
+
+    Mirrors core's ``FeatureChainParser.validate_property_mapping_defaults``, which
+    distinguishes "the validation_function raised when called with the default"
+    from "the validation_function ran and rejected the default": both surface as
+    ``ValueError``, with the original exception chained as ``__cause__`` in the
+    raising case. The builder's strict-default check must behave the same way
+    instead of letting the author's exception propagate raw.
+    """
+
+    def test_raising_validation_function_wraps_as_value_error_with_cause(self) -> None:
+        """``_boom`` raising ``RuntimeError`` surfaces as ``ValueError`` with the original chained."""
+        with pytest.raises(ValueError) as exc_info:
+            property_spec("d", strict=True, validation_function=_boom, default=5)
+
+        assert isinstance(exc_info.value.__cause__, RuntimeError)
+
+
+class TestPropertySpecEmptyAllowedValues:
+    """An explicitly empty ``allowed_values`` is always an authoring mistake (issue #536).
+
+    Even when a ``validation_function`` is present (so the spec would still be
+    enforceable), an explicitly empty allowed set is dead configuration: core's
+    ``_extract_property_values`` would surface it as an empty accepted set. The
+    builder must reject it up front instead of silently emitting a dead, empty
+    ``allowed_values`` key.
+    """
+
+    def test_empty_allowed_values_with_validation_function_raises(self) -> None:
+        """``strict=True`` with ``allowed_values=[]`` raises even though a validator is present."""
+        with pytest.raises(ValueError):
+            property_spec("d", strict=True, validation_function=_positive_int, allowed_values=[])
+
+
+class TestPropertySpecPassthroughRegressionGuards:
+    """Regression guards from the second review round of the passthroughs (issue #536)."""
+
+    def test_falsy_non_none_default_is_still_validated(self) -> None:
+        """``default=0`` is falsy but not ``None``, so it must still be checked (and rejected)."""
+        with pytest.raises(ValueError):
+            property_spec("d", strict=True, validation_function=_positive_int, default=0)
+
+    def test_validation_function_precedence_also_rejects_allowed_member(self) -> None:
+        """With both present, a default IN ``allowed_values`` is still rejected by the validator."""
+        with pytest.raises(ValueError):
+            property_spec(
+                "d",
+                strict=True,
+                allowed_values={"add": "A"},
+                validation_function=_positive_int,
+                default="add",
+            )
+
+    def test_required_when_spec_equals_hand_written_dict(self) -> None:
+        """A ``required_when`` spec is exactly the dict an author would hand-write."""
+        built = property_spec("d", required_when=_always_required)
+
+        hand_written: dict[str, Any] = {
+            "explanation": "d",
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: False,
+            DefaultOptionKeys.required_when: _always_required,
+        }
+        assert built == hand_written
+
+    def test_type_validator_spec_equals_hand_written_dict(self) -> None:
+        """A ``type_validator`` spec is exactly the dict an author would hand-write."""
+        built = property_spec("d", type_validator=_is_list_of_strings)
+
+        hand_written: dict[str, Any] = {
+            "explanation": "d",
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: False,
+            DefaultOptionKeys.type_validator: _is_list_of_strings,
+        }
+        assert built == hand_written

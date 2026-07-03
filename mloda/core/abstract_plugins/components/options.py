@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Optional, TYPE_CHECKING, cast
+from typing import Any, Iterable, Optional, TYPE_CHECKING, cast
 from copy import deepcopy
 
 from mloda.core.abstract_plugins.components.hashable_dict import _make_hashable
@@ -298,3 +298,25 @@ class Options:
                     raise ValueError(f"Context key '{key}' conflict: parent='{value}', child='{self.context[key]}'")
 
             self.context.update(propagating)
+
+    def forward_for_input_feature(self, exclude: Optional[Iterable[str]] = None) -> "Options":
+        """
+        Build Options for a declared input feature that survives the parent->child group auto-merge.
+
+        When a FeatureGroup returns a declared input feature from input_features(), the engine
+        merges the parent feature's group options into that child. Parent query-specific keys
+        (listed in ``exclude``) plus in_features are marked merge-protected via
+        feature_chainer_parser_key so they do not flow onto and break the child's resolution.
+
+        Called on the PARENT's Options. Returns a NEW Options carrying the parent's group params
+        forward, except keys in ``exclude`` and except in_features. The parent's context is not
+        copied and the parent is not mutated.
+        """
+        excluded = frozenset(exclude or ())
+        new_group = {
+            key: value
+            for key, value in self.group.items()
+            if key not in excluded and key != DefaultOptionKeys.in_features
+        }
+        new_group[DefaultOptionKeys.feature_chainer_parser_key] = excluded | {DefaultOptionKeys.in_features}
+        return Options(group=new_group)

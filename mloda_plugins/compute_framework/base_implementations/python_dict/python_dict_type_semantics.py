@@ -10,6 +10,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
+from mloda.core.abstract_plugins.components.contract.value_inspection import iso8601_string_semantics
 
 
 def column_semantics(data: dict[str, list[Any]], column: str) -> ColumnSemantics:
@@ -19,6 +20,11 @@ def column_semantics(data: dict[str, list[Any]], column: str) -> ColumnSemantics
         if candidate is not None:
             value = candidate
             break
+
+    if isinstance(value, str):
+        inspected = iso8601_string_semantics(data.get(column, []))
+        if inspected is not None:
+            return inspected
 
     is_ordered = False
     is_temporal = False

@@ -24,7 +24,7 @@
 | idna                                   | 3.18            | BSD-3-Clause                                       |
 | iniconfig                              | 2.3.0           | MIT                                                |
 | ipykernel                              | 7.3.0           | BSD-3-Clause                                       |
-| ipython                                | 9.14.1          | BSD-3-Clause                                       |
+| ipython                                | 9.15.0          | BSD-3-Clause                                       |
 | ipython_pygments_lexers                | 1.1.1           | BSD License                                        |
 | jedi                                   | 0.20.0          | MIT License                                        |
 | joblib                                 | 1.5.3           | BSD-3-Clause                                       |
@@ -85,7 +85,7 @@
 | regex                                  | 2026.5.9        | Apache-2.0 AND CNRI-Python                         |
 | requests                               | 2.34.2          | Apache Software License                            |
 | rich                                   | 14.3.4          | MIT License                                        |
-| ruff                                   | 0.15.19         | MIT                                                |
+| ruff                                   | 0.15.20         | MIT                                                |
 | scikit-learn                           | 1.9.0           | BSD-3-Clause                                       |
 | scipy                                  | 1.18.0          | BSD License                                        |
 | six                                    | 1.17.0          | MIT License                                        |

@@ -67,3 +67,10 @@ class TestSqlColumnSemanticsFromArrow:
         assert sem.is_numeric is False
         assert sem.is_tz_aware is False
         assert sem.unit is None
+
+    def test_large_string_value_sample_classifies_temporal(self) -> None:
+        # pa.types.is_string() is False for large_string, so value-inspection must also
+        # cover large_string (and string_view) column types.
+        sem = column_semantics_from_arrow(pa.large_string(), value_sample=["2024-01-01T00:00:00"])
+        assert sem.is_temporal is True
+        assert sem.is_ordered is True

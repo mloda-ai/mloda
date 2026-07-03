@@ -14,6 +14,13 @@ from mloda.core.abstract_plugins.components.contract.comparison_contract import 
 
 
 def _parse_iso(value: str) -> date | datetime | None:
+    # fromisoformat is lenient on 3.11+ (accepts separator-less/basic and week/ordinal forms)
+    # but strict on 3.10. Require a dash-bearing extended calendar date and reject week dates
+    # so classification is reproducible across the 3.10-3.14 CI matrix and bare-digit codes
+    # (zip/product codes) never classify as temporal.
+    date_part = value.split("T", 1)[0].split(" ", 1)[0]
+    if "-" not in date_part or "w" in value.lower():
+        return None
     # Python 3.10's fromisoformat rejects a trailing 'Z'; normalize it to '+00:00'.
     parse_input = value[:-1] + "+00:00" if value.endswith("Z") else value
     try:
@@ -46,6 +53,13 @@ def iso8601_string_semantics(values: Iterable[Any], sample_size: int = 100) -> C
             break
 
     if not parsed:
+        return None
+
+    # A date-only value or a naive datetime both count as tz-naive. A sample mixing aware and
+    # naive values is not confidently classifiable, so do not assert a timezone state.
+    any_aware = any(isinstance(p, datetime) and p.tzinfo is not None for p in parsed)
+    any_naive = any(not isinstance(p, datetime) or p.tzinfo is None for p in parsed)
+    if any_aware and any_naive:
         return None
 
     is_tz_aware = all(isinstance(p, datetime) and p.tzinfo is not None for p in parsed)

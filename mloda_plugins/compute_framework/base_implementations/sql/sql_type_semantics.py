@@ -2,8 +2,9 @@
 
 Single source of truth for deriving :class:`ColumnSemantics` from a pyarrow
 ``DataType``. Backs both duckdb and sqlite; sqlite stores datetimes as ISO TEXT,
-so it may pass ``is_string_storage=True``. Value-inspection of string storage is
-deferred to a later phase, so the flag does not trigger any value scan yet.
+so it may pass ``is_string_storage=True``. When a ``value_sample`` is provided for a
+string-typed column, its ISO-8601 values are classified as temporal via
+``iso8601_string_semantics``.
 """
 
 from typing import TYPE_CHECKING, Any
@@ -14,6 +15,23 @@ from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import i
 
 if TYPE_CHECKING:
     import pyarrow as pa
+
+
+def is_string_like_arrow_type(arrow_type: "pa.DataType") -> bool:
+    """True for string, large_string and (where available) string_view arrow types.
+
+    ``pa.types.is_string`` is False for large_string/string_view, so value-inspection
+    would otherwise skip those column types. ``is_string_view`` is guarded because older
+    pyarrow releases may lack it.
+    """
+    import pyarrow as pa
+
+    is_string_view = getattr(pa.types, "is_string_view", None)
+    return bool(
+        pa.types.is_string(arrow_type)
+        or pa.types.is_large_string(arrow_type)
+        or (is_string_view is not None and is_string_view(arrow_type))
+    )
 
 
 def column_semantics_from_arrow(
@@ -29,7 +47,7 @@ def column_semantics_from_arrow(
     """
     import pyarrow as pa
 
-    if pa.types.is_string(arrow_type) and value_sample is not None:
+    if is_string_like_arrow_type(arrow_type) and value_sample is not None:
         inspected = iso8601_string_semantics(value_sample)
         if inspected is not None:
             return inspected

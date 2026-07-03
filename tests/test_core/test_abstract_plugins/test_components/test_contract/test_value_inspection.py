@@ -82,3 +82,62 @@ class TestNoneSkipping:
         assert sem is not None
         assert sem.is_temporal is True
         assert sem.is_tz_aware is False
+
+
+class TestSeparatorlessFormsRejected:
+    """Bare-digit and week/ordinal forms must classify as non-temporal on all Python versions.
+
+    ``datetime.fromisoformat`` is lenient on 3.11+ (accepts separator-less, week and basic
+    forms) but strict on 3.10. Requiring a dash-bearing calendar date makes the result
+    reproducible across the 3.10-3.14 CI matrix and avoids false-positive temporal
+    classification of plain string codes (zip codes, product codes).
+    """
+
+    def test_bare_digits_return_none(self) -> None:
+        assert iso8601_string_semantics(["20240101"]) is None
+
+    def test_basic_datetime_returns_none(self) -> None:
+        assert iso8601_string_semantics(["20240101T000000"]) is None
+
+    def test_week_date_returns_none(self) -> None:
+        assert iso8601_string_semantics(["2024-W01-1"]) is None
+
+    def test_ordinal_date_returns_none(self) -> None:
+        assert iso8601_string_semantics(["2024001"]) is None
+
+    def test_extended_calendar_forms_still_accepted(self) -> None:
+        for value, aware in [
+            ("2024-01-01", False),
+            ("2024-01-01T00:00:00", False),
+            ("2024-01-01T00:00:00+00:00", True),
+            ("2024-01-01T00:00:00Z", True),
+        ]:
+            sem = iso8601_string_semantics([value])
+            assert sem is not None, value
+            assert sem.is_temporal is True
+            assert sem.is_tz_aware is aware
+
+
+class TestMixedTimezoneAwareness:
+    """A sample mixing tz-aware and tz-naive/date-only values is not confidently classifiable."""
+
+    def test_aware_and_naive_return_none(self) -> None:
+        assert iso8601_string_semantics(["2024-01-01T00:00:00+00:00", "2024-06-01T00:00:00"]) is None
+
+    def test_aware_and_date_only_return_none(self) -> None:
+        assert iso8601_string_semantics(["2024-01-01T00:00:00Z", "2024-06-01"]) is None
+
+    def test_all_aware_is_tz_aware_true(self) -> None:
+        sem = iso8601_string_semantics(["2024-01-01T00:00:00+00:00", "2024-06-01T00:00:00Z"])
+        assert sem is not None
+        assert sem.is_tz_aware is True
+
+    def test_all_naive_is_tz_aware_false(self) -> None:
+        sem = iso8601_string_semantics(["2024-01-01T00:00:00", "2024-06-01T12:30:00"])
+        assert sem is not None
+        assert sem.is_tz_aware is False
+
+    def test_all_date_only_is_tz_aware_false(self) -> None:
+        sem = iso8601_string_semantics(["2024-01-01", "2024-06-01"])
+        assert sem is not None
+        assert sem.is_tz_aware is False

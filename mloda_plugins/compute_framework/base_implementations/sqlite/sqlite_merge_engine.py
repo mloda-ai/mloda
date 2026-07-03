@@ -118,7 +118,11 @@ class SqliteMergeEngine(SqlBaseMergeEngine):
 
     def _column_semantics(self, data: Any, column: str) -> ColumnSemantics:
         arrow_type = data.types[data.columns.index(column)]
-        value_sample = sample_string_values(data, column) if pa.types.is_string(arrow_type) else None
+        # Cost note: value-sampling runs one LIMIT 100 query per string-typed column during
+        # equi-join validation, including genuine string keys where the result is discarded;
+        # a per-relation sample cache is a possible future optimization.
+        is_string_like = sql_type_semantics.is_string_like_arrow_type(arrow_type)
+        value_sample = sample_string_values(data, column) if is_string_like else None
         sem = sql_type_semantics.column_semantics_from_arrow(
             arrow_type, is_string_storage=True, value_sample=value_sample
         )

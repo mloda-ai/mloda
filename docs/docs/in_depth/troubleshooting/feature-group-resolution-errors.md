@@ -48,6 +48,22 @@ def get_domain(cls):
     return "sales"  # Makes this FG only handle 'sales' domain features
 ```
 
+#### 4. Scope a feature to one source (shared keys across sources)
+When two enabled sources declare the same column (for example a shared join key), requesting that column by bare name is ambiguous. Scope the request to one source. The scope is resolution-only and does not affect feature identity.
+
+``` python
+# RECOMMENDED: class object, collision-proof
+Feature("subject_token", feature_group=ClaimsReader)
+
+# class-name string form
+Feature("subject_token", feature_group="ClaimsReader")
+```
+
+Caveats:
+
+- The string form matches the exact class name only: it does not match subclasses, and two classes with the same name in different modules stay ambiguous. The class-object form matches the class and its registered subclasses, preferring the most specific subclass, so prefer the class object.
+- The scope is resolution-only and excluded from Feature identity, so two requests for the same column name scoped to different sources compare equal. Requesting both in one features list raises `ValueError: Duplicate feature setup: <name>` rather than silently dropping one, so you are told, not surprised. Inside a single `input_features()` returning a set literal, a second same-name feature with a different scope is silently deduplicated by the Python set itself before the engine ever sees it, so never scope the same name twice within one feature group. To read the same column from two sources side by side, give them distinct derived feature names.
+
 ## FeatureGroup Redefinition Errors
 
 ### The Problem

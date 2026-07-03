@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import copy
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 from uuid import uuid4
 from mloda.core.abstract_plugins.components.data_types import DataType
+
+if TYPE_CHECKING:
+    from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -28,6 +31,7 @@ class Feature:
         initial_requested_data (bool): Whether the data was initially requested.
         link (Optional[Link]): The link associated with the feature.
         index (Optional[Index]): The index associated with the feature.
+        feature_group_scope (str | type[FeatureGroup] | None): Resolution-only scope; excluded from identity.
 
     Quick start (recommended progression)::
 
@@ -75,6 +79,7 @@ class Feature:
         initial_requested_data: bool = False,
         link: Optional[Link] = None,
         index: Optional[Index] = None,
+        feature_group: str | type[FeatureGroup] | None = None,
     ):
         if options is None:
             options = {}
@@ -107,65 +112,151 @@ class Feature:
         self.link = link
         self.index = index  # Index is a feature currently only used for append/union features.
 
-    @classmethod
-    def not_typed(cls, name: str | FeatureName, options: Optional[dict[str, Any]] = None) -> Feature:
-        if options is None:
-            options = {}
-        name = FeatureName(name) if isinstance(name, str) else name
-        return cls(name=name, options=options)
+        # feature_group_scope is resolution-only metadata, excluded from equality and hash like link/index.
+        self.feature_group_scope = self._set_feature_group_scope(feature_group)
+
+    def _set_feature_group_scope(
+        self, feature_group: str | type[FeatureGroup] | None
+    ) -> str | type[FeatureGroup] | None:
+        if feature_group is None:
+            return None
+        if isinstance(feature_group, str):
+            stripped = feature_group.strip()
+            return stripped or None
+        from mloda.core.abstract_plugins.feature_group import FeatureGroup
+
+        if feature_group is FeatureGroup:
+            raise TypeError("feature_group cannot be the root FeatureGroup base class; a concrete subclass is required")
+        if isinstance(feature_group, type) and issubclass(feature_group, FeatureGroup):
+            return feature_group
+        raise TypeError(
+            f"feature_group must be a FeatureGroup subclass, a class-name string, or None, "
+            f"got {type(feature_group).__name__}"
+        )
 
     @classmethod
-    def str_of(cls, name: str | FeatureName, options: Optional[dict[str, Any]] = None) -> Feature:
-        return cls._typed_of(name, DataType.STRING, options)
-
-    @classmethod
-    def int32_of(cls, name: str | FeatureName, options: Optional[dict[str, Any]] = None) -> Feature:
-        return cls._typed_of(name, DataType.INT32, options)
-
-    @classmethod
-    def int64_of(cls, name: str | FeatureName, options: Optional[dict[str, Any]] = None) -> "Feature":
-        return cls._typed_of(name, DataType.INT64, options)
-
-    @classmethod
-    def float_of(cls, name: str | FeatureName, options: Optional[dict[str, Any]] = None) -> "Feature":
-        return cls._typed_of(name, DataType.FLOAT, options)
-
-    @classmethod
-    def double_of(cls, name: str | FeatureName, options: Optional[dict[str, Any]] = None) -> "Feature":
-        return cls._typed_of(name, DataType.DOUBLE, options)
-
-    @classmethod
-    def boolean_of(cls, name: str | FeatureName, options: Optional[dict[str, Any]] = None) -> "Feature":
-        return cls._typed_of(name, DataType.BOOLEAN, options)
-
-    @classmethod
-    def binary_of(cls, name: str | FeatureName, options: Optional[dict[str, Any]] = None) -> "Feature":
-        return cls._typed_of(name, DataType.BINARY, options)
-
-    @classmethod
-    def date_of(cls, name: str | FeatureName, options: Optional[dict[str, Any]] = None) -> "Feature":
-        return cls._typed_of(name, DataType.DATE, options)
-
-    @classmethod
-    def timestamp_millis_of(cls, name: str | FeatureName, options: Optional[dict[str, Any]] = None) -> "Feature":
-        return cls._typed_of(name, DataType.TIMESTAMP_MILLIS, options)
-
-    @classmethod
-    def timestamp_micros_of(cls, name: str | FeatureName, options: Optional[dict[str, Any]] = None) -> "Feature":
-        return cls._typed_of(name, DataType.TIMESTAMP_MICROS, options)
-
-    @classmethod
-    def decimal_of(cls, name: str | FeatureName, options: Optional[dict[str, Any]] = None) -> "Feature":
-        return cls._typed_of(name, DataType.DECIMAL, options)
-
-    @classmethod
-    def _typed_of(
-        cls, name: str | FeatureName, data_type: DataType, options: Optional[dict[str, Any]] = None
+    def not_typed(
+        cls,
+        name: str | FeatureName,
+        options: Optional[dict[str, Any]] = None,
+        feature_group: str | type[FeatureGroup] | None = None,
     ) -> Feature:
         if options is None:
             options = {}
         name = FeatureName(name) if isinstance(name, str) else name
-        return cls(name=name, data_type=data_type, options=options)
+        return cls(name=name, options=options, feature_group=feature_group)
+
+    @classmethod
+    def str_of(
+        cls,
+        name: str | FeatureName,
+        options: Optional[dict[str, Any]] = None,
+        feature_group: str | type[FeatureGroup] | None = None,
+    ) -> Feature:
+        return cls._typed_of(name, DataType.STRING, options, feature_group)
+
+    @classmethod
+    def int32_of(
+        cls,
+        name: str | FeatureName,
+        options: Optional[dict[str, Any]] = None,
+        feature_group: str | type[FeatureGroup] | None = None,
+    ) -> Feature:
+        return cls._typed_of(name, DataType.INT32, options, feature_group)
+
+    @classmethod
+    def int64_of(
+        cls,
+        name: str | FeatureName,
+        options: Optional[dict[str, Any]] = None,
+        feature_group: str | type[FeatureGroup] | None = None,
+    ) -> "Feature":
+        return cls._typed_of(name, DataType.INT64, options, feature_group)
+
+    @classmethod
+    def float_of(
+        cls,
+        name: str | FeatureName,
+        options: Optional[dict[str, Any]] = None,
+        feature_group: str | type[FeatureGroup] | None = None,
+    ) -> "Feature":
+        return cls._typed_of(name, DataType.FLOAT, options, feature_group)
+
+    @classmethod
+    def double_of(
+        cls,
+        name: str | FeatureName,
+        options: Optional[dict[str, Any]] = None,
+        feature_group: str | type[FeatureGroup] | None = None,
+    ) -> "Feature":
+        return cls._typed_of(name, DataType.DOUBLE, options, feature_group)
+
+    @classmethod
+    def boolean_of(
+        cls,
+        name: str | FeatureName,
+        options: Optional[dict[str, Any]] = None,
+        feature_group: str | type[FeatureGroup] | None = None,
+    ) -> "Feature":
+        return cls._typed_of(name, DataType.BOOLEAN, options, feature_group)
+
+    @classmethod
+    def binary_of(
+        cls,
+        name: str | FeatureName,
+        options: Optional[dict[str, Any]] = None,
+        feature_group: str | type[FeatureGroup] | None = None,
+    ) -> "Feature":
+        return cls._typed_of(name, DataType.BINARY, options, feature_group)
+
+    @classmethod
+    def date_of(
+        cls,
+        name: str | FeatureName,
+        options: Optional[dict[str, Any]] = None,
+        feature_group: str | type[FeatureGroup] | None = None,
+    ) -> "Feature":
+        return cls._typed_of(name, DataType.DATE, options, feature_group)
+
+    @classmethod
+    def timestamp_millis_of(
+        cls,
+        name: str | FeatureName,
+        options: Optional[dict[str, Any]] = None,
+        feature_group: str | type[FeatureGroup] | None = None,
+    ) -> "Feature":
+        return cls._typed_of(name, DataType.TIMESTAMP_MILLIS, options, feature_group)
+
+    @classmethod
+    def timestamp_micros_of(
+        cls,
+        name: str | FeatureName,
+        options: Optional[dict[str, Any]] = None,
+        feature_group: str | type[FeatureGroup] | None = None,
+    ) -> "Feature":
+        return cls._typed_of(name, DataType.TIMESTAMP_MICROS, options, feature_group)
+
+    @classmethod
+    def decimal_of(
+        cls,
+        name: str | FeatureName,
+        options: Optional[dict[str, Any]] = None,
+        feature_group: str | type[FeatureGroup] | None = None,
+    ) -> "Feature":
+        return cls._typed_of(name, DataType.DECIMAL, options, feature_group)
+
+    @classmethod
+    def _typed_of(
+        cls,
+        name: str | FeatureName,
+        data_type: DataType,
+        options: Optional[dict[str, Any]] = None,
+        feature_group: str | type[FeatureGroup] | None = None,
+    ) -> Feature:
+        if options is None:
+            options = {}
+        name = FeatureName(name) if isinstance(name, str) else name
+        return cls(name=name, data_type=data_type, options=options, feature_group=feature_group)
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, Feature):

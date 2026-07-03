@@ -62,18 +62,10 @@ class ReadDocument(BaseInputData):
         return [{cls.get_class_name(): content, "source": file_path, "file_type": cls.document_file_type(file_path)}]
 
     @classmethod
-    def supports_scoped_data_access(cls) -> bool:
-        # A ReadDocument subclass is a final scoped reader if it overrides load_data
-        # wholesale, or implements BOTH the per-format parse hook (produce_document)
-        # and suffix. Decided structurally via _is_overridden() so plugin discovery
-        # never executes the lifecycle (no produce_document() side effects, no
-        # escaping exceptions) and works for classmethod/staticmethod/plain overrides
-        # alike. Requiring suffix screens out intermediate bases that share
-        # produce_document but leave suffix abstract, mirroring ReadDB's connect
-        # requirement.
-        if cls._is_overridden(ReadDocument, "load_data"):
-            return True
-        return cls._is_overridden(ReadDocument, "produce_document") and cls._is_overridden(ReadDocument, "suffix")
+    def _final_reader_requires(cls) -> tuple[str, ...]:
+        # Requiring suffix alongside produce_document screens out intermediate bases that
+        # share produce_document but leave suffix abstract, mirroring ReadDB's connect requirement.
+        return ("produce_document", "suffix")
 
     @classmethod
     def suffix(cls) -> tuple[str, ...]:

@@ -22,13 +22,13 @@ discovery, and they are unpicklable -- which deadlocks the multiprocessing reade
 tests. Module-scope classes are picklable and stable. Additionally, every seam
 reader's ``is_valid_credentials`` returns ``False`` so that, even if discovered,
 they can never *match* a real ``DataAccessCollection`` in a sibling test. The seam
-tests call ``load_data`` / ``supports_scoped_data_access`` / ``prepare_credentials``
+tests call ``load_data`` / ``is_final_reader`` / ``prepare_credentials``
 directly, so a ``False`` credential check keeps every assertion valid.
 
 The lone exception is ``_RowHookNoConnectDB``, which intentionally returns ``True``
 from ``is_valid_credentials`` -- but only for an impossible sentinel dict that no
 real ``DataAccessCollection`` produces, and the class is classified non-final
-(``supports_scoped_data_access() is False``) so discovery never even reaches it.
+(``is_final_reader() is False``) so discovery never even reaches it.
 """
 
 from typing import Any, ClassVar
@@ -159,7 +159,7 @@ class TestReadDBLoadDataSeam:
         with pytest.raises(NotImplementedError):
             ReadDB.load_data(None, None)  # type: ignore[arg-type]
 
-        assert ReadDB.supports_scoped_data_access() is False
+        assert ReadDB.is_final_reader() is False
 
     def test_intermediate_base_probe_false_without_connecting(self) -> None:
         """A base that implements connect but NOT produce_rows is not a final class.
@@ -169,7 +169,7 @@ class TestReadDBLoadDataSeam:
         """
         _SeamIntermediateDB.connect_calls.clear()
 
-        assert _SeamIntermediateDB.supports_scoped_data_access() is False
+        assert _SeamIntermediateDB.is_final_reader() is False
 
         with pytest.raises(NotImplementedError):
             _SeamIntermediateDB.load_data(None, None)  # type: ignore[arg-type]
@@ -178,7 +178,7 @@ class TestReadDBLoadDataSeam:
 
     def test_seam_happy_path(self) -> None:
         """A reader overriding produce_rows is final: load_data runs the seam and closes."""
-        assert _SeamHappyPathDB.supports_scoped_data_access() is True
+        assert _SeamHappyPathDB.is_final_reader() is True
 
         sentinel_features = ["a", "b"]
         result = _SeamHappyPathDB.load_data({"k": "v"}, sentinel_features)  # type: ignore[arg-type]
@@ -225,7 +225,7 @@ class TestReadDBLoadDataSeam:
 #
 # These are defined at MODULE scope on purpose so they are created exactly once and are
 # stable across the test session (no per-test subclass churn). The structural
-# supports_scoped_data_access() that ReadDB will override must classify these WITHOUT
+# is_final_reader() that ReadDB will override must classify these WITHOUT
 # executing connect / produce_rows / prepare_credentials / get_connection, so a leaked
 # subclass can never trigger real I/O or raise during plugin discovery.
 #
@@ -284,8 +284,8 @@ class _IntermediateProbeDB(ReadDB):
         return False
 
 
-class TestSupportsScopedDataAccessIsSideEffectFree:
-    """supports_scoped_data_access() must classify readers structurally, not by execution."""
+class TestIsFinalReaderIsSideEffectFree:
+    """is_final_reader() must classify readers structurally, not by execution."""
 
     def test_probe_does_not_run_connect_or_produce_rows(self) -> None:
         """A seam reader is final, but probing it must NOT execute the lifecycle.
@@ -296,7 +296,7 @@ class TestSupportsScopedDataAccessIsSideEffectFree:
         _ProbeReader.connect_calls.clear()
         _ProbeReader.produce_rows_calls.clear()
 
-        is_final = _ProbeReader.supports_scoped_data_access()
+        is_final = _ProbeReader.is_final_reader()
 
         assert is_final is True
         assert _ProbeReader.connect_calls == [], "probe must not call connect()"
@@ -306,20 +306,20 @@ class TestSupportsScopedDataAccessIsSideEffectFree:
         """Probing a reader whose row hook raises must still return True, not propagate.
 
         Fails today: the base probe executes produce_rows(), so RuntimeError("boom")
-        escapes supports_scoped_data_access() and crashes discovery.
+        escapes is_final_reader() and crashes discovery.
         """
-        is_final = _BoomProbeReader.supports_scoped_data_access()
+        is_final = _BoomProbeReader.is_final_reader()
 
         assert is_final is True
 
     def test_abstract_and_intermediate_bases_stay_false(self) -> None:
         """Regression guard: classes without a row hook are not final readers."""
-        assert ReadDB.supports_scoped_data_access() is False
-        assert _IntermediateProbeDB.supports_scoped_data_access() is False
+        assert ReadDB.is_final_reader() is False
+        assert _IntermediateProbeDB.is_final_reader() is False
 
     def test_wholesale_load_data_override_is_final(self) -> None:
         """Regression guard: overriding load_data wholesale still counts as a final reader."""
-        assert SQLITEReader.supports_scoped_data_access() is True
+        assert SQLITEReader.is_final_reader() is True
 
 
 # --------------------------------------------------------------------------------------
@@ -336,7 +336,7 @@ class _StaticRowHookReader(ReadDB):
     """produce_rows is a @staticmethod: ``cls.produce_rows.__func__`` raises AttributeError today.
 
     The override-identity probe must unwrap via getattr(member, "__func__", member) so a
-    staticmethod row hook is recognised without crashing supports_scoped_data_access()/load_data.
+    staticmethod row hook is recognised without crashing is_final_reader()/load_data.
     """
 
     sentinel: ClassVar[dict[str, bool]] = {"static_rows": True}
@@ -405,7 +405,7 @@ class TestReadDBSeamReviewGaps:
         Fails today: ``cls.produce_rows.__func__`` raises AttributeError because a
         staticmethod accessed via the class is a plain function with no ``__func__``.
         """
-        assert _StaticRowHookReader.supports_scoped_data_access() is True
+        assert _StaticRowHookReader.is_final_reader() is True
 
     def test_staticmethod_produce_rows_runs_seam_end_to_end(self) -> None:
         """load_data probes the staticmethod row hook, runs the seam, and closes once.
@@ -427,7 +427,7 @@ class TestReadDBSeamReviewGaps:
         Fails today: the structural check returns True from the produce_rows override
         identity alone, ignoring that connect() is still the abstract base default.
         """
-        assert _RowHookNoConnectDB.supports_scoped_data_access() is False
+        assert _RowHookNoConnectDB.is_final_reader() is False
 
     def test_connect_raising_skips_close_connection(self) -> None:
         """If connect() raises before producing a connection, close_connection must not run.

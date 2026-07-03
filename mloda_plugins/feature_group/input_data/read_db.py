@@ -48,17 +48,10 @@ class ReadDB(BaseInputData):
             cls.close_connection(connection)
 
     @classmethod
-    def supports_scoped_data_access(cls) -> bool:
-        # A ReadDB subclass is a final scoped reader if it overrides load_data
-        # wholesale (e.g. SQLITEReader), or implements BOTH the per-backend row hook
-        # (produce_rows) and connect. Decided structurally via _underlying() so plugin
-        # discovery never executes the lifecycle (no connect()/produce_rows() side
-        # effects, no escaping exceptions) and works for classmethod/staticmethod/plain
-        # overrides alike. Requiring connect screens out intermediate bases that supply
-        # a shared produce_rows but leave connect abstract.
-        if cls._is_overridden(ReadDB, "load_data"):
-            return True
-        return cls._is_overridden(ReadDB, "produce_rows") and cls._is_overridden(ReadDB, "connect")
+    def _final_reader_requires(cls) -> tuple[str, ...]:
+        # Requiring connect alongside produce_rows screens out intermediate bases that
+        # supply a shared produce_rows but leave connect abstract.
+        return ("produce_rows", "connect")
 
     @classmethod
     def connect(cls, credentials: Any) -> Any:

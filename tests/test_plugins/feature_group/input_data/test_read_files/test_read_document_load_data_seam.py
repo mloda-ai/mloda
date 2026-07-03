@@ -18,7 +18,7 @@ These pin the planned contract (mirroring the ReadDB seam from issue #535):
       4. return [{cls.get_class_name(): content, "source": file_path,
                   "file_type": cls.document_file_type(file_path)}].
 
-    supports_scoped_data_access() is decided STRUCTURALLY (no execution):
+    is_final_reader() is decided STRUCTURALLY (no execution):
     True iff load_data is overridden wholesale relative to ReadDocument, or
     produce_document is overridden. ReadDocument itself and hook-less
     intermediate bases stay False.
@@ -161,7 +161,7 @@ class TestReadDocumentLoadDataSeam:
         with pytest.raises(NotImplementedError):
             ReadDocument.load_data(None, None)  # type: ignore[arg-type]
 
-        assert ReadDocument.supports_scoped_data_access() is False
+        assert ReadDocument.is_final_reader() is False
 
     def test_intermediate_base_probe_false_and_raises_before_features(self) -> None:
         """A base that overrides suffix() but NOT produce_document is not a final reader.
@@ -169,7 +169,7 @@ class TestReadDocumentLoadDataSeam:
         The parse hook must be probed *before* features access, so
         load_data(None, None) raises NotImplementedError, not AttributeError.
         """
-        assert _SeamIntermediateDoc.supports_scoped_data_access() is False
+        assert _SeamIntermediateDoc.is_final_reader() is False
 
         with pytest.raises(NotImplementedError):
             _SeamIntermediateDoc.load_data(None, None)  # type: ignore[arg-type]
@@ -182,7 +182,7 @@ class TestReadDocumentLoadDataSeam:
         """
         _SeamHappyPathDoc.received_paths.clear()
 
-        assert _SeamHappyPathDoc.supports_scoped_data_access() is True
+        assert _SeamHappyPathDoc.is_final_reader() is True
 
     def test_seam_happy_path_load_data_envelope(self, tmp_path: Path) -> None:
         """load_data resolves the path from options, parses via the hook, and wraps the envelope."""
@@ -227,8 +227,8 @@ class TestReadDocumentLoadDataSeam:
         ]
 
 
-class TestSupportsScopedDataAccessIsSideEffectFree:
-    """supports_scoped_data_access() must classify readers structurally, not by execution."""
+class TestIsFinalReaderIsSideEffectFree:
+    """is_final_reader() must classify readers structurally, not by execution."""
 
     def test_probe_does_not_run_produce_document(self) -> None:
         """A seam reader is final, but probing it must NOT execute the parse hook.
@@ -239,25 +239,25 @@ class TestSupportsScopedDataAccessIsSideEffectFree:
         """
         _ProbeRecorderDoc.produce_calls.clear()
 
-        is_final = _ProbeRecorderDoc.supports_scoped_data_access()
+        is_final = _ProbeRecorderDoc.is_final_reader()
 
         assert is_final is True
         assert _ProbeRecorderDoc.produce_calls == [], "probe must not call produce_document()"
 
     def test_probe_does_not_raise_when_produce_document_would_raise(self) -> None:
         """Probing a reader whose parse hook raises must still return True, not propagate."""
-        is_final = _BoomProbeDoc.supports_scoped_data_access()
+        is_final = _BoomProbeDoc.is_final_reader()
 
         assert is_final is True
 
     def test_wholesale_load_data_override_is_final(self) -> None:
         """Regression guard: overriding load_data wholesale still counts as a final reader."""
-        assert _WholesaleDoc.supports_scoped_data_access() is True
+        assert _WholesaleDoc.is_final_reader() is True
 
     def test_abstract_and_intermediate_bases_stay_false(self) -> None:
         """Regression guard: classes without a parse hook are not final readers."""
-        assert ReadDocument.supports_scoped_data_access() is False
-        assert _SeamIntermediateDoc.supports_scoped_data_access() is False
+        assert ReadDocument.is_final_reader() is False
+        assert _SeamIntermediateDoc.is_final_reader() is False
 
 
 class TestInRepoReadersMigrateToTheSeam:
@@ -330,13 +330,13 @@ class TestPyFileReaderStaysOnTheSeam:
     def test_py_file_reader_inherits_text_reader_and_is_final(self) -> None:
         """PyFileReader keeps inheriting from TextFileReader and still classifies as final."""
         assert issubclass(PyFileReader, TextFileReader)
-        assert PyFileReader.supports_scoped_data_access() is True
+        assert PyFileReader.is_final_reader() is True
 
 
 # --------------------------------------------------------------------------------------
 # Module-scope readers pinning the review-gap fix: a parse hook alone is NOT final.
 #
-# supports_scoped_data_access() classifies a reader as final from the produce_document
+# is_final_reader() classifies a reader as final from the produce_document
 # override alone, mirroring the ReadFile hole the reviewers found: a class without a
 # suffix override still classifies final, yet the default document_file_type calls
 # cls.suffix(), so load_data would crash on the abstract suffix(). Document *matching*
@@ -391,18 +391,18 @@ class TestReadDocumentSeamClassificationScreensMissingSuffix:
         Fails today: the structural check returns True from the produce_document override
         alone, ignoring that document_file_type would crash on the abstract suffix().
         """
-        assert _DocHookNoSuffixDoc.supports_scoped_data_access() is False
+        assert _DocHookNoSuffixDoc.is_final_reader() is False
 
     def test_intermediate_parse_base_without_suffix_is_not_final(self) -> None:
         """An intermediate parse base (produce_document, no suffix) is not final.
 
         Fails today: the produce_document override alone classifies the base as final.
         """
-        assert _DocHookNoSuffixBaseDoc.supports_scoped_data_access() is False
+        assert _DocHookNoSuffixBaseDoc.is_final_reader() is False
 
     def test_concrete_child_completing_the_hook_set_is_final(self) -> None:
         """Regression guard: a child adding only suffix on top of a parse base stays final.
 
         Passes today; pins that tightening the screen must not reject inherited overrides.
         """
-        assert _SuffixOnlyChildDoc.supports_scoped_data_access() is True
+        assert _SuffixOnlyChildDoc.is_final_reader() is True

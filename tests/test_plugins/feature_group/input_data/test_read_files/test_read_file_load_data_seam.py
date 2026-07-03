@@ -27,7 +27,7 @@ the ReadDocument seam):
          ImportError mentioning pyarrow under blocked pyarrow),
       3. return cls.produce_table(data_access, list(features.get_all_names())).
 
-    supports_scoped_data_access() is decided STRUCTURALLY (no execution):
+    is_final_reader() is decided STRUCTURALLY (no execution):
     True iff load_data is overridden wholesale relative to ReadFile, or
     produce_table is overridden. ReadFile itself and hook-less intermediate
     bases stay False.
@@ -194,7 +194,7 @@ class TestReadFileLoadDataSeam:
         with pytest.raises(NotImplementedError):
             ReadFile.load_data(None, None)  # type: ignore[arg-type]
 
-        assert ReadFile.supports_scoped_data_access() is False
+        assert ReadFile.is_final_reader() is False
 
     def test_intermediate_base_probe_false_and_raises_before_backend_guard(self) -> None:
         """A base that overrides suffix() and _pyarrow_module but NOT produce_table is not final.
@@ -205,7 +205,7 @@ class TestReadFileLoadDataSeam:
         """
         _SeamIntermediateFile.pyarrow_module_calls.clear()
 
-        assert _SeamIntermediateFile.supports_scoped_data_access() is False
+        assert _SeamIntermediateFile.is_final_reader() is False
 
         with pytest.raises(NotImplementedError):
             _SeamIntermediateFile.load_data(None, None)  # type: ignore[arg-type]
@@ -221,7 +221,7 @@ class TestReadFileLoadDataSeam:
         load_data(None, None), hits ReadFile's NotImplementedError, and
         wrongly classifies the reader as False.
         """
-        assert _SeamHappyPathFile.supports_scoped_data_access() is True
+        assert _SeamHappyPathFile.is_final_reader() is True
 
     def test_seam_happy_path_load_data_delegates_to_produce_table(self) -> None:
         """load_data probes the hook, checks the backend, then delegates to produce_table.
@@ -284,8 +284,8 @@ class TestReadFileLoadDataSeam:
         assert guard() is None
 
 
-class TestSupportsScopedDataAccessIsSideEffectFree:
-    """supports_scoped_data_access() must classify readers structurally, not by execution."""
+class TestIsFinalReaderIsSideEffectFree:
+    """is_final_reader() must classify readers structurally, not by execution."""
 
     def test_probe_does_not_run_pyarrow_module_or_produce_table(self) -> None:
         """A seam reader is final, but probing it must NOT execute any hook.
@@ -297,7 +297,7 @@ class TestSupportsScopedDataAccessIsSideEffectFree:
         _ProbeRecorderFile.pyarrow_module_calls.clear()
         _ProbeRecorderFile.produce_calls.clear()
 
-        is_final = _ProbeRecorderFile.supports_scoped_data_access()
+        is_final = _ProbeRecorderFile.is_final_reader()
 
         assert is_final is True
         assert _ProbeRecorderFile.pyarrow_module_calls == [], "probe must not call _pyarrow_module()"
@@ -305,18 +305,18 @@ class TestSupportsScopedDataAccessIsSideEffectFree:
 
     def test_probe_does_not_raise_when_produce_table_would_raise(self) -> None:
         """Probing a reader whose read hook raises must still return True, not propagate."""
-        is_final = _BoomProbeFile.supports_scoped_data_access()
+        is_final = _BoomProbeFile.is_final_reader()
 
         assert is_final is True
 
     def test_wholesale_load_data_override_is_final(self) -> None:
         """Regression guard: overriding load_data wholesale still counts as a final reader."""
-        assert _WholesaleFile.supports_scoped_data_access() is True
+        assert _WholesaleFile.is_final_reader() is True
 
     def test_abstract_and_intermediate_bases_stay_false(self) -> None:
         """Regression guard: classes without a read hook are not final readers."""
-        assert ReadFile.supports_scoped_data_access() is False
-        assert _SeamIntermediateFile.supports_scoped_data_access() is False
+        assert ReadFile.is_final_reader() is False
+        assert _SeamIntermediateFile.is_final_reader() is False
 
 
 class TestInRepoReadersMigrateToTheSeam:
@@ -377,7 +377,7 @@ class TestCsvReaderEndToEndParity:
 # --------------------------------------------------------------------------------------
 # Module-scope readers pinning the review-gap fix: a partial hook set is NOT final.
 #
-# Two reviews converged on the same hole: supports_scoped_data_access() classifies a
+# Two reviews converged on the same hole: is_final_reader() classifies a
 # reader as final from the produce_table override alone. An intermediate base that
 # overrides produce_table but leaves suffix() (or _pyarrow_module()) abstract then
 # enters plugin discovery as a final scoped reader, and match_subclass_data_access ->
@@ -389,7 +389,7 @@ class TestCsvReaderEndToEndParity:
 # The suffix-less classes below are exactly the hazardous shape, so each one overrides
 # match_subclass_data_access to return None: even while misclassified as final (today,
 # before the fix), a leaked registry entry can never be probed into the abstract
-# suffix() by a sibling test's file resolution. supports_scoped_data_access() is
+# suffix() by a sibling test's file resolution. is_final_reader() is
 # structural and never consults match_subclass_data_access, so the guard does not
 # distort any assertion below.
 # --------------------------------------------------------------------------------------
@@ -469,7 +469,7 @@ class TestReadFileSeamClassificationScreensPartialHookSets:
         Fails today: the structural check returns True from the produce_table override
         alone, and discovery would then crash in _file_matches on the abstract suffix().
         """
-        assert _TableHookNoSuffixFile.supports_scoped_data_access() is False
+        assert _TableHookNoSuffixFile.is_final_reader() is False
 
     def test_table_hook_without_pyarrow_module_is_not_final(self) -> None:
         """A read hook without a _pyarrow_module override has no backend guard, so it is not final.
@@ -478,7 +478,7 @@ class TestReadFileSeamClassificationScreensPartialHookSets:
         abstract base default, so load_data would raise NotImplementedError inside
         check_pyarrow_backend instead of running the seam.
         """
-        assert _TableHookNoBackendFile.supports_scoped_data_access() is False
+        assert _TableHookNoBackendFile.is_final_reader() is False
 
     def test_intermediate_backend_base_without_suffix_is_not_final(self) -> None:
         """An intermediate backend base (produce_table + _pyarrow_module, no suffix) is not final.
@@ -486,11 +486,11 @@ class TestReadFileSeamClassificationScreensPartialHookSets:
         Fails today: the produce_table override alone classifies the base as final, so it
         enters discovery and _file_matches calls the abstract suffix().
         """
-        assert _TableHookNoSuffixBaseFile.supports_scoped_data_access() is False
+        assert _TableHookNoSuffixBaseFile.is_final_reader() is False
 
     def test_concrete_child_completing_the_hook_set_is_final(self) -> None:
         """Regression guard: a child adding only suffix on top of a backend base stays final.
 
         Passes today; pins that tightening the screen must not reject inherited overrides.
         """
-        assert _SuffixOnlyChildFile.supports_scoped_data_access() is True
+        assert _SuffixOnlyChildFile.is_final_reader() is True

@@ -26,7 +26,7 @@ Test isolation note:
 All BaseInputData subclasses used here are defined at MODULE scope, never inside test
 methods, so they are picklable and stable in the global subclass registry. They leave
 every matching-related classmethod (suffix, is_valid_credentials, load_data hooks, ...)
-unimplemented, so supports_scoped_data_access() is False and plugin discovery in sibling
+unimplemented, so is_final_reader() is False and plugin discovery in sibling
 tests can never select them (mirrors test_read_document_load_data_seam.py).
 """
 

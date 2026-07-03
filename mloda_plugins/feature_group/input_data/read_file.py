@@ -86,22 +86,10 @@ class ReadFile(BaseInputData):
         return cls.produce_table(data_access, list(features.get_all_names()))
 
     @classmethod
-    def supports_scoped_data_access(cls) -> bool:
-        # A ReadFile subclass is a final scoped reader if it overrides load_data
-        # wholesale, or implements ALL of the per-format read hook (produce_table),
-        # suffix, and _pyarrow_module. Decided structurally via _is_overridden() so
-        # plugin discovery never executes the lifecycle (no _pyarrow_module()/
-        # produce_table() side effects, no escaping exceptions). Requiring suffix and
-        # _pyarrow_module screens out intermediate bases that share produce_table but
-        # leave suffix or the backend guard abstract, mirroring ReadDB's connect
-        # requirement.
-        if cls._is_overridden(ReadFile, "load_data"):
-            return True
-        return (
-            cls._is_overridden(ReadFile, "produce_table")
-            and cls._is_overridden(ReadFile, "suffix")
-            and cls._is_overridden(ReadFile, "_pyarrow_module")
-        )
+    def _final_reader_requires(cls) -> tuple[str, ...]:
+        # Requiring suffix and _pyarrow_module alongside produce_table screens out intermediate
+        # bases that share produce_table but leave suffix or the backend guard abstract.
+        return ("produce_table", "suffix", "_pyarrow_module")
 
     @classmethod
     def suffix(cls) -> tuple[str, ...]:

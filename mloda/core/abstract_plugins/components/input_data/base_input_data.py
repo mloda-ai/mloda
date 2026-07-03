@@ -189,19 +189,34 @@ class BaseInputData(ABC):
         raise NotImplementedError
 
     @classmethod
-    def supports_scoped_data_access(cls) -> bool:
+    def _final_reader_requires(cls) -> tuple[str, ...]:
         """
-        As we assume that load_data are only implemented in final child classes of scoped data access,
-        we can use this function to check if the class supports scoped data access and is the final child class.
+        A family base redeclares this to name the hooks a subclass must override (relative to
+        that family base) to classify as a final reader; the load_data wholesale-override
+        branch always wins.
         """
-        try:
-            cls.load_data(None, None)  # type: ignore[arg-type]
-        except NotImplementedError:
-            return False
-        except AttributeError:  # Expected as cls.load_data(None, None) should raise an error
-            return True
+        return ()
 
-        return True
+    @classmethod
+    def is_final_reader(cls) -> bool:
+        """
+        Structurally classify whether cls is a final scoped reader; nothing is executed.
+
+        The anchor is the most-derived class in cls.__mro__ that declares _final_reader_requires
+        in its own __dict__. A wholesale load_data override relative to the anchor is always
+        final; otherwise cls is final iff the anchor's required hooks are non-empty and all
+        overridden relative to the anchor.
+        """
+        anchor = next(klass for klass in cls.__mro__ if "_final_reader_requires" in klass.__dict__)
+        if cls._is_overridden(anchor, "load_data"):
+            return True
+        required = cls._final_reader_requires()
+        for name in required:
+            if not hasattr(anchor, name):
+                raise ValueError(
+                    f"Required final-reader hook '{name}' is not defined on anchor class {anchor.__name__}."
+                )
+        return bool(required) and all(cls._is_overridden(anchor, hook) for hook in required)
 
     @classmethod
     def get_class_name(cls) -> str:
@@ -260,7 +275,7 @@ def _collect_filtered_subclasses(cls: Any, parent_class: Any) -> list[type[BaseI
     for subclass in get_all_subclasses(cls):
         if not issubclass(subclass, parent_class):
             continue
-        if subclass.supports_scoped_data_access():
+        if subclass.is_final_reader():
             result.append(subclass)
     return result
 

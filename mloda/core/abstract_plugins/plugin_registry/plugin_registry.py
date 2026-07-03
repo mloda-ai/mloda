@@ -101,6 +101,11 @@ class PluginRegistry:
     @classmethod
     def default(cls) -> PluginRegistry:
         global _default
+        # Lock-free fast path: production code assigns _default exactly once and never resets it to
+        # None, and reading the reference is atomic under the GIL, so a non-None read is always valid.
+        existing = _default
+        if existing is not None:
+            return existing
         with _default_lock:
             if _default is None:
                 _default = cls()
@@ -212,6 +217,8 @@ class PluginRegistry:
     def restore(self, snapshot: PluginRegistrySnapshot) -> None:
         new_entries = dict(snapshot)
         if new_entries != self._entries:
+            # Non-atomic read-modify-write (here and in clear()), covered by the documented
+            # single-threaded registration model (see the comment in __init__).
             self._generation += 1
         self._entries = new_entries
 

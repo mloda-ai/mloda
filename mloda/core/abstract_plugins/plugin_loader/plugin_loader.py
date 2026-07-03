@@ -100,6 +100,9 @@ class PluginLoader:
         The result is cached: repeated calls return the same loader without redoing the load work.
         The cache automatically rebuilds when the default registry's generation changed, i.e. after
         ``clear()`` or ``restore()`` to different content, so a plain ``all()`` re-populates the registry.
+        Incremental registry edits (``register()``/``unregister()``) do not invalidate the cache; only
+        ``clear()`` and ``restore()`` to different content do, so pass ``force_reload=True`` to
+        re-register everything after such partial edits.
 
         Pass ``force_reload=True`` (or call ``reset_cache()`` first) to rebuild anyway, for example to
         pick up newly installed entry points.
@@ -121,11 +124,15 @@ class PluginLoader:
             if force_reload or current is None or PluginRegistry.default().generation != cls._cached_generation:
                 cls._building_thread_id = threading.get_ident()
                 try:
+                    # Read before the build: the build itself never bumps the generation (register()
+                    # does not increment it), so a concurrent clear()/restore() during the build yields
+                    # a mismatch and the next all() call heals the registry. Reading after the build
+                    # would permanently mask such a mid-build invalidation.
+                    generation_before_build = PluginRegistry.default().generation
                     plugin_loader = cls()
                     plugin_loader.load_all_plugins()
                     plugin_loader.load_entry_points()
-                    # Recorded after the build so registry mutations made during loading are covered.
-                    cls._cached_generation = PluginRegistry.default().generation
+                    cls._cached_generation = generation_before_build
                     cls._cached_loader = plugin_loader
                     current = plugin_loader
                 finally:

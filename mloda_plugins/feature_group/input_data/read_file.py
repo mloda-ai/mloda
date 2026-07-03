@@ -26,19 +26,18 @@ class ReadFile(BaseInputData):
     the listed suffixes so that ReadDocument can claim them instead.
 
     load_data is a template method exposing an opt-in lifecycle seam: a new
-    backend implements ``produce_table``, ``_pyarrow_module``, and
-    ``_file_format_label`` (optionally ``get_column_names``) plus ``suffix``
-    instead of overriding ``load_data`` wholesale; ``produce_table``,
-    ``suffix``, and ``_pyarrow_module`` are all required for the class to be
-    discovered as a final reader. Overriding ``load_data`` directly is still
-    supported.
+    backend implements ``produce_table`` (optionally ``get_column_names``)
+    plus ``suffix`` instead of overriding ``load_data`` wholesale; both
+    ``produce_table`` and ``suffix`` are required for the class to be
+    discovered as a final reader. A backend family may override
+    ``check_backend`` to verify its engine before any read happens; see
+    PyArrowReadFile for pyarrow-based formats. Overriding ``load_data``
+    directly is still supported.
 
     If get_column_names is not implemented, the class will assume the columns are there.
     """
 
     _auto_load_group: str = "feature_group/input_data/read_files"
-
-    _file_format_label: str = "structured"
 
     _structured_suffixes: "frozenset[str]" = frozenset(
         {
@@ -58,38 +57,29 @@ class ReadFile(BaseInputData):
 
     @classmethod
     def produce_table(cls, data_access: Any, column_names: list[str]) -> Any:
-        """The per-format read hook; a new backend implements THIS (plus _pyarrow_module and
-        _file_format_label) instead of overriding load_data wholesale."""
+        """The per-format read hook; a new backend implements THIS instead of overriding
+        load_data wholesale."""
         raise NotImplementedError
 
     @classmethod
-    def _pyarrow_module(cls) -> Any:
-        """Return the pyarrow submodule used by this reader, or None when pyarrow is absent."""
-        raise NotImplementedError
-
-    @classmethod
-    def check_pyarrow_backend(cls) -> None:
-        """Raises the centralized ImportError when the reader's pyarrow backend is missing."""
-        if cls._pyarrow_module() is None:
-            raise ImportError(
-                f"pyarrow is required to read {cls._file_format_label} files. "
-                "Install it with: pip install 'mloda[pyarrow]'"
-            )
+    def check_backend(cls) -> None:
+        """Pre-read guard hook a backend family overrides to verify its engine is importable
+        and raise a guiding ImportError otherwise; the default is a no-op."""
 
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-        """Template method: probe the read hook, check the pyarrow backend, then produce the table."""
+        """Template method: probe the read hook, check the backend, then produce the table."""
         if not cls._is_overridden(ReadFile, "produce_table"):
             raise NotImplementedError
 
-        cls.check_pyarrow_backend()
+        cls.check_backend()
         return cls.produce_table(data_access, list(features.get_all_names()))
 
     @classmethod
     def _final_reader_requires(cls) -> tuple[str, ...]:
-        # Requiring suffix and _pyarrow_module alongside produce_table screens out intermediate
-        # bases that share produce_table but leave suffix or the backend guard abstract.
-        return ("produce_table", "suffix", "_pyarrow_module")
+        # Requiring suffix alongside produce_table screens out intermediate bases that
+        # share produce_table but leave suffix abstract.
+        return ("produce_table", "suffix")
 
     @classmethod
     def suffix(cls) -> tuple[str, ...]:

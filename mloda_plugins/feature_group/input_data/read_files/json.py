@@ -5,10 +5,10 @@ try:
 except ImportError:
     pyarrow_json = None
 
-from mloda_plugins.feature_group.input_data.read_file import ReadFile
+from mloda_plugins.feature_group.input_data.pyarrow_read_file import PyArrowReadFile
 
 
-class JsonReader(ReadFile):
+class JsonReader(PyArrowReadFile):
     """
     Base class for JSON file reading feature groups.
 

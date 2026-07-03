@@ -5,10 +5,10 @@ try:
 except ImportError:
     pyarrow_csv = None
 
-from mloda_plugins.feature_group.input_data.read_file import ReadFile
+from mloda_plugins.feature_group.input_data.pyarrow_read_file import PyArrowReadFile
 
 
-class CsvReader(ReadFile):
+class CsvReader(PyArrowReadFile):
     """
     Base class for CSV file reading feature groups.
 

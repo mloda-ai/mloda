@@ -5,10 +5,10 @@ try:
 except ImportError:
     pyarrow_parquet = None
 
-from mloda_plugins.feature_group.input_data.read_file import ReadFile
+from mloda_plugins.feature_group.input_data.pyarrow_read_file import PyArrowReadFile
 
 
-class ParquetReader(ReadFile):
+class ParquetReader(PyArrowReadFile):
     """
     Base class for Parquet file reading feature groups.
 

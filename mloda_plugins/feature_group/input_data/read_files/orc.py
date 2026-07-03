@@ -5,10 +5,10 @@ try:
 except ImportError:
     pyarrow_orc = None
 
-from mloda_plugins.feature_group.input_data.read_file import ReadFile
+from mloda_plugins.feature_group.input_data.pyarrow_read_file import PyArrowReadFile
 
 
-class OrcReader(ReadFile):
+class OrcReader(PyArrowReadFile):
     """
     Base class for ORC file reading feature groups.
 

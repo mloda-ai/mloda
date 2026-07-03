@@ -38,7 +38,6 @@ from typing import Any, Optional
 
 import pytest
 
-from mloda.core.abstract_plugins.compute_framework import EmptyResultError
 from mloda.provider import BaseInputData
 from mloda.provider import DataCreator
 from mloda.provider import FeatureGroup
@@ -197,7 +196,7 @@ class EmptyResultRunAllTestBase(PolicyRunAllTestBase):
 
     def _run_default_case(self, mode: ParallelizationMode, flight_server: Any) -> None:
         if self.default_empty_is_schemaless():
-            expectation: PolicySuccess | PolicyRaises = PolicyRaises(match_substring=EmptyResultError.__name__)
+            expectation: PolicySuccess | PolicyRaises = PolicyRaises(match_substring="Result carries no schema")
         else:
             expectation = PolicySuccess(assert_result=_assert_single_empty_result)
 

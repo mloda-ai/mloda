@@ -16,5 +16,5 @@ def thread_worker(command: Any, cfw_register: Any, cfw: ComputeFramework, from_c
         error_message = f"An error occurred: {e}"
         msg = f"{error_message}\nFull traceback:\n{traceback.format_exc()}"
         exc_info = traceback.format_exc()
-        cfw_register.set_error(msg, exc_info)
-        raise Exception(msg, exc_info)
+        cfw_register.set_error(msg, exc_info, exception=e)
+        raise

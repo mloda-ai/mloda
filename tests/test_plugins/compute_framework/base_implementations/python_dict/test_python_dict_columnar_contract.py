@@ -276,4 +276,4 @@ def test_zero_column_result_raises_without_flag(flight_server: Any) -> None:
             parallelization_modes={ParallelizationMode.SYNC},
             flight_server=flight_server,
         )
-    assert EmptyResultError.__name__ in str(excinfo.value)
+    assert isinstance(excinfo.value, EmptyResultError)

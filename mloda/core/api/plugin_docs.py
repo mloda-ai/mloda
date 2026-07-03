@@ -26,7 +26,11 @@ from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRe
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.api.plugin_info import ComputeFrameworkInfo, ExtenderInfo, FeatureGroupInfo, ResolvedFeature
-from mloda.core.prepare.accessible_plugins import RedefinitionConflictError, dedup_feature_group_subclasses
+from mloda.core.prepare.accessible_plugins import (
+    RedefinitionConflictError,
+    dedup_feature_group_subclasses,
+    registry_for,
+)
 from mloda.core.prepare.identify_feature_group import split_frameworks_by_capability
 
 
@@ -78,7 +82,7 @@ def get_feature_group_docs(
         compute_framework: Filter by compute framework name or class (case-insensitive match).
         version_contains: Filter by version substring.
         plugin_collector: Filter using plugin collector's applicability check.
-        registered_only: If True, only document classes registered in the default registry.
+        registered_only: If True, only document classes in the collector's injected registry, else the default registry.
 
     Returns:
         List of FeatureGroupInfo objects sorted by name.
@@ -86,7 +90,7 @@ def get_feature_group_docs(
     allow_redefinition = plugin_collector.allow_redefinition if plugin_collector is not None else False
     all_feature_groups: set[type[FeatureGroup]] = get_all_subclasses(FeatureGroup)
     if registered_only:
-        registered = PluginRegistry.default().registered_classes()
+        registered = registry_for(plugin_collector).registered_classes()
         all_feature_groups = {fg for fg in all_feature_groups if fg in registered}
     if plugin_collector is not None:
         all_feature_groups = {fg for fg in all_feature_groups if plugin_collector.applicable_feature_group_class(fg)}

@@ -9,6 +9,7 @@ from typing import Optional
 import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -456,4 +457,160 @@ class TestNoComputeFrameworkErrorMessageFormat:
         )
         assert expected_pattern in error_message, (
             f"Error message should contain formatted class '{expected_pattern}', but got: {error_message}"
+        )
+
+
+class KnowledgeGraphLikeFeatureGroup(FeatureGroup):
+    """Strict input-feature matcher: accepts the bare name 'knowledge_graph' but
+    rejects any feature that carries extra group options.
+
+    This mimics a knowledge-graph style feature group that is meant to be an
+    input feature. When a parent feature forwards its query-specific group
+    options onto this declared input feature, the extra group keys cause the
+    matcher to reject the feature entirely.
+    """
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> bool:
+        name = str(feature_name) if isinstance(feature_name, FeatureName) else feature_name
+        return name == "knowledge_graph" and not options.group
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        return None
+
+
+class OtherNameFeatureGroup(FeatureGroup):
+    """Feature group that only matches a different name, used to keep some
+    plugins accessible while never matching the feature under test."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> bool:
+        name = str(feature_name) if isinstance(feature_name, FeatureName) else feature_name
+        return name == "some_other_feature"
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        return None
+
+
+class TestInputFeatureForwardingHint:
+    """Tests for the 'forward_for_input_feature' hint in the no-feature-group error.
+
+    The hint should fire only when a feature fails to resolve BECAUSE its group
+    options carry keys the matcher rejects, and some accessible feature group
+    WOULD match the same bare feature name if the group options were empty.
+    """
+
+    def test_hint_names_offending_keys_and_helper(self) -> None:
+        feature = Feature("knowledge_graph", Options(group={"query_text": "hi", "top_k": 5}))
+
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            KnowledgeGraphLikeFeatureGroup: {MockComputeFramework},
+        }
+
+        with pytest.raises(ValueError) as exc_info:
+            IdentifyFeatureGroupClass(
+                feature=feature,
+                accessible_plugins=accessible_plugins,
+                links=None,
+                data_access_collection=None,
+            )
+
+        error_message = str(exc_info.value)
+
+        assert "forward_for_input_feature" in error_message, (
+            f"Error message should point to forward_for_input_feature, but got: {error_message}"
+        )
+        assert "query_text" in error_message, (
+            f"Error message should name offending key 'query_text', but got: {error_message}"
+        )
+        assert "top_k" in error_message, f"Error message should name offending key 'top_k', but got: {error_message}"
+        assert "KnowledgeGraphLikeFeatureGroup" in error_message, (
+            f"Error message should name culprit feature group, but got: {error_message}"
+        )
+
+    def test_no_hint_when_no_group_options(self) -> None:
+        feature = Feature("knowledge_graph")
+
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            OtherNameFeatureGroup: {MockComputeFramework},
+        }
+
+        with pytest.raises(ValueError) as exc_info:
+            IdentifyFeatureGroupClass(
+                feature=feature,
+                accessible_plugins=accessible_plugins,
+                links=None,
+                data_access_collection=None,
+            )
+
+        error_message = str(exc_info.value)
+
+        assert "forward_for_input_feature" not in error_message, (
+            f"Error message should NOT emit forwarding hint when no group options, but got: {error_message}"
+        )
+
+    def test_no_hint_when_no_feature_group_matches_bare_name(self) -> None:
+        feature = Feature("totally_unknown", Options(group={"query_text": "hi"}))
+
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            KnowledgeGraphLikeFeatureGroup: {MockComputeFramework},
+        }
+
+        with pytest.raises(ValueError) as exc_info:
+            IdentifyFeatureGroupClass(
+                feature=feature,
+                accessible_plugins=accessible_plugins,
+                links=None,
+                data_access_collection=None,
+            )
+
+        error_message = str(exc_info.value)
+
+        assert "forward_for_input_feature" not in error_message, (
+            f"Error message should NOT emit forwarding hint when no FG matches the bare name, but got: {error_message}"
+        )
+
+    def test_reserved_keys_not_listed_as_offending(self) -> None:
+        feature = Feature(
+            "knowledge_graph",
+            Options(
+                group={
+                    "query_text": "hi",
+                    DefaultOptionKeys.feature_chainer_parser_key: frozenset({"query_text"}),
+                }
+            ),
+        )
+
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            KnowledgeGraphLikeFeatureGroup: {MockComputeFramework},
+        }
+
+        with pytest.raises(ValueError) as exc_info:
+            IdentifyFeatureGroupClass(
+                feature=feature,
+                accessible_plugins=accessible_plugins,
+                links=None,
+                data_access_collection=None,
+            )
+
+        error_message = str(exc_info.value)
+
+        assert "forward_for_input_feature" in error_message, (
+            f"Error message should point to forward_for_input_feature, but got: {error_message}"
+        )
+        assert "query_text" in error_message, (
+            f"Error message should name offending key 'query_text', but got: {error_message}"
+        )
+        assert "feature_chainer_parser_key" not in error_message, (
+            f"Reserved key 'feature_chainer_parser_key' must NOT be listed as offending, but got: {error_message}"
         )

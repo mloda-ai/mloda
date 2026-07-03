@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Optional, TYPE_CHECKING, cast
+from typing import Any, Iterable, Optional, TYPE_CHECKING, cast
 from copy import deepcopy
 
 from mloda.core.abstract_plugins.components.hashable_dict import _make_hashable
@@ -298,3 +298,35 @@ class Options:
                     raise ValueError(f"Context key '{key}' conflict: parent='{value}', child='{self.context[key]}'")
 
             self.context.update(propagating)
+
+    def forward_for_input_feature(self, exclude: Optional[Iterable[str]] = None) -> "Options":
+        """
+        Build Options for a declared input feature that survives the parent->child group auto-merge.
+
+        When a FeatureGroup returns a declared input feature from input_features(), the engine
+        merges the parent feature's group options into that child. Parent query-specific keys
+        (listed in ``exclude``) plus in_features are marked merge-protected via
+        feature_chainer_parser_key so they do not flow onto and break the child's resolution.
+
+        The feature_chainer_parser_key itself is also protected, and any protected keys the parent
+        already carries under feature_chainer_parser_key are preserved. This lets nested
+        input_features chains compose without raising.
+
+        Called on the PARENT's Options. Returns a NEW Options carrying the parent's group params
+        forward, except the protected keys. The parent's context is not copied and the parent is
+        not mutated.
+        """
+        if isinstance(exclude, str):
+            raise TypeError(
+                "forward_for_input_feature 'exclude' must be an iterable of keys, not a bare str "
+                "(a str would iterate into single characters)."
+            )
+        inherited = frozenset(self.get(DefaultOptionKeys.feature_chainer_parser_key) or ())
+        protected = (
+            frozenset(exclude or ())
+            | {DefaultOptionKeys.in_features, DefaultOptionKeys.feature_chainer_parser_key}
+            | inherited
+        )
+        new_group = {key: value for key, value in self.group.items() if key not in protected}
+        new_group[DefaultOptionKeys.feature_chainer_parser_key] = protected
+        return Options(group=new_group)

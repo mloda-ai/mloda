@@ -291,3 +291,7 @@ Options(
 ```
 
 Only the specified keys propagate. Everything else stays local. Group propagation is unchanged.
+
+This is the caller side. For the author side (how a feature group's own options merge
+into an input feature it declares, and how to keep query-specific keys off that child),
+see [Author-Side Option Forwarding for input_features](feature-chain-parser.md#author-side-option-forwarding-for-input_features).

@@ -402,6 +402,89 @@ PROPERTY_MAPPING = {
 }
 ```
 
+## Author-Side Option Forwarding for input_features
+
+The [Context Propagation](property-mapping.md#context-propagation) docs describe the
+**caller side**: context options stay local by default, and `propagate_context_keys`
+opts specific keys in. This section describes the **author side**: what happens to a
+feature group's own options when it declares an input feature.
+
+### The group-vs-context merge asymmetry
+
+When your `input_features()` returns a child `Feature`, the engine merges the parent
+feature's options into that child before resolving it:
+
+- **Group** parameters auto-merge from parent into the child input feature.
+- **Context** parameters do NOT auto-merge. They only reach a child when the caller
+  lists them in `propagate_context_keys`.
+
+A connector that needs an upstream selector (for example a `kg_backend` group option)
+to reach its input feature can rely on the group auto-merge. A connector that needs a
+**context** option to reach its input feature cannot rely on callers opting in, so it
+must forward that value explicitly on the child `Feature` it constructs.
+
+### Why a bare `Feature(name)` can fail resolution
+
+The group auto-merge also copies the parent's own query-specific group keys (for
+example `query_text`, `top_k`) onto the child. The child's matcher (its
+`match_feature_group_criteria` / `PROPERTY_MAPPING`) does not accept those extra keys,
+so resolution fails with `No feature groups found ...`. When a feature group would
+match the bare name but rejects it because of those extra group keys, the error names
+the offending keys and points to `forward_for_input_feature`. (Reserved keys such as
+`feature_chainer_parser_key` are ignored by matching, so it is only the parent's own
+query-specific keys that break the match.)
+
+``` python
+def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    return {Feature("knowledge_graph")}  # parent's query_text/top_k pollute this child -> no match
+```
+
+### Protecting keys with `forward_for_input_feature`
+
+To keep the parent's query-specific keys off the child, mark them as merge-protected.
+`Options.forward_for_input_feature(exclude=...)` builds options for a declared input
+feature that survive the auto-merge: it forwards the parent's non-excluded group
+parameters and marks the `exclude` keys (always together with `in_features`) as
+protected, so they are not copied onto the child.
+
+``` python
+def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    child_options = options.forward_for_input_feature(exclude={"query_text", "top_k"})
+    return {Feature("knowledge_graph", child_options)}
+```
+
+The shared `kg_backend` selector still flows to the child through the group
+auto-merge; `query_text` and `top_k` stay on the parent only. If the child needs a
+**context** value forwarded, set it explicitly on `child_options` before returning the
+feature, since context is never auto-merged.
+
+### The underlying mechanism
+
+`forward_for_input_feature` wraps `DefaultOptionKeys.feature_chainer_parser_key`, the
+key whose value is the set of option keys to protect during the parent-to-child merge.
+`in_features` is always protected. Setting this key by hand is the lower-level form of
+the same mechanism:
+
+``` python
+child_options = Options(
+    group={DefaultOptionKeys.feature_chainer_parser_key: frozenset({"query_text", "top_k"})}
+)
+```
+
+Prefer `forward_for_input_feature`; reach for the raw key only when you need protection
+semantics it does not cover.
+
+### Upstream feature deduplication
+
+The engine deduplicates upstream features that share the same group identity. Declaring
+the same source feature as the input of several parents therefore computes it once,
+**provided those parents forward the same options to it**. Forwarded options become part
+of the child's group identity, so two parents that call `forward_for_input_feature` with
+identical arguments share a single computed feature, while a plain request of the same
+name (or one carrying different options) is a distinct identity and is computed
+separately. Keep the forwarded options identical across parents when you want them to
+share the computation.
+
 ## Multiple Result Columns with ~ Pattern
 
 Some feature groups produce multiple result columns from a single input feature. mloda provides utilities to work with these patterns seamlessly.

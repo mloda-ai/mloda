@@ -3,6 +3,7 @@ from typing import Iterable, Optional
 
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -61,6 +62,7 @@ class IdentifyFeatureGroupClass:
 
         feature_group = self._filter_loop(feature, accessible_plugins, links, data_access_collection)
 
+        self._data_access_collection = data_access_collection
         self.validate(feature_group, feature, accessible_plugins)
         self.feature_group_compute_framework_mapping = feature_group
 
@@ -199,6 +201,45 @@ class IdentifyFeatureGroupClass:
         msg += " Pin the feature to a supported compute framework or override supports_compute_framework."
         return msg
 
+    def _input_feature_forwarding_hint(
+        self, feature: Feature, accessible_plugins: FeatureGroupEnvironmentMapping
+    ) -> Optional[str]:
+        reserved = {DefaultOptionKeys.in_features, DefaultOptionKeys.feature_chainer_parser_key}
+        offending = sorted(str(k) for k in feature.options.group if k not in reserved)
+        if not offending:
+            return None
+
+        bare = Options(
+            context=dict(feature.options.context),
+            propagate_context_keys=feature.options.propagate_context_keys,
+        )
+
+        culprits: list[type[FeatureGroup]] = []
+        for feature_group in accessible_plugins:
+            if not self._filter_feature_group_by_domain(feature_group, feature):
+                continue
+            if not self._filter_feature_group_by_scope(feature_group, feature):
+                continue
+            accepts_bare = feature_group.match_feature_group_criteria(feature.name, bare, self._data_access_collection)
+            rejects_actual = not feature_group.match_feature_group_criteria(
+                feature.name, feature.options, self._data_access_collection
+            )
+            if accepts_bare and rejects_actual:
+                culprits.append(feature_group)
+
+        if not culprits:
+            return None
+
+        names = sorted(fg.get_class_name() for fg in culprits)
+        exclude_snippet = "{" + ", ".join(repr(k) for k in offending) + "}"
+        return (
+            f"Feature group(s) {names} match the name '{str(feature.name)}' but reject it because of "
+            f"extra group option(s) {offending}. These look like options merged from a parent feature. "
+            f"If '{str(feature.name)}' is a declared input feature, build it with "
+            f"Options.forward_for_input_feature(exclude={exclude_snippet}) so the parent's query-specific "
+            f"keys stay off it."
+        )
+
     def _build_no_feature_group_error(
         self, feature: Feature, accessible_plugins: FeatureGroupEnvironmentMapping
     ) -> str:
@@ -219,6 +260,10 @@ class IdentifyFeatureGroupClass:
         if not accessible_plugins:
             msg += "\nNo plugins are loaded. Did you call PluginLoader.all()?"
             return msg
+
+        forwarding_hint = self._input_feature_forwarding_hint(feature, accessible_plugins)
+        if forwarding_hint is not None:
+            msg += f"\n{forwarding_hint}"
 
         known_names: list[str] = []
         for fg_class in accessible_plugins:

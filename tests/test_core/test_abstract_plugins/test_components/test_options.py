@@ -732,3 +732,258 @@ class TestOptionsNestedStructureHashing:
         )
         result = hash(options)
         assert isinstance(result, int)
+
+
+class TestForwardForInputFeature:
+    """
+    Test suite for Options.forward_for_input_feature.
+
+    WHY THIS EXISTS:
+    When a FeatureGroup returns a declared input feature from input_features(),
+    the engine merges the PARENT feature's group options into that child input
+    feature. Parent query-specific group keys (e.g. query_text, top_k) then land
+    on the child and break its resolution. forward_for_input_feature formalizes
+    the workaround of marking those keys merge-protected via
+    feature_chainer_parser_key.
+
+    CONTRACT (called on the PARENT's Options):
+    - If ``exclude`` is a bare ``str``, raise TypeError (it would otherwise
+      iterate into single characters). None and non-str iterables are fine.
+    - Let inherited = frozenset(self.get(feature_chainer_parser_key) or ()).
+    - protected = frozenset(exclude or ()) | {in_features,
+      feature_chainer_parser_key} | inherited.
+    - Returns a NEW Options carrying the parent's group params forward, except
+      every key in ``protected`` (so excluded keys, in_features,
+      feature_chainer_parser_key, and inherited keys are all dropped).
+    - Sets feature_chainer_parser_key in the returned .group to ``protected``.
+    - The parent's context is NOT copied onto the returned Options.
+    - Does not mutate the parent.
+    """
+
+    def test_returns_new_options_instance(self) -> None:
+        parent = Options(group={"kg_backend": "neo4j"})
+        result = parent.forward_for_input_feature(exclude={"query_text", "top_k"})
+
+        assert isinstance(result, Options)
+        assert result is not parent
+
+    def test_forwards_group_keys_except_exclude_and_in_features(self) -> None:
+        from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
+
+        parent = Options(
+            group={
+                "kg_backend": "neo4j",
+                "query_text": "hello",
+                "top_k": 5,
+                DefaultOptionKeys.in_features: "some_source",
+            }
+        )
+        result = parent.forward_for_input_feature(exclude={"query_text", "top_k"})
+
+        # Shared key forwarded
+        assert result.group["kg_backend"] == "neo4j"
+        # Excluded keys not forwarded
+        assert "query_text" not in result.group
+        assert "top_k" not in result.group
+        # in_features never forwarded
+        assert DefaultOptionKeys.in_features not in result.group
+
+    def test_sets_feature_chainer_parser_key_to_exclude_plus_in_features(self) -> None:
+        from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
+
+        parent = Options(group={"kg_backend": "neo4j", "query_text": "hello", "top_k": 5})
+        result = parent.forward_for_input_feature(exclude={"query_text", "top_k"})
+
+        protected = result.group[DefaultOptionKeys.feature_chainer_parser_key]
+        assert isinstance(protected, frozenset)
+        assert protected == frozenset({"query_text", "top_k"}) | {
+            DefaultOptionKeys.in_features,
+            DefaultOptionKeys.feature_chainer_parser_key,
+        }
+
+    def test_exclude_none_protects_only_in_features_and_forwards_all(self) -> None:
+        from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
+
+        parent = Options(group={"kg_backend": "neo4j", "query_text": "hello", "top_k": 5})
+        result = parent.forward_for_input_feature()
+
+        # All group keys forwarded when exclude is None
+        assert result.group["kg_backend"] == "neo4j"
+        assert result.group["query_text"] == "hello"
+        assert result.group["top_k"] == 5
+        # in_features and feature_chainer_parser_key itself are protected
+        protected = result.group[DefaultOptionKeys.feature_chainer_parser_key]
+        assert protected == frozenset({DefaultOptionKeys.in_features, DefaultOptionKeys.feature_chainer_parser_key})
+
+    def test_exclude_accepts_list(self) -> None:
+        from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
+
+        parent = Options(group={"kg_backend": "neo4j", "query_text": "hello", "top_k": 5})
+        result = parent.forward_for_input_feature(exclude=["query_text", "top_k"])
+
+        assert "query_text" not in result.group
+        assert "top_k" not in result.group
+        protected = result.group[DefaultOptionKeys.feature_chainer_parser_key]
+        assert protected == frozenset({"query_text", "top_k"}) | {
+            DefaultOptionKeys.in_features,
+            DefaultOptionKeys.feature_chainer_parser_key,
+        }
+
+    def test_exclude_accepts_frozenset(self) -> None:
+        from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
+
+        parent = Options(group={"kg_backend": "neo4j", "query_text": "hello"})
+        result = parent.forward_for_input_feature(exclude=frozenset({"query_text"}))
+
+        assert "query_text" not in result.group
+        protected = result.group[DefaultOptionKeys.feature_chainer_parser_key]
+        assert protected == frozenset({"query_text"}) | {
+            DefaultOptionKeys.in_features,
+            DefaultOptionKeys.feature_chainer_parser_key,
+        }
+
+    def test_parent_context_not_copied(self) -> None:
+        parent = Options(
+            group={"kg_backend": "neo4j"},
+            context={"debug_mode": True, "trace_id": "abc"},
+        )
+        result = parent.forward_for_input_feature(exclude={"query_text"})
+
+        assert "debug_mode" not in result.context
+        assert "trace_id" not in result.context
+
+    def test_does_not_mutate_parent(self) -> None:
+        from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
+
+        parent = Options(
+            group={"kg_backend": "neo4j", "query_text": "hello", "top_k": 5},
+            context={"debug_mode": True},
+        )
+        group_before = deepcopy(parent.group)
+        context_before = deepcopy(parent.context)
+
+        parent.forward_for_input_feature(exclude={"query_text", "top_k"})
+
+        assert parent.group == group_before
+        assert parent.context == context_before
+        # Parent should not gain the protection key
+        assert DefaultOptionKeys.feature_chainer_parser_key not in parent.group
+
+    def test_integration_through_real_merge_path(self) -> None:
+        """
+        Proof through the actual parent->child merge: excluded keys are protected
+        (do not flow to the child), while shared group keys still flow.
+        """
+        from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
+        from mloda.user import Feature, Features
+
+        parent_options = Options(
+            group={
+                "kg_backend": "neo4j",
+                "query_text": "hello",
+                "top_k": 5,
+                DefaultOptionKeys.in_features: "parent_source",
+            }
+        )
+
+        child_feature = Feature(
+            "child_input",
+            parent_options.forward_for_input_feature(exclude={"query_text", "top_k"}),
+        )
+
+        Features([child_feature]).merge_options(child_feature.options, parent_options)
+
+        # Excluded / query-specific keys are protected -> not on the child
+        assert "query_text" not in child_feature.options.group
+        assert "top_k" not in child_feature.options.group
+        # Shared group key still flows through
+        assert child_feature.options.group["kg_backend"] == "neo4j"
+
+    def test_str_exclude_raises_type_error(self) -> None:
+        """A bare str exclude must raise TypeError, not silently protect characters."""
+        parent = Options(group={"kg_backend": "neo4j", "query_text": "hi"})
+        with pytest.raises(TypeError):
+            parent.forward_for_input_feature(exclude="query_text")
+
+    def test_preserves_inherited_protected_keys(self) -> None:
+        """
+        When the parent was itself produced by this helper (it already carries
+        feature_chainer_parser_key), the inherited protected keys must be
+        preserved and re-protected, not overwritten.
+        """
+        from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
+
+        fcp = DefaultOptionKeys.feature_chainer_parser_key
+        in_features = DefaultOptionKeys.in_features
+
+        parent = Options(
+            group={
+                fcp: frozenset({"grand_key", in_features}),
+                "kg_backend": "neo4j",
+                "query_text": "hi",
+            }
+        )
+        result = parent.forward_for_input_feature(exclude={"query_text"})
+
+        protected = result.group[fcp]
+        assert protected == frozenset({"query_text", in_features, fcp, "grand_key"})
+        # Inherited + newly-excluded keys are dropped from the forwarded copy
+        assert "grand_key" not in result.group
+        assert "query_text" not in result.group
+        # Non-protected shared key still flows
+        assert result.group["kg_backend"] == "neo4j"
+
+    def test_nested_merge_does_not_raise(self) -> None:
+        """
+        Full nested chain: a parent that already carries an inherited protected
+        set must survive the real parent->child merge without a duplicate-key
+        ValueError, and grandparent protected keys must not leak onto the child.
+        """
+        from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
+        from mloda.user import Feature, Features
+
+        fcp = DefaultOptionKeys.feature_chainer_parser_key
+        in_features = DefaultOptionKeys.in_features
+
+        parent_options = Options(
+            group={
+                fcp: frozenset({"grand_key", in_features}),
+                "kg_backend": "neo4j",
+                "query_text": "hi",
+                "grand_key": "grand_value",
+            }
+        )
+
+        child = Feature(
+            "knowledge_graph",
+            parent_options.forward_for_input_feature(exclude={"query_text"}),
+        )
+
+        Features([child]).merge_options(child.options, parent_options)
+
+        assert child.options.group["kg_backend"] == "neo4j"
+        assert "query_text" not in child.options.group
+        assert "grand_key" not in child.options.group
+
+    def test_exclude_containing_in_features(self) -> None:
+        """Passing in_features explicitly in exclude is harmless and does not error."""
+        from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
+
+        fcp = DefaultOptionKeys.feature_chainer_parser_key
+        in_features = DefaultOptionKeys.in_features
+
+        parent = Options(group={"kg_backend": "neo4j"})
+        result = parent.forward_for_input_feature(exclude={in_features})
+
+        assert result.group[fcp] == frozenset({in_features, fcp})
+
+    def test_empty_parent_group(self) -> None:
+        """An empty parent forwards only the protected feature_chainer_parser_key entry."""
+        from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
+
+        fcp = DefaultOptionKeys.feature_chainer_parser_key
+        in_features = DefaultOptionKeys.in_features
+
+        result = Options().forward_for_input_feature()
+
+        assert result.group == {fcp: frozenset({in_features, fcp})}

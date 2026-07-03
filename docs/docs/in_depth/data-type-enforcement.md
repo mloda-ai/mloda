@@ -96,6 +96,8 @@ In strict mode, only exact type matches or standard widening conversions are all
 Enforcement is driven by a single override point on `ComputeFramework`:
 
 ```python
+from typing import Any, Optional
+
 def _extract_column_data_type(self, data: Any, column_name: str) -> Optional[DataType]:
     ...
 ```
@@ -120,7 +122,6 @@ The contract:
 A custom framework imports `DataType` from the public API:
 
 ```python
-from typing import Any, Optional
 from mloda.user import DataType
 from mloda.provider import ComputeFramework
 

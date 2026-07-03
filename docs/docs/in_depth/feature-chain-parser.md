@@ -428,9 +428,11 @@ must forward that value explicitly on the child `Feature` it constructs.
 The group auto-merge also copies the parent's own query-specific group keys (for
 example `query_text`, `top_k`) onto the child. The child's matcher (its
 `match_feature_group_criteria` / `PROPERTY_MAPPING`) does not accept those extra keys,
-so resolution fails with `No feature groups found ...` and no hint about why. (Reserved
-keys such as `feature_chainer_parser_key` are ignored by matching, so it is only the
-parent's own query-specific keys that break the match.)
+so resolution fails with `No feature groups found ...`. When a feature group would
+match the bare name but rejects it because of those extra group keys, the error names
+the offending keys and points to `forward_for_input_feature`. (Reserved keys such as
+`feature_chainer_parser_key` are ignored by matching, so it is only the parent's own
+query-specific keys that break the match.)
 
 ``` python
 def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:

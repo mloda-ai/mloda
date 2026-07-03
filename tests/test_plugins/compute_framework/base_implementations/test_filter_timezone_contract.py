@@ -284,3 +284,46 @@ def test_numeric_range_filter_unaffected_by_tz_guard(spec: FrameworkSpec) -> Non
     )
     result = spec.engine.do_filter(spec.build_numeric(), single_filter)
     assert sorted(spec.get_ids(result)) == EXPECTED_NUMERIC_IDS
+
+
+# --------------------------------------------------------------------------- #
+# OPT-IN (Option B, epic #518 / PR #581): the temporal filter-bound guard is
+# opt-in. A filter engine that does NOT set ``provides_column_semantics`` must
+# never be forced to implement ``_column_semantics``; the guard is skipped.
+# --------------------------------------------------------------------------- #
+
+
+def test_temporal_filter_guard_skipped_without_opt_in() -> None:
+    """A BaseFilterEngine subclass WITHOUT the flag and WITHOUT ``_column_semantics``, given a
+    real ``datetime``-bound min filter, must SKIP the tz guard and reach ``do_min_filter``
+    (returning its result) rather than raising ``NotImplementedError`` from the base
+    ``_column_semantics`` hook.
+    """
+    sentinel = object()
+
+    class NoSemanticsFilterEngine(BaseFilterEngine):
+        @classmethod
+        def do_min_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
+            return sentinel
+
+    single_filter = _min_filter(MIN_BOUND_AWARE)
+    result = NoSemanticsFilterEngine.do_filter({"ts": list(TS_AWARE)}, single_filter)
+    assert result is sentinel
+
+
+def test_temporal_filter_guard_raises_when_opted_in_without_hook() -> None:
+    """A BaseFilterEngine subclass with ``provides_column_semantics = True`` but no
+    ``_column_semantics`` override must raise ``NotImplementedError`` naming
+    ``_column_semantics`` on a datetime-bound min filter (opt-in fail-loud preserved).
+    """
+
+    class OptedInFilterEngine(BaseFilterEngine):
+        provides_column_semantics = True
+
+        @classmethod
+        def do_min_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
+            return data
+
+    single_filter = _min_filter(MIN_BOUND_AWARE)
+    with pytest.raises(NotImplementedError, match=r"_column_semantics"):
+        OptedInFilterEngine.do_filter({"ts": list(TS_AWARE)}, single_filter)

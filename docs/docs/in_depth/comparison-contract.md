@@ -33,9 +33,12 @@ joins and filters are never rejected.
 
 ## Per-engine capability
 
-What each backend can determine from its native schema. `column_semantics` is a required merge- and
-filter-engine hook; an engine that does not implement it raises a clear error rather than silently
-skipping validation.
+What each backend can determine from its native schema. `column_semantics` is an opt-in merge- and
+filter-engine hook: an engine enables the timezone/unit guard by setting `provides_column_semantics =
+True` and implementing the hook. Engines that leave the flag `False` (for example a time-agnostic
+custom ComputeFramework) skip the guard entirely and are never forced to implement it. An engine that
+opts in but forgets to implement the hook raises a clear error rather than silently skipping
+validation. All built-in backends below opt in.
 
 | Backend | ordered / temporal / numeric | timezone-awareness | time unit |
 |---------|:---:|:---:|:---:|

@@ -19,6 +19,8 @@ except ImportError:
 
 
 class SparkMergeEngine(BaseMergeEngine):
+    provides_column_semantics = True
+
     def check_import(self) -> None:
         if DataFrame is None:
             raise ImportError("PySpark is not installed. To be able to use this framework, please install pyspark.")

@@ -14,6 +14,8 @@ except ImportError:
 
 
 class PolarsMergeEngine(BaseMergeEngine):
+    provides_column_semantics = True
+
     def check_import(self) -> None:
         if pl is None:
             raise ImportError("Polars is not installed. To be able to use this framework, please install polars.")

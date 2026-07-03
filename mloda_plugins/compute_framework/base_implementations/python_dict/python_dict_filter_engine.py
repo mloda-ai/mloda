@@ -16,6 +16,8 @@ class PythonDictFilterEngine(BaseFilterEngine):
     without crashing (yields an empty keep set / passes through).
     """
 
+    provides_column_semantics = True
+
     @classmethod
     def final_filters(cls) -> bool:
         """Filters are applied after the feature calculation."""

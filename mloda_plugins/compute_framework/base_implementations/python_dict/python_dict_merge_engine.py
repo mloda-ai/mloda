@@ -18,6 +18,8 @@ class PythonDictMergeEngine(BaseMergeEngine):
     columnar dicts with the union of columns; the absent side is null-filled with ``None``.
     """
 
+    provides_column_semantics = True
+
     def check_import(self) -> None:
         """
         No external dependencies required for PythonDict framework.

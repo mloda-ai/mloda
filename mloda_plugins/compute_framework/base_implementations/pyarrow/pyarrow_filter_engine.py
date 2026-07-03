@@ -9,6 +9,8 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow import pyarrow
 
 
 class PyArrowFilterEngine(BaseFilterEngine):
+    provides_column_semantics = True
+
     @classmethod
     def final_filters(cls) -> bool:
         """Filters are applied after the feature calculation."""

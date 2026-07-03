@@ -166,12 +166,12 @@ class TestPythonDictMergeEngine:
 
 
 class TestPythonDictEquiJoinTimezoneGuard:
-    """Phase 3b: extend the temporal cross-side timezone guard to python_dict equi-joins.
+    """Temporal cross-side timezone guard on python_dict equi-joins.
 
-    python_dict's Phase-1 column_semantics reads temporal/tz from the first non-null value's
-    tzinfo, so once Green wires PythonDictMergeEngine._column_semantics to it, an INNER equi-join
-    whose key is tz-aware on one side and tz-naive on the other must raise a ValueError naming the
-    timezone mismatch. Today no override is wired, so the guard never fires.
+    python_dict's column_semantics reads temporal/tz from the first non-null value's tzinfo.
+    PythonDictMergeEngine opts into the guard (`provides_column_semantics = True`) and wires
+    _column_semantics to it, so an INNER equi-join whose key is tz-aware on one side and tz-naive
+    on the other must raise a ValueError naming the timezone mismatch.
     """
 
     def test_inner_equi_join_tz_aware_vs_naive_raises(self) -> None:

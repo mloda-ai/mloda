@@ -16,6 +16,8 @@ from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
 
 
 class PyArrowMergeEngine(BaseMergeEngine):
+    provides_column_semantics = True
+
     @staticmethod
     def _normalize_string_types(table: pa.Table, key_columns: list[str]) -> pa.Table:
         """

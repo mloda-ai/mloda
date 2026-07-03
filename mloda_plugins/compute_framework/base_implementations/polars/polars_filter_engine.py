@@ -11,6 +11,8 @@ except ImportError:
 
 
 class PolarsFilterEngine(BaseFilterEngine):
+    provides_column_semantics = True
+
     @classmethod
     def final_filters(cls) -> bool:
         """Filters are applied after the feature calculation."""

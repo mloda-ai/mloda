@@ -15,6 +15,8 @@ class BaseMergeEngine(ABC):
     implement the merge methods for specific join types as needed.
     """
 
+    provides_column_semantics: bool = False
+
     def __init__(self, framework_connection: Optional[Any] = None) -> None:
         """
         Initialize the merge engine.
@@ -102,9 +104,11 @@ class BaseMergeEngine(ABC):
     def _column_semantics(self, data: Any, column: str) -> ColumnSemantics:
         """Observed semantics of a column, used by both as-of and equi-join validation.
 
-        This is a mandatory hook (epic #518, Phase 3b): every engine must expose its
-        framework-native ColumnSemantics so the cross-side timezone/unit guard can fire.
-        The base raises rather than silently skipping the guard.
+        Opt-in hook (Option B, epic #518): the equi-join timezone/unit guard only calls
+        this when the engine sets ``provides_column_semantics = True``. An engine that
+        opts in promises to expose its framework-native ColumnSemantics; the base raises
+        NotImplementedError so a forgotten override fails loudly. As-of engines override
+        this unconditionally, so the as-of path always relies on it.
         """
         raise NotImplementedError(
             f"{self.__class__.__name__} must implement _column_semantics(data, column) "
@@ -140,10 +144,15 @@ class BaseMergeEngine(ABC):
 
         Reuses the as-of ComparisonContract machinery: require_compatible no-ops unless
         BOTH key columns are temporal, so string/integer/mismatched-type keys are
-        unaffected (narrow policy). _column_semantics is a mandatory hook (Phase 3b): the
-        base raises NotImplementedError, so every concrete engine must supply it; the guard
+        unaffected (narrow policy). The guard is opt-in (Option B, epic #518): it is
+        skipped entirely unless the engine sets ``provides_column_semantics = True``, so a
+        time-agnostic engine author is never forced to implement ``_column_semantics``.
+        When opted in, ``_column_semantics`` is required; the base raises
+        NotImplementedError if an opted-in engine forgot to implement it, and the guard
         then only fires an error for temporal-vs-temporal key pairs.
         """
+        if self.provides_column_semantics is False:
+            return
         left_cols = list(left_index.index)
         right_cols = list(right_index.index)
         if len(left_cols) != len(right_cols):

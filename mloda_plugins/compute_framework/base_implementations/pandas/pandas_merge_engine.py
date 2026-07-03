@@ -16,6 +16,8 @@ except ImportError:
 
 
 class PandasMergeEngine(BaseMergeEngine):
+    provides_column_semantics = True
+
     def check_import(self) -> None:
         if pd is None:
             raise ImportError("Pandas is not installed. To be able to use this framework, please install pandas.")

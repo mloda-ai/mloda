@@ -16,6 +16,8 @@ except ImportError:
 
 
 class DuckDBMergeEngine(SqlBaseMergeEngine):
+    provides_column_semantics = True
+
     def check_import(self) -> None:
         if duckdb is None:
             raise ImportError("DuckDB is not installed. To be able to use this framework, please install duckdb.")

@@ -7,6 +7,8 @@ from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import q
 
 
 class DuckDBFilterEngine(SqlBaseFilterEngine):
+    provides_column_semantics = True
+
     @classmethod
     def _column_semantics(cls, data: Any, column: str) -> ColumnSemantics:
         return duckdb_type_semantics.column_semantics(data, column)

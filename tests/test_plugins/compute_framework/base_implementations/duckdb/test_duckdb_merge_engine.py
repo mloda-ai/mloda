@@ -357,12 +357,12 @@ class TestDuckDBMergeEngineViewLeak:
 
 @pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB or PyArrow is not installed. Skipping this test.")
 class TestDuckDBEquiJoinTimezoneGuard:
-    """Phase 3b: extend the temporal cross-side timezone guard to duckdb equi-joins.
+    """Temporal cross-side timezone guard on duckdb equi-joins.
 
     A TIMESTAMP WITH TIME ZONE column (arrow timestamp with tz) on one side and a plain
     TIMESTAMP column (arrow timestamp without tz) on the other must be rejected by the
-    ComparisonContract once Green wires DuckDBMergeEngine._column_semantics. Today duckdb has
-    no _column_semantics override, so the guard never fires.
+    ComparisonContract. DuckDBMergeEngine opts into the guard
+    (`provides_column_semantics = True`) and implements _column_semantics.
     """
 
     @staticmethod

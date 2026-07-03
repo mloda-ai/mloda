@@ -34,6 +34,8 @@ class IcebergFilterEngine(BaseFilterEngine):
     for optimal performance through predicate pushdown.
     """
 
+    provides_column_semantics = True
+
     @classmethod
     def final_filters(cls) -> bool:
         """Iceberg filters are applied during scan, not after feature calculation."""

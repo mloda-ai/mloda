@@ -15,6 +15,8 @@ from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation
 
 
 class SqliteMergeEngine(SqlBaseMergeEngine):
+    provides_column_semantics = True
+
     def _merge_relations(self, left_data: Any, right_data: Any, union_all: bool) -> Any:
         if self.framework_connection is None:
             raise ValueError("Framework connection is not set. Please set the framework connection before merging.")

@@ -10,6 +10,8 @@ from mloda.core.filter.single_filter import SingleFilter
 
 
 class BaseFilterEngine(ABC):
+    provides_column_semantics: bool = False
+
     @classmethod
     def final_filters(cls) -> bool:
         """This function should return True if the filters should be applied after the feature calculation."""
@@ -135,9 +137,10 @@ class BaseFilterEngine(ABC):
     def _column_semantics(cls, data: Any, column: str) -> ColumnSemantics:
         """Observed semantics of a column, used by the temporal filter-bound guard.
 
-        Mandatory hook (epic #518, Phase 4): every filter engine must expose its
-        framework-native ColumnSemantics so the tz-awareness guard on datetime
-        range/min/max bounds can fire. The base raises rather than silently skipping.
+        Opt-in hook (Option B, epic #518): the temporal filter-bound guard only calls
+        this when the engine sets ``provides_column_semantics = True``. An engine that
+        opts in promises to expose its framework-native ColumnSemantics; the base raises
+        NotImplementedError so a forgotten override fails loudly.
         """
         raise NotImplementedError(
             f"{cls.__name__} must implement _column_semantics(data, column) "
@@ -148,12 +151,18 @@ class BaseFilterEngine(ABC):
     def _validate_temporal_filter_bounds(cls, data: Any, filter_feature: SingleFilter) -> None:
         """Guard that native datetime range/min/max bounds match the column's tz-awareness.
 
-        Only reads column semantics when a bound is actually a ``datetime`` (pandas
+        The guard is opt-in (Option B, epic #518): it is skipped entirely unless the
+        engine sets ``provides_column_semantics = True``, so a time-agnostic filter engine
+        author is never forced to implement ``_column_semantics``. When opted in, it only
+        reads column semantics when a bound is actually a ``datetime`` (pandas
         ``Timestamp`` is a ``datetime`` subclass, so it is included). Numeric/string
         filters never touch ``_column_semantics``. ``require_compatible`` no-ops unless
         both the column and the bound are temporal, so non-temporal columns are not
         falsely flagged.
         """
+        if cls.provides_column_semantics is False:
+            return
+
         param = filter_feature.parameter
         candidates = [param.value, param.min_value, param.max_value]
         datetime_bounds = [b for b in candidates if isinstance(b, datetime)]

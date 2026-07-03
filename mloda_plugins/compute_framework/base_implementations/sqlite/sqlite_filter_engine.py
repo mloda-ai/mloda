@@ -7,6 +7,8 @@ from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import q
 
 
 class SqliteFilterEngine(SqlBaseFilterEngine):
+    provides_column_semantics = True
+
     @classmethod
     def _column_semantics(cls, data: Any, column: str) -> ColumnSemantics:
         return sql_type_semantics.column_semantics_from_arrow(

@@ -5,7 +5,6 @@ try:
 except ImportError:
     pyarrow_json = None
 
-from mloda.provider import FeatureSet
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
 
@@ -118,6 +117,8 @@ class JsonReader(ReadFile):
     - Only requested fields are loaded into memory
     """
 
+    _file_format_label = "JSON"
+
     @classmethod
     def suffix(cls) -> tuple[str, ...]:
         return (
@@ -126,9 +127,11 @@ class JsonReader(ReadFile):
         )
 
     @classmethod
-    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-        if pyarrow_json is None:
-            raise ImportError("pyarrow is required to read JSON files. Install it with: pip install 'mloda[pyarrow]'")
+    def _pyarrow_module(cls) -> Any:
+        return pyarrow_json
+
+    @classmethod
+    def produce_table(cls, data_access: Any, column_names: list[str]) -> Any:
         result = pyarrow_json.read_json(
             data_access,
             parse_options=pyarrow_json.ParseOptions(
@@ -136,7 +139,7 @@ class JsonReader(ReadFile):
                 unexpected_field_behavior="error",
             ),
         )
-        return result.select(list(features.get_all_names()))
+        return result.select(column_names)
 
     @classmethod
     def get_column_names(cls, file_name: str) -> Any:

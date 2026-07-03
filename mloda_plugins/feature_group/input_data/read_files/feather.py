@@ -5,7 +5,6 @@ try:
 except ImportError:
     pyarrow_feather = None
 
-from mloda.provider import FeatureSet
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
 
@@ -100,6 +99,8 @@ class FeatherReader(ReadFile):
     - Columnar format enables selective column reading
     """
 
+    _file_format_label = "Feather"
+
     @classmethod
     def suffix(cls) -> tuple[str, ...]:
         return (
@@ -108,9 +109,9 @@ class FeatherReader(ReadFile):
         )
 
     @classmethod
-    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-        if pyarrow_feather is None:
-            raise ImportError(
-                "pyarrow is required to read Feather files. Install it with: pip install 'mloda[pyarrow]'"
-            )
-        return pyarrow_feather.read_table(source=data_access, columns=list(features.get_all_names()))
+    def _pyarrow_module(cls) -> Any:
+        return pyarrow_feather
+
+    @classmethod
+    def produce_table(cls, data_access: Any, column_names: list[str]) -> Any:
+        return pyarrow_feather.read_table(source=data_access, columns=column_names)

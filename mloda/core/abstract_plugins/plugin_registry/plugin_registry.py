@@ -91,6 +91,12 @@ class PluginRegistry:
         self._entries: dict[str, PluginRegistryEntry] = {}
         self._policy: PluginPolicy | None = None
         self._policy_warned_keys: set[str] = set()
+        self._generation: int = 0
+
+    @property
+    def generation(self) -> int:
+        """Bulk-invalidation counter: bumped by clear() and by restore() to different content only."""
+        return self._generation
 
     @classmethod
     def default(cls) -> PluginRegistry:
@@ -204,10 +210,14 @@ class PluginRegistry:
         return dict(self._entries)
 
     def restore(self, snapshot: PluginRegistrySnapshot) -> None:
-        self._entries = dict(snapshot)
+        new_entries = dict(snapshot)
+        if new_entries != self._entries:
+            self._generation += 1
+        self._entries = new_entries
 
     def clear(self) -> None:
         self._entries.clear()
+        self._generation += 1
 
 
 _default: PluginRegistry | None = None

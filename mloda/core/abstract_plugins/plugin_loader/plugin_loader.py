@@ -57,6 +57,8 @@ ENTRY_POINT_GROUPS: dict[str, type[Any]] = {
 class PluginLoader:
     _disabled_groups: ClassVar[set[str]] = set()
     _cached_loader: ClassVar[Optional["PluginLoader"]] = None
+    _cached_generation: ClassVar[int | None] = None
+    _building_thread_id: ClassVar[int | None] = None
     _cache_lock: ClassVar[threading.Lock] = threading.Lock()
 
     @classmethod
@@ -96,29 +98,45 @@ class PluginLoader:
         """Return a fully loaded PluginLoader, building and caching it on first use.
 
         The result is cached: repeated calls return the same loader without redoing the load work.
+        The cache automatically rebuilds when the default registry's generation changed, i.e. after
+        ``clear()`` or ``restore()`` to different content, so a plain ``all()`` re-populates the registry.
 
-        Pass ``force_reload=True`` (or call ``reset_cache()`` first) to rebuild, for example after the
-        default plugin registry has been cleared/restored or to pick up newly installed entry points.
-        This is the supported way to re-populate registry state.
+        Pass ``force_reload=True`` (or call ``reset_cache()`` first) to rebuild anyway, for example to
+        pick up newly installed entry points.
 
-        Must not be called re-entrantly from within plugin import / entry-point loading: the cache lock
-        is non-reentrant, so a re-entrant call during the initial build would deadlock. Treat the returned
+        Must not be called re-entrantly from within plugin import / entry-point loading: such a call
+        raises RuntimeError instead of deadlocking on the non-reentrant cache lock. Treat the returned
         loader as read-only (do not mutate its ``plugins``/``plugin_graph``), since it is shared across callers.
         """
-        if not force_reload and cls._cached_loader is not None:
-            return cls._cached_loader
+        cached = cls._cached_loader
+        if not force_reload and cached is not None and PluginRegistry.default().generation == cls._cached_generation:
+            return cached
+        if cls._building_thread_id == threading.get_ident():
+            raise RuntimeError(
+                "PluginLoader.all() was called re-entrantly from within plugin import / entry-point "
+                "loading; this would deadlock on the cache lock. Remove the nested all() call."
+            )
         with cls._cache_lock:
-            if force_reload or cls._cached_loader is None:
-                plugin_loader = cls()
-                plugin_loader.load_all_plugins()
-                plugin_loader.load_entry_points()
-                cls._cached_loader = plugin_loader
-            return cls._cached_loader
+            current = cls._cached_loader
+            if force_reload or current is None or PluginRegistry.default().generation != cls._cached_generation:
+                cls._building_thread_id = threading.get_ident()
+                try:
+                    plugin_loader = cls()
+                    plugin_loader.load_all_plugins()
+                    plugin_loader.load_entry_points()
+                    # Recorded after the build so registry mutations made during loading are covered.
+                    cls._cached_generation = PluginRegistry.default().generation
+                    cls._cached_loader = plugin_loader
+                    current = plugin_loader
+                finally:
+                    cls._building_thread_id = None
+            return current
 
     @classmethod
     def reset_cache(cls) -> None:
         with cls._cache_lock:
             cls._cached_loader = None
+            cls._cached_generation = None
 
     def load_entry_points(self, group: str | None = None) -> list[str]:
         """Discover installed entry-point manifests and register their plugin classes."""

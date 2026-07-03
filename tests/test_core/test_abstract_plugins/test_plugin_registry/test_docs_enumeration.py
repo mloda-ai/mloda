@@ -26,6 +26,7 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import register_plugin as registry_register
+from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.api.plugin_docs import (
     get_compute_framework_docs,
     get_extender_docs,
@@ -205,4 +206,53 @@ class TestDocsFallbackNonRegression:
         names = [fg.name for fg in get_feature_group_docs()]
         assert names.count("_DocsEnumOnceFG") == 1, (
             "a class that is both registered and subclass-reachable must not be documented twice"
+        )
+
+
+class TestRegisteredOnlyHonorsInjectedRegistry:
+    """registered_only=True must consult the collector's injected registry.
+
+    The engine path honors an injected registry via registry_for(plugin_collector),
+    falling back to the default registry only when none is injected. The docs path
+    must behave identically for multi-tenant instance scoping.
+    """
+
+    def test_registered_only_consults_injected_registry(self) -> None:
+        PluginRegistry.default().clear()
+
+        class _DocsEnumInjectedFG(FeatureGroup):
+            """Registered in the injected tenant registry only."""
+
+        class _DocsEnumDefaultOnlyFG(FeatureGroup):
+            """Registered in the default registry only."""
+
+        registry_register(_DocsEnumDefaultOnlyFG)
+
+        tenant = PluginRegistry()
+        tenant.register(_DocsEnumInjectedFG)
+
+        collector = PluginCollector().set_registry(tenant)
+        names = [fg.name for fg in get_feature_group_docs(plugin_collector=collector, registered_only=True)]
+
+        assert "_DocsEnumInjectedFG" in names, (
+            "registered_only=True must document classes in the collector's injected registry"
+        )
+        assert "_DocsEnumDefaultOnlyFG" not in names, (
+            "registered_only=True must consult the injected registry, not the default registry"
+        )
+
+    def test_registered_only_falls_back_to_default_without_injected_registry(self) -> None:
+        PluginRegistry.default().clear()
+
+        class _DocsEnumFallbackDefaultFG(FeatureGroup):
+            """Registered in the default registry; used with a collector that injects none."""
+
+        registry_register(_DocsEnumFallbackDefaultFG)
+
+        collector = PluginCollector()
+        assert collector.registry is None
+        names = [fg.name for fg in get_feature_group_docs(plugin_collector=collector, registered_only=True)]
+
+        assert "_DocsEnumFallbackDefaultFG" in names, (
+            "a collector without an injected registry must fall back to the default registry"
         )

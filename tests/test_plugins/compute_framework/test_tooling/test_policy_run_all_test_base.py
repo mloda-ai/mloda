@@ -9,7 +9,6 @@ and exercise both the success and raises expectations, in SYNC and in a worker-b
 
 from typing import Any
 
-from mloda.core.abstract_plugins.compute_framework import EmptyResultError
 from mloda.user import ParallelizationMode
 
 from tests.test_plugins.compute_framework.test_tooling.empty_result_run_all_test_base import (
@@ -60,7 +59,7 @@ def test_policy_base_drives_raises_case(flight_server: Any) -> None:
     result = conformance.assert_policy_case(
         feature_name="empty_result_schemaless_col",
         plugin_collector=_ENABLED_SCHEMALESS_ALLOWED,
-        expectation=PolicyRaises(match_substring=EmptyResultError.__name__),
+        expectation=PolicyRaises(match_substring="Result carries no schema"),
         mode=ParallelizationMode.SYNC,
         flight_server=flight_server,
     )

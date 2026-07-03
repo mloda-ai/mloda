@@ -1,6 +1,12 @@
 REPORT_URL = "https://github.com/mloda-ai/mloda/issues"
 
 
+class MlodaRunError(Exception):
+    """Raised by mlodaAPI when a worker step failed and the original exception
+    object could not be preserved (e.g. the internal critical error_out path,
+    or a non-picklable exception crossing a process boundary)."""
+
+
 def internal_invariant_error(
     invariant: str,
     actual_values: str = "",

@@ -265,7 +265,7 @@ class ComputeFrameworkExecutor:
             msg = f"{error_message}\nFull traceback:\n{traceback.format_exc()}"
             logging.error(msg)
             exc_info = traceback.format_exc()
-            self.cfw_register.set_error(msg, exc_info)
+            self.cfw_register.set_error(msg, exc_info, exception=e)
 
     def thread_execute_step(self, step: Any) -> None:
         """

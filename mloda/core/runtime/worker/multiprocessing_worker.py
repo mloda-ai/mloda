@@ -141,7 +141,7 @@ def worker(
             logging.error(msg)
             exc_info = traceback.format_exc()
             if cfw_register:
-                cfw_register.set_error(msg, exc_info)
+                cfw_register.set_error(msg, exc_info, exception=e)
 
             _handle_stop_command(command_queue)
             break

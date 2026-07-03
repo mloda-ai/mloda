@@ -22,6 +22,7 @@ from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.core.abstract_plugins.components.error_utils import MlodaRunError
 
 
 logger = logging.getLogger(__name__)
@@ -135,7 +136,10 @@ class ExecutionOrchestrator:
             error = self.cfw_register.get_error()
             if error:
                 logger.error(self.cfw_register.get_error_exc_info())
-                raise Exception(self.cfw_register.get_error_exc_info(), self.cfw_register.get_error_msg())
+                original = self.cfw_register.get_error_exception()
+                if isinstance(original, BaseException):
+                    raise original
+                raise MlodaRunError(self.cfw_register.get_error_msg())
             return False
         return True
 

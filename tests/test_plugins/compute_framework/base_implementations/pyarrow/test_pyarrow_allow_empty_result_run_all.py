@@ -55,4 +55,4 @@ def test_zero_column_raises_pyarrow(flight_server: Any) -> None:
             parallelization_modes={ParallelizationMode.SYNC},
             flight_server=flight_server,
         )
-    assert EmptyResultError.__name__ in str(excinfo.value)
+    assert isinstance(excinfo.value, EmptyResultError)

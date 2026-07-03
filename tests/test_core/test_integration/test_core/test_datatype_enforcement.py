@@ -489,7 +489,7 @@ class TestStrictTypeEnforcementPropagation:
             )
         assert "INT32" in str(exc_info.value)
         assert "INT64" in str(exc_info.value)
-        assert "DataTypeMismatchError" in str(exc_info.value)
+        assert isinstance(exc_info.value, DataTypeMismatchError)
 
         # LENIENT MODE: Should pass because numeric types are interchangeable
         result = MlodaTestRunner.run_api(
@@ -551,4 +551,4 @@ class TestStrictTypeEnforcementPropagation:
         assert "BaseFG" in str(exc_info.value)
         assert "INT32" in str(exc_info.value)
         assert "INT64" in str(exc_info.value)
-        assert "DataTypeMismatchError" in str(exc_info.value)
+        assert isinstance(exc_info.value, DataTypeMismatchError)

@@ -49,6 +49,7 @@ class CfwManager:
         self.error = False  # multiprocessing error flag
         self.msg: Any = None
         self.exc_info: Any = None
+        self.exception: Any = None
 
         self.uuid_column_names: dict[UUID, set[str]] = {}  # We only set this in case of TransformFrameworkStep
         self.uuid_flyway_datasets: dict[UUID, set[UUID]] = {}
@@ -179,15 +180,20 @@ class CfwManager:
         """Retrieves the set of parallelization modes."""
         return self.parallelization_modes
 
-    def set_error(self, msg: Any, exc_info: Any) -> None:
+    def set_error(self, msg: Any, exc_info: Any, exception: Any = None) -> None:
         """Sets an error message and exception information."""
         self.error = True
         self.msg = msg
         self.exc_info = exc_info
+        self.exception = exception
 
     def get_error(self) -> bool:
         """Retrieves the error flag."""
         return self.error
+
+    def get_error_exception(self) -> Any:
+        """Retrieves the original exception object, if captured."""
+        return self.exception
 
     def get_error_msg(self) -> Any:
         """Retrieves the error message."""

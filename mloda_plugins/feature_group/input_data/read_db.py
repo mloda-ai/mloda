@@ -23,11 +23,6 @@ class ReadDB(BaseInputData):
 
     _auto_load_group: str = "feature_group/input_data/read_dbs"
 
-    @staticmethod
-    def _underlying(member: Any) -> Any:
-        """Underlying function of a classmethod/staticmethod/plain override, for identity comparison."""
-        return getattr(member, "__func__", member)
-
     @classmethod
     def prepare_credentials(cls, data_access: Any, features: FeatureSet) -> Any:
         """Overridable hook to normalize/validate credentials before connecting; default is pass-through."""
@@ -42,7 +37,7 @@ class ReadDB(BaseInputData):
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
         """Template method: probe the row hook, prepare credentials, connect, produce rows, then close."""
-        if cls._underlying(cls.produce_rows) is cls._underlying(ReadDB.produce_rows):
+        if not cls._is_overridden(ReadDB, "produce_rows"):
             raise NotImplementedError
 
         credentials = cls.prepare_credentials(data_access, features)
@@ -61,11 +56,9 @@ class ReadDB(BaseInputData):
         # effects, no escaping exceptions) and works for classmethod/staticmethod/plain
         # overrides alike. Requiring connect screens out intermediate bases that supply
         # a shared produce_rows but leave connect abstract.
-        if cls._underlying(cls.load_data) is not cls._underlying(ReadDB.load_data):
+        if cls._is_overridden(ReadDB, "load_data"):
             return True
-        return cls._underlying(cls.produce_rows) is not cls._underlying(ReadDB.produce_rows) and cls._underlying(
-            cls.connect
-        ) is not cls._underlying(ReadDB.connect)
+        return cls._is_overridden(ReadDB, "produce_rows") and cls._is_overridden(ReadDB, "connect")
 
     @classmethod
     def connect(cls, credentials: Any) -> Any:

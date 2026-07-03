@@ -25,13 +25,51 @@ class ReadDocument(BaseInputData):
 
     This tells ReadDocument to include .json files and ReadFile to
     auto-exclude them for that feature.
+
+    load_data is a template method exposing an opt-in lifecycle seam: a new
+    reader implements ``produce_document`` (optionally ``document_file_type``)
+    instead of overriding ``load_data`` wholesale. Overriding ``load_data``
+    directly is still supported.
     """
 
     _auto_load_group: str = "feature_group/input_data/read_files"
 
     @classmethod
-    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+    def produce_document(cls, file_path: str) -> Any:
+        """The per-format parse hook; a new reader implements THIS instead of overriding load_data wholesale."""
         raise NotImplementedError
+
+    @classmethod
+    def document_file_type(cls, file_path: str) -> str:
+        """Overridable hook for the envelope's file_type; default is the first declared suffix without the dot."""
+        return cls.suffix()[0].lstrip(".")
+
+    @classmethod
+    def _read_text(cls, file_path: str) -> str:
+        """Shared helper for text-based readers: read the whole file as UTF-8 text."""
+        with open(file_path, encoding="utf-8") as file:
+            return file.read()
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        """Template method: probe the parse hook, resolve the path, parse, then wrap the one-row envelope."""
+        if not cls._is_overridden(ReadDocument, "produce_document"):
+            raise NotImplementedError
+
+        file_path = features.get_options_key(cls.__name__)
+        content = cls.produce_document(file_path)
+        return [{cls.get_class_name(): content, "source": file_path, "file_type": cls.document_file_type(file_path)}]
+
+    @classmethod
+    def supports_scoped_data_access(cls) -> bool:
+        # A ReadDocument subclass is a final scoped reader if it overrides load_data
+        # wholesale, or implements the per-format parse hook (produce_document).
+        # Decided structurally via _is_overridden() so plugin discovery never
+        # executes the lifecycle (no produce_document() side effects, no escaping
+        # exceptions) and works for classmethod/staticmethod/plain overrides alike.
+        if cls._is_overridden(ReadDocument, "load_data"):
+            return True
+        return cls._is_overridden(ReadDocument, "produce_document")
 
     @classmethod
     def suffix(cls) -> tuple[str, ...]:

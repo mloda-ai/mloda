@@ -18,6 +18,16 @@ class BaseInputData(ABC):
         """This function should return the name of the data access."""
         return cls.__name__
 
+    @staticmethod
+    def _underlying(member: Any) -> Any:
+        """Underlying function of a classmethod/staticmethod/plain override, for identity comparison."""
+        return getattr(member, "__func__", member)
+
+    @classmethod
+    def _is_overridden(cls, base: type, method_name: str) -> bool:
+        """Structurally check whether cls overrides method_name relative to base."""
+        return cls._underlying(getattr(cls, method_name)) is not cls._underlying(getattr(base, method_name))
+
     def matches(
         self,
         feature_name: str,

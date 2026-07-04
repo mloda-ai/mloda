@@ -5,6 +5,7 @@ Integration tests for combined feature groups.
 from mloda.user import mloda
 from mloda.user import Feature
 from mloda.user import PluginCollector
+from mloda.user import results_by_feature
 
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -71,13 +72,9 @@ class TestCombinedFeatureGroupsPandas:
             plugin_collector=plugin_collector,
         )
 
-        for res in result:
-            if "price__mean_imputed__sum_7_day_window__max_aggr" in res.columns:
-                res_check = res["price__mean_imputed__sum_7_day_window__max_aggr"]
-
-        for res in result2:
-            if "price__mean_imputed__sum_7_day_window__max_aggr" in res.columns:
-                res2_check = res["price__mean_imputed__sum_7_day_window__max_aggr"]
+        col = "price__mean_imputed__sum_7_day_window__max_aggr"
+        res_check = results_by_feature(result)[col][col]
+        res2_check = results_by_feature(result2)[col][col]
 
         assert res_check.equals(res2_check)
 

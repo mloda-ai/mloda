@@ -343,15 +343,11 @@ class TestSubColumnIntegration:
             }
         )
 
-        result = mloda.run_all(
+        df = mloda.run_all_as_dataframe(
             ["sub_column_consumer_output"],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
         )
-
-        assert len(result) >= 1, "Should return at least one result"
-
-        df = pd.concat(result, axis=1) if len(result) > 1 else result[0]
 
         assert "sub_column_consumer_output" in df.columns, "sub_column_consumer_output should be in the result"
 
@@ -413,15 +409,11 @@ class TestSubColumnIntegration:
             }
         )
 
-        result = mloda.run_all(
+        df = mloda.run_all_as_dataframe(
             ["validating_consumer_output"],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
         )
-
-        assert len(result) >= 1, "Should complete without error"
-
-        df = pd.concat(result, axis=1) if len(result) > 1 else result[0]
 
         expected = np.array([100, 200, 300, 400, 500])
         np.testing.assert_array_equal(
@@ -473,15 +465,11 @@ class TestSubColumnIntegration:
             }
         )
 
-        result = mloda.run_all(
+        df = mloda.run_all_as_dataframe(
             ["multi_sub_column_consumer_output"],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
         )
-
-        assert len(result) >= 1, "Should return at least one result"
-
-        df = pd.concat(result, axis=1) if len(result) > 1 else result[0]
 
         assert "multi_sub_column_consumer_output" in df.columns
 
@@ -540,15 +528,11 @@ class TestSubColumnIntegration:
             }
         )
 
-        result = mloda.run_all(
+        df = mloda.run_all_as_dataframe(
             ["sub_column_consumer_output__value_doubled"],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
         )
-
-        assert len(result) >= 1, "Should return at least one result"
-
-        df = pd.concat(result, axis=1) if len(result) > 1 else result[0]
 
         assert "sub_column_consumer_output__value_doubled" in df.columns
 
@@ -583,15 +567,11 @@ class TestSubColumnIntegration:
             }
         )
 
-        result = mloda.run_all(
+        df = mloda.run_all_as_dataframe(
             ["base_feature", "sub_column_consumer_output"],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
         )
-
-        assert len(result) >= 1, "Should return at least one result"
-
-        df = pd.concat(result, axis=1) if len(result) > 1 else result[0]
 
         assert "base_feature~0" in df.columns, "base_feature~0 should be in result"
         assert "base_feature~1" in df.columns, "base_feature~1 should be in result"
@@ -683,15 +663,11 @@ class TestSubColumnIntegration:
             }
         )
 
-        result = mloda.run_all(
+        df = mloda.run_all_as_dataframe(
             ["second_consumer_output"],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
         )
-
-        assert len(result) >= 1, "Should return at least one result"
-
-        df = pd.concat(result, axis=1) if len(result) > 1 else result[0]
 
         assert "second_consumer_output" in df.columns
 

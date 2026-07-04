@@ -20,6 +20,7 @@ from mloda.user import Options
 from mloda.user import ParallelizationMode
 from mloda.user import PluginCollector
 from mloda.user import mloda
+from mloda.user import results_by_feature
 
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame  # noqa: F401
 
@@ -98,9 +99,8 @@ def test_scoped_derived_feature_resolves_and_computes(flight_server: Any) -> Non
         parallelization_modes={ParallelizationMode.SYNC},
     )
 
-    values: list[str] = []
-    for res in result:
-        values = list(res[Derived508Scoped.get_class_name()].values)
+    col = Derived508Scoped.get_class_name()
+    values = list(results_by_feature(result)[col][col].values)
 
     assert values == ["s1|30", "s2|7"]
 
@@ -195,9 +195,8 @@ def test_scoped_key_shares_read_with_siblings(flight_server: Any) -> None:
         parallelization_modes={ParallelizationMode.SYNC},
     )
 
-    values: list[str] = []
-    for res in result:
-        values = list(res[Derived508CounterScoped.get_class_name()].values)
+    col = Derived508CounterScoped.get_class_name()
+    values = list(results_by_feature(result)[col][col].values)
 
     assert values == ["s1|30", "s2|7"]
     assert Source508CounterA.calls == 1
@@ -271,13 +270,6 @@ class Derived508IndepB(FeatureGroup):
         return {cls.get_class_name(): result}
 
 
-def _column_from_result(result: Any, column: str) -> list[Any]:
-    for res in result:
-        if column in res:
-            return list(res[column].values)
-    return []
-
-
 def test_two_derived_fgs_scope_same_key_to_different_sources(flight_server: Any) -> None:
     """Two derived FGs scope the same-name key to different sources and resolve independently.
 
@@ -301,8 +293,11 @@ def test_two_derived_fgs_scope_same_key_to_different_sources(flight_server: Any)
         parallelization_modes={ParallelizationMode.SYNC},
     )
 
-    values_a = _column_from_result(result, Derived508IndepA.get_class_name())
-    values_b = _column_from_result(result, Derived508IndepB.get_class_name())
+    mapping = results_by_feature(result)
+    col_a = Derived508IndepA.get_class_name()
+    col_b = Derived508IndepB.get_class_name()
+    values_a = list(mapping[col_a][col_a].values)
+    values_b = list(mapping[col_b][col_b].values)
 
     assert values_a == ["s1|30", "s2|7"]
     assert values_b == ["s1|300", "s2|400"]

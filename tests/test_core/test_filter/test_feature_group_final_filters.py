@@ -28,7 +28,7 @@ import pyarrow.compute as pc
 from mloda.provider import BaseFilterEngine, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
 from mloda.provider import BaseInputData
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_filter_engine import PyArrowFilterEngine
-from mloda.user import Feature, Features, GlobalFilter, ParallelizationMode
+from mloda.user import Feature, Features, GlobalFilter, ParallelizationMode, results_by_feature
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_SYNC_THREADING
 
@@ -535,18 +535,12 @@ class TestFeatureGroupFinalFilters:
             global_filter=global_filter,
         )
 
-        results_by_feature = {}
-        for res in result.results:
-            data = res.to_pydict()
-            if inline_feature_name in data:
-                results_by_feature[inline_feature_name] = data[inline_feature_name]
-            if final_feature_name in data:
-                results_by_feature[final_feature_name] = data[final_feature_name]
+        mapping = results_by_feature(result.results)
 
         # Inline FeatureGroup preserves all 4 rows with masked aggregation
-        assert results_by_feature[inline_feature_name] == [10, 10, 30, 30]
+        assert mapping[inline_feature_name].to_pydict()[inline_feature_name] == [10, 10, 30, 30]
         # Regular FeatureGroup has non-matching rows eliminated by final filtering
-        assert results_by_feature[final_feature_name] == [10, 30]
+        assert mapping[final_feature_name].to_pydict()[final_feature_name] == [10, 30]
 
     def test_fg_skip_with_inline_engine(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         """FG=False, Engine=False. Both agree to skip final filtering. Rows preserved.

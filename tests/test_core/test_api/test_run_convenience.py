@@ -1,13 +1,13 @@
-"""Failing tests for the mlodaAPI convenience classmethods (issues #564 and #568).
+"""Failing tests for the fluent Results returned by ``mlodaAPI.run_all`` (issues #564 and #568).
 
-``mlodaAPI.run_one`` (issue #564): run a SINGLE feature and return a flat list of
-row dicts, regardless of the compute framework that produced the result.
+``mlodaAPI.run_all`` must return a ``Results`` instance (a ``list`` subclass exported from
+``mloda.user``) whose accessors replace the removed ``run_one`` / ``run_all_as_dataframe``:
 
-``mlodaAPI.run_all_as_dataframe`` (issue #568): run like ``run_all`` and concatenate
-the per-feature-group results horizontally into ONE DataFrame (pandas or polars).
+- ``run_all(...).get_rows()``: one feature's result as a flat list of row dicts
+- ``run_all(...).get_values(name)``: one column as a plain Python list
+- ``run_all(...).get_df()``: all results horizontally concatenated into ONE DataFrame
 
-Both methods do not exist yet; every test in this module must fail with
-``AttributeError`` until the Green agent implements them.
+``Results`` does not exist yet; this module must fail at collection with ImportError.
 
 All FeatureGroups are module-local with unique ``rc564_`` / ``rc568_`` feature names
 and each run is pinned to its own ``PluginCollector`` so the tests stay deterministic
@@ -21,7 +21,7 @@ import pyarrow as pa
 import pytest
 
 from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet
-from mloda.user import Feature, PluginCollector, mlodaAPI
+from mloda.user import Feature, PluginCollector, Results, mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame  # noqa: F401
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable  # noqa: F401
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (  # noqa: F401
@@ -37,7 +37,7 @@ except ImportError:
 
 
 class Rc564PandasFeatureGroup(FeatureGroup):
-    """Root FG producing a single pandas column for the run_one tests."""
+    """Root FG producing a single pandas column for the get_rows tests."""
 
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
@@ -49,7 +49,7 @@ class Rc564PandasFeatureGroup(FeatureGroup):
 
 
 class Rc564DictFeatureGroup(FeatureGroup):
-    """Root FG producing a single columnar-dict column for the run_one tests."""
+    """Root FG producing a single columnar-dict column for the get_rows tests."""
 
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
@@ -61,7 +61,7 @@ class Rc564DictFeatureGroup(FeatureGroup):
 
 
 class Rc564ArrowFeatureGroup(FeatureGroup):
-    """Root FG producing a single pyarrow column for the run_one tests."""
+    """Root FG producing a single pyarrow column for the get_rows tests."""
 
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
@@ -73,7 +73,7 @@ class Rc564ArrowFeatureGroup(FeatureGroup):
 
 
 class Rc564PolarsFeatureGroup(FeatureGroup):
-    """Root FG producing a single polars column for the run_one tests."""
+    """Root FG producing a single polars column for the get_rows tests."""
 
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
@@ -145,7 +145,7 @@ class Rc568PolarsRightFeatureGroup(FeatureGroup):
 
 
 class Rc568DictFeatureGroup(FeatureGroup):
-    """Columnar-dict FG proving run_all_as_dataframe rejects non-DataFrame results."""
+    """Columnar-dict FG proving get_df rejects non-DataFrame results."""
 
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
@@ -169,70 +169,84 @@ _RC568_POLARS_PAIR = PluginCollector.enabled_feature_groups({Rc568PolarsLeftFeat
 _RC568_DICT = PluginCollector.enabled_feature_groups({Rc568DictFeatureGroup})
 
 
-class TestRunOne:
-    """Contract for ``mlodaAPI.run_one`` (issue #564)."""
+class TestRunAllReturnType:
+    """``mlodaAPI.run_all`` must return a fluent ``Results`` that is still a plain list."""
 
-    def test_run_one_pandas_returns_flat_row_dicts(self) -> None:
-        """A pandas-backed single feature comes back as a flat list of row dicts."""
-        result = mlodaAPI.run_one(
-            Feature("rc564_pandas_feature"),
+    def test_run_all_returns_results_instance_that_is_a_list(self) -> None:
+        result = mlodaAPI.run_all(
+            [Feature("rc568_pd_left")],
+            compute_frameworks=["PandasDataFrame"],
+            plugin_collector=_RC568_PANDAS_SINGLE,
+        )
+
+        assert isinstance(result, Results)
+        assert isinstance(result, list)
+
+
+class TestRunAllGetRows:
+    """``run_all(...).get_rows()`` yields flat row dicts for every compute framework."""
+
+    def test_pandas_result_returns_flat_row_dicts(self) -> None:
+        rows = mlodaAPI.run_all(
+            [Feature("rc564_pandas_feature")],
             compute_frameworks=["PandasDataFrame"],
             plugin_collector=_RC564_PANDAS,
-        )
+        ).get_rows()
 
-        assert result == [{"rc564_pandas_feature": 1}, {"rc564_pandas_feature": 2}]
+        assert rows == [{"rc564_pandas_feature": 1}, {"rc564_pandas_feature": 2}]
 
-    def test_run_one_python_dict_returns_flat_row_dicts(self) -> None:
-        """A PythonDict-backed single feature (given as str) yields identical flat rows."""
-        result = mlodaAPI.run_one(
-            "rc564_dict_feature",
+    def test_python_dict_result_returns_flat_row_dicts(self) -> None:
+        rows = mlodaAPI.run_all(
+            ["rc564_dict_feature"],
             compute_frameworks=["PythonDictFramework"],
             plugin_collector=_RC564_DICT,
-        )
+        ).get_rows()
 
-        assert result == [{"rc564_dict_feature": 1}, {"rc564_dict_feature": 2}]
+        assert rows == [{"rc564_dict_feature": 1}, {"rc564_dict_feature": 2}]
 
-    def test_run_one_pyarrow_returns_flat_row_dicts(self) -> None:
-        """A pyarrow-backed single feature comes back as a flat list of row dicts."""
-        result = mlodaAPI.run_one(
-            Feature("rc564_arrow_feature"),
+    def test_pyarrow_result_returns_flat_row_dicts(self) -> None:
+        rows = mlodaAPI.run_all(
+            [Feature("rc564_arrow_feature")],
             compute_frameworks=["PyArrowTable"],
             plugin_collector=_RC564_ARROW,
-        )
+        ).get_rows()
 
-        assert result == [{"rc564_arrow_feature": 1}, {"rc564_arrow_feature": 2}]
+        assert rows == [{"rc564_arrow_feature": 1}, {"rc564_arrow_feature": 2}]
 
     @pytest.mark.skipif(pl is None, reason="polars is not installed")
-    def test_run_one_polars_returns_flat_row_dicts(self) -> None:
-        """A polars-backed single feature comes back as a flat list of row dicts."""
-        result = mlodaAPI.run_one(
-            Feature("rc564_polars_feature"),
+    def test_polars_result_returns_flat_row_dicts(self) -> None:
+        rows = mlodaAPI.run_all(
+            [Feature("rc564_polars_feature")],
             compute_frameworks=["PolarsDataFrame"],
             plugin_collector=_RC564_POLARS,
-        )
+        ).get_rows()
 
-        assert result == [{"rc564_polars_feature": 1}, {"rc564_polars_feature": 2}]
-
-    def test_run_one_rejects_list_input(self) -> None:
-        """Passing a list instead of a single feature raises a clear ValueError."""
-        with pytest.raises(ValueError, match="single"):
-            mlodaAPI.run_one(
-                [Feature("rc564_pandas_feature")],  # type: ignore[arg-type]
-                compute_frameworks=["PandasDataFrame"],
-                plugin_collector=_RC564_PANDAS,
-            )
+        assert rows == [{"rc564_polars_feature": 1}, {"rc564_polars_feature": 2}]
 
 
-class TestRunAllAsDataframe:
-    """Contract for ``mlodaAPI.run_all_as_dataframe`` (issue #568)."""
+class TestRunAllGetValues:
+    """``run_all(...).get_values(name)`` yields one column as a plain Python list."""
+
+    def test_pandas_result_returns_plain_column_values(self) -> None:
+        values = mlodaAPI.run_all(
+            [Feature("rc568_pd_left")],
+            compute_frameworks=["PandasDataFrame"],
+            plugin_collector=_RC568_PANDAS_SINGLE,
+        ).get_values("rc568_pd_left")
+
+        assert values == [1, 2, 3]
+        assert type(values) is list
+
+
+class TestRunAllGetDf:
+    """``run_all(...).get_df()`` concatenates all results into ONE DataFrame."""
 
     def test_pandas_two_groups_concat_into_one_frame(self) -> None:
-        """Two pandas feature-group results are horizontally concatenated into ONE frame."""
-        result = mlodaAPI.run_all_as_dataframe(
+        result = mlodaAPI.run_all(
             [Feature("rc568_pd_left"), Feature("rc568_pd_right")],
             compute_frameworks=["PandasDataFrame"],
             plugin_collector=_RC568_PANDAS_PAIR,
-        )
+        ).get_df()
 
         assert isinstance(result, pd.DataFrame)
         assert {"rc568_pd_left", "rc568_pd_right"} <= set(result.columns)
@@ -241,12 +255,11 @@ class TestRunAllAsDataframe:
         assert list(result["rc568_pd_right"]) == [10, 20, 30]
 
     def test_pandas_single_group_returns_single_frame(self) -> None:
-        """A single-group run returns that single frame with the requested column."""
-        result = mlodaAPI.run_all_as_dataframe(
+        result = mlodaAPI.run_all(
             [Feature("rc568_pd_left")],
             compute_frameworks=["PandasDataFrame"],
             plugin_collector=_RC568_PANDAS_SINGLE,
-        )
+        ).get_df()
 
         assert isinstance(result, pd.DataFrame)
         assert "rc568_pd_left" in result.columns
@@ -254,12 +267,11 @@ class TestRunAllAsDataframe:
 
     @pytest.mark.skipif(pl is None, reason="polars is not installed")
     def test_polars_two_groups_concat_into_one_frame(self) -> None:
-        """Two polars feature-group results are horizontally concatenated into ONE frame."""
-        result = mlodaAPI.run_all_as_dataframe(
+        result = mlodaAPI.run_all(
             [Feature("rc568_pl_left"), Feature("rc568_pl_right")],
             compute_frameworks=["PolarsDataFrame"],
             plugin_collector=_RC568_POLARS_PAIR,
-        )
+        ).get_df()
 
         assert isinstance(result, pl.DataFrame)
         assert {"rc568_pl_left", "rc568_pl_right"} <= set(result.columns)
@@ -268,19 +280,21 @@ class TestRunAllAsDataframe:
         assert result["rc568_pl_right"].to_list() == [10, 20, 30]
 
     def test_non_dataframe_results_raise_value_error(self) -> None:
-        """PythonDict columnar-dict results cannot be concatenated and raise ValueError."""
+        results = mlodaAPI.run_all(
+            [Feature("rc568_dict_feature")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_RC568_DICT,
+        )
+
         with pytest.raises(ValueError, match="DataFrame"):
-            mlodaAPI.run_all_as_dataframe(
-                [Feature("rc568_dict_feature")],
-                compute_frameworks=["PythonDictFramework"],
-                plugin_collector=_RC568_DICT,
-            )
+            results.get_df()
 
     def test_row_count_mismatch_raises_value_error(self) -> None:
-        """Two groups with different row counts (3 vs 2) raise ValueError on concat."""
+        results = mlodaAPI.run_all(
+            [Feature("rc568_pd_left"), Feature("rc568_pd_short")],
+            compute_frameworks=["PandasDataFrame"],
+            plugin_collector=_RC568_PANDAS_MISMATCH,
+        )
+
         with pytest.raises(ValueError, match="row"):
-            mlodaAPI.run_all_as_dataframe(
-                [Feature("rc568_pd_left"), Feature("rc568_pd_short")],
-                compute_frameworks=["PandasDataFrame"],
-                plugin_collector=_RC568_PANDAS_MISMATCH,
-            )
+            results.get_df()

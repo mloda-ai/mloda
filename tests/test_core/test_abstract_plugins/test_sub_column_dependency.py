@@ -343,11 +343,11 @@ class TestSubColumnIntegration:
             }
         )
 
-        df = mloda.run_all_as_dataframe(
+        df = mloda.run_all(
             ["sub_column_consumer_output"],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
-        )
+        ).get_df()
 
         assert "sub_column_consumer_output" in df.columns, "sub_column_consumer_output should be in the result"
 
@@ -409,11 +409,11 @@ class TestSubColumnIntegration:
             }
         )
 
-        df = mloda.run_all_as_dataframe(
+        df = mloda.run_all(
             ["validating_consumer_output"],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
-        )
+        ).get_df()
 
         expected = np.array([100, 200, 300, 400, 500])
         np.testing.assert_array_equal(
@@ -465,11 +465,11 @@ class TestSubColumnIntegration:
             }
         )
 
-        df = mloda.run_all_as_dataframe(
+        df = mloda.run_all(
             ["multi_sub_column_consumer_output"],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
-        )
+        ).get_df()
 
         assert "multi_sub_column_consumer_output" in df.columns
 
@@ -528,11 +528,11 @@ class TestSubColumnIntegration:
             }
         )
 
-        df = mloda.run_all_as_dataframe(
+        df = mloda.run_all(
             ["sub_column_consumer_output__value_doubled"],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
-        )
+        ).get_df()
 
         assert "sub_column_consumer_output__value_doubled" in df.columns
 
@@ -567,11 +567,11 @@ class TestSubColumnIntegration:
             }
         )
 
-        df = mloda.run_all_as_dataframe(
+        df = mloda.run_all(
             ["base_feature", "sub_column_consumer_output"],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
-        )
+        ).get_df()
 
         assert "base_feature~0" in df.columns, "base_feature~0 should be in result"
         assert "base_feature~1" in df.columns, "base_feature~1 should be in result"
@@ -663,11 +663,11 @@ class TestSubColumnIntegration:
             }
         )
 
-        df = mloda.run_all_as_dataframe(
+        df = mloda.run_all(
             ["second_consumer_output"],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,
-        )
+        ).get_df()
 
         assert "second_consumer_output" in df.columns
 

@@ -360,36 +360,34 @@ AInputFeatureGroup
 
 As the input features can be fulfilled by **multiple other features**, we can have the same processes running in different environments, migrations and processes.
 
-#### Convenience helpers: run_one, run_all_as_dataframe, results_by_feature
+#### Reading results: get_one, get_rows, get_values, get_df
 
-`run_all` returns a list with one result object per feature group, so reading a value requires knowing that nesting. Three helpers cover the common cases: use `run_one` for a single feature (it returns the rows as a flat list of dicts), `run_all_as_dataframe` for one horizontally concatenated DataFrame (pandas or polars; it raises `ValueError` on mismatched row counts or non-DataFrame frameworks), and `results_by_feature` to pick a `run_all` result by column name (multi-output columns like `feature~suffix` are also reachable via their base name; missing names raise `KeyError`).
+`run_all` returns a `Results` list with one result object per feature group. Its accessors read a value without knowing that nesting: `get_rows(name)` converts one feature's result to a flat list of row dicts, `get_values(name)` returns one column as a plain Python list, `get_df()` concatenates all results into one wide DataFrame (pandas or polars; it raises `ValueError` on mismatched row counts or non-DataFrame frameworks), and `get_one(name)` returns the raw result object containing that column. Multi-output columns like `feature~suffix` are also reachable via their base name; unknown names raise `ValueError`.
 
-Reusing the feature groups from the previous example:
+Reusing the `result` from the previous example:
 
 ```python
-from mloda.user import results_by_feature
-
-plugin_collector = PluginCollector.enabled_feature_groups({AInputFeatureGroup, AFeatureInputCreator})
-
-# Single feature: flat rows, no nesting to unpack
-rows = mloda.run_one("AFeatureInputCreator", compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
+# One feature's rows as flat dicts, no nesting to unpack
+rows = result.get_rows("AFeatureInputCreator")
 print(rows)
 
+# One column as a plain Python list
+values = result.get_values("AInputFeatureGroup")
+print(values)
+
 # All features combined into one wide DataFrame
-df = mloda.run_all_as_dataframe(
-    feature_list, compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector
-)
+df = result.get_df()
 print(sorted(df.columns))
 
-# Pick a result from a plain run_all output by column name
-by_name = results_by_feature(result)
-print(by_name["AInputFeatureGroup"])
+# The raw result object containing a column
+print(result.get_one("AInputFeatureGroup"))
 ```
 
 Output:
 
 ``` python
 [{'AFeatureInputCreator': 'TestValue5'}, {'AFeatureInputCreator': 'TestValue6'}]
+[2, 2]
 ['AFeatureInputCreator', 'AInputFeatureGroup']
    AInputFeatureGroup
 0                   2

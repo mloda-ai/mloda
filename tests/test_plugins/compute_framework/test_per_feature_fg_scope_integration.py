@@ -20,7 +20,6 @@ from mloda.user import Options
 from mloda.user import ParallelizationMode
 from mloda.user import PluginCollector
 from mloda.user import mloda
-from mloda.user import results_by_feature
 
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame  # noqa: F401
 
@@ -100,7 +99,7 @@ def test_scoped_derived_feature_resolves_and_computes(flight_server: Any) -> Non
     )
 
     col = Derived508Scoped.get_class_name()
-    values = list(results_by_feature(result)[col][col].values)
+    values = result.get_values(col)
 
     assert values == ["s1|30", "s2|7"]
 
@@ -196,7 +195,7 @@ def test_scoped_key_shares_read_with_siblings(flight_server: Any) -> None:
     )
 
     col = Derived508CounterScoped.get_class_name()
-    values = list(results_by_feature(result)[col][col].values)
+    values = result.get_values(col)
 
     assert values == ["s1|30", "s2|7"]
     assert Source508CounterA.calls == 1
@@ -293,11 +292,10 @@ def test_two_derived_fgs_scope_same_key_to_different_sources(flight_server: Any)
         parallelization_modes={ParallelizationMode.SYNC},
     )
 
-    mapping = results_by_feature(result)
     col_a = Derived508IndepA.get_class_name()
     col_b = Derived508IndepB.get_class_name()
-    values_a = list(mapping[col_a][col_a].values)
-    values_b = list(mapping[col_b][col_b].values)
+    values_a = result.get_values(col_a)
+    values_b = result.get_values(col_b)
 
     assert values_a == ["s1|30", "s2|7"]
     assert values_b == ["s1|300", "s2|400"]

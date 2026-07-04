@@ -18,7 +18,7 @@ from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
-from mloda.core.api.results import _concat_frames, _to_rows
+from mloda.core.api.results import Results
 
 
 class mlodaAPI:
@@ -112,7 +112,7 @@ class mlodaAPI:
         copy_features: bool = True,
         strict_type_enforcement: bool = False,
         column_ordering: Optional[str] = None,
-    ) -> list[Any]:
+    ) -> Results:
         """
         Run feature computation in one step.
 
@@ -136,11 +136,13 @@ class mlodaAPI:
             strict_type_enforcement: If True, enforce strict type matching for typed features.
 
         Returns:
-            List of computed results, one per feature group in execution plan
-            order. Each element is a compute-framework object (e.g.
-            ``pd.DataFrame``, ``pa.Table``) containing only the columns for
-            the requested features resolved by that group. When all requested
-            features resolve to a single group, the list has one element.
+            Results list of computed results, one per feature group in
+            execution plan order. Each element is a compute-framework object
+            (e.g. ``pd.DataFrame``, ``pa.Table``) containing only the columns
+            for the requested features resolved by that group. When all
+            requested features resolve to a single group, the list has one
+            element. Use ``get_one``, ``get_rows``, ``get_values``, or
+            ``get_df`` to read results without knowing the element shape.
 
         Example:
             result = mloda.run_all(
@@ -167,33 +169,6 @@ class mlodaAPI:
             flight_server=flight_server,
             function_extender=function_extender,
         )
-
-    @classmethod
-    def run_one(cls, feature: Feature | str, **run_all_kwargs: Any) -> list[dict[str, Any]]:
-        """Run a single feature and return its result as a flat list of row dicts (issue #564).
-
-        Accepts the same options as ``run_all``, but unlike ``run_all`` they must all be
-        passed as keyword arguments.
-        """
-        if not isinstance(feature, (Feature, str)):
-            raise ValueError("run_one takes a single feature; use run_all for multiple features.")
-        results = cls.run_all([feature], **run_all_kwargs)
-        if len(results) != 1:
-            raise ValueError(
-                f"run_one expected exactly one result, got {len(results)}: the feature resolved "
-                "to multiple result groups. Use run_all instead."
-            )
-        return _to_rows(results[0])
-
-    @classmethod
-    def run_all_as_dataframe(cls, features: Features | list[Feature | str], **run_all_kwargs: Any) -> Any:
-        """Run like ``run_all`` and return one horizontally concatenated DataFrame (issue #568).
-
-        Accepts the same options as ``run_all``, but unlike ``run_all`` they must all be
-        passed as keyword arguments. Raises ValueError on mismatched row counts or when
-        the results are not pandas/polars DataFrames.
-        """
-        return _concat_frames(cls.run_all(features, **run_all_kwargs))
 
     @classmethod
     def stream_all(
@@ -281,7 +256,7 @@ class mlodaAPI:
         flight_server: Optional[Any] = None,
         function_extender: Optional[set[Extender]] = None,
         artifacts: Optional[dict[str, Any]] = None,
-    ) -> list[Any]:
+    ) -> Results:
         """Execute the prepared session and return results.
 
         Can be called multiple times on the same session with different ``api_data``
@@ -404,10 +379,10 @@ class mlodaAPI:
 
         return runner
 
-    def get_result(self) -> list[Any]:
+    def get_result(self) -> Results:
         if self.runner is None:
             raise ValueError("You need to run any run function beforehand.")
-        return self.runner.get_result()
+        return Results(self.runner.get_result())
 
     def get_artifacts(self) -> dict[str, Any]:
         if self.runner is None:

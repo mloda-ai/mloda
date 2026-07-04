@@ -28,6 +28,7 @@ from mloda.user import Features
 from mloda.user import Link
 from mloda.user import ParallelizationMode
 from mloda.user import PluginCollector
+from mloda.user import Results
 from mloda.provider import ComputeFramework
 from mloda.steward import Extender
 from mloda.user import mloda
@@ -42,7 +43,7 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 class RunResult:
     """Container for test run results."""
 
-    results: list[Any] = field(default_factory=list)
+    results: Results = field(default_factory=Results)
     artifacts: dict[str, Any] = field(default_factory=dict)
     runner: Optional[ExecutionOrchestrator] = None
 

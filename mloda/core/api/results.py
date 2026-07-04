@@ -1,32 +1,31 @@
-"""Public helpers for reading mlodaAPI.run_all output (issue #569)."""
+"""Fluent result list returned by mlodaAPI.run_all (issues #564, #568, #569)."""
 
 from typing import Any
 
 
-def results_by_feature(results: list[Any]) -> dict[str, Any]:
-    """Map each column name of each result element to the element itself.
+def _element_columns(element: Any) -> list[str]:
+    """List the column names of one result element."""
+    if isinstance(element, dict):
+        return list(element.keys())
+    if isinstance(element, list):
+        if element and not isinstance(element[0], dict):
+            raise ValueError(f"Unsupported result element type: list of {type(element[0]).__name__}")
+        return list(element[0].keys()) if element else []
+    if hasattr(element, "column_names"):
+        return list(element.column_names)
+    if hasattr(element, "columns"):
+        return list(element.columns)
+    raise ValueError(f"Unsupported result element type: {type(element).__name__}")
 
-    A multi-output column "feature~suffix" is also reachable via its base name "feature".
-    First occurrence wins on duplicate names. Looking up a missing name raises KeyError.
-    Caveat: a literal column name containing "~" also registers its base name, which can
-    shadow a same-named column from a later result.
+
+def _column_mapping(results: list[Any]) -> dict[str, Any]:
+    """Map each column name (and each multi-output base name before the first "~") to its element.
+
+    First occurrence wins on duplicate names.
     """
     mapping: dict[str, Any] = {}
     for element in results:
-        if isinstance(element, dict):
-            column_names = list(element.keys())
-        elif isinstance(element, list):
-            if element and not isinstance(element[0], dict):
-                raise ValueError(f"Unsupported result element type: list of {type(element[0]).__name__}")
-            column_names = list(element[0].keys()) if element else []
-        elif hasattr(element, "column_names"):
-            column_names = list(element.column_names)
-        elif hasattr(element, "columns"):
-            column_names = list(element.columns)
-        else:
-            raise ValueError(f"Unsupported result element type: {type(element).__name__}")
-
-        for column_name in column_names:
+        for column_name in _element_columns(element):
             if column_name not in mapping:
                 mapping[column_name] = element
             if "~" in column_name:
@@ -37,7 +36,7 @@ def results_by_feature(results: list[Any]) -> dict[str, Any]:
 
 
 def _to_rows(result: Any) -> list[dict[str, Any]]:
-    """Convert one run_all result element to a flat list of row dicts."""
+    """Convert one result element to a flat list of row dicts."""
     if isinstance(result, list):
         return list(result)
     if isinstance(result, dict):
@@ -68,7 +67,7 @@ def _to_rows(result: Any) -> list[dict[str, Any]]:
 
 
 def _concat_frames(results: list[Any]) -> Any:
-    """Horizontally combine run_all results into one pandas or polars DataFrame."""
+    """Horizontally combine result elements into one pandas or polars DataFrame."""
     elements = [
         element.collect()
         if type(element).__module__.split(".")[0] == "polars" and hasattr(element, "collect")
@@ -86,7 +85,7 @@ def _concat_frames(results: list[Any]) -> Any:
 
     if not frames:
         raise ValueError(
-            "run_all produced no DataFrame results; use results_by_feature or run_one "
+            "run_all produced no DataFrame results; use get_one, get_rows or get_values "
             "for non-DataFrame compute frameworks."
         )
     if non_frames:
@@ -119,3 +118,60 @@ def _concat_frames(results: list[Any]) -> Any:
     import polars as pl
 
     return pl.concat(deduped, how="horizontal")
+
+
+class Results(list[Any]):
+    """Result list of mlodaAPI.run_all: one element per resolving feature group (issues #564, #568, #569).
+
+    Accessors read results without knowing the element shape:
+
+    - get_one(name): the raw element containing a column (identity preserved)
+    - get_rows(name): one element converted to a flat list of row dicts
+    - get_values(name): one column as a plain Python list
+    - get_df(): all elements horizontally concatenated into one pandas or polars DataFrame
+
+    A multi-output column "feature~suffix" is also reachable via its base name "feature"
+    (split on the first "~"). First occurrence wins on duplicate names.
+    """
+
+    def get_one(self, name: str | None = None) -> Any:
+        """Return the element containing column ``name``; without a name, the sole element."""
+        if name is None:
+            if len(self) != 1:
+                raise ValueError(
+                    f"Expected exactly one result element, got {len(self)}; pass a feature name to get_one."
+                )
+            return self[0]
+        mapping = _column_mapping(self)
+        if name not in mapping:
+            raise ValueError(f"Unknown feature name '{name}'. Available names: {sorted(mapping)}.")
+        return mapping[name]
+
+    def get_rows(self, name: str | None = None) -> list[dict[str, Any]]:
+        """Return the element containing column ``name`` as a flat list of row dicts."""
+        return _to_rows(self.get_one(name))
+
+    def get_values(self, name: str) -> list[Any]:
+        """Return the column ``name`` as a plain Python list."""
+        element = self.get_one(name)
+        if name not in _element_columns(element):
+            raise ValueError(
+                f"'{name}' is not a column of the resolved element. "
+                f"Available columns: {sorted(_element_columns(element))}."
+            )
+        if isinstance(element, dict):
+            return list(element[name])
+        if isinstance(element, list):
+            return [row[name] for row in element]
+        column = element[name]
+        if hasattr(column, "to_pylist"):
+            return list(column.to_pylist())
+        if hasattr(column, "to_list"):
+            return list(column.to_list())
+        if hasattr(column, "tolist"):
+            return list(column.tolist())
+        return list(column)
+
+    def get_df(self) -> Any:
+        """Return all elements horizontally concatenated into one pandas or polars DataFrame."""
+        return _concat_frames(self)

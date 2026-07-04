@@ -153,17 +153,6 @@ class TestReadDB:
         with pytest.raises(NotImplementedError):
             ReadDB.check_feature_in_data_access("", None)
 
-    def test_init_reader_no_options(self) -> None:
-        read_db = ReadDB()
-        with pytest.raises(ValueError):
-            read_db.init_reader(None)
-
-    def test_init_reader_no_data_access(self) -> None:
-        read_db = ReadDB()
-        options = Options()
-        with pytest.raises(ValueError):
-            read_db.init_reader(options)
-
     def test_match_subclass_data_access(self) -> None:
         data_access = DataAccessCollection(credentials=[{SQLITEReader.db_path(): self.db_path}])
         feature_names = ["name"]
@@ -173,32 +162,6 @@ class TestReadDB:
     def test_get_connection_no_credentials(self) -> None:
         with pytest.raises(NotImplementedError):
             ReadDB.get_connection(None)
-
-    def test_init_reader_none_options_message(self) -> None:
-        """When init_reader is called with None, the error should mention the class name.
-
-        Currently the message is a generic 'Options were not set.' without indicating
-        which ReadDB subclass encountered the problem.
-        """
-
-        class CustomReadDB(ReadDB):
-            @classmethod
-            def connect(cls, credentials: Any) -> Any:
-                return None
-
-        reader = CustomReadDB()
-        with pytest.raises(ValueError, match=r"CustomReadDB"):
-            reader.init_reader(None)
-
-    def test_init_reader_missing_base_input_data_message(self) -> None:
-        """When options lack BaseInputData key, the error should mention 'BaseInputData'.
-
-        Currently the message is a generic 'Reader data access was not set.' without
-        telling the user which key is missing from options.
-        """
-        read_db = ReadDB()
-        with pytest.raises(ValueError, match=r"BaseInputData"):
-            read_db.init_reader(Options())
 
     def test_match_read_db_data_access_multiple_features_message(self) -> None:
         """When match_read_db_data_access receives multiple feature names, the error

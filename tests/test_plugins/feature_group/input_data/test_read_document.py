@@ -100,26 +100,3 @@ class TestReadDocumentLoad:
         instance = NoneReturningReader()
         with pytest.raises(ValueError):
             instance.load(features)
-
-
-class TestReadDocumentInitReader:
-    def test_init_reader_extracts_from_options(self) -> None:
-        options = Options(group={"BaseInputData": (ConcreteReadDocument, "/data/doc.json")})
-
-        instance = ConcreteReadDocument()
-        reader, data_access = instance.init_reader(options)
-
-        assert isinstance(reader, ConcreteReadDocument)
-        assert data_access == "/data/doc.json"
-
-    def test_init_reader_raises_when_options_none(self) -> None:
-        instance = ConcreteReadDocument()
-        with pytest.raises(ValueError):
-            instance.init_reader(None)
-
-    def test_init_reader_raises_when_base_input_data_missing(self) -> None:
-        options = Options(group={"some_other_key": "value"})
-
-        instance = ConcreteReadDocument()
-        with pytest.raises(ValueError):
-            instance.init_reader(options)

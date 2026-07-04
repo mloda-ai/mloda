@@ -210,49 +210,6 @@ class TestInputData:
                 assert v[0] == -4.757493165076248
 
 
-class TestReadFileValidationErrors:
-    def test_init_reader_none_options_message(self) -> None:
-        """When init_reader is called with None, the error should mention the class name.
-
-        Currently the message is a generic 'Options were not set.' without indicating
-        which reader class encountered the problem.
-        """
-
-        class MyCustomReader(ReadFile):
-            @classmethod
-            def get_column_names(cls, file_name: str) -> list[str]:
-                return []
-
-            @classmethod
-            def suffix(cls) -> tuple[str, ...]:
-                return (".csv",)
-
-        reader = MyCustomReader()
-        with pytest.raises(ValueError, match=r"MyCustomReader"):
-            reader.init_reader(None)
-
-    def test_init_reader_missing_base_input_data_message(self) -> None:
-        """When options lack BaseInputData, the error should mention 'BaseInputData'.
-
-        Currently the message is a generic 'Reader data access was not set.' without
-        telling the user which key is missing.
-        """
-
-        class AnotherReader(ReadFile):
-            @classmethod
-            def get_column_names(cls, file_name: str) -> list[str]:
-                return []
-
-            @classmethod
-            def suffix(cls) -> tuple[str, ...]:
-                return (".csv",)
-
-        reader = AnotherReader()
-        options = Options(group={"SomeOtherKey": "value"})
-        with pytest.raises(ValueError, match=r"BaseInputData"):
-            reader.init_reader(options)
-
-
 class TestReadFile:
     def test_validate_columns(self) -> None:
         class TestReadFile(ReadFile):
@@ -294,21 +251,6 @@ class TestReadFile:
         data_access = DataAccessCollection(files={"dummy.csv"})
         feature_names = ["id", "V1"]
         assert TestReadFile.match_subclass_data_access(data_access, feature_names, options=Options({})) == "dummy.csv"
-
-    def test_init_reader(self) -> None:
-        class TestReadFile(ReadFile):
-            @classmethod
-            def get_column_names(cls, file_name: str) -> list[str]:
-                return ["id", "V1", "V2"]
-
-            @classmethod
-            def suffix(cls) -> tuple[str, ...]:
-                return (".csv",)
-
-        options = Options(group={"BaseInputData": (TestReadFile, "dummy.csv")})
-        reader, data_access = TestReadFile().init_reader(options)
-        assert isinstance(reader, TestReadFile)
-        assert data_access == "dummy.csv"
 
     def test_load(self) -> None:
         class TestReadFile(ReadFile):

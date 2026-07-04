@@ -54,7 +54,7 @@ jobs:
         run: |
           npm install -g semantic-release@v24.2.1 \
             conventional-changelog-cli \
-            conventional-changelog-conventionalcommits \
+            conventional-changelog-conventionalcommits@9.3.1 \
             @semantic-release/changelog \
             @semantic-release/exec \
             @semantic-release/git \

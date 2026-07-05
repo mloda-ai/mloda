@@ -5,10 +5,11 @@ try:
 except ImportError:
     pyarrow_parquet = None
 
-from mloda_plugins.feature_group.input_data.pyarrow_read_file import PyArrowReadFile
+from mloda.provider import FeatureSet
+from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
 
-class ParquetReader(PyArrowReadFile):
+class ParquetReader(ReadFile):
     """
     Base class for Parquet file reading feature groups.
 
@@ -99,8 +100,6 @@ class ParquetReader(PyArrowReadFile):
     - Ideal for large datasets due to efficient compression
     """
 
-    _file_format_label = "Parquet"
-
     @classmethod
     def suffix(cls) -> tuple[str, ...]:
         return (
@@ -111,12 +110,12 @@ class ParquetReader(PyArrowReadFile):
         )
 
     @classmethod
-    def _pyarrow_module(cls) -> Any:
-        return pyarrow_parquet
-
-    @classmethod
-    def produce_table(cls, data_access: Any, column_names: list[str]) -> Any:
-        return pyarrow_parquet.read_table(data_access, columns=column_names)
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        if pyarrow_parquet is None:
+            raise ImportError(
+                "pyarrow is required to read Parquet files. Install it with: pip install 'mloda[pyarrow]'"
+            )
+        return pyarrow_parquet.read_table(data_access, columns=list(features.get_all_names()))
 
     @classmethod
     def get_column_names(cls, file_name: str) -> Any:

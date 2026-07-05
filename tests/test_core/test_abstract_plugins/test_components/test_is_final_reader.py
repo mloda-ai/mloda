@@ -24,7 +24,6 @@ import pytest
 
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda.provider import FeatureSet
-from mloda_plugins.feature_group.input_data.pyarrow_read_file import PyArrowReadFile
 from mloda_plugins.feature_group.input_data.read_db import ReadDB
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
@@ -297,10 +296,7 @@ class TestFamilyHookDeclarations:
         assert _final_reader_requires(ReadDocument) == ("produce_document", "suffix")
 
     def test_read_file_requires(self) -> None:
-        assert _final_reader_requires(ReadFile) == ("produce_table", "suffix")
-
-    def test_pyarrow_read_file_requires(self) -> None:
-        assert _final_reader_requires(PyArrowReadFile) == ("produce_table", "suffix", "_pyarrow_module")
+        assert _final_reader_requires(ReadFile) == ()
 
     def test_families_do_not_define_classification_locally(self) -> None:
         for family in (ReadDB, ReadDocument, ReadFile):

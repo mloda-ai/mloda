@@ -343,9 +343,9 @@ class TestPyFileReaderStaysOnTheSeam:
 # is guarded (_document_file_matches checks _has_suffix, and match_document_data_access
 # swallows the NotImplementedError), so a leaked suffix-less class is already harmless
 # in sibling discovery, but the classification screen must still mirror the family
-# pattern (ReadDB requires produce_rows AND connect; ReadFile requires produce_table AND
-# suffix): a ReadDocument subclass is "final via the seam" only if
-# produce_document AND suffix are BOTH overridden relative to ReadDocument.
+# pattern (ReadDB requires produce_rows AND connect): a ReadDocument subclass is
+# "final via the seam" only if produce_document AND suffix are BOTH overridden
+# relative to ReadDocument.
 # --------------------------------------------------------------------------------------
 
 

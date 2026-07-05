@@ -25,14 +25,13 @@ class ReadFile(BaseInputData):
     ``document_suffixes`` option. When that option is set, ReadFile auto-excludes
     the listed suffixes so that ReadDocument can claim them instead.
 
-    load_data is a template method exposing an opt-in lifecycle seam: a new
-    backend implements ``produce_table`` (optionally ``get_column_names``)
-    plus ``suffix`` instead of overriding ``load_data`` wholesale; both
-    ``produce_table`` and ``suffix`` are required for the class to be
-    discovered as a final reader. A backend family may override
-    ``check_backend`` to verify its engine before any read happens; see
-    PyArrowReadFile for pyarrow-based formats. Overriding ``load_data``
-    directly is still supported.
+    The following methods should be implemented in the child classes:
+    - load_data
+    - suffix
+    - get_column_names
+
+    A ReadFile subclass classifies as a final reader by overriding ``load_data``
+    wholesale to return its table.
 
     If get_column_names is not implemented, the class will assume the columns are there.
     """
@@ -56,30 +55,17 @@ class ReadFile(BaseInputData):
     )
 
     @classmethod
-    def produce_table(cls, data_access: Any, column_names: list[str]) -> Any:
-        """The per-format read hook; a new backend implements THIS instead of overriding
-        load_data wholesale."""
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        """
+        This function should be implemented by child classes.
+        """
         raise NotImplementedError
 
     @classmethod
-    def check_backend(cls) -> None:
-        """Pre-read guard hook a backend family overrides to verify its engine is importable
-        and raise a guiding ImportError otherwise; the default is a no-op."""
-
-    @classmethod
-    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-        """Template method: probe the read hook, check the backend, then produce the table."""
-        if not cls._is_overridden(ReadFile, "produce_table"):
-            raise NotImplementedError
-
-        cls.check_backend()
-        return cls.produce_table(data_access, list(features.get_all_names()))
-
-    @classmethod
     def _final_reader_requires(cls) -> tuple[str, ...]:
-        # Requiring suffix alongside produce_table screens out intermediate bases that
-        # share produce_table but leave suffix abstract.
-        return ("produce_table", "suffix")
+        # ReadFile anchors its own subtree so a subclass classifies as a final reader only
+        # by overriding load_data wholesale; there is no hook-based classification here.
+        return ()
 
     @classmethod
     def suffix(cls) -> tuple[str, ...]:

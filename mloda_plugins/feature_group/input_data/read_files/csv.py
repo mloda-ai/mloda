@@ -5,10 +5,11 @@ try:
 except ImportError:
     pyarrow_csv = None
 
-from mloda_plugins.feature_group.input_data.pyarrow_read_file import PyArrowReadFile
+from mloda.provider import FeatureSet
+from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
 
-class CsvReader(PyArrowReadFile):
+class CsvReader(ReadFile):
     """
     Base class for CSV file reading feature groups.
 
@@ -148,8 +149,6 @@ class CsvReader(PyArrowReadFile):
     - The reader automatically skips the header row after reading column names
     """
 
-    _file_format_label = "CSV"
-
     @classmethod
     def suffix(cls) -> tuple[str, ...]:
         return (
@@ -158,12 +157,11 @@ class CsvReader(PyArrowReadFile):
         )
 
     @classmethod
-    def _pyarrow_module(cls) -> Any:
-        return pyarrow_csv
-
-    @classmethod
-    def produce_table(cls, data_access: Any, column_names: list[str]) -> Any:
-        return pyarrow_csv.read_csv(data_access).select(column_names)
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        if pyarrow_csv is None:
+            raise ImportError("pyarrow is required to read CSV files. Install it with: pip install 'mloda[pyarrow]'")
+        result = pyarrow_csv.read_csv(data_access)
+        return result.select(list(features.get_all_names()))
 
     @classmethod
     def get_column_names(cls, file_name: str) -> Any:

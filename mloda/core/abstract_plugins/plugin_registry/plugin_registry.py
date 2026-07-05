@@ -87,7 +87,8 @@ def _resolve_plugin_type(cls: type[Any]) -> type[Any]:
 
 class PluginRegistry:
     def __init__(self) -> None:
-        # Only default() lazy init is locked; registration is expected single-threaded at import/startup time.
+        # Issue #583: concurrent runtime mutation is unsupported, so mutators are lock-free and the
+        # generation increment non-atomic. If that changes, lock the mutators and re-audit all().
         self._entries: dict[str, PluginRegistryEntry] = {}
         self._policy: PluginPolicy | None = None
         self._policy_warned_keys: set[str] = set()

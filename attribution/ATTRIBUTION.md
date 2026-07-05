@@ -82,7 +82,7 @@
 | pytest-xdist                           | 3.8.0           | MIT                                                |
 | python-dateutil                        | 2.9.0.post0     | Apache Software License; BSD License               |
 | pyzmq                                  | 27.1.0          | BSD License                                        |
-| regex                                  | 2026.5.9        | Apache-2.0 AND CNRI-Python                         |
+| regex                                  | 2026.6.28       | Apache-2.0 AND CNRI-Python                         |
 | requests                               | 2.34.2          | Apache Software License                            |
 | rich                                   | 14.3.4          | MIT License                                        |
 | ruff                                   | 0.15.20         | MIT                                                |

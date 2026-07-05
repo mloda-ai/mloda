@@ -17,9 +17,10 @@ Example:
 
 from typing import Any, Optional
 
+from mloda.core.abstract_plugins.components.base_feature_group_version import SOURCE_INTROSPECTION_ERRORS
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
-from mloda.core.abstract_plugins.components.utils import get_all_subclasses
+from mloda.core.abstract_plugins.components.utils import get_all_subclasses, safe_field
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
@@ -41,10 +42,7 @@ def list_registered(plugin_type: type[Any]) -> list[type[Any]]:
 
 def _safe_version(fg_class: type[FeatureGroup]) -> str:
     """Return the feature group version or "unavailable" if source introspection fails."""
-    try:
-        return fg_class.version()
-    except (OSError, TypeError):
-        return "unavailable"
+    return safe_field(lambda: fg_class.version(), "unavailable", catching=SOURCE_INTROSPECTION_ERRORS)
 
 
 def _dedup_degrading_on_conflict(
@@ -174,25 +172,10 @@ def get_compute_framework_docs(
         description = (cfw_class.__doc__ or "").strip() or cfw_class.__name__
         module = cfw_class.__module__
 
-        try:
-            is_available = cfw_class.is_available()
-        except Exception:  # nosec
-            is_available = False
-
-        try:
-            expected_data_framework = str(cfw_class.expected_data_framework())
-        except Exception:  # nosec
-            expected_data_framework = "unavailable"
-
-        try:
-            has_merge_engine = cfw_class.merge_engine() is not None
-        except Exception:  # nosec
-            has_merge_engine = False
-
-        try:
-            has_filter_engine = cfw_class.filter_engine() is not None
-        except Exception:  # nosec
-            has_filter_engine = False
+        is_available = safe_field(lambda: cfw_class.is_available(), False)
+        expected_data_framework = safe_field(lambda: str(cfw_class.expected_data_framework()), "unavailable")
+        has_merge_engine = safe_field(lambda: cfw_class.merge_engine() is not None, False)
+        has_filter_engine = safe_field(lambda: cfw_class.filter_engine() is not None, False)
 
         if available_only and not is_available:
             continue
@@ -256,12 +239,7 @@ def get_extender_docs(
         if ext_name in ("Extender", "_CompositeExtender"):
             continue
 
-        wraps_list: list[str] = []
-        try:
-            instance = ext_class()
-            wraps_list = [w.value for w in instance.wraps()]
-        except Exception:  # nosec
-            pass
+        wraps_list: list[str] = safe_field(lambda: [w.value for w in ext_class().wraps()], [])
 
         if name is not None and name.lower() not in ext_name.lower():
             continue

@@ -5,8 +5,11 @@ import importlib.metadata
 import inspect
 import linecache
 import hashlib
-from typing import Any
+from typing import Any, Final
 from abc import ABC
+
+# Exceptions inspect.getsource raises for dynamically built classes (no source backing / built-in).
+SOURCE_INTROSPECTION_ERRORS: Final = (OSError, TypeError)
 
 
 class BaseFeatureGroupVersion(ABC):
@@ -45,7 +48,7 @@ class BaseFeatureGroupVersion(ABC):
 
         try:
             source: str = inspect.getsource(target_class)
-        except (OSError, TypeError):
+        except SOURCE_INTROSPECTION_ERRORS:
             fallback = _linecache_source_for_class(target_class)
             if fallback is None:
                 raise

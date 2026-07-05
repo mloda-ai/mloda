@@ -6,7 +6,10 @@ import sys
 from copy import deepcopy
 from typing import Any, Optional, cast
 
-from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
+from mloda.core.abstract_plugins.components.base_feature_group_version import (
+    SOURCE_INTROSPECTION_ERRORS,
+    BaseFeatureGroupVersion,
+)
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import (
     PluginCollector,
     strict_mode_from_env,
@@ -15,7 +18,7 @@ from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRe
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender
-from mloda.core.abstract_plugins.components.utils import get_all_subclasses
+from mloda.core.abstract_plugins.components.utils import get_all_subclasses, safe_field
 
 
 logger = logging.getLogger(__name__)
@@ -103,10 +106,9 @@ def _safe_class_source_hash(cls: type[FeatureGroup]) -> Optional[str]:
     (built-in class) for classes built dynamically via ``type()``. Both leave the
     class without a stable source hash, so we return ``None``.
     """
-    try:
-        return BaseFeatureGroupVersion.class_source_hash(cls)
-    except (OSError, TypeError):
-        return None
+    return safe_field(
+        lambda: BaseFeatureGroupVersion.class_source_hash(cls), None, catching=SOURCE_INTROSPECTION_ERRORS
+    )
 
 
 def dedup_feature_group_subclasses(

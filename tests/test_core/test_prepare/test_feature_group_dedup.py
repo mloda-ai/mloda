@@ -28,7 +28,12 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.api.plugin_docs import get_feature_group_docs, resolve_feature
 from mloda.core.api.plugin_info import FeatureGroupInfo, ResolvedFeature
-from mloda.core.prepare.accessible_plugins import PreFilterPlugins, dedup_feature_group_subclasses
+from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
+from mloda.core.prepare.accessible_plugins import (
+    PreFilterPlugins,
+    dedup_feature_group_subclasses,
+    _safe_class_source_hash,
+)
 
 
 # Module-level reference store. This simulates IPython's ``_oh``/``Out[N]`` history,
@@ -124,6 +129,38 @@ def _cleanup_main_module_attrs() -> Any:
 def _filter_by_qualname(classes: set[type[FeatureGroup]], qualname: str) -> set[type[FeatureGroup]]:
     """Filter a set of classes to those with a matching ``__qualname__``."""
     return {c for c in classes if c.__qualname__ == qualname}
+
+
+# ---------------------------------------------------------------------------
+# Characterization: _safe_class_source_hash keeps a NARROW exception guard.
+#
+# _safe_class_source_hash delegates to safe_field(..., catching=(OSError, TypeError)).
+# Only the listed types degrade to None; every other exception (e.g. ValueError)
+# must propagate so unrelated bugs are not silently swallowed. If a future edit
+# drops the catching= argument, the guard widens to except Exception and the
+# ValueError case below flips from raising to returning None, failing this test.
+# ---------------------------------------------------------------------------
+def test_safe_class_source_hash_reraises_unlisted_exception(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A ValueError from class_source_hash is NOT in (OSError, TypeError), so it propagates."""
+
+    def _raise_value_error(target_class: Any) -> str:
+        raise ValueError("unlisted exception must propagate")
+
+    monkeypatch.setattr(BaseFeatureGroupVersion, "class_source_hash", _raise_value_error)
+
+    with pytest.raises(ValueError):
+        _safe_class_source_hash(DocsCatalogAnchorFG)
+
+
+def test_safe_class_source_hash_degrades_on_listed_oserror(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An OSError from class_source_hash IS listed, so it degrades to None."""
+
+    def _raise_os_error(target_class: Any) -> str:
+        raise OSError("listed exception degrades")
+
+    monkeypatch.setattr(BaseFeatureGroupVersion, "class_source_hash", _raise_os_error)
+
+    assert _safe_class_source_hash(DocsCatalogAnchorFG) is None
 
 
 # ---------------------------------------------------------------------------

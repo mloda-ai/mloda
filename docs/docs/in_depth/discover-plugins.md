@@ -83,8 +83,9 @@ extenders = get_extender_docs(wraps="formula")
 The discovery functions above walk every live plugin subclass and introspect it.
 Plugins can be broken, exotic, or built at runtime (via `type()`, notebook
 re-execution, or `importlib.reload`), so introspecting one class can fail. The
-whole catalog surface follows one shared contract so that a single broken plugin
-never sinks an entire catalog call.
+guarded catalog reads follow one shared contract so that a broken plugin
+degrades a field instead of sinking the catalog call; not every read is guarded
+yet (see below).
 
 Every failure a plugin can cause falls into one of three tiers:
 
@@ -123,18 +124,23 @@ and resolution paths intentionally differ:
 
 ### Shared helper
 
-The annotate tier is currently expressed as ad hoc `try/except Exception`
-blocks repeated per field in `get_compute_framework_docs`, alongside the
-narrower named guards `_safe_version` (in `plugin_docs.py`) and
-`_safe_class_source_hash` (one layer down in `accessible_plugins.py`), which
-catch only `(OSError, TypeError)`. A small
-shared safe-introspection helper (a per-field guard: call a thunk, return a
-caller-supplied fallback on failure) is worth extracting so the next catalog
-function or info field reaches for it instead of re-deriving the pattern. It
-should stay per-field (annotate the entry) rather than per-class (skip the whole
-entry), because the catalog's job is to list a degraded class, not hide it. That
-refactor is tracked as its own scoped follow-up; the unguarded `is_available()`
-call is fixed inline here so no known gap is left open in the meantime.
+The annotate tier is a single shared helper,
+`safe_field(read, fallback, catching=(Exception,))` in
+`mloda.core.abstract_plugins.components.utils`: it calls the `read` thunk and
+returns `fallback` if the read raises one of `catching`. The guarded annotate
+sites route through it (the feature-group version, the four compute-framework
+fields, and extender wraps), so the next catalog function or info field reaches
+for one helper instead of re-deriving a `try/except`. The remaining overridable
+reads in `get_feature_group_docs` (class name, description, compute framework
+definition, supported feature names, prefix) are not yet guarded, so a plugin
+raising there still propagates (a known follow-up gap).
+`get_compute_framework_docs` uses the default broad `catching` (any failure
+degrades the field), while the narrower named guards `_safe_version` (in
+`plugin_docs.py`) and `_safe_class_source_hash` (one layer down in
+`accessible_plugins.py`) pass the shared `SOURCE_INTROSPECTION_ERRORS` constant
+(from `base_feature_group_version.py`) so anything else still propagates. The helper is
+deliberately per-field (annotate the entry) rather than per-class (skip the whole
+entry), because the catalog's job is to list a degraded class, not hide it.
 
 ## Related Documentation
 

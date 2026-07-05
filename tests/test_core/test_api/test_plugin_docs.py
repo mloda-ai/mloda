@@ -1,5 +1,6 @@
 import gc
 import inspect
+from typing import Any
 
 import pytest
 from mloda.core.api.plugin_info import (
@@ -11,6 +12,7 @@ from mloda.core.api.plugin_docs import (
     get_feature_group_docs,
     get_compute_framework_docs,
     get_extender_docs,
+    _safe_version,
 )
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.user import PluginLoader
@@ -382,13 +384,11 @@ class TestGetComputeFrameworkDocs:
         assert default_names == all_names
 
     def test_get_compute_framework_docs_degrades_when_is_available_raises(self) -> None:
-        """A framework whose is_available() raises must degrade to unavailable, not sink the catalog.
+        """A framework whose is_available() raises must degrade to is_available=False, not sink the catalog.
 
-        The is_available() call at plugin_docs.py:177 runs outside any guard, so a live
-        ComputeFramework subclass whose availability probe raises currently propagates the
-        exception out of get_compute_framework_docs() (same shape as issue #533). The sibling
-        field reads (expected_data_framework, merge_engine, filter_engine) already fall back to
-        a sentinel on exception; is_available must degrade the same way: is_available=False.
+        Like the sibling field reads (expected_data_framework, merge_engine, filter_engine),
+        the availability probe routes through safe_field, and a degraded framework is excluded
+        by available_only=True exactly as a genuinely unavailable one would be (issue #533).
         """
 
         class _DocsIsAvailableBoomCFW(ComputeFramework):
@@ -415,6 +415,55 @@ class TestGetComputeFrameworkDocs:
             # Reap the test-local subclass so sibling tests are unaffected (live __subclasses__).
             del _DocsIsAvailableBoomCFW
             gc.collect()
+
+
+class TestSafeVersionGuard:
+    """Characterization tests pinning the narrow exception guard in ``_safe_version``.
+
+    ``_safe_version`` delegates to ``safe_field(..., catching=(OSError, TypeError))``.
+    The guard must stay narrow: only the listed types degrade to "unavailable";
+    every other exception (e.g. ``ValueError``) must propagate so unrelated bugs
+    are not silently swallowed. If a future edit drops the ``catching=`` argument,
+    the guard widens to ``except Exception`` and the ValueError case below flips
+    from raising to returning "unavailable", failing this test.
+    """
+
+    def test_safe_version_reraises_unlisted_exception(self) -> None:
+        """A ValueError from version() is NOT in (OSError, TypeError), so it propagates."""
+
+        class _StubFG:
+            @staticmethod
+            def version() -> str:
+                raise ValueError("unlisted exception must propagate")
+
+        with pytest.raises(ValueError):
+            _safe_version(_StubFG)  # type: ignore[arg-type]
+
+    def test_safe_version_degrades_on_listed_oserror(self) -> None:
+        """An OSError from version() IS listed, so it degrades to "unavailable"."""
+
+        class _StubFG:
+            @staticmethod
+            def version() -> str:
+                raise OSError("listed exception degrades")
+
+        assert _safe_version(_StubFG) == "unavailable"  # type: ignore[arg-type]
+
+    def test_safe_version_degrades_when_attribute_lookup_raises(self) -> None:
+        """A TypeError raised during the ``version`` attribute lookup itself degrades to "unavailable".
+
+        The annotate tier must keep the whole read inside the guard, including
+        attribute resolution, not just the ``version()`` call.
+        """
+
+        class _RaisingDescriptor:
+            def __get__(self, obj: Any, owner: type) -> Any:
+                raise TypeError("attribute lookup fails")
+
+        class _StubFG:
+            version = _RaisingDescriptor()
+
+        assert _safe_version(_StubFG) == "unavailable"  # type: ignore[arg-type]
 
 
 class TestGetExtenderDocs:

@@ -78,6 +78,64 @@ extenders = get_extender_docs()
 extenders = get_extender_docs(wraps="formula")
 ```
 
+## Graceful Degradation Policy
+
+The discovery functions above walk every live plugin subclass and introspect it.
+Plugins can be broken, exotic, or built at runtime (via `type()`, notebook
+re-execution, or `importlib.reload`), so introspecting one class can fail. The
+whole catalog surface follows one shared contract so that a single broken plugin
+never sinks an entire catalog call.
+
+Every failure a plugin can cause falls into one of three tiers:
+
+- **Annotate.** A single descriptive field cannot be read, but the class is still
+  a valid catalog entry. The entry is listed with a sentinel value and discovery
+  continues. Examples: `get_feature_group_docs` reports `version="unavailable"`
+  when source introspection fails (`_safe_version`); `get_compute_framework_docs`
+  reports `expected_data_framework="unavailable"`, `has_merge_engine=False`,
+  `has_filter_engine=False`, and `is_available=False` when the corresponding call
+  raises; `get_extender_docs` reports `wraps=[]` when the extender cannot be
+  instantiated. A framework that degrades to `is_available=False` is excluded by
+  `available_only=True`, exactly as a genuinely unavailable one would be.
+- **Skip.** An entry that is not meant to be documented is dropped silently:
+  classes defined in `__main__`, and the abstract bases (`get_extender_docs`
+  skips `Extender` and `_CompositeExtender` explicitly; the FeatureGroup and
+  ComputeFramework roots never appear because `get_all_subclasses` omits them).
+  Redefinition duplicates are collapsed rather than listed twice (see below).
+- **Propagate.** Errors that are not a single plugin's introspection fault are
+  left to surface: bad arguments to the discovery function itself, and failures
+  in mloda's own catalog machinery. These are bugs to fix, not conditions to
+  paper over.
+
+### Redefinition conflicts
+
+When the same `(module, qualname)` FeatureGroup is defined more than once with
+differing source (typical in notebooks and reload-heavy sessions), the catalog
+and resolution paths intentionally differ:
+
+- **`get_*_docs` degrade.** Documentation is a best-effort read-only view, so a
+  conflict collapses to the most recently defined (live) class and listing
+  continues. There is nothing to execute, so ambiguity is harmless.
+- **`resolve_feature` surfaces the conflict.** Resolution feeds execution, which
+  must be unambiguous to be safe, so it returns `feature_group=None` with the
+  conflict described in `error` and the conflicting classes that match the
+  requested feature name in `candidates` rather than silently picking one.
+
+### Shared helper
+
+The annotate tier is currently expressed as ad hoc `try/except Exception`
+blocks repeated per field in `get_compute_framework_docs`, alongside the
+narrower named guards `_safe_version` (in `plugin_docs.py`) and
+`_safe_class_source_hash` (one layer down in `accessible_plugins.py`), which
+catch only `(OSError, TypeError)`. A small
+shared safe-introspection helper (a per-field guard: call a thunk, return a
+caller-supplied fallback on failure) is worth extracting so the next catalog
+function or info field reaches for it instead of re-deriving the pattern. It
+should stay per-field (annotate the entry) rather than per-class (skip the whole
+entry), because the catalog's job is to list a degraded class, not hide it. That
+refactor is tracked as its own scoped follow-up; the unguarded `is_available()`
+call is fixed inline here so no known gap is left open in the meantime.
+
 ## Related Documentation
 
 - [Plugin Loader](plugin-loader.md)

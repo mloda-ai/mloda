@@ -12,6 +12,7 @@ from mloda.core.api.plugin_docs import (
     get_compute_framework_docs,
     get_extender_docs,
 )
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.user import PluginLoader
 
 
@@ -379,6 +380,41 @@ class TestGetComputeFrameworkDocs:
         default_names = {cfw.name for cfw in get_compute_framework_docs()}
         all_names = {cfw.name for cfw in get_compute_framework_docs(available_only=False)}
         assert default_names == all_names
+
+    def test_get_compute_framework_docs_degrades_when_is_available_raises(self) -> None:
+        """A framework whose is_available() raises must degrade to unavailable, not sink the catalog.
+
+        The is_available() call at plugin_docs.py:177 runs outside any guard, so a live
+        ComputeFramework subclass whose availability probe raises currently propagates the
+        exception out of get_compute_framework_docs() (same shape as issue #533). The sibling
+        field reads (expected_data_framework, merge_engine, filter_engine) already fall back to
+        a sentinel on exception; is_available must degrade the same way: is_available=False.
+        """
+
+        class _DocsIsAvailableBoomCFW(ComputeFramework):
+            """Test double whose availability probe raises."""
+
+            @staticmethod
+            def is_available() -> bool:
+                raise RuntimeError("boom")
+
+        try:
+            # The broken class must not take the whole catalog call down.
+            results = get_compute_framework_docs(available_only=False)
+            assert len(results) > 0, "Broken framework must not sink the whole catalog"
+
+            by_name = {cfw.name: cfw for cfw in results}
+            assert "_DocsIsAvailableBoomCFW" in by_name, "Broken framework should still be documented"
+            # It degrades to unavailable, matching the sibling guards.
+            assert by_name["_DocsIsAvailableBoomCFW"].is_available is False
+
+            # available_only=True must exclude it because it degraded to unavailable.
+            available_names = {cfw.name for cfw in get_compute_framework_docs(available_only=True)}
+            assert "_DocsIsAvailableBoomCFW" not in available_names
+        finally:
+            # Reap the test-local subclass so sibling tests are unaffected (live __subclasses__).
+            del _DocsIsAvailableBoomCFW
+            gc.collect()
 
 
 class TestGetExtenderDocs:

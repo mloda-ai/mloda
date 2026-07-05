@@ -98,9 +98,14 @@ class TestSqliteFrameworkBasics:
             fw.transform(data=42, feature_names=set())
 
     def test_transform_dict_no_connection_raises(self) -> None:
-        """transform() with dict but no connection set raises ValueError."""
+        """transform() with dict but no connection set raises ValueError.
+
+        With pyarrow present the dict is materialized via the pa.Table chain, whose
+        sqlite step requires the connection; without pyarrow the native from_dict path
+        raises. Both signal the missing connection.
+        """
         fw = SqliteFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
-        with pytest.raises(ValueError, match="not set"):
+        with pytest.raises(ValueError, match="[Cc]onnection"):
             fw.transform(data={"col": [1, 2]}, feature_names=set())
 
     def test_transform_add_column_preserves_existing(self, connection: sqlite3.Connection) -> None:

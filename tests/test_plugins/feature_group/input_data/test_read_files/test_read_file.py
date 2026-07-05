@@ -12,6 +12,9 @@ import pyarrow as pa
 import pyarrow.compute as pc
 
 from mloda.provider import FeatureGroup
+from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_file_source_transformer import (
+    FileSourcePyArrowTransformer,
+)
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable  # noqa: F401
 from mloda.user import DataAccessCollection
 from mloda.user import Feature
@@ -52,7 +55,9 @@ class OverwrittenReadCsvInputDataTestFeatureGroup(ReadFileFeature):
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         reader = cls.input_data()
         if reader is not None:
-            result = reader.load(features)
+            source = reader.load(features)
+            # ``load`` now yields a FileSource descriptor; materialize it into a pa.Table.
+            result = FileSourcePyArrowTransformer.transform_fw_to_other_fw(source)
 
             new_columns = {
                 col_name: pa.array([value * 2 for value in result[col_name].to_pylist()])

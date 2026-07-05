@@ -27,21 +27,22 @@ _BODY_CSV_LOAD: str = """
 import sys
 
 try:
+    from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
+    from mloda.provider import FeatureSet
+    from mloda.user import Feature
     from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 except Exception as e:
     print("IMPORT_FAILED:" + type(e).__name__)
     sys.exit(0)
 
-try:
-    CsvReader.load_data("/nonexistent/path.csv", None)
-    print("NO_RAISE")
-except ImportError as e:
-    if "pyarrow" in str(e).lower():
-        print("IMPORTERROR")
-    else:
-        print("WRONGMSG:" + str(e))
-except Exception as e:
-    print("WRONG:" + type(e).__name__)
+features = FeatureSet()
+features.add(Feature("A"))
+
+result = CsvReader.load_data("/nonexistent/path.csv", features)
+if isinstance(result, FileSource) and result.format == "csv" and result.columns == ("A",):
+    print("FILESOURCE")
+else:
+    print("WRONG:" + type(result).__name__)
 """
 
 # ---------------------------------------------------------------------------
@@ -116,12 +117,16 @@ def test_csv_reader_imports_without_pyarrow() -> None:
 
 
 @pytest.mark.timeout(30)
-def test_csv_reader_load_data_raises_import_error_without_pyarrow() -> None:
-    """CsvReader.load_data must raise ImportError mentioning pyarrow when pyarrow absent."""
+def test_csv_reader_load_data_returns_file_source_without_pyarrow() -> None:
+    """CsvReader.load_data must resolve a FileSource descriptor even when pyarrow is absent.
+
+    CSV no longer needs pyarrow: load_data returns a lightweight FileSource that a
+    per-framework transformer materializes later.
+    """
     result = run_blocked(_BODY_CSV_LOAD)
     assert result.returncode == 0, f"Body crashed.\nstderr:\n{result.stderr}"
-    assert "IMPORTERROR" in result.stdout, (
-        f"Expected IMPORTERROR sentinel. Got stdout: {result.stdout!r}\nstderr: {result.stderr}"
+    assert "FILESOURCE" in result.stdout, (
+        f"Expected FILESOURCE sentinel. Got stdout: {result.stdout!r}\nstderr: {result.stderr}"
     )
 
 

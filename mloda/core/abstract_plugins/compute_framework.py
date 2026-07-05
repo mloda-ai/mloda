@@ -143,11 +143,36 @@ class ComputeFramework(ABC):
         """
         _from_fw = type(data)
         _to_fw = self.expected_data_framework()
-        transformer_cls = self.transformer.transformer_map.get((_from_fw, _to_fw), None)
-        if transformer_cls is not None:
-            return transformer_cls.transform(_from_fw, _to_fw, data, self.framework_connection_object)
 
-        return None
+        # Same native type: nothing to transform. Guard here so the chain search does not
+        # discover a spurious self-loop (e.g. dict -> pa.Table -> dict) through PyArrow.
+        if _from_fw == _to_fw:
+            return None
+
+        transformation_chain = self.transformer.get_transformation_chain(_from_fw, _to_fw)
+        if transformation_chain is None:
+            return None
+
+        current_fw = _from_fw
+        for i, transformer_cls in enumerate(transformation_chain):
+            if i == len(transformation_chain) - 1:
+                target_fw = _to_fw
+            else:
+                target_fw = None
+                for (src, dst), trans in self.transformer.transformer_map.items():
+                    if trans == transformer_cls and src == current_fw:
+                        target_fw = dst
+                        break
+                if target_fw is None:
+                    raise KeyError(
+                        f"No transformer edge found for {transformer_cls} from {current_fw} in the "
+                        "transformer map; the transformation chain is inconsistent with the registry."
+                    )
+
+            data = transformer_cls.transform(current_fw, target_fw, data, self.framework_connection_object)
+            current_fw = target_fw
+
+        return data
 
     def select_data_by_column_names(
         self, data: Any, selected_feature_names: set[FeatureName], column_ordering: Optional[str] = None

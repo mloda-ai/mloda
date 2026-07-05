@@ -174,7 +174,10 @@ def get_compute_framework_docs(
         description = (cfw_class.__doc__ or "").strip() or cfw_class.__name__
         module = cfw_class.__module__
 
-        is_available = cfw_class.is_available()
+        try:
+            is_available = cfw_class.is_available()
+        except Exception:  # nosec
+            is_available = False
 
         try:
             expected_data_framework = str(cfw_class.expected_data_framework())

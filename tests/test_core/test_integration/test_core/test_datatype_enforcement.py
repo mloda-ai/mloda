@@ -529,7 +529,7 @@ class TestStrictTypeEnforcementPropagation:
                 return DataCreator(supports_features={"DerivedFG"})
 
             def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
-                return {Feature.int32_of("BaseFG")}
+                return {Feature("BaseFG", data_type="INT32", forward_group={"strict_type_enforcement"})}
 
             @classmethod
             def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

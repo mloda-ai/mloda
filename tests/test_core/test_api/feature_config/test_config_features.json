@@ -61,7 +61,7 @@
       "in_features": {
         "name": "max_aggregated",
         "options": {
-          "aggregation_function": "max",
+          "aggregation_type": "max",
           "in_features": {
             "name": "minmaxscaledweght",
             "options": {

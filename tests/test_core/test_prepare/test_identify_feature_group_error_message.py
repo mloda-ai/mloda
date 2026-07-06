@@ -503,7 +503,7 @@ class OtherNameFeatureGroup(FeatureGroup):
 
 
 class TestInputFeatureForwardingHint:
-    """Tests for the 'forward_for_input_feature' hint in the no-feature-group error.
+    """Tests for the forward_group hint in the no-feature-group error.
 
     The hint should fire only when a feature fails to resolve BECAUSE its group
     options carry keys the matcher rejects, and some accessible feature group
@@ -527,8 +527,8 @@ class TestInputFeatureForwardingHint:
 
         error_message = str(exc_info.value)
 
-        assert "forward_for_input_feature" in error_message, (
-            f"Error message should point to forward_for_input_feature, but got: {error_message}"
+        assert "forward_group" in error_message, (
+            f"Error message should point to forward_group, but got: {error_message}"
         )
         assert "query_text" in error_message, (
             f"Error message should name offending key 'query_text', but got: {error_message}"
@@ -555,7 +555,7 @@ class TestInputFeatureForwardingHint:
 
         error_message = str(exc_info.value)
 
-        assert "forward_for_input_feature" not in error_message, (
+        assert "forward_group" not in error_message, (
             f"Error message should NOT emit forwarding hint when no group options, but got: {error_message}"
         )
 
@@ -576,7 +576,7 @@ class TestInputFeatureForwardingHint:
 
         error_message = str(exc_info.value)
 
-        assert "forward_for_input_feature" not in error_message, (
+        assert "forward_group" not in error_message, (
             f"Error message should NOT emit forwarding hint when no FG matches the bare name, but got: {error_message}"
         )
 
@@ -586,7 +586,7 @@ class TestInputFeatureForwardingHint:
             Options(
                 group={
                     "query_text": "hi",
-                    DefaultOptionKeys.feature_chainer_parser_key: frozenset({"query_text"}),
+                    DefaultOptionKeys.in_features: "something",
                 }
             ),
         )
@@ -605,12 +605,12 @@ class TestInputFeatureForwardingHint:
 
         error_message = str(exc_info.value)
 
-        assert "forward_for_input_feature" in error_message, (
-            f"Error message should point to forward_for_input_feature, but got: {error_message}"
+        assert "forward_group" in error_message, (
+            f"Error message should point to forward_group, but got: {error_message}"
         )
         assert "query_text" in error_message, (
             f"Error message should name offending key 'query_text', but got: {error_message}"
         )
-        assert "feature_chainer_parser_key" not in error_message, (
-            f"Reserved key 'feature_chainer_parser_key' must NOT be listed as offending, but got: {error_message}"
+        assert "in_features" not in error_message, (
+            f"Reserved key 'in_features' must NOT be listed as offending, but got: {error_message}"
         )

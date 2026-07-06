@@ -95,7 +95,7 @@ class TestJoinSpecWithoutIndexColumns:
                 return feature_name == "JoinSpecNoIndexResult"
 
             def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
-                return {Feature("Amount"), Feature("Class")}
+                return {Feature("Amount", forward_group=True), Feature("Class", forward_group=True)}
 
             @classmethod
             def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

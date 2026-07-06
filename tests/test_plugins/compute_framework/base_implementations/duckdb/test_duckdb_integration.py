@@ -109,9 +109,9 @@ class DuckDBSimpleTransformFeatureGroup(ATestDuckDBFeatureGroup):
         feature_name_str = str(feature_name) if isinstance(feature_name, FeatureName) else str(feature_name)
 
         if feature_name_str == "doubled_value":
-            return {Feature("value")}
+            return {Feature("value", forward_group=True)}
         elif feature_name_str == "score_plus_ten":
-            return {Feature("score")}
+            return {Feature("score", forward_group=True)}
 
         return set()
 
@@ -143,7 +143,7 @@ class DuckDBSecondTransformFeatureGroup(ATestDuckDBFeatureGroup):
     """Second transformation that depends on the first."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
-        return {Feature("doubled_value")}
+        return {Feature("doubled_value", forward_group=True)}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -170,7 +170,7 @@ class DuckDBAggregationFeatureGroup(ATestDuckDBFeatureGroup):
         feature_name_str = str(feature_name) if isinstance(feature_name, FeatureName) else str(feature_name)
 
         if feature_name_str in ["avg_value_by_category", "count_by_category"]:
-            return {Feature("value"), Feature("category")}
+            return {Feature("value", forward_group=True), Feature("category", forward_group=True)}
 
         return set()
 
@@ -204,7 +204,7 @@ class CheckData(FeatureGroup):
         feature_name_str = str(feature_name) if isinstance(feature_name, FeatureName) else str(feature_name)
 
         if feature_name_str in ["pyarrow_avg_value_by_category"]:
-            return {Feature("avg_value_by_category")}
+            return {Feature("avg_value_by_category", forward_group=True)}
 
         return set()
 

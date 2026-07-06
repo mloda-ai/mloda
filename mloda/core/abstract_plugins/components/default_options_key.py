@@ -22,7 +22,6 @@ class DefaultOptionKeys(str, Enum):
     """
 
     in_features = "in_features"
-    feature_chainer_parser_key = "feature_chainer_parser_key"
     reference_time = "reference_time"
     time_travel = "time_travel"
     allowed_values = "allowed_values"

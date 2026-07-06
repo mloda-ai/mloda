@@ -45,9 +45,12 @@ class SecondNonRootJoinTestFeature(NonRootJoinTestFeature):
 class GroupedNonRootJoinTestFeature(FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         if options.get("test_non_root_merge_multiple_join"):
-            return {Feature(name="NonRootJoinTestFeature"), Feature(name="NonRootJoinTestFeatureB")}
+            return {
+                Feature(name="NonRootJoinTestFeature", forward_group=True),
+                Feature(name="NonRootJoinTestFeatureB", forward_group=True),
+            }
 
-        return {Feature(name="NonRootJoinTestFeature")}
+        return {Feature(name="NonRootJoinTestFeature", forward_group=True)}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -60,7 +63,7 @@ class GroupedNonRootJoinTestFeature(FeatureGroup):
 
 class GroupedSecondNonRootJoinTestFeature(GroupedNonRootJoinTestFeature):
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
-        return {Feature(name="SecondNonRootJoinTestFeature")}
+        return {Feature(name="SecondNonRootJoinTestFeature", forward_group=True)}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -74,8 +77,8 @@ class GroupedSecondNonRootJoinTestFeature(GroupedNonRootJoinTestFeature):
 class Call2GroupedNonRootJoinTestFeature(FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {
-            Feature(name=GroupedNonRootJoinTestFeature.get_class_name()),
-            Feature(name=GroupedSecondNonRootJoinTestFeature.get_class_name()),
+            Feature(name=GroupedNonRootJoinTestFeature.get_class_name(), forward_group=True),
+            Feature(name=GroupedSecondNonRootJoinTestFeature.get_class_name(), forward_group=True),
         }
 
     @classmethod

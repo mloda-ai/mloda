@@ -138,7 +138,7 @@ class FeatureChainParserMixin:
         if operation_config is not None and in_feature is not None and in_feature:
             in_features = in_feature.split(self.IN_FEATURE_SEPARATOR)
             self._validate_in_feature_count(in_features, feature_name)
-            return {Feature(f) for f in in_features}
+            return {Feature(f, forward_group=True) for f in in_features}
 
         # Configuration-based fallback using get_in_features()
         in_features_set = options.get_in_features()

@@ -19,8 +19,8 @@ class PrepareRunApiFeature(FeatureGroup):
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {
-            Feature(name="api_id", index=Index(("api_id",))),
-            Feature(name="api_value", index=Index(("api_id",))),
+            Feature(name="api_id", index=Index(("api_id",)), forward_group={"ApiInputData"}),
+            Feature(name="api_value", index=Index(("api_id",)), forward_group={"ApiInputData"}),
         }
 
     @classmethod

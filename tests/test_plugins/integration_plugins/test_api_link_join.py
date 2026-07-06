@@ -58,7 +58,7 @@ class LeftJoinedFeature(FeatureGroup):
 
         # Return features - attach link to one of them
         return {
-            Feature(name="api_value", link=link, index=Index(("api_id",))),
+            Feature(name="api_value", link=link, index=Index(("api_id",)), forward_group={"ApiInputData"}),
             Feature(name="creator_value", index=Index(("creator_id",))),
         }
 
@@ -86,7 +86,7 @@ class AppendedFeature(FeatureGroup):
 
         # Return features - attach link to one of them
         return {
-            Feature(name="api_value", link=link, index=Index(("api_id",))),
+            Feature(name="api_value", link=link, index=Index(("api_id",)), forward_group={"ApiInputData"}),
             Feature(name="creator_value", index=Index(("creator_id",))),
         }
 

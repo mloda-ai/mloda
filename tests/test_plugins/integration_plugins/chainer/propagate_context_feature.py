@@ -60,10 +60,6 @@ class PropagateContextFeatureGroupTest(FeatureGroup):
 
         source_features = options.get_in_features()
         for source_feature in source_features:
-            source_feature.options.add_to_group(
-                DefaultOptionKeys.feature_chainer_parser_key,
-                frozenset(["ident", DefaultOptionKeys.in_features]),
-            )
             features.add(source_feature)
 
         if features:

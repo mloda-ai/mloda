@@ -204,7 +204,7 @@ class IdentifyFeatureGroupClass:
     def _input_feature_forwarding_hint(
         self, feature: Feature, accessible_plugins: FeatureGroupEnvironmentMapping
     ) -> Optional[str]:
-        reserved = {DefaultOptionKeys.in_features, DefaultOptionKeys.feature_chainer_parser_key}
+        reserved = {DefaultOptionKeys.in_features}
         offending = sorted(str(k) for k in feature.options.group if k not in reserved)
         if not offending:
             return None
@@ -231,13 +231,12 @@ class IdentifyFeatureGroupClass:
             return None
 
         names = sorted(fg.get_class_name() for fg in culprits)
-        exclude_snippet = "{" + ", ".join(repr(k) for k in offending) + "}"
         return (
             f"Feature group(s) {names} match the name '{str(feature.name)}' but reject it because of "
-            f"extra group option(s) {offending}. These look like options merged from a parent feature. "
-            f"If '{str(feature.name)}' is a declared input feature, build it with "
-            f"Options.forward_for_input_feature(exclude={exclude_snippet}) so the parent's query-specific "
-            f"keys stay off it."
+            f"extra group option(s) {offending}. These look like options forwarded from a parent feature. "
+            f"If '{str(feature.name)}' is a declared input feature, narrow the child's forward_group so it "
+            f"only carries the keys this input feature actually needs and drops {offending}, or remove "
+            f"forward_group entirely so the input feature starts clean."
         )
 
     def _build_no_feature_group_error(

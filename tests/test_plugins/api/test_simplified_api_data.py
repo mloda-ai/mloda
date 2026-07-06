@@ -37,8 +37,8 @@ class SimpleApiFeature(FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         """Define input features from mloda data."""
         return {
-            Feature(name="api_id", index=Index(("api_id",))),
-            Feature(name="api_value", index=Index(("api_id",))),
+            Feature(name="api_id", index=Index(("api_id",)), forward_group={"ApiInputData"}),
+            Feature(name="api_value", index=Index(("api_id",)), forward_group={"ApiInputData"}),
         }
 
     @classmethod
@@ -62,8 +62,8 @@ class MultiKeyApiFeature(FeatureGroup):
         """Define input features from multiple mloda data sources."""
         # This will require data from both FirstKey and SecondKey
         return {
-            Feature(name="first_id", index=Index(("first_id",))),
-            Feature(name="second_value", index=Index(("second_id",))),
+            Feature(name="first_id", index=Index(("first_id",)), forward_group={"ApiInputData"}),
+            Feature(name="second_value", index=Index(("second_id",)), forward_group={"ApiInputData"}),
         }
 
     @classmethod
@@ -107,7 +107,7 @@ class SimplifiedApiJoinFeature(FeatureGroup):
         )
 
         return {
-            Feature(name="api_value", link=link, index=Index(("api_id",))),
+            Feature(name="api_value", link=link, index=Index(("api_id",)), forward_group={"ApiInputData"}),
             Feature(name="creator_value", index=Index(("creator_id",))),
         }
 

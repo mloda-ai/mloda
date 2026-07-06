@@ -17,8 +17,8 @@ class ClassMethodFeature(FeatureGroup):
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {
-            Feature(name="cm_id", index=Index(("cm_id",))),
-            Feature(name="cm_value", index=Index(("cm_id",))),
+            Feature(name="cm_id", index=Index(("cm_id",)), forward_group={"ApiInputData"}),
+            Feature(name="cm_value", index=Index(("cm_id",)), forward_group={"ApiInputData"}),
         }
 
     @classmethod

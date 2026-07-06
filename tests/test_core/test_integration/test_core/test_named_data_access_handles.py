@@ -117,7 +117,7 @@ class _DoubledValueFG(FeatureGroup, MatchData):
         return {SqliteFramework}
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
-        return {Feature("value")}
+        return {Feature("value", forward_group=True)}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

@@ -193,8 +193,8 @@ class AsofJoinedFeature(FeatureGroup, _AsofMatchData):
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         link = _asof_link()
         return {
-            Feature(name="lv", link=link, index=Index(("k",))),
-            Feature(name="rv", index=Index(("k",))),
+            Feature(name="lv", link=link, index=Index(("k",)), forward_group=True),
+            Feature(name="rv", index=Index(("k",)), forward_group=True),
         }
 
     @classmethod

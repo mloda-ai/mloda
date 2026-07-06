@@ -112,7 +112,10 @@ class TestAddIndex:
                 return False
 
             def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
-                return {Feature.int32_of("Amount"), Feature.int32_of("any_num")}
+                return {
+                    Feature("Amount", data_type="INT32", forward_group=True),
+                    Feature("any_num", data_type="INT32", forward_group=True),
+                }
 
             @classmethod
             def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

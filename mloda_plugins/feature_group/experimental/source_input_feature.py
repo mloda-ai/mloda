@@ -160,7 +160,7 @@ class SourceInputFeatureComposite:
         Helper method to create a Feature object from a source definition.
         """
         if isinstance(source, str):
-            return Feature(name=source)
+            return Feature(name=source, forward_group=True)
         else:
             try:
                 source_tuple = SourceTuple(*source)

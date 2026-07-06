@@ -215,7 +215,7 @@ class AssemblerWithMixedLink(FeatureGroup):
 
         return {
             Feature(name=BaseFeatureGroupA.FEATURE_NAME),
-            Feature(name="user_query", link=link),
+            Feature(name="user_query", link=link, forward_group={"ApiInputData"}),
         }
 
     @classmethod

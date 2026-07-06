@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from typing import Any, Iterable, Optional, TYPE_CHECKING, cast
+from typing import Any, Optional, TYPE_CHECKING, cast
 from copy import deepcopy
 
 from mloda.core.abstract_plugins.components.hashable_dict import _make_hashable
 from mloda.core.abstract_plugins.components.validators.options_validator import OptionsValidator
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
-import builtins
 
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.components.feature import Feature
@@ -230,103 +229,3 @@ class Options:
             parts += f", propagate_context_keys={self.propagate_context_keys}"
         parts += ")"
         return parts
-
-    def update_with_protected_keys(self, other: "Options", protected_keys: builtins.set[str] | None = None) -> None:
-        """
-        Updates this Options object with data from another Options object, respecting protected keys.
-
-        Protected keys allow parent and child features in a chain to maintain different values
-        without raising conflicts. This is essential for feature chaining where each level
-        needs its own configuration for certain parameters.
-
-        Protected keys can be specified in two ways:
-        1. Explicitly passed as the protected_keys parameter
-        2. Dynamically read from self.get(feature_chainer_parser_key) for backward compatibility
-
-        Mechanism:
-        - Protected keys in 'other' are NOT merged into 'self'
-        - This preserves the parent's (self) configuration for those keys
-        - Child features can have different values for protected keys without conflict
-
-        Example:
-            Parent feature has: in_features="parent_source"
-            Child feature has:  in_features="child_source"
-
-            Without protection: ERROR (duplicate key conflict)
-            With protection: Both keep their own values (no merge, no error)
-
-        Args:
-            other: The Options object to merge from (typically child options)
-            protected_keys: Set of keys to protect from merging.
-                          If None, uses in_features + any keys from feature_chainer_parser_key
-
-        Raises:
-            ValueError: If non-protected keys conflict between group and context
-        """
-        # Build protected keys set
-        if protected_keys is None:
-            # Default: always protect in_features
-            protected_keys = {DefaultOptionKeys.in_features}
-
-            # Dynamic: read additional protected keys from feature_chainer_parser_key
-            # This allows feature groups to specify which keys should be protected
-            if self.get(DefaultOptionKeys.feature_chainer_parser_key):
-                for key in self.get(DefaultOptionKeys.feature_chainer_parser_key):
-                    protected_keys.add(key)
-
-        # Create a copy of other.group excluding protected keys
-        # Protected keys are intentionally skipped to preserve parent's configuration
-        other_group_copy = other.group.copy()
-        for protected_key in protected_keys:
-            if protected_key in other_group_copy:
-                del other_group_copy[protected_key]
-
-        # Check for conflicts before updating
-        OptionsValidator.validate_no_group_context_conflicts(set(other_group_copy.keys()), set(self.context.keys()))
-        self.group.update(other_group_copy)
-
-        # Propagate specified context keys from other to self
-        if other.propagate_context_keys:
-            propagating = {
-                k: v for k, v in other.context.items() if k in other.propagate_context_keys and k not in protected_keys
-            }
-
-            OptionsValidator.validate_no_context_group_conflicts(set(propagating.keys()), set(self.group.keys()))
-
-            for key, value in propagating.items():
-                if key in self.context and self.context[key] != value:
-                    raise ValueError(f"Context key '{key}' conflict: parent='{value}', child='{self.context[key]}'")
-
-            self.context.update(propagating)
-
-    def forward_for_input_feature(self, exclude: Optional[Iterable[str]] = None) -> "Options":
-        """
-        Build Options for a declared input feature that survives the parent->child group auto-merge.
-
-        When a FeatureGroup returns a declared input feature from input_features(), the engine
-        merges the parent feature's group options into that child. Parent query-specific keys
-        (listed in ``exclude``) plus in_features are marked merge-protected via
-        feature_chainer_parser_key so they do not flow onto and break the child's resolution.
-
-        The feature_chainer_parser_key itself is also protected, and any protected keys the parent
-        already carries under feature_chainer_parser_key are preserved. This lets nested
-        input_features chains compose without raising.
-
-        Called on the PARENT's Options. Returns a NEW Options carrying the parent's group params
-        forward, except the protected keys. The parent's context is not copied and the parent is
-        not mutated.
-        """
-        if isinstance(exclude, str):
-            raise TypeError(
-                "forward_for_input_feature 'exclude' must be an iterable of keys, not a bare str "
-                "(a str would iterate into single characters)."
-            )
-        inherited = frozenset(self.get(DefaultOptionKeys.feature_chainer_parser_key) or ())
-        protected = (
-            frozenset(exclude or ())
-            | {DefaultOptionKeys.in_features, DefaultOptionKeys.feature_chainer_parser_key}
-            | inherited
-        )
-        new_group = {key: value for key, value in self.group.items() if key not in protected}
-        new_group[DefaultOptionKeys.feature_chainer_parser_key] = protected
-        return Options(group=new_group)

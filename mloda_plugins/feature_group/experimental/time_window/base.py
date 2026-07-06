@@ -138,8 +138,8 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
         # Try string-based parsing first
         _, source_feature = FeatureChainParser.parse_feature_name(str(feature_name), [self.PREFIX_PATTERN])
         if source_feature is not None:
-            time_filter_feature = Feature(self.get_reference_time_column(options))
-            return {Feature(source_feature), time_filter_feature}
+            time_filter_feature = Feature(self.get_reference_time_column(options), forward_group=True)
+            return {Feature(source_feature, forward_group=True), time_filter_feature}
 
         # Fall back to configuration-based approach
         source_features = options.get_in_features()

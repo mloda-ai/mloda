@@ -32,6 +32,10 @@ class Feature:
         link (Optional[Link]): The link associated with the feature.
         index (Optional[Index]): The index associated with the feature.
         feature_group_scope (str | type[FeatureGroup] | None): Resolution-only scope; excluded from identity.
+        forward_group (bool | set[str] | frozenset[str] | None): Consumer group keys forwarded onto this
+            feature when it is used as an input feature (True = all except in_features); excluded from identity.
+        inherit_context_keys (set[str] | frozenset[str] | None): Consumer context keys pulled onto this
+            feature when it is used as an input feature; excluded from identity.
 
     Quick start (recommended progression)::
 
@@ -80,6 +84,8 @@ class Feature:
         link: Optional[Link] = None,
         index: Optional[Index] = None,
         feature_group: str | type[FeatureGroup] | None = None,
+        forward_group: bool | set[str] | frozenset[str] | None = None,
+        inherit_context_keys: set[str] | frozenset[str] | None = None,
     ):
         if options is None:
             options = {}
@@ -114,6 +120,21 @@ class Feature:
 
         # feature_group_scope is resolution-only metadata, excluded from equality and hash like link/index.
         self.feature_group_scope = self._set_feature_group_scope(feature_group)
+
+        # forward_group and inherit_context_keys steer the input-feature option merge only.
+        # They are excluded from equality and hash like link/index/feature_group_scope.
+        if isinstance(forward_group, str):
+            raise TypeError(
+                "forward_group must be a set/frozenset of keys, a bool, or None, not a bare str "
+                "(a str would be ambiguous with an iterable of characters)."
+            )
+        self.forward_group = forward_group
+        if isinstance(inherit_context_keys, str):
+            raise TypeError(
+                "inherit_context_keys must be a set/frozenset of keys or None, not a bare str "
+                "(a str would be ambiguous with an iterable of characters)."
+            )
+        self.inherit_context_keys = inherit_context_keys
 
     def _set_feature_group_scope(
         self, feature_group: str | type[FeatureGroup] | None

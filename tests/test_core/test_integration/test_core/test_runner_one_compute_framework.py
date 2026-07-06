@@ -44,7 +44,7 @@ class EngineRunnerTest2(FeatureGroup):
         return False
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
-        return {Feature.int32_of(self.f_name2)}
+        return {Feature(self.f_name2, data_type="INT32", forward_group=True)}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -57,7 +57,7 @@ class EngineRunnerTest2(FeatureGroup):
 
 
 class EngineRunnerTest3(FeatureGroup):
-    feature_2 = Feature.int32_of("EngineRunnerTest2")
+    feature_2 = Feature("EngineRunnerTest2", data_type="INT32", forward_group=True)
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return {self.feature_2}
@@ -100,7 +100,7 @@ class SumFeature(FeatureGroup):
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         feature_names = options.get("sum")
-        return {Feature.int32_of(value) for value in set(feature_names)}
+        return {Feature(value, data_type="INT32", forward_group=True) for value in set(feature_names)}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

@@ -409,81 +409,78 @@ The [Context Propagation](property-mapping.md#context-propagation) docs describe
 opts specific keys in. This section describes the **author side**: what happens to a
 feature group's own options when it declares an input feature.
 
-### The group-vs-context merge asymmetry
+### Input features start clean (allowlist forwarding)
 
-When your `input_features()` returns a child `Feature`, the engine merges the parent
-feature's options into that child before resolving it:
+When your `input_features()` returns a child `Feature`, that child inherits **nothing**
+from the consumer feature by default. Its options are exactly what you set on it. Group
+parameters do not auto-merge, and context parameters do not either. Forwarding is opt-in
+per key, which keeps a consumer's own tuning keys off a foreign upstream unless you
+deliberately pass them down.
 
-- **Group** parameters auto-merge from parent into the child input feature.
-- **Context** parameters do NOT auto-merge. They only reach a child when the caller
-  lists them in `propagate_context_keys`.
+Three explicit channels move a value onto a declared input feature:
 
-A connector that needs an upstream selector (for example a `kg_backend` group option)
-to reach its input feature can rely on the group auto-merge. A connector that needs a
-**context** option to reach its input feature cannot rely on callers opting in, so it
-must forward that value explicitly on the child `Feature` it constructs.
+- **`forward_group`** on the child `Feature`: copy specific consumer **group** keys onto
+  the child (a set of key names, or `True` for every group key except `in_features`).
+- **`inherit_context_keys`** on the child `Feature`: pull specific consumer **context**
+  keys onto the child. This is the child-side counterpart of the caller-side
+  `propagate_context_keys` push.
+- **`propagate_context_keys`** on the caller's `Options`: the caller pushes named context
+  keys down through the chain (see [Context Propagation](property-mapping.md#context-propagation)).
 
-### Why a bare `Feature(name)` can fail resolution
+### A bare `Feature(name)` resolves cleanly
 
-The group auto-merge also copies the parent's own query-specific group keys (for
-example `query_text`, `top_k`) onto the child. The child's matcher (its
-`match_feature_group_criteria` / `PROPERTY_MAPPING`) does not accept those extra keys,
-so resolution fails with `No feature groups found ...`. When a feature group would
-match the bare name but rejects it because of those extra group keys, the error names
-the offending keys and points to `forward_for_input_feature`. (Reserved keys such as
-`feature_chainer_parser_key` are ignored by matching, so it is only the parent's own
-query-specific keys that break the match.)
-
-``` python
-def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
-    return {Feature("knowledge_graph")}  # parent's query_text/top_k pollute this child -> no match
-```
-
-### Protecting keys with `forward_for_input_feature`
-
-To keep the parent's query-specific keys off the child, mark them as merge-protected.
-`Options.forward_for_input_feature(exclude=...)` builds options for a declared input
-feature that survive the auto-merge: it forwards the parent's non-excluded group
-parameters and marks the `exclude` keys (always together with `in_features`) as
-protected, so they are not copied onto the child.
+Because nothing is merged onto it, a bare input feature carries none of the consumer's
+query-specific keys (for example `query_text`, `top_k`), so a strict upstream matcher
+that only accepts its bare name resolves without interference.
 
 ``` python
 def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
-    child_options = options.forward_for_input_feature(exclude={"query_text", "top_k"})
-    return {Feature("knowledge_graph", child_options)}
+    return {Feature("knowledge_graph")}  # starts clean; no consumer keys leak onto it
 ```
 
-The shared `kg_backend` selector still flows to the child through the group
-auto-merge; `query_text` and `top_k` stay on the parent only. If the child needs a
-**context** value forwarded, set it explicitly on `child_options` before returning the
-feature, since context is never auto-merged.
+### Forwarding an upstream selector with `forward_group`
 
-### The underlying mechanism
-
-`forward_for_input_feature` wraps `DefaultOptionKeys.feature_chainer_parser_key`, the
-key whose value is the set of option keys to protect during the parent-to-child merge.
-`in_features` is always protected. Setting this key by hand is the lower-level form of
-the same mechanism:
+When the input feature genuinely needs a shared selector from the consumer (for example
+a `kg_backend` group option), name that key in `forward_group`. Only the listed keys are
+copied; everything else stays off the child.
 
 ``` python
-child_options = Options(
-    group={DefaultOptionKeys.feature_chainer_parser_key: frozenset({"query_text", "top_k"})}
-)
+def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    return {Feature("knowledge_graph", forward_group={"kg_backend"})}
 ```
 
-Prefer `forward_for_input_feature`; reach for the raw key only when you need protection
-semantics it does not cover.
+`kg_backend` flows onto the child; the consumer's `query_text` and `top_k` do not. A
+forwarded key that already exists on the child with a different value raises a
+`ValueError` rather than silently overwriting. Passing `forward_group=True` forwards the
+whole consumer group at once (except `in_features`); prefer a narrow key set for a
+foreign upstream so a new consumer option added later cannot leak onto it.
+
+### Pulling a context value with `inherit_context_keys`
+
+Context is never forwarded implicitly. If the child needs a consumer context value, list
+it in `inherit_context_keys`:
+
+``` python
+def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    return {Feature("knowledge_graph", inherit_context_keys={"trace_id"})}
+```
+
+Same-family chained features built by `FeatureChainParserMixin` from a parsed feature
+name are constructed with `forward_group=True` automatically, so a chain like
+`price__scaled__aggregated` keeps passing each level's configuration down without extra
+wiring.
 
 ### Upstream feature deduplication
 
 The engine deduplicates upstream features that share the same group identity. Declaring
-the same source feature as the input of several parents therefore computes it once,
-**provided those parents forward the same options to it**. Forwarded options become part
-of the child's group identity, so two parents that call `forward_for_input_feature` with
-identical arguments share a single computed feature, while a plain request of the same
-name (or one carrying different options) is a distinct identity and is computed
-separately. Keep the forwarded options identical across parents when you want them to
-share the computation.
+the same source feature as the input of several consumers therefore computes it once,
+**provided those consumers forward the same options to it**. Forwarded group keys become
+part of the child's group identity, so two consumers that forward identical keys and
+values share a single computed feature, while a plain request of the same name (or one
+carrying different forwarded options) is a distinct identity and is computed separately.
+Keep the forwarded options identical across consumers when you want them to share the
+computation. `inherit_context_keys` values land in context and do not affect this
+identity.
 
 ## Multiple Result Columns with ~ Pattern
 

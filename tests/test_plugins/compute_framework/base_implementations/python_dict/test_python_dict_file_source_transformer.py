@@ -3,8 +3,10 @@
 Target behavior for ``FileSourceDictTransformer.transform_fw_to_other_fw`` (matching the
 column semantics pyarrow's CSV reader gives, without pyarrow):
 
-  (a) An empty cell becomes ``None`` (not ``""``). A numeric column with a missing cell is
-      ``[None, 3]`` (ints where present, ``None`` for the gap), not ``["", 3]``.
+  (a) Empty-cell handling matches pyarrow's default CSV reader (``strings_can_be_null=False``):
+      a NUMERIC column with a missing cell is ``[None, 3]`` (typed where present, ``None`` for the
+      gap); a STRING column's missing interior cell stays ``""`` (empty string, NOT ``None``);
+      an ALL-EMPTY column (every cell empty) is inferred as all-``None``.
   (b) A column whose non-empty cells are all integers -> ``int``; all decimals -> ``float``;
       a column mixing numeric and text cells stays ``str``.
   (c) Numeric-LOOKING text stays ``str``: ``"1_000"`` must NOT parse to ``1000``; leading /
@@ -57,6 +59,20 @@ class TestColumnWiseTypeInference:
         assert result["a"] == [1, 2]
         assert result["b"] == [None, 3]
         assert result["c"] == ["x", "y"]
+
+    def test_string_column_missing_interior_cell_is_empty_string(self, tmp_path: Path) -> None:
+        """(a) A STRING column's missing interior cell stays ``""`` (matches pyarrow), not ``None``."""
+        result = _materialize(tmp_path, "a,b\nx,1\n,2\ny,3\n", ("a", "b"))
+
+        assert result["a"] == ["x", "", "y"]
+        assert result["b"] == [1, 2, 3]
+
+    def test_all_empty_column_is_all_none(self, tmp_path: Path) -> None:
+        """(a) A column whose every cell is empty is inferred as all-``None`` (matches pyarrow)."""
+        result = _materialize(tmp_path, "a,b\n1,\n2,\n", ("a", "b"))
+
+        assert result["a"] == [1, 2]
+        assert result["b"] == [None, None]
 
     def test_integer_float_and_mixed_columns(self, tmp_path: Path) -> None:
         """(b) all-int -> int; all-decimal -> float; numeric+text -> str."""
@@ -123,6 +139,19 @@ class TestBlankAndRaggedRows:
             )
         message = str(excinfo.value)
         # Must name the file path and/or a row number so the error is actionable.
+        assert str(path) in message or "row" in message.lower(), message
+
+    def test_ragged_long_row_raises_valueerror_with_context(self, tmp_path: Path) -> None:
+        """(f) A row with MORE fields than the header raises a clear ValueError (pyarrow errors too),
+        rather than silently dropping the extra field(s)."""
+        path = tmp_path / "data.csv"
+        path.write_text("a,b\n1,2,3\n", encoding="utf-8")
+
+        with pytest.raises(ValueError) as excinfo:
+            FileSourceDictTransformer.transform_fw_to_other_fw(
+                FileSource(path=str(path), format="csv", columns=("a", "b"))
+            )
+        message = str(excinfo.value)
         assert str(path) in message or "row" in message.lower(), message
 
     def test_duplicate_header_raises_valueerror_naming_column(self, tmp_path: Path) -> None:

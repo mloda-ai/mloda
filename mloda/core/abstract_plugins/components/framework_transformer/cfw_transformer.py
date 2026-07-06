@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any, ClassVar, Optional
 
 from mloda.core.abstract_plugins.components.framework_transformer.base_transformer import BaseTransformer
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
@@ -27,6 +27,8 @@ class ComputeFrameworkTransformer:
     classes, allowing the system to find the appropriate transformer for
     converting data between any two supported frameworks.
     """
+
+    _auto_load_done: ClassVar[bool] = False
 
     def __init__(self) -> None:
         """
@@ -78,17 +80,18 @@ class ComputeFrameworkTransformer:
         Initialize the transformer registry with all available transformers.
 
         This method discovers all BaseTransformer subclasses and adds them
-        to the registry. If none are found, auto-loads only transformer files
-        from the compute_framework group via load_matching.
+        to the registry. The transformer files from the compute_framework group
+        are auto-loaded once per process via load_matching, so a stray
+        module-scope import of a single transformer cannot leave the registry
+        partial. Auto-loading is skipped while the group is disabled.
         """
+        from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
+
+        if not ComputeFrameworkTransformer._auto_load_done and "compute_framework" not in PluginLoader._disabled_groups:
+            PluginLoader().load_matching("compute_framework", "*transformer*")
+            ComputeFrameworkTransformer._auto_load_done = True
+
         transformers = get_all_subclasses(BaseTransformer)
-        if not transformers:
-            from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
-
-            if "compute_framework" not in PluginLoader._disabled_groups:
-                PluginLoader().load_matching("compute_framework", "*transformer*")
-                transformers = get_all_subclasses(BaseTransformer)
-
         for transformer in transformers:
             self.add(transformer)
 

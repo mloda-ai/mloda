@@ -19,20 +19,30 @@ _BOOL_MAP: dict[str, bool] = {
 def _infer_column(cells: list[str | None]) -> list[Any]:
     """Infer a single column's type once (column-wise) and cast its cells.
 
-    An empty (missing) cell is ``None`` and never forces the column to string.
+    Empty-cell semantics match pyarrow's default CSV reader
+    (``strings_can_be_null=False``): a missing cell in a numeric/bool column
+    becomes ``None``, while a missing cell in a string column becomes ``""``
+    (empty string). An all-empty column (no present cells) stays all ``None``.
+
+    Recognizing null tokens (``NA``, ``NaN``, ``null``) inside an otherwise
+    numeric column is a deliberate follow-up: such a column currently stays
+    string.
     """
     present = [c for c in cells if c is not None]
 
-    if present and all(_INT_RE.match(c) for c in present):
+    if not present:
+        return list(cells)
+
+    if all(_INT_RE.match(c) for c in present):
         return [None if c is None else int(c) for c in cells]
 
-    if present and all(_FLOAT_RE.match(c) for c in present):
+    if all(_FLOAT_RE.match(c) for c in present):
         return [None if c is None else float(c) for c in cells]
 
-    if present and all(c in _BOOL_MAP for c in present):
+    if all(c in _BOOL_MAP for c in present):
         return [None if c is None else _BOOL_MAP[c] for c in cells]
 
-    return list(cells)
+    return ["" if c is None else c for c in cells]
 
 
 class FileSourceDictTransformer(BaseTransformer):
@@ -83,7 +93,7 @@ class FileSourceDictTransformer(BaseTransformer):
             for row_number, row in enumerate(reader, start=1):
                 if not row:
                     continue
-                if len(row) < len(header):
+                if len(row) != len(header):
                     raise ValueError(
                         f"Ragged row {row_number} in {data.path}: expected {len(header)} columns, got {len(row)}."
                     )

@@ -1,7 +1,6 @@
-from typing import Any, Optional
+from typing import Any
 
 import pyarrow as pa
-from pyarrow import csv as pyarrow_csv
 
 from mloda.provider import BaseTransformer
 
@@ -31,8 +30,13 @@ class FileSourcePyArrowTransformer(BaseTransformer):
     def transform_fw_to_other_fw(cls, data: Any) -> Any:
         if data.format != "csv":
             raise ValueError(f"FileSourcePyArrowTransformer only supports the 'csv' format, got {data.format!r}.")
-        return pyarrow_csv.read_csv(data.path).select(list(data.columns))
+        from pyarrow import csv as pyarrow_csv
+
+        return pyarrow_csv.read_csv(
+            data.path,
+            convert_options=pyarrow_csv.ConvertOptions(include_columns=list(data.columns)),
+        )
 
     @classmethod
-    def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Optional[Any] = None) -> Any:
+    def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Any | None = None) -> Any:
         raise NotImplementedError

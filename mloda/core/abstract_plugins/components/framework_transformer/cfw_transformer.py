@@ -127,3 +127,34 @@ class ComputeFrameworkTransformer:
                 ]
 
         return None
+
+    def apply_chain(
+        self,
+        from_framework: type[Any],
+        to_framework: type[Any],
+        chain: list[type[BaseTransformer]],
+        data: Any,
+        connection: Any,
+    ) -> Any:
+        """Walk a transformation chain, resolving each intermediate hop's target framework
+        from the transformer map, and apply each transformer in sequence."""
+        current_fw = from_framework
+        for i, transformer_cls in enumerate(chain):
+            if i == len(chain) - 1:
+                target_fw: type[Any] = to_framework
+            else:
+                target_fw = self._resolve_intermediate_target(transformer_cls, current_fw)
+
+            data = transformer_cls.transform(current_fw, target_fw, data, connection)
+            current_fw = target_fw
+
+        return data
+
+    def _resolve_intermediate_target(self, transformer_cls: type[BaseTransformer], current_fw: type[Any]) -> type[Any]:
+        for (src, dst), trans in self.transformer_map.items():
+            if trans == transformer_cls and src == current_fw:
+                return dst
+        raise KeyError(
+            f"No transformer edge found for {transformer_cls} from {current_fw} in the "
+            "transformer map; the transformation chain is inconsistent with the registry."
+        )

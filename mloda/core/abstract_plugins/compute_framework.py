@@ -12,6 +12,7 @@ from mloda.core.abstract_plugins.function_extender import (
     _CompositeExtender,
 )
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
+from mloda.core.abstract_plugins.components.input_data.input_data_descriptor import InputDataDescriptor
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.filter.filter_engine import BaseFilterEngine
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
@@ -149,30 +150,28 @@ class ComputeFramework(ABC):
         if _from_fw == _to_fw:
             return None
 
-        transformation_chain = self.transformer.get_transformation_chain(_from_fw, _to_fw)
-        if transformation_chain is None:
-            return None
+        # A direct transformer always applies (e.g. FileSource -> pa.Table, FileSource -> dict).
+        direct = self.transformer.transformer_map.get((_from_fw, _to_fw))
+        if direct is not None:
+            return direct.transform(_from_fw, _to_fw, data, self.framework_connection_object)
 
-        current_fw = _from_fw
-        for i, transformer_cls in enumerate(transformation_chain):
-            if i == len(transformation_chain) - 1:
-                target_fw = _to_fw
-            else:
-                target_fw = None
-                for (src, dst), trans in self.transformer.transformer_map.items():
-                    if trans == transformer_cls and src == current_fw:
-                        target_fw = dst
-                        break
-                if target_fw is None:
-                    raise KeyError(
-                        f"No transformer edge found for {transformer_cls} from {current_fw} in the "
-                        "transformer map; the transformation chain is inconsistent with the registry."
-                    )
+        # A multi-hop chain (through pa.Table) is only valid for a descriptor input that has no
+        # native framework form. A plain dict is not a descriptor, so it returns None and the
+        # framework's native transform() branch handles it.
+        if isinstance(data, InputDataDescriptor):
+            return self._materialize_descriptor(data, _from_fw, _to_fw)
 
-            data = transformer_cls.transform(current_fw, target_fw, data, self.framework_connection_object)
-            current_fw = target_fw
+        return None
 
-        return data
+    def _materialize_descriptor(self, data: Any, _from_fw: type[Any], _to_fw: Any) -> Any:
+        chain = self.transformer.get_transformation_chain(_from_fw, _to_fw)
+        if chain is None:
+            raise ValueError(
+                f"Cannot materialize {_from_fw.__name__} into {type(self).__name__}: no transformer chain is "
+                f"registered from {_from_fw.__name__} to {_to_fw}. Reading files into this framework needs "
+                f"pyarrow. Install it with: pip install 'mloda[pyarrow]'."
+            )
+        return self.transformer.apply_chain(_from_fw, _to_fw, chain, data, self.framework_connection_object)
 
     def select_data_by_column_names(
         self, data: Any, selected_feature_names: set[FeatureName], column_ordering: Optional[str] = None

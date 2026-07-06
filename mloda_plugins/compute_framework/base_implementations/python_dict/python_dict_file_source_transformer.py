@@ -1,19 +1,38 @@
 import csv
-from typing import Any, Optional
+import re
+from typing import Any
 
 from mloda.provider import BaseTransformer
 
+_INT_RE = re.compile(r"^[+-]?[0-9]+$")
+_FLOAT_RE = re.compile(r"^[+-]?(?:[0-9]+\.[0-9]*|\.[0-9]+|[0-9]+)(?:[eE][+-]?[0-9]+)?$")
+_BOOL_MAP: dict[str, bool] = {
+    "true": True,
+    "false": False,
+    "True": True,
+    "False": False,
+    "TRUE": True,
+    "FALSE": False,
+}
 
-def _coerce(value: str) -> Any:
-    """Coerce a raw CSV cell to ``int``, else ``float``, else keep it as ``str``."""
-    try:
-        return int(value)
-    except ValueError:
-        pass
-    try:
-        return float(value)
-    except ValueError:
-        return value
+
+def _infer_column(cells: list[str | None]) -> list[Any]:
+    """Infer a single column's type once (column-wise) and cast its cells.
+
+    An empty (missing) cell is ``None`` and never forces the column to string.
+    """
+    present = [c for c in cells if c is not None]
+
+    if present and all(_INT_RE.match(c) for c in present):
+        return [None if c is None else int(c) for c in cells]
+
+    if present and all(_FLOAT_RE.match(c) for c in present):
+        return [None if c is None else float(c) for c in cells]
+
+    if present and all(c in _BOOL_MAP for c in present):
+        return [None if c is None else _BOOL_MAP[c] for c in cells]
+
+    return list(cells)
 
 
 class FileSourceDictTransformer(BaseTransformer):
@@ -47,18 +66,33 @@ class FileSourceDictTransformer(BaseTransformer):
 
         with open(data.path, newline="", encoding="utf-8-sig") as f:
             reader = csv.reader(f)
-            header = next(reader)
+            header = next(reader, [])
+
             index: dict[str, int] = {}
             for name in data.columns:
-                if name not in header:
+                occurrences = header.count(name)
+                if occurrences > 1:
+                    raise ValueError(
+                        f"Duplicate column {name!r} in CSV header of {data.path}; cannot resolve which one to read."
+                    )
+                if occurrences == 0:
                     raise ValueError(f"Column {name!r} not found in CSV header of {data.path}")
                 index[name] = header.index(name)
-            columns: dict[str, list[Any]] = {name: [] for name in data.columns}
-            for row in reader:
+
+            raw: dict[str, list[str | None]] = {name: [] for name in data.columns}
+            for row_number, row in enumerate(reader, start=1):
+                if not row:
+                    continue
+                if len(row) < len(header):
+                    raise ValueError(
+                        f"Ragged row {row_number} in {data.path}: expected {len(header)} columns, got {len(row)}."
+                    )
                 for name in data.columns:
-                    columns[name].append(_coerce(row[index[name]]))
-        return columns
+                    cell = row[index[name]]
+                    raw[name].append(None if cell == "" else cell)
+
+        return {name: _infer_column(cells) for name, cells in raw.items()}
 
     @classmethod
-    def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Optional[Any] = None) -> Any:
+    def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Any | None = None) -> Any:
         raise NotImplementedError

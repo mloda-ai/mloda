@@ -1,9 +1,11 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from mloda.core.abstract_plugins.components.input_data.input_data_descriptor import InputDataDescriptor
+
 
 @dataclass(frozen=True)
-class FileSource:
+class FileSource(InputDataDescriptor):
     """Immutable, hashable descriptor for a file-backed input.
 
     Decouples file input from any compute framework: ``load_data`` resolves a file into

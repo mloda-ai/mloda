@@ -158,4 +158,4 @@ class CsvReader(ReadFile):
     @classmethod
     def get_column_names(cls, file_name: str) -> Any:
         with open(file_name, newline="", encoding="utf-8-sig") as f:
-            return next(csv.reader(f))
+            return next(csv.reader(f), [])

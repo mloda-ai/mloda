@@ -176,7 +176,10 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
         _, source_feature = FeatureChainParser.parse_feature_name(feature_name, [self.PREFIX_PATTERN])
         if source_feature is not None:
             time_filter_feature = Feature(self.get_reference_time_column(options))
-            return {Feature(source_feature), time_filter_feature}
+            return {
+                Feature(source_feature, forward_group={DefaultOptionKeys.reference_time}),
+                time_filter_feature,
+            }
 
         # Fall back to configuration-based approach
         source_features = options.get_in_features()

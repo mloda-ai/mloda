@@ -1,7 +1,7 @@
 """RED test: a ``FileSource`` descriptor with no resolvable materialization chain must
 raise an ACTIONABLE error, not silently leak the descriptor.
 
-When pyarrow is unavailable, a non-PythonDict framework (here ``PandasDataFrame``) cannot
+When pyarrow is unavailable, a non-PythonDict framework (here ``DuckDBFramework``) cannot
 materialize a CSV ``FileSource`` (the only path runs through ``pa.Table``). The fix must
 raise an error whose message names the descriptor/target and points at installing pyarrow
 (substring ``pyarrow``), instead of leaking the ``FileSource`` object downstream.
@@ -9,8 +9,8 @@ raise an error whose message names the descriptor/target and points at installin
 The body runs in a subprocess with pyarrow blocked via ``sys.meta_path``.
 
 Fails today: with pyarrow blocked and no chain, ``apply_compute_framework_transformer``
-returns ``None`` and ``PandasDataFrame.transform`` falls through to a generic
-"Data <FileSource> is not supported by PandasDataFrame" ValueError that never mentions
+returns ``None`` and ``DuckDBFramework.transform`` falls through to a generic
+"Data <FileSource> is not supported by DuckDBFramework" ValueError that never mentions
 pyarrow, so the ``OK:ACTIONABLE`` sentinel is absent.
 """
 
@@ -36,9 +36,9 @@ with open(path, "w", newline="") as f:
 try:
     from mloda.user import ParallelizationMode
     from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
-    from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+    from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 
-    fw = PandasDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+    fw = DuckDBFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
     source = FileSource(path=path, format="csv", columns=("A", "B"))
 
     try:

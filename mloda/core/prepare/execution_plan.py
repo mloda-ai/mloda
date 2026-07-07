@@ -1100,21 +1100,23 @@ class ExecutionPlan:
                 f_hash = feature.similarity_hash(split_keys)
                 hash_collector[f_hash].add(feature)
 
-        # Second pass: assign None-typed features to existing groups with matching base hash
+        # Second pass: assign None-typed features to existing groups with matching base hash.
+        # Precompute each group representative's base hash once (O(groups)) and look up in O(1),
+        # preserving the first-match-in-insertion-order semantics of the original scan.
+        base_hash_to_group: dict[int, int] = {}
+        for existing_hash, group in hash_collector.items():
+            representative_base_hash = next(iter(group)).base_similarity_hash(split_keys)
+            base_hash_to_group.setdefault(representative_base_hash, existing_hash)
+
         for feature in none_typed_features:
             base_hash = feature.base_similarity_hash(split_keys)
-            assigned = False
-
-            # Find an existing group with matching base properties
-            for existing_hash, group in hash_collector.items():
-                any_feature = next(iter(group))
-                if any_feature.base_similarity_hash(split_keys) == base_hash:
-                    hash_collector[existing_hash].add(feature)
-                    assigned = True
-                    break
-
-            if not assigned:
-                # No matching typed group found, create a new group for this None-typed feature
+            matched_group = base_hash_to_group.get(base_hash)
+            if matched_group is not None:
+                hash_collector[matched_group].add(feature)
+            else:
+                # No matching typed group found; create a new group for this None-typed feature
+                # and register it so later None-typed features with the same base hash reuse it.
                 hash_collector[base_hash].add(feature)
+                base_hash_to_group[base_hash] = base_hash
 
         return hash_collector

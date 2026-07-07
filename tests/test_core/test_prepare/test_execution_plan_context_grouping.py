@@ -166,6 +166,95 @@ def test_plain_value_splits_from_inherited_value_when_key_is_a_split_key() -> No
     )
 
 
+def test_none_typed_joins_first_of_two_data_type_only_groups() -> None:
+    """Characterization pin for the O(1) reverse-map optimization (issue #622).
+
+    Two typed features sharing everything (name, options, compute framework, inherited
+    context) but differing ONLY in data_type form two distinct groups (data_type is part
+    of similarity_hash). A None-typed feature with the same base properties shares the
+    SAME base_similarity_hash as both typed groups, so the current code joins the FIRST
+    matching group in insertion order and breaks. The optimization must preserve this
+    first-match semantics: exactly 2 groups survive, one with 2 members, the other with 1.
+    """
+    typed_int = Feature(
+        "tenant_scoped_source",
+        options=_options_with_inherited_tenant("acme"),
+        data_type=DataType.INT32,
+    )
+    typed_float = Feature(
+        "tenant_scoped_source",
+        options=_options_with_inherited_tenant("acme"),
+        data_type=DataType.FLOAT,
+    )
+    none_typed = Feature(
+        "tenant_scoped_source",
+        options=_options_with_inherited_tenant("acme"),
+    )
+
+    groups = _group({typed_int, typed_float, none_typed})
+
+    assert len(groups) == 2, (
+        "Two typed features differing only in data_type must stay in distinct groups, and the "
+        f"None-typed feature must join one existing group rather than form its own. Got {len(groups)}: {groups}"
+    )
+
+    sizes = sorted(len(group) for group in groups.values())
+    assert sizes == [1, 2], (
+        "The None-typed feature must join exactly one of the two typed groups (first-match "
+        f"semantics), yielding group sizes [1, 2]. Got {sizes}: {groups}"
+    )
+
+    joined_group = next(group for group in groups.values() if none_typed in group)
+    assert len(joined_group) == 2 and (typed_int in joined_group) ^ (typed_float in joined_group), (
+        "The None-typed feature must join exactly one typed group, keeping the two typed features in separate groups."
+    )
+
+
+def test_two_none_typed_features_without_typed_group_share_one_group() -> None:
+    """Characterization pin (issue #622): a newly created None-typed group is reused.
+
+    When two None-typed features have identical base properties and there is NO matching
+    typed group, the first opens a new group keyed by its base hash and the second must
+    join that same group. Expect a single group holding both features.
+    """
+    none_typed_a = Feature(
+        "tenant_scoped_source",
+        options=_options_with_inherited_tenant("acme"),
+    )
+    none_typed_b = Feature(
+        "tenant_scoped_index",
+        options=_options_with_inherited_tenant("acme"),
+    )
+
+    groups = _group({none_typed_a, none_typed_b})
+
+    assert len(groups) == 1, (
+        "Two None-typed features with identical base properties and no typed group must share one "
+        f"group (the newly created None-typed group is reused). Got {len(groups)}: {groups}"
+    )
+    only_group = next(iter(groups.values()))
+    assert none_typed_a in only_group and none_typed_b in only_group
+
+
+def test_split_context_hashable_empty_cases_return_empty_tuple() -> None:
+    """Characterization pin (issue #622): the empty split-context canonicalizes to ().
+
+    The optimization introduces an empty-case short-circuit; this pins its expected value.
+    With EMPTY split_keys the result is the empty-tuple canonical value (), and for a feature
+    carrying context that contains NONE of the split keys the result is also ()."""
+    feature = Feature(
+        "tenant_scoped_source",
+        options=Options(group={"data_source": "prod"}, context={"tenant": "acme"}),
+    )
+
+    assert feature._split_context_hashable(frozenset()) == (), (
+        "Empty split_keys must canonicalize to the empty tuple ()."
+    )
+    assert feature._split_context_hashable(frozenset({"region"})) == (), (
+        "A feature carrying none of the split keys in its context must canonicalize to ()."
+    )
+
+
 def test_features_with_identical_inherited_context_share_one_group() -> None:
     """Regression pin: identical group options and identical inherited context still group together."""
     feature_a = Feature(

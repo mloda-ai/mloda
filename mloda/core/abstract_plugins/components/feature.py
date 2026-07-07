@@ -347,7 +347,13 @@ class Feature:
 
     def _split_context_hashable(self, split_keys: frozenset[str]) -> Any:
         """Order-independent view of this feature's context values for the split keys."""
-        return _make_hashable({key: self.options.context[key] for key in split_keys if key in self.options.context})
+        if not split_keys:
+            return ()
+        context = self.options.context
+        relevant = {key: context[key] for key in split_keys if key in context}
+        if not relevant:
+            return ()
+        return _make_hashable(relevant)
 
     def _grouping_hash(self, split_keys: frozenset[str] | None, include_data_type: bool) -> int:
         keys = self.options.inherited_context_keys if split_keys is None else split_keys

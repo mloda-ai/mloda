@@ -10,6 +10,9 @@ if TYPE_CHECKING:
     from mloda.core.abstract_plugins.components.options import Options
 
 
+logger = logging.getLogger(__name__)
+
+
 class ExtenderHook(Enum):
     FEATURE_GROUP_CALCULATE_FEATURE = "feature_group_calculate_feature"
     VALIDATE_INPUT_FEATURE = "validate_input_feature"
@@ -42,6 +45,20 @@ class Extender(ABC):
     @priority.setter
     def priority(self, value: int) -> None:
         self._priority = value
+
+    @property
+    def raise_on_error(self) -> bool:
+        """Whether a failure in this extender breaks the calculation.
+
+        True (default) means a failure in this extender propagates and breaks the
+        calculation; False means the failure is logged as a warning and the wrapped
+        function is called instead.
+        """
+        return getattr(self, "_raise_on_error", True)
+
+    @raise_on_error.setter
+    def raise_on_error(self, value: bool) -> None:
+        self._raise_on_error = value
 
     @abstractmethod
     def wraps(self) -> set[ExtenderHook]:
@@ -121,11 +138,7 @@ class _CompositeExtender(Extender):
         def make_wrapper(ext: Extender, inner_func: Any) -> Any:
             @functools.wraps(inner_func)
             def wrapper(*a: Any, **kw: Any) -> Any:
-                try:
-                    return ext.__call__(inner_func, *a, **kw)
-                except Exception as e:
-                    logging.error(f"{ext.__class__.__name__} {ext.name if hasattr(ext, 'name') else ''} {str(e)}")
-                    return inner_func(*a, **kw)
+                return _invoke_extender(ext, inner_func, *a, **kw)
 
             return wrapper
 
@@ -133,3 +146,43 @@ class _CompositeExtender(Extender):
         for extender in reversed(self.extenders):
             wrapped_func = make_wrapper(extender, wrapped_func)
         return wrapped_func(*args, **kwargs)
+
+
+def _invoke_extender(ext: Extender, inner_func: Any, *args: Any, **kwargs: Any) -> Any:
+    """Invoke an extender around inner_func, scoping any warning-only fallback to the
+    extender's OWN code so inner-function failures propagate and inner never re-runs."""
+    # Breaking (default): call directly, everything propagates.
+    if ext.raise_on_error:
+        return ext.__call__(inner_func, *args, **kwargs)
+
+    # Warning-only: guard ONLY the extender's own code. Wrap inner_func so we can tell
+    # whether a raised exception came from inner_func (must propagate, never swallow,
+    # never re-run) versus the extender's own instrumentation (log + fall back).
+    sentinel = object()
+    state: dict[str, Any] = {"result": sentinel, "inner_raised": False}
+
+    @functools.wraps(inner_func)
+    def guarded_inner(*a: Any, **kw: Any) -> Any:
+        try:
+            result = inner_func(*a, **kw)
+        except BaseException:
+            state["inner_raised"] = True
+            raise
+        state["result"] = result
+        return result
+
+    try:
+        return ext.__call__(guarded_inner, *args, **kwargs)
+    except Exception as e:
+        if state["inner_raised"]:
+            # The failure came from the wrapped function / downstream chain, not this
+            # extender. Propagate unchanged; do not swallow, do not re-run.
+            raise
+        name = ext.name if hasattr(ext, "name") else ""
+        logger.warning(f"{ext.__class__.__name__} {name} {type(e).__name__}: {e}", exc_info=True)
+        if state["result"] is not sentinel:
+            # Inner already ran successfully; the extender failed afterwards.
+            # Return the already-computed result; do NOT re-run inner.
+            return state["result"]
+        # Extender failed before delegating; run inner exactly once as the fallback.
+        return inner_func(*args, **kwargs)

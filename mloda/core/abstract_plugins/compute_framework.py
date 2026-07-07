@@ -10,6 +10,7 @@ from mloda.core.abstract_plugins.function_extender import (
     Extender,
     ExtenderHook,
     _CompositeExtender,
+    _invoke_extender,
 )
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
@@ -642,7 +643,7 @@ class ComputeFramework(ABC):
         try:
             if extender is None:
                 return feature_group.calculate_feature(self.data, features)
-            return extender(feature_group.calculate_feature, self.data, features)
+            return _invoke_extender(extender, feature_group.calculate_feature, self.data, features)
         except KeyError as e:
             # Provide helpful error message for missing columns
             self._raise_helpful_missing_column_error(feature_group, e)

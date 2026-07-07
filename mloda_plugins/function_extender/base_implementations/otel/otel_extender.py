@@ -13,8 +13,9 @@ except ImportError:
 
 
 class OtelExtender(Extender):
-    def __init__(self) -> None:
+    def __init__(self, raise_on_error: bool = False) -> None:
         self.wrapped: set[ExtenderHook] = set()
+        self.raise_on_error = raise_on_error
 
         if trace is None:
             return

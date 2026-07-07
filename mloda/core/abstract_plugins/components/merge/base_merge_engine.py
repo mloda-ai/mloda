@@ -115,6 +115,10 @@ class BaseMergeEngine(ABC):
             f"to support timezone/ordered validation for joins."
         )
 
+    def _schema_maybe_temporal(self, data: Any, column: str) -> bool:
+        """Schema-only guess: could this column be temporal? Default True (never rule out)."""
+        return True
+
     def _coerce_asof_time_column(self, data: Any, column: str) -> Any:
         """Coerce an ISO-8601 string as-of time column to a temporal/numeric dtype.
 
@@ -158,8 +162,16 @@ class BaseMergeEngine(ABC):
         if len(left_cols) != len(right_cols):
             return
         contract = ComparisonContract(required=frozenset())
+        # require_compatible only fires for temporal-vs-temporal pairs, so skip a pair as soon
+        # as either side is known non-temporal (from schema, then from the left's semantics).
         for left_col, right_col in zip(left_cols, right_cols):
+            if not self._schema_maybe_temporal(left_data, left_col):
+                continue
+            if not self._schema_maybe_temporal(right_data, right_col):
+                continue
             left_sem = self._column_semantics(left_data, left_col)
+            if not left_sem.is_temporal:
+                continue
             right_sem = self._column_semantics(right_data, right_col)
             contract.require_compatible(left_sem, right_sem, left_col, right_col)
 

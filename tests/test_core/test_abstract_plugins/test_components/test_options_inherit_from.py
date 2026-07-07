@@ -1506,3 +1506,60 @@ class TestNonForwardedKeysConstant:
         assert DefaultOptionKeys.in_features not in child.group
         assert DefaultOptionKeys.in_features not in child.context
         assert child.group["kg_backend"] == "neo4j"
+
+
+class TestInheritFromCrossNamespaceIndependence:
+    """
+    Regression pins for issue #621: consumer CONTEXT vs child GROUP is independent.
+
+    WHY THIS EXISTS:
+    inherit_from only forwards group->group and only compares forwarded consumer
+    GROUP keys against the child's group/context. It NEVER compares a consumer
+    CONTEXT key against a child GROUP key. This is deliberate under the
+    group/context namespace separation: group drives resolution/splitting, context
+    is metadata. So a consumer context and a child group that happen to share a key
+    name resolve SILENTLY, the child keeps its own group value, and no ValueError is
+    raised. Only this one direction is dropped; the reverse (consumer group vs child
+    context) still raises. These pins lock in the asymmetry so a future regression
+    that starts cross-comparing namespaces would break them.
+    """
+
+    def test_consumer_context_and_child_group_same_name_resolve_silently(self) -> None:
+        """The DoD scenario: consumer context algo=sum and child group algo=mean do not clash;
+        inherit_from does not raise and the child keeps group['algo'] == 'mean'."""
+        consumer = Options(context={"algo": "sum"})
+        child = Options(group={"algo": "mean"})
+
+        child.inherit_from(consumer)
+
+        assert child.group["algo"] == "mean"
+
+    def test_consumer_context_never_leaks_into_child_group(self) -> None:
+        """consumer.context is not a source for the child's group: 'algo' stays out of any
+        cross-namespace merge, child.context does not gain it, and child.group['algo'] is unchanged."""
+        consumer = Options(context={"algo": "sum"})
+        child = Options(group={"algo": "mean"})
+
+        child.inherit_from(consumer)
+
+        assert child.group["algo"] == "mean"
+        assert "algo" not in child.context
+
+    def test_reverse_direction_still_raises_consumer_group_vs_child_context(self) -> None:
+        """The asymmetry guardrail: only context->group is silent. A consumer GROUP key
+        forwarded onto a child that holds it in CONTEXT is still a cross-conflict and raises."""
+        consumer = Options(group={"algo": "sum"})
+        child = Options(context={"algo": "mean"})
+
+        with pytest.raises(ValueError, match="algo"):
+            child.inherit_from(consumer)
+
+    def test_equal_value_cross_namespace_also_silent(self) -> None:
+        """Equal values across namespaces are likewise independent, not deduped: consumer
+        context algo=mean and child group algo=mean do not raise and the child keeps its value."""
+        consumer = Options(context={"algo": "mean"})
+        child = Options(group={"algo": "mean"})
+
+        child.inherit_from(consumer)
+
+        assert child.group["algo"] == "mean"

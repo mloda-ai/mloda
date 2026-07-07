@@ -40,6 +40,7 @@ SOURCE_NAME = "namemis579_source"
 OPERATION_KEY = "operation_namemis579"
 CHAINED_CHILD_NAME = f"{SOURCE_NAME}__sum_namemis579"
 CONSUMER_NAME = "namemis579_consumer"
+STRING_CONSUMER_NAME = "namemis579_string_consumer"
 
 
 class NameMis579SourceGroup(FeatureGroup):
@@ -125,6 +126,52 @@ class NameMis579ConsumerGroup(FeatureGroup):
         for feature in features.features:
             data[feature.name] = data[CHAINED_CHILD_NAME]
         return data
+
+
+class NameMis579StringConsumerGroup(FeatureGroup):
+    """Consumer requesting the chained child as a BARE STRING; forwards options by default.
+
+    On the unified forwarding path the bare-string child runs the real inherit_from
+    merge, so the forwarded operation key must trip the forwarded-name-mismatch guard
+    exactly like an object child does.
+    """
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: str | FeatureName,
+        options: Options,
+        data_access_collection: Any = None,
+    ) -> bool:
+        return str(feature_name) == STRING_CONSUMER_NAME
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Any]]:
+        return {CHAINED_CHILD_NAME}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        for feature in features.features:
+            data[feature.name] = data[CHAINED_CHILD_NAME]
+        return data
+
+
+class TestForwardedNameMismatchStringChildEndToEnd:
+    def test_run_all_raises_on_forwarded_name_mismatch_for_bare_string_child(self) -> None:
+        """A group option contradicting the bare-string child's name-parsed value fails the run."""
+        consumer = Feature(STRING_CONSUMER_NAME, options=Options(group={OPERATION_KEY: "max"}))
+
+        with pytest.raises(ValueError, match=OPERATION_KEY):
+            mloda.run_all(
+                [consumer],
+                compute_frameworks={PandasDataFrame},
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {NameMis579SourceGroup, NameMis579ChainedGroup, NameMis579StringConsumerGroup}
+                ),
+            )
 
 
 class TestForwardedNameMismatchEndToEnd:

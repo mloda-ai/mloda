@@ -116,6 +116,11 @@ class SqliteMergeEngine(SqlBaseMergeEngine):
                 )
         return super().validate_asof_time_columns(left_data, right_data, asof_config)
 
+    def _schema_maybe_temporal(self, data: Any, column: str) -> bool:
+        # Temporal only if a real temporal arrow type or a string (sqlite stores datetimes as TEXT).
+        arrow_type = data.types[data.columns.index(column)]
+        return bool(pa.types.is_temporal(arrow_type)) or sql_type_semantics.is_string_like_arrow_type(arrow_type)
+
     def _column_semantics(self, data: Any, column: str) -> ColumnSemantics:
         arrow_type = data.types[data.columns.index(column)]
         # Cost note: value-sampling runs one LIMIT 100 query per string-typed column during

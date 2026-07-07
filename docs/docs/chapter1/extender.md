@@ -62,6 +62,28 @@ With this simple extender, you can easily log and monitor the execution time of 
 
 When multiple extenders are provided, they are automatically chained and executed in priority order (lower values first).
 
-#### 4. Discovering Extenders
+#### 4. Error handling
+
+By default an exception raised inside an extender is **breaking**: it propagates and fails the feature calculation, just like a bug in any other code. This holds whether one extender or several are registered for a hook, so adding a second extender never changes the error semantics.
+
+An extender that is non-critical (for example observability or telemetry) can opt out by setting `raise_on_error = False`. When such an extender fails, the error is logged as a warning and the wrapped function still runs, so a failing extender cannot break the calculation:
+
+```python
+class MetricsExtender(Extender):
+    def __init__(self) -> None:
+        self.raise_on_error = False  # failures log a warning instead of breaking
+
+    def wraps(self) -> Set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        result = func(*args, **kwargs)
+        record_metric(...)  # if this raises, the calculation still succeeds
+        return result
+```
+
+Only the extender's own failure is caught: an exception raised by the wrapped function (or by a downstream breaking extender) always propagates, and the wrapped function is never run twice. Concrete extenders can also expose the flag as a constructor argument (for example `OtelExtender(raise_on_error=True)`) to let callers opt back into breaking behavior.
+
+#### 5. Discovering Extenders
 
 To list all available extenders and their documentation, use the `get_extender_docs()` function from `mloda.steward`.

@@ -320,10 +320,10 @@ consumer context keys into its own context. For both author-side flows, see
 
 `group` and `context` are separate namespaces: `group` drives feature-group
 resolution and splitting, `context` carries metadata. Within a single `Options`
-the same key may not live in both, but across a consumer and its input feature the
-two namespaces do not interact. Option forwarding is group-to-group only, so a
-consumer `context` key and a same-named child `group` key are treated as different
-roles, not a conflict:
+the same key may not live in both. Across a consumer and its input feature, the
+default option forwarding is group-to-group only: a consumer `context` key is not
+compared against a same-named child `group` key, so the two are treated as
+different roles, not a conflict:
 
 ``` python
 consumer = Options(context={"algo": "sum"})
@@ -333,9 +333,15 @@ child.inherit_from(consumer)   # resolves silently, no ValueError
 assert child.group["algo"] == "mean"   # child keeps its own group value
 ```
 
-This is intentional. The consumer's `context['algo']` never flows onto the child's
-`group['algo']`, in either the differing-value or equal-value case. The asymmetry is
-deliberate: the reverse direction (a consumer **group** key forwarded onto a child
-that holds the same key in **context**) is still a genuine forwarding conflict and
-raises. Keep such a key off the child with `forward_group_exclude`, an allowlist, or
-`forward_group=False` (see the flows above).
+This is intentional. A plain consumer `context['algo']` never flows onto the
+child's `group['algo']`, in either the differing-value or equal-value case.
+
+The independence is scoped to that default path; it does not hold once a context
+key is explicitly forwarded. A consumer that pushes the key via
+`propagate_context_keys`, or a child that pulls it via `inherit_context_keys`,
+brings the key into the child's context, and a same-named child `group` key then
+raises a cross-category conflict. Likewise the reverse of the default path (a
+consumer **group** key forwarded onto a child that holds the same key in
+**context**) is a genuine forwarding conflict and raises. Keep such a key off the
+child with `forward_group_exclude`, an allowlist, or `forward_group=False` (see the
+flows above).

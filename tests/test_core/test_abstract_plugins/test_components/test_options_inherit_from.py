@@ -1513,9 +1513,11 @@ class TestInheritFromCrossNamespaceIndependence:
     Regression pins for issue #621: consumer CONTEXT vs child GROUP is independent.
 
     WHY THIS EXISTS:
-    inherit_from only forwards group->group and only compares forwarded consumer
-    GROUP keys against the child's group/context. It NEVER compares a consumer
-    CONTEXT key against a child GROUP key. This is deliberate under the
+    inherit_from forwards group->group by default and only compares forwarded
+    consumer GROUP keys against the child's group/context. It NEVER compares a
+    consumer CONTEXT key against a child GROUP key in that path (context can still
+    flow context->context via inherit_context_keys / propagate_context_keys, but
+    that is a different flow). This is deliberate under the
     group/context namespace separation: group drives resolution/splitting, context
     is metadata. So a consumer context and a child group that happen to share a key
     name resolve SILENTLY, the child keeps its own group value, and no ValueError is
@@ -1533,6 +1535,8 @@ class TestInheritFromCrossNamespaceIndependence:
         child.inherit_from(consumer)
 
         assert child.group["algo"] == "mean"
+        assert "algo" not in child.inherited_group_keys
+        assert child.last_forwarded_group_keys == frozenset()
 
     def test_consumer_context_never_leaks_into_child_group(self) -> None:
         """consumer.context is not a source for the child's group: 'algo' stays out of any
@@ -1551,7 +1555,7 @@ class TestInheritFromCrossNamespaceIndependence:
         consumer = Options(group={"algo": "sum"})
         child = Options(context={"algo": "mean"})
 
-        with pytest.raises(ValueError, match="algo"):
+        with pytest.raises(ValueError, match="child's context"):
             child.inherit_from(consumer)
 
     def test_equal_value_cross_namespace_also_silent(self) -> None:

@@ -3,9 +3,8 @@ from typing import Iterable, Optional
 
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
-from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.options import NON_FORWARDED_KEYS, Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup, format_feature_group_class
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -204,7 +203,7 @@ class IdentifyFeatureGroupClass:
     def _input_feature_forwarding_hint(
         self, feature: Feature, accessible_plugins: FeatureGroupEnvironmentMapping
     ) -> Optional[str]:
-        reserved = {DefaultOptionKeys.in_features, DefaultOptionKeys.feature_chainer_parser_key}
+        reserved = NON_FORWARDED_KEYS
         offending = sorted(str(k) for k in feature.options.group if k not in reserved)
         if not offending:
             return None
@@ -231,13 +230,12 @@ class IdentifyFeatureGroupClass:
             return None
 
         names = sorted(fg.get_class_name() for fg in culprits)
-        exclude_snippet = "{" + ", ".join(repr(k) for k in offending) + "}"
         return (
             f"Feature group(s) {names} match the name '{str(feature.name)}' but reject it because of "
-            f"extra group option(s) {offending}. These look like options merged from a parent feature. "
-            f"If '{str(feature.name)}' is a declared input feature, build it with "
-            f"Options.forward_for_input_feature(exclude={exclude_snippet}) so the parent's query-specific "
-            f"keys stay off it."
+            f"extra group option(s) {offending}. Group options flow onto input features from the consumer "
+            f"by default; these keys either flowed in that way or were set directly on this feature. "
+            f"Keep them off '{str(feature.name)}' by setting forward_group_exclude={{...}}, an allowlist, "
+            f"or forward_group=False on the child in the consumer's input_features."
         )
 
     def _build_no_feature_group_error(

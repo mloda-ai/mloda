@@ -79,26 +79,24 @@ class ChainedContextFeatureGroupTest(FeatureGroup):
                 options=Options(
                     group={
                         "property2": "value1",  # default group parameter
-                        DefaultOptionKeys.feature_chainer_parser_key: frozenset(
-                            ["ident", DefaultOptionKeys.in_features, "property2", "property3"]
-                        ),
                     },
                     context={
                         "ident": config,  # context parameter parsed from the feature name
                         "property3": "opt_val1",  # optional parameter set
                     },
                 ),
+                forward_group_exclude=frozenset({"property2", "property3", "ident"}),
             )
             features.add(feat)
             return features
 
-        # Configuration-based approach
+        # Configuration-based approach: children inherit consumer group options by default.
+        # This plugin carves out its chainer-level keys ("ident", "property2", "property3")
+        # so each chain level keeps its own values while everything else still flows.
         source_features = options.get_in_features()
         for source_feature in source_features:
-            source_feature.options.add_to_group(
-                DefaultOptionKeys.feature_chainer_parser_key,
-                frozenset(["ident", DefaultOptionKeys.in_features.value, "property2", "property3"]),
-            )
+            if source_feature.forward_group is None and not source_feature.forward_group_exclude:
+                source_feature.forward_group_exclude = frozenset({"property2", "property3", "ident"})
             features.add(source_feature)
 
         if features:

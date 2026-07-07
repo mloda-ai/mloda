@@ -1,5 +1,6 @@
 from collections import defaultdict
 from copy import deepcopy
+import logging
 from typing import Any, Optional
 from uuid import UUID
 import uuid
@@ -28,6 +29,9 @@ from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.link import JoinType, Link
 from mloda.core.abstract_plugins.components.validators.link_validator import LinkValidator
+
+
+logger = logging.getLogger(__name__)
 
 
 class Engine:
@@ -66,6 +70,8 @@ class Engine:
 
         self.data_access_collection = data_access_collection
         self.column_ordering = column_ordering
+        self._dual_consumption_warned: set[tuple[str, str, frozenset[str]]] = set()
+        self._property_mapping_keys_cache: dict[type[FeatureGroup], frozenset[str]] = {}
         self.execution_planner = self.create_setup_execution_plan(features)
         self.tfs_connection_map = self._resolve_tfs_connection_map()
 
@@ -130,8 +136,8 @@ class Engine:
     def _process_feature(self, feature: Feature, features: Features) -> None:
         """Processes a single feature by delegating tasks to helper methods."""
 
-        # Drop feature chainer parser properties
         feature_group_class, compute_frameworks = self._identify_feature_group_and_frameworks(feature)
+        self._warn_on_dual_option_consumption(feature, feature_group_class)
         feature_group = feature_group_class()
 
         self._set_feature_name(feature, feature_group)
@@ -166,6 +172,42 @@ class Engine:
         """Sets the compute framework and data type for the feature."""
         feature = self.set_compute_framework(feature, compute_frameworks)
         feature.data_type = self.set_data_type(feature, feature_group_class)
+
+    def _property_mapping_keys(self, feature_group_class: type[FeatureGroup]) -> frozenset[str]:
+        """Returns the PROPERTY_MAPPING keys of a feature group class as a frozenset of str."""
+        cached = self._property_mapping_keys_cache.get(feature_group_class)
+        if cached is not None:
+            return cached
+        property_mapping = getattr(feature_group_class, "PROPERTY_MAPPING", None)
+        if isinstance(property_mapping, dict):
+            keys = frozenset(str(key) for key in property_mapping)
+        else:
+            keys = frozenset()
+        self._property_mapping_keys_cache[feature_group_class] = keys
+        return keys
+
+    def _warn_on_dual_option_consumption(self, feature: Feature, feature_group_class: type[FeatureGroup]) -> None:
+        """Warns when a forwarded option key is declared by both the consumer and the resolved child group."""
+        if not feature.consumer_attributions or not feature.options.inherited_group_keys:
+            return
+        child_keys = self._property_mapping_keys(feature_group_class)
+        child_class_name = feature_group_class.get_class_name()
+        for consumer_name, entry_keys in feature.consumer_attributions:
+            overlap = entry_keys & child_keys
+            if not overlap:
+                continue
+            warned_key = (consumer_name, child_class_name, overlap)
+            if warned_key in self._dual_consumption_warned:
+                continue
+            self._dual_consumption_warned.add(warned_key)
+            logger.warning(
+                f"Option key(s) {sorted(overlap)} forwarded from consumer feature group "
+                f"{consumer_name} to input feature '{feature.name}' resolved by "
+                f"{child_class_name} are declared in the PROPERTY_MAPPING of both feature "
+                f"groups, so the forwarded value now configures both. If this is unintended, set "
+                f"forward_group_exclude={{...}}, an allowlist, or forward_group=False on the child in "
+                f"input_features."
+            )
 
     def _identify_feature_group_and_frameworks(
         self, feature: Feature
@@ -348,6 +390,11 @@ class Engine:
             features = Features(
                 list(input_features), child_options=options, child_uuid=uuid, parent_domain=parent_domain
             )
+            consumer_name = feature_group_class.get_class_name()
+            consumer_property_keys = self._property_mapping_keys(feature_group_class)
+            for input_feature in features.collection:
+                forwarded_declared_keys = input_feature.options.last_forwarded_group_keys & consumer_property_keys
+                input_feature.add_consumer_attribution(consumer_name, forwarded_declared_keys)
             if features.child_uuid is None:
                 raise ValueError(f"Features {features} has no parent uuid although it should have one.")
             self.feature_link_parents[features.child_uuid] = features.parent_uuids

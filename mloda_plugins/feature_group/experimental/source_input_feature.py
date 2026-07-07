@@ -160,6 +160,8 @@ class SourceInputFeatureComposite:
         Helper method to create a Feature object from a source definition.
         """
         if isinstance(source, str):
+            # Source features receive the consumer's group options (api connections,
+            # data access scopes) through the engine's forward-by-default inheritance.
             return Feature(name=source)
         else:
             try:

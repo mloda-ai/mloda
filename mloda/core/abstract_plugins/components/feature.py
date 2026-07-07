@@ -10,10 +10,11 @@ if TYPE_CHECKING:
 
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
+from mloda.core.abstract_plugins.components.hashable_dict import _make_hashable
 from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.options import Options, validate_forwarding_directives
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.components.validators.feature_validator import FeatureValidator
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
@@ -80,6 +81,9 @@ class Feature:
         link: Optional[Link] = None,
         index: Optional[Index] = None,
         feature_group: str | type[FeatureGroup] | None = None,
+        forward_group: frozenset[str] | set[str] | list[str] | tuple[str, ...] | bool | None = None,
+        forward_group_exclude: frozenset[str] | set[str] | list[str] | tuple[str, ...] | None = None,
+        inherit_context_keys: frozenset[str] | set[str] | list[str] | tuple[str, ...] = frozenset(),
     ):
         if options is None:
             options = {}
@@ -114,6 +118,53 @@ class Feature:
 
         # feature_group_scope is resolution-only metadata, excluded from equality and hash like link/index.
         self.feature_group_scope = self._set_feature_group_scope(feature_group)
+
+        # Resolution-only metadata stamped by the engine: one (consumer class name, consumer
+        # PROPERTY_MAPPING keys) entry appended per consumer feature group that declares this
+        # feature as an input feature; excluded from equality and hash like link/index.
+        self.consumer_attributions: list[tuple[str, frozenset[str]]] = []
+
+        # forward_group, forward_group_exclude and inherit_context_keys are merge directives
+        # for input features with forward-by-default semantics (None/True inherit all consumer
+        # group options, False isolates, an allowlist restricts, exclude subtracts),
+        # excluded from equality and hash like link/index.
+        # Only the literal False triggers the contradiction guard with a non-empty
+        # forward_group_exclude; an EMPTY allowlist frozenset combined with an exclude stays
+        # legal because allowlists may be computed dynamically.
+        self.forward_group: frozenset[str] | bool | None = (
+            forward_group
+            if forward_group is None or isinstance(forward_group, bool)
+            else self._normalize_allowlist(forward_group, "forward_group")
+        )
+        self.forward_group_exclude: frozenset[str] = (
+            frozenset()
+            if forward_group_exclude is None
+            else self._normalize_allowlist(forward_group_exclude, "forward_group_exclude")
+        )
+        validate_forwarding_directives(self.forward_group, self.forward_group_exclude)
+        self.inherit_context_keys = self._normalize_allowlist(inherit_context_keys, "inherit_context_keys")
+
+    def add_consumer_attribution(self, name: str, keys: frozenset[str]) -> None:
+        """Record a consumer attribution, skipping an identical (name, keys) entry.
+
+        Appended per consumer feature group that declares this feature as an input feature.
+        Idempotent so re-stamping the same Feature instance across mloda runs does not grow
+        the list unboundedly.
+        """
+        entry = (name, keys)
+        if entry not in self.consumer_attributions:
+            self.consumer_attributions.append(entry)
+
+    @staticmethod
+    def _normalize_allowlist(
+        value: frozenset[str] | set[str] | list[str] | tuple[str, ...], param_name: str
+    ) -> frozenset[str]:
+        if isinstance(value, str) or not isinstance(value, (frozenset, set, list, tuple)):
+            raise TypeError(f"{param_name} must be a set, frozenset, list, or tuple of str, got {type(value).__name__}")
+        for element in value:
+            if not isinstance(element, str):
+                raise TypeError(f"{param_name} elements must be str, got {type(element).__name__}")
+        return frozenset(value)
 
     def _set_feature_group_scope(
         self, feature_group: str | type[FeatureGroup] | None
@@ -294,25 +345,42 @@ class Feature:
     def is_different_data_type(self, other: Feature) -> bool:
         return self.name == other.name and self.data_type != other.data_type
 
-    def similarity_hash(self) -> int:
-        """Hash for grouping features by compute framework, options, and data type.
+    def _split_context_hashable(self, split_keys: frozenset[str]) -> Any:
+        """Order-independent view of this feature's context values for the split keys."""
+        return _make_hashable({key: self.options.context[key] for key in split_keys if key in self.options.context})
 
-        When data_type is None, it's excluded from the hash so None-typed features
-        can be grouped with any typed features (handled by grouping logic).
+    def _grouping_hash(self, split_keys: frozenset[str] | None, include_data_type: bool) -> int:
+        keys = self.options.inherited_context_keys if split_keys is None else split_keys
+        compute_frameworks_hashable = (
+            frozenset(self.compute_frameworks) if self.compute_frameworks is not None else None
+        )
+        split_context = self._split_context_hashable(keys)
+        if include_data_type and self.data_type is not None:
+            return hash((self.options, compute_frameworks_hashable, split_context, self.data_type))
+        return hash((self.options, compute_frameworks_hashable, split_context))
+
+    def similarity_hash(self, split_keys: frozenset[str] | None = None) -> int:
+        """Grouping hash over options, compute framework, split-key context values, and data type.
+
+        When split_keys is None it falls back to THIS feature's own inherited_context_keys, a
+        per-feature convenience. Production grouping in
+        ExecutionPlan.group_features_by_compute_framework_and_options passes the resolution-wide
+        union of every in-scope feature's inherited_context_keys; any caller performing grouping
+        must pass that resolution-wide split_keys rather than relying on the per-feature default.
+        data_type is excluded when None so None-typed features can join typed groups.
         """
-        compute_frameworks_hashable = (
-            frozenset(self.compute_frameworks) if self.compute_frameworks is not None else None
-        )
-        if self.data_type is not None:
-            return hash((self.options, compute_frameworks_hashable, self.data_type))
-        return hash((self.options, compute_frameworks_hashable))
+        return self._grouping_hash(split_keys, include_data_type=True)
 
-    def base_similarity_hash(self) -> int:
-        """Base hash excluding data_type, used for lenient grouping of None-typed features."""
-        compute_frameworks_hashable = (
-            frozenset(self.compute_frameworks) if self.compute_frameworks is not None else None
-        )
-        return hash((self.options, compute_frameworks_hashable))
+    def base_similarity_hash(self, split_keys: frozenset[str] | None = None) -> int:
+        """similarity_hash without data_type, for lenient grouping of None-typed features.
+
+        split_keys follows the same rule as similarity_hash: None falls back to THIS feature's own
+        inherited_context_keys (a per-feature convenience), whereas production grouping in
+        ExecutionPlan.group_features_by_compute_framework_and_options passes the resolution-wide
+        union of every in-scope feature's inherited_context_keys. Any caller performing grouping
+        must pass that resolution-wide split_keys rather than relying on the per-feature default.
+        """
+        return self._grouping_hash(split_keys, include_data_type=False)
 
     def _set_domain(self, domain: Optional[str], domain_options: Optional[str]) -> None | Domain:
         if domain:

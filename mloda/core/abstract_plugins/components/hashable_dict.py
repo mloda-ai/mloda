@@ -8,6 +8,14 @@ def _make_hashable(value: Any) -> Any:
         return tuple(_make_hashable(item) for item in value)
     if isinstance(value, set):
         return frozenset(_make_hashable(item) for item in value)
+    # Unhashable non-container leaves fall back to repr so grouping never crashes.
+    # Residual constraint: two values that are __eq__-equal but unhashable must have
+    # repr consistent with equality, else they over-split into separate groups (a
+    # rare, non-crashing tradeoff).
+    try:
+        hash(value)
+    except TypeError:
+        return repr(value)
     return value
 
 

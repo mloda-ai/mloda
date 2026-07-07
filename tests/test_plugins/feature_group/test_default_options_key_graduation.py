@@ -19,7 +19,6 @@ class TestDefaultOptionKeysCoreLocation:
 
         expected_keys = [
             "in_features",
-            "feature_chainer_parser_key",
             "reference_time",
             "time_travel",
             "default",

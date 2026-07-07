@@ -503,11 +503,15 @@ class OtherNameFeatureGroup(FeatureGroup):
 
 
 class TestInputFeatureForwardingHint:
-    """Tests for the 'forward_for_input_feature' hint in the no-feature-group error.
+    """Tests for the forwarding hint in the no-feature-group error.
 
     The hint should fire only when a feature fails to resolve BECAUSE its group
     options carry keys the matcher rejects, and some accessible feature group
     WOULD match the same bare feature name if the group options were empty.
+    Under the forward-by-default contract, group options flow onto input
+    features from the consumer BY DEFAULT, so the hint must say so and advise
+    the remedies: forward_group_exclude, an allowlist, or forward_group=False
+    on the child in the consumer's input_features.
     """
 
     def test_hint_names_offending_keys_and_helper(self) -> None:
@@ -527,8 +531,8 @@ class TestInputFeatureForwardingHint:
 
         error_message = str(exc_info.value)
 
-        assert "forward_for_input_feature" in error_message, (
-            f"Error message should point to forward_for_input_feature, but got: {error_message}"
+        assert "forward_group" in error_message, (
+            f"Error message should point to forward_group, but got: {error_message}"
         )
         assert "query_text" in error_message, (
             f"Error message should name offending key 'query_text', but got: {error_message}"
@@ -536,6 +540,23 @@ class TestInputFeatureForwardingHint:
         assert "top_k" in error_message, f"Error message should name offending key 'top_k', but got: {error_message}"
         assert "KnowledgeGraphLikeFeatureGroup" in error_message, (
             f"Error message should name culprit feature group, but got: {error_message}"
+        )
+        # Forward-by-default contract: the hint must state that group options flow
+        # onto input features from the consumer by default, and advise the new
+        # remedies instead of the retired allowlist-first phrasing.
+        assert "by default" in error_message.lower(), (
+            f"Error message should state that group options flow onto input features by default, "
+            f"but got: {error_message}"
+        )
+        assert "forward_group_exclude" in error_message, (
+            f"Error message should advise the forward_group_exclude remedy, but got: {error_message}"
+        )
+        assert "forward_group=False" in error_message, (
+            f"Error message should advise the forward_group=False remedy, but got: {error_message}"
+        )
+        assert "stop using forward_group=True" not in error_message, (
+            f"Error message must not contain the retired phrasing 'stop using forward_group=True', "
+            f"but got: {error_message}"
         )
 
     def test_no_hint_when_no_group_options(self) -> None:
@@ -555,7 +576,7 @@ class TestInputFeatureForwardingHint:
 
         error_message = str(exc_info.value)
 
-        assert "forward_for_input_feature" not in error_message, (
+        assert "forward_group" not in error_message, (
             f"Error message should NOT emit forwarding hint when no group options, but got: {error_message}"
         )
 
@@ -576,7 +597,7 @@ class TestInputFeatureForwardingHint:
 
         error_message = str(exc_info.value)
 
-        assert "forward_for_input_feature" not in error_message, (
+        assert "forward_group" not in error_message, (
             f"Error message should NOT emit forwarding hint when no FG matches the bare name, but got: {error_message}"
         )
 
@@ -586,7 +607,7 @@ class TestInputFeatureForwardingHint:
             Options(
                 group={
                     "query_text": "hi",
-                    DefaultOptionKeys.feature_chainer_parser_key: frozenset({"query_text"}),
+                    DefaultOptionKeys.in_features: "some_source",
                 }
             ),
         )
@@ -605,12 +626,12 @@ class TestInputFeatureForwardingHint:
 
         error_message = str(exc_info.value)
 
-        assert "forward_for_input_feature" in error_message, (
-            f"Error message should point to forward_for_input_feature, but got: {error_message}"
+        assert "forward_group" in error_message, (
+            f"Error message should point to forward_group, but got: {error_message}"
         )
         assert "query_text" in error_message, (
             f"Error message should name offending key 'query_text', but got: {error_message}"
         )
-        assert "feature_chainer_parser_key" not in error_message, (
-            f"Reserved key 'feature_chainer_parser_key' must NOT be listed as offending, but got: {error_message}"
+        assert "in_features" not in error_message, (
+            f"Reserved key 'in_features' must NOT be listed as offending, but got: {error_message}"
         )

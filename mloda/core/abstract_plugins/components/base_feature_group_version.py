@@ -5,11 +5,27 @@ import importlib.metadata
 import inspect
 import linecache
 import hashlib
+import weakref
 from typing import Any, Final
 from abc import ABC
 
 # Exceptions inspect.getsource raises for dynamically built classes (no source backing / built-in).
 SOURCE_INTROSPECTION_ERRORS: Final = (OSError, TypeError)
+
+
+# Hash cache keyed by the class OBJECT (never by name): a redefined same-name
+# class is a new object and must be hashed fresh. The hash is deterministic per
+# class object within a process; docs enumeration calls class_source_hash for
+# every FeatureGroup subclass per call, and this cache keeps that walk off the
+# pytest 10s timeout as subclass counts grow. The cache is weak-keyed so
+# temporary classes (Jupyter cells, test-local, synthetic dedup classes) are
+# not pinned for the process lifetime and can still be garbage-collected.
+_class_source_hash_cache: "weakref.WeakKeyDictionary[type[Any], str]" = weakref.WeakKeyDictionary()
+
+# Package metadata cannot change within a process; docs enumeration calls
+# mloda_version per FeatureGroup subclass, and repeated importlib.metadata
+# parsing was a measured hot path in large test sessions.
+_mloda_version_cache: str | None = None
 
 
 class BaseFeatureGroupVersion(ABC):
@@ -18,11 +34,16 @@ class BaseFeatureGroupVersion(ABC):
         """
         Retrieves the version of the 'mloda' package using importlib.metadata.
         If retrieval fails, it returns "0.0.0" as a fallback.
+        The result (including the fallback) is memoized for the process lifetime.
         """
+        global _mloda_version_cache
+        if _mloda_version_cache is not None:
+            return _mloda_version_cache
         try:
-            return importlib.metadata.version("mloda")
+            _mloda_version_cache = importlib.metadata.version("mloda")
         except Exception:
-            return "0.0.0"
+            _mloda_version_cache = "0.0.0"
+        return _mloda_version_cache
 
     @classmethod
     def class_source_hash(cls, target_class: type[Any]) -> str:
@@ -46,6 +67,10 @@ class BaseFeatureGroupVersion(ABC):
         if not issubclass(target_class, FeatureGroup):
             raise ValueError(f"target_class must be a subclass of FeatureGroup: {target_class}")
 
+        cached = _class_source_hash_cache.get(target_class)
+        if cached is not None:
+            return cached
+
         try:
             source: str = inspect.getsource(target_class)
         except SOURCE_INTROSPECTION_ERRORS:
@@ -62,7 +87,9 @@ class BaseFeatureGroupVersion(ABC):
                         "and no linecache fallback was available"
                     )
                 source = fallback
-        return hashlib.sha256(source.encode("utf-8")).hexdigest()
+        source_hash = hashlib.sha256(source.encode("utf-8")).hexdigest()
+        _class_source_hash_cache[target_class] = source_hash
+        return source_hash
 
     @classmethod
     def module_name(cls, target_class: type[Any]) -> str:

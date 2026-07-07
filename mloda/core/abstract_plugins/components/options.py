@@ -1,15 +1,30 @@
 from __future__ import annotations
 
-from typing import Any, Iterable, Optional, TYPE_CHECKING, cast
+import logging
+from typing import Any, Optional, TYPE_CHECKING, cast
 from copy import deepcopy
 
 from mloda.core.abstract_plugins.components.hashable_dict import _make_hashable
 from mloda.core.abstract_plugins.components.validators.options_validator import OptionsValidator
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
-import builtins
 
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.components.feature import Feature
+
+logger = logging.getLogger(__name__)
+
+NON_FORWARDED_KEYS: frozenset[str] = frozenset({DefaultOptionKeys.in_features})
+
+
+def validate_forwarding_directives(
+    forward_group: frozenset[str] | bool | None, forward_group_exclude: frozenset[str]
+) -> None:
+    """Reject the contradictory forward_group=False + non-empty forward_group_exclude combination."""
+    if forward_group is False and forward_group_exclude:
+        raise ValueError(
+            "forward_group=False cannot be combined with a non-empty forward_group_exclude: "
+            "opting out of all group options contradicts excluding single keys."
+        )
 
 
 class Options:
@@ -77,6 +92,9 @@ class Options:
         self.group = group or {}
         self.context = context or {}
         self.propagate_context_keys: frozenset[str] = propagate_context_keys or frozenset()
+        self.inherited_group_keys: frozenset[str] = frozenset()
+        self.inherited_context_keys: frozenset[str] = frozenset()
+        self.last_forwarded_group_keys: frozenset[str] = frozenset()
         OptionsValidator.validate_no_duplicate_keys(self.group, self.context)
         OptionsValidator.validate_propagate_keys_in_context(self.propagate_context_keys, self.context)
 
@@ -222,7 +240,11 @@ class Options:
 
         copied_group = safe_deepcopy_dict(self.group)
         copied_context = safe_deepcopy_dict(self.context)
-        return Options(group=copied_group, context=copied_context, propagate_context_keys=self.propagate_context_keys)
+        copied = Options(group=copied_group, context=copied_context, propagate_context_keys=self.propagate_context_keys)
+        copied.inherited_group_keys = self.inherited_group_keys
+        copied.inherited_context_keys = self.inherited_context_keys
+        copied.last_forwarded_group_keys = self.last_forwarded_group_keys
+        return copied
 
     def __str__(self) -> str:
         parts = f"Options(group={self.group}, context={self.context}"
@@ -231,102 +253,120 @@ class Options:
         parts += ")"
         return parts
 
-    def update_with_protected_keys(self, other: "Options", protected_keys: builtins.set[str] | None = None) -> None:
+    def inherit_from(
+        self,
+        consumer: "Options",
+        forward_group: frozenset[str] | bool | None = None,
+        forward_group_exclude: frozenset[str] = frozenset(),
+        inherit_context_keys: frozenset[str] = frozenset(),
+        owner: str | None = None,
+    ) -> None:
         """
-        Updates this Options object with data from another Options object, respecting protected keys.
+        Inherit options from the consumer feature that declared this input feature.
 
-        Protected keys allow parent and child features in a chain to maintain different values
-        without raising conflicts. This is essential for feature chaining where each level
-        needs its own configuration for certain parameters.
+        Called on the INPUT feature's Options (self, mutated in place); the consumer is never
+        mutated. By default ALL consumer group keys flow to self: forwarding is opt-out.
 
-        Protected keys can be specified in two ways:
-        1. Explicitly passed as the protected_keys parameter
-        2. Dynamically read from self.get(feature_chainer_parser_key) for backward compatibility
+        Flows:
+        - forward_group: None (the unspecified default) and True copy all consumer.group keys.
+          False is the explicit opt-out and copies nothing. A frozenset restricts the copy to
+          the listed keys. Group-to-group only; keys absent from consumer.group are skipped
+          silently.
+        - forward_group_exclude: keys subtracted from whatever set forward_group produced.
+          Combining it (non-empty) with forward_group=False is contradictory and raises.
+        - inherit_context_keys: consumer.context keys pulled into self.context. Context-to-context
+          only; keys absent from consumer.context are skipped silently.
+        - consumer.propagate_context_keys: consumer-side push of context keys into self.context.
+          The push is skipped when forward_group is False (only the literal False blocks it; an
+          empty frozenset allowlist does not).
 
-        Mechanism:
-        - Protected keys in 'other' are NOT merged into 'self'
-        - This preserves the parent's (self) configuration for those keys
-        - Child features can have different values for protected keys without conflict
+        DefaultOptionKeys.in_features is never inherited through any flow.
 
-        Example:
-            Parent feature has: in_features="parent_source"
-            Child feature has:  in_features="child_source"
+        Every key actually forwarded (including keys self already held with an equal value) is
+        unioned into self.inherited_group_keys, so provenance accumulates across consumers.
 
-            Without protection: ERROR (duplicate key conflict)
-            With protection: Both keep their own values (no merge, no error)
+        A self-merge (string-declared input features share the consumer's Options instance) is a
+        complete no-op and preserves inherited_group_keys; it logs a warning when any non-default
+        directive is passed, because such directives have no effect.
 
-        Args:
-            other: The Options object to merge from (typically child options)
-            protected_keys: Set of keys to protect from merging.
-                          If None, uses in_features + any keys from feature_chainer_parser_key
+        The optional ``owner`` (the input feature's name) only enriches the forwarding-conflict
+        error message; it changes no behavior otherwise.
 
         Raises:
-            ValueError: If non-protected keys conflict between group and context
+            ValueError: If a forwarded group key already exists on self with a different value
+                        (rich message naming the key, both values, and the opt-out remedies,
+                        including ``owner`` when given),
+                        or an inherited key exists in the opposite category (group/context
+                        cross-conflict),
+                        or forward_group=False is combined with a non-empty forward_group_exclude.
         """
-        # Build protected keys set
-        if protected_keys is None:
-            # Default: always protect in_features
-            protected_keys = {DefaultOptionKeys.in_features}
+        if consumer is self:
+            if forward_group is not None or forward_group_exclude or inherit_context_keys:
+                logger.warning(
+                    "inherit_from directives have no effect on a child that shares the consumer's "
+                    "Options instance (string-declared input features share the instance by design): "
+                    f"forward_group={forward_group!r}, forward_group_exclude={forward_group_exclude!r}, "
+                    f"inherit_context_keys={inherit_context_keys!r} are ignored."
+                )
+            self.last_forwarded_group_keys = frozenset()
+            return
 
-            # Dynamic: read additional protected keys from feature_chainer_parser_key
-            # This allows feature groups to specify which keys should be protected
-            if self.get(DefaultOptionKeys.feature_chainer_parser_key):
-                for key in self.get(DefaultOptionKeys.feature_chainer_parser_key):
-                    protected_keys.add(key)
+        excluded = NON_FORWARDED_KEYS
+        validate_forwarding_directives(forward_group, forward_group_exclude)
 
-        # Create a copy of other.group excluding protected keys
-        # Protected keys are intentionally skipped to preserve parent's configuration
-        other_group_copy = other.group.copy()
-        for protected_key in protected_keys:
-            if protected_key in other_group_copy:
-                del other_group_copy[protected_key]
+        if forward_group is False:
+            group_keys: frozenset[str] = frozenset()
+        elif forward_group is None or forward_group is True:
+            group_keys = frozenset(consumer.group.keys())
+        else:
+            group_keys = forward_group
 
-        # Check for conflicts before updating
-        OptionsValidator.validate_no_group_context_conflicts(set(other_group_copy.keys()), set(self.context.keys()))
-        self.group.update(other_group_copy)
+        group_keys = group_keys - forward_group_exclude
 
-        # Propagate specified context keys from other to self
-        if other.propagate_context_keys:
+        inherited: set[str] = set()
+        for key in sorted(group_keys):
+            if key in excluded or key not in consumer.group:
+                continue
+            if key in self.context and self.context[key] != consumer.group[key]:
+                owner_clause = f" on input feature '{owner}'" if owner is not None else " on the input feature"
+                raise ValueError(
+                    f"Option key '{key}' forwarded from the consumer as a group option conflicts with the "
+                    f"same key held in the child's context{owner_clause}: consumer='{consumer.group[key]}', "
+                    f"child context='{self.context[key]}'. Keep the key off the child with "
+                    f"forward_group_exclude={{'{key}'}}, an allowlist, or forward_group=False."
+                )
+            if key in self.group and self.group[key] != consumer.group[key]:
+                owner_clause = f" on input feature '{owner}'" if owner is not None else " on the input feature"
+                raise ValueError(
+                    f"Option key '{key}' forwarded from the consumer conflicts with the value already set"
+                    f"{owner_clause}: consumer='{consumer.group[key]}', child='{self.group[key]}'. "
+                    f"Keep the key off the child with forward_group_exclude={{'{key}'}}, an allowlist, "
+                    "or forward_group=False."
+                )
+            self.add_to_group(key, consumer.group[key])
+            inherited.add(key)
+        self.inherited_group_keys = self.inherited_group_keys | frozenset(inherited)
+        self.last_forwarded_group_keys = frozenset(inherited)
+
+        inherited_context: set[str] = set()
+        for key in inherit_context_keys:
+            if key in excluded or key not in consumer.context:
+                continue
+            self.add_to_context(key, consumer.context[key])
+            inherited_context.add(key)
+
+        if consumer.propagate_context_keys and forward_group is not False:
             propagating = {
-                k: v for k, v in other.context.items() if k in other.propagate_context_keys and k not in protected_keys
+                k: v for k, v in consumer.context.items() if k in consumer.propagate_context_keys and k not in excluded
             }
 
             OptionsValidator.validate_no_context_group_conflicts(set(propagating.keys()), set(self.group.keys()))
 
             for key, value in propagating.items():
                 if key in self.context and self.context[key] != value:
-                    raise ValueError(f"Context key '{key}' conflict: parent='{value}', child='{self.context[key]}'")
+                    raise ValueError(f"Context key '{key}' conflict: consumer='{value}', child='{self.context[key]}'")
 
             self.context.update(propagating)
+            inherited_context.update(propagating.keys())
 
-    def forward_for_input_feature(self, exclude: Optional[Iterable[str]] = None) -> "Options":
-        """
-        Build Options for a declared input feature that survives the parent->child group auto-merge.
-
-        When a FeatureGroup returns a declared input feature from input_features(), the engine
-        merges the parent feature's group options into that child. Parent query-specific keys
-        (listed in ``exclude``) plus in_features are marked merge-protected via
-        feature_chainer_parser_key so they do not flow onto and break the child's resolution.
-
-        The feature_chainer_parser_key itself is also protected, and any protected keys the parent
-        already carries under feature_chainer_parser_key are preserved. This lets nested
-        input_features chains compose without raising.
-
-        Called on the PARENT's Options. Returns a NEW Options carrying the parent's group params
-        forward, except the protected keys. The parent's context is not copied and the parent is
-        not mutated.
-        """
-        if isinstance(exclude, str):
-            raise TypeError(
-                "forward_for_input_feature 'exclude' must be an iterable of keys, not a bare str "
-                "(a str would iterate into single characters)."
-            )
-        inherited = frozenset(self.get(DefaultOptionKeys.feature_chainer_parser_key) or ())
-        protected = (
-            frozenset(exclude or ())
-            | {DefaultOptionKeys.in_features, DefaultOptionKeys.feature_chainer_parser_key}
-            | inherited
-        )
-        new_group = {key: value for key, value in self.group.items() if key not in protected}
-        new_group[DefaultOptionKeys.feature_chainer_parser_key] = protected
-        return Options(group=new_group)
+        self.inherited_context_keys = self.inherited_context_keys | frozenset(inherited_context)

@@ -58,12 +58,10 @@ class PropagateContextFeatureGroupTest(FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         features = set()
 
+        # Children inherit consumer group options by default; CONTEXT stays local and flows
+        # only via the propagate_context_keys push.
         source_features = options.get_in_features()
         for source_feature in source_features:
-            source_feature.options.add_to_group(
-                DefaultOptionKeys.feature_chainer_parser_key,
-                frozenset(["ident", DefaultOptionKeys.in_features]),
-            )
             features.add(source_feature)
 
         if features:

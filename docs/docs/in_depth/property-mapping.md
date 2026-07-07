@@ -306,8 +306,12 @@ Options(
 )
 ```
 
-Only the specified keys propagate. Everything else stays local. Group propagation is unchanged.
+Only the specified keys propagate. Everything else stays local for context. Group
+options behave differently: they forward to input features by default. A feature group
+keeps consumer-local keys off its upstreams by setting `forward_group_exclude`, an
+allowlist, or `forward_group=False` on the child `Feature` it declares.
 
-This is the caller side. For the author side (how a feature group's own options merge
-into an input feature it declares, and how to keep query-specific keys off that child),
-see [Author-Side Option Forwarding for input_features](feature-chain-parser.md#author-side-option-forwarding-for-input_features).
+`propagate_context_keys` is the caller-side **push**. Its symmetric counterpart is the
+child-side **pull** `inherit_context_keys`, set on an input feature to copy listed
+consumer context keys into its own context. For both author-side flows, see
+[Forwarding Options to Input Features](feature-chain-parser.md#forwarding-options-to-input-features).

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import copy
 from typing import TYPE_CHECKING, Any, Optional
 from uuid import uuid4
 from mloda.core.abstract_plugins.components.data_types import DataType
@@ -17,7 +16,6 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.options import Options, validate_forwarding_directives
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.components.validators.feature_validator import FeatureValidator
-from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 
 
 class Feature:
@@ -108,6 +106,7 @@ class Feature:
                     f"got {type(data_type).__name__}"
                 )
 
+        # Engine-stamped consumer metadata; in equality/hash via cycle-safe _child_options_key (#608).
         self.child_options: Optional[Options] = None
 
         self.initial_requested_data = initial_requested_data
@@ -319,7 +318,7 @@ class Feature:
             and self.domain == other.domain
             and self.compute_frameworks == other.compute_frameworks
             and self.data_type == other.data_type
-            and self.child_options == other.child_options
+            and self._child_options_key() == other._child_options_key()
         )
 
     def __hash__(self) -> int:
@@ -327,20 +326,57 @@ class Feature:
             frozenset(self.compute_frameworks) if self.compute_frameworks is not None else None
         )
 
-        child_options = copy.deepcopy(self.child_options)
-        if child_options:
-            if child_options.get(DefaultOptionKeys.in_features):
-                val = child_options.get(DefaultOptionKeys.in_features)
+        return hash(
+            (
+                self.name,
+                self.options,
+                self.domain,
+                compute_frameworks_hashable,
+                self.data_type,
+                self._child_options_key(),
+            )
+        )
 
-                if isinstance(val, frozenset):
-                    for v in val:
-                        if isinstance(v, Feature):
-                            child_options.group[DefaultOptionKeys.in_features] = v.name
+    def _child_options_key(self) -> Any:
+        """Cycle-safe identity view of child_options for __eq__/__hash__ (#608).
 
-                if isinstance(val, Feature):
-                    child_options.group[DefaultOptionKeys.in_features] = val.name
+        child_options can hold features value-equal to self, so a deep compare recurses
+        forever. _reduce mirrors the Feature.__eq__/Options.__eq__ fields, with an id()
+        visited guard that collapses an already-seen feature to its name to terminate.
+        """
+        if self.child_options is None:
+            return None
+        return self._reduce(self.child_options.group, frozenset())
 
-        return hash((self.name, self.options, self.domain, compute_frameworks_hashable, self.data_type, child_options))
+    @staticmethod
+    def _reduce(value: Any, seen: frozenset[int]) -> Any:
+        if isinstance(value, Feature):
+            if id(value) in seen:
+                return ("feature", value.name)
+            seen = seen | {id(value)}
+            compute_frameworks = frozenset(value.compute_frameworks) if value.compute_frameworks is not None else None
+            child_group = Feature._reduce(value.child_options.group, seen) if value.child_options is not None else None
+            return (
+                "feature",
+                value.name,
+                Feature._reduce(value.options.group, seen),
+                Feature._reduce(value.options.context, seen),
+                value.domain,
+                compute_frameworks,
+                value.data_type,
+                child_group,
+            )
+        if isinstance(value, Options):
+            return ("options", Feature._reduce(value.group, seen))
+        if isinstance(value, dict):
+            return tuple(
+                sorted(((key, Feature._reduce(val, seen)) for key, val in value.items()), key=lambda kv: kv[0])
+            )
+        if isinstance(value, (frozenset, set)):
+            return frozenset(Feature._reduce(item, seen) for item in value)
+        if isinstance(value, (list, tuple)):
+            return tuple(Feature._reduce(item, seen) for item in value)
+        return _make_hashable(value)
 
     def is_different_data_type(self, other: Feature) -> bool:
         return self.name == other.name and self.data_type != other.data_type

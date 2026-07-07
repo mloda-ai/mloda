@@ -1,4 +1,5 @@
 from __future__ import annotations
+from copy import deepcopy
 from typing import Generator, Optional
 from uuid import UUID
 from mloda.core.abstract_plugins.components.domain import Domain
@@ -44,8 +45,10 @@ class Features:
                 child_options = Options({})
 
             if isinstance(feature, str):
+                is_string = True
                 feature = Feature(name=feature, options=child_options, domain=self.parent_domain)
             else:
+                is_string = False
                 if feature.domain is None and self.parent_domain is not None:
                     feature.domain = Domain(self.parent_domain)
             if child_uuid:
@@ -53,6 +56,14 @@ class Features:
                 self.child_uuid = child_uuid
                 feature.child_options = child_options
                 self.merge_options(feature, child_options)
+                if is_string:
+                    # String-declared input features share the consumer's Options instance during the
+                    # merge (a self-merge no-op), so isolate the child here: deepcopy severs the shared
+                    # group/context containers so mutating a string child cannot leak into the consumer
+                    # or sibling string children. By-reference aliasing of forwarded values for
+                    # Feature-object children is tracked separately (#607); unpickleable values fall back
+                    # to a shallow copy in Options.__deepcopy__ and cannot be isolated.
+                    feature.options = deepcopy(feature.options)
 
             self.check_duplicate_feature(feature)
             self.collection.append(feature)

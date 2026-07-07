@@ -62,14 +62,3 @@ class OptionsValidator:
         conflicting = other_context_keys & self_group_keys
         if conflicting:
             raise ValueError(f"Cannot propagate context: keys already exist in group: {conflicting}")
-
-    @staticmethod
-    def validate_no_group_context_conflicts(other_group_keys: set[str], self_context_keys: set[str]) -> None:
-        """
-        Validate no conflicts between other's group keys and self's context keys.
-
-        Raises ValueError if any key exists in both, with conflicting keys in message.
-        """
-        conflicting_keys = other_group_keys & self_context_keys
-        if conflicting_keys:
-            raise ValueError(f"Cannot update group: keys already exist in context: {conflicting_keys}")

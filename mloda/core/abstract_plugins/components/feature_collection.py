@@ -4,11 +4,15 @@ from uuid import UUID
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.options import Options
-from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 
 
 class Features:
     """A class to create the features collection and do basic validation.
+
+    Input features inherit ALL consumer group options by default. Feature.forward_group=False
+    isolates the input feature, a frozenset allowlist restricts the copy to the listed keys,
+    and Feature.forward_group_exclude carves out single keys. Context flows only via the
+    consumer-side Options.propagate_context_keys push or the Feature.inherit_context_keys pull.
 
     Parent uuid is internal logic for now. Don t give this parameter.
     """
@@ -48,54 +52,35 @@ class Features:
                 self.parent_uuids.add(feature.uuid)
                 self.child_uuid = child_uuid
                 feature.child_options = child_options
-                self.merge_options(feature.options, child_options)
+                self.merge_options(feature, child_options)
 
             self.check_duplicate_feature(feature)
             self.collection.append(feature)
 
-    def merge_options(self, feature_options: Options, child_options: Options) -> None:
+    def merge_options(self, feature: Feature, child_options: Options) -> None:
         """
-        Merge child_options into feature_options, respecting protected keys.
+        Apply forward-by-default inheritance of the consumer's options onto the input feature.
 
-        Protected keys allow parent and child features to maintain different values
-        without conflicts. This is essential for feature chaining where each level
-        needs its own configuration for certain parameters.
-
-        Protected keys are determined dynamically by reading:
-        - in_features (always protected)
-        - Keys listed in feature_options.get(feature_chainer_parser_key)
+        Delegates to Options.inherit_from: the input feature inherits ALL consumer group
+        keys by default; feature.forward_group=False isolates it, an allowlist restricts
+        the copy, and feature.forward_group_exclude carves out single keys. Consumer
+        context keys flow only when listed in feature.inherit_context_keys or pushed via
+        the consumer's propagate_context_keys. Conflict detection lives in inherit_from.
 
         Args:
-            feature_options: Parent feature's options (will be updated)
-            child_options: Child feature's options to merge in
+            feature: The input feature whose options are updated in place
+            child_options: The consumer feature's options (never mutated)
 
         Raises:
-            ValueError: If non-protected keys have conflicting values
+            ValueError: If an inherited key conflicts with an existing value
         """
-        # Get protected keys dynamically from the feature options
-        protected_keys = {DefaultOptionKeys.in_features}
-        if feature_options.get(DefaultOptionKeys.feature_chainer_parser_key):
-            protected_keys.update(feature_options.get(DefaultOptionKeys.feature_chainer_parser_key))
-
-        # Check for conflicts in non-protected keys only
-        for key_child, value_child in child_options.items():
-            for key_parent, value_parent in feature_options.items():
-                if key_child == key_parent:
-                    # Skip protected keys - they're allowed to differ
-                    if key_parent in protected_keys:
-                        continue
-
-                    # Non-protected keys must match
-                    if value_child != value_parent:
-                        raise ValueError(
-                            f"Duplicate key '{key_child}' found with conflicting values. "
-                            f"Parent has '{value_parent}', child has '{value_child}'. "
-                            f"Protected keys that can differ: {protected_keys}"
-                        )
-
-        # Merge child options into parent, excluding protected keys
-        # update_with_protected_keys will read feature_chainer_parser_key dynamically
-        feature_options.update_with_protected_keys(child_options)
+        feature.options.inherit_from(
+            child_options,
+            forward_group=feature.forward_group,
+            forward_group_exclude=feature.forward_group_exclude,
+            inherit_context_keys=feature.inherit_context_keys,
+            owner=str(feature.name),
+        )
 
     def check_duplicate_feature(self, feature: Feature) -> None:
         if feature in self.collection:

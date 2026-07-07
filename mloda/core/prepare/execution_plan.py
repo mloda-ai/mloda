@@ -1085,23 +1085,30 @@ class ExecutionPlan:
         hash_collector: dict[int, set[Feature]] = defaultdict(set)
         none_typed_features: list[Feature] = []
 
+        # Any key inherited by some feature in scope splits all features by value, so equal
+        # effective config groups together and differing values stay isolated regardless of
+        # provenance (consistent with the provenance-blind Feature dedup).
+        split_keys: frozenset[str] = frozenset(
+            key for feature in features for key in feature.options.inherited_context_keys
+        )
+
         # First pass: group features with explicit data_type
         for feature in features:
             if feature.data_type is None:
                 none_typed_features.append(feature)
             else:
-                f_hash = feature.similarity_hash()
+                f_hash = feature.similarity_hash(split_keys)
                 hash_collector[f_hash].add(feature)
 
         # Second pass: assign None-typed features to existing groups with matching base hash
         for feature in none_typed_features:
-            base_hash = feature.base_similarity_hash()
+            base_hash = feature.base_similarity_hash(split_keys)
             assigned = False
 
             # Find an existing group with matching base properties
             for existing_hash, group in hash_collector.items():
                 any_feature = next(iter(group))
-                if any_feature.base_similarity_hash() == base_hash:
+                if any_feature.base_similarity_hash(split_keys) == base_hash:
                     hash_collector[existing_hash].add(feature)
                     assigned = True
                     break

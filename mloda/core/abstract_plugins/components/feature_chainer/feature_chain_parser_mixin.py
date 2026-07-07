@@ -46,6 +46,7 @@ group). Return values use truthy/falsy semantics: any falsy return (``False``,
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import Callable
 from typing import Any, Optional, cast
 
@@ -119,6 +120,10 @@ class FeatureChainParserMixin:
         First attempts to parse in_features from the feature name string.
         Falls back to options.get_in_features() if string parsing fails.
 
+        Chained children are left at the default forward_group, which forwards all
+        consumer group options. Authors opt out via forward_group=False, an allowlist,
+        or forward_group_exclude.
+
         Args:
             options: Options containing configuration
             feature_name: Feature name to parse
@@ -191,6 +196,14 @@ class FeatureChainParserMixin:
         Also enforces MIN_IN_FEATURES / MAX_IN_FEATURES constraints when
         in_features is present in options.
 
+        For string-parsed features, additionally checks consumer-forwarded option
+        values against the value parsed from the feature name: if a PROPERTY_MAPPING
+        key arrived via forwarding (it is in ``options.inherited_group_keys``) and its
+        value differs from the name-parsed value, a ``ValueError`` is raised, because
+        the name-parsed value would otherwise silently win. Setting the environment
+        variable ``MLODA_ALLOW_FORWARDED_NAME_MISMATCH=1`` downgrades this error to a
+        warning.
+
         Args:
             feature_name: Feature name to match
             options: Options containing configuration
@@ -221,6 +234,7 @@ class FeatureChainParserMixin:
             if operation_config is not None and source_feature is not None:
                 if not cls._validate_string_match(feature_name, operation_config, source_feature):
                     return False
+                cls._validate_forwarded_name_mismatch(feature_name, operation_config, property_mapping, options)
 
         if not cls._validate_required_when(result, feature_name, prefix_patterns, property_mapping, options):
             return False
@@ -232,6 +246,52 @@ class FeatureChainParserMixin:
             return False
 
         return result
+
+    @classmethod
+    def _validate_forwarded_name_mismatch(
+        cls,
+        feature_name: str | FeatureName,
+        operation_config: str,
+        property_mapping: dict[str, Any] | None,
+        options: Options,
+    ) -> None:
+        """Reject consumer-forwarded option values that contradict the name-parsed value.
+
+        The name-parsed value takes precedence, so a differing forwarded value would be
+        silently ignored. Raises ValueError unless MLODA_ALLOW_FORWARDED_NAME_MISMATCH
+        downgrades the error to a warning.
+        """
+        if property_mapping is None or not options.inherited_group_keys:
+            return
+        prop_key = cls._find_property_key_for_value(property_mapping, operation_config)
+        if prop_key is None or prop_key not in options.inherited_group_keys:
+            return
+        inherited_value = options.get(prop_key)
+        if inherited_value is None or str(inherited_value) == operation_config:
+            return
+        message = (
+            f"Feature '{feature_name}': option '{prop_key}' was forwarded from a consumer with value "
+            f"'{inherited_value}', but the feature name parses to '{operation_config}'. The name-parsed value "
+            f"takes precedence, so the forwarded value would be silently ignored. Carve the key out with "
+            f"forward_group_exclude={{'{prop_key}'}} on the child in the consumer's input_features, or use an "
+            f"allowlist / forward_group=False. Set MLODA_ALLOW_FORWARDED_NAME_MISMATCH=1 to downgrade this "
+            f"error to a warning."
+        )
+        if os.environ.get("MLODA_ALLOW_FORWARDED_NAME_MISMATCH", "").lower() in ("1", "true"):
+            logger.warning(message)
+            return
+        raise ValueError(message)
+
+    @staticmethod
+    def _find_property_key_for_value(property_mapping: dict[str, Any], operation_config: str) -> str | None:
+        """Return the PROPERTY_MAPPING key whose values contain operation_config, if any."""
+        for prop_key, prop_value in property_mapping.items():
+            if not isinstance(prop_value, dict):
+                continue
+            extracted = FeatureChainParser._extract_property_values(prop_value)
+            if operation_config in extracted:
+                return prop_key
+        return None
 
     @classmethod
     def _validate_required_when(

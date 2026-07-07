@@ -41,6 +41,7 @@
 | mypy                                   | 2.1.0           | MIT                                                |
 | mypy_extensions                        | 1.1.0           | MIT                                                |
 | narwhals                               | 2.22.1          | MIT                                                |
+| nest-asyncio                           | 1.6.0           | BSD License                                        |
 | nest-asyncio2                          | 1.7.2           | BSD License                                        |
 | nltk                                   | 3.9.4           | Apache Software License                            |
 | numpy                                  | 2.5.0           | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 |

@@ -1,7 +1,15 @@
+import copy
 from copy import deepcopy
 
 import pytest
 from mloda.user import Options
+
+
+class _RaisesOnDeepcopy:
+    """Value whose deep-copy raises, mimicking the Python 3.14 uuid.UUID KeyError('int')."""
+
+    def __deepcopy__(self, memo: dict[int, object]) -> "_RaisesOnDeepcopy":
+        raise KeyError("int")
 
 
 class TestOptions:
@@ -240,6 +248,22 @@ class TestPropagateContextKeys:
         o = Options(context={"k": "v"}, propagate_context_keys=frozenset({"k"}))
         o2 = deepcopy(o)
         assert o2.propagate_context_keys == frozenset({"k"})
+
+    def test_deepcopy_falls_back_to_reference_when_value_deepcopy_raises(self) -> None:
+        """A value whose deep-copy raises ANY exception must be shared by reference, and
+        copy.deepcopy(Options(...)) must never propagate that exception (Python 3.14 uuid.UUID
+        raises KeyError('int'), which _safe_deepcopy must swallow per-value)."""
+        sentinel = _RaisesOnDeepcopy()
+        opts = Options(group={"g": sentinel, "d": {"n": 1}}, context={"c": sentinel})
+
+        copied = copy.deepcopy(opts)
+
+        # Un-deep-copyable values fall back to being shared by reference.
+        assert copied.group["g"] is sentinel
+        assert copied.context["c"] is sentinel
+        # Sibling values in the same dict are still independently deep-copied (per-value fallback).
+        assert copied.group["d"] is not opts.group["d"]
+        assert copied.group["d"] == {"n": 1}
 
 
 class TestContextPropagationIntegration:

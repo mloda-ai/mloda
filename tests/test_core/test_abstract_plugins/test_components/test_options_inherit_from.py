@@ -1,6 +1,4 @@
-import logging
 from copy import deepcopy
-from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -805,29 +803,6 @@ class TestLastForwardedGroupKeys:
 
         assert child.last_forwarded_group_keys == frozenset({"kg_backend"})
 
-    def test_self_merge_resets_last_forwarded_but_preserves_inherited(self) -> None:
-        """A self-merge RESETS last_forwarded to empty while PRESERVING inherited_group_keys."""
-        consumer = Options(group={"kg_backend": "neo4j"})
-        child = Options()
-        child.inherit_from(consumer)
-        assert child.last_forwarded_group_keys == frozenset({"kg_backend"})
-        assert child.inherited_group_keys == frozenset({"kg_backend"})
-
-        child.inherit_from(child)
-
-        assert child.last_forwarded_group_keys == frozenset()
-        assert child.inherited_group_keys == frozenset({"kg_backend"})
-
-    def test_self_merge_with_directives_also_resets_last_forwarded(self) -> None:
-        """A self-merge carrying directives is still a no-op that resets last_forwarded to empty."""
-        consumer = Options(group={"kg_backend": "neo4j"})
-        child = Options()
-        child.inherit_from(consumer)
-
-        child.inherit_from(child, forward_group=True)
-
-        assert child.last_forwarded_group_keys == frozenset()
-
     def test_deepcopy_preserves_last_forwarded_group_keys(self) -> None:
         """last_forwarded_group_keys survives Options.__deepcopy__."""
         consumer = Options(group={"kg_backend": "neo4j"})
@@ -839,127 +814,33 @@ class TestLastForwardedGroupKeys:
         assert copied.last_forwarded_group_keys == frozenset({"kg_backend"})
 
 
-class TestInheritFromSelfMerge:
+class TestInheritFromSelfMergeGuard:
     """
-    Test suite for the self-merge no-op contract.
+    Test suite for the self-merge defensive guard.
 
-    String-declared input features share the consumer's Options instance, so the
-    engine ends up calling options.inherit_from(options) with the SAME object as
-    self and consumer. That call must be a complete no-op (identity check):
-    group and context stay unchanged AND inherited_group_keys set by an EARLIER
-    real inherit is preserved, not reset to frozenset().
-    """
-
-    def test_self_merge_is_noop_and_preserves_inherited_group_keys(self) -> None:
-        """inherit_from(self) leaves group, context, and inherited_group_keys untouched."""
-        consumer = Options(group={"kg_backend": "neo4j", "top_k": 5})
-        child = Options(group={"own_key": "own_value"}, context={"trace_id": "abc"})
-
-        child.inherit_from(consumer)
-        assert child.inherited_group_keys == frozenset({"kg_backend", "top_k"})
-
-        group_before = deepcopy(child.group)
-        context_before = deepcopy(child.context)
-
-        child.inherit_from(child)
-
-        assert child.group == group_before
-        assert child.context == context_before
-        assert child.inherited_group_keys == frozenset({"kg_backend", "top_k"})
-
-    def test_self_merge_with_directives_is_still_noop(self) -> None:
-        """inherit_from(self, ...) with forwarding directives is also a complete no-op."""
-        consumer = Options(group={"kg_backend": "neo4j"})
-        child = Options(group={"own_key": "own_value"})
-
-        child.inherit_from(consumer)
-        assert child.inherited_group_keys == frozenset({"kg_backend"})
-
-        group_before = deepcopy(child.group)
-        context_before = deepcopy(child.context)
-
-        child.inherit_from(child, forward_group=True)
-
-        assert child.group == group_before
-        assert child.context == context_before
-        assert child.inherited_group_keys == frozenset({"kg_backend"})
-
-        child.inherit_from(child, forward_group_exclude=frozenset({"x"}))
-
-        assert child.group == group_before
-        assert child.context == context_before
-        assert child.inherited_group_keys == frozenset({"kg_backend"})
-
-
-class TestInheritFromSelfMergeDirectiveWarning:
-    """
-    Test suite for the self-merge directive warning.
-
-    String-declared input features share the consumer's Options instance, so
-    directives a plugin sets on such a child (forward_group, forward_group_exclude,
-    inherit_context_keys) silently do nothing today. The new contract: a self-merge
-    carrying any NON-DEFAULT directive logs a warning explaining the directives
-    have no effect because the child shares the consumer's Options instance. The
-    merge stays a complete no-op either way, and an all-default self-merge stays
-    silent.
+    ``opts.inherit_from(opts)`` (the consumer IS self) must be a no-op: it must
+    NOT deep-copy self's own values into itself, must NOT stamp self-referential
+    provenance, and must RESET last_forwarded_group_keys to frozenset() while
+    PRESERVING the accumulated inherited_group_keys.
     """
 
-    @pytest.mark.parametrize(
-        "directives",
-        [
-            pytest.param({"forward_group": True}, id="forward_group_true"),
-            pytest.param({"forward_group": False}, id="forward_group_false"),
-            pytest.param({"forward_group": frozenset({"x"})}, id="forward_group_allowlist"),
-            pytest.param({"forward_group_exclude": frozenset({"x"})}, id="forward_group_exclude"),
-            pytest.param({"inherit_context_keys": frozenset({"x"})}, id="inherit_context_keys"),
-        ],
-    )
-    def test_self_merge_with_nondefault_directive_logs_warning(
-        self, directives: dict[str, Any], caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """Each non-default directive on a self-merge emits a logger.warning saying
-        the directives have no effect (shared Options instance)."""
-        options = Options(group={"own_key": "own_value"}, context={"trace_id": "abc"})
+    def test_self_merge_is_noop_preserving_provenance_and_resetting_last_forwarded(self) -> None:
+        """A self-merge preserves inherited_group_keys, leaves values untouched, adds no
+        new keys, and resets last_forwarded_group_keys to an empty frozenset."""
+        opts = Options(group={"a": 1})
+        consumer = Options(group={"a": 1})
+        opts.inherit_from(consumer)
 
-        with caplog.at_level(logging.WARNING):
-            options.inherit_from(options, **directives)
+        assert opts.inherited_group_keys == frozenset({"a"})
 
-        warning_records = [record for record in caplog.records if record.levelno >= logging.WARNING]
-        assert len(warning_records) >= 1, f"Expected a warning for self-merge with directives {directives}, got none"
-        assert "no effect" in caplog.text
+        opts.inherit_from(opts)
 
-    def test_self_merge_with_nondefault_directive_stays_complete_noop(self, caplog: pytest.LogCaptureFixture) -> None:
-        """The warning does not change the contract: the self-merge remains a no-op."""
-        consumer = Options(group={"kg_backend": "neo4j"})
-        child = Options(group={"own_key": "own_value"}, context={"trace_id": "abc"})
-        child.inherit_from(consumer)
-
-        group_before = deepcopy(child.group)
-        context_before = deepcopy(child.context)
-        inherited_before = child.inherited_group_keys
-
-        with caplog.at_level(logging.WARNING):
-            child.inherit_from(child, forward_group=frozenset({"x"}))
-
-        assert child.group == group_before
-        assert child.context == context_before
-        assert child.inherited_group_keys == inherited_before
-
-    def test_self_merge_with_default_directives_is_silent(self, caplog: pytest.LogCaptureFixture) -> None:
-        """An all-default self-merge (the normal string-declared child path) logs nothing."""
-        options = Options(group={"own_key": "own_value"}, context={"trace_id": "abc"})
-
-        with caplog.at_level(logging.WARNING):
-            options.inherit_from(options)
-            options.inherit_from(
-                options,
-                forward_group=None,
-                forward_group_exclude=frozenset(),
-                inherit_context_keys=frozenset(),
-            )
-
-        warning_records = [record for record in caplog.records if record.levelno >= logging.WARNING]
-        assert warning_records == []
+        # Provenance preserved, no self-referential churn.
+        assert opts.inherited_group_keys == frozenset({"a"})
+        # Values untouched, no new keys introduced.
+        assert opts.group == {"a": 1}
+        # A self-merge forwards nothing this call.
+        assert opts.last_forwarded_group_keys == frozenset()
 
 
 class TestInheritContextKeys:

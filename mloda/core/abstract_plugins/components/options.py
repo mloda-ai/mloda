@@ -16,6 +16,49 @@ logger = logging.getLogger(__name__)
 NON_FORWARDED_KEYS: frozenset[str] = frozenset({DefaultOptionKeys.in_features})
 
 
+def _safe_deepcopy(value: Any, memo: dict[int, Any]) -> Any:
+    """Deep-copy a single value, falling back to sharing the value by reference when it cannot be
+    deep-copied for ANY reason (e.g. unpicklable objects, or values whose deepcopy raises under some
+    Python versions such as uuid.UUID on 3.14)."""
+    try:
+        return deepcopy(value, memo)
+    except Exception:
+        # If the value cannot be deep-copied for any reason, share it by reference.
+        return value
+
+
+def _isolate_forwarded_value(value: Any, memo: dict[int, Any]) -> Any:
+    """Copy the mutable-container spine so nested-container mutation cannot leak back to the
+    consumer, while sharing every non-container leaf (validators, models, handles, unpicklable
+    objects) by reference to preserve the identity the framework relies on for dedup, hashing,
+    and conflict detection. Custom container types (anything other than dict/list/set/tuple) are
+    shared by reference (documented limitation)."""
+    vid = id(value)
+    if vid in memo:
+        return memo[vid]
+    if isinstance(value, dict):
+        result: dict[Any, Any] = {}
+        memo[vid] = result
+        for k, v in value.items():
+            result[k] = _isolate_forwarded_value(v, memo)
+        return result
+    if isinstance(value, list):
+        result_list: list[Any] = []
+        memo[vid] = result_list
+        for v in value:
+            result_list.append(_isolate_forwarded_value(v, memo))
+        return result_list
+    if isinstance(value, set):
+        result_set = {_isolate_forwarded_value(v, memo) for v in value}
+        memo[vid] = result_set
+        return result_set
+    if isinstance(value, tuple):
+        result_tuple = tuple(_isolate_forwarded_value(v, memo) for v in value)
+        memo[vid] = result_tuple
+        return result_tuple
+    return value
+
+
 def validate_forwarding_directives(
     forward_group: frozenset[str] | bool | None, forward_group_exclude: frozenset[str]
 ) -> None:
@@ -229,14 +272,7 @@ class Options:
     def __deepcopy__(self, memo: dict[int, Any]) -> "Options":
         def safe_deepcopy_dict(d: dict[str, Any]) -> dict[str, Any]:
             """Safely deepcopy a dictionary, falling back to shallow copy for unpickleable objects."""
-            result = {}
-            for key, value in d.items():
-                try:
-                    result[key] = deepcopy(value, memo)
-                except (TypeError, AttributeError, RecursionError):
-                    # If the object cannot be pickled/deepcopied or causes recursion, use shallow copy
-                    result[key] = value
-            return result
+            return {key: _safe_deepcopy(value, memo) for key, value in d.items()}
 
         copied_group = safe_deepcopy_dict(self.group)
         copied_context = safe_deepcopy_dict(self.context)
@@ -285,9 +321,13 @@ class Options:
         Every key actually forwarded (including keys self already held with an equal value) is
         unioned into self.inherited_group_keys, so provenance accumulates across consumers.
 
-        A self-merge (string-declared input features share the consumer's Options instance) is a
-        complete no-op and preserves inherited_group_keys; it logs a warning when any non-default
-        directive is passed, because such directives have no effect.
+        Forwarded values are isolated by a container-spine copy as they are stored: the mutable
+        container spine (dict/list/set/tuple) is copied recursively so nested mutation on the child
+        never leaks back to the consumer or to a sibling input feature, while every non-container
+        leaf (validators, models, handles, unpicklable values) is shared by reference to preserve
+        the identity the framework relies on for dedup, hashing, and conflict detection. Custom
+        container types are shared by reference. Both string-declared and object input features run
+        this same merge.
 
         The optional ``owner`` (the input feature's name) only enriches the forwarding-conflict
         error message; it changes no behavior otherwise.
@@ -301,15 +341,14 @@ class Options:
                         or forward_group=False is combined with a non-empty forward_group_exclude.
         """
         if consumer is self:
-            if forward_group is not None or forward_group_exclude or inherit_context_keys:
-                logger.warning(
-                    "inherit_from directives have no effect on a child that shares the consumer's "
-                    "Options instance (string-declared input features share the instance by design): "
-                    f"forward_group={forward_group!r}, forward_group_exclude={forward_group_exclude!r}, "
-                    f"inherit_context_keys={inherit_context_keys!r} are ignored."
-                )
+            # A child that shares the consumer's own Options instance has nothing to forward; treat it
+            # as a no-op so a user/plugin passing the consumer's own Options does not self-copy values or
+            # stamp self-referential provenance. Bundled code never hits this (string children get a fresh
+            # Options); it is purely defensive.
             self.last_forwarded_group_keys = frozenset()
             return
+
+        memo: dict[int, Any] = {}
 
         excluded = NON_FORWARDED_KEYS
         validate_forwarding_directives(forward_group, forward_group_exclude)
@@ -343,7 +382,7 @@ class Options:
                     f"Keep the key off the child with forward_group_exclude={{'{key}'}}, an allowlist, "
                     "or forward_group=False."
                 )
-            self.add_to_group(key, consumer.group[key])
+            self.add_to_group(key, _isolate_forwarded_value(consumer.group[key], memo))
             inherited.add(key)
         self.inherited_group_keys = self.inherited_group_keys | frozenset(inherited)
         self.last_forwarded_group_keys = frozenset(inherited)
@@ -352,7 +391,7 @@ class Options:
         for key in inherit_context_keys:
             if key in excluded or key not in consumer.context:
                 continue
-            self.add_to_context(key, consumer.context[key])
+            self.add_to_context(key, _isolate_forwarded_value(consumer.context[key], memo))
             inherited_context.add(key)
 
         if consumer.propagate_context_keys and forward_group is not False:
@@ -366,7 +405,7 @@ class Options:
                 if key in self.context and self.context[key] != value:
                     raise ValueError(f"Context key '{key}' conflict: consumer='{value}', child='{self.context[key]}'")
 
-            self.context.update(propagating)
+            self.context.update({key: _isolate_forwarded_value(value, memo) for key, value in propagating.items()})
             inherited_context.update(propagating.keys())
 
         self.inherited_context_keys = self.inherited_context_keys | frozenset(inherited_context)

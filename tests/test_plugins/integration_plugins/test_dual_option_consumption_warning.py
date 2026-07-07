@@ -139,6 +139,25 @@ class DualWarn579ConsumerGroup(_DualWarn579ConsumerBase):
         return {Feature(SOURCE_NAME)}
 
 
+class DualWarn579StringConsumerGroup(_DualWarn579ConsumerBase):
+    """Consumer that declares the mode key but requests its child as a BARE STRING.
+
+    The unified forwarding path gives the bare-string child its own fresh Options and
+    runs the real inherit_from merge, so it records forwarding provenance exactly like
+    an object child and must trigger the same dual-consumption warning.
+    """
+
+    FEATURE_NAME = "dualwarn579_string_consumer"
+    PROPERTY_MAPPING = {
+        MODE_KEY: {
+            "explanation": "Execution mode consumed by the dualwarn579 string consumer group",
+        },
+    }
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Any]]:
+        return {SOURCE_NAME}
+
+
 class DualWarn579RepeatConsumerGroup(_DualWarn579ConsumerBase):
     """Consumer matching TWO feature names so one class can be requested twice in one run."""
 
@@ -509,3 +528,82 @@ class TestDualOptionConsumptionWarningForwardingAttribution:
         assert "DualWarn579SourceGroup" in message
         # The non-forwarding consumer B must NOT be warned.
         assert "DualWarn579SharedConsumerBGroup" not in message
+
+
+class TestDualOptionConsumptionWarningStringChild:
+    """
+    Pins the dual-consumption warning for the BARE-STRING input-feature path (#620).
+
+    A bare-string child (input_features returning {SOURCE_NAME}, not {Feature(...)})
+    now runs the real inherit_from merge on its own fresh Options and records the same
+    forwarding provenance as an object child. The dual-consumption warning must fire
+    for it exactly as it does for an object child.
+    """
+
+    def test_warning_fires_for_bare_string_input_feature(self, caplog: pytest.LogCaptureFixture) -> None:
+        """A bare-string child that inherits a dual-declared key triggers exactly one WARNING."""
+        DualWarn579SourceGroup.reset_recording()
+
+        consumer = Feature(
+            DualWarn579StringConsumerGroup.FEATURE_NAME,
+            options=Options(group={MODE_KEY: "fast"}),
+        )
+        with caplog.at_level(logging.WARNING):
+            results = _run([consumer], {DualWarn579SourceGroup, DualWarn579StringConsumerGroup})
+
+        # The run itself must succeed for the requested consumer feature.
+        frame = _frame_with_column(results, DualWarn579StringConsumerGroup.FEATURE_NAME)
+        assert frame[DualWarn579StringConsumerGroup.FEATURE_NAME].tolist() == [2, 4, 6]
+
+        records = _mode_warning_records(caplog)
+        assert len(records) == 1, (
+            f"Expected exactly one WARNING mentioning '{MODE_KEY}', got {len(records)}: "
+            f"{[record.getMessage() for record in records]}"
+        )
+        message = records[0].getMessage()
+        assert "DualWarn579StringConsumerGroup" in message
+        assert "DualWarn579SourceGroup" in message
+        assert "forward_group_exclude" in message
+
+        # The warning plus this seen_options check are the proof that the bare-string
+        # child inherited the forwarded key: the mode key actually reached the upstream
+        # source (the [2, 4, 6] value alone comes from the consumer's OWN mode).
+        assert len(DualWarn579SourceGroup.seen_options) == 1
+        assert MODE_KEY in DualWarn579SourceGroup.seen_options[0]["group"]
+
+    def test_bare_string_child_warns_and_forwards_but_wrapped_feature_exclude_decouples(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A bare-string input feature carries no per-child opt-out: it warns and forwards
+        the dual-declared key to the upstream source. The documented decouple is wrapping
+        it as Feature(name, forward_group_exclude={...}), which then warns not at all and
+        withholds the key. Both behaviors are contrasted on the SAME upstream seen_options.
+        """
+        # Bare-string child: no per-child opt-out, so it warns AND forwards the key.
+        DualWarn579SourceGroup.reset_recording()
+        bare_consumer = Feature(
+            DualWarn579StringConsumerGroup.FEATURE_NAME,
+            options=Options(group={MODE_KEY: "fast"}),
+        )
+        with caplog.at_level(logging.WARNING):
+            _run([bare_consumer], {DualWarn579SourceGroup, DualWarn579StringConsumerGroup})
+
+        assert len(_mode_warning_records(caplog)) == 1
+        assert len(DualWarn579SourceGroup.seen_options) == 1
+        assert MODE_KEY in DualWarn579SourceGroup.seen_options[0]["group"]
+
+        # Wrapped child with forward_group_exclude: no warning AND the key is withheld.
+        caplog.clear()
+        DualWarn579SourceGroup.reset_recording()
+        wrapped_consumer = Feature(
+            DualWarn579ExcludeConsumerGroup.FEATURE_NAME,
+            options=Options(group={MODE_KEY: "fast"}),
+        )
+        with caplog.at_level(logging.WARNING):
+            _run([wrapped_consumer], {DualWarn579SourceGroup, DualWarn579ExcludeConsumerGroup})
+
+        assert _mode_warning_records(caplog) == []
+        assert len(DualWarn579SourceGroup.seen_options) == 1
+        upstream = DualWarn579SourceGroup.seen_options[0]
+        assert MODE_KEY not in upstream["group"]
+        assert MODE_KEY not in upstream["context"]

@@ -44,7 +44,7 @@ class Features:
                 child_options = Options({})
 
             if isinstance(feature, str):
-                feature = Feature(name=feature, options=child_options, domain=self.parent_domain)
+                feature = Feature(name=feature, options=Options({}), domain=self.parent_domain)
             else:
                 if feature.domain is None and self.parent_domain is not None:
                     feature.domain = Domain(self.parent_domain)

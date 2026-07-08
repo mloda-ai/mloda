@@ -415,8 +415,10 @@ class Options:
             new_context.update({key: _isolate_forwarded_value(value, memo) for key, value in propagating.items()})
             inherited_context.update(propagating.keys())
 
-        self.group = new_group
-        self.context = new_context
+        self.group.clear()
+        self.group.update(new_group)
+        self.context.clear()
+        self.context.update(new_context)
         self.inherited_group_keys = self.inherited_group_keys | frozenset(inherited)
         self.last_forwarded_group_keys = frozenset(inherited)
         self.inherited_context_keys = self.inherited_context_keys | frozenset(inherited_context)

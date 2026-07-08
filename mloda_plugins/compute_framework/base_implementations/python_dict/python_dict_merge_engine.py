@@ -6,7 +6,7 @@ from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 from mloda.provider import BaseMergeEngine
 from mloda.user import Index
 from mloda.user import JoinType
-from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils import row_count
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils import columnar_to_rows
 from mloda_plugins.compute_framework.base_implementations.python_dict import python_dict_type_semantics
 
 
@@ -30,8 +30,7 @@ class PythonDictMergeEngine(BaseMergeEngine):
 
     @classmethod
     def _to_rows(cls, data: dict[str, list[Any]]) -> list[dict[str, Any]]:
-        n = row_count(data)
-        return [{col: data[col][i] for col in data} for i in range(n)]
+        return columnar_to_rows(data)
 
     @staticmethod
     def _to_columnar(rows: list[dict[str, Any]], columns: list[str]) -> dict[str, list[Any]]:

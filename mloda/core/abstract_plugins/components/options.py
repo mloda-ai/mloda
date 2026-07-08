@@ -362,36 +362,43 @@ class Options:
 
         group_keys = group_keys - forward_group_exclude
 
+        # Stage all mutations into locals and run every conflict check first; self is left
+        # untouched until the commit block, so any raise leaves self completely unchanged.
+        new_group = dict(self.group)
+        new_context = dict(self.context)
+
         inherited: set[str] = set()
         for key in sorted(group_keys):
             if key in excluded or key not in consumer.group:
                 continue
-            if key in self.context and self.context[key] != consumer.group[key]:
+            if key in new_context and new_context[key] != consumer.group[key]:
                 owner_clause = f" on input feature '{owner}'" if owner is not None else " on the input feature"
                 raise ValueError(
                     f"Option key '{key}' forwarded from the consumer as a group option conflicts with the "
                     f"same key held in the child's context{owner_clause}: consumer='{consumer.group[key]}', "
-                    f"child context='{self.context[key]}'. Keep the key off the child with "
+                    f"child context='{new_context[key]}'. Keep the key off the child with "
                     f"forward_group_exclude={{'{key}'}}, an allowlist, or forward_group=False."
                 )
-            if key in self.group and self.group[key] != consumer.group[key]:
+            if key in new_group and new_group[key] != consumer.group[key]:
                 owner_clause = f" on input feature '{owner}'" if owner is not None else " on the input feature"
                 raise ValueError(
                     f"Option key '{key}' forwarded from the consumer conflicts with the value already set"
-                    f"{owner_clause}: consumer='{consumer.group[key]}', child='{self.group[key]}'. "
+                    f"{owner_clause}: consumer='{consumer.group[key]}', child='{new_group[key]}'. "
                     f"Keep the key off the child with forward_group_exclude={{'{key}'}}, an allowlist, "
                     "or forward_group=False."
                 )
-            self.add_to_group(key, _isolate_forwarded_value(consumer.group[key], memo))
+            value = _isolate_forwarded_value(consumer.group[key], memo)
+            OptionsValidator.validate_can_add_to_group(key, value, new_group, new_context)
+            new_group[key] = value
             inherited.add(key)
-        self.inherited_group_keys = self.inherited_group_keys | frozenset(inherited)
-        self.last_forwarded_group_keys = frozenset(inherited)
 
         inherited_context: set[str] = set()
         for key in inherit_context_keys:
             if key in excluded or key not in consumer.context:
                 continue
-            self.add_to_context(key, _isolate_forwarded_value(consumer.context[key], memo))
+            value = _isolate_forwarded_value(consumer.context[key], memo)
+            OptionsValidator.validate_can_add_to_context(key, value, new_group, new_context)
+            new_context[key] = value
             inherited_context.add(key)
 
         if consumer.propagate_context_keys and forward_group is not False:
@@ -399,14 +406,18 @@ class Options:
                 k: v for k, v in consumer.context.items() if k in consumer.propagate_context_keys and k not in excluded
             }
 
-            OptionsValidator.validate_no_context_group_conflicts(set(propagating.keys()), set(self.group.keys()))
+            OptionsValidator.validate_no_context_group_conflicts(set(propagating.keys()), set(new_group.keys()))
 
             for key, value in propagating.items():
-                if key in self.context and self.context[key] != value:
-                    raise ValueError(f"Context key '{key}' conflict: consumer='{value}', child='{self.context[key]}'")
+                if key in new_context and new_context[key] != value:
+                    raise ValueError(f"Context key '{key}' conflict: consumer='{value}', child='{new_context[key]}'")
 
-            self.context.update({key: _isolate_forwarded_value(value, memo) for key, value in propagating.items()})
+            new_context.update({key: _isolate_forwarded_value(value, memo) for key, value in propagating.items()})
             inherited_context.update(propagating.keys())
 
+        self.group = new_group
+        self.context = new_context
+        self.inherited_group_keys = self.inherited_group_keys | frozenset(inherited)
+        self.last_forwarded_group_keys = frozenset(inherited)
         self.inherited_context_keys = self.inherited_context_keys | frozenset(inherited_context)
         return frozenset(inherited)

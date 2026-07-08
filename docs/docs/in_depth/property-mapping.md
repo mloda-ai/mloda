@@ -235,6 +235,17 @@ counterpart is the child-side **pull** `inherit_context_keys`. For both author-s
 flows see
 [Forwarding Options to Input Features](feature-chain-parser.md#forwarding-options-to-input-features).
 
+A forwarded key also splits FeatureSets by value. A context key delivered via the
+push (`propagate_context_keys`) or the pull (`inherit_context_keys`) enters the
+child's `inherited_context_keys`, and features whose value for that key differs (e.g.
+`env=prod` vs `env=staging`) then compute in separate FeatureSets, one per value;
+equal values still share one computation. The split is per-FeatureGroup and by value,
+not by provenance: once any feature in that scope forwards the key, every feature in
+scope splits on it, including a sibling that set the same key directly in plain
+context. A key that no feature in scope ever forwards stays metadata and does not
+split. This isolates per-value results that previously collapsed into one computation
+where a single value silently won.
+
 ### `group` and `context` are independent namespaces
 
 `group` (which drives resolution and splitting) and `context` (metadata) are

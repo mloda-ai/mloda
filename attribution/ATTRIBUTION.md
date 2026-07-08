@@ -4,7 +4,7 @@
 | PyYAML                                 | 6.0.3           | MIT License                                        |
 | Pygments                               | 2.20.0          | BSD-2-Clause                                       |
 | annotated-types                        | 0.7.0           | MIT License                                        |
-| ast_serialize                          | 0.5.0           | MIT                                                |
+| ast_serialize                          | 0.6.0           | MIT                                                |
 | asttokens                              | 3.0.1           | Apache 2.0                                         |
 | bandit                                 | 1.9.4           | Apache-2.0                                         |
 | cachetools                             | 6.2.6           | MIT                                                |
@@ -30,18 +30,17 @@
 | joblib                                 | 1.5.3           | BSD-3-Clause                                       |
 | jupyter_client                         | 8.9.1           | BSD License                                        |
 | jupyter_core                           | 5.9.1           | BSD-3-Clause                                       |
-| librt                                  | 0.11.0          | MIT                                                |
+| librt                                  | 0.12.0          | MIT                                                |
 | markdown-it-py                         | 4.2.0           | MIT License                                        |
 | matplotlib-inline                      | 0.2.2           | BSD-3-Clause                                       |
 | mdurl                                  | 0.1.2           | MIT License                                        |
 | mktestdocs                             | 0.2.5           | MIT                                                |
-| mloda                                  | 0.8.0           | Apache-2.0                                         |
+| mloda                                  | 0.9.0           | Apache-2.0                                         |
 | mmh3                                   | 5.2.1           | MIT License                                        |
 | msgpack                                | 1.2.1           | Apache-2.0                                         |
 | mypy                                   | 2.1.0           | MIT                                                |
 | mypy_extensions                        | 1.1.0           | MIT                                                |
 | narwhals                               | 2.22.1          | MIT                                                |
-| nest-asyncio                           | 1.6.0           | BSD License                                        |
 | nest-asyncio2                          | 1.7.2           | BSD License                                        |
 | nltk                                   | 3.9.4           | Apache Software License                            |
 | numpy                                  | 2.5.0           | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 |
@@ -55,7 +54,7 @@
 | packageurl-python                      | 0.17.6          | MIT License                                        |
 | packaging                              | 26.2            | Apache-2.0 OR BSD-2-Clause                         |
 | pandas                                 | 3.0.3           | BSD License                                        |
-| pandera                                | 0.32.0          | MIT License                                        |
+| pandera                                | 0.32.1          | MIT License                                        |
 | parso                                  | 0.8.7           | MIT License                                        |
 | pathspec                               | 1.1.1           | Mozilla Public License 2.0 (MPL 2.0)               |
 | pexpect                                | 4.9.0           | ISC License (ISCL)                                 |
@@ -64,8 +63,8 @@
 | pip_audit                              | 2.10.1          | Apache Software License                            |
 | platformdirs                           | 4.10.0          | MIT License                                        |
 | pluggy                                 | 1.6.0           | MIT License                                        |
-| polars                                 | 1.42.0          | MIT License                                        |
-| polars-runtime-32                      | 1.42.0          | MIT License                                        |
+| polars                                 | 1.42.1          | MIT License                                        |
+| polars-runtime-32                      | 1.42.1          | MIT License                                        |
 | prompt_toolkit                         | 3.0.52          | BSD License                                        |
 | psutil                                 | 7.2.2           | BSD-3-Clause                                       |
 | ptyprocess                             | 0.7.0           | ISC License (ISCL)                                 |

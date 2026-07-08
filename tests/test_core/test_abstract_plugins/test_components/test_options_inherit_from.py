@@ -700,7 +700,7 @@ class TestLastForwardedGroupKeys:
     inherit_from call actually forwarded. Each real merge REPLACES it with that
     call's forwarded set (same membership rule as inherited: keys copied AND
     equal-value forwards count; in_features, allowlist carve-outs, and excludes
-    never count). A self-merge RESETS it to frozenset() (whereas inherited is
+    never count). A self-merge PRESERVES it (whereas inherited is also
     preserved). __deepcopy__ preserves it. Default frozenset() at construction.
 
     The engine reads this per-consumer set (intersected with the consumer's
@@ -820,27 +820,215 @@ class TestInheritFromSelfMergeGuard:
 
     ``opts.inherit_from(opts)`` (the consumer IS self) must be a no-op: it must
     NOT deep-copy self's own values into itself, must NOT stamp self-referential
-    provenance, and must RESET last_forwarded_group_keys to frozenset() while
-    PRESERVING the accumulated inherited_group_keys.
+    provenance, and must PRESERVE last_forwarded_group_keys (the aliasing hazard:
+    a shared Options reused as an input feature keeps its recorded forwarded set)
+    while PRESERVING the accumulated inherited_group_keys. It returns frozenset().
     """
 
-    def test_self_merge_is_noop_preserving_provenance_and_resetting_last_forwarded(self) -> None:
+    def test_self_merge_is_noop_preserving_provenance_and_last_forwarded(self) -> None:
         """A self-merge preserves inherited_group_keys, leaves values untouched, adds no
-        new keys, and resets last_forwarded_group_keys to an empty frozenset."""
+        new keys, PRESERVES last_forwarded_group_keys, and returns an empty frozenset."""
         opts = Options(group={"a": 1})
         consumer = Options(group={"a": 1})
-        opts.inherit_from(consumer)
+        real_forwarded = opts.inherit_from(consumer)
 
         assert opts.inherited_group_keys == frozenset({"a"})
+        assert real_forwarded == frozenset({"a"})
+        assert opts.last_forwarded_group_keys == frozenset({"a"})
 
-        opts.inherit_from(opts)
+        self_forwarded = opts.inherit_from(opts)
 
         # Provenance preserved, no self-referential churn.
         assert opts.inherited_group_keys == frozenset({"a"})
         # Values untouched, no new keys introduced.
         assert opts.group == {"a": 1}
-        # A self-merge forwards nothing this call.
-        assert opts.last_forwarded_group_keys == frozenset()
+        # A self-merge forwards nothing this call, so it RETURNS an empty frozenset ...
+        assert self_forwarded == frozenset()
+        # ... but PRESERVES the previously recorded forwarded set (aliasing regression).
+        assert opts.last_forwarded_group_keys == frozenset({"a"})
+
+
+class TestInheritFromReturnValue:
+    """
+    Test suite for the frozenset[str] RETURN VALUE of Options.inherit_from (NEW SPEC).
+
+    inherit_from now returns the set of consumer group keys it forwarded in THIS call,
+    with the same membership rule as last_forwarded_group_keys: keys copied AND keys the
+    child already held with an equal value both count; in_features, allowlist carve-outs,
+    and excluded keys never count. A self-merge (consumer IS self) returns frozenset()
+    without touching the recorded set. The engine consumes this return value (stored on
+    Feature.forwarded_group_keys) for dual-consumption attribution instead of reading the
+    possibly-clobbered last_forwarded_group_keys off the shared Options instance.
+    """
+
+    def test_normal_merge_returns_forwarded_frozenset(self) -> None:
+        """A default merge returns exactly the keys forwarded in that call."""
+        consumer = Options(group={"kg_backend": "neo4j", "top_k": 5})
+        child = Options(group={"own_key": "own_value"})
+
+        returned = child.inherit_from(consumer)
+
+        assert returned == frozenset({"kg_backend", "top_k"})
+
+    def test_return_matches_last_forwarded_membership(self) -> None:
+        """The return value has the same membership as last_forwarded_group_keys."""
+        consumer = Options(group={"kg_backend": "neo4j", "top_k": 5})
+        child = Options(group={"own_key": "own_value"})
+
+        returned = child.inherit_from(consumer)
+
+        assert returned == child.last_forwarded_group_keys
+
+    def test_equal_value_forward_is_in_return(self) -> None:
+        """A forwarded key the child already held with an EQUAL value counts in the return."""
+        consumer = Options(group={"kg_backend": "neo4j", "top_k": 5})
+        child = Options(group={"kg_backend": "neo4j"})
+
+        returned = child.inherit_from(consumer)
+
+        assert returned == frozenset({"kg_backend", "top_k"})
+
+    def test_forward_group_false_returns_empty(self) -> None:
+        """forward_group=False forwards nothing, so the return is empty."""
+        consumer = Options(group={"kg_backend": "neo4j"})
+        child = Options()
+
+        returned = child.inherit_from(consumer, forward_group=False)
+
+        assert returned == frozenset()
+
+    def test_empty_group_consumer_returns_empty(self) -> None:
+        """A consumer with an empty group forwards nothing, so the return is empty."""
+        consumer = Options(group={})
+        child = Options(group={"own_key": "own_value"})
+
+        returned = child.inherit_from(consumer)
+
+        assert returned == frozenset()
+
+    def test_allowlist_carve_out_honored_in_return(self) -> None:
+        """With an allowlist, only the keys actually forwarded appear in the return."""
+        consumer = Options(group={"kg_backend": "neo4j", "top_k": 5})
+        child = Options()
+
+        returned = child.inherit_from(consumer, forward_group=frozenset({"kg_backend", "missing_key"}))
+
+        assert returned == frozenset({"kg_backend"})
+        assert returned == child.last_forwarded_group_keys
+
+    def test_exclude_carve_out_honored_in_return(self) -> None:
+        """An excluded key never appears in the return."""
+        consumer = Options(group={"kg_backend": "neo4j", "top_k": 5})
+        child = Options()
+
+        returned = child.inherit_from(consumer, forward_group_exclude=frozenset({"top_k"}))
+
+        assert returned == frozenset({"kg_backend"})
+        assert returned == child.last_forwarded_group_keys
+
+    def test_in_features_carve_out_honored_in_return(self) -> None:
+        """in_features is never forwarded, so it never appears in the return."""
+        consumer = Options(group={DefaultOptionKeys.in_features: "consumer_source", "kg_backend": "neo4j"})
+        child = Options()
+
+        returned = child.inherit_from(consumer)
+
+        assert returned == frozenset({"kg_backend"})
+
+    def test_self_merge_returns_empty_and_preserves_last_forwarded(self) -> None:
+        """A self-merge on an Options that already recorded a forwarded set (the aliasing
+        hazard: the same instance reused as an input feature) returns frozenset() while
+        the recorded last_forwarded_group_keys survives intact."""
+        consumer = Options(group={"kg_backend": "neo4j"})
+        shared = Options()
+        shared.inherit_from(consumer)
+        assert shared.last_forwarded_group_keys == frozenset({"kg_backend"})
+
+        returned = shared.inherit_from(shared)
+
+        # The self-merge forwards nothing this call ...
+        assert returned == frozenset()
+        # ... and PRESERVES the true forwarded set the engine later attributes provenance from.
+        assert shared.last_forwarded_group_keys == frozenset({"kg_backend"})
+
+    def test_second_merge_return_replaces_not_unions(self) -> None:
+        """Each call's return reflects ONLY that call's forwarded set, not the accumulated union."""
+        consumer_a = Options(group={"kg_backend": "neo4j"})
+        consumer_b = Options(group={"top_k": 5})
+        child = Options()
+
+        first = child.inherit_from(consumer_a)
+        second = child.inherit_from(consumer_b)
+
+        assert first == frozenset({"kg_backend"})
+        assert second == frozenset({"top_k"})
+
+
+class TestFeatureForwardedGroupKeys:
+    """
+    Test suite for Feature.forwarded_group_keys (NEW SPEC).
+
+    Features.merge_options stores the frozenset returned by Options.inherit_from onto
+    feature.forwarded_group_keys, so the engine attributes the dual-consumption warning
+    from this per-feature value instead of reading the (possibly clobbered) shared
+    Options.last_forwarded_group_keys. Default frozenset() on a fresh Feature.
+    """
+
+    def test_fresh_feature_has_empty_forwarded_group_keys(self) -> None:
+        """A freshly constructed Feature carries an empty forwarded_group_keys frozenset."""
+        feature = Feature(name="child")
+
+        assert isinstance(feature.forwarded_group_keys, frozenset)
+        assert feature.forwarded_group_keys == frozenset()
+
+    def test_merge_options_stores_inherit_from_return(self) -> None:
+        """Features.merge_options stores the inherit_from return value onto the feature."""
+        consumer_opts = Options(group={"kg_backend": "neo4j", "top_k": 5})
+        features = Features(
+            [Feature(name="child")],
+            child_options=consumer_opts,
+            child_uuid=uuid4(),
+        )
+
+        (child,) = features.collection
+        assert child.forwarded_group_keys == frozenset({"kg_backend", "top_k"})
+        assert child.forwarded_group_keys == child.options.last_forwarded_group_keys
+
+    def test_merge_options_stored_value_honors_exclude(self) -> None:
+        """The stored forwarded set reflects a feature-level forward_group_exclude carve-out."""
+        consumer_opts = Options(group={"kg_backend": "neo4j", "top_k": 5})
+        features = Features(
+            [Feature(name="child", forward_group_exclude=frozenset({"top_k"}))],
+            child_options=consumer_opts,
+            child_uuid=uuid4(),
+        )
+
+        (child,) = features.collection
+        assert child.forwarded_group_keys == frozenset({"kg_backend"})
+
+    def test_merge_options_stored_value_empty_on_forward_group_false(self) -> None:
+        """An isolated feature (forward_group=False) stores an empty forwarded set."""
+        consumer_opts = Options(group={"kg_backend": "neo4j"})
+        features = Features(
+            [Feature(name="child", forward_group=False)],
+            child_options=consumer_opts,
+            child_uuid=uuid4(),
+        )
+
+        (child,) = features.collection
+        assert child.forwarded_group_keys == frozenset()
+
+    def test_string_child_forwarded_group_keys_recorded(self) -> None:
+        """A bare-string input feature also gets its forwarded set stored."""
+        consumer_opts = Options(group={"kg_backend": "neo4j"})
+        features = Features(
+            ["child"],
+            child_options=consumer_opts,
+            child_uuid=uuid4(),
+        )
+
+        (child,) = features.collection
+        assert child.forwarded_group_keys == frozenset({"kg_backend"})
 
 
 class TestInheritContextKeys:

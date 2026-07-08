@@ -296,7 +296,7 @@ class Options:
         forward_group_exclude: frozenset[str] = frozenset(),
         inherit_context_keys: frozenset[str] = frozenset(),
         owner: str | None = None,
-    ) -> None:
+    ) -> frozenset[str]:
         """
         Inherit options from the consumer feature that declared this input feature.
 
@@ -332,6 +332,8 @@ class Options:
         The optional ``owner`` (the input feature's name) only enriches the forwarding-conflict
         error message; it changes no behavior otherwise.
 
+        Returns the group keys forwarded this call; the self-merge no-op returns frozenset().
+
         Raises:
             ValueError: If a forwarded group key already exists on self with a different value
                         (rich message naming the key, both values, and the opt-out remedies,
@@ -341,12 +343,10 @@ class Options:
                         or forward_group=False is combined with a non-empty forward_group_exclude.
         """
         if consumer is self:
-            # A child that shares the consumer's own Options instance has nothing to forward; treat it
-            # as a no-op so a user/plugin passing the consumer's own Options does not self-copy values or
-            # stamp self-referential provenance. Bundled code never hits this (string children get a fresh
-            # Options); it is purely defensive.
-            self.last_forwarded_group_keys = frozenset()
-            return
+            # A child sharing the consumer's own Options has nothing to forward: no-op. Return
+            # frozenset() without touching last_forwarded_group_keys, so a shared instance is never
+            # clobbered. Bundled code never hits this (string children get a fresh Options).
+            return frozenset()
 
         memo: dict[int, Any] = {}
 
@@ -409,3 +409,4 @@ class Options:
             inherited_context.update(propagating.keys())
 
         self.inherited_context_keys = self.inherited_context_keys | frozenset(inherited_context)
+        return frozenset(inherited)

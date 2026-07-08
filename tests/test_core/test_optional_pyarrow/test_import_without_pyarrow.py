@@ -46,6 +46,10 @@ if os.environ.get("MLODA_TEST_BLOCK_PYARROW", "1") == "1":
 import importlib
 
 import mloda.user
+
+# Importing mloda.user must not eagerly import optional backend libraries.
+assert "pyarrow" not in sys.modules, "import mloda.user must not eagerly import pyarrow"
+
 from mloda.user import mloda, Feature, PluginCollector
 
 # Dependency-free lazy access: PythonDictFramework must resolve from mloda.user

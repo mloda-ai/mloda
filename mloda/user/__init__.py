@@ -101,6 +101,12 @@ def __getattr__(name: str) -> Any:
         return getattr(module, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
+
+def __dir__() -> list[str]:
+    # Surface the lazy framework names for REPL/IDE completion.
+    return sorted(set(globals()) | _LAZY_COMPUTE_FRAMEWORKS.keys())
+
+
 __all__ = [
     # API
     "mlodaAPI",
@@ -142,14 +148,4 @@ __all__ = [
     "get_extender_docs",
     "list_registered",
     "resolve_feature",
-    # Compute frameworks (lazy, issue #649)
-    "PythonDictFramework",
-    "PandasDataFrame",
-    "PolarsDataFrame",
-    "PolarsLazyDataFrame",
-    "PyArrowTable",
-    "SqliteFramework",
-    "DuckDBFramework",
-    "SparkFramework",
-    "IcebergFramework",
 ]

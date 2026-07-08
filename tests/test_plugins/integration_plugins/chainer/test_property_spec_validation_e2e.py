@@ -135,12 +135,19 @@ class TestPropertySpecValidationFunctionE2E:
             ),
         )
 
-        with pytest.raises(ValueError, match="window_size"):
+        with pytest.raises(ValueError) as exc_info:
             mloda.run_all(
                 [feature],
                 compute_frameworks={PandasDataFrame},
                 plugin_collector=self.plugin_collector,
             )
+
+        error_message = str(exc_info.value)
+        assert "window_size" in error_message
+        assert "14" in error_message
+        # Pins that the message comes from the strict-validation rejection hint (naming
+        # the culprit class), not just that "window_size" appears somewhere by coincidence.
+        assert PropertySpecE2EWindowedFeatureGroup.__name__ in error_message
 
         assert len(CALCULATE_INVOCATIONS) == invocations_before, "rejection must happen before any computation"
 

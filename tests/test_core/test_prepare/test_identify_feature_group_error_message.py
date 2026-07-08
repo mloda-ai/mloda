@@ -663,15 +663,32 @@ class StrictWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return None
 
 
-class TestStrictValidationRejectionHint:
-    """Tests for the (not yet wired) strict-validation rejection hint in the
-    no-feature-group error.
+class StrictMaxWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+    """Second strict-rejecting config-based feature group, mapping a different key
+    ('max_window') than StrictWindowFeatureGroup, used to verify the hint names
+    every rejecting candidate rather than only the first.
+    """
 
-    Once wired, the no-feature-group-found error should consult
+    PROPERTY_MAPPING = {
+        "max_window": {
+            "explanation": "Maximum window size",
+            DefaultOptionKeys.strict_validation: True,
+            DefaultOptionKeys.validation_function: lambda v: isinstance(v, int) and 0 < v <= 13,
+        },
+        DefaultOptionKeys.in_features: {"explanation": "source", DefaultOptionKeys.context: True},
+    }
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        return None
+
+
+class TestStrictValidationRejectionHint:
+    """Tests for the strict-validation rejection hint in the no-feature-group error.
+
+    The no-feature-group-found error consults
     FeatureChainParserMixin._strict_validation_rejection_reason for each accessible
-    candidate and surface the discarded ValueError (e.g. "Property value '14' failed
-    validation for 'window_size'") together with the culprit class name, instead of
-    only the generic "No feature groups found" message.
+    candidate and surfaces the discarded ValueError (e.g. "Property value '14' failed
+    validation for 'window_size'") together with the culprit class name(s).
     """
 
     def test_hint_names_rejected_option_value_and_class(self) -> None:
@@ -727,4 +744,40 @@ class TestStrictValidationRejectionHint:
         )
         assert "window_size" not in error_message, (
             f"Error message should NOT mention 'window_size' for an unrelated feature, but got: {error_message}"
+        )
+
+    def test_hint_names_all_rejecting_classes(self) -> None:
+        """When multiple accessible candidates each reject the same feature via strict
+        validation, the hint must name every one of them, not just the first."""
+        feature = Feature(
+            "strict_multi_test_feature",
+            Options(
+                context={
+                    DefaultOptionKeys.in_features: "src",
+                    "window_size": 14,
+                    "max_window": 20,
+                }
+            ),
+        )
+
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            StrictWindowFeatureGroup: {MockComputeFramework},
+            StrictMaxWindowFeatureGroup: {MockComputeFramework},
+        }
+
+        with pytest.raises(ValueError) as exc_info:
+            IdentifyFeatureGroupClass(
+                feature=feature,
+                accessible_plugins=accessible_plugins,
+                links=None,
+                data_access_collection=None,
+            )
+
+        error_message = str(exc_info.value)
+
+        assert "StrictWindowFeatureGroup" in error_message, (
+            f"Error message should name StrictWindowFeatureGroup, but got: {error_message}"
+        )
+        assert "StrictMaxWindowFeatureGroup" in error_message, (
+            f"Error message should name StrictMaxWindowFeatureGroup, but got: {error_message}"
         )

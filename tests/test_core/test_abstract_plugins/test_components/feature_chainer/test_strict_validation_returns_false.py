@@ -52,6 +52,12 @@ class SubGroupWithValidationFunction(BaseMode):
     }
 
 
+class MalformedPrefixFeatureGroup(FeatureChainParserMixin):
+    """PREFIX_PATTERN matches names with no chain separator, triggering a parse ValueError unrelated to option validation."""
+
+    PREFIX_PATTERN = r"^malformed_prefix_(\w+)$"
+
+
 class TestStrictValidationReturnsFalse:
     """Tests that strict_validation failures return False instead of raising ValueError."""
 
@@ -127,3 +133,11 @@ class TestStrictValidationRejectionReason:
         reason = SubGroupA._strict_validation_rejection_reason(feature_name, options)
 
         assert reason is None
+
+    def test_malformed_prefix_match_returns_none(self) -> None:
+        """PREFIX_PATTERN matches but the name has no chain separator: this is a
+        malformed-name parse ValueError, not an option-value rejection, so it must
+        return None rather than the parser's "has no source feature" message."""
+        result = MalformedPrefixFeatureGroup._strict_validation_rejection_reason("malformed_prefix_test", Options())
+
+        assert result is None

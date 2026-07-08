@@ -251,18 +251,28 @@ class FeatureChainParserMixin:
     def _strict_validation_rejection_reason(cls, feature_name: str | FeatureName, options: Options) -> str | None:
         """Return the ValueError message that match_feature_group_criteria discards, if any.
 
-        Re-runs the same basic-match call as match_feature_group_criteria, but surfaces
-        the ValueError message instead of swallowing it into a plain False. Returns None
-        when the call succeeds or fails without raising (i.e. an unrelated candidate).
-        Diagnostic-only: does not affect match_feature_group_criteria's behavior.
+        Only surfaces ValueErrors raised by property-mapping validation (genuine
+        strict_validation rejections). A ValueError raised while parsing a
+        PREFIX_PATTERN match (malformed feature name, no chain separator) is a
+        parse error, not an option-value rejection, and is treated as nothing to
+        report. Returns None when nothing was rejected (match succeeded, or the
+        candidate is unrelated). Diagnostic-only: does not affect
+        match_feature_group_criteria's behavior.
         """
+        prefix_patterns = cls._get_prefix_patterns()
+        if prefix_patterns:
+            try:
+                if FeatureChainParser._match_pattern_based_feature(feature_name, prefix_patterns, CHAIN_SEPARATOR):
+                    return None
+            except ValueError:
+                return None
+
+        property_mapping = cls._get_property_mapping()
+        if property_mapping is None:
+            return None
+
         try:
-            FeatureChainParser.match_configuration_feature_chain_parser(
-                feature_name,
-                options,
-                property_mapping=cls._get_property_mapping(),
-                prefix_patterns=cls._get_prefix_patterns(),
-            )
+            FeatureChainParser._validate_options_against_property_mapping(options, property_mapping)
         except ValueError as exc:
             return str(exc)
         return None

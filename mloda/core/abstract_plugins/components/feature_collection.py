@@ -59,8 +59,8 @@ class Features:
 
     def merge_options(self, feature: Feature, child_options: Options) -> None:
         """
-        Apply forward-by-default inheritance of the consumer's options onto the input feature and
-        record the forwarded group-key set on the feature.
+        Apply forward-by-default inheritance onto the input feature and record the forwarded
+        group-key set on it.
 
         Delegates to Options.inherit_from: the input feature inherits ALL consumer group
         keys by default; feature.forward_group=False isolates it, an allowlist restricts

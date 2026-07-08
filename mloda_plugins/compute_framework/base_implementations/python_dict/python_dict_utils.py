@@ -29,7 +29,10 @@ def rows_to_columnar(rows: list[dict[str, Any]]) -> dict[str, list[Any]]:
 
 
 def columnar_to_rows(data: dict[str, Any] | list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Pivot a columnar dict to row-wise ``list[dict]``. Row-wise list input is returned unchanged."""
+    """Pivot a columnar dict to row-wise ``list[dict]``. Row-wise list input is returned unchanged.
+
+    List input is returned by identity, not copied. It is trusted: its elements are not validated.
+    """
     if isinstance(data, list):
         return data
     if not isinstance(data, dict):

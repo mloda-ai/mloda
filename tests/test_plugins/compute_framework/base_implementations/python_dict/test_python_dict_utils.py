@@ -84,6 +84,13 @@ class TestHomogenizeRows:
         result = homogenize_rows(rows)
         assert [list(row.keys()) for row in result] == [["b", "a", "c"]] * 3
 
+    def test_union_key_order_with_interleaved_multi_key_rows(self) -> None:
+        """Multi-key rows interleave into a first-occurrence union order shared by every row."""
+        rows: list[dict[str, Any]] = [{"a": 1, "c": 2}, {"b": 3}]
+        result = homogenize_rows(rows)
+        assert [list(row.keys()) for row in result] == [["a", "c", "b"]] * 2
+        assert result == [{"a": 1, "c": 2, "b": None}, {"a": None, "c": None, "b": 3}]
+
     def test_uniform_rows_returned_equal_but_as_new_objects(self) -> None:
         """Already-uniform rows come back equal, yet as fresh dict objects."""
         rows: list[dict[str, Any]] = [{"a": 1, "b": 2}, {"a": 3, "b": 4}]

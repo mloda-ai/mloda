@@ -3,6 +3,7 @@ from __future__ import annotations
 import multiprocessing
 import threading
 import time
+from collections.abc import Sequence
 from typing import Any, Generator, Optional
 from uuid import UUID
 import logging
@@ -281,7 +282,7 @@ class ExecutionOrchestrator:
         self.data_lifecycle_manager.add_to_result_data_collection(cfw, features, step_uuid, self.location)
 
     def get_result_data(
-        self, cfw: ComputeFramework, selected_feature_names: set[FeatureName], location: Optional[str] = None
+        self, cfw: ComputeFramework, selected_feature_names: Sequence[FeatureName], location: Optional[str] = None
     ) -> Any:
         """
         Gets result data from the compute framework.

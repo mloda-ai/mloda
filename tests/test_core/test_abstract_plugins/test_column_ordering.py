@@ -94,14 +94,14 @@ class TestIdentifyNamingConvention:
 
     def test_default_returns_set(self) -> None:
         cfw = create_compute_framework()
-        result = cfw.identify_naming_convention({FeatureName("A"), FeatureName("B")}, {"A", "B", "C"})
+        result = cfw.identify_naming_convention([FeatureName("A"), FeatureName("B")], {"A", "B", "C"})
         assert isinstance(result, set)
         assert result == {"A", "B"}
 
     def test_alphabetical_returns_sorted_list(self) -> None:
         cfw = create_compute_framework()
         result = cfw.identify_naming_convention(
-            {FeatureName("Zebra"), FeatureName("Apple"), FeatureName("Mango")},
+            [FeatureName("Zebra"), FeatureName("Apple"), FeatureName("Mango")],
             {"Zebra", "Apple", "Mango"},
             ordering="alphabetical",
         )
@@ -110,14 +110,14 @@ class TestIdentifyNamingConvention:
     def test_alphabetical_with_sub_columns(self) -> None:
         cfw = create_compute_framework()
         result = cfw.identify_naming_convention(
-            {FeatureName("Temp")}, {"Temp~min", "Temp~max", "Temp~mean"}, ordering="alphabetical"
+            [FeatureName("Temp")], {"Temp~min", "Temp~max", "Temp~mean"}, ordering="alphabetical"
         )
         assert result == ["Temp~max", "Temp~mean", "Temp~min"]
 
     def test_request_order_returns_list(self) -> None:
         cfw = create_compute_framework()
         result = cfw.identify_naming_convention(
-            {FeatureName("A"), FeatureName("B")}, {"A", "B"}, ordering="request_order"
+            [FeatureName("A"), FeatureName("B")], {"A", "B"}, ordering="request_order"
         )
         assert isinstance(result, list)
         assert set(result) == {"A", "B"}
@@ -125,7 +125,7 @@ class TestIdentifyNamingConvention:
     def test_sub_columns_grouped_alphabetical(self) -> None:
         cfw = create_compute_framework()
         result = cfw.identify_naming_convention(
-            {FeatureName("Temp"), FeatureName("Hum")},
+            [FeatureName("Temp"), FeatureName("Hum")],
             {"Temp~mean", "Temp~max", "Hum~mean", "Hum~max"},
             ordering="alphabetical",
         )
@@ -134,7 +134,7 @@ class TestIdentifyNamingConvention:
     def test_invalid_ordering_raises(self) -> None:
         cfw = create_compute_framework()
         with pytest.raises(ValueError):
-            cfw.identify_naming_convention({FeatureName("A")}, {"A"}, ordering="invalid")
+            cfw.identify_naming_convention([FeatureName("A")], {"A"}, ordering="invalid")
 
 
 # --- API Parameter Tests ---
@@ -204,14 +204,14 @@ class TestColumnOrderingThreading:
         mock_cfw.data = {"col": [1, 2, 3]}
         mock_cfw.select_data_by_column_names.return_value = {"col": [1, 2, 3]}
 
-        dlm.get_result_data(mock_cfw, {FeatureName("col")})
+        dlm.get_result_data(mock_cfw, [FeatureName("col")])
         mock_cfw.select_data_by_column_names.assert_called_once_with(
-            mock_cfw.data, {FeatureName("col")}, column_ordering="alphabetical"
+            mock_cfw.data, [FeatureName("col")], column_ordering="alphabetical"
         )
 
     def test_compute_framework_select_accepts_column_ordering(self) -> None:
         cfw = create_compute_framework()
-        result = cfw.select_data_by_column_names({}, set(), column_ordering="alphabetical")
+        result = cfw.select_data_by_column_names({}, [], column_ordering="alphabetical")
         assert result == {}
 
 
@@ -259,14 +259,14 @@ class TestComputeFrameworksColumnOrdering:
     def test_pandas_accepts_column_ordering(self) -> None:
         cfw = PandasDataFrame(ParallelizationMode.SYNC, frozenset(), uuid4())
         data = pd.DataFrame({"Z": [1], "A": [2], "M": [3]})
-        features = {FeatureName("Z"), FeatureName("A"), FeatureName("M")}
+        features = [FeatureName("Z"), FeatureName("A"), FeatureName("M")]
         result = cfw.select_data_by_column_names(data, features, column_ordering="alphabetical")
         assert list(result.columns) == ["A", "M", "Z"]
 
     def test_pandas_request_order(self) -> None:
         cfw = PandasDataFrame(ParallelizationMode.SYNC, frozenset(), uuid4())
         data = pd.DataFrame({"Z": [1], "A": [2], "M": [3]})
-        features = {FeatureName("Z"), FeatureName("A"), FeatureName("M")}
+        features = [FeatureName("Z"), FeatureName("A"), FeatureName("M")]
         result = cfw.select_data_by_column_names(data, features, column_ordering="request_order")
         assert isinstance(result, pd.DataFrame)
         assert set(result.columns) == {"Z", "A", "M"}
@@ -274,7 +274,7 @@ class TestComputeFrameworksColumnOrdering:
     def test_pyarrow_accepts_column_ordering(self) -> None:
         cfw = PyArrowTable(ParallelizationMode.SYNC, frozenset(), uuid4())
         data = pa.table({"Z": [1], "A": [2], "M": [3]})
-        features = {FeatureName("Z"), FeatureName("A"), FeatureName("M")}
+        features = [FeatureName("Z"), FeatureName("A"), FeatureName("M")]
         result = cfw.select_data_by_column_names(data, features, column_ordering="alphabetical")
         assert result.column_names == ["A", "M", "Z"]
 
@@ -282,7 +282,7 @@ class TestComputeFrameworksColumnOrdering:
     def test_polars_accepts_column_ordering(self) -> None:
         cfw = PolarsDataFrame(ParallelizationMode.SYNC, frozenset(), uuid4())
         data = pl.DataFrame({"Z": [1], "A": [2], "M": [3]})
-        features = {FeatureName("Z"), FeatureName("A"), FeatureName("M")}
+        features = [FeatureName("Z"), FeatureName("A"), FeatureName("M")]
         result = cfw.select_data_by_column_names(data, features, column_ordering="alphabetical")
         assert result.columns == ["A", "M", "Z"]
 
@@ -290,7 +290,7 @@ class TestComputeFrameworksColumnOrdering:
     def test_polars_lazy_accepts_column_ordering(self) -> None:
         cfw = PolarsLazyDataFrame(ParallelizationMode.SYNC, frozenset(), uuid4())
         data = pl.DataFrame({"Z": [1], "A": [2], "M": [3]}).lazy()
-        features = {FeatureName("Z"), FeatureName("A"), FeatureName("M")}
+        features = [FeatureName("Z"), FeatureName("A"), FeatureName("M")]
         result = cfw.select_data_by_column_names(data, features, column_ordering="alphabetical")
         # PolarsLazyDataFrame.select_data_by_column_names() returns collected DataFrame
         assert result.columns == ["A", "M", "Z"]
@@ -301,7 +301,7 @@ class TestComputeFrameworksColumnOrdering:
         conn = duckdb.connect(":memory:")
         # DuckDB expects a DuckDBPyRelation
         data = conn.sql("SELECT 1 as Z, 2 as A, 3 as M")
-        features = {FeatureName("Z"), FeatureName("A"), FeatureName("M")}
+        features = [FeatureName("Z"), FeatureName("A"), FeatureName("M")]
         result = cfw.select_data_by_column_names(data, features, column_ordering="alphabetical")
         assert result.column_names == ["A", "M", "Z"]
 
@@ -309,7 +309,7 @@ class TestComputeFrameworksColumnOrdering:
         cfw = PythonDictFramework(ParallelizationMode.SYNC, frozenset(), uuid4())
         # PythonDictFramework expects a columnar dict format
         data = {"Z": [1], "A": [2], "M": [3]}
-        features = {FeatureName("Z"), FeatureName("A"), FeatureName("M")}
+        features = [FeatureName("Z"), FeatureName("A"), FeatureName("M")]
         result = cfw.select_data_by_column_names(data, features, column_ordering="alphabetical")
         assert list(result.keys()) == ["A", "M", "Z"]
 

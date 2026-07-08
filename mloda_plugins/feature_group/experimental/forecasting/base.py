@@ -287,7 +287,7 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
         """
 
         _options = None
-        for feature in features.features:
+        for feature in features.get_sorted_features():
             if _options:
                 if _options != feature.options:
                     raise ValueError("All features must have the same options.")
@@ -305,7 +305,7 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
         results: list[tuple[str, Any]] = []
 
         # Process each requested feature with the original clean data
-        for feature in features.features:
+        for feature in features.get_sorted_features():
             algorithm, horizon, time_unit, in_features = cls._extract_forecasting_parameters(feature)
 
             # Resolve multi-column features automatically

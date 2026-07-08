@@ -89,7 +89,7 @@ class TestIcebergFrameworkComputeFramework:
 
     def test_transform_dict_to_arrow(self) -> None:
         """Test transforming dict to PyArrow table (intermediate step for Iceberg)."""
-        result = self.iceberg_framework.transform(self.dict_data, set())
+        result = self.iceberg_framework.transform(self.dict_data, [])
         assert isinstance(result, pa.Table)
         assert result.column_names == ["column1", "column2"]
         assert result.to_pydict() == self.dict_data
@@ -97,13 +97,13 @@ class TestIcebergFrameworkComputeFramework:
     def test_transform_iceberg_table_passthrough(self) -> None:
         """Test that Iceberg tables pass through unchanged."""
         mock_iceberg_table = Mock(spec=IcebergTable)
-        result = self.iceberg_framework.transform(mock_iceberg_table, set())
+        result = self.iceberg_framework.transform(mock_iceberg_table, [])
         assert result is mock_iceberg_table
 
     def test_transform_invalid_data(self) -> None:
         """Test that invalid data types raise ValueError."""
         with pytest.raises(ValueError, match="Data type .* is not supported"):
-            self.iceberg_framework.transform(data=["invalid"], feature_names=set())
+            self.iceberg_framework.transform(data=["invalid"], feature_names=[])
 
     def test_set_framework_connection_object_catalog(self) -> None:
         """Test setting a catalog as framework connection object."""
@@ -128,7 +128,7 @@ class TestIcebergFrameworkComputeFramework:
     def test_select_data_by_column_names_non_iceberg(self) -> None:
         """Test that non-Iceberg data passes through unchanged."""
         data = "not_iceberg_table"
-        feature_names = {FeatureName("column1")}
+        feature_names = [FeatureName("column1")]
         result = self.iceberg_framework.select_data_by_column_names(data, feature_names)
         assert result is data
 

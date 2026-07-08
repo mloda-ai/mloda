@@ -191,7 +191,7 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Adds the calculated distances directly to the input data structure.
         """
         # Process each requested feature
-        for feature in features.features:
+        for feature in features.get_sorted_features():
             distance_type, point1_feature, point2_feature = cls._extract_geo_distance_parameters(feature)
 
             cls._check_source_features_exist(data, [point1_feature, point2_feature])

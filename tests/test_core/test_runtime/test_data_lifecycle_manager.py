@@ -292,7 +292,7 @@ class TestDataLifecycleManagerGetResultData:
         mock_cfw.select_data_by_column_names.return_value = selected_data
 
         feature_name = FeatureName("feature1")
-        selected_feature_names = {feature_name}
+        selected_feature_names = [feature_name]
 
         result = manager.get_result_data(mock_cfw, selected_feature_names)
 
@@ -318,7 +318,7 @@ class TestDataLifecycleManagerGetResultData:
         mock_cfw.select_data_by_column_names.return_value = selected_data
 
         feature_name = Mock(spec=FeatureName)
-        selected_feature_names = {feature_name}
+        selected_feature_names = [feature_name]
 
         with patch("mloda.core.runtime.data_lifecycle_manager.FlightServer") as mock_flight_server:
             mock_flight_server.download_table.return_value = downloaded_data
@@ -340,7 +340,7 @@ class TestDataLifecycleManagerGetResultData:
         mock_cfw.data = None
 
         feature_name = Mock(spec=FeatureName)
-        selected_feature_names = {feature_name}
+        selected_feature_names = [feature_name]
 
         with pytest.raises(NotImplementedError, match="Cannot retrieve result data"):
             manager.get_result_data(mock_cfw, selected_feature_names, location=None)

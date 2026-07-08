@@ -308,7 +308,7 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
         """
 
         _options = None
-        for feature in features.features:
+        for feature in features.get_sorted_features():
             if _options:
                 if _options != feature.options:
                     raise ValueError("All features must have the same options.")
@@ -321,7 +321,7 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
         cls._check_reference_time_column_is_datetime(data, reference_time_column)
 
         # Process each requested feature
-        for feature in features.features:
+        for feature in features.get_sorted_features():
             window_function, window_size, time_unit, in_features = cls._extract_time_window_params_and_source_features(
                 feature
             )

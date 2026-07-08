@@ -287,7 +287,7 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Adds the clustering results directly to the input data structure.
         """
         # Process each requested feature
-        for feature in features.features:
+        for feature in features.get_sorted_features():
             algorithm, k_value, source_features = cls._extract_algorithm_k_value_and_source_features(feature)
 
             # Resolve multi-column features automatically

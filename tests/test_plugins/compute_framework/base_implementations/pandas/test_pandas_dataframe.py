@@ -44,24 +44,24 @@ class TestPandasDataFrameComputeFramework:
     def test_transform_dict_to_table(
         self, pd_dataframe: PandasDataFrame, dict_data: dict[str, list[int]], expected_data: Any
     ) -> None:
-        assert all(pd_dataframe.transform(dict_data, set()) == expected_data)
+        assert all(pd_dataframe.transform(dict_data, []) == expected_data)
 
     def test_transform_arrays(self) -> None:
         data = PandasDataFrame.pd_series()([1, 2, 3])
         _pdDf = PandasDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         _pdDf.set_data(PandasDataFrame.pd_dataframe().from_dict({"existing_column": [4, 5, 6]}))
 
-        data = _pdDf.transform(data=data, feature_names={"new_column"})
+        data = _pdDf.transform(data=data, feature_names=["new_column"])
         assert data.equals(
             PandasDataFrame.pd_dataframe().from_dict({"existing_column": [4, 5, 6], "new_column": [1, 2, 3]})
         )
 
     def test_transform_invalid_data(self, pd_dataframe: PandasDataFrame) -> None:
         with pytest.raises(ValueError):
-            pd_dataframe.transform(data=["a"], feature_names=set())
+            pd_dataframe.transform(data=["a"], feature_names=[])
 
     def test_select_data_by_column_names(self, pd_dataframe: PandasDataFrame, expected_data: Any) -> None:
-        data = pd_dataframe.select_data_by_column_names(expected_data, {FeatureName("column1")})
+        data = pd_dataframe.select_data_by_column_names(expected_data, [FeatureName("column1")])
         assert data.columns == ["column1"]
 
     def test_set_column_names(self, pd_dataframe: PandasDataFrame, expected_data: Any) -> None:
@@ -78,7 +78,7 @@ class TestPandasTransformList:
 
         data = [{"content": "hello world", "source": "/path/to/file.txt", "file_type": "text"}]
 
-        result = pdf.transform(data, {"content"})
+        result = pdf.transform(data, ["content"])
 
         assert isinstance(result, pd.DataFrame)
         assert len(result) == 1
@@ -95,7 +95,7 @@ class TestPandasTransformList:
             {"content": "second", "source": "/path/b.json", "file_type": "json"},
         ]
 
-        result = pdf.transform(data, {"content"})
+        result = pdf.transform(data, ["content"])
 
         assert isinstance(result, pd.DataFrame)
         assert len(result) == 2

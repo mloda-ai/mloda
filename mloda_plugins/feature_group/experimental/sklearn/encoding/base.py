@@ -240,7 +240,7 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Adds the encoding results directly to the input data structure.
         """
         # Process each requested feature
-        for feature in features.features:
+        for feature in features.get_sorted_features():
             encoder_type, source_feature = cls._extract_encoder_type_and_source_feature(feature)
 
             # Remove ~suffix if present (for OneHot column patterns like category~1)

@@ -72,7 +72,7 @@ class TestPolarsDataFrameComputeFramework:
     def test_transform_dict_to_table(
         self, pl_dataframe: PolarsDataFrame, dict_data: dict[str, list[int]], expected_data: Any
     ) -> None:
-        result = pl_dataframe.transform(dict_data, set())
+        result = pl_dataframe.transform(dict_data, [])
         assert result.equals(expected_data)
 
     def test_transform_arrays(self) -> None:
@@ -80,16 +80,16 @@ class TestPolarsDataFrameComputeFramework:
         _plDf = PolarsDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         _plDf.set_data(PolarsDataFrame.pl_dataframe()({"existing_column": [4, 5, 6]}))
 
-        result = _plDf.transform(data=data, feature_names={"new_column"})
+        result = _plDf.transform(data=data, feature_names=["new_column"])
         expected = PolarsDataFrame.pl_dataframe()({"existing_column": [4, 5, 6], "new_column": [1, 2, 3]})
         assert result.equals(expected)
 
     def test_transform_invalid_data(self, pl_dataframe: PolarsDataFrame) -> None:
         with pytest.raises(ValueError):
-            pl_dataframe.transform(data=["a"], feature_names=set())
+            pl_dataframe.transform(data=["a"], feature_names=[])
 
     def test_select_data_by_column_names(self, pl_dataframe: PolarsDataFrame, expected_data: Any) -> None:
-        data = pl_dataframe.select_data_by_column_names(expected_data, {FeatureName("column1")})
+        data = pl_dataframe.select_data_by_column_names(expected_data, [FeatureName("column1")])
         assert data.columns == ["column1"]
 
     def test_set_column_names(self, pl_dataframe: PolarsDataFrame, expected_data: Any) -> None:

@@ -181,7 +181,7 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         """
 
         # Process each requested feature
-        for feature in features.features:
+        for feature in features.get_sorted_features():
             operations, source_feature = cls._extract_operations_and_source_feature(feature)
 
             # Check if source feature exists

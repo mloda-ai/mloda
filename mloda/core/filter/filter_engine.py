@@ -31,7 +31,7 @@ class BaseFilterEngine(ABC):
         """
         if features.filters is None:
             return []
-        all_names = features.get_all_names()
+        all_names = set(features.get_all_names())
         return [sf for sf in features.filters if sf.filter_feature.name in all_names]
 
     @classmethod

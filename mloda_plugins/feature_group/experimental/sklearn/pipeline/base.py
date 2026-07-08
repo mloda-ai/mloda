@@ -202,7 +202,7 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Adds the pipeline results directly to the input data structure.
         """
         # Process each requested feature
-        for feature in features.features:
+        for feature in features.get_sorted_features():
             pipeline_name, source_features = cls._extract_pipeline_name_and_source_features(feature)
 
             # Check that all source features exist

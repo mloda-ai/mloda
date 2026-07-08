@@ -82,7 +82,7 @@ class TestDuckDBFrameworkComputeFramework:
         self, duckdb_framework: DuckDBFramework, connection: Any, dict_data: dict[str, list[int]], expected_data: Any
     ) -> None:
         duckdb_framework.set_framework_connection_object(connection)
-        result = duckdb_framework.transform(dict_data, set())
+        result = duckdb_framework.transform(dict_data, [])
         result_df = result.df()
         expected_df = expected_data.df()
 
@@ -91,10 +91,10 @@ class TestDuckDBFrameworkComputeFramework:
 
     def test_transform_invalid_data(self, duckdb_framework: DuckDBFramework) -> None:
         with pytest.raises(ValueError):
-            duckdb_framework.transform(data=["a"], feature_names=set())
+            duckdb_framework.transform(data=["a"], feature_names=[])
 
     def test_select_data_by_column_names(self, duckdb_framework: DuckDBFramework, expected_data: Any) -> None:
-        data = duckdb_framework.select_data_by_column_names(expected_data, {FeatureName("column1")})
+        data = duckdb_framework.select_data_by_column_names(expected_data, [FeatureName("column1")])
         assert isinstance(data, pa.Table)
         assert "column1" in data.column_names
 
@@ -107,8 +107,8 @@ class TestDuckDBFrameworkComputeFramework:
     def test_transform_add_column_preserves_existing(self, duckdb_framework: DuckDBFramework, connection: Any) -> None:
         duckdb_framework.set_framework_connection_object(connection)
         dict_data = {"col_a": [1, 2, 3], "col_b": [4, 5, 6]}
-        duckdb_framework.data = duckdb_framework.transform(dict_data, set())
-        result = duckdb_framework.transform(data=[7, 8, 9], feature_names={"col_c"})
+        duckdb_framework.data = duckdb_framework.transform(dict_data, [])
+        result = duckdb_framework.transform(data=[7, 8, 9], feature_names=["col_c"])
         assert set(result.columns) == {"col_a", "col_b", "col_c"}
         assert len(result) == 3
         arrow = result.to_arrow_table()

@@ -222,7 +222,7 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Adds the centrality results directly to the input data structure.
         """
         # Process each feature
-        for feature in features.features:
+        for feature in features.get_sorted_features():
             centrality_type, source_feature_str = cls._extract_centrality_and_source_feature(feature)
 
             # Common parameter extraction (works for both approaches)

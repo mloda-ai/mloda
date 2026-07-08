@@ -132,7 +132,7 @@ class ScalingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Adds the scaling results directly to the input data structure.
         """
         # Process each requested feature
-        for feature in features.features:
+        for feature in features.get_sorted_features():
             scaler_type, source_feature = cls._extract_scaler_type_and_source_feature(feature)
 
             # Check that source feature exists

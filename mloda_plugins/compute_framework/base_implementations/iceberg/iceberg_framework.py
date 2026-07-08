@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import Any, Optional
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.provider import BaseMergeEngine
@@ -108,14 +109,14 @@ class IcebergFramework(ComputeFramework):
         )
 
     def select_data_by_column_names(
-        self, data: Any, selected_feature_names: set[FeatureName], column_ordering: Optional[str] = None
+        self, data: Any, selected_feature_names: Sequence[FeatureName], column_ordering: Optional[str] = None
     ) -> Any:
         """
         Select specific columns from Iceberg table.
 
         Args:
             data: Iceberg table
-            selected_feature_names: Set of feature names to select
+            selected_feature_names: Sequence of feature names to select
             column_ordering: Optional column ordering strategy
 
         Returns:
@@ -181,13 +182,13 @@ class IcebergFramework(ComputeFramework):
             return DataType.DECIMAL
         return None
 
-    def transform(self, data: Any, feature_names: set[str]) -> Any:
+    def transform(self, data: Any, feature_names: Sequence[str]) -> Any:
         """
         Transform data to Iceberg table format.
 
         Args:
             data: Input data (dict, PyArrow table, etc.)
-            feature_names: Set of feature names
+            feature_names: Sequence of feature names
 
         Returns:
             Transformed data in Iceberg table format

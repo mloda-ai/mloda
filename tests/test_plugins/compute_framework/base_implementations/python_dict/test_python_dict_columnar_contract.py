@@ -53,33 +53,33 @@ class TestTransformColumnar:
     def test_columnar_dict_passthrough(self) -> None:
         """A columnar dict with equal-length list values is returned as-is."""
         data = {"a": [1, 2], "b": ["x", "y"]}
-        assert _framework().transform(data, set()) == {"a": [1, 2], "b": ["x", "y"]}
+        assert _framework().transform(data, []) == {"a": [1, 2], "b": ["x", "y"]}
 
     def test_list_of_row_dicts_becomes_columnar(self) -> None:
         """A list of row dicts pivots into a columnar dict."""
         data = [{"a": 1, "b": 2}, {"a": 3, "b": 4}]
-        assert _framework().transform(data, set()) == {"a": [1, 3], "b": [2, 4]}
+        assert _framework().transform(data, []) == {"a": [1, 3], "b": [2, 4]}
 
     def test_single_row_list_becomes_columnar(self) -> None:
         """A single-element list of a row dict becomes a one-row columnar dict."""
-        assert _framework().transform([{"a": 1}], set()) == {"a": [1]}
+        assert _framework().transform([{"a": 1}], []) == {"a": [1]}
 
     def test_empty_list_becomes_empty_dict(self) -> None:
         """An empty list has no schema and normalizes to the schema-less ``{}``."""
-        assert _framework().transform([], set()) == {}
+        assert _framework().transform([], []) == {}
 
     def test_empty_dict_passthrough(self) -> None:
         """``{}`` (zero columns) is already the schema-less empty; returned as ``{}``."""
-        assert _framework().transform({}, set()) == {}
+        assert _framework().transform({}, []) == {}
 
     def test_zero_row_columnar_dict_passthrough(self) -> None:
         """A columnar dict with an empty column keeps its schema (one known column)."""
-        assert _framework().transform({"a": []}, set()) == {"a": []}
+        assert _framework().transform({"a": []}, []) == {"a": []}
 
     def test_columnar_dict_unequal_lengths_raises(self) -> None:
         """Value-lists of differing length are invalid columnar input."""
         with pytest.raises(ValueError):
-            _framework().transform({"a": [1, 2], "b": [3]}, set())
+            _framework().transform({"a": [1, 2], "b": [3]}, [])
 
     def test_dict_with_non_list_values_raises(self) -> None:
         """A dict whose values are not lists is not columnar and is rejected.
@@ -87,17 +87,17 @@ class TestTransformColumnar:
         Single-row dicts are no longer special-cased under the columnar model.
         """
         with pytest.raises(ValueError):
-            _framework().transform({"a": 1, "b": 2}, set())
+            _framework().transform({"a": 1, "b": 2}, [])
 
     def test_none_raises(self) -> None:
         """``None`` is a missing result, not an empty one: unsupported type."""
         with pytest.raises(ValueError, match="Data type .* is not supported"):
-            _framework().transform(None, set())
+            _framework().transform(None, [])
 
     def test_int_raises(self) -> None:
         """A bare int is an unsupported type."""
         with pytest.raises(ValueError, match="Data type .* is not supported"):
-            _framework().transform(5, set())
+            _framework().transform(5, [])
 
 
 # ---------------------------------------------------------------------------
@@ -189,17 +189,17 @@ class TestSelectColumnar:
     def test_select_subset_preserves_rows(self) -> None:
         """Selection returns a columnar dict of only the requested columns."""
         data = {"a": [1, 2], "b": [3, 4], "c": [5, 6]}
-        result = _framework().select_data_by_column_names(data, {FeatureName("a"), FeatureName("b")})
+        result = _framework().select_data_by_column_names(data, [FeatureName("a"), FeatureName("b")])
         assert result == {"a": [1, 2], "b": [3, 4]}
 
     def test_select_empty_dict_returns_empty_dict(self) -> None:
         """Selecting from ``{}`` yields ``{}``."""
-        result = _framework().select_data_by_column_names({}, {FeatureName("a")})
+        result = _framework().select_data_by_column_names({}, [FeatureName("a")])
         assert result == {}
 
     def test_select_zero_row_columns_kept(self) -> None:
         """Selecting a present-but-empty column keeps the column at zero rows."""
-        result = _framework().select_data_by_column_names({"a": [], "b": []}, {FeatureName("a")})
+        result = _framework().select_data_by_column_names({"a": [], "b": []}, [FeatureName("a")])
         assert result == {"a": []}
 
 

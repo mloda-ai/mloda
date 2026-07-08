@@ -1,10 +1,9 @@
 # PROPERTY_MAPPING Configuration
 
-## Overview
+`PROPERTY_MAPPING` defines parameter validation and classification for modern
+feature groups via the unified parser.
 
-PROPERTY_MAPPING defines parameter validation and classification for modern feature groups using the unified parser approach.
-
-## Basic Structure
+## Basic structure
 
 ``` python
 from mloda.provider import DefaultOptionKeys
@@ -13,27 +12,27 @@ PROPERTY_MAPPING = {
     "parameter_name": {
         "value1": "Description of value1",
         "value2": "Description of value2",
-        DefaultOptionKeys.context: True,  # Parameter classification
-        DefaultOptionKeys.strict_validation: True,  # Validation mode
+        DefaultOptionKeys.context: True,           # classification (see below)
+        DefaultOptionKeys.strict_validation: True,  # validation mode
     },
     DefaultOptionKeys.in_features: {
         "explanation": "Source feature description",
         DefaultOptionKeys.context: True,
-        DefaultOptionKeys.strict_validation: False,  # Flexible validation
+        DefaultOptionKeys.strict_validation: False,
     },
 }
 ```
 
-In this flattened form, the allowed values share one dict namespace with the
-metadata flag keys. The parser recovers the value space by subtracting the
-reserved metadata keys (`RESERVED_PROPERTY_KEYS`: `explanation`, `allowed_values`,
-`default`, `context`, `group`, `strict_validation`, `validation_function`,
-`required_when`, `type_validator`). The flattened form stays fully supported.
+In this flattened form the allowed values share one dict with the metadata flags.
+The parser recovers the value space by subtracting the reserved metadata keys
+(`RESERVED_PROPERTY_KEYS`: `explanation`, `allowed_values`, `default`, `context`,
+`group`, `strict_validation`, `validation_function`, `required_when`,
+`type_validator`). It stays fully supported.
 
 ## Recommended: explicit `allowed_values`
 
-To keep the value space separate from the flags (so a doc-only key can never
-widen an allowed set), declare it under `DefaultOptionKeys.allowed_values`:
+Declaring the value space under `DefaultOptionKeys.allowed_values` keeps it
+separate from the flags, so a doc-only key can never widen an allowed set:
 
 ``` python
 "operation_type": {
@@ -43,23 +42,18 @@ widen an allowed set), declare it under `DefaultOptionKeys.allowed_values`:
 }
 ```
 
-When `allowed_values` is present the parser uses it directly and ignores any
-other non-flag keys. `allowed_values` may be a mapping of value to one-line
-docstring, or a re-iterable collection of values (list, tuple, set). Do not
-pass a one-shot iterator (e.g. a generator) in a hand-written spec: the parser
-iterates the value space more than once, so an exhausted iterator would behave
-like an empty set. (`property_spec` materializes iterables for you.)
-
-`allowed_values` and `explanation` are reserved key names. A spec cannot use
-either as a literal accepted value; both are recovered as metadata, not values.
+When present, the parser uses `allowed_values` directly and ignores other non-flag
+keys. It may be a value-to-docstring mapping or a re-iterable collection (list,
+tuple, set), but not a one-shot iterator (a generator would exhaust, behaving like
+an empty set; `property_spec` materializes iterables for you). `allowed_values` and
+`explanation` are reserved names and cannot be literal accepted values.
 
 ### Builder: `property_spec`
 
-`property_spec` builds the same dict and validates its invariants at
-construction (strict needs a non-empty `allowed_values` or a
-`validation_function`; `allowed_values` without strict is rejected as a no-op;
-a strict `default` must be in the allowed set). The contract stays a plain
-dict, so this is optional sugar:
+`property_spec` builds the same dict and validates its invariants at construction
+(strict needs a non-empty `allowed_values` or a `validation_function`;
+`allowed_values` without strict is a no-op; a strict `default` must be accepted).
+The contract stays a plain dict, so this is optional sugar:
 
 ``` python
 from mloda.provider import property_spec
@@ -74,59 +68,32 @@ PROPERTY_MAPPING = {
 }
 ```
 
-The builder also accepts three optional callable passthroughs, emitted only
-when provided (an omitted passthrough leaves no key in the dict):
+Three optional callable passthroughs are emitted only when provided:
 
-- `validation_function`: must be callable and requires `strict=True` (like
-  `allowed_values`, it is only enforced under strict validation). With a
-  `validation_function`, strict no longer needs `allowed_values`, and a
-  declared `default` is checked through the function instead of by membership.
-  If the function raises when called with the default, the builder wraps it as
-  a `ValueError` with the original exception chained as `__cause__`, mirroring
-  core's class-definition check.
-- `required_when`: conditional-requirement predicate; callable-checked, no
-  strict requirement.
-- `type_validator`: raw-value shape check; callable-checked, no strict
-  requirement.
+- `validation_function`: requires `strict=True`; then strict no longer needs
+  `allowed_values`, and a declared `default` is checked through the function. If it
+  raises on the default, the builder wraps it as a `ValueError` (original chained as
+  `__cause__`), mirroring core's class-definition check.
+- `required_when`: conditional-requirement predicate; no strict requirement.
+- `type_validator`: raw-value shape check; no strict requirement.
 
-## Parameter Classification
+## Parameter classification
 
 ``` python
-# Context parameter (doesn't affect Feature Group splitting)
-"aggregation_type": {
-    "sum": "Sum aggregation",
-    DefaultOptionKeys.context: True,
-}
+# Context parameter: does not affect Feature Group splitting
+"aggregation_type": {"sum": "Sum aggregation", DefaultOptionKeys.context: True}
 
-# Group parameter (affects Feature Group splitting)
-"data_source": {
-    "production": "Production data",
-    DefaultOptionKeys.group: True,
-}
-
-# Order-by parameter (defines sort order for sequential operations)
-DefaultOptionKeys.order_by: {
-    "explanation": "Column(s) controlling row order for rank, offset, or frame_aggregate",
-    DefaultOptionKeys.context: True,
-    DefaultOptionKeys.strict_validation: False,
-}
+# Group parameter: affects Feature Group splitting
+"data_source": {"production": "Production data", DefaultOptionKeys.group: True}
 ```
 
-## Validation Modes
+## Validation modes
 
-### Strict Validation (Default: False)
-``` python
-"algorithm_type": {
-    "kmeans": "K-means clustering",
-    "dbscan": "DBSCAN clustering", 
-    DefaultOptionKeys.strict_validation: True,  # Only listed values allowed
-}
-```
+`strict_validation` defaults to `False` (listed values are illustrative). Set it to
+`True` to accept only listed values.
 
-### Custom Validation Functions
-
-Use `validation_function` with `strict_validation=True` to validate individual
-parsed elements. The parser unpacks lists and calls the function on each element:
+**`validation_function`** (requires `strict_validation=True`) validates individual
+parsed elements; the parser unpacks lists and calls it per element:
 
 ``` python
 "window_size": {
@@ -136,12 +103,9 @@ parsed elements. The parser unpacks lists and calls the function on each element
 }
 ```
 
-### Type Validators
-
-Use `type_validator` to validate the shape or composite type of the raw option
-value before any list unpacking. Unlike `validation_function`, it does not
-require `strict_validation`. The validator receives the value exactly as stored
-in Options and must return a truthy value for the match to succeed:
+**`type_validator`** checks the shape of the raw value before any list unpacking. It
+does not require `strict_validation` and must return truthy for the match to
+succeed:
 
 ``` python
 def _is_list_of_strings(value):
@@ -150,71 +114,46 @@ def _is_list_of_strings(value):
 "partition_by": {
     "explanation": "List of columns to partition by",
     DefaultOptionKeys.context: True,
-    DefaultOptionKeys.strict_validation: False,
     DefaultOptionKeys.type_validator: _is_list_of_strings,
 }
 ```
 
-When both `validation_function` and `type_validator` are present on the same
-entry, `validation_function` runs first (during property mapping validation on
-each parsed element), then `type_validator` runs on the raw value. Validators
-must be pure functions with no side effects.
+When both are present, `validation_function` runs first (per parsed element), then
+`type_validator` on the raw value. Both must be pure functions.
 
-### Default Values
+## Default values
+
 ``` python
-"method": {
-    "linear": "Linear interpolation",
-    "cubic": "Cubic interpolation",
-    DefaultOptionKeys.default: "linear",  # Default if not specified
+"method": {"linear": "Linear", "cubic": "Cubic", DefaultOptionKeys.default: "linear"}
+```
+
+### Declared defaults must be honored
+
+Under `strict_validation: True`, a declared `default` must be a value the key
+accepts. mloda enforces this at class-definition time: a `PROPERTY_MAPPING` whose
+strict `default` is outside the accepted set (or fails its `validation_function`)
+raises `ValueError` immediately, naming the class, key, default, and accepted
+values. This closes a gap where omitting the key would apply an unrevalidated
+default.
+
+``` python
+# Rejected at class definition: "mul" is not accepted.
+"operation_type": {
+    "add": "Addition",
+    "sub": "Subtraction",
+    DefaultOptionKeys.strict_validation: True,
+    DefaultOptionKeys.default: "mul",
 }
 ```
 
-### Declared Defaults Must Be Honored
+Resolve it by adding the default to the accepted values, or removing it (a key with
+no default and no `required_when` is unconditionally required). `required_when` does
+NOT exempt a key: when its predicate returns `False` and the key is omitted, the
+default still applies, so an unaccepted default would still slip through. A `default`
+of `None` is always legal (the "unset" sentinel), and the check is a no-op when
+`strict_validation` is `False`.
 
-When a key uses `strict_validation: True`, a declared `default` must be a value the
-key actually accepts. mloda enforces this at class-definition time: defining a
-`FeatureGroup` subclass whose `PROPERTY_MAPPING` declares a strict default outside
-the accepted set (or one that fails the key's `validation_function`) raises
-`ValueError` immediately, naming the class, the key, the declared default, and the
-accepted values.
-
-This closes a silent gap: option validation only inspects keys present in the
-`Options` object, so omitting the key applies the default without revalidating it.
-Without the invariant, a subclass that narrows a key's accepted values to exclude
-the inherited default would validate successfully when the key is omitted, then run
-under a default it does not honor.
-
-``` python
-# Rejected at class definition: "mul" is not in the accepted set.
-PROPERTY_MAPPING = {
-    "operation_type": {
-        "add": "Addition",
-        "sub": "Subtraction",
-        DefaultOptionKeys.strict_validation: True,
-        DefaultOptionKeys.default: "mul",  # ValueError: not an accepted value
-    },
-}
-```
-
-To resolve a rejection, pick one of:
-
-- **Add the default to the accepted values** so it is honored.
-- **Remove the default**, which makes the key required by omission. A key with no
-  declared default (and no `required_when`) is unconditionally required, so it can
-  never silently run under an unhonored default.
-
-`required_when` does NOT exempt a key from this check. A `required_when` predicate
-expresses a *conditional* requirement: when the predicate returns `False` and the
-key is omitted, the declared default is still applied. A default outside the
-accepted set would therefore still slip through on that branch, so it is rejected
-regardless of `required_when`.
-
-A `default` of `None` is always legal: it is the conventional "unset" sentinel and
-is exempt from the check even under `strict_validation: True`. The check is also a
-no-op when `strict_validation` is `False`, where listed values are illustrative
-rather than enforced.
-
-## Usage in Feature Groups
+## Usage in feature groups
 
 ``` python
 class MyFeatureGroup(FeatureGroup):
@@ -225,12 +164,9 @@ class MyFeatureGroup(FeatureGroup):
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
         },
-        DefaultOptionKeys.in_features: {
-            "explanation": "Source feature",
-            DefaultOptionKeys.context: True,
-        },
+        DefaultOptionKeys.in_features: {"explanation": "Source feature", DefaultOptionKeys.context: True},
     }
-    
+
     @classmethod
     def match_feature_group_criteria(cls, feature_name, options, data_access_collection=None):
         return FeatureChainParser.match_configuration_feature_chain_parser(
@@ -238,29 +174,21 @@ class MyFeatureGroup(FeatureGroup):
         )
 ```
 
-## Validation Examples
-
 ``` python
-# Valid - "sum" is in mapping
-Options(context={"operation_type": "sum"})
-
-# Invalid with strict validation - "custom" not in mapping  
-Options(context={"operation_type": "custom"})  # Raises ValueError
-
-# Valid with flexible validation - any value allowed
-Options(context={"in_features": "any_feature_name"})
+Options(context={"operation_type": "sum"})     # valid: "sum" is in mapping
+Options(context={"operation_type": "custom"})  # strict: raises ValueError
+Options(context={"in_features": "any_name"})   # flexible: any value allowed
 ```
 
-## Conditional Requirements with `required_when`
+## Conditional requirements with `required_when`
 
-Use `DefaultOptionKeys.required_when` to declare options that are only required under certain conditions. Attach a predicate callable to a PROPERTY_MAPPING entry. The predicate receives an effective `Options` object and returns `True` when the option is required.
-
-This works for both configuration-based and string-based feature creation. For string-based features, the operation value parsed from the feature name is merged into the effective options before predicate evaluation, so predicates see values from both sources.
+Attach a predicate callable to declare an option required only under certain
+conditions. It receives an effective `Options` and returns `True` when the option is
+required. This works for both config-based and string-based features (for the
+latter, the operation parsed from the feature name is merged in first, so predicates
+see values from both sources).
 
 ``` python
-from mloda.core.abstract_plugins.components.options import Options
-from mloda.provider import DefaultOptionKeys
-
 _ORDER_DEPENDENT = {"first", "last"}
 
 def _needs_order_by(options: Options) -> bool:
@@ -275,73 +203,58 @@ PROPERTY_MAPPING = {
     "order_by": {
         "explanation": "Column to order by within each partition",
         DefaultOptionKeys.context: True,
-        DefaultOptionKeys.strict_validation: False,
         DefaultOptionKeys.required_when: _needs_order_by,
     },
 }
 ```
 
-When the predicate returns `True` and the option is absent, `match_feature_group_criteria` returns `False`. When the predicate returns `False`, the option is not required. Entries with `required_when` are treated as optional by the base parser.
+When the predicate returns `True` and the option is absent,
+`match_feature_group_criteria` returns `False`; entries with `required_when` are
+otherwise treated as optional. The predicate must be a pure, callable
+`(Options) -> bool` that does not raise. Non-callable values are skipped with a
+warning; non-bool truthy returns count as `True`.
 
-### Predicate Contract
+## Context propagation
 
-The predicate must satisfy:
-
-- **Signature:** `(Options) -> bool`
-- **Must be callable.** Non-callable values are skipped with a warning log.
-- **Must not raise exceptions.** Exceptions from predicates propagate uncaught.
-- **Must be a pure function** (no side effects).
-- Non-bool truthy return values are treated as `True`.
-
-## Context Propagation
-
-By default, context parameters are local: they do not flow through feature dependency chains. This is correct for feature-specific config like aggregation types.
-
-For cross-cutting metadata (session IDs, environment flags) that should flow through chains, use `propagate_context_keys` on `Options`:
+By default context parameters are local: they do not flow through dependency chains,
+which is correct for feature-specific config. For cross-cutting metadata (session
+IDs, environment flags), use `propagate_context_keys`:
 
 ``` python
 Options(
     context={"session_id": "abc", "window_function": "sum"},
-    propagate_context_keys=frozenset({"session_id"}),  # only session_id flows to dependents
+    propagate_context_keys=frozenset({"session_id"}),  # only session_id flows on
 )
 ```
 
-Only the specified keys propagate. Everything else stays local for context. Group
-options behave differently: they forward to input features by default. A feature group
-keeps consumer-local keys off its upstreams by setting `forward_group_exclude`, an
-allowlist, or `forward_group=False` on the child `Feature` it declares.
-
-`propagate_context_keys` is the caller-side **push**. Its symmetric counterpart is the
-child-side **pull** `inherit_context_keys`, set on an input feature to copy listed
-consumer context keys into its own context. For both author-side flows, see
+Only listed keys propagate; the rest stay local. Group options differ: they forward
+to input features by default. A feature group keeps consumer-local keys off its
+upstreams with `forward_group_exclude`, an allowlist, or `forward_group=False` on the
+child `Feature`. `propagate_context_keys` is the caller-side **push**; its
+counterpart is the child-side **pull** `inherit_context_keys`. For both author-side
+flows see
 [Forwarding Options to Input Features](feature-chain-parser.md#forwarding-options-to-input-features).
 
 ### `group` and `context` are independent namespaces
 
-`group` and `context` are separate namespaces: `group` drives feature-group
-resolution and splitting, `context` carries metadata. Within a single `Options`
-the same key may not live in both. Across a consumer and its input feature, the
-default option forwarding is group-to-group only: a consumer `context` key is not
-compared against a same-named child `group` key, so the two are treated as
-different roles, not a conflict:
+`group` (which drives resolution and splitting) and `context` (metadata) are
+separate namespaces. Within one `Options` a key may not live in both. Across a
+consumer and its input feature, default forwarding is group-to-group only: a consumer
+`context` key is not compared against a same-named child `group` key, so the two are
+independent roles, not a conflict:
 
 ``` python
 consumer = Options(context={"algo": "sum"})
 child = Options(group={"algo": "mean"})
 
-child.inherit_from(consumer)   # resolves silently, no ValueError
-assert child.group["algo"] == "mean"   # child keeps its own group value
+child.inherit_from(consumer)          # resolves silently, no ValueError
+assert child.group["algo"] == "mean"  # child keeps its own group value
 ```
 
-This is intentional. A plain consumer `context['algo']` never flows onto the
-child's `group['algo']`, in either the differing-value or equal-value case.
-
-The independence is scoped to that default path; it does not hold once a context
-key is explicitly forwarded. A consumer that pushes the key via
-`propagate_context_keys`, or a child that pulls it via `inherit_context_keys`,
-brings the key into the child's context, and a same-named child `group` key then
-raises a cross-category conflict. Likewise the reverse of the default path (a
-consumer **group** key forwarded onto a child that holds the same key in
-**context**) is a genuine forwarding conflict and raises. Keep such a key off the
-child with `forward_group_exclude`, an allowlist, or `forward_group=False` (see the
-flows above).
+This holds for both differing and equal values, but only on that default path. Once
+a context key is explicitly forwarded (pushed via `propagate_context_keys` or pulled
+via `inherit_context_keys`) it enters the child's context, and a same-named child
+`group` key then raises a cross-category conflict. The reverse of the default path (a
+consumer **group** key forwarded onto a child holding it in **context**) also raises.
+Keep such a key off the child with `forward_group_exclude`, an allowlist, or
+`forward_group=False`.

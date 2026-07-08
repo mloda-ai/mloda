@@ -17,11 +17,21 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 class ContextRootFeatureGroup(FeatureGroup):
     """Abstract root feature group that generates its declared FEATURES in place via DataCreator.
 
-    Overrides five members (feature_names_supported, input_data, match_feature_group_criteria,
-    compute_framework_rule, input_features) and requires subclasses to implement calculate_feature.
-    FEATURES is required: a subclass with empty FEATURES matches nothing.
-    Option- or data-access-sensitive matching must override match_feature_group_criteria;
-    overriding input_data() alone does not change matching, which is a pure membership test.
+    Instead of hand-writing feature_names_supported(), input_data(), match_feature_group_criteria(),
+    and compute_framework_rule(), a subclass declares FEATURES (and optionally COMPUTE_FRAMEWORKS)
+    and implements only calculate_feature::
+
+        class RetrievalFG(ContextRootFeatureGroup):
+            FEATURES = {RETRIEVAL_FEATURE, RETRIEVAL_DOC_FEATURE, RETRIEVAL_DISTANCE_FEATURE}
+            COMPUTE_FRAMEWORKS = {PythonDictFramework}
+
+            @classmethod
+            def calculate_feature(cls, data, features):
+                ...
+
+    FEATURES is required: a subclass with empty FEATURES matches nothing. Matching is a pure
+    membership test, so option- or data-access-sensitive roots must override
+    match_feature_group_criteria (overriding input_data() alone does not change matching).
     """
 
     FEATURES: ClassVar[set[str]] = set()

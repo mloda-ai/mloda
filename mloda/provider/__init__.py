@@ -18,6 +18,7 @@
 # directly and implement input_features and match_feature_group_criteria.
 #
 from mloda.core.abstract_plugins.feature_group import FeatureGroup as FeatureGroup
+from mloda.core.abstract_plugins.context_root_feature_group import ContextRootFeatureGroup as ContextRootFeatureGroup
 
 # Versioning
 from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
@@ -87,6 +88,7 @@ from mloda.core.abstract_plugins.components.merge.base_merge_engine import BaseM
 __all__ = [
     # Base classes
     "FeatureGroup",
+    "ContextRootFeatureGroup",
     # Versioning
     "BaseFeatureGroupVersion",
     "ComputeFramework",

@@ -13,6 +13,12 @@ class DefaultMappingFeatureGroup(FeatureGroup):
     """No PROPERTY_MAPPING override -- exercises the None default."""
 
 
+class EmptyMappingFeatureGroup(FeatureGroup):
+    """PROPERTY_MAPPING explicitly set to an empty dict -- distinct from the None default."""
+
+    PROPERTY_MAPPING = {}
+
+
 class LegacyMappingFeatureGroup(FeatureGroup):
     """Legacy flattened PROPERTY_MAPPING form with a single declared parameter."""
 
@@ -63,6 +69,13 @@ class MultiKeyMappingFeatureGroup(FeatureGroup):
 def test_declared_option_keys_returns_empty_frozenset_when_property_mapping_none() -> None:
     """PROPERTY_MAPPING unset (None, the default) yields an empty frozenset."""
     result = DefaultMappingFeatureGroup.declared_option_keys()
+
+    assert result == frozenset()
+
+
+def test_declared_option_keys_returns_empty_frozenset_when_property_mapping_empty_dict() -> None:
+    """PROPERTY_MAPPING explicitly set to {} also yields an empty frozenset."""
+    result = EmptyMappingFeatureGroup.declared_option_keys()
 
     assert result == frozenset()
 

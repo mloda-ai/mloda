@@ -133,7 +133,7 @@ class TestSparkFrameworkComputeFramework:
         spark_framework.set_framework_connection_object(spark_session)
 
         dict_data = {"column1": [1, 2, 3], "column2": [4, 5, 6]}
-        result = spark_framework.transform(dict_data, set())
+        result = spark_framework.transform(dict_data, [])
         result_data = result.collect()
 
         expected_data = spark_session.createDataFrame(
@@ -150,7 +150,7 @@ class TestSparkFrameworkComputeFramework:
         spark_framework.set_framework_connection_object(spark_session)
 
         with pytest.raises(ValueError):
-            spark_framework.transform(data=["a"], feature_names=set())
+            spark_framework.transform(data=["a"], feature_names=[])
 
     def test_select_data_by_column_names(self, spark_session: Any) -> None:
         spark_framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
@@ -158,7 +158,7 @@ class TestSparkFrameworkComputeFramework:
         expected_data = spark_session.createDataFrame(
             [{"column1": 1, "column2": 4}, {"column1": 2, "column2": 5}, {"column1": 3, "column2": 6}]
         )
-        data = spark_framework.select_data_by_column_names(expected_data, {FeatureName("column1")})
+        data = spark_framework.select_data_by_column_names(expected_data, [FeatureName("column1")])
         assert data.columns == ["column1"]
 
     def test_set_column_names(self, spark_session: Any) -> None:
@@ -270,7 +270,7 @@ class TestSparkFrameworkComputeFramework:
         spark_framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         spark_framework.set_framework_connection_object(spark_session)
 
-        result = spark_framework.transform({}, set())
+        result = spark_framework.transform({}, [])
         assert result is not None
         assert result.count() == 0
 
@@ -293,7 +293,7 @@ class TestSparkFrameworkComputeFramework:
         )
         spark_framework.data = existing
 
-        result = spark_framework.transform([10, 20, 30], {"new_feature"})
+        result = spark_framework.transform([10, 20, 30], ["new_feature"])
         rows = result.collect()
 
         by_other = {row["other"]: row for row in rows}

@@ -71,7 +71,7 @@ class TestPythonDictEmptyResultPolicy:
 
     def test_select_empty_data_returns_empty_dict(self) -> None:
         """select on the schema-less ``{}`` returns ``{}`` unconditionally."""
-        result = _framework().select_data_by_column_names({}, {FeatureName("col1")})
+        result = _framework().select_data_by_column_names({}, [FeatureName("col1")])
         assert result == {}
 
     def test_select_missing_column_still_raises(self) -> None:
@@ -82,7 +82,7 @@ class TestPythonDictEmptyResultPolicy:
         ValueError ('No columns found ...').
         """
         with pytest.raises(ValueError, match="No columns found"):
-            _framework().select_data_by_column_names({"a": [1]}, {FeatureName("missing")})
+            _framework().select_data_by_column_names({"a": [1]}, [FeatureName("missing")])
 
     def test_validate_filter_columns_empty_dict_does_not_raise(self) -> None:
         """The skip is driven by the data being the schema-less ``{}``.

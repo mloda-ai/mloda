@@ -25,7 +25,7 @@ class TestPythonDictFramework:
 
         input_data = {"col1": [1, 2, 3], "col2": ["a", "b", "c"]}
 
-        result = framework.transform(input_data, set())
+        result = framework.transform(input_data, [])
         assert result == {"col1": [1, 2, 3], "col2": ["a", "b", "c"]}
 
     def test_transform_single_dict_raises(self) -> None:
@@ -33,7 +33,7 @@ class TestPythonDictFramework:
         framework = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
         with pytest.raises(ValueError):
-            framework.transform({"col1": 1, "col2": "a"}, set())
+            framework.transform({"col1": 1, "col2": "a"}, [])
 
     def test_transform_list_of_rows_becomes_columnar(self) -> None:
         """A list of row dicts pivots into a columnar dict."""
@@ -41,7 +41,7 @@ class TestPythonDictFramework:
 
         input_data = [{"col1": 1, "col2": "a"}, {"col1": 2, "col2": "b"}]
 
-        result = framework.transform(input_data, set())
+        result = framework.transform(input_data, [])
         assert result == {"col1": [1, 2], "col2": ["a", "b"]}
 
     def test_transform_empty_data_returns_empty_dict(self) -> None:
@@ -49,8 +49,8 @@ class TestPythonDictFramework:
         None is NOT an empty: it raises, pinned by ``test_transform_none_raises``."""
         framework = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
-        assert framework.transform([], set()) == {}
-        assert framework.transform({}, set()) == {}
+        assert framework.transform([], []) == {}
+        assert framework.transform({}, []) == {}
 
     def test_transform_none_raises(self) -> None:
         """``None`` is a MISSING result (state A), not a representational empty.
@@ -63,14 +63,14 @@ class TestPythonDictFramework:
         framework = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
         with pytest.raises(ValueError, match="Data type .* is not supported"):
-            framework.transform(None, set())
+            framework.transform(None, [])
 
     def test_transform_invalid_data(self) -> None:
         """Test that invalid data types raise errors."""
         framework = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
         with pytest.raises(ValueError, match="Data type .* is not supported"):
-            framework.transform("invalid", set())
+            framework.transform("invalid", [])
 
     @pytest.mark.parametrize("falsy_value", [0, False, ""])
     def test_transform_falsy_unsupported_data_raises(self, falsy_value: Any) -> None:
@@ -82,7 +82,7 @@ class TestPythonDictFramework:
         framework = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
         with pytest.raises(ValueError, match="Data type .* is not supported"):
-            framework.transform(falsy_value, set())
+            framework.transform(falsy_value, [])
 
     def test_select_data_by_column_names(self) -> None:
         """Test columnar column selection functionality."""
@@ -90,7 +90,7 @@ class TestPythonDictFramework:
 
         data: dict[str, list[Any]] = {"col1": [1, 2], "col2": ["a", "b"], "col3": [10, 20]}
 
-        feature_names = {FeatureName("col1"), FeatureName("col2")}
+        feature_names = [FeatureName("col1"), FeatureName("col2")]
 
         result = framework.select_data_by_column_names(data, feature_names)
         assert result == {"col1": [1, 2], "col2": ["a", "b"]}
@@ -106,7 +106,7 @@ class TestPythonDictFramework:
 
         framework.data = {"a": [1, 2], "b": [3, 4]}
 
-        result = framework.select_data_by_column_names(framework.data, {FeatureName("a")})
+        result = framework.select_data_by_column_names(framework.data, [FeatureName("a")])
         assert result == {"a": [1, 2]}
 
         result["a"].append(99)
@@ -117,7 +117,7 @@ class TestPythonDictFramework:
         """Empty data ({}) is propagated as {} in column selection (no judgement)."""
         framework = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
-        feature_names = {FeatureName("col1")}
+        feature_names = [FeatureName("col1")]
 
         assert framework.select_data_by_column_names({}, feature_names) == {}
 

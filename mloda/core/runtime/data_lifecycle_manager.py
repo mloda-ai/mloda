@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import Any, Generator, Optional
 from uuid import UUID
 
@@ -94,14 +95,14 @@ class DataLifecycleManager:
             self.result_data_collection[step_uuid] = result
 
     def get_result_data(
-        self, cfw: ComputeFramework, selected_feature_names: set[FeatureName], location: Optional[str] = None
+        self, cfw: ComputeFramework, selected_feature_names: Sequence[FeatureName], location: Optional[str] = None
     ) -> Any:
         """
         Gets result data from the compute framework.
 
         Args:
             cfw: The compute framework containing the data.
-            selected_feature_names: Set of feature names to select.
+            selected_feature_names: Sequence of feature names to select.
             location: Optional location string for remote data access.
 
         Returns:

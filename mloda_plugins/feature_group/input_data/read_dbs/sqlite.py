@@ -170,7 +170,7 @@ class SQLITEReader(ReadDB):
         query = "select "
 
         options = None
-        for feature in features.features:
+        for feature in features.get_sorted_features():
             query += f"{feature.name}, "
             options = feature.options
 

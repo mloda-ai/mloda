@@ -52,7 +52,7 @@ class TestPolarsLazyDataFrameComputeFramework:
         assert self.lazy_df.expected_data_framework() == pl.LazyFrame
 
     def test_transform_dict_to_lazy_frame(self) -> None:
-        result = self.lazy_df.transform(self.dict_data, set())
+        result = self.lazy_df.transform(self.dict_data, [])
         assert isinstance(result, pl.LazyFrame)
         # Verify it's actually lazy (no execution yet) by checking schema
         assert set(result.collect_schema().names()) == {"column1", "column2"}
@@ -66,7 +66,7 @@ class TestPolarsLazyDataFrameComputeFramework:
         _lazy_df = PolarsLazyDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         _lazy_df.set_data(PolarsLazyDataFrame.pl_lazy_frame()({"existing_column": [4, 5, 6]}))
 
-        result = _lazy_df.transform(data=data, feature_names={"new_column"})
+        result = _lazy_df.transform(data=data, feature_names=["new_column"])
         assert isinstance(result, pl.LazyFrame)
 
         # Verify schema without executing
@@ -81,14 +81,14 @@ class TestPolarsLazyDataFrameComputeFramework:
     def test_transform_dataframe_to_lazy(self) -> None:
         """Test converting DataFrame to LazyFrame"""
         df = pl.DataFrame({"col": [1, 2, 3]})
-        result = self.lazy_df.transform(df, set())
+        result = self.lazy_df.transform(df, [])
         assert isinstance(result, pl.LazyFrame)
         # Verify schema
         assert set(result.collect_schema().names()) == {"col"}
 
     def test_transform_invalid_data(self) -> None:
         with pytest.raises(ValueError):
-            self.lazy_df.transform(data=["a"], feature_names=set())
+            self.lazy_df.transform(data=["a"], feature_names=[])
 
     def test_set_column_names(self) -> None:
         self.lazy_df.data = self.expected_lazy_data
@@ -158,11 +158,11 @@ class TestLazyEagerEquivalence:
 
         # Eager transformation
         eager_df = PolarsDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
-        eager_result = eager_df.transform(self.dict_data, set())
+        eager_result = eager_df.transform(self.dict_data, [])
 
         # Lazy transformation
         lazy_df = PolarsLazyDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
-        lazy_result = lazy_df.transform(self.dict_data, set())
+        lazy_result = lazy_df.transform(self.dict_data, [])
 
         # Compare collected lazy result with eager result
         assert lazy_result.collect().equals(eager_result)
@@ -174,7 +174,7 @@ class TestLazyEagerEquivalence:
         # Setup data
         df_data = pl.DataFrame(self.dict_data)
         lazy_data = df_data.lazy()
-        feature_names = {FeatureName("column1")}
+        feature_names = [FeatureName("column1")]
 
         # Eager selection
         eager_df = PolarsDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
@@ -200,7 +200,7 @@ class TestLazyExecutionTiming:
         lazy_df = PolarsLazyDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
         # Create lazy frame
-        result = lazy_df.transform(self.dict_data, set())
+        result = lazy_df.transform(self.dict_data, [])
 
         # Should be able to get schema without execution
         schema = result.collect_schema()

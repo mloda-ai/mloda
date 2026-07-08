@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Sequence
 from typing import Any, Optional
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.provider import BaseMergeEngine
@@ -78,7 +79,7 @@ class SparkFramework(ComputeFramework):
         return SparkMergeEngine
 
     def select_data_by_column_names(
-        self, data: Any, selected_feature_names: set[FeatureName], column_ordering: Optional[str] = None
+        self, data: Any, selected_feature_names: Sequence[FeatureName], column_ordering: Optional[str] = None
     ) -> Any:
         column_names = set(data.columns)
         _selected_feature_names = self.identify_naming_convention(
@@ -161,7 +162,7 @@ class SparkFramework(ComputeFramework):
     def transform(
         self,
         data: Any,
-        feature_names: set[str],
+        feature_names: Sequence[str],
     ) -> Any:
         transformed_data = self.apply_compute_framework_transformer(data)
         if transformed_data is not None:

@@ -1,5 +1,6 @@
 import datetime
 import decimal
+from collections.abc import Sequence
 from typing import Any, Optional
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.provider import BaseMergeEngine
@@ -52,7 +53,7 @@ class PythonDictFramework(ComputeFramework):
     def select_data_by_column_names(
         self,
         data: dict[str, list[Any]],
-        selected_feature_names: set[FeatureName],
+        selected_feature_names: Sequence[FeatureName],
         column_ordering: Optional[str] = None,
     ) -> dict[str, list[Any]]:
         if not data:
@@ -143,13 +144,13 @@ class PythonDictFramework(ComputeFramework):
         if isinstance(data, dict):
             self._validate_columnar_dict(data)
 
-    def transform(self, data: Any, feature_names: set[str]) -> dict[str, list[Any]]:
+    def transform(self, data: Any, feature_names: Sequence[str]) -> dict[str, list[Any]]:
         """
         Transforms data to the COLUMNAR PythonDict framework format.
 
         Args:
             data: Input data to transform
-            feature_names: Set of feature names being processed
+            feature_names: Sequence of feature names being processed
 
         Returns:
             dict[str, list[Any]]: Data in columnar PythonDict format

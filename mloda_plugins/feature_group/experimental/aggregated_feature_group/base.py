@@ -165,7 +165,7 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Adds the aggregated results directly to the input data structure.
         """
         # Process each requested feature
-        for feature in features.features:
+        for feature in features.get_sorted_features():
             aggregation_type, source_feature_name = cls._extract_aggr_and_source_feature(feature)
 
             # Resolve multi-column features automatically

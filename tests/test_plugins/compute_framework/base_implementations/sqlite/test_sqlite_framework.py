@@ -41,7 +41,7 @@ class TestSqliteFrameworkBasics:
         fw = SqliteFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         fw.set_framework_connection_object(connection)
         dict_data = {"column1": [1, 2, 3], "column2": [4, 5, 6]}
-        result = fw.transform(dict_data, set())
+        result = fw.transform(dict_data, [])
         assert isinstance(result, SqliteRelation)
         assert len(result) == 3
         assert set(result.columns) == {"column1", "column2"}
@@ -49,7 +49,7 @@ class TestSqliteFrameworkBasics:
     def test_transform_invalid_data(self) -> None:
         fw = SqliteFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         with pytest.raises(ValueError):
-            fw.transform(data=["a"], feature_names=set())
+            fw.transform(data=["a"], feature_names=[])
 
     def test_select_data_by_column_names(self, connection: sqlite3.Connection) -> None:
         fw = SqliteFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
@@ -58,7 +58,7 @@ class TestSqliteFrameworkBasics:
         arrow = pa.Table.from_pydict({"column1": [1, 2, 3], "column2": [4, 5, 6]})
         data = SqliteRelation.from_arrow(connection, arrow)
 
-        result = fw.select_data_by_column_names(data, {FeatureName("column1")})
+        result = fw.select_data_by_column_names(data, [FeatureName("column1")])
         assert "column1" in result.columns
 
     def test_set_framework_connection_object_none_raises(self) -> None:
@@ -95,20 +95,20 @@ class TestSqliteFrameworkBasics:
         """transform() with a plain int raises ValueError."""
         fw = SqliteFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         with pytest.raises(ValueError):
-            fw.transform(data=42, feature_names=set())
+            fw.transform(data=42, feature_names=[])
 
     def test_transform_dict_no_connection_raises(self) -> None:
         """transform() with dict but no connection set raises ValueError."""
         fw = SqliteFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         with pytest.raises(ValueError, match="not set"):
-            fw.transform(data={"col": [1, 2]}, feature_names=set())
+            fw.transform(data={"col": [1, 2]}, feature_names=[])
 
     def test_transform_add_column_preserves_existing(self, connection: sqlite3.Connection) -> None:
         fw = SqliteFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         fw.set_framework_connection_object(connection)
         dict_data = {"col_a": [1, 2, 3], "col_b": [4, 5, 6]}
-        fw.data = fw.transform(dict_data, set())
-        result = fw.transform(data=[7, 8, 9], feature_names={"col_c"})
+        fw.data = fw.transform(dict_data, [])
+        result = fw.transform(data=[7, 8, 9], feature_names=["col_c"])
         assert set(result.columns) == {"col_a", "col_b", "col_c"}
         assert len(result) == 3
         arrow = result.to_arrow_table()

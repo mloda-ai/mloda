@@ -113,4 +113,5 @@ class FeatherReader(ReadFile):
             raise ImportError(
                 "pyarrow is required to read Feather files. Install it with: pip install 'mloda[pyarrow]'"
             )
-        return pyarrow_feather.read_table(source=data_access, columns=list(features.get_all_names()))
+        columns = list(features.get_all_names())
+        return pyarrow_feather.read_table(source=data_access, columns=columns).select(columns)

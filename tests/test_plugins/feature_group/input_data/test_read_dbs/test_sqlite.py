@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import pyarrow as pa
 
 from mloda.user import Feature
+from mloda.user import Options
 from mloda.provider import FeatureSet
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 
@@ -117,6 +118,28 @@ class TestSQLITEReader:
         )
         # Assert the result is the mocked table
         assert result == table
+
+    def test_build_query_columns_sorted(self) -> None:
+        """SELECT column order must be deterministic (alphabetically sorted), not
+        dependent on FeatureSet.features set iteration order / PYTHONHASHSEED (#613)."""
+        feature_set = FeatureSet()
+        # Deliberately non-alphabetical insertion order; six names so at least one
+        # PYTHONHASHSEED reorders the underlying set against the sorted expectation.
+        names = ["c_col", "a_col", "f_col", "b_col", "e_col", "d_col"]
+        for name in names:
+            feature_set.add(
+                Feature(
+                    name,
+                    options=Options(context={"BaseInputData": (SQLITEReader, {"table_name": "test_table"})}),
+                )
+            )
+
+        query = SQLITEReader.build_query(feature_set)
+
+        columns_part = query[len("select ") :].split(" from")[0]
+        columns = [col.strip() for col in columns_part.split(",")]
+
+        assert columns == sorted(names), f"build_query emitted columns {columns}, expected {sorted(names)}"
 
     def test_get_table_missing_options(self) -> None:
         with pytest.raises(ValueError, match="Options were not set."):

@@ -34,7 +34,7 @@ class AppendMergeTestFeature(FeatureGroup):
         if len(feature_name) != 1:
             raise ValueError(f"Test Failed: {feature_name}")
         else:
-            single_feature_name = feature_name.pop()
+            single_feature_name = feature_name[0]
         return {single_feature_name: [f"{single_feature_name}_value"]}
 
 

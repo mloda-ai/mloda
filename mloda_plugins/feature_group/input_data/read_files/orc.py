@@ -111,4 +111,5 @@ class OrcReader(ReadFile):
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
         if pyarrow_orc is None:
             raise ImportError("pyarrow is required to read ORC files. Install it with: pip install 'mloda[pyarrow]'")
-        return pyarrow_orc.read_table(source=data_access, columns=list(features.get_all_names()))
+        columns = list(features.get_all_names())
+        return pyarrow_orc.read_table(source=data_access, columns=columns).select(columns)

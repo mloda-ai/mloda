@@ -218,7 +218,7 @@ class TestIdentifyNamingConventionForSubColumns:
         from uuid import uuid4
         from mloda.user import ParallelizationMode
 
-        selected_feature_names = {FeatureName("base~1")}
+        selected_feature_names = [FeatureName("base~1")]
         column_names = {"base~0", "base~1", "base~2", "other_column"}
 
         framework = PandasDataFrame(
@@ -243,7 +243,7 @@ class TestIdentifyNamingConventionForSubColumns:
         from uuid import uuid4
         from mloda.user import ParallelizationMode
 
-        selected_feature_names = {FeatureName("base")}
+        selected_feature_names = [FeatureName("base")]
         column_names = {"base~0", "base~1", "base~2", "other_column"}
 
         framework = PandasDataFrame(
@@ -299,7 +299,7 @@ class TestSubColumnErrorHandling:
         from uuid import uuid4
         from mloda.user import ParallelizationMode
 
-        selected_feature_names = {FeatureName("base~999")}
+        selected_feature_names = [FeatureName("base~999")]
         column_names = {"base~0", "base~1", "base~2"}
 
         framework = PandasDataFrame(

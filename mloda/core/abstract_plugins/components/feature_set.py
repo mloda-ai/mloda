@@ -73,8 +73,14 @@ class FeatureSet:
     def get_all_feature_ids(self) -> set[UUID]:
         return {feature.uuid for feature in self.features}
 
-    def get_all_names(self) -> set[str]:
-        return {feature.name for feature in self.features}
+    def get_all_names(self) -> tuple[str, ...]:
+        """Return the unique feature names as an alphabetically sorted tuple (deterministic order)."""
+        return tuple(sorted({feature.name for feature in self.features}))
+
+    def get_sorted_features(self) -> tuple[Feature, ...]:
+        """Return all features sorted by name: deterministic iteration order for callers
+        that materialize column or query order."""
+        return tuple(sorted(self.features, key=lambda feature: feature.name))
 
     def __str__(self) -> str:
         return f"{self.features}"
@@ -104,8 +110,8 @@ class FeatureSet:
         FeatureSetValidator.validate_equal_options(self.features)
         return self.options.get(key)
 
-    def get_initial_requested_features(self) -> set[FeatureName]:
-        return {feature.name for feature in self.features if feature.initial_requested_data}
+    def get_initial_requested_features(self) -> tuple[FeatureName, ...]:
+        return tuple(sorted({feature.name for feature in self.features if feature.initial_requested_data}))
 
     def get_name_of_one_feature(self) -> FeatureName:
         FeatureSetValidator.validate_feature_added(

@@ -1,4 +1,5 @@
 from abc import ABC
+from collections.abc import Sequence
 from typing import Any, Optional, final
 from uuid import UUID, uuid4
 from mloda.core.abstract_plugins.components.data_types import DataType
@@ -111,7 +112,7 @@ class ComputeFramework(ABC):
     def transform(
         self,
         data: Any,
-        feature_names: set[str],
+        feature_names: Sequence[str],
     ) -> Any:
         """This function should be used to transform the data.
         The idea here is that we can transform the data to a common format.
@@ -151,7 +152,7 @@ class ComputeFramework(ABC):
         return None
 
     def select_data_by_column_names(
-        self, data: Any, selected_feature_names: set[FeatureName], column_ordering: Optional[str] = None
+        self, data: Any, selected_feature_names: Sequence[FeatureName], column_ordering: Optional[str] = None
     ) -> Any:
         """
         If you only want to store the requested features, implement this functionality depending on your framework.
@@ -771,7 +772,7 @@ Available join types:
     @final
     def identify_naming_convention(
         self,
-        selected_feature_names: set[FeatureName],
+        selected_feature_names: Sequence[FeatureName],
         column_names: set[str],
         ordering: Optional[str] = None,
     ) -> set[str] | list[str]:
@@ -782,7 +783,7 @@ Available join types:
         return multiple related columns using the naming convention 'feature_name~column_suffix'.
 
         Args:
-            selected_feature_names: A set of FeatureName objects representing the requested features
+            selected_feature_names: A sequence of FeatureName objects representing the requested features
             column_names: A set of strings representing the available column names in the data
             ordering: Optional ordering mode - None for Set, "alphabetical" or "request_order" for List
 
@@ -825,7 +826,7 @@ Available join types:
 
         # ordering == "request_order"
         result: list[str] = []
-        for feature in selected_feature_names:
+        for feature in dict.fromkeys(selected_feature_names):
             feature_name_str = str(feature)
             matching_cols = []
             for col in _selected_feature_names:

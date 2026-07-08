@@ -273,7 +273,7 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         """
 
         # Process each requested feature
-        for feature in features.features:
+        for feature in features.get_sorted_features():
             imputation_method, source_feature = cls._extract_imputation_method_and_source_feature(feature)
 
             # Resolve multi-column features automatically

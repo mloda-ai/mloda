@@ -348,7 +348,7 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
         """
 
         # Process each requested feature
-        for feature in features.features:
+        for feature in features.get_sorted_features():
             algorithm, dimension, source_features, options = cls._extract_algorithm_dimension_and_source_features(
                 feature
             )

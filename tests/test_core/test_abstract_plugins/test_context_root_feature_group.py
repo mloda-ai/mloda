@@ -7,7 +7,10 @@ These pin the contract of the not-yet-existing ``ContextRootFeatureGroup`` (a
 globally-discovered feature names stay unique and parallel-safe under xdist.
 """
 
+import inspect
 from typing import Any, ClassVar, Optional
+
+import pytest
 
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.provider import ContextRootFeatureGroup
@@ -101,3 +104,46 @@ def test_match_feature_group_criteria_override() -> None:
     # Override takes effect: prefix match, not FEATURES membership.
     assert _CrfgOverride.match_feature_group_criteria("custom_thing", options) is True
     assert _CrfgOverride.match_feature_group_criteria("crfg_declared_only", options) is False
+
+
+def test_base_class_is_abstract() -> None:
+    # The base must be abstract so it is not treated as a concrete shippable plugin.
+    assert inspect.isabstract(ContextRootFeatureGroup) is True
+
+
+def test_subclass_without_calculate_feature_is_abstract() -> None:
+    class _CrfgNoCalc(ContextRootFeatureGroup):
+        FEATURES: ClassVar[set[str]] = {"crfg_nocalc"}
+
+    # Declaring only FEATURES leaves calculate_feature abstract: not instantiable.
+    assert inspect.isabstract(_CrfgNoCalc) is True
+    with pytest.raises(TypeError):
+        _CrfgNoCalc()  # type: ignore[abstract]
+
+    class _CrfgWithCalc(ContextRootFeatureGroup):
+        FEATURES: ClassVar[set[str]] = {"crfg_withcalc"}
+
+        @classmethod
+        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+            return {"crfg_withcalc": [1]}
+
+    # Defining calculate_feature makes the subclass concrete and instantiable.
+    assert inspect.isabstract(_CrfgWithCalc) is False
+    assert _CrfgWithCalc() is not None
+
+
+def test_compute_framework_rule_returns_copy() -> None:
+    class _CrfgCfCopy(ContextRootFeatureGroup):
+        FEATURES: ClassVar[set[str]] = {"crfg_cf_copy"}
+        COMPUTE_FRAMEWORKS: ClassVar[Optional[set[type]]] = {PythonDictFramework}
+
+        @classmethod
+        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+            return {"crfg_cf_copy": [1]}
+
+    rule = _CrfgCfCopy.compute_framework_rule()
+    assert rule == {PythonDictFramework}
+
+    # Mutating the returned rule must not affect the class attribute (defensive copy).
+    rule.clear()
+    assert _CrfgCfCopy.COMPUTE_FRAMEWORKS == {PythonDictFramework}

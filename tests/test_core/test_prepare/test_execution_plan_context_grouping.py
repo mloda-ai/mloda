@@ -30,6 +30,15 @@ def _options_with_inherited_tenant(tenant: str) -> Options:
     return child
 
 
+def _options_with_propagated_env(env: str) -> Options:
+    """Child Options whose "env" context entry was DELIVERED via the caller-side PUSH
+    (consumer.propagate_context_keys), so options.inherited_context_keys provenance is real."""
+    consumer = Options(context={"env": env}, propagate_context_keys=frozenset({"env"}))
+    child = Options(group={"data_source": "prod"})
+    child.inherit_from(consumer)
+    return child
+
+
 def test_features_differing_in_inherited_context_land_in_different_groups() -> None:
     """Same name, group options, compute framework, and data_type but different
     INHERITED context must produce two separate groups."""
@@ -252,6 +261,52 @@ def test_split_context_hashable_empty_cases_return_empty_tuple() -> None:
     )
     assert feature._split_context_hashable(frozenset({"region"})) == (), (
         "A feature carrying none of the split keys in its context must canonicalize to ()."
+    )
+
+
+def test_features_differing_in_propagated_context_land_in_different_groups() -> None:
+    """Same name, group options, compute framework, and data_type but different PROPAGATED
+    (pushed via consumer.propagate_context_keys) context must produce two separate groups."""
+    feature_prod = Feature(
+        "env_scoped_source",
+        options=_options_with_propagated_env("prod"),
+        data_type=DataType.INT32,
+    )
+    feature_staging = Feature(
+        "env_scoped_source",
+        options=_options_with_propagated_env("staging"),
+        data_type=DataType.INT32,
+    )
+
+    groups = _group({feature_prod, feature_staging})
+
+    assert len(groups) == 2, (
+        "Features differing in PROPAGATED (pushed) context must not share a FeatureSet. "
+        f"Expected 2 groups, got {len(groups)}: {groups}"
+    )
+    for group in groups.values():
+        assert len(group) == 1
+
+
+def test_features_with_identical_propagated_context_share_one_group() -> None:
+    """Regression pin: identical group options and identical PROPAGATED context still group
+    together (equal propagated values share one computation)."""
+    feature_a = Feature(
+        "env_scoped_source",
+        options=_options_with_propagated_env("prod"),
+        data_type=DataType.INT32,
+    )
+    feature_b = Feature(
+        "env_scoped_other",
+        options=_options_with_propagated_env("prod"),
+        data_type=DataType.INT32,
+    )
+
+    groups = _group({feature_a, feature_b})
+
+    assert len(groups) == 1, (
+        "Features with identical group options and identical propagated context must share one "
+        f"FeatureSet. Got {len(groups)} groups: {groups}"
     )
 
 

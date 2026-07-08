@@ -123,6 +123,10 @@ class Feature:
         # feature as an input feature; excluded from equality and hash like link/index.
         self.consumer_attributions: list[tuple[str, frozenset[str]]] = []
 
+        # Resolution-only metadata set by Features.merge_options from the inherit_from return: the
+        # group keys forwarded onto this input feature; excluded from equality and hash like link/index.
+        self.forwarded_group_keys: frozenset[str] = frozenset()
+
         # forward_group, forward_group_exclude and inherit_context_keys are merge directives
         # for input features with forward-by-default semantics (None/True inherit all consumer
         # group options, False isolates, an allowlist restricts, exclude subtracts),

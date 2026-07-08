@@ -393,7 +393,7 @@ class Engine:
             consumer_name = feature_group_class.get_class_name()
             consumer_property_keys = self._property_mapping_keys(feature_group_class)
             for input_feature in features.collection:
-                forwarded_declared_keys = input_feature.options.last_forwarded_group_keys & consumer_property_keys
+                forwarded_declared_keys = input_feature.forwarded_group_keys & consumer_property_keys
                 input_feature.add_consumer_attribution(consumer_name, forwarded_declared_keys)
             if features.child_uuid is None:
                 raise ValueError(f"Features {features} has no parent uuid although it should have one.")

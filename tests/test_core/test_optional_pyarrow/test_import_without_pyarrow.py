@@ -43,12 +43,28 @@ if os.environ.get("MLODA_TEST_BLOCK_PYARROW", "1") == "1":
     assert _pyarrow_blocked, "pyarrow should be blocked but was importable"
 
 # The eager import path of mloda.user must not require pyarrow.
+import importlib
+
 import mloda.user
 from mloda.user import mloda, Feature, PluginCollector
+
+# Dependency-free lazy access: PythonDictFramework must resolve from mloda.user
+# even with pyarrow blocked, because PythonDict needs no optional backend.
+from mloda.user import PythonDictFramework
+
+# Accessing a pyarrow-backed framework via mloda.user must fail cleanly and only
+# at access time, raising ModuleNotFoundError (pyarrow blocked), not eagerly on
+# ``import mloda.user`` above. Resolve the package via importlib under a distinct
+# name: the local ``mloda`` above is the mlodaAPI alias, not the package module.
+_user_mod = importlib.import_module("mloda.user")
+_pyarrow_access_blocked = False
+try:
+    _user_mod.PyArrowTable
+except ModuleNotFoundError:
+    _pyarrow_access_blocked = True
+assert _pyarrow_access_blocked, "mloda.user.PyArrowTable must raise ModuleNotFoundError while pyarrow is blocked"
+
 from mloda.provider import FeatureGroup, FeatureSet, DataCreator, BaseInputData
-from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
-    PythonDictFramework,
-)
 
 from typing import Any, Optional
 

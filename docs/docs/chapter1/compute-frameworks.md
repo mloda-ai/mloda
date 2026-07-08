@@ -86,8 +86,7 @@ In this example, we define a compute framework rule inside the feature group. Th
 import pyarrow.compute as pc
 import pyarrow as pa
 
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda.user import PyArrowTable, PandasDataFrame
 from mloda.provider import FeatureGroup
 
 
@@ -133,6 +132,17 @@ In this case, the feature group ExampleB will only run on the PyArrowTable frame
 | **IcebergFramework** | Apache Iceberg Tables | Schema evolution, time travel, data lake management | Data lake scenarios, versioned datasets, large-scale analytics | pyiceberg, pyarrow |
 | **SparkFramework** | Apache Spark DataFrames | Distributed processing, scalability, fault tolerance | Big data, distributed computing, production clusters | pyspark, Java 8+ |
 | **PythonDictFramework** | dict[str, list[Any]] (columnar) | Zero dependencies, simple, lightweight | Minimal environments, education, prototyping | None (Python stdlib only) |
+
+##### Importing a Compute Framework
+
+Every stock compute framework is importable directly from `mloda.user`, so you do not need the deep `mloda_plugins.compute_framework.base_implementations...` path:
+
+```python
+from mloda.user import PythonDictFramework, PandasDataFrame, PolarsDataFrame, PolarsLazyDataFrame
+from mloda.user import PyArrowTable, SqliteFramework, DuckDBFramework, IcebergFramework, SparkFramework
+```
+
+These are resolved lazily, so `import mloda.user` stays dependency-free: a framework whose backend (e.g. `pyarrow`) is not installed only raises `ModuleNotFoundError` when you actually import that class. The deep import paths keep working unchanged.
 
 ##### Automatic Dependency Detection
 

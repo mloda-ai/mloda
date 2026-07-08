@@ -1,3 +1,6 @@
+import importlib
+from typing import TYPE_CHECKING, Any
+
 # API
 from mloda.core.api.request import mlodaAPI
 
@@ -50,6 +53,54 @@ from mloda.core.api.plugin_docs import (
 mloda = mlodaAPI
 stream_all = mlodaAPI.stream_all
 
+# Lazy compute-framework exports (issue #649): resolved on demand so that
+# ``import mloda.user`` stays dependency-free and optional backends propagate
+# ModuleNotFoundError only at access time.
+_LAZY_COMPUTE_FRAMEWORKS: dict[str, str] = {
+    "PythonDictFramework": "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework",
+    "PandasDataFrame": "mloda_plugins.compute_framework.base_implementations.pandas.dataframe",
+    "PolarsDataFrame": "mloda_plugins.compute_framework.base_implementations.polars.dataframe",
+    "PolarsLazyDataFrame": "mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe",
+    "PyArrowTable": "mloda_plugins.compute_framework.base_implementations.pyarrow.table",
+    "SqliteFramework": "mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework",
+    "DuckDBFramework": "mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework",
+    "SparkFramework": "mloda_plugins.compute_framework.base_implementations.spark.spark_framework",
+    "IcebergFramework": "mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework",
+}
+
+if TYPE_CHECKING:
+    # Static re-exports for mypy/tooling; not imported at runtime.
+    from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import (
+        DuckDBFramework as DuckDBFramework,
+    )
+    from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework import (
+        IcebergFramework as IcebergFramework,
+    )
+    from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame as PandasDataFrame
+    from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame as PolarsDataFrame
+    from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import (
+        PolarsLazyDataFrame as PolarsLazyDataFrame,
+    )
+    from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable as PyArrowTable
+    from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
+        PythonDictFramework as PythonDictFramework,
+    )
+    from mloda_plugins.compute_framework.base_implementations.spark.spark_framework import (
+        SparkFramework as SparkFramework,
+    )
+    from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import (
+        SqliteFramework as SqliteFramework,
+    )
+
+
+def __getattr__(name: str) -> Any:
+    # PEP 562 lazy resolution of optional compute-framework classes.
+    module_path = _LAZY_COMPUTE_FRAMEWORKS.get(name)
+    if module_path is not None:
+        module = importlib.import_module(module_path)
+        return getattr(module, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 __all__ = [
     # API
     "mlodaAPI",
@@ -91,4 +142,14 @@ __all__ = [
     "get_extender_docs",
     "list_registered",
     "resolve_feature",
+    # Compute frameworks (lazy, issue #649)
+    "PythonDictFramework",
+    "PandasDataFrame",
+    "PolarsDataFrame",
+    "PolarsLazyDataFrame",
+    "PyArrowTable",
+    "SqliteFramework",
+    "DuckDBFramework",
+    "SparkFramework",
+    "IcebergFramework",
 ]

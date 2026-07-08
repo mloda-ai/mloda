@@ -180,6 +180,30 @@ Options(context={"operation_type": "custom"})  # strict: raises ValueError
 Options(context={"in_features": "any_name"})   # flexible: any value allowed
 ```
 
+### What the end user sees on a strict-validation rejection
+
+The direct call above raises `ValueError` immediately. Going through
+`FeatureChainParserMixin.match_feature_group_criteria` (the default for most
+feature groups) is different: it catches that `ValueError` and returns `False`
+instead, because during resolution one candidate's "no match" must not abort
+the search for another candidate that might still accept the feature.
+
+If every candidate ends up rejecting the feature, the final "No feature groups
+found" error collects the discarded rejection reasons from every mixin-based
+candidate that had one and appends them, naming the feature group, the option
+key, the rejected value, and why it failed:
+
+```
+Feature group(s) rejected an option value while matching 'window_size_windowed':
+  - WindowedFeatureGroup: Property value '14' failed validation for 'window_size'
+```
+
+This is diagnostic only: it does not change `match_feature_group_criteria`'s
+`True`/`False` contract, so a value rejected by one feature group can still
+match a different one, and multi-group fallback resolution keeps working.
+Feature group authors do not need to override `match_feature_group_criteria`
+to get this message.
+
 ## Conditional requirements with `required_when`
 
 Attach a predicate callable to declare an option required only under certain

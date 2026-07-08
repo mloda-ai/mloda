@@ -81,3 +81,49 @@ class TestStrictValidationReturnsFalse:
         result = SubGroupWithValidationFunction.match_feature_group_criteria(feature_name, options)
 
         assert result is False
+
+
+class TestStrictValidationRejectionReason:
+    """Tests that _strict_validation_rejection_reason surfaces the discarded ValueError message."""
+
+    def test_membership_check_rejection_returns_message(self) -> None:
+        """SubGroupA with mode=mode_b should return the membership-check message, not None."""
+        feature_name = FeatureName("any_feature")
+        options = Options(group={"mode": "mode_b"})
+
+        assert SubGroupA.match_feature_group_criteria(feature_name, options) is False
+
+        reason = SubGroupA._strict_validation_rejection_reason(feature_name, options)
+
+        assert reason is not None
+        assert "mode_b" in reason
+        assert "mode" in reason
+
+    def test_matching_value_returns_none(self) -> None:
+        """SubGroupA with mode=mode_a matches, so there is no rejection reason."""
+        feature_name = FeatureName("any_feature")
+        options = Options(group={"mode": "mode_a"})
+
+        reason = SubGroupA._strict_validation_rejection_reason(feature_name, options)
+
+        assert reason is None
+
+    def test_validation_function_rejection_returns_message(self) -> None:
+        """SubGroupWithValidationFunction with an invalid mode returns the validation_function message."""
+        feature_name = FeatureName("any_feature")
+        options = Options(group={"mode": "invalid_prefix"})
+
+        reason = SubGroupWithValidationFunction._strict_validation_rejection_reason(feature_name, options)
+
+        assert reason is not None
+        assert "invalid_prefix" in reason
+        assert "mode" in reason
+
+    def test_unrelated_candidate_returns_none(self) -> None:
+        """When the relevant property is entirely absent, this is a non-match, not a rejection."""
+        feature_name = FeatureName("any_feature")
+        options = Options(group={})
+
+        reason = SubGroupA._strict_validation_rejection_reason(feature_name, options)
+
+        assert reason is None

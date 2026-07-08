@@ -12,6 +12,9 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
+    FeatureChainParserMixin,
+)
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -634,4 +637,94 @@ class TestInputFeatureForwardingHint:
         )
         assert "in_features" not in error_message, (
             f"Reserved key 'in_features' must NOT be listed as offending, but got: {error_message}"
+        )
+
+
+class StrictWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+    """Config-based feature group with a strict, validated 'window_size' property.
+
+    Deliberately does NOT override match_feature_group_criteria, so it exercises the
+    mixin's default swallow-to-False path: a validation_function rejection inside
+    FeatureChainParser._validate_property_value raises ValueError, which
+    match_feature_group_criteria catches and turns into a plain False, discarding the
+    actionable message. _strict_validation_rejection_reason recovers that message.
+    """
+
+    PROPERTY_MAPPING = {
+        "window_size": {
+            "explanation": "Size of window",
+            DefaultOptionKeys.strict_validation: True,
+            DefaultOptionKeys.validation_function: lambda v: isinstance(v, int) and 0 < v <= 13,
+        },
+        DefaultOptionKeys.in_features: {"explanation": "source", DefaultOptionKeys.context: True},
+    }
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        return None
+
+
+class TestStrictValidationRejectionHint:
+    """Tests for the (not yet wired) strict-validation rejection hint in the
+    no-feature-group error.
+
+    Once wired, the no-feature-group-found error should consult
+    FeatureChainParserMixin._strict_validation_rejection_reason for each accessible
+    candidate and surface the discarded ValueError (e.g. "Property value '14' failed
+    validation for 'window_size'") together with the culprit class name, instead of
+    only the generic "No feature groups found" message.
+    """
+
+    def test_hint_names_rejected_option_value_and_class(self) -> None:
+        feature = Feature(
+            "strict_window_test_feature",
+            Options(context={DefaultOptionKeys.in_features: "src", "window_size": 14}),
+        )
+
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            StrictWindowFeatureGroup: {MockComputeFramework},
+        }
+
+        with pytest.raises(ValueError) as exc_info:
+            IdentifyFeatureGroupClass(
+                feature=feature,
+                accessible_plugins=accessible_plugins,
+                links=None,
+                data_access_collection=None,
+            )
+
+        error_message = str(exc_info.value)
+
+        assert "window_size" in error_message, (
+            f"Error message should name the rejected option 'window_size', but got: {error_message}"
+        )
+        assert "14" in error_message, f"Error message should include the rejected value '14', but got: {error_message}"
+        assert "StrictWindowFeatureGroup" in error_message, (
+            f"Error message should name the culprit feature group, but got: {error_message}"
+        )
+
+    def test_no_hint_when_feature_is_unrelated(self) -> None:
+        """A feature with none of the mapped keys present is a non-match, not a
+        rejection: match_feature_group_criteria returns False without raising, so
+        _strict_validation_rejection_reason must find nothing to surface."""
+        feature = Feature("totally_unrelated_feature")
+
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            StrictWindowFeatureGroup: {MockComputeFramework},
+        }
+
+        with pytest.raises(ValueError) as exc_info:
+            IdentifyFeatureGroupClass(
+                feature=feature,
+                accessible_plugins=accessible_plugins,
+                links=None,
+                data_access_collection=None,
+            )
+
+        error_message = str(exc_info.value)
+
+        assert "StrictWindowFeatureGroup" not in error_message, (
+            f"Error message should NOT name a feature group for an unrelated feature, but got: {error_message}"
+        )
+        assert "window_size" not in error_message, (
+            f"Error message should NOT mention 'window_size' for an unrelated feature, but got: {error_message}"
         )

@@ -248,6 +248,26 @@ class FeatureChainParserMixin:
         return result
 
     @classmethod
+    def _strict_validation_rejection_reason(cls, feature_name: str | FeatureName, options: Options) -> str | None:
+        """Return the ValueError message that match_feature_group_criteria discards, if any.
+
+        Re-runs the same basic-match call as match_feature_group_criteria, but surfaces
+        the ValueError message instead of swallowing it into a plain False. Returns None
+        when the call succeeds or fails without raising (i.e. an unrelated candidate).
+        Diagnostic-only: does not affect match_feature_group_criteria's behavior.
+        """
+        try:
+            FeatureChainParser.match_configuration_feature_chain_parser(
+                feature_name,
+                options,
+                property_mapping=cls._get_property_mapping(),
+                prefix_patterns=cls._get_prefix_patterns(),
+            )
+        except ValueError as exc:
+            return str(exc)
+        return None
+
+    @classmethod
     def _validate_forwarded_name_mismatch(
         cls,
         feature_name: str | FeatureName,

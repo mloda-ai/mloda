@@ -81,6 +81,13 @@ class FeatureGroup(ABC):
         super().__init_subclass__(**kwargs)
         FeatureChainParser.validate_property_mapping_defaults(cls.__name__, cls.PROPERTY_MAPPING)
 
+    @classmethod
+    def declared_option_keys(cls) -> frozenset[str]:
+        """Return the top-level parameter names declared in ``PROPERTY_MAPPING``."""
+        if cls.PROPERTY_MAPPING is None:
+            return frozenset()
+        return frozenset(str(key) for key in cls.PROPERTY_MAPPING)
+
     def __init__(self) -> None:
         pass
 

@@ -1755,3 +1755,73 @@ class TestInheritFromCrossNamespaceIndependence:
         child.inherit_from(consumer)
 
         assert child.group["algo"] == "mean"
+
+
+class TestInheritFromAtomicOnConflict:
+    """
+    Regression pins for issue #623: inherit_from must be ATOMIC on conflict.
+
+    WHY THIS EXISTS:
+    The group forward iterates sorted(group_keys) and calls add_to_group per key,
+    mutating self.group immediately, while the provenance fields
+    (inherited_group_keys, last_forwarded_group_keys) are assigned only AFTER the
+    loop. So a mid-loop conflict on a LATER sorted key raises ValueError after an
+    EARLIER sorted key was already committed to self.group, leaving self partially
+    mutated (polluted group) with stale provenance. The contract SHOULD be atomic:
+    a raise leaves self completely unchanged. These pins arrange a multi-key forward
+    where an earlier sorted key forwards cleanly and a later key conflicts, then
+    assert self is untouched after the raise.
+    """
+
+    def test_group_conflict_is_atomic_no_partial_commit(self) -> None:
+        """The canonical reproduction: consumer group {'aaa': 1, 'zzz': 9} forwarded onto a
+        child holding group {'zzz': 8}. 'aaa' sorts first and forwards cleanly, then 'zzz'
+        conflicts and raises. After the raise the earlier 'aaa' must NOT be committed and
+        provenance must be untouched (empty, as this is the child's first merge)."""
+        consumer = Options(group={"aaa": 1, "zzz": 9})
+        child = Options(group={"zzz": 8})
+
+        with pytest.raises(ValueError):
+            child.inherit_from(consumer)
+
+        assert child.group == {"zzz": 8}
+        assert child.inherited_group_keys == frozenset()
+        assert child.last_forwarded_group_keys == frozenset()
+
+    def test_group_conflict_preserves_pre_existing_provenance(self) -> None:
+        """A child that already inherited a key from a benign consumer must keep its group
+        AND its recorded provenance exactly when a SECOND, conflicting multi-key forward
+        raises. The failed call must not touch self at all."""
+        benign = Options(group={"benign": 7})
+        child = Options(group={"zzz": 8})
+        child.inherit_from(benign)
+
+        group_before = deepcopy(child.group)
+        inherited_before = child.inherited_group_keys
+        last_forwarded_before = child.last_forwarded_group_keys
+        assert inherited_before == frozenset({"benign"})
+        assert last_forwarded_before == frozenset({"benign"})
+
+        conflicting = Options(group={"aaa": 1, "zzz": 9})
+        with pytest.raises(ValueError):
+            child.inherit_from(conflicting)
+
+        assert child.group == group_before
+        assert child.inherited_group_keys == inherited_before
+        assert child.last_forwarded_group_keys == last_forwarded_before
+
+    def test_context_cross_conflict_is_atomic_no_partial_commit(self) -> None:
+        """A forwarded group key that collides with an existing child CONTEXT key raises the
+        cross-conflict branch. Arrange 'aaa' (sorts first) to forward cleanly into group and
+        'zzz' (sorts later) to hit the context cross-conflict. After the raise the earlier
+        'aaa' must NOT be committed to group and provenance must be untouched."""
+        consumer = Options(group={"aaa": 1, "zzz": 9})
+        child = Options(context={"zzz": 8})
+
+        with pytest.raises(ValueError):
+            child.inherit_from(consumer)
+
+        assert "aaa" not in child.group
+        assert child.group == {}
+        assert child.inherited_group_keys == frozenset()
+        assert child.last_forwarded_group_keys == frozenset()

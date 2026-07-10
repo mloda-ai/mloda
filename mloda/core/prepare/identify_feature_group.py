@@ -238,6 +238,30 @@ class IdentifyFeatureGroupClass:
             f"or forward_group=False on the child in the consumer's input_features."
         )
 
+    def _strict_validation_rejection_hint(
+        self, feature: Feature, accessible_plugins: FeatureGroupEnvironmentMapping
+    ) -> Optional[str]:
+        reasons: list[tuple[str, str]] = []
+        for feature_group in accessible_plugins:
+            if not self._filter_feature_group_by_domain(feature_group, feature):
+                continue
+            if not self._filter_feature_group_by_scope(feature_group, feature):
+                continue
+
+            rejection_check = getattr(feature_group, "_strict_validation_rejection_reason", None)
+            if rejection_check is None:
+                continue
+
+            reason = rejection_check(feature.name, feature.options)
+            if reason is not None:
+                reasons.append((feature_group.get_class_name(), reason))
+
+        if not reasons:
+            return None
+
+        lines = "\n".join(f"  - {class_name}: {reason}" for class_name, reason in sorted(reasons))
+        return f"Feature group(s) rejected an option value while matching '{str(feature.name)}':\n{lines}"
+
     def _build_no_feature_group_error(
         self, feature: Feature, accessible_plugins: FeatureGroupEnvironmentMapping
     ) -> str:
@@ -262,6 +286,10 @@ class IdentifyFeatureGroupClass:
         forwarding_hint = self._input_feature_forwarding_hint(feature, accessible_plugins)
         if forwarding_hint is not None:
             msg += f"\n{forwarding_hint}"
+
+        strict_validation_hint = self._strict_validation_rejection_hint(feature, accessible_plugins)
+        if strict_validation_hint is not None:
+            msg += f"\n{strict_validation_hint}"
 
         known_names: list[str] = []
         for fg_class in accessible_plugins:

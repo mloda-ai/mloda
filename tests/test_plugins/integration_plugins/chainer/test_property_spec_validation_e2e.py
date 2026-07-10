@@ -9,15 +9,6 @@ validation moments for free:
    window_size raises ValueError before any computation runs.
 2. Authoring time: ``property_spec`` itself rejects a declared default that fails
    the validation_function, at the call site (class-definition time).
-
-The derived feature group uses FeatureChainParserMixin for input_features but
-overrides ``match_feature_group_criteria`` to call
-``FeatureChainParser.match_configuration_feature_chain_parser`` directly, following
-``test_list_valued_options_e2e.py``. The mixin's default match catches the
-validation ValueError and returns False (see
-``test_strict_validation_returns_false.py``), which would surface only as a generic
-"No feature groups found" error; the direct call preserves the actionable message
-naming the rejected option.
 """
 
 from typing import Any, Optional
@@ -30,13 +21,12 @@ from mloda.provider import (
     ComputeFramework,
     DataCreator,
     DefaultOptionKeys,
-    FeatureChainParser,
     FeatureChainParserMixin,
     FeatureGroup,
     FeatureSet,
     property_spec,
 )
-from mloda.user import Feature, FeatureName, Options, PluginCollector, mloda
+from mloda.user import Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 # Records calculate_feature invocations so tests can assert that planning-time
@@ -81,20 +71,6 @@ class PropertySpecE2EWindowedFeatureGroup(FeatureChainParserMixin, FeatureGroup)
         ),
         DefaultOptionKeys.in_features: property_spec("Source feature to window over"),
     }
-
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: FeatureName | str,
-        options: Options,
-        data_access_collection: Optional[Any] = None,
-    ) -> bool:
-        _name = str(feature_name) if isinstance(feature_name, FeatureName) else feature_name
-        return FeatureChainParser.match_configuration_feature_chain_parser(
-            _name,
-            options,
-            property_mapping=cls.PROPERTY_MAPPING,
-        )
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -159,12 +135,19 @@ class TestPropertySpecValidationFunctionE2E:
             ),
         )
 
-        with pytest.raises(ValueError, match="window_size"):
+        with pytest.raises(ValueError) as exc_info:
             mloda.run_all(
                 [feature],
                 compute_frameworks={PandasDataFrame},
                 plugin_collector=self.plugin_collector,
             )
+
+        error_message = str(exc_info.value)
+        assert "window_size" in error_message
+        assert "14" in error_message
+        # Pins that the message comes from the strict-validation rejection hint (naming
+        # the culprit class), not just that "window_size" appears somewhere by coincidence.
+        assert PropertySpecE2EWindowedFeatureGroup.__name__ in error_message
 
         assert len(CALCULATE_INVOCATIONS) == invocations_before, "rejection must happen before any computation"
 

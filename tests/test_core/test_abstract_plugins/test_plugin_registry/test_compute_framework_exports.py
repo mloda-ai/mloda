@@ -71,3 +71,35 @@ class TestUnknownAttributeStillRaises:
     def test_unknown_attribute_raises_attribute_error(self) -> None:
         with pytest.raises(AttributeError):
             mloda.user.DefinitelyNotAnExportedSymbol
+
+
+# python_dict helper functions follow the same lazy-export contract as the framework
+# classes: importable from mloda.user, identical to the canonical source object,
+# out of __all__, surfaced by __dir__.
+_PYTHON_DICT_UTILS_MODULE = "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils"
+
+HELPER_EXPORT_MATRIX: list[tuple[str, str]] = [
+    ("columnar_to_rows", _PYTHON_DICT_UTILS_MODULE),
+    ("homogenize_rows", _PYTHON_DICT_UTILS_MODULE),
+    ("is_columnar", _PYTHON_DICT_UTILS_MODULE),
+]
+
+_HELPER_MATRIX_IDS = [symbol for symbol, _source in HELPER_EXPORT_MATRIX]
+
+
+class TestPythonDictHelperExportMatrix:
+    @pytest.mark.parametrize(("symbol", "source_module"), HELPER_EXPORT_MATRIX, ids=_HELPER_MATRIX_IDS)
+    def test_helper_excluded_from_all_but_discoverable_via_dir(self, symbol: str, source_module: str) -> None:
+        assert symbol not in mloda.user.__all__, (
+            f"mloda.user.__all__ must NOT list '{symbol}' (keeps wildcard import dependency-free)"
+        )
+        assert symbol in dir(mloda.user), f"mloda.user.__dir__ must surface '{symbol}' for discoverability"
+
+    @pytest.mark.parametrize(("symbol", "source_module"), HELPER_EXPORT_MATRIX, ids=_HELPER_MATRIX_IDS)
+    def test_helper_is_identical_to_source_object(self, symbol: str, source_module: str) -> None:
+        source = _source_module(source_module)
+        assert hasattr(source, symbol), f"{source.__name__} must define '{symbol}'"
+        assert hasattr(mloda.user, symbol), f"mloda.user must expose '{symbol}'"
+        assert getattr(mloda.user, symbol) is getattr(source, symbol), (
+            f"mloda.user.{symbol} must be the identical object from {source.__name__}"
+        )

@@ -12,7 +12,7 @@ The compute framework concept provides significant flexibility and enables a var
 -   Testing: Easily compare different compute technologies or frameworks.
 -   Migrations: Move from one environment to another (e.g., local to cloud or db to other db) without changing the underlying feature definitions.
 
-This flexibility is one of mloda’s key advantages, allowing users to decouple feature definitions from specific computation technologies—something that traditional feature stores don’t easily offer.
+This flexibility is one of mloda’s key advantages, allowing users to decouple feature definitions from specific computation technologies, something that traditional feature stores don’t easily offer.
 
 #### 2. Balancing Flexibility and Complexity
 
@@ -170,6 +170,21 @@ result[0]  # Returns dict[str, list[Any]] (columnar)
 ```
 
 A feature group running on PythonDictFramework may also return row-wise data as a list of dicts; it is normalized to the columnar form, and all rows must have identical keys.
+
+#### Columnar helpers
+
+`columnar_to_rows`, `homogenize_rows`, `is_columnar`, and `rows_to_columnar` are importable from `mloda.user`. `columnar_to_rows` is strict: it raises `ValueError` on anything that is not a valid columnar dict. Use `is_columnar` to branch first:
+
+``` python
+from mloda.user import columnar_to_rows, is_columnar
+
+def to_rows_lenient(data):
+    if isinstance(data, list):
+        return data
+    return columnar_to_rows(data) if is_columnar(data) else []
+```
+
+Strictness stays in the library; forgiveness is application policy.
 
 Example using Polars frameworks:
 ``` python

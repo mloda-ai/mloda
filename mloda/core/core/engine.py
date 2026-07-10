@@ -178,11 +178,7 @@ class Engine:
         cached = self._property_mapping_keys_cache.get(feature_group_class)
         if cached is not None:
             return cached
-        property_mapping = getattr(feature_group_class, "PROPERTY_MAPPING", None)
-        if isinstance(property_mapping, dict):
-            keys = frozenset(str(key) for key in property_mapping)
-        else:
-            keys = frozenset()
+        keys = feature_group_class.declared_option_keys()
         self._property_mapping_keys_cache[feature_group_class] = keys
         return keys
 

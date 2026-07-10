@@ -152,13 +152,19 @@ class ComputeFramework(ABC):
         return None
 
     def select_data_by_column_names(
-        self, data: Any, selected_feature_names: Sequence[FeatureName], column_ordering: Optional[str] = None
+        self,
+        data: Any,
+        selected_feature_names: Sequence[FeatureName],
+        column_ordering: Optional[str] = None,
+        request_feature_order: Optional[list[str]] = None,
     ) -> Any:
         """
         If you only want to store the requested features, implement this functionality depending on your framework.
 
         e.g. if you are using pyarrow, you can use the following code:
         return data.select([f.name for f in selected_feature_names])
+
+        request_feature_order: Optional ordered feature names driving 'request_order' output sequence
         """
         return data
 
@@ -775,6 +781,7 @@ Available join types:
         selected_feature_names: Sequence[FeatureName],
         column_names: set[str],
         ordering: Optional[str] = None,
+        request_feature_order: Optional[list[str]] = None,
     ) -> set[str] | list[str]:
         """
         Identifies columns that match feature names or follow the naming convention pattern.
@@ -786,6 +793,7 @@ Available join types:
             selected_feature_names: A sequence of FeatureName objects representing the requested features
             column_names: A set of strings representing the available column names in the data
             ordering: Optional ordering mode - None for Set, "alphabetical" or "request_order" for List
+            request_feature_order: Optional ordered feature names driving 'request_order' output sequence
 
         Returns:
             A set of column names (default) or list if ordering is specified
@@ -825,13 +833,19 @@ Available join types:
             return sorted(_selected_feature_names)
 
         # ordering == "request_order"
+        order_source = request_feature_order if request_feature_order else [str(f) for f in selected_feature_names]
         result: list[str] = []
-        for feature in dict.fromkeys(selected_feature_names):
-            feature_name_str = str(feature)
+        appended: set[str] = set()
+        for name in dict.fromkeys(order_source):
             matching_cols = []
             for col in _selected_feature_names:
-                if col == feature_name_str or col.startswith(f"{feature_name_str}~"):
+                if col in appended:
+                    continue
+                if col == name or col.startswith(f"{name}~"):
                     matching_cols.append(col)
             matching_cols.sort()
             result.extend(matching_cols)
+            appended.update(matching_cols)
+        # Fallback: never drop a matched column not covered by order_source.
+        result.extend(sorted(_selected_feature_names - appended))
         return result

@@ -55,11 +55,15 @@ class SqliteFramework(ComputeFramework):
         return SqliteMergeEngine
 
     def select_data_by_column_names(
-        self, data: Any, selected_feature_names: Sequence[FeatureName], column_ordering: Optional[str] = None
+        self,
+        data: Any,
+        selected_feature_names: Sequence[FeatureName],
+        column_ordering: Optional[str] = None,
+        request_feature_order: Optional[list[str]] = None,
     ) -> Any:
         column_names = set(data.columns)
         _selected_feature_names = self.identify_naming_convention(
-            selected_feature_names, column_names, ordering=column_ordering
+            selected_feature_names, column_names, ordering=column_ordering, request_feature_order=request_feature_order
         )
 
         selected_columns = list(_selected_feature_names)

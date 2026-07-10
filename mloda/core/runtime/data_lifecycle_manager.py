@@ -18,7 +18,10 @@ class DataLifecycleManager:
     """
 
     def __init__(
-        self, transformer: Optional[ComputeFrameworkTransformer] = None, column_ordering: Optional[str] = None
+        self,
+        transformer: Optional[ComputeFrameworkTransformer] = None,
+        column_ordering: Optional[str] = None,
+        request_feature_order: Optional[list[str]] = None,
     ) -> None:
         """
         Initializes DataLifecycleManager with empty state and transformer.
@@ -33,6 +36,7 @@ class DataLifecycleManager:
         self.artifacts: dict[str, Any] = {}
         self.transformer = transformer if transformer is not None else ComputeFrameworkTransformer()
         self.column_ordering = column_ordering
+        self.request_feature_order = request_feature_order
 
     def drop_data_for_finished_cfws(
         self, finished_ids: set[UUID], cfw_collection: dict[UUID, ComputeFramework], location: Optional[str] = None
@@ -133,7 +137,12 @@ class DataLifecycleManager:
         if not cfw._extract_column_names(data):
             return data
 
-        return cfw.select_data_by_column_names(data, selected_feature_names, column_ordering=self.column_ordering)
+        return cfw.select_data_by_column_names(
+            data,
+            selected_feature_names,
+            column_ordering=self.column_ordering,
+            request_feature_order=self.request_feature_order,
+        )
 
     def get_results(self) -> list[Any]:
         """

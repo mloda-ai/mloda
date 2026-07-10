@@ -70,6 +70,7 @@ class Engine:
 
         self.data_access_collection = data_access_collection
         self.column_ordering = column_ordering
+        self.request_feature_order: list[str] = [str(f.name) for f in features]
         self._dual_consumption_warned: set[tuple[str, str, frozenset[str]]] = set()
         self._property_mapping_keys_cache: dict[type[FeatureGroup], frozenset[str]] = {}
         self.execution_planner = self.create_setup_execution_plan(features)
@@ -100,6 +101,7 @@ class Engine:
             execution_plan_copy,
             flight_server,
             column_ordering=self.column_ordering,
+            request_feature_order=self.request_feature_order,
             tfs_connection_map=self.tfs_connection_map,
         )
         if isinstance(orchestrator, ExecutionOrchestrator):

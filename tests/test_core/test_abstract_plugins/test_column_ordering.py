@@ -136,6 +136,26 @@ class TestIdentifyNamingConvention:
         with pytest.raises(ValueError):
             cfw.identify_naming_convention([FeatureName("A")], {"A"}, ordering="invalid")
 
+    def test_request_order_honors_request_feature_order(self) -> None:
+        cfw = create_compute_framework()
+        result = cfw.identify_naming_convention(
+            [FeatureName("A"), FeatureName("B"), FeatureName("C")],
+            {"A", "B", "C"},
+            ordering="request_order",
+            request_feature_order=["C", "A", "B"],
+        )
+        assert result == ["C", "A", "B"]
+
+    def test_request_feature_order_with_grouped_sub_columns(self) -> None:
+        cfw = create_compute_framework()
+        result = cfw.identify_naming_convention(
+            [FeatureName("Temp"), FeatureName("Hum")],
+            {"Temp~mean", "Temp~max", "Hum~mean", "Hum~max"},
+            ordering="request_order",
+            request_feature_order=["Hum", "Temp"],
+        )
+        assert result == ["Hum~max", "Hum~mean", "Temp~max", "Temp~mean"]
+
 
 # --- API Parameter Tests ---
 
@@ -206,7 +226,7 @@ class TestColumnOrderingThreading:
 
         dlm.get_result_data(mock_cfw, [FeatureName("col")])
         mock_cfw.select_data_by_column_names.assert_called_once_with(
-            mock_cfw.data, [FeatureName("col")], column_ordering="alphabetical"
+            mock_cfw.data, [FeatureName("col")], column_ordering="alphabetical", request_feature_order=None
         )
 
     def test_compute_framework_select_accepts_column_ordering(self) -> None:
@@ -375,3 +395,25 @@ class TestEndToEndColumnOrdering:
 
         # Columns should be in alphabetical order regardless of request order
         assert list(df.columns) == ["FeatureA", "FeatureB", "FeatureC", "FeatureD", "FeatureE"]
+
+    def test_request_order_returns_columns_in_request_sequence(self) -> None:
+        """Request features E, C, A, D, B, verify result preserves that exact request order."""
+        plugin_collector = PluginCollector.enabled_feature_groups({MultiFeatureGroup})
+
+        result = mloda.run_all(
+            [
+                Feature(name="FeatureE"),
+                Feature(name="FeatureC"),
+                Feature(name="FeatureA"),
+                Feature(name="FeatureD"),
+                Feature(name="FeatureB"),
+            ],
+            compute_frameworks={PandasDataFrame},
+            plugin_collector=plugin_collector,
+            column_ordering="request_order",
+        )
+
+        assert len(result) == 1
+        df = result[0]
+
+        assert list(df.columns) == ["FeatureE", "FeatureC", "FeatureA", "FeatureD", "FeatureB"]

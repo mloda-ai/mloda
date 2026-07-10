@@ -58,12 +58,16 @@ class PythonDictFramework(ComputeFramework):
         data: dict[str, list[Any]],
         selected_feature_names: Sequence[FeatureName],
         column_ordering: Optional[str] = None,
+        request_feature_order: Optional[list[str]] = None,
     ) -> dict[str, list[Any]]:
         if not data:
             return {}
 
         _selected_feature_names = self.identify_naming_convention(
-            selected_feature_names, set(data.keys()), ordering=column_ordering
+            selected_feature_names,
+            set(data.keys()),
+            ordering=column_ordering,
+            request_feature_order=request_feature_order,
         )
 
         # Copy the column lists so mutating the selection cannot mutate framework internals.

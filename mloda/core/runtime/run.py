@@ -43,6 +43,7 @@ class ExecutionOrchestrator:
         execution_planner: ExecutionPlan,
         flight_server: Optional[ParallelRunnerFlightServer] = None,
         column_ordering: Optional[str] = None,
+        request_feature_order: Optional[list[str]] = None,
         tfs_connection_map: Optional[dict[type[ComputeFramework], Any]] = None,
     ) -> None:
         """
@@ -62,7 +63,9 @@ class ExecutionOrchestrator:
         self.worker_manager = WorkerManager()
 
         # Data lifecycle - delegate to DataLifecycleManager
-        self.data_lifecycle_manager = DataLifecycleManager(column_ordering=column_ordering)
+        self.data_lifecycle_manager = DataLifecycleManager(
+            column_ordering=column_ordering, request_feature_order=request_feature_order
+        )
 
         self._step_lock = threading.Lock()
 

@@ -298,7 +298,7 @@ class TestDataLifecycleManagerGetResultData:
 
         assert result == selected_data
         mock_cfw.select_data_by_column_names.assert_called_once_with(
-            mock_cfw.data, selected_feature_names, column_ordering=None
+            mock_cfw.data, selected_feature_names, column_ordering=None, request_feature_order=None
         )
 
     def test_get_result_data_downloads_from_flight_server_when_location_provided(self) -> None:
@@ -328,7 +328,7 @@ class TestDataLifecycleManagerGetResultData:
             mock_flight_server.download_table.assert_called_once_with(location, str(mock_cfw.uuid))
             mock_cfw.convert_flight_server_data_back.assert_called_once_with(downloaded_data, manager.transformer)
             mock_cfw.select_data_by_column_names.assert_called_once_with(
-                converted_data, selected_feature_names, column_ordering=None
+                converted_data, selected_feature_names, column_ordering=None, request_feature_order=None
             )
             assert result == selected_data
 

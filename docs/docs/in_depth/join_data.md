@@ -81,16 +81,21 @@ engine and does not support joins.
 
 Cross-backend caveats to be aware of:
 
--   **`direction='nearest'`** is supported on `pandas`, `polars`, `pyarrow`, and `python_dict`. The
-    SQL/Spark backends (`duckdb`, `sqlite`, `spark`) raise `ValueError` for `nearest`, as there is
-    no clean SQL form.
+-   **`direction='nearest'`** is supported on `pandas`, `polars`, and `python_dict`. `pyarrow` and the
+    SQL/Spark backends (`duckdb`, `sqlite`, `spark`) raise `ValueError` for `nearest`: Acero's
+    `join_asof` and the SQL forms express only a directional (forward/backward) match.
 -   **`tolerance`** accepts `float | int | timedelta`. A `timedelta` tolerance is forwarded natively
-    by `pandas`/`polars`/`pyarrow`, but the SQL/Spark backends (`duckdb`, `sqlite`, `spark`) cannot
-    derive a numeric tolerance from a `timedelta` without knowing the time column's storage and will
-    raise `ValueError`; provide a numeric tolerance (e.g. epoch seconds matching the time column).
-    This is enforced inside the merge engine at run time, not at `Link.asof(...)` construction.
+    only by `pandas`/`polars`/`python_dict`. `pyarrow` and the SQL/Spark backends (`duckdb`, `sqlite`,
+    `spark`) cannot derive a numeric tolerance from a `timedelta` and raise `ValueError`; provide a
+    numeric tolerance (e.g. epoch seconds matching the time column). This is enforced inside the merge
+    engine at run time, not at `Link.asof(...)` construction.
+-   **`pyarrow` is the most restrictive as-of backend.** Backed by Acero's `Table.join_asof`, it
+    rejects `direction='nearest'`, requires an *integer* `tolerance` (an integer-valued float such as
+    `5.0` is accepted, `5.5` is not; `timedelta` is rejected), and rejects `allow_exact_matches=False`
+    (Acero's match range always includes the exact-time row). Treat it like the SQL backends
+    (directional match, numeric tolerance), not like `pandas`/`polars`.
 -   **Overlapping non-key columns.** If the left and right frames share a column name other than the
-    by-keys/time columns, `pandas`/`pyarrow` keep both with `_x`/`_y` suffixes, whereas the
+    by-keys/time columns, `pandas` keeps both with `_x`/`_y` suffixes, whereas `pyarrow` and the
     SQL/`polars`/`python_dict` backends keep the left column and drop the right one. Rename
     conflicting columns upstream if you need both.
 -   **Time-column dtype.** As-of time columns must be ordered (datetime, numeric, or timedelta). A
@@ -109,8 +114,8 @@ Cross-backend caveats to be aware of:
     [comparison contract](comparison-contract.md)).
 -   **Ties.** When two right rows share the identical boundary timestamp within a by-key, the chosen
     row is backend-defined (each engine applies its own internal tie rule). `python_dict`,
-    `sqlite`, and `spark` resolve ties deterministically (smallest surviving right column values
-    win); the other backends follow their native `merge_asof`/`ASOF JOIN` behavior. Do not rely on
+    `duckdb`, `sqlite`, and `spark` resolve ties deterministically (smallest surviving right column
+    values win); the other backends follow their native `merge_asof` behavior. Do not rely on
     a specific tied row being selected across backends.
 
 #### Link

@@ -114,6 +114,189 @@ class IsolatedConcreteAgg(IsolatedAbstractAggBase):
         return data
 
 
+# --- Issue #646 diagnostic-message regression fixtures -------------------------
+
+# Finding A: scope narrows the abstract hierarchy away; the frameworks are available.
+SCOPE_MISMATCH_FEATURE = "scope_mismatch_abstract_test_646"
+
+# Finding B: a concrete subclass matched but rejected the framework via capability hook.
+CAPABILITY_SHADOW_FEATURE = "capability_shadowed_abstract_test_646"
+
+
+class ScopeMismatchUnrelatedFG(FeatureGroup):
+    """Unrelated feature group used only as a scope target; never matches the feature."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> bool:
+        return False
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        return None
+
+
+class ScopeMismatchAbstractBase(FeatureGroup):
+    """Abstract base matching ``SCOPE_MISMATCH_FEATURE``; uninstantiable via abstract hook."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> bool:
+        name = str(feature_name) if isinstance(feature_name, FeatureName) else feature_name
+        return name == SCOPE_MISMATCH_FEATURE
+
+    @classmethod
+    @abstractmethod
+    def _scope_hook(cls, data: Any) -> Any:
+        """Abstract hook that makes this base uninstantiable."""
+        ...
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        return None
+
+
+class ScopeMismatchConcrete(ScopeMismatchAbstractBase):
+    """Concrete subclass declaring an AVAILABLE framework (``MockComputeFramework``).
+
+    A scope pinned to ``ScopeMismatchUnrelatedFG`` filters this subclass out, so the
+    hierarchy is narrowed away by SCOPE, not by a missing/unavailable framework.
+    """
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {MockComputeFramework}
+
+    @classmethod
+    def _scope_hook(cls, data: Any) -> Any:
+        return data
+
+
+class CapabilityShadowAbstractBase(FeatureGroup):
+    """Abstract base matching ``CAPABILITY_SHADOW_FEATURE``; uninstantiable via abstract hook."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> bool:
+        name = str(feature_name) if isinstance(feature_name, FeatureName) else feature_name
+        return name == CAPABILITY_SHADOW_FEATURE
+
+    @classmethod
+    @abstractmethod
+    def _capability_hook(cls, data: Any) -> Any:
+        """Abstract hook that makes this base uninstantiable."""
+        ...
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        return None
+
+
+class CapabilityShadowConcrete(CapabilityShadowAbstractBase):
+    """Concrete subclass whose declared framework IS available but is rejected by the
+    capability hook: ``supports_compute_framework`` returns False. This is a capability
+    rejection, NOT a missing/unavailable framework.
+    """
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {MockComputeFramework}
+
+    @classmethod
+    def supports_compute_framework(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        compute_framework: type[ComputeFramework],
+    ) -> bool:
+        return False
+
+    @classmethod
+    def _capability_hook(cls, data: Any) -> Any:
+        return data
+
+
+class TestAbstractOnlyMessageCorrectness:
+    """Issue #646 regression: the abstract-only diagnostic must not shadow the real reason.
+
+    The abstract skip is recorded BEFORE the domain/scope filters and BEFORE the
+    capability-rejection check, so two adjacent failure modes currently emit the
+    factually wrong 'require compute framework(s) [...], none of which are available
+    or enabled' message even though the frameworks ARE available.
+    """
+
+    def test_scope_mismatch_not_reported_as_missing_framework(self) -> None:
+        """Finding A: scoping the request to an unrelated feature group narrows the
+        abstract hierarchy away. The concrete subclass declares an AVAILABLE framework,
+        so the real reason is the scope mismatch, NOT a missing framework. The error
+        must not falsely claim the frameworks are 'none of which are available or enabled'.
+        """
+        feature = Feature(SCOPE_MISMATCH_FEATURE, feature_group=ScopeMismatchUnrelatedFG)
+
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            ScopeMismatchAbstractBase: {MockComputeFramework},
+            ScopeMismatchConcrete: {MockComputeFramework},
+            ScopeMismatchUnrelatedFG: {MockComputeFramework},
+        }
+
+        with pytest.raises(ValueError) as exc_info:
+            IdentifyFeatureGroupClass(
+                feature=feature,
+                accessible_plugins=accessible_plugins,
+                links=None,
+                data_access_collection=None,
+            )
+
+        error_message = str(exc_info.value)
+
+        assert "none of which are available or enabled" not in error_message, (
+            f"Scope mismatch must not be misreported as a missing-framework error; the frameworks "
+            f"ARE available and the real reason is the scope narrowing, but got: {error_message}"
+        )
+
+    def test_capability_rejection_not_shadowed_by_abstract_only(self) -> None:
+        """Finding B: a concrete subclass matched criteria/domain/scope but its available
+        framework was rejected by ``supports_compute_framework`` (a capability rejection).
+        The user must get the capability-rejection message, NOT the abstract-only message
+        that wrongly claims the framework is 'none of which are available or enabled'.
+        """
+        feature = Feature(CAPABILITY_SHADOW_FEATURE)
+
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            CapabilityShadowAbstractBase: {MockComputeFramework},
+            CapabilityShadowConcrete: {MockComputeFramework},
+        }
+
+        with pytest.raises(ValueError) as exc_info:
+            IdentifyFeatureGroupClass(
+                feature=feature,
+                accessible_plugins=accessible_plugins,
+                links=None,
+                data_access_collection=None,
+            )
+
+        error_message = str(exc_info.value)
+        lowered = error_message.lower()
+
+        assert "none of which are available or enabled" not in error_message, (
+            f"A capability rejection must not be shadowed by the abstract-only message; the "
+            f"framework IS available and was rejected by supports_compute_framework, but got: {error_message}"
+        )
+        assert "supports_compute_framework" in error_message or "unsupported compute framework" in lowered, (
+            f"Error should be the capability-rejection message (mentioning 'supports_compute_framework' "
+            f"or 'Unsupported compute framework'), but got: {error_message}"
+        )
+
+
 class TestAbstractFeatureGroupNotSelectedByResolution:
     """Unit-level regression: an abstract FeatureGroup must not win resolution."""
 

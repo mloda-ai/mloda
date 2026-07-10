@@ -80,15 +80,15 @@ class IdentifyFeatureGroupClass:
             if not self._filter_feature_group_by_criteria(feature_group, feature, data_access_collection):
                 continue
 
-            # Abstract bases can match a name but cannot be instantiated; never let one win.
-            if inspect.isabstract(feature_group):
-                self._abstract_matched_feature_groups.add(feature_group)
-                continue
-
             if not self._filter_feature_group_by_domain(feature_group, feature):
                 continue
 
             if not self._filter_feature_group_by_scope(feature_group, feature):
+                continue
+
+            # Abstract bases can match name+domain+scope but cannot be instantiated; never let one win.
+            if inspect.isabstract(feature_group):
+                self._abstract_matched_feature_groups.add(feature_group)
                 continue
 
             self._criteria_matched_feature_groups.add(feature_group)
@@ -301,7 +301,7 @@ class IdentifyFeatureGroupClass:
         return (
             f"No feature groups found for feature name: '{feature_name}'. "
             f"Its concrete implementations require compute framework(s) {framework_names}, "
-            f"none of which are available or enabled."
+            f"none of which are available or enabled for this run."
         )
 
     def _build_no_feature_group_error(
@@ -309,17 +309,18 @@ class IdentifyFeatureGroupClass:
     ) -> str:
         scope_callout = _scope_callout(feature)
 
-        abstract_only_message = self._abstract_only_message(feature, accessible_plugins)
-        if abstract_only_message is not None:
-            if scope_callout:
-                return f"{abstract_only_message} {scope_callout}"
-            return abstract_only_message
-
+        # Capability rejections are concrete and specific; prefer them over the abstract-only fallback.
         capability_message = self._capability_rejection_message(feature)
         if capability_message is not None:
             if scope_callout:
                 return f"{capability_message} {scope_callout}"
             return capability_message
+
+        abstract_only_message = self._abstract_only_message(feature, accessible_plugins)
+        if abstract_only_message is not None:
+            if scope_callout:
+                return f"{abstract_only_message} {scope_callout}"
+            return abstract_only_message
 
         feature_name = str(feature.name)
         msg = f"No feature groups found for feature name: '{feature_name}'."

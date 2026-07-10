@@ -39,11 +39,10 @@ def is_columnar(data: Any) -> bool:
 
 def validate_columnar_dict(data: dict[str, Any]) -> None:
     """Raise ValueError unless every value is a list and all value-lists share one length."""
-    lengths = set()
     for key, column in data.items():
         if not isinstance(column, list):
             raise ValueError(f"Expected list column values, but column {key!r} is {type(column)}")
-        lengths.add(len(column))
+    lengths = {len(column) for column in data.values()}
     if len(lengths) > 1:
         raise ValueError(f"Inconsistent column lengths: {sorted(lengths)}.")
 

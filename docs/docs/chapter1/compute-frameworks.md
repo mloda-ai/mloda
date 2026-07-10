@@ -12,7 +12,7 @@ The compute framework concept provides significant flexibility and enables a var
 -   Testing: Easily compare different compute technologies or frameworks.
 -   Migrations: Move from one environment to another (e.g., local to cloud or db to other db) without changing the underlying feature definitions.
 
-This flexibility is one of mloda’s key advantages, allowing users to decouple feature definitions from specific computation technologies—something that traditional feature stores don’t easily offer.
+This flexibility is one of mloda’s key advantages, allowing users to decouple feature definitions from specific computation technologies, something that traditional feature stores don’t easily offer.
 
 #### 2. Balancing Flexibility and Complexity
 

@@ -7,16 +7,17 @@ import pytest
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils import (
     columnar_to_rows,
     homogenize_rows,
+    is_columnar,
     rows_to_columnar,
+    validate_columnar_dict,
 )
 
 
 class TestColumnarToRows:
-    def test_list_input_passes_through_by_identity(self) -> None:
-        """A row-wise list input is returned unchanged, as the same object."""
-        rows: list[dict[str, Any]] = [{"a": 1}, {"a": 2}]
-        result = columnar_to_rows(rows)
-        assert result is rows
+    def test_list_input_raises(self) -> None:
+        """Strict dict-only: a row-wise list is no longer passed through."""
+        with pytest.raises(ValueError):
+            columnar_to_rows([{"a": 1}])  # type: ignore[arg-type]
 
     def test_columnar_dict_pivots_to_rows(self) -> None:
         """A columnar dict pivots into a list of row dicts."""
@@ -114,3 +115,45 @@ class TestHomogenizeRows:
         """Homogenized mixed-key rows compose with ``rows_to_columnar`` into a columnar dict."""
         rows: list[dict[str, Any]] = [{"a": 1}, {"b": 2}]
         assert rows_to_columnar(homogenize_rows(rows)) == {"a": [1, None], "b": [None, 2]}
+
+
+class TestIsColumnar:
+    def test_equal_length_list_columns_is_true(self) -> None:
+        assert is_columnar({"a": [1, 2], "b": [3, 4]}) is True
+
+    def test_empty_dict_is_true(self) -> None:
+        """The schema-less ``{}`` counts as columnar."""
+        assert is_columnar({}) is True
+
+    def test_zero_row_dict_is_true(self) -> None:
+        assert is_columnar({"a": []}) is True
+
+    def test_ragged_column_lengths_is_false(self) -> None:
+        assert is_columnar({"a": [1, 2], "b": [1]}) is False
+
+    def test_non_list_value_is_false(self) -> None:
+        assert is_columnar({"a": 5}) is False
+
+    def test_tuple_value_is_false(self) -> None:
+        """A tuple column is not a list and is not columnar."""
+        assert is_columnar({"a": (1, 2)}) is False
+
+    @pytest.mark.parametrize("data", [None, "text", 5, [{"a": 1}]])
+    def test_non_dict_input_is_false(self, data: Any) -> None:
+        assert is_columnar(data) is False
+
+
+class TestValidateColumnarDict:
+    def test_valid_dict_does_not_raise(self) -> None:
+        validate_columnar_dict({"a": [1], "b": [2]})
+
+    def test_empty_dict_does_not_raise(self) -> None:
+        validate_columnar_dict({})
+
+    def test_ragged_column_lengths_raise(self) -> None:
+        with pytest.raises(ValueError):
+            validate_columnar_dict({"a": [1, 2], "b": [1]})
+
+    def test_non_list_value_raises(self) -> None:
+        with pytest.raises(ValueError):
+            validate_columnar_dict({"a": 5})

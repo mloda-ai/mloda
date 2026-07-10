@@ -159,6 +159,22 @@ class TestPythonDictFramework:
         assert framework.filter_engine() == PythonDictFilterEngine
 
 
+class TestFrameworkColumnarValidationAgreesWithHelper:
+    def test_validate_native_data_and_validate_columnar_dict_agree_on_ragged_dict(self) -> None:
+        """The framework's columnar validation and the utils validator reject the same ragged dict."""
+        from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils import (
+            validate_columnar_dict,
+        )
+
+        ragged: dict[str, Any] = {"a": [1, 2], "b": [1]}
+        framework = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+        with pytest.raises(ValueError):
+            framework.validate_native_data(ragged)
+        with pytest.raises(ValueError):
+            validate_columnar_dict(ragged)
+
+
 class TestPythonDictDtypeExtraction(DtypeExtractionTestMixin):
     """Test PythonDictFramework._extract_column_dtype using shared mixin."""
 

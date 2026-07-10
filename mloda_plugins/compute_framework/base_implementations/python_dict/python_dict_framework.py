@@ -16,7 +16,10 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_mask_engine import (
     PythonDictMaskEngine,
 )
-from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils import rows_to_columnar
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils import (
+    rows_to_columnar,
+    validate_columnar_dict,
+)
 
 
 class PythonDictFramework(ComputeFramework):
@@ -118,21 +121,8 @@ class PythonDictFramework(ComputeFramework):
 
     @staticmethod
     def _validate_columnar_dict(data: dict[str, Any]) -> None:
-        """Enforce the columnar contract on a dict: every value is a list and all value-lists
-        share one length. ``{}`` is schema-less and always valid. Shared by ``transform`` and
-        ``validate_native_data`` so both agree on what a valid columnar frame is.
-        """
-        if not data:
-            return
-
-        if not all(isinstance(v, list) for v in data.values()):
-            raise ValueError(
-                f"Columnar dict values must all be lists (rows must arrive as a list of dicts). Got: {data}"
-            )
-
-        lengths = {len(v) for v in data.values()}
-        if len(lengths) > 1:
-            raise ValueError(f"All columns must have the same length. Got column lengths {lengths}.")
+        """Delegate to the shared ``validate_columnar_dict``, the single source of the columnar contract."""
+        validate_columnar_dict(data)
 
     def validate_native_data(self, data: Any) -> None:
         """Enforce the columnar contract when a dict result bypasses ``transform``.

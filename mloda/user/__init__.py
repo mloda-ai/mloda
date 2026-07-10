@@ -68,6 +68,14 @@ _LAZY_COMPUTE_FRAMEWORKS: dict[str, str] = {
     "IcebergFramework": "mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework",
 }
 
+# Lazy python_dict helper exports (same PEP 562 contract as the framework classes).
+_LAZY_PYTHON_DICT_UTILS: dict[str, str] = {
+    "columnar_to_rows": "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils",
+    "homogenize_rows": "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils",
+    "is_columnar": "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils",
+    "rows_to_columnar": "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils",
+}
+
 if TYPE_CHECKING:
     # Static re-exports for mypy/tooling; not imported at runtime.
     from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import (
@@ -85,6 +93,12 @@ if TYPE_CHECKING:
     from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
         PythonDictFramework as PythonDictFramework,
     )
+    from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils import (
+        columnar_to_rows as columnar_to_rows,
+        homogenize_rows as homogenize_rows,
+        is_columnar as is_columnar,
+        rows_to_columnar as rows_to_columnar,
+    )
     from mloda_plugins.compute_framework.base_implementations.spark.spark_framework import (
         SparkFramework as SparkFramework,
     )
@@ -94,8 +108,8 @@ if TYPE_CHECKING:
 
 
 def __getattr__(name: str) -> Any:
-    # PEP 562 lazy resolution of optional compute-framework classes.
-    module_path = _LAZY_COMPUTE_FRAMEWORKS.get(name)
+    # PEP 562 lazy resolution of optional compute-framework classes and python_dict helpers.
+    module_path = _LAZY_COMPUTE_FRAMEWORKS.get(name) or _LAZY_PYTHON_DICT_UTILS.get(name)
     if module_path is not None:
         module = importlib.import_module(module_path)
         return getattr(module, name)
@@ -103,8 +117,8 @@ def __getattr__(name: str) -> Any:
 
 
 def __dir__() -> list[str]:
-    # Surface the lazy framework names for REPL/IDE completion.
-    return sorted(set(globals()) | _LAZY_COMPUTE_FRAMEWORKS.keys())
+    # Surface the lazy names for REPL/IDE completion.
+    return sorted(set(globals()) | _LAZY_COMPUTE_FRAMEWORKS.keys() | _LAZY_PYTHON_DICT_UTILS.keys())
 
 
 __all__ = [

@@ -28,16 +28,17 @@ def rows_to_columnar(rows: list[dict[str, Any]]) -> dict[str, list[Any]]:
     return {key: [row[key] for row in rows] for key in first_keys}
 
 
-def columnar_to_rows(data: dict[str, Any] | list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Pivot a columnar dict to row-wise ``list[dict]``. Row-wise list input is returned unchanged.
-
-    List input is returned by identity, not copied. It is trusted: its elements are not validated.
-    """
-    if isinstance(data, list):
-        return data
+def is_columnar(data: Any) -> bool:
+    """True iff data is a dict whose values are all lists of one shared length."""
     if not isinstance(data, dict):
-        raise ValueError(f"Expected columnar dict or list of dictionaries, got {type(data)}")
+        return False
+    if not all(isinstance(column, list) for column in data.values()):
+        return False
+    return len({len(column) for column in data.values()}) <= 1
 
+
+def validate_columnar_dict(data: dict[str, Any]) -> None:
+    """Raise ValueError unless every value is a list and all value-lists share one length."""
     lengths = set()
     for key, column in data.items():
         if not isinstance(column, list):
@@ -45,6 +46,14 @@ def columnar_to_rows(data: dict[str, Any] | list[dict[str, Any]]) -> list[dict[s
         lengths.add(len(column))
     if len(lengths) > 1:
         raise ValueError(f"Inconsistent column lengths: {sorted(lengths)}.")
+
+
+def columnar_to_rows(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Pivot a columnar dict to row-wise ``list[dict]``. Anything else raises ValueError."""
+    if not isinstance(data, dict):
+        raise ValueError(f"Expected columnar dict (row-wise lists are no longer accepted), got {type(data)}")
+
+    validate_columnar_dict(data)
 
     return [{key: data[key][i] for key in data} for i in range(row_count(data))]
 

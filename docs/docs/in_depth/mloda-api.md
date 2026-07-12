@@ -124,6 +124,26 @@ print(f"Candidates: {[fg.__name__ for fg in result.candidates]}")
 - **candidates** (`List[Type[FeatureGroup]]`): All FeatureGroups that matched before subclass filtering.
 - **error** (`str | None`): Error message if resolution failed (no match or multiple conflicts).
 
+##### explain and resolved_plan
+
+The runtime counterpart to `resolve_feature`: `mlodaAPI.explain(...)` builds the execution plan for a request without running it, and `session.resolved_plan()` returns the same records for a prepared session (before or after `run()`). Both return a `list[PlanStep]` in execution-plan order.
+
+``` python
+from mloda.user import mloda
+
+for step in mloda.explain(["sales__mean_aggr"], compute_frameworks=["PandasDataFrame"]):
+    print(step.step_kind, step.feature_names, step.feature_group_name, step.compute_framework_name)
+```
+
+**Returns:** `PlanStep` dataclass (frozen) with fields:
+
+- **step_kind** (`str`): `"compute"`, `"join"` or `"transform"`.
+- **feature_names** (`tuple[str, ...]`): Features computed by a compute step, empty otherwise.
+- **feature_group** (`type[FeatureGroup] | None`): Resolved FeatureGroup, the destination for a transform step, None for a join.
+- **compute_framework** (`type[ComputeFramework] | None`): Selected ComputeFramework, the destination for a transform step, the left side for a join.
+- **source_feature_group** / **source_compute_framework**: Origin of a transform step; the right side framework for a join.
+- **feature_group_name** / **compute_framework_name** (`str | None`): Class names of the above, None when unset.
+
 ##### get_feature_group_docs
 
 Get documentation for feature groups with optional filtering.

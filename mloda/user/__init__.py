@@ -4,6 +4,9 @@ from typing import TYPE_CHECKING, Any
 # API
 from mloda.core.api.request import mlodaAPI
 
+# Resolved execution plan
+from mloda.core.api.plan_info import PlanStep
+
 # Features
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_collection import Features
@@ -125,6 +128,8 @@ __all__ = [
     # API
     "mlodaAPI",
     "mloda",
+    # Resolved execution plan
+    "PlanStep",
     # Features
     "Feature",
     "Features",

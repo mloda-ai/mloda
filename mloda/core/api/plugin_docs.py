@@ -77,14 +77,11 @@ def get_feature_group_docs(
     before calling this function (e.g., via PluginLoader.all()).
 
     Returns gracefully on redefinition conflicts: instead of raising, each
-    conflicting class is documented as its most recently defined (live)
-    version. Reports "unavailable" as version for classes whose source
-    cannot be introspected.
+    conflicting class is documented as its most recently defined (live) version.
 
-    Degrades per field rather than failing the call: a name, description,
-    compute framework list, supported feature name set or prefix that raises
-    (or, where it feeds a filter, returns a non-str) falls back to a
-    base-class-derived value and logs a WARNING naming the class and field.
+    Degrades per field instead of failing the call: a read that raises, or that
+    returns a non-str where the field feeds a filter, falls back to a
+    base-class-derived value ("unavailable" for version).
 
     Args:
         name: Filter by feature group name (case-insensitive partial match).

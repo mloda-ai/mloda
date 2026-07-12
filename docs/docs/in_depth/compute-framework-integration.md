@@ -86,9 +86,17 @@ Two shapes, enforced at class definition; a half declaration fails at import:
 - Shape A: `key` names a `PROPERTY_MAPPING` key with an enumerable value
   space; `parametric_families` join the universe by family name.
 - Shape B (flattened multi-axis families): declare the universe explicitly
-  with a resolver, `SubtypeDeclaration(universe={"median", "sum"}, resolver=my_resolver)`.
+  with a resolver:
 
-Frameworks absent from `supported` keep the full universe. The derived
+``` python
+def resolve_window(feature_name: str, options: Options) -> str | None:
+    return options.get("window_function")
+
+SUBTYPES = SubtypeDeclaration(universe={"median", "sum"}, resolver=resolve_window)
+```
+
+`supported` is a sparse per-framework override: frameworks absent from it
+keep the full universe. The derived
 `supports_compute_framework` canonicalizes parametric instances (`ntile_2`
 becomes `ntile`) and gates declared subtypes by the declaration; undeclared
 subtypes and features without one stay open.

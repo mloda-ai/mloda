@@ -11,7 +11,7 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
-from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
+from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, split_frameworks_by_capability
 from mloda.provider import FeatureChainParserMixin, FeatureGroup, SubtypeDeclaration, property_spec
 
 
@@ -282,3 +282,37 @@ class TestFrameSpecLikeFamily:
 
         _, compute_frameworks = _identify(feature, accessible_plugins).get()
         assert compute_frameworks == {SubDeclMatchFwAlpha, SubDeclMatchFwBeta}
+
+
+def _subdeclm_raising_resolver(feature_name: str, options: Options) -> Optional[str]:
+    raise RuntimeError("subdeclm resolver boom")
+
+
+class SubDeclMatchRaisingResolverFG(FeatureGroup):
+    """Shape B family whose resolver raises; planning must degrade open."""
+
+    SUBTYPES = SubtypeDeclaration(
+        universe={"boom"},
+        resolver=_subdeclm_raising_resolver,
+        supported={SubDeclMatchFwBeta.get_class_name(): frozenset()},
+    )
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {SubDeclMatchFwAlpha, SubDeclMatchFwBeta}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        return None
+
+
+class TestSubDeclMatchPlanningNeverRaises:
+    """A raising resolver must not crash the planning path; the family degrades open."""
+
+    def test_raising_resolver_degrades_open_in_split(self) -> None:
+        supported, rejected = split_frameworks_by_capability(
+            [SubDeclMatchRaisingResolverFG],
+            FeatureName("subdeclm_raising_feature"),
+            Options(),
+        )
+        assert supported == {SubDeclMatchFwAlpha, SubDeclMatchFwBeta}
+        assert rejected == set()

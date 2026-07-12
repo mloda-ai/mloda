@@ -26,7 +26,7 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.index.index import Index
-from mloda.core.abstract_plugins.components.utils import get_all_subclasses
+from mloda.core.abstract_plugins.components.utils import get_all_subclasses, safe_field
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +91,8 @@ class FeatureGroup(ABC):
         "supported_subtypes",
         "resolve_subtype",
         "canonical_subtype",
+        "subtype_support_matrix",
+        "declared_option_values",
     )
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
@@ -185,8 +187,8 @@ class FeatureGroup(ABC):
     @final
     @classmethod
     def supported_subtypes(cls, compute_framework: type[ComputeFramework]) -> frozenset[str]:
-        """Subtypes supported on a compute framework; frameworks absent from the declaration
-        support the full universe."""
+        """Subtypes supported on a compute framework; ``supported`` is a sparse override, so
+        frameworks absent from it keep the full universe."""
         declaration = cls.SUBTYPES
         if declaration is None:
             return frozenset()
@@ -205,8 +207,12 @@ class FeatureGroup(ABC):
             return None
 
         name = str(feature_name)
-        if declaration.resolver is not None:
-            return declaration.resolver(name, options)
+        resolver = declaration.resolver
+        if resolver is not None:
+            resolved = safe_field(lambda: resolver(name, options), None)
+            if resolved is None:
+                return None
+            return str(resolved)
         if declaration.key is None:
             return None
 

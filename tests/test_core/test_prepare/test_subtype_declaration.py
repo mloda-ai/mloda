@@ -735,3 +735,183 @@ class TestDerivedAccessorOverrideRejection:
                 (SubDeclWindowBaseFG,),
                 {"supported_subtypes": classmethod(_subdecl_supported_override)},
             )
+
+
+def _subdecl_setitem(mapping: Any, key: str, value: Any) -> None:
+    mapping[key] = value
+
+
+def _subdecl_raising_resolver(feature_name: str, options: Options) -> Optional[str]:
+    raise RuntimeError("subdecl resolver boom")
+
+
+def _subdecl_int_resolver(feature_name: str, options: Options) -> Any:
+    return 7
+
+
+def _subdecl_matrix_override(cls: type[FeatureGroup]) -> dict[str, frozenset[str]]:
+    return {}
+
+
+def _subdecl_option_values_override(cls: type[FeatureGroup], key: str) -> frozenset[str]:
+    return frozenset()
+
+
+class SubDeclRaisingResolverFG(FeatureGroup):
+    """Shape B whose resolver raises; resolution must degrade instead of propagating."""
+
+    SUBTYPES = SubtypeDeclaration(
+        universe={"boom"},
+        resolver=_subdecl_raising_resolver,
+        supported={SubDeclFwBeta.get_class_name(): frozenset()},
+    )
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        return None
+
+
+class SubDeclIntResolverFG(FeatureGroup):
+    """Shape B whose resolver returns a raw int; the result must be stringified."""
+
+    SUBTYPES = SubtypeDeclaration(
+        universe={"7"},
+        resolver=_subdecl_int_resolver,
+        supported={SubDeclFwBeta.get_class_name(): frozenset()},
+    )
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        return None
+
+
+class TestSubDeclDeepImmutability:
+    """supported and parametric_families are read-only mappings; universe stays a frozenset."""
+
+    def test_shape_a_mappings_reject_item_assignment(self) -> None:
+        decl = SubtypeDeclaration(
+            key="subdecl_immut_key",
+            parametric_families={"fam": "A family"},
+            supported={"SubDeclFwBeta": {"fam"}},
+        )
+        with pytest.raises(TypeError):
+            _subdecl_setitem(decl.supported, "SubDeclFwAlpha", frozenset({"fam"}))
+        with pytest.raises(TypeError):
+            _subdecl_setitem(decl.parametric_families, "fam2", "Another family")
+
+    def test_shape_b_mappings_reject_item_assignment_and_universe_is_frozenset(self) -> None:
+        decl = SubtypeDeclaration(
+            universe={"lit"},
+            resolver=_subdecl_noop_resolver,
+            parametric_families={"fam": "A family"},
+            supported={"SubDeclFwBeta": {"lit", "fam"}},
+        )
+        with pytest.raises(TypeError):
+            _subdecl_setitem(decl.supported, "SubDeclFwAlpha", frozenset({"lit"}))
+        with pytest.raises(TypeError):
+            _subdecl_setitem(decl.parametric_families, "fam2", "Another family")
+        assert isinstance(decl.universe, frozenset)
+
+
+class TestSubDeclStringNormalizationOnIngest:
+    """Every declared value is stringified when the declaration is constructed."""
+
+    def test_numeric_universe_members_are_stringified(self) -> None:
+        raw_universe: set[Any] = {2, 7}
+        decl = SubtypeDeclaration(universe=raw_universe, resolver=_subdecl_noop_resolver)
+        assert decl.universe == frozenset({"2", "7"})
+
+    def test_numeric_supported_values_are_stringified(self) -> None:
+        raw_universe: set[Any] = {2, 7}
+        raw_supported: dict[str, set[Any]] = {"SubDeclSomeFw": {2}}
+        decl = SubtypeDeclaration(universe=raw_universe, resolver=_subdecl_noop_resolver, supported=raw_supported)
+        assert decl.supported == {"SubDeclSomeFw": frozenset({"2"})}
+
+    def test_numeric_parametric_family_keys_are_stringified(self) -> None:
+        raw_families: dict[Any, str] = {5: "Lag by N rows"}
+        decl = SubtypeDeclaration(universe={"lit"}, resolver=_subdecl_noop_resolver, parametric_families=raw_families)
+        assert decl.family_names() == frozenset({"5"})
+
+
+class TestSubDeclKeyedNumericValueSpace:
+    """A keyed declaration over a numeric allowed_values space is definable and gates."""
+
+    def test_numeric_value_space_family_is_definable_and_gates(self) -> None:
+        numeric_supported: dict[str, set[Any]] = {
+            SubDeclFwAlpha.get_class_name(): {2},
+            SubDeclFwBeta.get_class_name(): {7},
+        }
+
+        class SubDeclNumericBucketFG(FeatureGroup):
+            SUBTYPES = SubtypeDeclaration(key="subdecl_num_bucket", supported=numeric_supported)
+            PROPERTY_MAPPING = {
+                "subdecl_num_bucket": property_spec(
+                    "Bucket count.",
+                    strict=True,
+                    allowed_values={2: "two", 7: "seven"},
+                ),
+            }
+
+            @classmethod
+            def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+                return {SubDeclFwAlpha, SubDeclFwBeta}
+
+            def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+                return None
+
+        options = Options(group={"subdecl_num_bucket": 2})
+        gate = SubDeclNumericBucketFG.supports_compute_framework
+        assert gate("subdecl_num_feature", options, SubDeclFwAlpha) is True
+        assert gate("subdecl_num_feature", options, SubDeclFwBeta) is False
+
+
+class TestSubDeclEmptyUniverseRejection:
+    """Shape B must declare a non-empty universe."""
+
+    def test_empty_universe_raises(self) -> None:
+        empty_universe: set[str] = set()
+        with pytest.raises(ValueError):
+            SubtypeDeclaration(universe=empty_universe, resolver=_subdecl_noop_resolver)
+
+
+class TestSubDeclRaisingResolverDegrades:
+    """A raising resolver degrades to unresolved instead of propagating."""
+
+    def test_resolve_subtype_returns_none(self) -> None:
+        assert SubDeclRaisingResolverFG.resolve_subtype("subdecl_raising_feature", Options()) is None
+
+    def test_supports_compute_framework_stays_open(self) -> None:
+        gate = SubDeclRaisingResolverFG.supports_compute_framework
+        assert gate("subdecl_raising_feature", Options(), SubDeclFwBeta) is True
+
+
+class TestSubDeclResolverResultStringified:
+    """A non-string resolver result is stringified before gating."""
+
+    def test_resolve_subtype_stringifies_int_result(self) -> None:
+        assert SubDeclIntResolverFG.resolve_subtype("subdecl_int_feature", Options()) == "7"
+
+    def test_stringified_result_gates_by_supported_subtypes(self) -> None:
+        gate = SubDeclIntResolverFG.supports_compute_framework
+        assert gate("subdecl_int_feature", Options(), SubDeclFwBeta) is False
+        assert gate("subdecl_int_feature", Options(), SubDeclFwAlpha) is True
+
+
+class TestSubDeclExtendedOverrideRejection:
+    """subtype_support_matrix and declared_option_values are also rejected at class definition."""
+
+    def test_subtype_support_matrix_override_rejected(self) -> None:
+        with pytest.raises(ValueError) as exc_info:
+            type(
+                "SubDeclOverridesMatrixFG",
+                (FeatureGroup,),
+                {"subtype_support_matrix": classmethod(_subdecl_matrix_override)},
+            )
+        assert "SubDeclOverridesMatrixFG" in str(exc_info.value)
+
+    def test_declared_option_values_override_rejected(self) -> None:
+        with pytest.raises(ValueError) as exc_info:
+            type(
+                "SubDeclOverridesOptionValuesFG",
+                (FeatureGroup,),
+                {"declared_option_values": classmethod(_subdecl_option_values_override)},
+            )
+        assert "SubDeclOverridesOptionValuesFG" in str(exc_info.value)

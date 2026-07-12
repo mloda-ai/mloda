@@ -412,10 +412,10 @@ class TestSubDeclDocContractERaisingResolverDegrades:
         assert result.subtype is None
         assert result.subtype_family is None
 
-    def test_raising_resolver_degrades_capability_split(self) -> None:
+    def test_raising_resolver_degrades_capability_split_open(self) -> None:
         result = resolve_feature(R5_FEATURE)
         assert result.feature_group is SubDeclDocRaisingResolverFG
-        assert result.supported_compute_frameworks == []
+        assert result.supported_compute_frameworks == ["PythonDictFramework"]
         assert result.unsupported_compute_frameworks == []
 
 

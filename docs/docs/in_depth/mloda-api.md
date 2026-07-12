@@ -116,6 +116,8 @@ print(f"Candidates: {[fg.__name__ for fg in result.candidates]}")
 **Parameters:**
 
 - **feature_name** (`str`): The name of the feature to resolve.
+- **options** (`Options | None`, keyword-only): Options used for matching and for the compute framework capability split. Defaults to empty `Options`. Required to resolve FeatureGroups that gate matching on an option.
+- **plugin_collector** (`PluginCollector | None`, keyword-only): Restricts the FeatureGroups considered, and threads its `allow_redefinition` flag into deduplication.
 
 **Returns:** `ResolvedFeature` dataclass with fields:
 

@@ -52,10 +52,10 @@ is built for you.
 
 The debug inspector `resolve_feature(name)` reflects the hook too: its
 `ResolvedFeature` result carries `supported_compute_frameworks` and
-`unsupported_compute_frameworks` (evaluated under default options, since the
-inspector does not know the caller's `Options`), and a feature that matches a
-group but is unsupported on every installed framework resolves to
-`feature_group=None` with a capability error rather than appearing runnable.
+`unsupported_compute_frameworks` (evaluated under default options unless you
+pass `options=`, see [Discover Plugins](discover-plugins.md)), and a feature
+that matches a group but is unsupported on every installed framework resolves
+to `feature_group=None` with a capability error rather than appearing runnable.
 
 ### Empty Results
 

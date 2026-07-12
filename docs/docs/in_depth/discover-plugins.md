@@ -22,6 +22,27 @@ This is useful for:
 - Understanding which plugin handles a feature
 - Identifying conflicts when multiple FeatureGroups match
 
+### Option-Gated Feature Groups
+
+Matching and the compute framework split both run under the options you pass.
+A FeatureGroup whose `match_feature_group_criteria` or
+`supports_compute_framework` reads an option therefore only resolves when you
+supply it. Without `options` the evaluation uses empty `Options`, and such a
+group reports no candidates:
+
+``` python
+from mloda.steward import resolve_feature
+from mloda.user import Options, PluginLoader
+
+PluginLoader.all()
+
+# The group-by aggregation FeatureGroups in mloda-registry match only when partition_by is set.
+result = resolve_feature("sales__sum_aggr", options=Options(group={"partition_by": ["customer_id"]}))
+print(result.feature_group, result.supported_compute_frameworks)
+```
+
+`options` and `plugin_collector` are keyword-only, so pass them by name.
+
 ### Inspecting Candidates
 
 When resolution fails due to conflicts, check the candidates:

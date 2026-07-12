@@ -97,6 +97,45 @@ class mlodaAPI:
         return features
 
     @classmethod
+    def _prepare_and_run(
+        cls,
+        features: Features | list[Feature | str],
+        compute_frameworks: set[type[ComputeFramework]] | Optional[list[str]] = None,
+        links: Optional[set[Link]] = None,
+        data_access_collection: Optional[DataAccessCollection] = None,
+        parallelization_modes: set[ParallelizationMode] = {ParallelizationMode.SYNC},
+        flight_server: Optional[Any] = None,
+        function_extender: Optional[set[Extender]] = None,
+        global_filter: Optional[GlobalFilter] = None,
+        api_data: Optional[dict[str, dict[str, Any]]] = None,
+        plugin_collector: Optional[PluginCollector] = None,
+        copy_features: bool = True,
+        strict_type_enforcement: bool = False,
+        column_ordering: Optional[str] = None,
+    ) -> tuple[list[Any], "mlodaAPI"]:
+        """Single planning pass plus one execution: returns the results and the session that produced them."""
+        session = cls.prepare(
+            features,
+            compute_frameworks,
+            links,
+            data_access_collection,
+            global_filter,
+            api_data=api_data,
+            plugin_collector=plugin_collector,
+            copy_features=copy_features,
+            strict_type_enforcement=strict_type_enforcement,
+            column_ordering=column_ordering,
+            parallelization_modes=parallelization_modes,
+        )
+        results = session.run(
+            api_data=api_data,
+            parallelization_modes=parallelization_modes,
+            flight_server=flight_server,
+            function_extender=function_extender,
+        )
+        return results, session
+
+    @classmethod
     def run_all(
         cls,
         features: Features | list[Feature | str],
@@ -148,25 +187,62 @@ class mlodaAPI:
                 api_data={"UserQuery": {"row_index": [0], "query": ["hello"]}}
             )
         """
-        session = cls.prepare(
+        results, _session = cls._prepare_and_run(
             features,
             compute_frameworks,
             links,
             data_access_collection,
+            parallelization_modes,
+            flight_server,
+            function_extender,
             global_filter,
             api_data=api_data,
             plugin_collector=plugin_collector,
             copy_features=copy_features,
             strict_type_enforcement=strict_type_enforcement,
             column_ordering=column_ordering,
-            parallelization_modes=parallelization_modes,
         )
-        return session.run(
+        return results
+
+    @classmethod
+    def run_all_with_plan(
+        cls,
+        features: Features | list[Feature | str],
+        compute_frameworks: set[type[ComputeFramework]] | Optional[list[str]] = None,
+        links: Optional[set[Link]] = None,
+        data_access_collection: Optional[DataAccessCollection] = None,
+        parallelization_modes: set[ParallelizationMode] = {ParallelizationMode.SYNC},
+        flight_server: Optional[Any] = None,
+        function_extender: Optional[set[Extender]] = None,
+        global_filter: Optional[GlobalFilter] = None,
+        api_data: Optional[dict[str, dict[str, Any]]] = None,
+        plugin_collector: Optional[PluginCollector] = None,
+        copy_features: bool = True,
+        strict_type_enforcement: bool = False,
+        column_ordering: Optional[str] = None,
+    ) -> tuple[list[Any], list[PlanStep]]:
+        """Run feature computation in one step and return its results with the plan of that run.
+
+        Same parameters as ``run_all``. A single planning pass serves both values, so the plan is the
+        one that executed. ``explain`` instead re-resolves a fresh plan: it reports what a request
+        would resolve to, not what a run executed.
+        """
+        results, session = cls._prepare_and_run(
+            features,
+            compute_frameworks,
+            links,
+            data_access_collection,
+            parallelization_modes,
+            flight_server,
+            function_extender,
+            global_filter,
             api_data=api_data,
-            parallelization_modes=parallelization_modes,
-            flight_server=flight_server,
-            function_extender=function_extender,
+            plugin_collector=plugin_collector,
+            copy_features=copy_features,
+            strict_type_enforcement=strict_type_enforcement,
+            column_ordering=column_ordering,
         )
+        return results, session.resolved_plan()
 
     @classmethod
     def stream_all(

@@ -140,6 +140,14 @@ for step in mloda.explain(["sales__mean_aggr"], compute_frameworks=["PandasDataF
     print(step.step_kind, step.feature_names, step.feature_group_name, step.compute_framework_name)
 ```
 
+To get the plan of a run that actually happened, the two-phase route already suffices, with no extra API: `session = mloda.prepare(...)`, `results = session.run()`, `plan = session.resolved_plan()`.
+
+`mlodaAPI.run_all_with_plan(...)` is a convenience over exactly that: one call, `run_all`'s parameters and defaults, returning `(results, list[PlanStep])`. It saves remembering to pass `parallelization_modes={ParallelizationMode.SYNC}` to `prepare` to match what `run_all` would plan with. It is not a new capability. What it adds over `explain` is that `explain` re-resolves a fresh plan, while this returns the plan of the run that happened, from the same single planning pass.
+
+``` python
+results, plan = mloda.run_all_with_plan(["sales__mean_aggr"], compute_frameworks=["PandasDataFrame"])
+```
+
 **Returns:** `PlanStep` dataclass (frozen) with fields:
 
 - **step_kind** (`Literal["compute", "join", "transform"]`).

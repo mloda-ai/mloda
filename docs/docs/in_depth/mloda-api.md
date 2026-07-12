@@ -153,7 +153,9 @@ for step in mloda.explain(["sales__mean_aggr"], compute_frameworks=["PandasDataF
 **Returns:** `PlanStep` dataclass (frozen) with fields:
 
 - **step_kind** (`Literal["compute", "join", "transform"]`).
-- **feature_names** (`tuple[str, ...]`): Features computed by a compute step, empty otherwise. This includes engine-injected features (link index features, global-filter features), so it is not a clean "requested feature name -> FeatureGroup" map: the same index name can appear under two different FeatureGroups in one plan.
+- **feature_names** (`tuple[str, ...]`): Features computed by a compute step, empty otherwise. This includes engine-injected features (link index features, global-filter features); use the requested/injected split below to tell them apart.
+- **requested_feature_names** (`tuple[str, ...]`): The user-requested subset of `feature_names` on a compute step, empty for join and transform steps.
+- **injected_feature_names** (`tuple[str, ...]`): The engine-injected/dependency remainder of `feature_names` on a compute step, empty for join and transform steps.
 - **feature_group** (`type[FeatureGroup] | None`): Resolved FeatureGroup; the destination for a transform step; the link's declared left side for a join.
 - **compute_framework** (`type[ComputeFramework] | None`): Selected ComputeFramework; the destination for a transform step; the merge destination for a join.
 - **source_feature_group** / **source_compute_framework**: Origin of a transform step. For a join: the link's declared right side, and the framework merged in.

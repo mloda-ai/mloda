@@ -10,6 +10,10 @@ Contract under test:
   * Join steps are not blank records: ``feature_group``/``source_feature_group`` are the link's
     declared left/right feature groups, ``compute_framework`` is the merge destination framework
     and ``source_compute_framework`` the framework merged in, ``join_type`` the link's join type.
+  * ``PlanStep`` also carries ``requested_feature_names`` and ``injected_feature_names``, both
+    defaulting to ``()``. On compute steps they partition ``feature_names`` into the names the user
+    asked for (``initial_requested_data`` is True) and the names the engine injected (chained
+    sources, link index features). Join and transform steps keep both empty.
   * ``build_plan_steps`` raises ``ValueError`` on a step it does not know, instead of dropping it.
   * ``mlodaAPI.resolved_plan()`` returns ``list[PlanStep]`` on a prepared session, both before
     and after ``run()``, in execution-plan order, and matches the plan that actually executed.
@@ -324,6 +328,8 @@ class TestPlanStepDataclass:
             "source_feature_group",
             "source_compute_framework",
             "join_type",
+            "requested_feature_names",
+            "injected_feature_names",
         ]
 
     def test_join_type_defaults_to_none(self) -> None:
@@ -417,6 +423,42 @@ class TestPlanStepDataclass:
         outer = dataclasses.replace(inner, join_type="outer")
 
         assert inner != outer
+
+
+class TestPlanStepRequestedAndInjectedFields:
+    """PlanStep splits feature_names into user-requested and engine-injected names."""
+
+    @staticmethod
+    def _compute_step() -> PlanStep:
+        return PlanStep(
+            step_kind="compute",
+            feature_names=("plan_info_sales",),
+            feature_group=PlanInfoPandasSource,
+            compute_framework=PandasDataFrame,
+            source_feature_group=None,
+            source_compute_framework=None,
+        )
+
+    def test_requested_and_injected_default_to_empty_tuples(self) -> None:
+        """A caller constructing a PlanStep by hand must not need to pass either field."""
+        step = self._compute_step()
+
+        assert step.requested_feature_names == ()
+        assert step.injected_feature_names == ()
+
+        fields_by_name = {field.name: field for field in dataclasses.fields(PlanStep)}
+        assert fields_by_name["requested_feature_names"].default == ()
+        assert fields_by_name["injected_feature_names"].default == ()
+
+    def test_requested_and_injected_participate_in_equality(self) -> None:
+        """Two records that only differ in the requested/injected split must not compare equal."""
+        base = self._compute_step()
+        with_requested = dataclasses.replace(base, requested_feature_names=("plan_info_sales",))
+        with_injected = dataclasses.replace(base, injected_feature_names=("plan_info_sales",))
+
+        assert base != with_requested
+        assert base != with_injected
+        assert with_requested != with_injected
 
 
 # ---------------------------------------------------------------------------
@@ -788,6 +830,79 @@ class TestCrossFrameworkJoinStepMapping:
         assert kinds.index("join") < kinds.index("compute", kinds.index("join"))
         consumer_index = [step.feature_group for step in plan].index(PlanInfoCrossConsumer)
         assert kinds.index("join") < consumer_index
+
+
+# ---------------------------------------------------------------------------
+# requested vs engine-injected feature names
+# ---------------------------------------------------------------------------
+
+
+class TestRequestedAndInjectedForChainedFeature:
+    """Only the chained ``*__mean_aggr`` name was requested: the source it chains off is injected."""
+
+    def test_source_step_features_are_all_injected(self) -> None:
+        plan = _prepare_chained_session().resolved_plan()
+
+        source_step = next(step for step in plan if step.feature_group is PlanInfoPandasSource)
+
+        assert source_step.requested_feature_names == ()
+        assert source_step.injected_feature_names == source_step.feature_names
+        assert source_step.injected_feature_names == ("plan_info_sales",)
+
+    def test_aggregation_step_features_are_all_requested(self) -> None:
+        plan = _prepare_chained_session().resolved_plan()
+
+        aggregation_step = next(step for step in plan if step.feature_group is PandasAggregatedFeatureGroup)
+
+        assert aggregation_step.requested_feature_names == aggregation_step.feature_names
+        assert aggregation_step.requested_feature_names == ("plan_info_sales__mean_aggr",)
+        assert aggregation_step.injected_feature_names == ()
+
+
+class TestRequestedAndInjectedForJoinPlans:
+    """Join and transform steps carry no names; compute steps partition feature_names exactly."""
+
+    def test_join_and_transform_steps_keep_both_fields_empty(self) -> None:
+        plan = _prepare_cross_framework_join_session().resolved_plan()
+
+        non_compute_steps = [step for step in plan if step.step_kind != "compute"]
+        assert {step.step_kind for step in non_compute_steps} == {"join", "transform"}
+
+        for step in non_compute_steps:
+            assert step.requested_feature_names == ()
+            assert step.injected_feature_names == ()
+
+    def test_compute_steps_partition_feature_names_disjointly(self) -> None:
+        """requested and injected are disjoint, sorted, and their union is feature_names exactly."""
+        plans = [
+            _prepare_single_framework_join_session().resolved_plan(),
+            _prepare_cross_framework_join_session().resolved_plan(),
+        ]
+
+        for plan in plans:
+            for step in (step for step in plan if step.step_kind == "compute"):
+                requested = set(step.requested_feature_names)
+                injected = set(step.injected_feature_names)
+
+                assert requested.isdisjoint(injected)
+                assert tuple(sorted(requested | injected)) == step.feature_names
+                assert list(step.requested_feature_names) == sorted(requested)
+                assert list(step.injected_feature_names) == sorted(injected)
+
+    def test_link_index_feature_is_injected_not_requested(self) -> None:
+        """Only ``PlanInfoCrossConsumer`` was requested: the link's index feature on the source
+        compute step is engine-injected, and the consumer's own name is the requested one."""
+        plan = _prepare_cross_framework_join_session().resolved_plan()
+
+        left_step = next(step for step in plan if step.feature_group is PlanInfoCrossLeftPandas)
+        assert left_step.requested_feature_names == ()
+        assert "plan_info_xjid" in left_step.injected_feature_names
+        assert "plan_info_xjid" not in left_step.requested_feature_names
+        assert left_step.injected_feature_names == left_step.feature_names
+
+        consumer_step = next(step for step in plan if step.feature_group is PlanInfoCrossConsumer)
+        assert consumer_step.requested_feature_names == ("PlanInfoCrossConsumer",)
+        assert consumer_step.injected_feature_names == ()
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import logging
 from typing import Any, ClassVar, Callable, Iterable, Optional, final
 from abc import ABC
@@ -10,7 +11,10 @@ from mloda.core.abstract_plugins.components.data_types import DataType
 
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
-from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
+    CHAIN_SEPARATOR,
+    FeatureChainParser,
+)
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
@@ -77,9 +81,68 @@ class FeatureGroup(ABC):
     See ``docs/in_depth/property-mapping.md`` for the full specification.
     """
 
+    SUBTYPE_KEY: ClassVar[Optional[str]] = None
+    """Declares the subtype dimension of a feature group family.
+
+    Shape A: name a declared ``PROPERTY_MAPPING`` key with an enumerable value space.
+    Shape B: keep ``None`` and override BOTH ``subtype_universe()`` and ``resolve_subtype()``
+    for flattened multi-axis families.
+    """
+
+    PARAMETRIC_SUBTYPE_FAMILIES: ClassVar[Optional[dict[str, str]]] = None
+    """Maps parametric subtype family names (e.g. ``ntile`` for ``ntile_2``) to descriptions.
+
+    Legal only alongside a subtype dimension (Shape A ``SUBTYPE_KEY`` or a Shape B
+    ``subtype_universe()`` override); family names join the subtype universe.
+    """
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         FeatureChainParser.validate_property_mapping_defaults(cls.__name__, cls.PROPERTY_MAPPING)
+        cls._validate_subtype_declaration()
+
+    @classmethod
+    def _overrides(cls, method_name: str) -> bool:
+        """True when cls replaces the FeatureGroup base classmethod."""
+        return getattr(cls, method_name).__func__ is not getattr(FeatureGroup, method_name).__func__
+
+    @classmethod
+    def _validate_subtype_declaration(cls) -> None:
+        """Enforce the two legal subtype declaration shapes at class-definition time."""
+        universe_overridden = cls._overrides("subtype_universe")
+
+        if cls.SUBTYPE_KEY is None:
+            if universe_overridden and not cls._overrides("resolve_subtype"):
+                raise ValueError(
+                    f"{cls.__name__} overrides subtype_universe() without SUBTYPE_KEY; "
+                    f"it must also override resolve_subtype()."
+                )
+            if cls.PARAMETRIC_SUBTYPE_FAMILIES and not universe_overridden:
+                raise ValueError(
+                    f"{cls.__name__} declares PARAMETRIC_SUBTYPE_FAMILIES without a subtype dimension; "
+                    f"set SUBTYPE_KEY or override subtype_universe() and resolve_subtype()."
+                )
+            return
+
+        if cls.SUBTYPE_KEY not in cls.declared_option_keys():
+            raise ValueError(
+                f"{cls.__name__} declares SUBTYPE_KEY '{cls.SUBTYPE_KEY}', "
+                f"which is not a declared PROPERTY_MAPPING key."
+            )
+
+        declared_values = cls.declared_option_values(cls.SUBTYPE_KEY)
+        if not declared_values and not universe_overridden:
+            raise ValueError(
+                f"{cls.__name__} declares SUBTYPE_KEY '{cls.SUBTYPE_KEY}' without an enumerable value space; "
+                f"declare allowed values or override subtype_universe()."
+            )
+
+        colliding = frozenset(cls.PARAMETRIC_SUBTYPE_FAMILIES or ()) & declared_values
+        if colliding:
+            raise ValueError(
+                f"{cls.__name__} declares parametric subtype families {sorted(colliding)} that collide "
+                f"with declared values of SUBTYPE_KEY '{cls.SUBTYPE_KEY}'."
+            )
 
     @classmethod
     def declared_option_keys(cls) -> frozenset[str]:
@@ -87,6 +150,90 @@ class FeatureGroup(ABC):
         if cls.PROPERTY_MAPPING is None:
             return frozenset()
         return frozenset(str(key) for key in cls.PROPERTY_MAPPING)
+
+    @classmethod
+    def declared_option_values(cls, key: str) -> frozenset[str]:
+        """Return the enumerable value space declared for a ``PROPERTY_MAPPING`` key.
+
+        Predicate-only keys and absent keys have an empty value space; values are stringified.
+        """
+        if cls.PROPERTY_MAPPING is None or key not in cls.PROPERTY_MAPPING:
+            return frozenset()
+        extracted = FeatureChainParser._extract_property_values(cls.PROPERTY_MAPPING[key])
+        if not isinstance(extracted, (dict, list, tuple, set, frozenset)):
+            return frozenset()
+        return frozenset(str(value) for value in extracted)
+
+    @classmethod
+    def subtype_universe(cls) -> frozenset[str]:
+        """Return every subtype this family declares: SUBTYPE_KEY values plus parametric family names."""
+        if cls.SUBTYPE_KEY is None:
+            return frozenset()
+        return cls.declared_option_values(cls.SUBTYPE_KEY) | frozenset(cls.PARAMETRIC_SUBTYPE_FAMILIES or ())
+
+    @classmethod
+    def supported_subtypes(cls, compute_framework: type[ComputeFramework]) -> frozenset[str]:
+        """Return the subtypes this class supports on a compute framework; defaults to the full universe."""
+        return cls.subtype_universe()
+
+    @classmethod
+    def resolve_subtype(cls, feature_name: FeatureName | str, options: Options) -> Optional[str]:
+        """Resolve the raw subtype of a concrete feature: name parsing first, then options; never raises."""
+        if cls.SUBTYPE_KEY is None:
+            return None
+
+        name = str(feature_name)
+        source, separator, _ = name.rpartition(CHAIN_SEPARATOR)
+        if separator and source:
+            patterns = [
+                pattern
+                for pattern in (getattr(cls, "PREFIX_PATTERN", None), getattr(cls, "SUFFIX_PATTERN", None))
+                if isinstance(pattern, str)
+            ]
+            if patterns:
+                parsed, _parsed_source = FeatureChainParser.parse_feature_name(name, patterns)
+                if parsed is not None:
+                    return parsed
+
+        value = options.get(cls.SUBTYPE_KEY)
+        if value is None:
+            return None
+        return str(value)
+
+    @classmethod
+    def canonical_subtype(cls, subtype: str) -> str:
+        """Collapse a parametric instance ``<family>_<digits>`` to its family name, else identity."""
+        stem, separator, tail = subtype.rpartition("_")
+        if separator and tail.isdigit() and stem in (cls.PARAMETRIC_SUBTYPE_FAMILIES or ()):
+            return stem
+        return subtype
+
+    @final
+    @classmethod
+    def subtype_support_matrix(cls) -> dict[str, frozenset[str]]:
+        """Audit surface: supported subtypes per declared compute framework.
+
+        Empty for abstract classes and families without a subtype dimension. Raises
+        ValueError when declared support exceeds the subtype universe.
+        """
+        if inspect.isabstract(cls):
+            return {}
+
+        universe = cls.subtype_universe()
+        if not universe:
+            return {}
+
+        matrix: dict[str, frozenset[str]] = {}
+        for compute_framework in cls.compute_framework_definition():
+            supported = cls.supported_subtypes(compute_framework)
+            overreach = supported - universe
+            if overreach:
+                raise ValueError(
+                    f"{cls.get_class_name()} declares supported subtypes {sorted(overreach)} on "
+                    f"{compute_framework.get_class_name()} that are outside its subtype universe."
+                )
+            matrix[compute_framework.get_class_name()] = supported
+        return matrix
 
     def __init__(self) -> None:
         pass
@@ -490,8 +637,24 @@ class FeatureGroup(ABC):
         the concrete feature, so it can reject an op on one backend while allowing
         others. If every candidate framework is rejected, the matcher surfaces a
         distinguishable error instead of a generic "no feature group" message.
+
+        The default derives the verdict from the subtype declaration: features whose
+        canonical subtype is declared are gated by ``supported_subtypes()``; everything
+        else (no subtype dimension, unresolved or undeclared subtype) stays open.
         """
-        return True
+        universe = cls.subtype_universe()
+        if not universe:
+            return True
+
+        subtype = cls.resolve_subtype(feature_name, options)
+        if subtype is None:
+            return True
+
+        canonical = cls.canonical_subtype(subtype)
+        if canonical not in universe:
+            return True
+
+        return canonical in cls.supported_subtypes(compute_framework)
 
     @final
     @classmethod

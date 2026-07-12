@@ -7,7 +7,8 @@ PluginRegistryCollisionError. mloda.steward exports PluginRegistry,
 list_registered, and the governance objects PluginPolicy, ApprovalStatus, and
 PluginPolicyViolationError. Every export is the identical object from its core
 module and is listed in the namespace's __all__. Governance objects are
-steward-only: mloda.user and mloda.provider gain nothing.
+steward-only: mloda.user and mloda.provider gain nothing. PlanStep, the resolved
+execution-plan record, is shared by mloda.user and mloda.steward.
 """
 
 import importlib
@@ -30,6 +31,7 @@ _SOURCE_MODULES: dict[str, str] = {
     "core_registry": "mloda.core.abstract_plugins.plugin_registry.plugin_registry",
     "plugin_docs": "mloda.core.api.plugin_docs",
     "core_policy": "mloda.core.abstract_plugins.plugin_registry.plugin_policy",
+    "plan_info": "mloda.core.api.plan_info",
 }
 
 
@@ -49,6 +51,9 @@ EXPORT_MATRIX: list[tuple[str, str, str]] = [
     ("steward", "PluginPolicy", "core_policy"),
     ("steward", "ApprovalStatus", "core_policy"),
     ("steward", "PluginPolicyViolationError", "core_policy"),
+    # Resolved execution plan (issue #647): the same PlanStep record for users and stewards.
+    ("user", "PlanStep", "plan_info"),
+    ("steward", "PlanStep", "plan_info"),
 ]
 
 _MATRIX_IDS = [f"{namespace}-{symbol}" for namespace, symbol, _source in EXPORT_MATRIX]

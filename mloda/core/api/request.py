@@ -6,6 +6,7 @@ from mloda.core.abstract_plugins.components.input_data.api.api_input_data_collec
 )
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.core.engine import Engine
+from mloda.core.api.plan_info import PlanStep, build_plan_steps
 from mloda.core.api.prepare.setup_compute_framework import SetupComputeFramework
 from mloda.core.prepare.accessible_plugins import filter_extenders_by_strict_mode
 from mloda.core.filter.global_filter import GlobalFilter
@@ -245,6 +246,57 @@ class mlodaAPI:
             column_ordering=column_ordering,
             parallelization_modes=parallelization_modes,
         )
+
+    @classmethod
+    def explain(
+        cls,
+        features: Features | list[Feature | str],
+        *,
+        compute_frameworks: set[type[ComputeFramework]] | Optional[list[str]] = None,
+        links: Optional[set[Link]] = None,
+        data_access_collection: Optional[DataAccessCollection] = None,
+        global_filter: Optional[GlobalFilter] = None,
+        api_data: Optional[dict[str, dict[str, Any]]] = None,
+        plugin_collector: Optional[PluginCollector] = None,
+        copy_features: bool = True,
+        strict_type_enforcement: bool = False,
+        column_ordering: Optional[str] = None,
+        parallelization_modes: Optional[set[ParallelizationMode]] = None,
+    ) -> list[PlanStep]:
+        """Resolve the execution plan without executing it.
+
+        Same as ``prepare(...).resolved_plan()``: no feature is computed. The plan is re-resolved
+        from scratch, so this answers "what would this request resolve to", not "what did a previous
+        ``run_all`` execute". To mirror a ``run_all`` resolution, pass the same
+        ``parallelization_modes``: ``run_all`` defaults to ``{ParallelizationMode.SYNC}`` while
+        ``prepare``/``explain`` default to None, and ``SetupComputeFramework`` filters compute
+        frameworks by mode.
+
+        Every parameter after ``features`` is keyword-only.
+        """
+        session = cls.prepare(
+            features,
+            compute_frameworks,
+            links,
+            data_access_collection,
+            global_filter,
+            api_data=api_data,
+            plugin_collector=plugin_collector,
+            copy_features=copy_features,
+            strict_type_enforcement=strict_type_enforcement,
+            column_ordering=column_ordering,
+            parallelization_modes=parallelization_modes,
+        )
+        return session.resolved_plan()
+
+    def resolved_plan(self) -> list[PlanStep]:
+        """Return the resolved execution plan of this session as ``PlanStep`` records.
+
+        Available after ``prepare()`` and unchanged by ``run()``.
+        """
+        if self.engine is None:
+            raise ValueError("Internal error: engine not initialized. This is likely a bug in mloda.")
+        return build_plan_steps(self.engine.execution_planner)
 
     def run(
         self,

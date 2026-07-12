@@ -73,6 +73,8 @@ def test_import_user_full() -> None:
         # Plugin discovery
         PluginLoader,
         PluginCollector,
+        # Resolved execution plan
+        PlanStep,
     )
 
     # mloda
@@ -103,6 +105,10 @@ def test_import_user_full() -> None:
     # Plugin discovery
     assert PluginLoader is not None
     assert PluginCollector is not None
+    # Resolved execution plan
+    assert PlanStep is not None
+    assert callable(mlodaAPI.explain)
+    assert hasattr(mlodaAPI, "resolved_plan")
 
 
 # =============================================================================
@@ -206,12 +212,16 @@ def test_import_steward_governance() -> None:
         # Function extenders (audit, monitoring, observability)
         Extender,
         ExtenderHook,
+        # Resolved execution plan
+        PlanStep,
     )
 
     # Plugin inspection
     assert FeatureGroupInfo is not None
     assert ComputeFrameworkInfo is not None
     assert ExtenderInfo is not None
+    # Resolved execution plan
+    assert PlanStep is not None
     # Documentation
     assert get_feature_group_docs is not None
     assert get_compute_framework_docs is not None

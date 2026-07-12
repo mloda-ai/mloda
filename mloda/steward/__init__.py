@@ -1,6 +1,9 @@
 # Plugin inspection/metadata
 from mloda.core.api.plugin_info import FeatureGroupInfo, ComputeFrameworkInfo, ExtenderInfo, ResolvedFeature
 
+# Resolved execution plan
+from mloda.core.api.plan_info import PlanStep
+
 # Documentation/discovery
 from mloda.core.api.plugin_docs import (
     get_feature_group_docs,
@@ -32,6 +35,8 @@ __all__ = [
     "ComputeFrameworkInfo",
     "ExtenderInfo",
     "ResolvedFeature",
+    # Resolved execution plan
+    "PlanStep",
     # Documentation
     "get_feature_group_docs",
     "get_compute_framework_docs",

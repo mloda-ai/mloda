@@ -82,19 +82,13 @@ class FeatureGroup(ABC):
     """
 
     SUBTYPE_KEY: ClassVar[Optional[str]] = None
-    """Declares the subtype dimension of a feature group family.
-
-    Shape A: name a declared ``PROPERTY_MAPPING`` key with an enumerable value space.
-    Shape B: keep ``None`` and override BOTH ``subtype_universe()`` and ``resolve_subtype()``
-    for flattened multi-axis families.
-    """
+    """Subtype dimension of the family. Shape A: name a ``PROPERTY_MAPPING`` key with an
+    enumerable value space. Shape B: keep ``None`` and override BOTH ``subtype_universe()``
+    and ``resolve_subtype()``."""
 
     PARAMETRIC_SUBTYPE_FAMILIES: ClassVar[Optional[dict[str, str]]] = None
-    """Maps parametric subtype family names (e.g. ``ntile`` for ``ntile_2``) to descriptions.
-
-    Legal only alongside a subtype dimension (Shape A ``SUBTYPE_KEY`` or a Shape B
-    ``subtype_universe()`` override); family names join the subtype universe.
-    """
+    """Parametric subtype family names (e.g. ``ntile`` for ``ntile_2``) mapped to descriptions;
+    they join the subtype universe. Legal only alongside a subtype dimension."""
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -160,10 +154,8 @@ class FeatureGroup(ABC):
 
     @classmethod
     def declared_option_values(cls, key: str) -> frozenset[str]:
-        """Return the enumerable value space declared for a ``PROPERTY_MAPPING`` key.
-
-        Predicate-only keys and absent keys have an empty value space; values are stringified.
-        """
+        """Return the stringified enumerable value space of a ``PROPERTY_MAPPING`` key;
+        predicate-only and absent keys yield an empty set."""
         if cls.PROPERTY_MAPPING is None or key not in cls.PROPERTY_MAPPING:
             return frozenset()
         extracted = FeatureChainParser._extract_property_values(cls.PROPERTY_MAPPING[key])
@@ -209,10 +201,8 @@ class FeatureGroup(ABC):
 
     @classmethod
     def canonical_subtype(cls, subtype: str) -> str:
-        """Collapse a parametric instance ``<family>_<digits>`` to its family name, else identity.
-
-        A declared universe member never collapses, even when it looks parametric.
-        """
+        """Collapse a parametric instance ``<family>_<digits>`` to its family name, else identity;
+        a declared universe member never collapses."""
         if subtype in cls.subtype_universe():
             return subtype
         stem, separator, tail = subtype.rpartition("_")
@@ -223,12 +213,9 @@ class FeatureGroup(ABC):
     @final
     @classmethod
     def subtype_support_matrix(cls) -> dict[str, frozenset[str]]:
-        """Audit surface: supported subtypes per declared compute framework.
-
-        Empty for abstract classes and families without a subtype dimension. Raises
-        ValueError when declared support exceeds the subtype universe, or when the
-        class hand-overrides supports_compute_framework.
-        """
+        """Supported subtypes per declared compute framework; empty for abstract classes and
+        families without a subtype dimension. Raises ValueError on support outside the
+        universe or a hand-overridden supports_compute_framework."""
         if inspect.isabstract(cls):
             return {}
 
@@ -657,9 +644,8 @@ class FeatureGroup(ABC):
         others. If every candidate framework is rejected, the matcher surfaces a
         distinguishable error instead of a generic "no feature group" message.
 
-        The default derives the verdict from the subtype declaration: features whose
-        canonical subtype is declared are gated by ``supported_subtypes()``; everything
-        else (no subtype dimension, unresolved or undeclared subtype) stays open.
+        The default gates a declared canonical subtype by ``supported_subtypes()``;
+        everything else (no subtype dimension, unresolved or undeclared subtype) stays open.
         """
         universe = cls.subtype_universe()
         if not universe:

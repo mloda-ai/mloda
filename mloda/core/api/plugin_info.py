@@ -20,10 +20,9 @@ class FeatureGroupInfo:
     subtypes: list[str] = field(default_factory=list)
     # Sorted parametric subtype family names (e.g. "ntile" covering "ntile_2").
     parametric_subtypes: list[str] = field(default_factory=list)
-    # Sorted supported subtypes per framework from compute_framework_definition(): the declared rule, or every
-    # loaded framework when the family declares no compute_framework_rule. Empty for abstract classes.
+    # Sorted supported subtypes per framework from compute_framework_definition(); empty for abstract classes.
     subtype_support: dict[str, list[str]] = field(default_factory=dict)
-    # Message when the capability declaration is invalid (misdeclared support), None for a legitimately empty matrix.
+    # Message when the capability declaration is invalid, None for a legitimately empty matrix.
     subtype_error: Optional[str] = None
 
 

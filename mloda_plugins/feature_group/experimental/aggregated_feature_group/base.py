@@ -85,7 +85,7 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     # Option key for aggregation type
     AGGREGATION_TYPE = "aggregation_type"
 
-    # The aggregation type is this family's subtype discriminator.
+    # Subtype discriminator of this family.
     SUBTYPE_KEY = AGGREGATION_TYPE
 
     # Define supported aggregation types

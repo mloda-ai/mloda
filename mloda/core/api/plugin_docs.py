@@ -53,11 +53,7 @@ def _safe_version(fg_class: type[FeatureGroup]) -> str:
 
 
 def _subtype_support_or_error(fg_class: type[FeatureGroup]) -> tuple[dict[str, list[str]], Optional[str]]:
-    """Return the sorted subtype support matrix, degrading a raising class to ({}, message).
-
-    safe_field cannot carry the failure message, and a misdeclared capability (ValueError
-    from subtype_support_matrix) must land in subtype_error instead of being swallowed.
-    """
+    """Return the sorted subtype support matrix, degrading a raising class to ({}, message)."""
     try:
         matrix = fg_class.subtype_support_matrix()
     except Exception as exc:
@@ -412,7 +408,7 @@ def resolve_feature(
             error=error,
         )
 
-    # A raising plugin declaration must not escape the never-raises contract; degrade to no split.
+    # Degrade a raising plugin declaration to an empty split; resolve_feature never raises.
     empty_split: tuple[set[type[ComputeFramework]], set[type[ComputeFramework]]] = (set(), set())
     supported, rejected = safe_field(
         lambda: split_frameworks_by_capability(candidates, feature_name_obj, resolved_options),

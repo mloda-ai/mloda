@@ -465,8 +465,7 @@ class TestContract10DeclarationValidation:
         assert "sustatu_pred_only_key" in message
 
     def test_predicate_only_key_with_universe_override_is_legal(self) -> None:
-        # SubtypeUPredicateUniverseFG was defined at module scope without error. Its key has no
-        # enumerable value space, which is exactly why the explicit universe override is required.
+        # SubtypeUPredicateUniverseFG was defined at module scope without error despite its predicate-only key.
         assert SubtypeUPredicateUniverseFG.declared_option_values("sustatu_pred_key") == frozenset()
         assert SubtypeUPredicateUniverseFG.subtype_universe() == frozenset({"p1", "p2"})
 

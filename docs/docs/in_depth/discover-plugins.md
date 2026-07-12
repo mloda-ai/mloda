@@ -43,12 +43,10 @@ print(result.feature_group, result.supported_compute_frameworks)
 
 `options` and `plugin_collector` are keyword-only, so pass them by name.
 
-When exactly one FeatureGroup resolves, `ResolvedFeature` also reports the
-feature's subtype: `subtype` is the value resolved from the name or the passed
-options (e.g. `"sum"` for `sales__sum_aggr`), and `subtype_family` is the
-parametric family name when the subtype is a parametric instance (`"ntile"`
-for `ntile_2`), else `None`. Both stay `None` for families without a subtype
-dimension or when nothing resolves.
+When exactly one FeatureGroup resolves, `ResolvedFeature` also reports
+`subtype` (resolved from the name or the passed options, e.g. `"sum"` for
+`sales__sum_aggr`) and `subtype_family` (the parametric family name, `"ntile"`
+for `ntile_2`); both are `None` when nothing resolves.
 
 ### Inspecting Candidates
 
@@ -78,15 +76,10 @@ fgs = get_feature_group_docs(name="timestamp")
 fgs = get_feature_group_docs(compute_framework="PandasDataframe")
 ```
 
-Each `FeatureGroupInfo` also documents the family's subtype declaration:
-`subtype_key` (the discriminator option key, `None` without one), `subtypes`
-(the sorted universe), `parametric_subtypes` (family names like `ntile`),
-`subtype_support` (sorted supported subtypes per framework from
-`compute_framework_definition()`: the declared rule, or every loaded framework
-when the family declares no `compute_framework_rule`; empty for abstract
-bases) and `subtype_error` (set when
-the class declares support outside its universe, so a misdeclared capability
-is distinguishable from a legitimately empty matrix). See
+Each `FeatureGroupInfo` also carries the subtype declaration: `subtype_key`,
+`subtypes` (the sorted universe), `parametric_subtypes`, `subtype_support`
+(supported subtypes per framework; empty for abstract bases) and
+`subtype_error` (set when the declaration is invalid). See
 [Declaring capability per subtype](compute-framework-integration.md#declaring-capability-per-subtype).
 
 ## Inspecting Compute Frameworks

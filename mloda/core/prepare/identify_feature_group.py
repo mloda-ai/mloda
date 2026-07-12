@@ -1,3 +1,4 @@
+import inspect
 from difflib import get_close_matches
 from typing import Iterable, Optional
 
@@ -58,6 +59,7 @@ class IdentifyFeatureGroupClass:
         data_access_collection: Optional[DataAccessCollection] = None,
     ):
         self._criteria_matched_feature_groups: set[type[FeatureGroup]] = set()
+        self._abstract_matched_feature_groups: set[type[FeatureGroup]] = set()
 
         feature_group = self._filter_loop(feature, accessible_plugins, links, data_access_collection)
 
@@ -82,6 +84,11 @@ class IdentifyFeatureGroupClass:
                 continue
 
             if not self._filter_feature_group_by_scope(feature_group, feature):
+                continue
+
+            # Abstract bases can match name+domain+scope but cannot be instantiated; never let one win.
+            if inspect.isabstract(feature_group):
+                self._abstract_matched_feature_groups.add(feature_group)
                 continue
 
             self._criteria_matched_feature_groups.add(feature_group)
@@ -262,16 +269,58 @@ class IdentifyFeatureGroupClass:
         lines = "\n".join(f"  - {class_name}: {reason}" for class_name, reason in sorted(reasons))
         return f"Feature group(s) rejected an option value while matching '{str(feature.name)}':\n{lines}"
 
+    def _abstract_only_message(
+        self, feature: Feature, accessible_plugins: FeatureGroupEnvironmentMapping
+    ) -> Optional[str]:
+        """Message for the case where the only name matches were abstract bases.
+
+        Names the compute frameworks that the concrete (non-abstract) subclasses of
+        those abstract bases declare, since those are what a user must enable.
+        """
+        if not self._abstract_matched_feature_groups:
+            return None
+
+        frameworks: set[str] = set()
+        for candidate in accessible_plugins:
+            if inspect.isabstract(candidate):
+                continue
+            if not any(issubclass(candidate, abstract_fg) for abstract_fg in self._abstract_matched_feature_groups):
+                continue
+            for cfw in candidate.compute_framework_definition():
+                frameworks.add(cfw.get_class_name())
+
+        feature_name = str(feature.name)
+        if not frameworks:
+            return (
+                f"No feature groups found for feature name: '{feature_name}'. "
+                f"Only abstract feature group base(s) matched, which cannot be instantiated; "
+                f"no concrete implementation is available or enabled."
+            )
+
+        framework_names = sorted(frameworks)
+        return (
+            f"No feature groups found for feature name: '{feature_name}'. "
+            f"Its concrete implementations require compute framework(s) {framework_names}, "
+            f"none of which are available or enabled for this run."
+        )
+
     def _build_no_feature_group_error(
         self, feature: Feature, accessible_plugins: FeatureGroupEnvironmentMapping
     ) -> str:
         scope_callout = _scope_callout(feature)
 
+        # Capability rejections are concrete and specific; prefer them over the abstract-only fallback.
         capability_message = self._capability_rejection_message(feature)
         if capability_message is not None:
             if scope_callout:
                 return f"{capability_message} {scope_callout}"
             return capability_message
+
+        abstract_only_message = self._abstract_only_message(feature, accessible_plugins)
+        if abstract_only_message is not None:
+            if scope_callout:
+                return f"{abstract_only_message} {scope_callout}"
+            return abstract_only_message
 
         feature_name = str(feature.name)
         msg = f"No feature groups found for feature name: '{feature_name}'."

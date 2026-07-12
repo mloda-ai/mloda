@@ -326,6 +326,65 @@ def test_loader_nested_in_features_rejects_whitespace_only_feature_group() -> No
 
 
 # ---------------------------------------------------------------------------
+# Misplaced scope: "feature_group" inside an option container is a hard error
+#
+# The scope is a TOP-LEVEL field. Written inside "options" (or the group/context
+# variants) it is silently swallowed as an ordinary option: feature_group_scope
+# stays None, the key poisons the option hash and the matcher inputs, and
+# resolution still fails with "Multiple feature groups found" without ever
+# naming the key that was ignored. JSON is the documented surface for AI agents,
+# so this misplacement is likely and must fail loudly at validation time.
+#
+# Only TOP-LEVEL keys of each container are checked: a nested scope legitimately
+# lives at options["in_features"]["feature_group"], which is a dict VALUE.
+# ---------------------------------------------------------------------------
+
+MISPLACED_KEY_TERMS = ("feature_group", "top-level")
+
+
+def test_feature_config_rejects_feature_group_key_inside_options() -> None:
+    """A feature_group key inside 'options' is a misplaced scope and raises ValueError."""
+    with pytest.raises(ValueError) as exc_info:
+        FeatureConfig(name="shared_token", options={"feature_group": "ConfigScopeSourceA"})
+
+    message = str(exc_info.value)
+    for term in MISPLACED_KEY_TERMS:
+        assert term in message
+
+
+def test_feature_config_rejects_feature_group_key_inside_group_options() -> None:
+    """A feature_group key inside 'group_options' is a misplaced scope and raises ValueError."""
+    with pytest.raises(ValueError) as exc_info:
+        FeatureConfig(name="shared_token", group_options={"feature_group": "ConfigScopeSourceA"})
+
+    message = str(exc_info.value)
+    for term in MISPLACED_KEY_TERMS:
+        assert term in message
+
+
+def test_feature_config_rejects_feature_group_key_inside_context_options() -> None:
+    """A feature_group key inside 'context_options' is a misplaced scope and raises ValueError."""
+    with pytest.raises(ValueError) as exc_info:
+        FeatureConfig(name="shared_token", context_options={"feature_group": "ConfigScopeSourceA"})
+
+    message = str(exc_info.value)
+    for term in MISPLACED_KEY_TERMS:
+        assert term in message
+
+
+def test_loader_rejects_misplaced_feature_group_key_in_options() -> None:
+    """Through the JSON surface, a scope written inside 'options' fails loudly instead of becoming an option."""
+    config_str = '[{"name": "shared_token", "options": {"feature_group": "ConfigScopeSourceA"}}]'
+
+    with pytest.raises(ValueError) as exc_info:
+        load_features_from_config(config_str, format="json")
+
+    message = str(exc_info.value)
+    for term in MISPLACED_KEY_TERMS:
+        assert term in message
+
+
+# ---------------------------------------------------------------------------
 # Regression: configs without the field are unchanged
 # ---------------------------------------------------------------------------
 

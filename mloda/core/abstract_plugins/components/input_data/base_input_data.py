@@ -18,6 +18,16 @@ class BaseInputData(ABC):
         """This function should return the name of the data access."""
         return cls.__name__
 
+    @staticmethod
+    def _underlying(member: Any) -> Any:
+        """Underlying function of a classmethod/staticmethod/plain override, for identity comparison."""
+        return getattr(member, "__func__", member)
+
+    @classmethod
+    def _is_overridden(cls, base: type, method_name: str) -> bool:
+        """Structurally check whether cls overrides method_name relative to base."""
+        return cls._underlying(getattr(cls, method_name)) is not cls._underlying(getattr(base, method_name))
+
     def matches(
         self,
         feature_name: str,
@@ -128,7 +138,32 @@ class BaseInputData(ABC):
         options.add_to_group("BaseInputData", (cls_to_be_added, matched_data_access))
 
     def init_reader(self, options: Optional[Options]) -> tuple["BaseInputData", Any]:
-        raise NotImplementedError
+        if options is None:
+            raise ValueError(
+                f"Options were not set for {self.__class__.__name__}.init_reader().\n"
+                "Provide an Options object with a 'BaseInputData' key mapping to a tuple of "
+                "(ReaderClass, data_access).\n"
+                "Example:\n"
+                "  options = Options(context={\n"
+                "      'BaseInputData': (ReaderClass, data_access)\n"
+                "  })"
+            )
+
+        reader_data_access = options.get("BaseInputData")
+
+        if reader_data_access is None:
+            raise ValueError(
+                f"'BaseInputData' key is missing or None in the provided Options for {self.__class__.__name__}.\n"
+                "The 'BaseInputData' key in Options must map to a tuple of "
+                "(ReaderClass, data_access).\n"
+                "Example:\n"
+                "  options = Options(context={\n"
+                "      'BaseInputData': (ReaderClass, data_access)\n"
+                "  })"
+            )
+
+        reader, data_access = reader_data_access
+        return reader(), data_access
 
     def load(self, features: FeatureSet) -> Any:
         _options = None
@@ -154,19 +189,43 @@ class BaseInputData(ABC):
         raise NotImplementedError
 
     @classmethod
-    def supports_scoped_data_access(cls) -> bool:
+    def _final_reader_requires(cls) -> tuple[str, ...]:
         """
-        As we assume that load_data are only implemented in final child classes of scoped data access,
-        we can use this function to check if the class supports scoped data access and is the final child class.
+        A family base redeclares this to name the hooks a subclass must override (relative to
+        that family base) to classify as a final reader; the load_data wholesale-override
+        branch always wins.
         """
-        try:
-            cls.load_data(None, None)  # type: ignore[arg-type]
-        except NotImplementedError:
-            return False
-        except AttributeError:  # Expected as cls.load_data(None, None) should raise an error
-            return True
+        return ()
 
-        return True
+    @classmethod
+    def final_reader_anchor(cls) -> type["BaseInputData"]:
+        """
+        The most-derived class in cls.__mro__ that declares _final_reader_requires in its own
+        __dict__; BaseInputData declares the default, so an anchor always exists.
+        """
+        return next(klass for klass in cls.__mro__ if "_final_reader_requires" in klass.__dict__)
+
+    @classmethod
+    def is_final_reader(cls) -> bool:
+        """
+        Structurally classify whether cls is a final scoped reader; nothing is executed.
+
+        A wholesale load_data override relative to the anchor is always final; otherwise cls
+        is final iff the anchor's required hooks are non-empty and all overridden relative to
+        the anchor. A class that declares _final_reader_requires is a family base and is
+        therefore never final itself: both branches compare relative to the anchor, and
+        nothing is overridden relative to itself.
+        """
+        anchor = cls.final_reader_anchor()
+        if cls._is_overridden(anchor, "load_data"):
+            return True
+        required = cls._final_reader_requires()
+        for name in required:
+            if not hasattr(anchor, name):
+                raise ValueError(
+                    f"Required final-reader hook '{name}' is not defined on anchor class {anchor.__name__}."
+                )
+        return bool(required) and all(cls._is_overridden(anchor, hook) for hook in required)
 
     @classmethod
     def get_class_name(cls) -> str:
@@ -225,7 +284,7 @@ def _collect_filtered_subclasses(cls: Any, parent_class: Any) -> list[type[BaseI
     for subclass in get_all_subclasses(cls):
         if not issubclass(subclass, parent_class):
             continue
-        if subclass.supports_scoped_data_access():
+        if subclass.is_final_reader():
             result.append(subclass)
     return result
 

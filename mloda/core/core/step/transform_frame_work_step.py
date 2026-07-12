@@ -132,25 +132,9 @@ class TransformFrameworkStep(Step):
                 f"Available transformers: {list(self.transformer.transformer_map.keys())}"
             )
 
-        # Apply transformations in sequence
-        current_fw = _from_fw
-        for i, transformer_cls in enumerate(transformation_chain):
-            # Determine target framework for this transformation step
-            if i == len(transformation_chain) - 1:
-                # Last step: transform to final target
-                target_fw = _to_fw
-            else:
-                # Intermediate step: find what this transformer outputs
-                # Look for the transformer in the map to determine its output type
-                for (src, dst), trans in self.transformer.transformer_map.items():
-                    if trans == transformer_cls and src == current_fw:
-                        target_fw = dst
-                        break
-
-            data = transformer_cls.transform(current_fw, target_fw, data, cfw.framework_connection_object)
-            current_fw = target_fw  # Update current framework for next iteration
-
-        return data
+        return self.transformer.apply_chain(
+            _from_fw, _to_fw, transformation_chain, data, cfw.framework_connection_object
+        )
 
     def equal_frameworks(self) -> bool:
         if self.from_framework.expected_data_framework() == self.to_framework.expected_data_framework():

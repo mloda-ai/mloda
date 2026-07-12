@@ -8,11 +8,20 @@ import pyarrow.feather as pyarrow_feather
 import pyarrow.orc as pyarrow_orc
 import pyarrow.parquet as pyarrow_parquet
 
+from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 from mloda_plugins.feature_group.input_data.read_files.feather import FeatherReader
 from mloda_plugins.feature_group.input_data.read_files.json import JsonReader
 from mloda_plugins.feature_group.input_data.read_files.orc import OrcReader
 from mloda_plugins.feature_group.input_data.read_files.parquet import ParquetReader
+
+
+def _loaded_column_names(result: Any) -> list[str]:
+    """CsvReader resolves a FileSource descriptor whose ``columns`` pins the order;
+    the other readers still return a materialized table with ``column_names``."""
+    if isinstance(result, FileSource):
+        return list(result.columns)
+    return list(result.column_names)
 
 
 class FeatureSetStub:
@@ -86,9 +95,9 @@ class TestDeterministicColumnOrder:
         features = FeatureSetStub(self.physical_columns)
 
         for cls, path in test_cases:
-            result = cls.load_data(path, features)
-            assert result.column_names == self.sorted_columns, (
-                f"{cls.__name__} returned columns {result.column_names}, expected {self.sorted_columns}"
+            columns = _loaded_column_names(cls.load_data(path, features))
+            assert columns == self.sorted_columns, (
+                f"{cls.__name__} returned columns {columns}, expected {self.sorted_columns}"
             )
 
     def _all_readers(self) -> list[tuple[Any, Any]]:
@@ -106,10 +115,8 @@ class TestDeterministicColumnOrder:
         features = FeatureSetStub([])
 
         for cls, path in self._all_readers():
-            result = cls.load_data(path, features)
-            assert result.column_names == [], (
-                f"{cls.__name__} returned columns {result.column_names}, expected [] for empty feature set"
-            )
+            columns = _loaded_column_names(cls.load_data(path, features))
+            assert columns == [], f"{cls.__name__} returned columns {columns}, expected [] for empty feature set"
 
     def test_single_column_feature_set_returns_that_column(self) -> None:
         """A single-column feature set must return exactly that one column.
@@ -117,7 +124,5 @@ class TestDeterministicColumnOrder:
         features = FeatureSetStub(["a1"])
 
         for cls, path in self._all_readers():
-            result = cls.load_data(path, features)
-            assert result.column_names == ["a1"], (
-                f"{cls.__name__} returned columns {result.column_names}, expected ['a1']"
-            )
+            columns = _loaded_column_names(cls.load_data(path, features))
+            assert columns == ["a1"], f"{cls.__name__} returned columns {columns}, expected ['a1']"

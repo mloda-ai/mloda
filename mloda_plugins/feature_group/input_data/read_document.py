@@ -25,29 +25,62 @@ class ReadDocument(BaseInputData):
 
     This tells ReadDocument to include .json files and ReadFile to
     auto-exclude them for that feature.
+
+    load_data is a template method exposing an opt-in lifecycle seam: a new
+    reader implements ``produce_document`` (optionally ``document_file_type``)
+    plus ``suffix`` instead of overriding ``load_data`` wholesale; both are
+    required for the class to be discovered as a final reader. Overriding
+    ``load_data`` directly is still supported.
     """
 
     _auto_load_group: str = "feature_group/input_data/read_files"
 
     @classmethod
-    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+    def produce_document(cls, file_path: str) -> Any:
+        """The per-format parse hook; a new reader implements THIS instead of overriding load_data wholesale."""
         raise NotImplementedError
+
+    @classmethod
+    def document_file_type(cls, file_path: str) -> str:
+        """Overridable hook for the envelope's file_type; default is the first declared suffix without the dot."""
+        return cls.suffix()[0].lstrip(".")
+
+    @classmethod
+    def _read_text(cls, file_path: str) -> str:
+        """Shared helper for text-based readers: read the whole file as UTF-8 text."""
+        with open(file_path, encoding="utf-8") as file:
+            return file.read()
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        """Template method: probe final-reader classification against the dynamic anchor,
+        resolve the path (a resolved str/Path data access wins; the reader-named options
+        key is the fallback), parse, then wrap the one-row envelope."""
+        if not cls.is_final_reader():
+            raise NotImplementedError
+
+        if isinstance(data_access, (str, Path)):
+            file_path = str(data_access)
+        else:
+            file_path = features.get_options_key(cls.__name__)
+        if file_path is None:
+            raise ValueError(
+                f"No file path for {cls.__name__}: data_access is not a path and the '{cls.__name__}' options key "
+                f"is not set. Select the reader via Feature(name, options={{'{cls.__name__}': '/path/to/file'}}) "
+                "or provide a matching DataAccessCollection."
+            )
+        content = cls.produce_document(file_path)
+        return [{cls.get_class_name(): content, "source": file_path, "file_type": cls.document_file_type(file_path)}]
+
+    @classmethod
+    def _final_reader_requires(cls) -> tuple[str, ...]:
+        # Requiring suffix alongside produce_document screens out intermediate bases that
+        # share produce_document but leave suffix abstract, mirroring ReadDB's connect requirement.
+        return ("produce_document", "suffix")
 
     @classmethod
     def suffix(cls) -> tuple[str, ...]:
         raise NotImplementedError
-
-    def init_reader(self, options: Optional[Options]) -> tuple["ReadDocument", Any]:
-        if options is None:
-            raise ValueError("Options were not set.")
-
-        reader_data_access = options.get("BaseInputData")
-
-        if reader_data_access is None:
-            raise ValueError("Reader data access was not set.")
-
-        reader, data_access = reader_data_access
-        return reader(), data_access
 
     @classmethod
     def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
@@ -113,7 +146,7 @@ class ReadDocument(BaseInputData):
             return False
         if not path.endswith(cls.suffix()):
             return False
-        if document_suffixes is not None and cls._is_structured_suffix(path, document_suffixes):
+        if cls._is_structured_suffix(path, document_suffixes):
             return False
         return True
 

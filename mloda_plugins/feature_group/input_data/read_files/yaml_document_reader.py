@@ -4,8 +4,6 @@ from typing import Any
 
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
 
-from mloda.provider import FeatureSet
-
 
 class YamlDocumentReader(ReadDocument):
     """Load entire YAML file as a single document value for RAG pipelines."""
@@ -15,18 +13,12 @@ class YamlDocumentReader(ReadDocument):
         return (".yaml", ".yml")
 
     @classmethod
-    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-        file_path = features.get_options_key(cls.__name__)
-
+    def produce_document(cls, file_path: str) -> Any:
         with open(file_path, "r", encoding="utf-8") as f:
             documents = list(yaml.safe_load_all(f))
+        content = documents[0] if len(documents) == 1 else documents
+        return yaml.dump(content)
 
-        if len(documents) == 1:
-            content = documents[0]
-        else:
-            content = documents
-
-        yaml_string = yaml.dump(content)
-        file_type = Path(file_path).suffix.lstrip(".")
-
-        return [{cls.get_class_name(): yaml_string, "source": file_path, "file_type": file_type}]
+    @classmethod
+    def document_file_type(cls, file_path: str) -> str:
+        return Path(file_path).suffix.lstrip(".")

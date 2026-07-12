@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 from mloda.user import DataAccessCollection
 from mloda.provider import FeatureSet
 from mloda.provider import BaseInputData
@@ -29,6 +29,10 @@ class ReadFile(BaseInputData):
     - load_data
     - suffix
     - get_column_names
+
+    A ReadFile subclass classifies as a final reader by overriding ``load_data``
+    wholesale. It may return its table directly, or a descriptor materialized by
+    the target compute framework (CsvReader returns a ``FileSource``).
 
     If get_column_names is not implemented, the class will assume the columns are there.
     """
@@ -59,41 +63,18 @@ class ReadFile(BaseInputData):
         raise NotImplementedError
 
     @classmethod
+    def _final_reader_requires(cls) -> tuple[str, ...]:
+        # ReadFile anchors its own subtree so a subclass classifies as a final reader only
+        # by overriding load_data wholesale; there is no hook-based classification here.
+        return ()
+
+    @classmethod
     def suffix(cls) -> tuple[str, ...]:
         raise NotImplementedError
 
     @classmethod
     def get_column_names(cls, file_name: str) -> list[str]:
         raise NotImplementedError
-
-    def init_reader(self, options: Optional[Options]) -> tuple["ReadFile", Any]:
-        if options is None:
-            raise ValueError(
-                f"Options were not set for {self.__class__.__name__}.init_reader().\n"
-                "When using ReadFile-based features, you must provide Options "
-                "with a 'BaseInputData' key.\n"
-                "Example:\n"
-                "  from mloda.user import Feature, Options\n"
-                "  feature = Feature('my_column', options=Options(context={\n"
-                "      'BaseInputData': (CsvReader, '/path/to/file.csv')\n"
-                "  }))"
-            )
-
-        reader_data_access = options.get("BaseInputData")
-
-        if reader_data_access is None:
-            raise ValueError(
-                f"'BaseInputData' key is missing or None in the provided Options for {self.__class__.__name__}.\n"
-                "The 'BaseInputData' key in Options must map to a tuple of "
-                "(ReaderClass, data_access).\n"
-                "Example:\n"
-                "  options = Options(context={\n"
-                "      'BaseInputData': (CsvReader, '/path/to/file.csv')\n"
-                "  })"
-            )
-
-        reader, data_access = reader_data_access
-        return reader(), data_access
 
     @classmethod
     def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:

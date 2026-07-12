@@ -25,9 +25,10 @@ class ComputeFrameworkTransformer:
 
     The transformer registry is a mapping from framework pairs to transformer
     classes, allowing the system to find the appropriate transformer for
-    converting data between two supported frameworks. Two-way transformers
-    register both directions; one-way transformers register only their
-    forward edge.
+    converting data between two supported frameworks. Each direction is
+    registered only if its transform hook is overridden: two-way transformers
+    register both edges, one-way transformers only the edge whose hook they
+    implement.
     """
 
     _auto_load_done: ClassVar[bool] = False

@@ -15,11 +15,12 @@ class BaseTransformer:
     1. Subclass BaseTransformer
     2. Implement all abstract methods
     3. Define the source and target frameworks
-    4. Implement each transform direction the transformer supports. Implementing
-       transform_fw_to_other_fw registers the forward edge, transform_other_fw_to_fw registers the
-       reverse edge, and implementing both makes the transformer two-way. To declare a direction
-       unsupported, leave its hook unimplemented; do not override it with a raising body, because
-       any override registers the edge and the chain search will then route through it.
+    4. Implement each transform direction the transformer supports: transform_fw_to_other_fw registers
+       the forward edge, transform_other_fw_to_fw the reverse edge, implementing both makes the
+       transformer two-way. To declare a direction unsupported, leave its hook unimplemented; do not
+       override it with a raising body, because any override registers the edge and the chain search
+       can then route through it. Omitting both hooks registers no edge at all: the transformer stays
+       out of the registry and only a warning is logged.
 
     The transformer will be automatically discovered and registered with the
     ComputeFrameworkTransformer.
@@ -153,17 +154,19 @@ class BaseTransformer:
         raise NotImplementedError
 
     # The two transform hooks below are deliberately NOT @abstractmethod: the decorator is inert here
-    # (BaseTransformer has no ABC metaclass) and it signals "you must implement this", which
-    # contradicts the one-way contract. Their raising bodies are load-bearing: apply_chain relies on them.
+    # (BaseTransformer has no ABC metaclass) and signals "you must implement this", contradicting the
+    # one-way contract. They must still exist, because add() detects an override by comparing function
+    # identity against them. Their raising bodies are a fail-loud default for a hook called without
+    # consulting transformer_map; chain walks never reach them, as an edge exists only for an override.
 
     @classmethod
     def transform_fw_to_other_fw(cls, data: Any) -> Any:
         """
         Transform data from the primary framework to the secondary framework.
 
-        Implementing this hook registers the forward edge (framework(), other_framework()) for chain
-        composition; leaving it unimplemented declares that direction unsupported. Do not override it
-        with a raising body: the edge would still be registered and chains would crash mid-flight.
+        Implementing this hook registers the forward edge (framework(), other_framework()); leaving it
+        unimplemented declares that direction unsupported. Do not override it with a raising body: the
+        edge keys off the override, not its body, so chains would route through it and crash mid-flight.
 
         Args:
             data: Data in the primary framework format
@@ -178,9 +181,9 @@ class BaseTransformer:
         """
         Transform data from the secondary framework to the primary framework.
 
-        Implementing this hook registers the reverse edge (other_framework(), framework()) for chain
-        composition; leaving it unimplemented declares that direction unsupported. Do not override it
-        with a raising body: the edge would still be registered and chains would crash mid-flight.
+        Implementing this hook registers the reverse edge (other_framework(), framework()); leaving it
+        unimplemented declares that direction unsupported. Do not override it with a raising body: the
+        edge keys off the override, not its body, so chains would route through it and crash mid-flight.
 
         Args:
             data: Data in the secondary framework format

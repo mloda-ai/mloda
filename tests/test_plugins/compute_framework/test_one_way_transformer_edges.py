@@ -17,15 +17,13 @@ Contract:
   * With the reverse edge unregistered, a route that would only exist via a one-way
     transformer's reverse edge resolves to ``None`` instead of a chain that would crash.
 
-ANTI-PATTERN (pinned by ``TestRaisingOverrideAntiPatternRegistersTheEdge`` below): expressing
+ANTI-PATTERN (pinned by ``TestRaisingOverrideAntiPatternRegistersTheEdge`` below): declaring
 "this direction is not supported" by OVERRIDING the unused hook with a bare
-``raise NotImplementedError``. Since ``add()`` decides structurally, on function identity, an
-override, ANY override, including a purely raising one, is the "register this edge" signal.
-The dead edge therefore lands in the map, the BFS in ``get_transformation_chain`` cheerfully
-routes a chain through it, and ``apply_chain`` blows up mid-chain with a bare
+``raise NotImplementedError``. Since ``add()`` decides on function identity, ANY override, even
+a purely raising one, is the "register this edge" signal: the dead edge lands in the map, the
+BFS routes a chain through it, and ``apply_chain`` crashes mid-chain with a bare
 ``NotImplementedError`` instead of the caller getting a clean "no chain exists" ``None``.
-The only correct way to declare a direction unsupported is to LEAVE IT UNIMPLEMENTED and
-inherit ``BaseTransformer``'s default.
+Declare a direction unsupported by leaving its hook unimplemented, never by raising.
 
 Isolation note: the synthetic frameworks and transformers are built fresh inside factory
 functions per test. Their import hooks succeed (``add()`` must accept them), so a lingering
@@ -117,14 +115,8 @@ def _make_two_way_transformer(name: str, fw: type[Any], other_fw: type[Any]) -> 
 
 
 def _make_raising_override_transformer(name: str, fw: type[Any], other_fw: type[Any]) -> type[BaseTransformer]:
-    """ANTI-PATTERN factory: a one-way transformer that spells its unused direction out as a
-    bare ``raise NotImplementedError`` override instead of omitting it.
-
-    The body is semantically identical to the inherited default, but the override gives
-    ``transform_other_fw_to_fw`` a NEW function identity, and function identity is precisely
-    the signal ``add()`` reads. So the reverse edge gets registered and becomes a live route
-    that can only ever crash. Contrast ``_make_one_way_transformer``, which omits the hook.
-    """
+    """ANTI-PATTERN factory: spells the unused direction as a bare raising override instead of
+    omitting it. Contrast ``_make_one_way_transformer``, which omits the hook."""
 
     class _RaisingOverride(BaseTransformer):
         @classmethod
@@ -242,22 +234,15 @@ class TestBfsNeverRoutesThroughOneWayReverseEdges:
 
 
 class TestRaisingOverrideAntiPatternRegistersTheEdge:
-    """Pins WHY ``raise NotImplementedError`` is the WRONG way to express one-way.
-
-    ``add()`` classifies a direction as implemented by comparing function identity against
-    ``BaseTransformer``. A raising override is still an override, so it reads as "implemented"
-    and its edge is registered. These tests document the resulting trap so nobody re-derives
-    the anti-pattern from the old two-way convention. The fix is never a smarter exception;
-    it is to OMIT the unused hook entirely.
-    """
+    """Pins the ANTI-PATTERN described in the module docstring."""
 
     def test_raising_override_registers_the_reverse_edge_but_omission_does_not(self) -> None:
-        """(2a) Same intent, "this direction is unsupported", two spellings, opposite outcomes.
+        """(2a) Same intent, two spellings: a raising override registers the reverse edge,
+        omitting the hook does not.
 
-        Overriding ``transform_other_fw_to_fw`` with a bare raise REGISTERS the reverse edge;
-        omitting the override does not. The two transformers get their OWN fresh framework
-        pairs, never a shared one: two distinct classes claiming the same pair would collide in
-        the next registry's discovery pass and poison unrelated tests (see the isolation note).
+        Each transformer gets its OWN fresh framework pair, never a shared one: two classes
+        claiming the same pair collide in the next registry's discovery pass and poison
+        unrelated tests.
         """
         anti_src = type("_FwAntiSrc", (), {})
         anti_dst = type("_FwAntiDst", (), {})
@@ -271,29 +256,22 @@ class TestRaisingOverrideAntiPatternRegistersTheEdge:
         assert registry.add(correct) is True
 
         assert registry.transformer_map.get((anti_dst, anti_src)) is anti_pattern, (
-            "a bare `raise NotImplementedError` override changes the function identity of "
-            "transform_other_fw_to_fw, which IS add()'s 'register this edge' signal; the dead "
-            "reverse edge is therefore registered. This is the anti-pattern being pinned"
+            "a raising override still gives transform_other_fw_to_fw a new function identity, "
+            "which IS add()'s 'register this edge' signal, so the dead reverse edge is registered"
         )
         assert (ok_dst, ok_src) not in registry.transformer_map, (
-            "the correct one-way spelling omits transform_other_fw_to_fw entirely, leaving "
-            "BaseTransformer's default in place, so no reverse edge is registered"
+            "omitting transform_other_fw_to_fw leaves BaseTransformer's default in place, so no "
+            "reverse edge is registered"
         )
 
         assert registry.transformer_map.get((anti_src, anti_dst)) is anti_pattern
         assert registry.transformer_map.get((ok_src, ok_dst)) is correct
 
     def test_chain_routes_through_the_raising_edge_and_apply_chain_raises(self) -> None:
-        """(2b) The concrete failure mode: a SELECTED chain that detonates mid-flight.
-
-        Topology mirrors the one-way (1d) test, with the anti-pattern transformer in place of
-        the correct one-way: the only route A -> C is A -> B via the raising REVERSE edge of
-        T(framework=B, other=A), then B -> C via a two-way transformer.
-
-        Because that reverse edge is registered, get_transformation_chain does NOT return the
-        honest None the caller could handle. It hands back a chain that looks valid, and
-        apply_chain then dies inside the raising hook with a bare NotImplementedError, far from
-        the plugin author who wrote it.
+        """(2b) The failure mode. Topology mirrors (1d) with the anti-pattern transformer in
+        place of the correct one-way: the only route A -> C runs through the raising REVERSE
+        edge of T(framework=B, other=A). Instead of an honest None, the BFS hands back a chain
+        that looks valid and apply_chain dies inside the raising hook.
         """
         fw_a = type("_FwAntiA", (), {})
         fw_b = type("_FwAntiB", (), {})

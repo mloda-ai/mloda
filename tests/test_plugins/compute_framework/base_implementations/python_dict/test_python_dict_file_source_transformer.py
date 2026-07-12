@@ -28,7 +28,11 @@ column semantics pyarrow's CSV reader gives, without pyarrow):
       a column of only null tokens (and/or empty cells) is all-``None``.
   (l) An all-int column with any value outside signed int64 range degrades entirely to
       ``float`` (pyarrow's int64 -> double fallback); int64 min/max stay exact ints; an
-      integer too large for float64 becomes ``inf``.
+      integer too large for float64 becomes ``inf``. Digit counts beyond 4300 are deliberate:
+      that is CPython's ``sys.get_int_max_str_digits()`` cap on ``int(str)`` (leading zeros
+      count toward it), so an ``int()``-based inference raises there instead of reading.
+  (m) pyarrow's int64 parser rejects a leading ``+``, so a column containing ``+5`` falls back
+      to double: the whole column is ``float``, not ``int``.
 """
 
 from __future__ import annotations
@@ -80,21 +84,41 @@ def _materialize(tmp_path: Path, content: str, columns: tuple[str, ...]) -> Any:
     return FileSourceDictTransformer.transform_fw_to_other_fw(FileSource(path=str(path), format="csv", columns=columns))
 
 
-def _parity(tmp_path: Path, content: str, columns: tuple[str, ...]) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Materialize the SAME csv file with both materializers; return (dict result, pyarrow result)."""
+def _types(values: list[Any]) -> list[type[Any]]:
+    return [type(v) for v in values]
+
+
+def _parity(tmp_path: Path, content: str, columns: tuple[str, ...], expected: dict[str, list[Any]]) -> dict[str, Any]:
+    """Assert the dict materializer yields ``expected``, then that pyarrow agrees on the SAME file.
+
+    Two deliberate properties:
+
+    - The dict-side assertion runs BEFORE ``importorskip("pyarrow")``, so the stdlib expectations
+      stay pinned in a pyarrow-free environment (the ``nopyarrow`` tox env); only the cross-check
+      against pyarrow is skipped there.
+    - Element TYPES are compared, not just values: ``==`` is type-blind (``5 == 5.0`` and
+      ``True == 1`` are both ``True``), so a value-only assertion silently accepts an int / float /
+      bool divergence, which is exactly the class of bug this parity suite exists to catch.
+    """
+    dict_result: dict[str, Any] = _materialize(tmp_path, content, columns)
+
+    assert dict_result == expected
+    for name in columns:
+        assert _types(dict_result[name]) == _types(expected[name]), f"column {name!r} element types"
+
     pytest.importorskip("pyarrow")
     from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_file_source_transformer import (
         FileSourcePyArrowTransformer,
     )
 
-    path = tmp_path / "data.csv"
-    path.write_text(content, encoding="utf-8")
-    source = FileSource(path=str(path), format="csv", columns=columns)
-
-    dict_result: dict[str, Any] = FileSourceDictTransformer.transform_fw_to_other_fw(source)
+    source = FileSource(path=str(tmp_path / "data.csv"), format="csv", columns=columns)
     table = FileSourcePyArrowTransformer.transform_fw_to_other_fw(source)
-    pyarrow_result: dict[str, Any] = {name: table.column(name).to_pylist() for name in columns}
-    return dict_result, pyarrow_result
+    for name in columns:
+        pyarrow_column: list[Any] = table.column(name).to_pylist()
+        assert dict_result[name] == pyarrow_column, f"column {name!r} values"
+        assert _types(dict_result[name]) == _types(pyarrow_column), f"column {name!r} element types"
+
+    return dict_result
 
 
 class TestColumnWiseTypeInference:
@@ -256,107 +280,98 @@ class TestEncodingAndFormat:
 class TestCsvInferenceParityWithPyArrow:
     """PARITY pin (issue #662): both materializers must agree on the SAME CSV file.
 
-    pyarrow's CSV reader is the reference. Every test here materializes one file with BOTH
-    ``FileSourceDictTransformer`` and ``FileSourcePyArrowTransformer`` and asserts identical
-    values, so the stdlib path cannot drift from pyarrow (and a pyarrow default change is
-    caught too). Covers null tokens (k) and int64 overflow (l).
+    pyarrow's CSV reader is the reference. Every test states the expected dict-side column
+    (always asserted, pyarrow or not) and ``_parity`` additionally cross-checks
+    ``FileSourcePyArrowTransformer`` on the same file, comparing VALUES AND ELEMENT TYPES, so the
+    stdlib path cannot drift from pyarrow (and a pyarrow default change is caught too).
+    Covers null tokens (k), int64 overflow (l) and the leading-``+`` int64 refusal (m).
     """
 
     def test_null_token_in_int_column_becomes_none(self, tmp_path: Path) -> None:
         """(k) ``NA`` in an otherwise-int column is a null: ``[1, 2, None]``, not all-string."""
-        dict_result, pyarrow_result = _parity(tmp_path, "a\n1\n2\nNA\n", ("a",))
-
-        assert dict_result["a"] == [1, 2, None]
-        assert dict_result == pyarrow_result
-        assert all(isinstance(v, int) and not isinstance(v, bool) for v in dict_result["a"] if v is not None)
+        _parity(tmp_path, "a\n1\n2\nNA\n", ("a",), {"a": [1, 2, None]})
 
     def test_every_default_null_token_is_recognized_in_an_int_column(self, tmp_path: Path) -> None:
         """(k) The full pyarrow default ``null_values`` set (minus ``""``) nulls out in an int column."""
         content = "a\n1\n" + "\n".join(_NULL_TOKENS) + "\n2\n"
-        dict_result, pyarrow_result = _parity(tmp_path, content, ("a",))
-
-        assert dict_result["a"] == [1, *([None] * len(_NULL_TOKENS)), 2]
-        assert dict_result == pyarrow_result
+        _parity(tmp_path, content, ("a",), {"a": [1, *([None] * len(_NULL_TOKENS)), 2]})
 
     def test_null_token_in_float_column_becomes_none(self, tmp_path: Path) -> None:
         """(k) ``null`` in an otherwise-float column is a null; the column stays float."""
-        dict_result, pyarrow_result = _parity(tmp_path, "a\n1.5\nnull\n2.5\n", ("a",))
-
-        assert dict_result["a"] == [1.5, None, 2.5]
-        assert dict_result == pyarrow_result
-        assert all(isinstance(v, float) for v in dict_result["a"] if v is not None)
+        _parity(tmp_path, "a\n1.5\nnull\n2.5\n", ("a",), {"a": [1.5, None, 2.5]})
 
     def test_null_token_in_bool_column_becomes_none(self, tmp_path: Path) -> None:
         """(k) ``NA`` between bools is a null; the column stays bool."""
-        dict_result, pyarrow_result = _parity(tmp_path, "a\ntrue\nNA\nfalse\n", ("a",))
-
-        assert dict_result["a"] == [True, None, False]
-        assert dict_result == pyarrow_result
-        assert all(isinstance(v, bool) for v in dict_result["a"] if v is not None)
+        _parity(tmp_path, "a\ntrue\nNA\nfalse\n", ("a",), {"a": [True, None, False]})
 
     def test_null_tokens_stay_literal_strings_in_a_string_column(self, tmp_path: Path) -> None:
         """(k) ``strings_can_be_null=False``: in a string column a null token is just text."""
-        dict_result, pyarrow_result = _parity(tmp_path, "a\nx\nNA\nfoo\n", ("a",))
-
-        assert dict_result["a"] == ["x", "NA", "foo"]
-        assert dict_result == pyarrow_result
-        assert all(isinstance(v, str) for v in dict_result["a"])
+        _parity(tmp_path, "a\nx\nNA\nfoo\n", ("a",), {"a": ["x", "NA", "foo"]})
 
     def test_all_null_token_column_is_all_none(self, tmp_path: Path) -> None:
         """(k) A column of only null tokens (pyarrow infers the ``null`` type) is all-``None``."""
-        dict_result, pyarrow_result = _parity(tmp_path, "a\nNA\nnull\nNaN\n", ("a",))
-
-        assert dict_result["a"] == [None, None, None]
-        assert dict_result == pyarrow_result
+        _parity(tmp_path, "a\nNA\nnull\nNaN\n", ("a",), {"a": [None, None, None]})
 
     def test_null_tokens_mixed_with_empty_cells_are_all_none(self, tmp_path: Path) -> None:
         """(k) Null tokens plus empty cells (no other cells) -> all-``None``, not empty strings."""
-        dict_result, pyarrow_result = _parity(tmp_path, "a,b\nNA,1\n,2\nnull,3\n", ("a", "b"))
-
-        assert dict_result["a"] == [None, None, None]
-        assert dict_result["b"] == [1, 2, 3]
-        assert dict_result == pyarrow_result
+        _parity(tmp_path, "a,b\nNA,1\n,2\nnull,3\n", ("a", "b"), {"a": [None, None, None], "b": [1, 2, 3]})
 
     def test_int64_overflow_degrades_whole_column_to_float(self, tmp_path: Path) -> None:
-        """(l) One out-of-int64-range value turns the whole column float (pyarrow int64 -> double)."""
-        dict_result, pyarrow_result = _parity(tmp_path, "a\n9223372036854775808\n1\n", ("a",))
+        """(l) One out-of-int64-range value turns the whole column float (pyarrow int64 -> double).
 
-        assert dict_result["a"] == [9.223372036854776e18, 1.0]
-        assert dict_result == pyarrow_result
-        # The in-range cell degrades too: the column has ONE type.
-        assert all(isinstance(v, float) for v in dict_result["a"])
+        The in-range cell degrades too (``1.0``, not ``1``): the column has ONE type."""
+        _parity(tmp_path, "a\n9223372036854775808\n1\n", ("a",), {"a": [9.223372036854776e18, 1.0]})
 
     def test_negative_int64_overflow_degrades_whole_column_to_float(self, tmp_path: Path) -> None:
         """(l) Below int64 min degrades the column to float as well."""
-        dict_result, pyarrow_result = _parity(tmp_path, "a\n-9223372036854775809\n1\n", ("a",))
-
-        assert dict_result["a"] == [-9.223372036854776e18, 1.0]
-        assert dict_result == pyarrow_result
-        assert all(isinstance(v, float) for v in dict_result["a"])
+        _parity(tmp_path, "a\n-9223372036854775809\n1\n", ("a",), {"a": [-9.223372036854776e18, 1.0]})
 
     def test_int64_boundary_values_stay_exact_ints(self, tmp_path: Path) -> None:
         """(l) int64 max/min are IN range: they must stay exact ints, never lossy floats."""
-        dict_result, pyarrow_result = _parity(tmp_path, "a\n9223372036854775807\n-9223372036854775808\n", ("a",))
-
-        assert dict_result["a"] == [9223372036854775807, -9223372036854775808]
-        assert dict_result == pyarrow_result
-        assert all(isinstance(v, int) and not isinstance(v, bool) for v in dict_result["a"])
+        _parity(
+            tmp_path,
+            "a\n9223372036854775807\n-9223372036854775808\n",
+            ("a",),
+            {"a": [9223372036854775807, -9223372036854775808]},
+        )
 
     def test_integer_too_large_for_float64_becomes_inf(self, tmp_path: Path) -> None:
         """(l) A 401-digit integer overflows float64: ``inf``, exactly as pyarrow yields."""
-        dict_result, pyarrow_result = _parity(tmp_path, "a\n1" + "0" * 400 + "\n2\n", ("a",))
-
-        assert dict_result["a"] == [math.inf, 2.0]
-        assert math.isinf(dict_result["a"][0])
-        assert dict_result == pyarrow_result
+        result = _parity(tmp_path, "a\n1" + "0" * 400 + "\n2\n", ("a",), {"a": [math.inf, 2.0]})
+        assert math.isinf(result["a"][0])
 
     def test_negative_integer_too_large_for_float64_becomes_negative_inf(self, tmp_path: Path) -> None:
         """(l) The negative counterpart yields ``-inf``."""
-        dict_result, pyarrow_result = _parity(tmp_path, "a\n-1" + "0" * 400 + "\n2\n", ("a",))
+        result = _parity(tmp_path, "a\n-1" + "0" * 400 + "\n2\n", ("a",), {"a": [-math.inf, 2.0]})
+        assert math.isinf(result["a"][0])
 
-        assert dict_result["a"] == [-math.inf, 2.0]
-        assert math.isinf(dict_result["a"][0])
-        assert dict_result == pyarrow_result
+    def test_integer_beyond_int_max_str_digits_becomes_inf(self, tmp_path: Path) -> None:
+        """(l) A 5000-digit integer exceeds CPython's ``sys.get_int_max_str_digits()`` cap on
+        ``int(str)`` (4300 by default), so an ``int()``-based inference raises instead of reading
+        the file. pyarrow yields ``inf``; the dict path must too."""
+        result = _parity(tmp_path, "a\n" + "1" * 5000 + "\n2\n", ("a",), {"a": [math.inf, 2.0]})
+        assert math.isinf(result["a"][0])
+
+    def test_leading_zeros_beyond_int_max_str_digits_stay_exact_int(self, tmp_path: Path) -> None:
+        """(l) LEADING ZEROS count toward ``sys.get_int_max_str_digits()`` (4300), so a value that
+        comfortably fits int64 can still blow the ``int(str)`` cap. pyarrow reads ``1``; the dict
+        path must stay an exact int and never raise."""
+        _parity(tmp_path, "a\n" + "0" * 5000 + "1\n2\n", ("a",), {"a": [1, 2]})
+
+    def test_leading_zeros_within_int_max_str_digits_stay_exact_int(self, tmp_path: Path) -> None:
+        """(l) The short counterpart: ``007`` is an int ``7`` on both sides (a fix for the huge
+        zero-padded case must not push ordinary zero-padded ints onto the float path)."""
+        _parity(tmp_path, "a\n007\n2\n", ("a",), {"a": [7, 2]})
+
+    def test_leading_plus_integer_degrades_column_to_float(self, tmp_path: Path) -> None:
+        """(m) pyarrow's int64 parser REJECTS a leading ``+``, so the column falls back to double:
+        ``+5`` yields ``5.0``, and the sibling ``6`` degrades to ``6.0`` with it. The stdlib path
+        must not type this column as int."""
+        _parity(tmp_path, "a\n+5\n6\n", ("a",), {"a": [5.0, 6.0]})
+
+    def test_leading_plus_float_stays_float(self, tmp_path: Path) -> None:
+        """(m) A leading ``+`` on a DECIMAL is accepted by pyarrow's double parser: still float."""
+        _parity(tmp_path, "a\n+5.5\n6.5\n", ("a",), {"a": [5.5, 6.5]})
 
 
 class TestEndToEndPythonDictCsv:

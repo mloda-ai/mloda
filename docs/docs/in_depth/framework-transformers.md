@@ -165,9 +165,11 @@ To create a custom transformer for a new pair of frameworks:
    - `transform_fw_to_other_fw()` - Transform from primary to secondary; registers the forward edge
    - `transform_other_fw_to_fw()` - Transform from secondary to primary; registers the reverse edge
 
-Each direction hook you implement registers that direction's edge, so implementing both yields a two-way transformer usable in chains in either direction.
+**One-way transformers**: implement only the direction you support. Either hook may be omitted, and only an implemented hook's edge is registered (omit both and nothing is registered, with a warning).
 
-**One-way transformers**: to declare a direction unsupported, leave its hook unimplemented. Either hook may be omitted, and only the edge of the implemented hook is registered. Do not override the omitted one with `raise NotImplementedError`: registration keys off the override itself, not its body, so a raising override registers a dead edge that the chain search can route through and then crash on, instead of reporting "no chain exists". Omitting both hooks registers no edge at all: the transformer is inert and only a warning is logged. Override detection resolves through the MRO, so a subclass of a two-way transformer (for example `DuckDBPyArrowTransformer`, which extends `SqlBasePyArrowTransformer`) inherits both overrides and cannot drop a direction by omission. `FileSourcePyArrowTransformer` and `FileSourceDictTransformer` are the reference one-way implementations; both simply omit `transform_other_fw_to_fw()`.
+- Never override an unsupported hook with `raise NotImplementedError`: registration keys off the override itself, not its body, so the dead edge is registered, and a chain routes through it and crashes instead of reporting "no chain exists".
+- Override detection resolves through the MRO, so a subclass of a two-way transformer (for example `DuckDBPyArrowTransformer`) inherits both overrides and cannot drop a direction by omission.
+- `FileSourcePyArrowTransformer` and `FileSourceDictTransformer` are the reference one-way implementations; both omit `transform_other_fw_to_fw()`.
 
 Example of a two-way transformer:
 

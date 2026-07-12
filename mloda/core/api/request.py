@@ -5,8 +5,9 @@ from mloda.core.abstract_plugins.components.input_data.api.api_input_data_collec
     ApiInputDataCollection,
 )
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
-from mloda.core.core.engine import Engine
+from mloda.core.core.engine import Engine as Engine
 from mloda.core.api.plan_info import PlanStep, build_plan_steps
+from mloda.core.api.run_result import ResultStream, RunResult
 from mloda.core.api.prepare.setup_compute_framework import SetupComputeFramework
 from mloda.core.prepare.accessible_plugins import filter_extenders_by_strict_mode
 from mloda.core.filter.global_filter import GlobalFilter
@@ -112,7 +113,7 @@ class mlodaAPI:
         copy_features: bool = True,
         strict_type_enforcement: bool = False,
         column_ordering: Optional[str] = None,
-    ) -> list[Any]:
+    ) -> RunResult:
         """
         Run feature computation in one step.
 
@@ -136,11 +137,12 @@ class mlodaAPI:
             strict_type_enforcement: If True, enforce strict type matching for typed features.
 
         Returns:
-            List of computed results, one per feature group in execution plan
-            order. Each element is a compute-framework object (e.g.
-            ``pd.DataFrame``, ``pa.Table``) containing only the columns for
-            the requested features resolved by that group. When all requested
-            features resolve to a single group, the list has one element.
+            ``RunResult``, a list of computed results, one per feature group in
+            execution plan order. Each element is a compute-framework object
+            (e.g. ``pd.DataFrame``, ``pa.Table``) containing only the columns
+            for the requested features resolved by that group. When all
+            requested features resolve to a single group, the list has one
+            element. ``result.plan`` exposes the resolved plan of this run.
 
         Example:
             result = mloda.run_all(
@@ -161,12 +163,13 @@ class mlodaAPI:
             column_ordering=column_ordering,
             parallelization_modes=parallelization_modes,
         )
-        return session.run(
+        results = session.run(
             api_data=api_data,
             parallelization_modes=parallelization_modes,
             flight_server=flight_server,
             function_extender=function_extender,
         )
+        return RunResult(results, session)
 
     @classmethod
     def stream_all(
@@ -184,14 +187,15 @@ class mlodaAPI:
         copy_features: bool = True,
         strict_type_enforcement: bool = False,
         column_ordering: Optional[str] = None,
-    ) -> Generator[Any, None, None]:
+    ) -> ResultStream:
         """Stream results at feature-group granularity.
 
         Like ``run_all`` but yields each feature group's result as it completes.
-        ``list(stream_all(...))`` equals ``run_all(...)``.
+        ``list(stream_all(...))`` equals ``run_all(...)``. Planning happens eagerly
+        at the call; the returned ``ResultStream`` exposes ``plan`` before iteration.
 
-        Yields:
-            One complete result per feature group.
+        Returns:
+            ``ResultStream`` yielding one complete result per feature group.
         """
         session = cls.prepare(
             features,
@@ -206,11 +210,14 @@ class mlodaAPI:
             column_ordering=column_ordering,
             parallelization_modes=parallelization_modes,
         )
-        yield from session.stream_run(
-            api_data=api_data,
-            parallelization_modes=parallelization_modes,
-            flight_server=flight_server,
-            function_extender=function_extender,
+        return ResultStream(
+            session.stream_run(
+                api_data=api_data,
+                parallelization_modes=parallelization_modes,
+                flight_server=flight_server,
+                function_extender=function_extender,
+            ),
+            session,
         )
 
     @classmethod

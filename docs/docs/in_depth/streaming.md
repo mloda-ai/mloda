@@ -9,6 +9,8 @@ for result in mloda.stream_all(["FeatureA", "FeatureB", "FeatureC"]):
     print(result)
 ```
 
+`stream_all` returns a `ResultStream`: it iterates exactly like the old generator and additionally exposes a `.plan` property with the resolved execution plan. Planning happens eagerly, so an unresolvable request raises at the `stream_all` call, not at first iteration.
+
 ## Comparison with `run_all`
 
 `run_all` returns all results at once after every feature group has finished:

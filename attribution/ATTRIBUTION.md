@@ -41,9 +41,10 @@
 | mypy                                   | 2.1.0           | MIT                                                |
 | mypy_extensions                        | 1.1.0           | MIT                                                |
 | narwhals                               | 2.23.0          | MIT                                                |
+| nest-asyncio                           | 1.6.0           | BSD License                                        |
 | nest-asyncio2                          | 1.7.2           | BSD License                                        |
 | nltk                                   | 3.9.4           | Apache Software License                            |
-| numpy                                  | 2.5.0           | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 |
+| numpy                                  | 2.5.1           | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 |
 | opentelemetry-api                      | 1.43.0          | Apache-2.0                                         |
 | opentelemetry-instrumentation          | 0.64b0          | Apache Software License                            |
 | opentelemetry-instrumentation-logging  | 0.64b0          | Apache Software License                            |

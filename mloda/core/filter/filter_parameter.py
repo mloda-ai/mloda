@@ -26,7 +26,12 @@ class FilterParameterImpl:
 
     @classmethod
     def from_dict(cls, params: dict[str, Any]) -> "FilterParameterImpl":
-        return cls(_raw=tuple(sorted(params.items())))
+        # Convert list values to tuples for hashability (frozen dataclass in a set).
+        def _make_hashable(v: Any) -> Any:
+            if isinstance(v, list):
+                return tuple(v)
+            return v
+        return cls(_raw=tuple(sorted((k, _make_hashable(v)) for k, v in params.items())))
 
     @property
     def value(self) -> Optional[Any]:

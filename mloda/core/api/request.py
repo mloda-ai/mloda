@@ -5,6 +5,8 @@ from mloda.core.abstract_plugins.components.input_data.api.api_input_data_collec
     ApiInputDataCollection,
 )
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
+
+# Explicit alias re-exports Engine under no_implicit_reexport so tests can patch mloda.core.api.request.Engine.
 from mloda.core.core.engine import Engine as Engine
 from mloda.core.api.plan_info import PlanStep, build_plan_steps
 from mloda.core.api.run_result import ResultStream, RunResult
@@ -169,7 +171,7 @@ class mlodaAPI:
             flight_server=flight_server,
             function_extender=function_extender,
         )
-        return RunResult(results, session)
+        return RunResult(results, session.resolved_plan())
 
     @classmethod
     def stream_all(
@@ -210,6 +212,7 @@ class mlodaAPI:
             column_ordering=column_ordering,
             parallelization_modes=parallelization_modes,
         )
+        # Planning is eager in prepare, so the plan snapshot is available before iteration.
         return ResultStream(
             session.stream_run(
                 api_data=api_data,
@@ -217,7 +220,7 @@ class mlodaAPI:
                 flight_server=flight_server,
                 function_extender=function_extender,
             ),
-            session,
+            session.resolved_plan(),
         )
 
     @classmethod

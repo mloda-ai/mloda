@@ -138,7 +138,9 @@ from mloda.user import mloda
 results = mloda.run_all(["sales__mean_aggr"], compute_frameworks=["PandasDataFrame"])
 for step in results.plan:
     print(step.step_kind, step.feature_names)
-``` To match a `run_all` resolution, pass the same `parallelization_modes`: `run_all` defaults to `{ParallelizationMode.SYNC}`, `prepare`/`explain` default to `None`, and compute frameworks are filtered by mode.
+```
+
+To match a `run_all` resolution, pass the same `parallelization_modes`: `run_all` defaults to `{ParallelizationMode.SYNC}`, `prepare`/`explain` default to `None`, and compute frameworks are filtered by mode.
 
 ``` python
 from mloda.user import mloda

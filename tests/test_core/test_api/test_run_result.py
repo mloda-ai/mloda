@@ -17,6 +17,8 @@ The chained ``plan_info_sales__mean_aggr`` request reuses the feature groups reg
 """
 
 import collections.abc
+import copy
+import pickle  # nosec B403
 from typing import Any
 from unittest.mock import patch
 
@@ -231,6 +233,48 @@ class TestPublicExports:
 
         assert type(_run_all()) is RunResult
         assert isinstance(_stream_all(), ResultStream)
+
+
+class TestRunResultIsPlainData:
+    """RunResult is plain data: picklable, deep-copyable, and free of the producing session."""
+
+    def test_pickle_round_trip_preserves_content(self) -> None:
+        results = _run_all()
+
+        loaded = pickle.loads(pickle.dumps(results))  # nosec B301
+
+        assert len(loaded) == len(results) == 1
+        assert loaded[0]["plan_info_sales__mean_aggr"].tolist() == results[0]["plan_info_sales__mean_aggr"].tolist()
+
+    def test_pickle_round_trip_preserves_type_and_plan(self) -> None:
+        from mloda.user import RunResult
+
+        results = _run_all()
+
+        loaded = pickle.loads(pickle.dumps(results))  # nosec B301
+
+        assert type(loaded) is RunResult
+        assert loaded.plan == results.plan
+
+    def test_deepcopy_preserves_content(self) -> None:
+        results = _run_all()
+
+        copied = copy.deepcopy(results)
+
+        assert len(copied) == len(results) == 1
+        assert copied[0]["plan_info_sales__mean_aggr"].tolist() == results[0]["plan_info_sales__mean_aggr"].tolist()
+
+    def test_run_result_does_not_retain_the_session(self) -> None:
+        """Memory pin: the plan is snapshotted eagerly, the session reference is dropped."""
+        results = _run_all()
+
+        assert not hasattr(results, "_session")
+
+    def test_result_stream_does_not_retain_the_session(self) -> None:
+        """Memory pin: same session-free contract for stream_all."""
+        stream = _stream_all()
+
+        assert not hasattr(stream, "_session")
 
 
 class TestSubclassDispatch:

@@ -126,16 +126,28 @@ and resolution paths intentionally differ:
 The annotate tier is a single shared helper,
 `safe_field(read, fallback, catching=(Exception,), field="")` in
 `mloda.core.abstract_plugins.components.utils`: it calls the `read` thunk and
-returns `fallback` if the read raises one of `catching`. Every overridable read
-in a catalog walk is annotate tier and routes through it, so the next catalog
-function or info field reaches for one helper instead of re-deriving a
-`try/except`. Identity fields fall back to the base-class implementation rather
-than a sentinel: a feature group whose `get_class_name()` raises is listed under
-its `__name__`, and one whose `prefix()` raises gets `"<__name__>_"`. A swallowed
-read is always logged as a WARNING naming the `field` label and the exception, so
-degrading is never silent. A feature group whose `compute_framework_definition()`
+returns `fallback` if the read raises one of `catching`, so a catalog function or
+info field reaches for one helper instead of re-deriving a `try/except`.
+
+Logging is opt-in via the `field` label. The five labelled reads in
+`get_feature_group_docs` warn on swallow, naming the class, the field and the
+exception, because a raise there means a broken plugin. The unlabelled guards
+degrade silently, because degrading there is expected by design: source
+introspection fails for `type()`-built classes, a framework availability probe
+raises when an optional backend is not installed, and Iceberg's `merge_engine()`
+deliberately raises `NotImplementedError`. Warning on those would be log spam.
+
+The guarded reads that feed a filter (`get_class_name()` for `name=` and the
+final sort, `description()` for `search=`, `version()` for `version_contains=`)
+also validate that the plugin returned a `str`, so a plugin that returns the
+wrong type degrades through the same path instead of sinking the whole call.
+Fallbacks are base-class-derived rather than sentinels: a feature group whose
+`description()` degrades is documented with its docstring (or, lacking one, its
+`__name__`), which keeps it findable via `search=`; one whose `prefix()` raises
+gets `"<__name__>_"`. A feature group whose `compute_framework_definition()`
 degrades to `[]` is excluded by a `compute_framework=` filter, mirroring how a
 framework degraded to `is_available=False` is excluded by `available_only=True`.
+
 `get_compute_framework_docs` uses the default broad `catching` (any failure
 degrades the field), while the narrower named guards `_safe_version` (in
 `plugin_docs.py`) and `_safe_class_source_hash` (one layer down in

@@ -4,10 +4,13 @@ safe_field is the "annotate" tier: it reads one introspected field and, if the
 read raises an exception in `catching`, returns a caller-supplied fallback
 instead of propagating. Exceptions outside `catching` still propagate.
 
-A swallowed read is not silent: safe_field logs a WARNING naming the field
-label (the optional `field` argument) and the exception it swallowed, so a
-broken plugin is diagnosable from the logs even though the catalog call
-degrades instead of failing.
+Logging is opt-in via the `field` label. A swallowed read with a non-empty
+`field` logs a WARNING naming the label and the exception, so a broken plugin
+stays diagnosable even though the catalog call degrades instead of failing.
+A swallowed read WITHOUT a `field` label is completely silent: those call sites
+are by-design degradations on healthy systems (source introspection of
+type()-built classes, a deliberately unimplemented merge engine, an uninstalled
+optional backend), where a WARNING would be pure log spam.
 """
 
 import logging
@@ -27,6 +30,11 @@ def _warning_messages(caplog: pytest.LogCaptureFixture) -> list[str]:
         for record in caplog.records
         if record.levelno == logging.WARNING and record.name == SAFE_FIELD_LOGGER
     ]
+
+
+def _module_messages(caplog: pytest.LogCaptureFixture) -> list[str]:
+    """Return messages emitted by the safe_field module logger at any level."""
+    return [record.getMessage() for record in caplog.records if record.name == SAFE_FIELD_LOGGER]
 
 
 class TestSafeFieldSuccessPath:
@@ -108,6 +116,48 @@ class TestSafeFieldWarnsOnSwallow:
         assert "missing_key" in messages[0]
 
 
+class TestSafeFieldUnlabelledSwallowIsSilent:
+    """A swallowed read without a field label logs nothing at all.
+
+    The unlabelled call sites degrade by design on a healthy system, so warning
+    on them is log spam. Only a labelled read opts into a WARNING.
+    """
+
+    def test_unlabelled_swallow_logs_nothing(self, caplog: pytest.LogCaptureFixture) -> None:
+        def raises() -> str:
+            raise RuntimeError("boom")
+
+        with caplog.at_level(logging.DEBUG, logger=SAFE_FIELD_LOGGER):
+            result = safe_field(raises, "unavailable")
+
+        assert result == "unavailable"
+        assert _module_messages(caplog) == [], "An unlabelled swallow must not log anything"
+
+    def test_empty_field_label_swallow_logs_nothing(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Passing field="" explicitly is the same as passing no label: silent."""
+
+        def raises() -> str:
+            raise RuntimeError("boom")
+
+        with caplog.at_level(logging.DEBUG, logger=SAFE_FIELD_LOGGER):
+            result = safe_field(raises, "unavailable", field="")
+
+        assert result == "unavailable"
+        assert _module_messages(caplog) == [], "An empty field label must not log anything"
+
+    def test_unlabelled_swallow_of_narrow_catching_logs_nothing(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Source-introspection style call sites (narrow catching, no label) stay silent."""
+
+        def raises() -> str:
+            raise OSError("source not found")
+
+        with caplog.at_level(logging.DEBUG, logger=SAFE_FIELD_LOGGER):
+            result = safe_field(raises, "unavailable", catching=(OSError, TypeError))
+
+        assert result == "unavailable"
+        assert _module_messages(caplog) == []
+
+
 class TestSafeFieldSuccessPathIsSilent:
     """The success path never logs: only a degraded read is worth a warning."""
 
@@ -116,14 +166,14 @@ class TestSafeFieldSuccessPathIsSilent:
             result = safe_field(lambda: 42, -1, field="version")
 
         assert result == 42
-        assert [record.getMessage() for record in caplog.records if record.name == SAFE_FIELD_LOGGER] == []
+        assert _module_messages(caplog) == []
 
     def test_success_path_logs_nothing_without_field_label(self, caplog: pytest.LogCaptureFixture) -> None:
         with caplog.at_level(logging.DEBUG, logger=SAFE_FIELD_LOGGER):
             result = safe_field(lambda: 42, -1)
 
         assert result == 42
-        assert [record.getMessage() for record in caplog.records if record.name == SAFE_FIELD_LOGGER] == []
+        assert _module_messages(caplog) == []
 
 
 class TestSafeFieldFieldLabelKeepsExistingBehavior:

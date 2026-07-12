@@ -1,5 +1,6 @@
 import gc
 import inspect
+import logging
 from typing import Any
 
 import pytest
@@ -17,6 +18,8 @@ from mloda.core.api.plugin_docs import (
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.user import PluginLoader
+
+SAFE_FIELD_LOGGER = "mloda.core.abstract_plugins.components.utils"
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -268,8 +271,13 @@ class TestGetFeatureGroupDocsDegradedFieldReads:
             del _DocsGetClassNameBoomFG
             gc.collect()
 
-    def test_description_raising_degrades_to_empty_string(self) -> None:
-        """A broken description() falls back to the empty string."""
+    def test_description_raising_degrades_to_class_docstring(self) -> None:
+        """A broken description() falls back to the class docstring, as compute frameworks already do.
+
+        The fallback is base-class-derived, not "": an empty description would hide the
+        broken plugin from every ``search=`` query, which is exactly the masking risk the
+        degradation is meant to avoid.
+        """
 
         class _DocsDescriptionBoomFG(FeatureGroup):
             """Test double whose description() raises."""
@@ -281,9 +289,25 @@ class TestGetFeatureGroupDocsDegradedFieldReads:
         try:
             by_name = {fg.name: fg for fg in get_feature_group_docs()}
             assert "_DocsDescriptionBoomFG" in by_name, "Degraded class must still be documented"
-            assert by_name["_DocsDescriptionBoomFG"].description == ""
+            assert by_name["_DocsDescriptionBoomFG"].description == "Test double whose description() raises."
         finally:
             del _DocsDescriptionBoomFG
+            gc.collect()
+
+    def test_description_raising_without_docstring_degrades_to_class_name(self) -> None:
+        """With no docstring to fall back on, a broken description() degrades to the class name."""
+
+        class _DocsDescriptionNoDocstringFG(FeatureGroup):
+            @classmethod
+            def description(cls) -> str:
+                raise RuntimeError("boom")
+
+        try:
+            by_name = {fg.name: fg for fg in get_feature_group_docs()}
+            assert "_DocsDescriptionNoDocstringFG" in by_name, "Degraded class must still be documented"
+            assert by_name["_DocsDescriptionNoDocstringFG"].description == "_DocsDescriptionNoDocstringFG"
+        finally:
+            del _DocsDescriptionNoDocstringFG
             gc.collect()
 
     def test_compute_framework_definition_raising_degrades_to_empty_list(self) -> None:
@@ -302,6 +326,57 @@ class TestGetFeatureGroupDocsDegradedFieldReads:
             assert by_name["_DocsFrameworkBoomFG"].compute_frameworks == []
         finally:
             del _DocsFrameworkBoomFG
+            gc.collect()
+
+    def test_compute_framework_rule_raising_degrades_to_empty_list(self) -> None:
+        """The realistic break: compute_framework_definition() is @final, but the rule hook it calls is not.
+
+        A plugin cannot override the final definition hook, so the way a real plugin breaks
+        framework discovery is by raising from the overridable compute_framework_rule().
+        That exception surfaces through the final method and must degrade the same way.
+        """
+
+        class _DocsFrameworkRuleBoomFG(FeatureGroup):
+            """Test double whose compute_framework_rule() raises."""
+
+            @classmethod
+            def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+                raise RuntimeError("boom")
+
+        try:
+            by_name = {fg.name: fg for fg in get_feature_group_docs()}
+            assert "_DocsFrameworkRuleBoomFG" in by_name, "Degraded class must still be documented"
+            assert by_name["_DocsFrameworkRuleBoomFG"].compute_frameworks == []
+        finally:
+            del _DocsFrameworkRuleBoomFG
+            gc.collect()
+
+    def test_degraded_compute_framework_rule_excluded_by_compute_framework_filter(self) -> None:
+        """A class whose compute_framework_rule() raises is excluded by a compute_framework= filter."""
+        baseline = get_feature_group_docs()
+        canonical_name: str | None = None
+        for fg in baseline:
+            if len(fg.compute_frameworks) > 0:
+                canonical_name = fg.compute_frameworks[0]
+                break
+        assert canonical_name is not None, "Need a feature group with at least one compute framework"
+
+        class _DocsFrameworkRuleFilterBoomFG(FeatureGroup):
+            """Test double whose compute_framework_rule() raises."""
+
+            @classmethod
+            def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+                raise RuntimeError("boom")
+
+        try:
+            unfiltered = {fg.name for fg in get_feature_group_docs()}
+            assert "_DocsFrameworkRuleFilterBoomFG" in unfiltered, "Degraded class must still be documented"
+
+            filtered = get_feature_group_docs(compute_framework=canonical_name)
+            assert len(filtered) > 0, "Healthy feature groups must still match the framework filter"
+            assert "_DocsFrameworkRuleFilterBoomFG" not in {fg.name for fg in filtered}
+        finally:
+            del _DocsFrameworkRuleFilterBoomFG
             gc.collect()
 
     def test_feature_names_supported_raising_degrades_to_empty_set(self) -> None:
@@ -377,25 +452,40 @@ class TestGetFeatureGroupDocsDegradedFieldReads:
             del _DocsNameFilterBoomFG
             gc.collect()
 
-    def test_degraded_description_excluded_by_search_filter(self) -> None:
-        """A class whose description() raises degrades to "" and so matches no search query."""
+    def test_degraded_description_still_findable_by_search_filter(self) -> None:
+        """A class whose description() raises stays findable via search= on its docstring.
+
+        Degrading to the docstring keeps a broken plugin discoverable; degrading to ""
+        would make it invisible to every search query.
+        """
 
         class _DocsSearchBoomFG(FeatureGroup):
-            """Test double whose description() raises with a searchable docstring."""
+            """Test double whose description() raises, keyword lodestarquux."""
 
             @classmethod
             def description(cls) -> str:
-                raise RuntimeError("searchable boom")
+                raise RuntimeError("boom")
 
         try:
-            unfiltered = {fg.name: fg for fg in get_feature_group_docs()}
-            assert "_DocsSearchBoomFG" in unfiltered, "Degraded class must still be documented"
-            assert unfiltered["_DocsSearchBoomFG"].description == ""
-
-            searched = {fg.name for fg in get_feature_group_docs(search="searchable")}
-            assert "_DocsSearchBoomFG" not in searched, "An empty description must not match a search query"
+            searched = {fg.name for fg in get_feature_group_docs(search="lodestarquux")}
+            assert "_DocsSearchBoomFG" in searched, "A degraded description must stay searchable via the docstring"
         finally:
             del _DocsSearchBoomFG
+            gc.collect()
+
+    def test_degraded_description_without_docstring_findable_by_class_name_search(self) -> None:
+        """With no docstring, the degraded description is the class name and search= finds it there."""
+
+        class _DocsSearchNoDocstringBoomFG(FeatureGroup):
+            @classmethod
+            def description(cls) -> str:
+                raise RuntimeError("boom")
+
+        try:
+            searched = {fg.name for fg in get_feature_group_docs(search="_DocsSearchNoDocstringBoomFG")}
+            assert "_DocsSearchNoDocstringBoomFG" in searched
+        finally:
+            del _DocsSearchNoDocstringBoomFG
             gc.collect()
 
     def test_degraded_compute_frameworks_excluded_by_compute_framework_filter(self) -> None:
@@ -428,6 +518,218 @@ class TestGetFeatureGroupDocsDegradedFieldReads:
             assert "_DocsFrameworkFilterBoomFG" not in {fg.name for fg in filtered}
         finally:
             del _DocsFrameworkFilterBoomFG
+            gc.collect()
+
+
+class TestGetFeatureGroupDocsContractViolations:
+    """A plugin that returns the WRONG TYPE degrades through the same path as one that raises.
+
+    Raising is not the only way a plugin breaks its contract. A ``description()`` that
+    returns ``None`` raises nothing, so a guard keyed only on exceptions never fires and
+    the catalog call dies later, in the ``search=`` filter, with an ``AttributeError``.
+    The two reads that feed filters (``get_class_name`` for ``name=`` and the sort,
+    ``description`` for ``search=``) must validate the returned type inside the guard so a
+    contract violation degrades to the same base-class-derived fallback.
+
+    Isolation follows the sibling class: doubles are function-local and reaped in ``finally``.
+    """
+
+    def test_description_returning_none_does_not_sink_the_search_filter(self) -> None:
+        """description() -> None must not blow up search=, it degrades to the docstring."""
+
+        class _DocsDescriptionNoneFG(FeatureGroup):
+            """Test double whose description() returns None, keyword ripcordquux."""
+
+            @classmethod
+            def description(cls) -> Any:
+                return None
+
+        try:
+            searched = {fg.name for fg in get_feature_group_docs(search="ripcordquux")}
+            assert "_DocsDescriptionNoneFG" in searched, "A None description must degrade to the docstring"
+        finally:
+            del _DocsDescriptionNoneFG
+            gc.collect()
+
+    def test_description_returning_none_degrades_to_class_docstring(self) -> None:
+        """The unfiltered catalog reports the base-class-derived fallback, not None."""
+
+        class _DocsDescriptionNoneUnfilteredFG(FeatureGroup):
+            """Test double whose description() returns None."""
+
+            @classmethod
+            def description(cls) -> Any:
+                return None
+
+        try:
+            by_name = {fg.name: fg for fg in get_feature_group_docs()}
+            assert "_DocsDescriptionNoneUnfilteredFG" in by_name, "Contract-violating class must still be documented"
+            assert (
+                by_name["_DocsDescriptionNoneUnfilteredFG"].description
+                == "Test double whose description() returns None."
+            )
+        finally:
+            del _DocsDescriptionNoneUnfilteredFG
+            gc.collect()
+
+    def test_get_class_name_returning_non_str_does_not_sink_the_name_filter(self) -> None:
+        """get_class_name() -> non-str must not blow up name=, it degrades to the class __name__."""
+
+        class _DocsClassNameNonStrFG(FeatureGroup):
+            """Test double whose get_class_name() returns an int."""
+
+            @classmethod  # type: ignore[misc]
+            def get_class_name(cls) -> Any:
+                return 42
+
+        try:
+            filtered = get_feature_group_docs(name="_DocsClassNameNonStrFG")
+            assert [fg.name for fg in filtered] == ["_DocsClassNameNonStrFG"]
+        finally:
+            del _DocsClassNameNonStrFG
+            gc.collect()
+
+    def test_get_class_name_returning_non_str_degrades_in_unfiltered_catalog(self) -> None:
+        """The unfiltered catalog (which sorts by name) also survives a non-str name."""
+
+        class _DocsClassNameNonStrUnfilteredFG(FeatureGroup):
+            """Test double whose get_class_name() returns an int."""
+
+            @classmethod  # type: ignore[misc]
+            def get_class_name(cls) -> Any:
+                return 42
+
+        try:
+            by_name = {fg.name: fg for fg in get_feature_group_docs()}
+            assert "_DocsClassNameNonStrUnfilteredFG" in by_name, "Contract-violating class must still be documented"
+            assert by_name["_DocsClassNameNonStrUnfilteredFG"].name == "_DocsClassNameNonStrUnfilteredFG"
+        finally:
+            del _DocsClassNameNonStrUnfilteredFG
+            gc.collect()
+
+    def test_version_returning_non_str_does_not_sink_the_version_filter(self) -> None:
+        """version() -> non-str must not blow up version_contains=, it degrades to "unavailable".
+
+        The third read that feeds a filter. A non-str version passes the exception-only guard
+        and then dies in ``version_contains not in version``, exactly as the None description
+        dies in the search filter.
+        """
+
+        class _DocsVersionNonStrFG(FeatureGroup):
+            """Test double whose version() returns an int."""
+
+            @classmethod
+            def version(cls) -> Any:
+                return 42
+
+        try:
+            filtered = get_feature_group_docs(version_contains="unavailable")
+            assert "_DocsVersionNonStrFG" in {fg.name for fg in filtered}, (
+                "A non-str version must degrade to the documented sentinel and stay filterable"
+            )
+        finally:
+            del _DocsVersionNonStrFG
+            gc.collect()
+
+    def test_version_returning_non_str_degrades_to_unavailable(self) -> None:
+        """The unfiltered catalog reports the "unavailable" sentinel, not the non-str value."""
+
+        class _DocsVersionNonStrUnfilteredFG(FeatureGroup):
+            """Test double whose version() returns an int."""
+
+            @classmethod
+            def version(cls) -> Any:
+                return 42
+
+        try:
+            by_name = {fg.name: fg for fg in get_feature_group_docs()}
+            assert "_DocsVersionNonStrUnfilteredFG" in by_name, "Contract-violating class must still be documented"
+            assert by_name["_DocsVersionNonStrUnfilteredFG"].version == "unavailable"
+        finally:
+            del _DocsVersionNonStrUnfilteredFG
+            gc.collect()
+
+    def test_version_degradation_stays_silent(self, caplog: pytest.LogCaptureFixture) -> None:
+        """_safe_version is unlabelled by design, so a degraded version read logs nothing."""
+
+        class _DocsVersionSilentFG(FeatureGroup):
+            """Test double whose version() returns an int."""
+
+            @classmethod
+            def version(cls) -> Any:
+                return 42
+
+        try:
+            with caplog.at_level(logging.DEBUG, logger=SAFE_FIELD_LOGGER):
+                by_name = {fg.name: fg for fg in get_feature_group_docs()}
+
+            assert by_name["_DocsVersionSilentFG"].version == "unavailable"
+
+            messages = [record.getMessage() for record in caplog.records if record.name == SAFE_FIELD_LOGGER]
+            assert messages == [], f"An unlabelled version degradation must be silent, got {messages}"
+        finally:
+            del _DocsVersionSilentFG
+            gc.collect()
+
+
+class TestDegradedReadLogging:
+    """Feature-group reads are labelled, so they warn. Compute-framework reads are not, so they stay silent.
+
+    The labels are the only thing that makes a degraded plugin diagnosable, so they are
+    asserted here: dropping ``field=`` from the feature-group call sites must fail a test.
+    The compute-framework call sites are deliberately unlabelled, because they degrade by
+    design on a healthy system (an uninstalled optional backend, a deliberately
+    unimplemented merge engine), and warning on those is log spam.
+    """
+
+    def test_degraded_feature_group_read_logs_warning_naming_class_and_field(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        class _DocsWarnBoomFG(FeatureGroup):
+            """Test double whose description() raises."""
+
+            @classmethod
+            def description(cls) -> str:
+                raise RuntimeError("boom")
+
+        try:
+            with caplog.at_level(logging.WARNING, logger=SAFE_FIELD_LOGGER):
+                get_feature_group_docs()
+
+            messages = [
+                record.getMessage()
+                for record in caplog.records
+                if record.levelno == logging.WARNING and record.name == SAFE_FIELD_LOGGER
+            ]
+            matching = [msg for msg in messages if "_DocsWarnBoomFG.description" in msg]
+            assert len(matching) >= 1, f"Expected a WARNING naming '_DocsWarnBoomFG.description', got {messages}"
+            assert "boom" in matching[0], "Warning must carry the swallowed exception message"
+        finally:
+            del _DocsWarnBoomFG
+            gc.collect()
+
+    def test_degraded_compute_framework_read_logs_nothing(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Compute-framework field reads are unlabelled by design, so a degraded read is silent."""
+
+        class _DocsSilentBoomCFW(ComputeFramework):
+            """Test double whose availability probe raises."""
+
+            @staticmethod
+            def is_available() -> bool:
+                raise RuntimeError("boom")
+
+        try:
+            with caplog.at_level(logging.DEBUG, logger=SAFE_FIELD_LOGGER):
+                results = get_compute_framework_docs()
+
+            by_name = {cfw.name: cfw for cfw in results}
+            assert "_DocsSilentBoomCFW" in by_name, "Degraded framework must still be documented"
+            assert by_name["_DocsSilentBoomCFW"].is_available is False
+
+            messages = [record.getMessage() for record in caplog.records if record.name == SAFE_FIELD_LOGGER]
+            assert messages == [], f"Unlabelled compute-framework reads must degrade silently, got {messages}"
+        finally:
+            del _DocsSilentBoomCFW
             gc.collect()
 
 

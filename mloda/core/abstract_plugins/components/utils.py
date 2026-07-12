@@ -17,12 +17,15 @@ def safe_field(
 ) -> T:
     """Annotate tier: degrade a single unreadable field to a fallback instead of failing the whole discovery call.
 
-    A swallowed read is logged as a WARNING naming `field` and the exception, so the broken plugin stays diagnosable.
+    A labelled read (non-empty `field`) warns on swallow; an unlabelled read degrades silently, because degrading
+    there is expected.
     """
     try:
         return read()
     except catching as exc:
-        logger.warning("Degraded field '%s': %s: %s", field, type(exc).__name__, exc)
+        if field:
+            # str(exc), not exc: a retained log record must not pin the traceback, its frames and the plugin class.
+            logger.warning("Degraded field '%s': %s: %s", field, type(exc).__name__, str(exc))
         return fallback
 
 

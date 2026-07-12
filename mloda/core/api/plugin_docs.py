@@ -40,9 +40,16 @@ def list_registered(plugin_type: type[Any]) -> list[type[Any]]:
     return PluginRegistry.default().list_registered(plugin_type)
 
 
+def _as_str(value: Any) -> str:
+    """Return `value` unchanged, raising TypeError if a plugin returned a non-str, so the guarded read degrades."""
+    if not isinstance(value, str):
+        raise TypeError(f"expected str, got {type(value).__name__}")
+    return value
+
+
 def _safe_version(fg_class: type[FeatureGroup]) -> str:
-    """Return the feature group version or "unavailable" if source introspection fails."""
-    return safe_field(lambda: fg_class.version(), "unavailable", catching=SOURCE_INTROSPECTION_ERRORS)
+    """Return the feature group version or "unavailable" if source introspection fails or version() is not a str."""
+    return safe_field(lambda: _as_str(fg_class.version()), "unavailable", catching=SOURCE_INTROSPECTION_ERRORS)
 
 
 def _dedup_degrading_on_conflict(
@@ -74,6 +81,11 @@ def get_feature_group_docs(
     version. Reports "unavailable" as version for classes whose source
     cannot be introspected.
 
+    Degrades per field rather than failing the call: a name, description,
+    compute framework list, supported feature name set or prefix that raises
+    (or, where it feeds a filter, returns a non-str) falls back to a
+    base-class-derived value and logs a WARNING naming the class and field.
+
     Args:
         name: Filter by feature group name (case-insensitive partial match).
         search: Search in feature group description (case-insensitive partial match).
@@ -100,8 +112,9 @@ def get_feature_group_docs(
             continue
 
         cls_name = fg_class.__name__
-        fg_name = safe_field(lambda: fg_class.get_class_name(), cls_name, field=f"{cls_name}.get_class_name")
-        description = safe_field(lambda: fg_class.description(), "", field=f"{cls_name}.description")
+        fg_name = safe_field(lambda: _as_str(fg_class.get_class_name()), cls_name, field=f"{cls_name}.get_class_name")
+        doc_fallback = (fg_class.__doc__ or "").strip() or cls_name
+        description = safe_field(lambda: _as_str(fg_class.description()), doc_fallback, field=f"{cls_name}.description")
         version = _safe_version(fg_class)
         module = fg_class.__module__
         compute_frameworks: list[str] = safe_field(

@@ -59,6 +59,16 @@ Feature("subject_token", feature_group=ClaimsReader)
 Feature("subject_token", feature_group="ClaimsReader")
 ```
 
+The same scope in a JSON config ([feature config](../feature-config.md)):
+
+``` json
+[
+    {"name": "subject_token", "feature_group": "ClaimsReader"}
+]
+```
+
+The config form takes the class-name string only, because JSON cannot express a class object; the class-object form is Python-only.
+
 Caveats:
 
 - The string form matches the exact class name only: it does not match subclasses, and two classes with the same name in different modules stay ambiguous. The class-object form matches the class and its registered subclasses, preferring the most specific subclass, so prefer the class object.

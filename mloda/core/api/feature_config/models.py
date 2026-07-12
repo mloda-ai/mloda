@@ -9,6 +9,20 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 
+def validate_feature_group_scope(value: Any) -> Optional[str]:
+    """Config scope is a non-empty class-name string; the class-object form is Python-only."""
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(
+            "'feature_group' must be a feature group class-name string; "
+            "the class-object form is only available in Python, not in a config"
+        )
+    if not value.strip():
+        raise ValueError("'feature_group' must be a non-empty feature group class-name string")
+    return value
+
+
 @dataclass
 class FeatureConfig:
     """Model for a feature configuration with name and options."""
@@ -20,6 +34,7 @@ class FeatureConfig:
     context_options: Optional[dict[str, Any]] = None
     propagate_context_keys: Optional[list[str]] = None
     column_index: Optional[int] = None
+    feature_group: Optional[str] = None
 
     def __post_init__(self) -> None:
         """Validate that options and group_options/context_options are mutually exclusive."""
@@ -30,6 +45,7 @@ class FeatureConfig:
                 "'propagate_context_keys' requires 'context_options'; "
                 "it is meaningless without context options and would otherwise be silently dropped"
             )
+        validate_feature_group_scope(self.feature_group)
 
 
 def feature_config_schema() -> dict[str, Any]:
@@ -48,6 +64,7 @@ def feature_config_schema() -> dict[str, Any]:
             "context_options": {"type": "object"},
             "propagate_context_keys": {"type": "array", "items": {"type": "string"}},
             "column_index": {"type": "integer"},
+            "feature_group": {"type": "string", "minLength": 1},
         },
         "required": ["name"],
         "additionalProperties": False,

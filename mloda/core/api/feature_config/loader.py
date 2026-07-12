@@ -13,7 +13,7 @@ from typing import Any
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.api.feature_config.parser import parse_json
-from mloda.core.api.feature_config.models import FeatureConfig
+from mloda.core.api.feature_config.models import FeatureConfig, validate_feature_group_scope
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 
 
@@ -51,8 +51,15 @@ def process_nested_features(options: dict[str, Any]) -> dict[str, Any]:
                 else:
                     processed_nested_options["in_features"] = in_features
 
-            # Create the Feature object
-            processed[key] = Feature(name=feature_name, options=processed_nested_options)
+            # The nested dict skips FeatureConfig, so validate its scope with the same rules
+            nested_feature_group = validate_feature_group_scope(value.get("feature_group"))
+
+            # Create the Feature object, keeping any nested resolution scope
+            processed[key] = Feature(
+                name=feature_name,
+                options=processed_nested_options,
+                feature_group=nested_feature_group,
+            )
         elif isinstance(value, dict):
             # Recursively process nested dicts
             processed[key] = process_nested_features(value)
@@ -103,7 +110,7 @@ def load_features_from_config(config_str: str, format: str = "json") -> list[Fea
                     if item.propagate_context_keys
                     else None,
                 )
-                feature = Feature(name=feature_name, options=options)
+                feature = Feature(name=feature_name, options=options, feature_group=item.feature_group)
                 features.append(feature)
             # Check if in_features exists and create Options accordingly
             elif item.in_features:
@@ -112,12 +119,12 @@ def load_features_from_config(config_str: str, format: str = "json") -> list[Fea
                 # Always convert to frozenset for consistency (even single items)
                 source_value = frozenset(item.in_features)
                 options = Options(group=processed_options, context={DefaultOptionKeys.in_features: source_value})
-                feature = Feature(name=feature_name, options=options)
+                feature = Feature(name=feature_name, options=options, feature_group=item.feature_group)
                 features.append(feature)
             else:
                 # Process nested features in options before creating Feature
                 processed_options = process_nested_features(item.options)
-                feature = Feature(name=feature_name, options=processed_options)
+                feature = Feature(name=feature_name, options=processed_options, feature_group=item.feature_group)
                 features.append(feature)
         else:
             raise ValueError(f"Unexpected config item type: {type(item)}")

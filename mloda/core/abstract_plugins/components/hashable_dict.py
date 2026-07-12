@@ -3,7 +3,15 @@ from typing import Any
 
 def _make_hashable(value: Any) -> Any:
     if isinstance(value, dict):
-        return tuple(sorted((k, _make_hashable(v)) for k, v in value.items()))
+        items = [(k, _make_hashable(v)) for k, v in value.items()]
+        # Mixed-type keys (e.g. reader class plus str) are unorderable; fall back to a
+        # type-robust deterministic sort. The common orderable case stays unchanged.
+        try:
+            return tuple(sorted(items))
+        except TypeError:
+            return tuple(
+                sorted(items, key=lambda kv: (kv[0].__class__.__module__, kv[0].__class__.__qualname__, repr(kv[0])))
+            )
     if isinstance(value, (list, tuple)):
         return tuple(_make_hashable(item) for item in value)
     if isinstance(value, set):

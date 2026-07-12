@@ -128,7 +128,9 @@ When two enabled sources declare the same column (for example a shared join key)
 
 The config form takes a non-empty class-name string only, since JSON cannot express a class object. In Python, `Feature("subject_token", feature_group=ClaimsReader)` also accepts the class object.
 
-The string matches the named class and its subclasses, preferring the most specific one, exactly like the class object. Naming an abstract family base such as `"AggregatedFeatureGroup"` therefore selects the concrete subclass for the compute framework of the run, so the config does not have to name a framework-specific class. Two classes with the same name in different modules both match and stay ambiguous, and the root `FeatureGroup` base is rejected.
+The string matches the named class and its subclasses, preferring the most specific one, exactly like the class object. Naming an abstract family base such as `"AggregatedFeatureGroup"` therefore selects the concrete subclass, so the config does not have to name a compute-framework-specific class.
+
+The scope narrows candidates but does not break ties between them. If the run enables two compute frameworks whose concrete subclasses both match, the family base stays ambiguous and raises, exactly as the bare name does; enable one framework for the run. Two classes with the same name in different modules likewise both match and stay ambiguous, and the root `FeatureGroup` base is rejected.
 
 The scope is resolution-only and excluded from feature identity, so requesting the same name scoped to two different sources in one list raises `ValueError: Duplicate feature setup: <name>` rather than silently dropping one; see [Feature Group resolution errors](troubleshooting/feature-group-resolution-errors.md).
 

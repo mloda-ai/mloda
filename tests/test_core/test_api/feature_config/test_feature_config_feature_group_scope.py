@@ -26,7 +26,9 @@ from mloda.user import Feature
 from mloda.user import PluginCollector
 from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregatedFeatureGroup
 
 
 # ---------------------------------------------------------------------------
@@ -327,6 +329,63 @@ def test_loader_nested_in_features_rejects_whitespace_only_feature_group() -> No
 
 
 # ---------------------------------------------------------------------------
+# The root FeatureGroup base name is rejected by the config layer (issue #682)
+#
+# A string scope matches by ancestry, so the root base name would scope to every
+# candidate. Feature() rejects it with a TypeError, but a config value must fail
+# as a config error: ValueError from the config validation, like every other
+# invalid scope value, on the top-level path AND the nested in_features path.
+# ---------------------------------------------------------------------------
+
+ROOT_BASE_NAME = FeatureGroup.get_class_name()
+
+
+def test_feature_config_rejects_root_feature_group_base_name() -> None:
+    """The root base name is a wildcard scope and must be rejected by FeatureConfig."""
+    with pytest.raises(ValueError, match="feature_group"):
+        FeatureConfig(name="shared_token", feature_group=ROOT_BASE_NAME)
+
+
+def test_loader_rejects_root_feature_group_base_name() -> None:
+    """The loader rejects the root base name with a config ValueError, not a Python TypeError."""
+    config_str = '[{"name": "shared_token", "feature_group": "FeatureGroup"}]'
+
+    with pytest.raises(ValueError, match="feature_group"):
+        load_features_from_config(config_str)
+
+
+def test_nested_in_features_rejects_root_feature_group_base_name() -> None:
+    """The nested path bypasses FeatureConfig, so it must reject the root base name itself."""
+    options: dict[str, Any] = {
+        "in_features": {
+            "name": "shared_token",
+            "feature_group": ROOT_BASE_NAME,
+        },
+    }
+
+    with pytest.raises(ValueError, match="feature_group"):
+        process_nested_features(options)
+
+
+def test_loader_nested_in_features_rejects_root_feature_group_base_name() -> None:
+    """The same nested rejection surfaces through load_features_from_config on a JSON string."""
+    config_str = """[
+        {
+            "name": "outer_feature",
+            "options": {
+                "in_features": {
+                    "name": "shared_token",
+                    "feature_group": "FeatureGroup"
+                }
+            }
+        }
+    ]"""
+
+    with pytest.raises(ValueError, match="feature_group"):
+        load_features_from_config(config_str)
+
+
+# ---------------------------------------------------------------------------
 # Misplaced scope: "feature_group" inside an option container is a hard error
 #
 # The scope is a TOP-LEVEL field. Written inside "options" (or the group/context
@@ -532,7 +591,13 @@ class ConfigScopeAggregationSource(FeatureGroup):
 
 
 def test_end2end_config_abstract_family_base_scope_resolves_to_pandas_subclass() -> None:
-    """A config scoped to 'AggregatedFeatureGroup' runs on the Pandas subclass."""
+    """A config scoped to 'AggregatedFeatureGroup' runs on the Pandas subclass.
+
+    The allowlist keeps the whole family accessible, which is the situation a real
+    config user is in: the scoped abstract base itself, plus a rival concrete
+    sibling for another framework. The base drops out because it cannot be
+    instantiated, the PyArrow sibling because its framework is not enabled.
+    """
     config_str = '[{"name": "config_scope_sales__mean_aggr", "feature_group": "AggregatedFeatureGroup"}]'
 
     features = load_features_from_config(config_str, format="json")
@@ -541,7 +606,12 @@ def test_end2end_config_abstract_family_base_scope_resolves_to_pandas_subclass()
             features,
             compute_frameworks={PandasDataFrame},
             plugin_collector=PluginCollector.enabled_feature_groups(
-                {ConfigScopeAggregationSource, PandasAggregatedFeatureGroup}
+                {
+                    ConfigScopeAggregationSource,
+                    AggregatedFeatureGroup,
+                    PandasAggregatedFeatureGroup,
+                    PyArrowAggregatedFeatureGroup,
+                }
             ),
         )
     )

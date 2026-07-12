@@ -26,11 +26,15 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
-from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
+from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, matches_feature_group_scope
 
 
 class MockComputeFramework(ComputeFramework):
     """Mock compute framework for testing."""
+
+
+class SecondMockComputeFramework(ComputeFramework):
+    """A second mock compute framework, for rival subclasses of different frameworks."""
 
 
 class ScopeSourceA(FeatureGroup):
@@ -577,3 +581,49 @@ def test_base_name_string_scope_with_two_sibling_subclasses_stays_ambiguous() ->
             data_access_collection=None,
         )
     assert "Scoped to feature group: '_DupNameBase'" in str(exc_info.value)
+
+
+def test_base_name_string_scope_with_differing_framework_siblings_stays_ambiguous() -> None:
+    """Rival subclasses on DIFFERENT compute frameworks stay ambiguous under a base-name scope.
+
+    The realistic multi-framework shape: two concrete per-framework siblings of one
+    family base (as PandasAggregatedFeatureGroup and PyArrowAggregatedFeatureGroup
+    are), both enabled. Their compute-framework sets differ, so filter_subclasses
+    takes its early-continue branch and cannot pick a winner, and neither is a
+    subclass of the other. Resolution must raise instead of silently choosing one.
+    """
+    framework_sibling_one = type("ScopeFrameworkSiblingOne", (_DupNameBase,), {})
+    framework_sibling_two = type("ScopeFrameworkSiblingTwo", (_DupNameBase,), {})
+    accessible_plugins: FeatureGroupEnvironmentMapping = {
+        framework_sibling_one: {MockComputeFramework},
+        framework_sibling_two: {SecondMockComputeFramework},
+    }
+
+    feature = Feature("subject_token", feature_group=_DupNameBase.get_class_name())
+
+    with pytest.raises(ValueError, match="Multiple feature groups found") as exc_info:
+        IdentifyFeatureGroupClass(
+            feature=feature,
+            accessible_plugins=accessible_plugins,
+            links=None,
+            data_access_collection=None,
+        )
+    message = str(exc_info.value)
+    assert "Scoped to feature group: '_DupNameBase'" in message
+    assert "ScopeFrameworkSiblingOne" in message
+    assert "ScopeFrameworkSiblingTwo" in message
+
+
+# ---------------------------------------------------------------------------
+# The ancestry predicate never treats the root FeatureGroup base as a wildcard
+# ---------------------------------------------------------------------------
+
+
+def test_root_feature_group_base_name_is_not_a_wildcard_scope() -> None:
+    """The root base name matches nothing, even though it is in every candidate's MRO.
+
+    Pins the root exclusion in the ancestry walk directly: no public path reaches
+    it, because Feature() rejects the root base name before resolution.
+    """
+    assert matches_feature_group_scope(ScopeSourceA, FeatureGroup.get_class_name()) is False
+    assert matches_feature_group_scope(ScopeConcreteFamilyMember, FeatureGroup.get_class_name()) is False

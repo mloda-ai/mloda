@@ -179,7 +179,7 @@ class Feature:
         root_rejection = "feature_group cannot be the root FeatureGroup base class; a concrete subclass is required"
         if isinstance(feature_group, str):
             stripped = feature_group.strip()
-            # String scopes match by ancestry, so the root base name would match every candidate.
+            # The root names no feature group family; rejected here as in the class-object form below.
             if stripped == FeatureGroup.get_class_name():
                 raise TypeError(root_rejection)
             return stripped or None

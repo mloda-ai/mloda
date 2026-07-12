@@ -69,7 +69,7 @@ The same scope in a JSON config ([feature config](../feature-config.md)):
 
 The config form takes the class-name string only, because JSON cannot express a class object; the class-object form is Python-only.
 
-Both forms match the scoped class and its subclasses, preferring the most specific one. Naming an abstract family base therefore selects the concrete subclass for the compute framework of the run, so a config can scope to the family without knowing which framework will execute it:
+Both forms match the scoped class and its subclasses, preferring the most specific one. Naming an abstract family base therefore selects the concrete subclass, so a config can scope to the family without naming a compute-framework-specific class:
 
 ``` json
 [
@@ -79,8 +79,10 @@ Both forms match the scoped class and its subclasses, preferring the most specif
 
 Caveats:
 
-- The class object is collision-proof; the string form is not. Two classes with the same name in different modules both match the string, so the request stays ambiguous and raises. A base whose subclasses do not narrow to one candidate also raises.
-- The root `FeatureGroup` base is rejected in either form: it would scope to everything.
+- The scope narrows candidates; it does not break ties between them. If the run enables two compute frameworks whose concrete subclasses both match, the family base stays ambiguous and raises, exactly as the bare name does. Enable one framework for the run, or pin `compute_frameworks` on the `Feature` (Python only).
+- The class object is collision-proof; the string form is not. Two classes with the same name in different modules both match the string, so the request stays ambiguous and raises.
+- Neither form pins one exact class: a subclass of the named class is preferred over it. To resolve to a specific implementation, name that implementation.
+- The root `FeatureGroup` base is rejected in either form: it names no family.
 - The scope is resolution-only and excluded from Feature identity, so two requests for the same column name scoped to different sources compare equal. Requesting both in one features list raises `ValueError: Duplicate feature setup: <name>` rather than silently dropping one, so you are told, not surprised. Inside a single `input_features()` returning a set literal, a second same-name feature with a different scope is silently deduplicated by the Python set itself before the engine ever sees it, so never scope the same name twice within one feature group. To read the same column from two sources side by side, give them distinct derived feature names.
 
 ## FeatureGroup Redefinition Errors

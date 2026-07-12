@@ -44,9 +44,10 @@ def split_frameworks_by_capability(
 def matches_feature_group_scope(feature_group: type[FeatureGroup], scope: str | type[FeatureGroup]) -> bool:
     """Is the candidate inside the requested scope, for both the class-object and the string form.
 
-    The string form is issubclass expressed over class names, so a config that can only carry a name
-    keeps the same subclass-preferring semantics. The root FeatureGroup base is excluded from the
-    ancestry walk because every candidate carries it, which would make it a wildcard.
+    The string form matches the named class and its subclasses by walking the candidate's ancestry
+    (MRO), so a config that can only carry a name keeps the same subclass-preferring semantics. The
+    root FeatureGroup base is excluded from that walk because every candidate carries it, which would
+    make it a wildcard.
     """
     if isinstance(scope, type):
         return issubclass(feature_group, scope)

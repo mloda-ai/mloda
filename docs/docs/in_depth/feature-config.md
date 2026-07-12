@@ -126,7 +126,7 @@ When two enabled sources declare the same column (for example a shared join key)
 ]
 ```
 
-The config form takes the class-name string only, since JSON cannot express a class object. The string matches the exact class name: it does not match subclasses, and two classes with the same name in different modules stay ambiguous. In Python, `Feature("subject_token", feature_group=ClaimsReader)` also accepts the class object. The scope is resolution-only and excluded from feature identity, so the same name scoped to two different sources cannot be requested twice in one list; see [Feature Group resolution errors](troubleshooting/feature-group-resolution-errors.md).
+The config form takes a non-empty class-name string only, since JSON cannot express a class object. The string matches the exact class name: it does not match subclasses, and two classes with the same name in different modules stay ambiguous. In Python, `Feature("subject_token", feature_group=ClaimsReader)` also accepts the class object. The scope is resolution-only and excluded from feature identity, so requesting the same name scoped to two different sources in one list raises `ValueError: Duplicate feature setup: <name>` rather than silently dropping one; see [Feature Group resolution errors](troubleshooting/feature-group-resolution-errors.md).
 
 ## Worked Example: Window, Rank, and Percentile Features
 

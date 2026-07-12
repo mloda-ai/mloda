@@ -5,9 +5,10 @@ enabled feature groups both declare. The JSON config schema has no equivalent
 field, so config-file users hit "Multiple feature groups found".
 
 These tests pin the config-side field: FeatureConfig.feature_group holds a
-class-name STRING (the class-object form stays Python-only), the loader forwards
-it to Feature at every construction site, non-string values are rejected with
-ValueError, and the schema advertises it.
+non-empty class-name STRING (the class-object form stays Python-only), the loader
+forwards it to Feature at every construction site (including the nested
+in_features path, which bypasses FeatureConfig validation), invalid values are
+rejected with ValueError, and the schema advertises it.
 """
 
 from typing import Any, Optional
@@ -64,6 +65,34 @@ def test_feature_config_rejects_class_object_feature_group() -> None:
 
     with pytest.raises(ValueError):
         FeatureConfig(name="shared_token", feature_group=bad_value)
+
+
+def test_feature_config_rejects_empty_feature_group() -> None:
+    """An empty feature_group is a config mistake, not a silent "no scope"."""
+    with pytest.raises(ValueError, match="feature_group"):
+        FeatureConfig(name="shared_token", feature_group="")
+
+
+def test_feature_config_rejects_whitespace_only_feature_group() -> None:
+    """A whitespace-only feature_group strips to nothing and must be rejected too."""
+    with pytest.raises(ValueError, match="feature_group"):
+        FeatureConfig(name="shared_token", feature_group="   ")
+
+
+def test_loader_rejects_empty_feature_group() -> None:
+    """The loader rejects an empty feature_group instead of dropping the scope."""
+    config_str = '[{"name": "shared_token", "feature_group": ""}]'
+
+    with pytest.raises(ValueError, match="feature_group"):
+        load_features_from_config(config_str)
+
+
+def test_loader_rejects_whitespace_only_feature_group() -> None:
+    """The loader rejects a whitespace-only feature_group instead of dropping the scope."""
+    config_str = '[{"name": "shared_token", "feature_group": "   "}]'
+
+    with pytest.raises(ValueError, match="feature_group"):
+        load_features_from_config(config_str)
 
 
 # ---------------------------------------------------------------------------
@@ -202,6 +231,101 @@ def test_loader_nested_in_features_feature_carries_feature_group() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Loader: the nested in_features dict is validated like a FeatureConfig
+#
+# The nested dict never passes through FeatureConfig.__post_init__, so its
+# feature_group must be validated on the nested path too. Otherwise Feature()
+# raises a raw TypeError ("feature_group must be a FeatureGroup subclass, ...")
+# and a config-file user gets a Python-API error out of a config error.
+# ---------------------------------------------------------------------------
+
+CONFIG_STYLE_MESSAGE = "must be a feature group class-name string"
+
+
+def test_nested_in_features_rejects_non_string_feature_group() -> None:
+    """A non-string nested feature_group raises the config-style ValueError, not a TypeError."""
+    options: dict[str, Any] = {
+        "scaler_type": "minmax",
+        "in_features": {
+            "name": "shared_token",
+            "feature_group": 123,
+            "options": {"in_features": "age"},
+        },
+    }
+
+    with pytest.raises(ValueError, match=CONFIG_STYLE_MESSAGE):
+        process_nested_features(options)
+
+
+def test_nested_in_features_rejects_class_object_feature_group() -> None:
+    """The class-object scope form stays Python-only on the nested config path as well."""
+
+    class NotJsonExpressibleNested(FeatureGroup):
+        """Placeholder feature group used as an invalid nested config value."""
+
+    options: dict[str, Any] = {
+        "in_features": {
+            "name": "shared_token",
+            "feature_group": NotJsonExpressibleNested,
+        },
+    }
+
+    with pytest.raises(ValueError, match=CONFIG_STYLE_MESSAGE):
+        process_nested_features(options)
+
+
+def test_loader_nested_in_features_rejects_non_string_feature_group() -> None:
+    """The same nested rejection surfaces through load_features_from_config on a JSON string."""
+    config_str = """[
+        {
+            "name": "outer_feature",
+            "options": {
+                "scaler_type": "minmax",
+                "in_features": {
+                    "name": "shared_token",
+                    "feature_group": 123,
+                    "options": {"in_features": "age"}
+                }
+            }
+        }
+    ]"""
+
+    with pytest.raises(ValueError, match=CONFIG_STYLE_MESSAGE):
+        load_features_from_config(config_str)
+
+
+def test_nested_in_features_rejects_empty_feature_group() -> None:
+    """An empty nested feature_group is rejected instead of silently stripped to None."""
+    options: dict[str, Any] = {
+        "in_features": {
+            "name": "shared_token",
+            "feature_group": "",
+        },
+    }
+
+    with pytest.raises(ValueError, match="feature_group"):
+        process_nested_features(options)
+
+
+def test_loader_nested_in_features_rejects_whitespace_only_feature_group() -> None:
+    """A whitespace-only nested feature_group is rejected through the loader too."""
+    config_str = """[
+        {
+            "name": "outer_feature",
+            "options": {
+                "in_features": {
+                    "name": "shared_token",
+                    "feature_group": "   "
+                }
+            }
+        }
+    ]"""
+
+    with pytest.raises(ValueError, match="feature_group"):
+        load_features_from_config(config_str)
+
+
+# ---------------------------------------------------------------------------
 # Regression: configs without the field are unchanged
 # ---------------------------------------------------------------------------
 
@@ -237,6 +361,13 @@ def test_feature_config_schema_includes_feature_group() -> None:
 
     assert "feature_group" in schema["properties"], "'feature_group' should be in schema properties"
     assert schema["properties"]["feature_group"]["type"] == "string"
+
+
+def test_feature_config_schema_feature_group_is_non_empty() -> None:
+    """The schema states the non-empty constraint the validation enforces."""
+    schema = feature_config_schema()
+
+    assert schema["properties"]["feature_group"]["minLength"] == 1
 
 
 # ---------------------------------------------------------------------------
@@ -299,12 +430,10 @@ def test_end2end_scoped_config_feature_resolves_to_source_a() -> None:
 
     results = _run(config_str)
 
-    values: list[str] = []
-    for df in results:
-        if "config_shared_token" in df.columns:
-            values = list(df["config_shared_token"].values)
-
-    assert values == ["a1", "a2"]
+    assert len(results) == 1
+    df = results[0]
+    assert "config_shared_token" in df.columns
+    assert list(df["config_shared_token"].values) == ["a1", "a2"]
 
 
 def test_end2end_scoped_config_feature_resolves_to_source_b() -> None:
@@ -313,9 +442,7 @@ def test_end2end_scoped_config_feature_resolves_to_source_b() -> None:
 
     results = _run(config_str)
 
-    values: list[str] = []
-    for df in results:
-        if "config_shared_token" in df.columns:
-            values = list(df["config_shared_token"].values)
-
-    assert values == ["b1", "b2"]
+    assert len(results) == 1
+    df = results[0]
+    assert "config_shared_token" in df.columns
+    assert list(df["config_shared_token"].values) == ["b1", "b2"]

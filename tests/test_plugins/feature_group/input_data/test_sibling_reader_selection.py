@@ -208,3 +208,42 @@ class TestUrlReaderRecipeEndToEnd:
             plugin_collector=PluginCollector.enabled_feature_groups({ReadFileFeature}),
         )
         assert result[0].to_pydict()[_URL_FEATURE_NAME] == _URL_FEATURE_VALUES
+
+
+class TestClassKeyNormalization565:
+    """Group E: class option keys must be identity-equivalent to their data_access_name() string form.
+
+    Pins the fix for the class-key/string-key identity split: a reader class used as an
+    Options key should be normalized to ``cls.data_access_name()`` when the Options object
+    is constructed, so both spellings hash, compare, and look up identically.
+    """
+
+    def test_options_class_key_equals_string_key(self) -> None:
+        class_keyed = Options(cast(dict[str, Any], {SiblingSel565ReaderA: _ACCESS_A}))
+        string_keyed = Options({SiblingSel565ReaderA.__name__: _ACCESS_A})
+        assert class_keyed == string_keyed
+        assert hash(class_keyed) == hash(string_keyed)
+
+    def test_feature_class_key_equals_string_key(self) -> None:
+        class_keyed = Feature(
+            name="sibling_sel_565_norm_feat",
+            options=cast(dict[str, Any], {SiblingSel565ReaderA: _ACCESS_A}),
+        )
+        string_keyed = Feature(
+            name="sibling_sel_565_norm_feat",
+            options={SiblingSel565ReaderA.__name__: _ACCESS_A},
+        )
+        assert class_keyed == string_keyed
+        assert hash(class_keyed) == hash(string_keyed)
+        assert len({class_keyed, string_keyed}) == 1
+
+    def test_child_options_with_class_key_hashable(self) -> None:
+        feature = Feature(name="sibling_sel_565_child_feat")
+        feature.child_options = Options(
+            cast(dict[str, Any], {SiblingSel565ReaderA: _ACCESS_A, "sibling_sel_565_child_marker": True})
+        )
+        assert isinstance(hash(feature), int)
+
+    def test_options_get_by_string_after_class_key_construction(self) -> None:
+        options = Options(cast(dict[str, Any], {SiblingSel565ReaderA: _ACCESS_A}))
+        assert options.get(SiblingSel565ReaderA.__name__) == _ACCESS_A

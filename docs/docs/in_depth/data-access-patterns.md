@@ -76,7 +76,7 @@ A feature selects a specific reader with an Option whose key equals the reader's
 Feature("value", options={UbaAirReader.__name__: url})
 ```
 
-The reader class itself is also accepted as the key, e.g. `Feature("value", options={UbaAirReader: url})`.
+The reader class itself is also accepted as the key, e.g. `Feature("value", options={UbaAirReader: url})`; it is normalized to the class-name string when the Options object is constructed, so both forms are one identity.
 
 The matched `(ReaderClass, data_access)` pair is stored under the reserved `"BaseInputData"` options key and consumed by `init_reader` at load time.
 

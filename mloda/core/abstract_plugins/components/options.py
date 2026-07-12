@@ -59,6 +59,16 @@ def _isolate_forwarded_value(value: Any, memo: dict[int, Any]) -> Any:
     return value
 
 
+def _normalize_reader_class_keys(d: dict[str, Any]) -> dict[str, Any]:
+    """Reader class keys normalize to data_access_name() so both documented key forms
+    (class object and class-name string) share one identity."""
+    if not any(isinstance(k, type) for k in d):
+        return d
+    return {
+        (k.data_access_name() if isinstance(k, type) and hasattr(k, "data_access_name") else k): v for k, v in d.items()
+    }
+
+
 def validate_forwarding_directives(
     forward_group: frozenset[str] | bool | None, forward_group_exclude: frozenset[str]
 ) -> None:
@@ -132,8 +142,8 @@ class Options:
         context: Optional[dict[str, Any]] = None,
         propagate_context_keys: frozenset[str] | None = None,
     ) -> None:
-        self.group = group or {}
-        self.context = context or {}
+        self.group = _normalize_reader_class_keys(group) if group else {}
+        self.context = _normalize_reader_class_keys(context) if context else {}
         self.propagate_context_keys: frozenset[str] = propagate_context_keys or frozenset()
         self.inherited_group_keys: frozenset[str] = frozenset()
         self.inherited_context_keys: frozenset[str] = frozenset()

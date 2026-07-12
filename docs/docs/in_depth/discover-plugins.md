@@ -81,8 +81,10 @@ fgs = get_feature_group_docs(compute_framework="PandasDataframe")
 Each `FeatureGroupInfo` also documents the family's subtype declaration:
 `subtype_key` (the discriminator option key, `None` without one), `subtypes`
 (the sorted universe), `parametric_subtypes` (family names like `ntile`),
-`subtype_support` (sorted supported subtypes per declared compute framework,
-not per installed one; empty for abstract bases) and `subtype_error` (set when
+`subtype_support` (sorted supported subtypes per framework from
+`compute_framework_definition()`: the declared rule, or every loaded framework
+when the family declares no `compute_framework_rule`; empty for abstract
+bases) and `subtype_error` (set when
 the class declares support outside its universe, so a misdeclared capability
 is distinguishable from a legitimately empty matrix). See
 [Declaring capability per subtype](compute-framework-integration.md#declaring-capability-per-subtype).

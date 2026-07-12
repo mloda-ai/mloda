@@ -96,6 +96,20 @@ def _match_recording_validation_errors(
         return False
 
 
+def _resolved_subtype_fields(
+    fg_class: type[FeatureGroup], feature_name: FeatureName, options: Options
+) -> tuple[Optional[str], Optional[str]]:
+    """Resolve (subtype, subtype_family) for a candidate, degrading a raising declaration to (None, None)."""
+    subtype: Optional[str] = safe_field(lambda: fg_class.resolve_subtype(feature_name, options), None)
+    if subtype is None:
+        return None, None
+    raw_subtype = subtype
+    canonical = safe_field(lambda: fg_class.canonical_subtype(raw_subtype), raw_subtype)
+    if canonical != raw_subtype:
+        return subtype, canonical
+    return subtype, None
+
+
 def get_feature_group_docs(
     name: Optional[str] = None,
     search: Optional[str] = None,
@@ -157,16 +171,6 @@ def get_feature_group_docs(
             lambda: fg_class.feature_names_supported(), set(), field=f"{cls_name}.feature_names_supported"
         )
         prefix = safe_field(lambda: fg_class.prefix(), f"{cls_name}_", field=f"{cls_name}.prefix")
-        subtype_key: Optional[str] = safe_field(lambda: fg_class.SUBTYPE_KEY, None, field=f"{cls_name}.SUBTYPE_KEY")
-        subtypes: list[str] = safe_field(
-            lambda: sorted(fg_class.subtype_universe()), [], field=f"{cls_name}.subtype_universe"
-        )
-        parametric_subtypes: list[str] = safe_field(
-            lambda: sorted(fg_class.PARAMETRIC_SUBTYPE_FAMILIES or {}),
-            [],
-            field=f"{cls_name}.PARAMETRIC_SUBTYPE_FAMILIES",
-        )
-        subtype_support, subtype_error = _subtype_support_or_error(fg_class)
 
         if name is not None and name.lower() not in fg_name.lower():
             continue
@@ -181,6 +185,17 @@ def get_feature_group_docs(
 
         if version_contains is not None and version_contains not in version:
             continue
+
+        subtype_key: Optional[str] = safe_field(lambda: fg_class.SUBTYPE_KEY, None, field=f"{cls_name}.SUBTYPE_KEY")
+        subtypes: list[str] = safe_field(
+            lambda: sorted(fg_class.subtype_universe()), [], field=f"{cls_name}.subtype_universe"
+        )
+        parametric_subtypes: list[str] = safe_field(
+            lambda: sorted(fg_class.PARAMETRIC_SUBTYPE_FAMILIES or {}),
+            [],
+            field=f"{cls_name}.PARAMETRIC_SUBTYPE_FAMILIES",
+        )
+        subtype_support, subtype_error = _subtype_support_or_error(fg_class)
 
         results.append(
             FeatureGroupInfo(
@@ -397,11 +412,23 @@ def resolve_feature(
             error=error,
         )
 
-    supported, rejected = split_frameworks_by_capability(candidates, feature_name_obj, resolved_options)
+    # A raising plugin declaration must not escape the never-raises contract; degrade to no split.
+    empty_split: tuple[set[type[ComputeFramework]], set[type[ComputeFramework]]] = (set(), set())
+    supported, rejected = safe_field(
+        lambda: split_frameworks_by_capability(candidates, feature_name_obj, resolved_options),
+        empty_split,
+    )
     supported_names = sorted(c.get_class_name() for c in supported)
     rejected_names = sorted(c.get_class_name() for c in rejected)
+    filtered = _filter_subclasses(candidates)
 
     if not supported and rejected:
+        subtype_unsupported: Optional[str] = None
+        subtype_family_unsupported: Optional[str] = None
+        if len(filtered) == 1:
+            subtype_unsupported, subtype_family_unsupported = _resolved_subtype_fields(
+                filtered[0], feature_name_obj, resolved_options
+            )
         return ResolvedFeature(
             feature_name=feature_name,
             feature_group=None,
@@ -413,19 +440,13 @@ def resolve_feature(
             ),
             supported_compute_frameworks=[],
             unsupported_compute_frameworks=rejected_names,
+            subtype=subtype_unsupported,
+            subtype_family=subtype_family_unsupported,
         )
-
-    filtered = _filter_subclasses(candidates)
 
     if len(filtered) == 1:
         resolved = filtered[0]
-        subtype: Optional[str] = safe_field(lambda: resolved.resolve_subtype(feature_name_obj, resolved_options), None)
-        subtype_family: Optional[str] = None
-        if subtype is not None:
-            raw_subtype = subtype
-            canonical = safe_field(lambda: resolved.canonical_subtype(raw_subtype), raw_subtype)
-            if canonical != raw_subtype:
-                subtype_family = canonical
+        subtype, subtype_family = _resolved_subtype_fields(resolved, feature_name_obj, resolved_options)
         return ResolvedFeature(
             feature_name=feature_name,
             feature_group=resolved,

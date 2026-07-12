@@ -103,8 +103,10 @@ class FeatureGroup(ABC):
 
     @classmethod
     def _overrides(cls, method_name: str) -> bool:
-        """True when cls replaces the FeatureGroup base classmethod."""
-        return getattr(cls, method_name).__func__ is not getattr(FeatureGroup, method_name).__func__
+        """True when cls replaces the FeatureGroup base classmethod; a non-classmethod shadow counts as an override."""
+        own = getattr(getattr(cls, method_name), "__func__", None)
+        base = getattr(getattr(FeatureGroup, method_name), "__func__", None)
+        return own is not base
 
     @classmethod
     def _validate_subtype_declaration(cls) -> None:
@@ -116,6 +118,11 @@ class FeatureGroup(ABC):
                 raise ValueError(
                     f"{cls.__name__} overrides subtype_universe() without SUBTYPE_KEY; "
                     f"it must also override resolve_subtype()."
+                )
+            if cls._overrides("resolve_subtype") and not universe_overridden:
+                raise ValueError(
+                    f"{cls.__name__} overrides resolve_subtype() without SUBTYPE_KEY; "
+                    f"it must also override subtype_universe(), otherwise the resolver is inert."
                 )
             if cls.PARAMETRIC_SUBTYPE_FAMILIES and not universe_overridden:
                 raise ValueError(
@@ -202,7 +209,12 @@ class FeatureGroup(ABC):
 
     @classmethod
     def canonical_subtype(cls, subtype: str) -> str:
-        """Collapse a parametric instance ``<family>_<digits>`` to its family name, else identity."""
+        """Collapse a parametric instance ``<family>_<digits>`` to its family name, else identity.
+
+        A declared universe member never collapses, even when it looks parametric.
+        """
+        if subtype in cls.subtype_universe():
+            return subtype
         stem, separator, tail = subtype.rpartition("_")
         if separator and tail.isdigit() and stem in (cls.PARAMETRIC_SUBTYPE_FAMILIES or ()):
             return stem
@@ -214,7 +226,8 @@ class FeatureGroup(ABC):
         """Audit surface: supported subtypes per declared compute framework.
 
         Empty for abstract classes and families without a subtype dimension. Raises
-        ValueError when declared support exceeds the subtype universe.
+        ValueError when declared support exceeds the subtype universe, or when the
+        class hand-overrides supports_compute_framework.
         """
         if inspect.isabstract(cls):
             return {}
@@ -222,6 +235,12 @@ class FeatureGroup(ABC):
         universe = cls.subtype_universe()
         if not universe:
             return {}
+
+        if cls._overrides("supports_compute_framework"):
+            raise ValueError(
+                f"{cls.get_class_name()} overrides supports_compute_framework, so the hand-written hook makes "
+                f"the declared subtype support matrix unverifiable; the declaration is not authoritative."
+            )
 
         matrix: dict[str, frozenset[str]] = {}
         for compute_framework in cls.compute_framework_definition():

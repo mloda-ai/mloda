@@ -329,3 +329,138 @@ class TestContractCResolvedFeatureSubtype:
         assert result.feature_group is SuDocOptionFeatureGroup
         assert result.subtype is None
         assert result.subtype_family is None
+
+
+R4_KEY = "sudocr4_kind"
+R4_UNIVERSE = frozenset({"median", "sum", "ntile"})
+
+R5_KEY = "sudocr5_kind"
+
+R6_KEY = "sudocr6_kind"
+R6_UNIVERSE = frozenset({"median", "sum"})
+
+
+class SuDocR4RejectingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+    """Family whose single declared framework rejects everything except 'sum'."""
+
+    SUBTYPE_KEY = R4_KEY
+    PARAMETRIC_SUBTYPE_FAMILIES = {"ntile": "N-tile bucketing"}
+    PREFIX_PATTERN = r".*__([\w]+)_sudocr4$"
+    PROPERTY_MAPPING = {
+        R4_KEY: property_spec(
+            "Operation kind rejected almost everywhere.",
+            strict=True,
+            allowed_values={"median": "Median", "sum": "Sum"},
+        ),
+    }
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PythonDictFramework}
+
+    @classmethod
+    def supported_subtypes(cls, compute_framework: type[ComputeFramework]) -> frozenset[str]:
+        return frozenset({"sum"})
+
+
+class SuDocR5RaisingSupportFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+    """Family whose subtype declaration raises when queried; resolution must degrade, not raise."""
+
+    SUBTYPE_KEY = R5_KEY
+    PREFIX_PATTERN = r".*__([\w]+)_sudocr5$"
+    PROPERTY_MAPPING = {
+        R5_KEY: property_spec(
+            "Operation kind with an exploding declaration.",
+            strict=True,
+            allowed_values={"median": "Median", "sum": "Sum"},
+        ),
+    }
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PythonDictFramework}
+
+    @classmethod
+    def supported_subtypes(cls, compute_framework: type[ComputeFramework]) -> frozenset[str]:
+        raise RuntimeError("sudocr5 declaration exploded")
+
+
+class SuDocR6HookOverrideFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+    """Family with a subtype universe AND a hand-written supports_compute_framework hook."""
+
+    SUBTYPE_KEY = R6_KEY
+    PREFIX_PATTERN = r".*__([\w]+)_sudocr6$"
+    PROPERTY_MAPPING = {
+        R6_KEY: property_spec(
+            "Operation kind gated by a hand-written hook.",
+            strict=True,
+            allowed_values={"median": "Median", "sum": "Sum"},
+        ),
+    }
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PandasDataFrame, PythonDictFramework}
+
+    @classmethod
+    def supports_compute_framework(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        compute_framework: type[ComputeFramework],
+    ) -> bool:
+        return True
+
+
+class TestContractDUnsupportedEverywhereReportsSubtype:
+    """R4: the unsupported-everywhere branch still reports the resolved subtype."""
+
+    def test_unsupported_everywhere_still_reports_subtype(self) -> None:
+        result = resolve_feature("value__median_sudocr4")
+        assert result.feature_group is None
+        assert result.candidates == [SuDocR4RejectingFeatureGroup]
+        assert result.error is not None
+        assert "unsupported" in result.error
+        assert result.supported_compute_frameworks == []
+        assert result.unsupported_compute_frameworks == ["PythonDictFramework"]
+        assert result.subtype == "median"
+        assert result.subtype_family is None
+
+    def test_unsupported_everywhere_parametric_instance_reports_family(self) -> None:
+        result = resolve_feature("value__ntile_3_sudocr4")
+        assert result.feature_group is None
+        assert result.error is not None
+        assert "unsupported" in result.error
+        assert result.subtype == "ntile_3"
+        assert result.subtype_family == "ntile"
+
+
+class TestContractERaisingDeclarationDegrades:
+    """R5: a raising supported_subtypes never propagates out of resolve_feature."""
+
+    def test_raising_declaration_degrades_capability_split(self) -> None:
+        result = resolve_feature("value__median_sudocr5")
+        assert result.feature_group is SuDocR5RaisingSupportFeatureGroup
+        assert result.error is None
+        assert result.supported_compute_frameworks == []
+        assert result.unsupported_compute_frameworks == []
+        assert result.subtype == "median"
+        assert result.subtype_family is None
+
+
+class TestContractFHookOverrideSurfacedInDocs:
+    """R6: docs surface a hook-overriding family as subtype_error instead of a fabricated matrix."""
+
+    def test_hook_override_reported_as_subtype_error(self) -> None:
+        docs = get_feature_group_docs()
+        by_name = {doc.name: doc for doc in docs}
+
+        hooked = by_name["SuDocR6HookOverrideFeatureGroup"]
+        assert hooked.subtype_key == R6_KEY
+        assert hooked.subtypes == sorted(R6_UNIVERSE)
+        assert hooked.subtype_support == {}
+        assert hooked.subtype_error is not None
+        assert "supports_compute_framework" in hooked.subtype_error
+
+        healthy = by_name["SuDocWindowFeatureGroup"]
+        assert healthy.subtype_error is None

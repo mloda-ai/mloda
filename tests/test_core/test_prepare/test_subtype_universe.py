@@ -617,3 +617,106 @@ class TestContract11MatchTimeIntegration:
         assert SubtypeUWindowFG.resolve_subtype("value__median_sustatw", Options()) == "median"
         assert "median" not in SubtypeUWindowFG.supported_subtypes(SubtypeUFwBeta)
         assert SubtypeUWindowFG.match_feature_group_criteria("value__median_sustatw", Options()) is True
+
+
+R2_SUBTYPE_KEY = "sustatr2_op"
+R2_UNIVERSE = frozenset({"lag_1", "sum", "lag"})
+R2_BETA_SUPPORTED = frozenset({"lag_1", "sum"})
+
+
+class SubtypeULagLiteralBaseFG(FeatureChainParserMixin, FeatureGroup):
+    """Universe containing the literal declared value 'lag_1' alongside the parametric family 'lag'."""
+
+    SUBTYPE_KEY = R2_SUBTYPE_KEY
+    PARAMETRIC_SUBTYPE_FAMILIES = {"lag": "Lag by N rows"}
+    PREFIX_PATTERN = r".*__([\w]+)_sustatr2$"
+    PROPERTY_MAPPING = {
+        R2_SUBTYPE_KEY: property_spec(
+            "Operation subtype with a parametric-looking declared member.",
+            strict=True,
+            allowed_values={"lag_1": "Lag by one row", "sum": "Sum"},
+        ),
+    }
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {SubtypeUFwAlpha, SubtypeUFwBeta}
+
+
+class SubtypeULagLiteralNarrowFG(SubtypeULagLiteralBaseFG):
+    """Supports the literal 'lag_1' but not the 'lag' family on SubtypeUFwBeta."""
+
+    @classmethod
+    def supported_subtypes(cls, compute_framework: type[ComputeFramework]) -> frozenset[str]:
+        if compute_framework is SubtypeUFwBeta:
+            return R2_BETA_SUPPORTED
+        return R2_UNIVERSE
+
+
+class SubtypeUHookMatrixAbstractFG(SubtypeUExplicitOverrideFG):
+    """Abstract hook-overriding family member; the matrix audit must stay empty."""
+
+    @abstractmethod
+    def _sustatu_hook_abstract_marker(self) -> None: ...
+
+
+class SubtypeUHookMatrixPlainFG(FeatureGroup):
+    """Hook override without a subtype dimension; the matrix audit must stay empty."""
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {SubtypeUFwAlpha, SubtypeUFwBeta}
+
+    @classmethod
+    def supports_compute_framework(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        compute_framework: type[ComputeFramework],
+    ) -> bool:
+        return True
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        return None
+
+
+class TestR1ResolverOnlyDeclarationRaises:
+    """R1: overriding only resolve_subtype without a subtype dimension is inert and must raise."""
+
+    def test_resolver_only_override_without_universe_raises_at_definition(self) -> None:
+        with pytest.raises(ValueError) as exc_info:
+
+            class SubtypeUBrokenResolverOnlyFG(FeatureGroup):
+                @classmethod
+                def resolve_subtype(cls, feature_name: FeatureName | str, options: Options) -> Optional[str]:
+                    return "rows_7"
+
+        assert "SubtypeUBrokenResolverOnlyFG" in str(exc_info.value)
+
+
+class TestR2DeclaredUniverseMemberNeverCollapses:
+    """R2: canonical_subtype keeps a declared universe member even when it looks parametric."""
+
+    def test_class_shape_is_legal_and_declared_member_stays_identity(self) -> None:
+        assert SubtypeULagLiteralBaseFG.subtype_universe() == R2_UNIVERSE
+        assert SubtypeULagLiteralBaseFG.canonical_subtype("lag_1") == "lag_1"
+        assert SubtypeULagLiteralBaseFG.canonical_subtype("lag_7") == "lag"
+
+    def test_derived_gate_distinguishes_declared_member_from_family_instance(self) -> None:
+        gate = SubtypeULagLiteralNarrowFG.supports_compute_framework
+        assert gate("value__lag_1_sustatr2", Options(), SubtypeUFwBeta) is True
+        assert gate("value__lag_7_sustatr2", Options(), SubtypeUFwBeta) is False
+        assert gate("value__lag_7_sustatr2", Options(), SubtypeUFwAlpha) is True
+
+
+class TestR3HookOverrideMakesMatrixUnverifiable:
+    """R3: a hand-written supports_compute_framework makes the declared matrix non-authoritative."""
+
+    def test_matrix_raises_for_hook_overrider_and_spares_undimensioned_classes(self) -> None:
+        with pytest.raises(ValueError) as exc_info:
+            SubtypeUExplicitOverrideFG.subtype_support_matrix()
+        message = str(exc_info.value)
+        assert "supports_compute_framework" in message
+        assert "SubtypeUExplicitOverrideFG" in message
+        assert SubtypeUHookMatrixAbstractFG.subtype_support_matrix() == {}
+        assert SubtypeUHookMatrixPlainFG.subtype_support_matrix() == {}

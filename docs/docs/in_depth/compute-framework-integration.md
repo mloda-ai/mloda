@@ -106,11 +106,14 @@ and features without a subtype stay open; the declaration never rejects more
 than it claims to know.
 
 **The data steward** audits capability without probing synthetic features.
-`subtype_support_matrix()` returns the supported subtypes per declared
-compute framework; abstract bases report their universe but no matrix.
-`get_feature_group_docs()` carries the same picture per entry: `subtype_key`,
-`subtypes` (the sorted universe), `parametric_subtypes`, `subtype_support`
-(declared frameworks, not installed ones) and `subtype_error`, which
+`subtype_support_matrix()` returns the supported subtypes per compute
+framework from `compute_framework_definition()`: the declared rule, or every
+loaded framework when the family declares no `compute_framework_rule`.
+Abstract bases report their universe but no matrix. A family that
+hand-overrides `supports_compute_framework` gets no declared matrix; the
+misfit surfaces as `subtype_error`. `get_feature_group_docs()` carries the
+same picture per entry: `subtype_key`, `subtypes` (the sorted universe),
+`parametric_subtypes`, `subtype_support` and `subtype_error`, which
 distinguishes a misdeclared capability (support claimed outside the universe)
 from a legitimately empty matrix.
 

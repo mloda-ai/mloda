@@ -123,16 +123,18 @@ git checkout -b fix/short-description
 Open issues cite public symbols as code pointers. When a PR renames or removes one (a `FeatureGroup` hook, a `ComputeFramework` method, an extender type, a `DefaultOptionKeys` member), sweep the backlog for the old name in the same PR:
 
 ```bash
-gh issue list --repo mloda-ai/mloda --state open --search "<old name> in:body"
+gh issue list --repo mloda-ai/mloda --state open --search "<old name>"
 ```
 
-Update each hit to the new name, or close the issue if the change made it moot. A stale pointer costs the next contributor discovery time before any real work starts.
+Search the bare symbol name with no `in:` qualifier: the default covers title, body, and comments, and a stale name in a title is just as costly as one in a code pointer. Update each hit to the new name, or close the issue if the change made it moot.
 
-Confirm the symbol is really gone by grepping the public surface, not the whole tree. A retired symbol usually lives on in tests that assert its removal, so a repo-wide grep still reports hits and hides the rename:
+Confirm the symbol is really gone by grepping the shipped code rather than the whole tree. A retired symbol usually lives on in tests that assert its removal, so a repo-wide grep still reports hits and hides the rename:
 
 ```bash
-git grep -w "<old name>" -- mloda/ mloda_plugins/   # no output: gone from the public surface
+git grep -wF "<old name>" -- mloda/ mloda_plugins/   # no output: gone from the shipped code
 ```
+
+Grep the bare leaf name (`feature_chainer_parser_key`), not the dotted path (`DefaultOptionKeys.feature_chainer_parser_key`), so the definition site is covered and not just the call sites.
 
 ## License
 

@@ -26,4 +26,5 @@ Closes #
 - [ ] `tox` passes locally (tests, `ruff format --check`, `ruff check`, `mypy --strict`, `bandit`, license check)
 - [ ] Tests added or updated for the change (and the skip count adjusted if needed)
 - [ ] Documentation updated where relevant
+- [ ] If this renames or removes a public symbol: open issues swept for the old name ([CONTRIBUTING](../CONTRIBUTING.md#renaming-or-removing-public-api))
 - [ ] PR title follows [Conventional Commits](https://www.conventionalcommits.org/)

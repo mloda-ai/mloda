@@ -118,6 +118,22 @@ git checkout -b fix/short-description
 5. Push your branch to your fork and open a pull request targeting `main`.
 6. CI runs the full tox suite on Python 3.10, 3.11, 3.12, 3.13, and 3.14. All checks must pass before merge.
 
+### Renaming or Removing Public API
+
+Open issues cite public symbols as code pointers. When a PR renames or removes one (a `FeatureGroup` hook, a `ComputeFramework` method, an extender type, a `DefaultOptionKeys` member), sweep the backlog for the old name in the same PR:
+
+```bash
+gh issue list --repo mloda-ai/mloda --state open --search "<old name> in:body"
+```
+
+Update each hit to the new name, or close the issue if the change made it moot. A stale pointer costs the next contributor discovery time before any real work starts.
+
+Confirm the symbol is really gone by grepping the public surface, not the whole tree. A retired symbol usually lives on in tests that assert its removal, so a repo-wide grep still reports hits and hides the rename:
+
+```bash
+git grep -w "<old name>" -- mloda/ mloda_plugins/   # no output: gone from the public surface
+```
+
 ## License
 
 By contributing, you agree that your contributions will be licensed under the [Apache License, Version 2.0](https://github.com/mloda-ai/mloda/blob/main/LICENSE).

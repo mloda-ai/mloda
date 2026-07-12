@@ -21,6 +21,8 @@ class PlanStep:
     The names include engine-injected features (link index features, global-filter features):
     ``requested_feature_names`` holds the user-requested names, ``injected_feature_names`` the
     engine-injected/dependency remainder; both are empty for join and transform steps.
+    The split is name-based, so a name that is both user-requested and engine-injected within
+    one step counts as requested only.
     ``source_*`` and ``join_type`` are None.
 
     transform: ``feature_group``/``compute_framework`` are the destination, ``source_*`` the origin.

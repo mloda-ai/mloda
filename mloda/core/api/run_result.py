@@ -1,4 +1,4 @@
-"""Run results that carry the resolved plan of the run that produced them (issue #647 follow-up)."""
+"""Run results that carry the resolved plan of the run that produced them."""
 
 from collections.abc import Generator
 from types import TracebackType

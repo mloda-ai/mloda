@@ -1,4 +1,4 @@
-"""Tests for run results that know their run (issue #647 follow-up).
+"""Tests for run results that know their run.
 
 Contract under test:
   * ``mloda.core.api.run_result.RunResult`` is the return type of ``mlodaAPI.run_all``. It IS the
@@ -35,7 +35,7 @@ from tests.test_core.test_api.test_plan_info import PlanInfoPandasSource
 
 _PLUGINS = PluginCollector.enabled_feature_groups({PlanInfoPandasSource, PandasAggregatedFeatureGroup})
 
-# The chained request from issue #647: an aggregated feature over a source feature.
+# A chained request: an aggregated feature over a source feature.
 _CHAINED_FEATURES: list[Feature | str] = ["plan_info_sales__mean_aggr"]
 
 # Two feature groups resolve here, so the stream yields two elements and can be closed early.
@@ -109,7 +109,7 @@ class TestRunResultPlan:
             setattr(results, "plan", [])
 
     def test_chained_request_plan_contains_the_aggregation_compute_step(self) -> None:
-        """Issue #647 DoD: the plan names the concrete aggregation group and framework."""
+        """The plan names the concrete aggregation group and framework."""
         results = _run_all()
 
         compute_steps = [step for step in results.plan if step.step_kind == "compute"]

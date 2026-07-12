@@ -74,6 +74,7 @@ Combine strings and objects:
 | `context_options` | object | No | Context parameters (metadata, doesn't affect resolution) |
 | `propagate_context_keys` | array | No | Context keys that propagate to dependent features |
 | `column_index` | integer | No | Index for multi-output features (adds `~N` suffix) |
+| `feature_group` | string | No | Feature Group class name the feature resolves to (resolution-only scope) |
 
 ## Configuration Approaches
 
@@ -112,6 +113,20 @@ For explicit separation of group and context parameters:
 ```
 
 Note: `options` and `group_options`/`context_options` are mutually exclusive.
+
+### Feature Group Scope
+
+When two enabled sources declare the same column (for example a shared join key), the bare name is ambiguous and resolution fails with "Multiple feature groups found". Use `feature_group` to scope the request to one source:
+
+```json
+[
+    {"name": "subject_token", "feature_group": "ClaimsReader"},
+    {"name": "claims_amount"},
+    {"name": "labs_result"}
+]
+```
+
+The config form takes the class-name string only, since JSON cannot express a class object. The string matches the exact class name: it does not match subclasses, and two classes with the same name in different modules stay ambiguous. In Python, `Feature("subject_token", feature_group=ClaimsReader)` also accepts the class object. The scope is resolution-only and excluded from feature identity, so the same name scoped to two different sources cannot be requested twice in one list; see [Feature Group resolution errors](troubleshooting/feature-group-resolution-errors.md).
 
 ## Worked Example: Window, Rank, and Percentile Features
 

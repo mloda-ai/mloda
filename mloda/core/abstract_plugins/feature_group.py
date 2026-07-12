@@ -77,9 +77,39 @@ class FeatureGroup(ABC):
     See ``docs/in_depth/property-mapping.md`` for the full specification.
     """
 
+    SUBTYPE_KEY: ClassVar[Optional[str]] = None
+    """Name of the ``PROPERTY_MAPPING`` key carrying this family's subtype discriminator.
+
+    ``None`` (the default) means the family has no subtype dimension. Setting it to a
+    key that ``PROPERTY_MAPPING`` does not declare is a class-definition error, unless
+    the class overrides ``subtype_universe()`` (families that flatten several axes).
+    """
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         FeatureChainParser.validate_property_mapping_defaults(cls.__name__, cls.PROPERTY_MAPPING)
+        cls._validate_subtype_key()
+
+    @classmethod
+    def _validate_subtype_key(cls) -> None:
+        """Reject a SUBTYPE_KEY that names no PROPERTY_MAPPING key at class-definition time."""
+        key = cls.SUBTYPE_KEY
+        if key is None:
+            return
+
+        declared = getattr(cls.subtype_universe, "__func__", None)
+        base = getattr(FeatureGroup.subtype_universe, "__func__", None)
+        if declared is not base:
+            return
+
+        if key in cls.declared_option_keys():
+            return
+
+        raise ValueError(
+            f"{cls.__name__}.SUBTYPE_KEY = '{key}' is not declared in its PROPERTY_MAPPING. "
+            f"Declare the key in PROPERTY_MAPPING, or override subtype_universe() to define the "
+            f"subtypes explicitly."
+        )
 
     @classmethod
     def declared_option_keys(cls) -> frozenset[str]:
@@ -87,6 +117,84 @@ class FeatureGroup(ABC):
         if cls.PROPERTY_MAPPING is None:
             return frozenset()
         return frozenset(str(key) for key in cls.PROPERTY_MAPPING)
+
+    @classmethod
+    def declared_option_values(cls, key: str) -> frozenset[str]:
+        """Return the declared value space of a ``PROPERTY_MAPPING`` key.
+
+        Handles both the ``DefaultOptionKeys.allowed_values`` form and the legacy
+        flattened form. Empty when the key is absent or declares no value space.
+        """
+        if cls.PROPERTY_MAPPING is None or key not in cls.PROPERTY_MAPPING:
+            return frozenset()
+
+        values = FeatureChainParser._extract_property_values(cls.PROPERTY_MAPPING[key])
+        if not isinstance(values, (dict, list, tuple, set, frozenset)):
+            return frozenset()
+        return frozenset(str(value) for value in values)
+
+    @classmethod
+    def subtype_universe(cls) -> frozenset[str]:
+        """Return every subtype this family defines.
+
+        Defaults to the declared value space of ``SUBTYPE_KEY``. Override for families
+        whose subtype is a flattened combination of several PROPERTY_MAPPING keys.
+        """
+        if cls.SUBTYPE_KEY is None:
+            return frozenset()
+        return cls.declared_option_values(cls.SUBTYPE_KEY)
+
+    @classmethod
+    def supported_subtypes(cls, compute_framework: type[ComputeFramework]) -> frozenset[str]:
+        """Return the subtypes supported on ``compute_framework``. Defaults to the full universe."""
+        return cls.subtype_universe()
+
+    @classmethod
+    def resolve_subtype(cls, feature_name: FeatureName | str, options: Options) -> Optional[str]:
+        """Resolve a concrete feature's subtype from its name, else from ``options[SUBTYPE_KEY]``."""
+        key = cls.SUBTYPE_KEY
+        if key is None:
+            return None
+
+        patterns = [
+            pattern
+            for pattern in (getattr(cls, "PREFIX_PATTERN", None), getattr(cls, "SUFFIX_PATTERN", None))
+            if pattern is not None
+        ]
+        subtype, _ = FeatureChainParser.parse_feature_name(str(feature_name), patterns)
+        if subtype is not None:
+            return subtype
+
+        value = options.get(key)
+        if value is not None:
+            return str(value)
+        return None
+
+    @final
+    @classmethod
+    def subtype_support_matrix(cls) -> dict[str, frozenset[str]]:
+        """Map each declared compute framework class name to the subtypes it supports.
+
+        Empty when the family has no subtype dimension. Raises when a framework declares
+        support for a subtype outside ``subtype_universe()``.
+        """
+        if cls.SUBTYPE_KEY is None:
+            return {}
+
+        universe = cls.subtype_universe()
+        matrix: dict[str, frozenset[str]] = {}
+
+        for compute_framework in cls.compute_framework_definition():
+            supported = cls.supported_subtypes(compute_framework)
+            outside = supported - universe
+            if outside:
+                raise ValueError(
+                    f"{cls.__name__}.supported_subtypes({compute_framework.get_class_name()}) declares "
+                    f"{sorted(outside)}, which is outside its subtype universe {sorted(universe)}."
+                )
+            matrix[compute_framework.get_class_name()] = supported
+
+        return matrix
 
     def __init__(self) -> None:
         pass
@@ -482,16 +590,31 @@ class FeatureGroup(ABC):
     ) -> bool:
         """Per-feature, per-framework capability check evaluated at match time.
 
-        Returns ``True`` (the default) to allow the framework. Override to declare
-        that a specific operation (encoded in ``feature_name``/``options``) is
-        unsupported on ``compute_framework`` -- return ``False`` and the matcher
-        removes that framework from the candidate set for this feature only.
-        Unlike ``compute_framework_rule`` (a static class-level set), this hook sees
-        the concrete feature, so it can reject an op on one backend while allowing
-        others. If every candidate framework is rejected, the matcher surfaces a
-        distinguishable error instead of a generic "no feature group" message.
+        The default is derived from the subtype declaration: a feature whose subtype is
+        in ``subtype_universe()`` but not in ``supported_subtypes(compute_framework)`` is
+        rejected; everything else is allowed. Families without a ``SUBTYPE_KEY``, features
+        whose subtype does not resolve, and parametric subtypes outside the universe (e.g.
+        ``ntile_2``) all stay allowed, so this hook never double-gates what matching and
+        strict validation already reject.
+
+        Override to declare capability directly. Returning ``False`` makes the matcher
+        remove that framework from the candidate set for this feature only. Unlike
+        ``compute_framework_rule`` (a static class-level set), this hook sees the concrete
+        feature, so it can reject an op on one backend while allowing others. If every
+        candidate framework is rejected, the matcher surfaces a distinguishable error
+        instead of a generic "no feature group" message.
         """
-        return True
+        if cls.SUBTYPE_KEY is None:
+            return True
+
+        subtype = cls.resolve_subtype(feature_name, options)
+        if subtype is None:
+            return True
+
+        if subtype not in cls.subtype_universe():
+            return True
+
+        return subtype in cls.supported_subtypes(compute_framework)
 
     @final
     @classmethod

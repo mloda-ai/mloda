@@ -14,6 +14,12 @@ class FeatureGroupInfo:
     compute_frameworks: list[str]
     supported_feature_names: set[str]
     prefix: str
+    # PROPERTY_MAPPING key carrying the subtype discriminator, None without a subtype dimension.
+    subtype_key: Optional[str] = None
+    # Every subtype the family declares, sorted.
+    subtypes: list[str] = field(default_factory=list)
+    # Compute framework class name -> supported subtypes, sorted.
+    subtype_support: dict[str, list[str]] = field(default_factory=dict)
 
 
 @dataclass
@@ -45,3 +51,5 @@ class ResolvedFeature:
     supported_compute_frameworks: list[str] = field(default_factory=list)
     # Frameworks rejecting the feature, evaluated under default options.
     unsupported_compute_frameworks: list[str] = field(default_factory=list)
+    # Subtype resolved from the feature name/options by the resolved feature group.
+    subtype: Optional[str] = None

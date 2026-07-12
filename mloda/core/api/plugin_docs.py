@@ -106,6 +106,11 @@ def get_feature_group_docs(
         compute_frameworks = [cfw.__name__ for cfw in fg_class.compute_framework_definition()]
         supported_feature_names = fg_class.feature_names_supported()
         prefix = fg_class.prefix()
+        empty_universe: frozenset[str] = frozenset()
+        empty_matrix: dict[str, frozenset[str]] = {}
+        subtypes = sorted(safe_field(lambda: fg_class.subtype_universe(), empty_universe))
+        support_matrix = safe_field(lambda: fg_class.subtype_support_matrix(), empty_matrix)
+        subtype_support = {cfw_name: sorted(supported) for cfw_name, supported in support_matrix.items()}
 
         if name is not None and name.lower() not in fg_name.lower():
             continue
@@ -130,6 +135,9 @@ def get_feature_group_docs(
                 compute_frameworks=compute_frameworks,
                 supported_feature_names=supported_feature_names,
                 prefix=prefix,
+                subtype_key=fg_class.SUBTYPE_KEY,
+                subtypes=subtypes,
+                subtype_support=subtype_support,
             )
         )
 
@@ -336,13 +344,15 @@ def resolve_feature(feature_name: str, plugin_collector: Optional[PluginCollecto
     filtered = _filter_subclasses(candidates)
 
     if len(filtered) == 1:
+        resolved = filtered[0]
         return ResolvedFeature(
             feature_name=feature_name,
-            feature_group=filtered[0],
+            feature_group=resolved,
             candidates=candidates,
             error=None,
             supported_compute_frameworks=supported_names,
             unsupported_compute_frameworks=rejected_names,
+            subtype=safe_field(lambda: resolved.resolve_subtype(feature_name_obj, Options()), None),
         )
 
     conflicting_names = [fg.__name__ for fg in filtered]

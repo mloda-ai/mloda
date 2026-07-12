@@ -57,6 +57,43 @@ inspector does not know the caller's `Options`), and a feature that matches a
 group but is unsupported on every installed framework resolves to
 `feature_group=None` with a capability error rather than appearing runnable.
 
+### Declaring Capability per Subtype
+
+When a family's operations are enumerated by one `PROPERTY_MAPPING` key (the
+aggregation type, the scaler type, ...), name that key with `SUBTYPE_KEY` and
+declare which subtypes each framework supports:
+
+``` python
+class StatFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+    SUBTYPE_KEY = "stat_type"
+    PREFIX_PATTERN = r".*__([\w]+)_stat$"
+    PROPERTY_MAPPING = {
+        "stat_type": property_spec(
+            "statistic to compute",
+            strict=True,
+            allowed_values={"sum": "Sum of values", "median": "Median value"},
+        ),
+    }
+
+    @classmethod
+    def supported_subtypes(cls, compute_framework):
+        if compute_framework is SQLiteFramework:
+            return frozenset({"sum"})  # median is unsupported on SQLite
+        return cls.subtype_universe()
+```
+
+`subtype_universe()` derives from the key's declared values, and
+`supports_compute_framework` is then derived from both: no override needed. A
+subtype outside the universe (a parametric one such as `ntile_2`) stays allowed,
+so the hook never double-gates what matching already rejects. Families that
+flatten several axes into one subtype override `subtype_universe()` themselves.
+
+The declaration is enumerable without probing: `subtype_support_matrix()` returns
+framework class name -> supported subtypes (and raises if a framework claims a
+subtype outside the universe), and `get_feature_group_docs()` exposes the same
+data as `subtype_key`, `subtypes` and `subtype_support`. `resolve_feature(name)`
+reports the concrete feature's `subtype`.
+
 ### Empty Results
 
 The contract is: a **final** requested feature must return a *schema-bearing*

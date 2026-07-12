@@ -264,7 +264,11 @@ def get_extender_docs(
     return sorted(results, key=lambda x: x.name)
 
 
-def resolve_feature(feature_name: str, plugin_collector: Optional[PluginCollector] = None) -> ResolvedFeature:
+def resolve_feature(
+    feature_name: str,
+    options: Optional[Options] = None,
+    plugin_collector: Optional[PluginCollector] = None,
+) -> ResolvedFeature:
     """
     Resolve a feature name to its matching FeatureGroup class.
 
@@ -274,14 +278,15 @@ def resolve_feature(feature_name: str, plugin_collector: Optional[PluginCollecto
 
     Args:
         feature_name: The name of the feature to resolve.
-        plugin_collector: Optional PluginCollector. When provided, its
-            ``allow_redefinition`` flag is threaded into deduplication so that
-            redefined FeatureGroup classes (e.g. via reload) do not raise.
+        options: Options used for matching and capability checks. Defaults to empty Options.
+        plugin_collector: Optional PluginCollector; its ``allow_redefinition`` flag is threaded into deduplication.
 
     Returns:
         ResolvedFeature containing the resolved FeatureGroup (if found),
         all matching candidates, and any error message.
     """
+    resolved_options = options if options is not None else Options()
+    options_caveat = "default options" if options is None else "the provided options"
     allow_redefinition = plugin_collector.allow_redefinition if plugin_collector is not None else False
     fg_classes: set[type[FeatureGroup]] = get_all_subclasses(FeatureGroup)
     if plugin_collector is not None:
@@ -292,7 +297,7 @@ def resolve_feature(feature_name: str, plugin_collector: Optional[PluginCollecto
         raw_conflicts = list(getattr(exc, "conflicts", []))
         feature_name_obj = FeatureName(feature_name)
         matching_conflicts = [
-            fg for fg in raw_conflicts if fg.match_feature_group_criteria(feature_name_obj, Options(), None)
+            fg for fg in raw_conflicts if fg.match_feature_group_criteria(feature_name_obj, resolved_options, None)
         ]
         return ResolvedFeature(
             feature_name=feature_name,
@@ -304,7 +309,7 @@ def resolve_feature(feature_name: str, plugin_collector: Optional[PluginCollecto
     feature_name_obj = FeatureName(feature_name)
 
     for fg in all_fgs:
-        if fg.match_feature_group_criteria(feature_name_obj, Options(), None):
+        if fg.match_feature_group_criteria(feature_name_obj, resolved_options, None):
             candidates.append(fg)
 
     if not candidates:
@@ -315,7 +320,7 @@ def resolve_feature(feature_name: str, plugin_collector: Optional[PluginCollecto
             error=f"No FeatureGroup found for feature name: {feature_name}",
         )
 
-    supported, rejected = split_frameworks_by_capability(candidates, feature_name_obj, Options())
+    supported, rejected = split_frameworks_by_capability(candidates, feature_name_obj, resolved_options)
     supported_names = sorted(c.get_class_name() for c in supported)
     rejected_names = sorted(c.get_class_name() for c in rejected)
 
@@ -327,7 +332,7 @@ def resolve_feature(feature_name: str, plugin_collector: Optional[PluginCollecto
             error=(
                 f"Feature '{feature_name}' matches {[c.get_class_name() for c in candidates]} "
                 f"but is unsupported on all installed compute frameworks "
-                f"(evaluated under default options): {rejected_names}."
+                f"(evaluated under {options_caveat}): {rejected_names}."
             ),
             supported_compute_frameworks=[],
             unsupported_compute_frameworks=rejected_names,

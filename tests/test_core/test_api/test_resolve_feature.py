@@ -15,6 +15,7 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.api.plugin_info import ResolvedFeature
 from mloda.core.api.plugin_docs import resolve_feature
 from mloda.user import PluginLoader
@@ -26,6 +27,10 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 
 SPLIT_CAP_FEATURE = "SplitCapResolveFeature"
 ALL_REJECTED_CAP_FEATURE = "AllRejectedCapResolveFeature"
+OPTION_GATED_FEATURE = "OptionGatedResolveFeature"
+OPTION_CAP_FEATURE = "OptionCapResolveFeature"
+PARTITION_BY_KEY = "partition_by"
+ALLOW_PYTHON_DICT_KEY = "allow_python_dict"
 
 
 class SplitCapResolveFeatureGroup(FeatureGroup):
@@ -89,6 +94,63 @@ class AllRejectedCapResolveFeatureGroup(FeatureGroup):
         compute_framework: type[ComputeFramework],
     ) -> bool:
         return False
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        return None
+
+
+class OptionGatedResolveFeatureGroup(FeatureGroup):
+    """Matches its feature name only when the caller supplies a truthy 'partition_by' option."""
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PandasDataFrame, PythonDictFramework}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> bool:
+        if isinstance(feature_name, FeatureName):
+            feature_name = str(feature_name)
+        if feature_name != OPTION_GATED_FEATURE:
+            return False
+        return bool(options.get(PARTITION_BY_KEY))
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        return None
+
+
+class OptionCapResolveFeatureGroup(FeatureGroup):
+    """Matches its feature name always, but only supports PythonDictFramework when an option opts in."""
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PandasDataFrame, PythonDictFramework}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> bool:
+        if isinstance(feature_name, FeatureName):
+            feature_name = str(feature_name)
+        return feature_name == OPTION_CAP_FEATURE
+
+    @classmethod
+    def supports_compute_framework(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        compute_framework: type[ComputeFramework],
+    ) -> bool:
+        if compute_framework is PythonDictFramework:
+            return bool(options.get(ALLOW_PYTHON_DICT_KEY))
+        return True
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return None
@@ -397,3 +459,94 @@ class TestResolveFeatureCapabilityAware:
         assert "PandasDataFrame" in result.unsupported_compute_frameworks
         assert "PandasDataFrame" not in result.supported_compute_frameworks
         assert "PythonDictFramework" not in result.supported_compute_frameworks
+
+
+class TestResolveFeatureWithOptions:
+    """resolve_feature accepts caller-supplied Options and threads them through matching (issue #640)."""
+
+    def test_option_gated_feature_does_not_resolve_without_options(self) -> None:
+        """Without options, an option-gated FeatureGroup never matches, so resolution fails."""
+        result = resolve_feature(OPTION_GATED_FEATURE)
+
+        assert result.feature_group is None
+        assert result.candidates == []
+        assert result.error is not None
+
+    def test_option_gated_feature_resolves_with_options(self) -> None:
+        """With the gating option supplied, the option-gated FeatureGroup resolves."""
+        result = resolve_feature(OPTION_GATED_FEATURE, options=Options(group={PARTITION_BY_KEY: ["id"]}))
+
+        assert result.feature_group is OptionGatedResolveFeatureGroup
+        assert result.error is None
+        assert OptionGatedResolveFeatureGroup in result.candidates
+        assert result.supported_compute_frameworks
+        assert "PandasDataFrame" in result.supported_compute_frameworks
+
+    def test_options_default_is_equivalent_to_explicit_empty_options(self) -> None:
+        """options=None must behave exactly like a fresh, empty Options."""
+        implicit = resolve_feature(OPTION_GATED_FEATURE)
+        explicit = resolve_feature(OPTION_GATED_FEATURE, options=Options())
+
+        assert explicit.feature_group is implicit.feature_group
+        assert explicit.candidates == implicit.candidates
+        assert explicit.error == implicit.error
+
+    def test_supports_compute_framework_sees_default_options(self) -> None:
+        """Without options, the capability hook rejects PythonDictFramework."""
+        result = resolve_feature(OPTION_CAP_FEATURE)
+
+        assert result.feature_group is OptionCapResolveFeatureGroup
+        assert "PandasDataFrame" in result.supported_compute_frameworks
+        assert "PythonDictFramework" in result.unsupported_compute_frameworks
+
+    def test_supports_compute_framework_sees_caller_options(self) -> None:
+        """With the opt-in option, the capability hook accepts PythonDictFramework too."""
+        result = resolve_feature(OPTION_CAP_FEATURE, options=Options(group={ALLOW_PYTHON_DICT_KEY: True}))
+
+        assert result.feature_group is OptionCapResolveFeatureGroup
+        assert "PandasDataFrame" in result.supported_compute_frameworks
+        assert "PythonDictFramework" in result.supported_compute_frameworks
+        assert "PythonDictFramework" not in result.unsupported_compute_frameworks
+
+    def test_plugin_collector_keyword_still_works_without_options(self) -> None:
+        """plugin_collector remains usable as a keyword argument on its own."""
+        collector = PluginCollector.enabled_feature_groups({OptionCapResolveFeatureGroup})
+
+        result = resolve_feature(OPTION_CAP_FEATURE, plugin_collector=collector)
+
+        assert result.feature_group is OptionCapResolveFeatureGroup
+        assert result.error is None
+
+    def test_plugin_collector_keyword_works_alongside_options(self) -> None:
+        """plugin_collector and options can be combined as keyword arguments."""
+        collector = PluginCollector.enabled_feature_groups({OptionGatedResolveFeatureGroup})
+
+        result = resolve_feature(
+            OPTION_GATED_FEATURE,
+            options=Options(group={PARTITION_BY_KEY: ["id"]}),
+            plugin_collector=collector,
+        )
+
+        assert result.feature_group is OptionGatedResolveFeatureGroup
+        assert result.candidates == [OptionGatedResolveFeatureGroup]
+        assert result.error is None
+
+    def test_all_rejected_error_keeps_default_options_caveat_without_options(self) -> None:
+        """Without caller options, the all-rejected error still names the default-options caveat."""
+        result = resolve_feature(ALL_REJECTED_CAP_FEATURE)
+
+        assert result.feature_group is None
+        assert result.error is not None
+        assert "default options" in result.error
+
+    def test_all_rejected_error_drops_default_options_caveat_with_options(self) -> None:
+        """With caller options, the all-rejected error must not claim it evaluated default options."""
+        result = resolve_feature(ALL_REJECTED_CAP_FEATURE, options=Options(group={PARTITION_BY_KEY: ["id"]}))
+
+        assert result.feature_group is None
+        assert result.error is not None
+        assert "default options" not in result.error, (
+            f"Error must not claim default options when the caller supplied options, got: {result.error}"
+        )
+        assert "PandasDataFrame" in result.error
+        assert "PythonDictFramework" in result.error

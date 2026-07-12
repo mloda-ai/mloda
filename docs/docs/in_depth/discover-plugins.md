@@ -22,6 +22,21 @@ This is useful for:
 - Understanding which plugin handles a feature
 - Identifying conflicts when multiple FeatureGroups match
 
+### Option-Gated Feature Groups
+
+Some FeatureGroups only match when an option is present, and
+`supports_compute_framework` may also depend on the options. Matching and the
+compute framework split default to empty `Options`, so pass the options the
+feature would really run with:
+
+``` python
+from mloda.user import Options
+from mloda.steward import resolve_feature
+
+result = resolve_feature("value__median_agg", options=Options(group={"partition_by": ["customer_id"]}))
+print(result.supported_compute_frameworks)
+```
+
 ### Inspecting Candidates
 
 When resolution fails due to conflicts, check the candidates:

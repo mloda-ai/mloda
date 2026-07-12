@@ -14,39 +14,60 @@ _BOOL_MAP: dict[str, bool] = {
     "TRUE": True,
     "FALSE": False,
 }
+#: pyarrow's default ``ConvertOptions.null_values`` minus ``""``: empty cells are already
+#: mapped to ``None`` before inference.
+_NULL_TOKENS: frozenset[str] = frozenset(
+    {
+        "#N/A",
+        "#N/A N/A",
+        "#NA",
+        "-1.#IND",
+        "-1.#QNAN",
+        "-NaN",
+        "-nan",
+        "1.#IND",
+        "1.#QNAN",
+        "N/A",
+        "NA",
+        "NULL",
+        "NaN",
+        "n/a",
+        "nan",
+        "null",
+    }
+)
+_INT64_MIN = -(2**63)
+_INT64_MAX = 2**63 - 1
 
 
 def _infer_column(cells: list[str | None]) -> list[Any]:
     """Infer a single column's type once (column-wise) and cast its cells.
 
-    Empty-cell semantics match pyarrow's default CSV reader
-    (``strings_can_be_null=False``): a missing cell in a numeric/bool column
-    becomes ``None``, while a missing cell in a string column becomes ``""``
-    (empty string). An all-empty column (no present cells) stays all ``None``.
+    Matches pyarrow's default CSV reader:
 
-    Null tokens (``NA``, ``NaN``, ``null``) inside an otherwise numeric column
-    are not recognized: such a column stays string, whereas pyarrow parses
-    those tokens as nulls.
-
-    Integers beyond int64 range stay exact arbitrary-precision Python ints here,
-    whereas pyarrow's CSV reader yields a lossy ``float64``.
-
-    Both are deliberate divergences from pyarrow, tracked as a follow-up in
-    issue #662.
+    - Empty cells (``None`` here) and null tokens become ``None`` in an int/float/bool column;
+      in a string column an empty cell stays ``""`` and a null token stays literal text
+      (``strings_can_be_null=False``). A column of only empty cells and/or null tokens is all-``None``.
+    - The type is decided from the cells that are neither empty nor a null token.
+    - An int column with any value outside signed int64 range degrades entirely to float
+      (pyarrow's int64 -> double fallback).
     """
-    present = [c for c in cells if c is not None]
+    typed = [c for c in cells if c is not None and c not in _NULL_TOKENS]
 
-    if not present:
-        return list(cells)
+    if not typed:
+        return [None] * len(cells)
 
-    if all(_INT_RE.match(c) for c in present):
-        return [None if c is None else int(c) for c in cells]
+    if all(_INT_RE.match(c) for c in typed):
+        if all(_INT64_MIN <= int(c) <= _INT64_MAX for c in typed):
+            return [None if c is None or c in _NULL_TOKENS else int(c) for c in cells]
+        # Parse the float from the source string: float(int(...)) would raise on huge values.
+        return [None if c is None or c in _NULL_TOKENS else float(c) for c in cells]
 
-    if all(_FLOAT_RE.match(c) for c in present):
-        return [None if c is None else float(c) for c in cells]
+    if all(_FLOAT_RE.match(c) for c in typed):
+        return [None if c is None or c in _NULL_TOKENS else float(c) for c in cells]
 
-    if all(c in _BOOL_MAP for c in present):
-        return [None if c is None else _BOOL_MAP[c] for c in cells]
+    if all(c in _BOOL_MAP for c in typed):
+        return [None if c is None or c in _NULL_TOKENS else _BOOL_MAP[c] for c in cells]
 
     return ["" if c is None else c for c in cells]
 

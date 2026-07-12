@@ -22,6 +22,13 @@ column semantics pyarrow's CSV reader gives, without pyarrow):
   (i) A UTF-8 BOM at the start of the file is tolerated (``utf-8-sig``).
   (j) A non-csv ``FileSource.format`` raises ``ValueError``; the reverse direction
       (dict -> FileSource) raises ``NotImplementedError``.
+  (k) Null tokens (pyarrow's default ``ConvertOptions.null_values``: ``NA``, ``N/A``, ``NaN``,
+      ``null``, ``#N/A``, ``-1.#IND``, ...) become ``None`` in an otherwise int / float / bool
+      column; in a STRING column they stay literal strings (``strings_can_be_null=False``);
+      a column of only null tokens (and/or empty cells) is all-``None``.
+  (l) An all-int column with any value outside signed int64 range degrades entirely to
+      ``float`` (pyarrow's int64 -> double fallback); int64 min/max stay exact ints; an
+      integer too large for float64 becomes ``inf``.
 """
 
 from __future__ import annotations
@@ -45,10 +52,49 @@ from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFea
 from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader  # noqa: F401
 
 
+#: pyarrow's default ``ConvertOptions().null_values``, minus ``""`` (empty cells are handled
+#: before inference). Pinned literally so a pyarrow default change surfaces as a test failure.
+_NULL_TOKENS: tuple[str, ...] = (
+    "#N/A",
+    "#N/A N/A",
+    "#NA",
+    "-1.#IND",
+    "-1.#QNAN",
+    "-NaN",
+    "-nan",
+    "1.#IND",
+    "1.#QNAN",
+    "N/A",
+    "NA",
+    "NULL",
+    "NaN",
+    "n/a",
+    "nan",
+    "null",
+)
+
+
 def _materialize(tmp_path: Path, content: str, columns: tuple[str, ...]) -> Any:
     path = tmp_path / "data.csv"
     path.write_text(content, encoding="utf-8")
     return FileSourceDictTransformer.transform_fw_to_other_fw(FileSource(path=str(path), format="csv", columns=columns))
+
+
+def _parity(tmp_path: Path, content: str, columns: tuple[str, ...]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Materialize the SAME csv file with both materializers; return (dict result, pyarrow result)."""
+    pytest.importorskip("pyarrow")
+    from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_file_source_transformer import (
+        FileSourcePyArrowTransformer,
+    )
+
+    path = tmp_path / "data.csv"
+    path.write_text(content, encoding="utf-8")
+    source = FileSource(path=str(path), format="csv", columns=columns)
+
+    dict_result: dict[str, Any] = FileSourceDictTransformer.transform_fw_to_other_fw(source)
+    table = FileSourcePyArrowTransformer.transform_fw_to_other_fw(source)
+    pyarrow_result: dict[str, Any] = {name: table.column(name).to_pylist() for name in columns}
+    return dict_result, pyarrow_result
 
 
 class TestColumnWiseTypeInference:
@@ -207,36 +253,110 @@ class TestEncodingAndFormat:
             FileSourceDictTransformer.transform_other_fw_to_fw({"a": [1]})
 
 
-class TestDeliberateNullTokenDivergenceFromPyArrow:
-    """PASSING divergence pin: the stdlib materializer does NOT recognize null tokens.
+class TestCsvInferenceParityWithPyArrow:
+    """PARITY pin (issue #662): both materializers must agree on the SAME CSV file.
 
-    DELIBERATE divergence, pinned so it cannot drift silently (issue #619 tracks null-token
-    inference as a follow-up): on the SAME CSV file with the column ``1,2,NA``, the stdlib
-    ``FileSourceDictTransformer`` keeps the column entirely string
-    (``["1", "2", "NA"]``, per its documented "such a column currently stays string" rule),
-    while pyarrow's CSV reader treats ``NA`` as a null token and yields ``[1, 2, None]``.
-
-    This test must PASS today. If it ever fails, either the stdlib transformer started
-    inferring null tokens (close #619 and update this pin) or pyarrow changed its default
-    null tokens; both deserve a conscious decision, not a silent drift.
+    pyarrow's CSV reader is the reference. Every test here materializes one file with BOTH
+    ``FileSourceDictTransformer`` and ``FileSourcePyArrowTransformer`` and asserts identical
+    values, so the stdlib path cannot drift from pyarrow (and a pyarrow default change is
+    caught too). Covers null tokens (k) and int64 overflow (l).
     """
 
-    def test_na_token_column_diverges_between_dict_and_pyarrow_materializers(self, tmp_path: Path) -> None:
-        path = tmp_path / "data.csv"
-        path.write_text("a\n1\n2\nNA\n", encoding="utf-8")
-        source = FileSource(path=str(path), format="csv", columns=("a",))
+    def test_null_token_in_int_column_becomes_none(self, tmp_path: Path) -> None:
+        """(k) ``NA`` in an otherwise-int column is a null: ``[1, 2, None]``, not all-string."""
+        dict_result, pyarrow_result = _parity(tmp_path, "a\n1\n2\nNA\n", ("a",))
 
-        dict_result = FileSourceDictTransformer.transform_fw_to_other_fw(source)
-        assert dict_result["a"] == ["1", "2", "NA"]
+        assert dict_result["a"] == [1, 2, None]
+        assert dict_result == pyarrow_result
+        assert all(isinstance(v, int) and not isinstance(v, bool) for v in dict_result["a"] if v is not None)
+
+    def test_every_default_null_token_is_recognized_in_an_int_column(self, tmp_path: Path) -> None:
+        """(k) The full pyarrow default ``null_values`` set (minus ``""``) nulls out in an int column."""
+        content = "a\n1\n" + "\n".join(_NULL_TOKENS) + "\n2\n"
+        dict_result, pyarrow_result = _parity(tmp_path, content, ("a",))
+
+        assert dict_result["a"] == [1, *([None] * len(_NULL_TOKENS)), 2]
+        assert dict_result == pyarrow_result
+
+    def test_null_token_in_float_column_becomes_none(self, tmp_path: Path) -> None:
+        """(k) ``null`` in an otherwise-float column is a null; the column stays float."""
+        dict_result, pyarrow_result = _parity(tmp_path, "a\n1.5\nnull\n2.5\n", ("a",))
+
+        assert dict_result["a"] == [1.5, None, 2.5]
+        assert dict_result == pyarrow_result
+        assert all(isinstance(v, float) for v in dict_result["a"] if v is not None)
+
+    def test_null_token_in_bool_column_becomes_none(self, tmp_path: Path) -> None:
+        """(k) ``NA`` between bools is a null; the column stays bool."""
+        dict_result, pyarrow_result = _parity(tmp_path, "a\ntrue\nNA\nfalse\n", ("a",))
+
+        assert dict_result["a"] == [True, None, False]
+        assert dict_result == pyarrow_result
+        assert all(isinstance(v, bool) for v in dict_result["a"] if v is not None)
+
+    def test_null_tokens_stay_literal_strings_in_a_string_column(self, tmp_path: Path) -> None:
+        """(k) ``strings_can_be_null=False``: in a string column a null token is just text."""
+        dict_result, pyarrow_result = _parity(tmp_path, "a\nx\nNA\nfoo\n", ("a",))
+
+        assert dict_result["a"] == ["x", "NA", "foo"]
+        assert dict_result == pyarrow_result
         assert all(isinstance(v, str) for v in dict_result["a"])
 
-        pytest.importorskip("pyarrow")
-        from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_file_source_transformer import (
-            FileSourcePyArrowTransformer,
-        )
+    def test_all_null_token_column_is_all_none(self, tmp_path: Path) -> None:
+        """(k) A column of only null tokens (pyarrow infers the ``null`` type) is all-``None``."""
+        dict_result, pyarrow_result = _parity(tmp_path, "a\nNA\nnull\nNaN\n", ("a",))
 
-        table = FileSourcePyArrowTransformer.transform_fw_to_other_fw(source)
-        assert table.column("a").to_pylist() == [1, 2, None]
+        assert dict_result["a"] == [None, None, None]
+        assert dict_result == pyarrow_result
+
+    def test_null_tokens_mixed_with_empty_cells_are_all_none(self, tmp_path: Path) -> None:
+        """(k) Null tokens plus empty cells (no other cells) -> all-``None``, not empty strings."""
+        dict_result, pyarrow_result = _parity(tmp_path, "a,b\nNA,1\n,2\nnull,3\n", ("a", "b"))
+
+        assert dict_result["a"] == [None, None, None]
+        assert dict_result["b"] == [1, 2, 3]
+        assert dict_result == pyarrow_result
+
+    def test_int64_overflow_degrades_whole_column_to_float(self, tmp_path: Path) -> None:
+        """(l) One out-of-int64-range value turns the whole column float (pyarrow int64 -> double)."""
+        dict_result, pyarrow_result = _parity(tmp_path, "a\n9223372036854775808\n1\n", ("a",))
+
+        assert dict_result["a"] == [9.223372036854776e18, 1.0]
+        assert dict_result == pyarrow_result
+        # The in-range cell degrades too: the column has ONE type.
+        assert all(isinstance(v, float) for v in dict_result["a"])
+
+    def test_negative_int64_overflow_degrades_whole_column_to_float(self, tmp_path: Path) -> None:
+        """(l) Below int64 min degrades the column to float as well."""
+        dict_result, pyarrow_result = _parity(tmp_path, "a\n-9223372036854775809\n1\n", ("a",))
+
+        assert dict_result["a"] == [-9.223372036854776e18, 1.0]
+        assert dict_result == pyarrow_result
+        assert all(isinstance(v, float) for v in dict_result["a"])
+
+    def test_int64_boundary_values_stay_exact_ints(self, tmp_path: Path) -> None:
+        """(l) int64 max/min are IN range: they must stay exact ints, never lossy floats."""
+        dict_result, pyarrow_result = _parity(tmp_path, "a\n9223372036854775807\n-9223372036854775808\n", ("a",))
+
+        assert dict_result["a"] == [9223372036854775807, -9223372036854775808]
+        assert dict_result == pyarrow_result
+        assert all(isinstance(v, int) and not isinstance(v, bool) for v in dict_result["a"])
+
+    def test_integer_too_large_for_float64_becomes_inf(self, tmp_path: Path) -> None:
+        """(l) A 401-digit integer overflows float64: ``inf``, exactly as pyarrow yields."""
+        dict_result, pyarrow_result = _parity(tmp_path, "a\n1" + "0" * 400 + "\n2\n", ("a",))
+
+        assert dict_result["a"] == [math.inf, 2.0]
+        assert math.isinf(dict_result["a"][0])
+        assert dict_result == pyarrow_result
+
+    def test_negative_integer_too_large_for_float64_becomes_negative_inf(self, tmp_path: Path) -> None:
+        """(l) The negative counterpart yields ``-inf``."""
+        dict_result, pyarrow_result = _parity(tmp_path, "a\n-1" + "0" * 400 + "\n2\n", ("a",))
+
+        assert dict_result["a"] == [-math.inf, 2.0]
+        assert math.isinf(dict_result["a"][0])
+        assert dict_result == pyarrow_result
 
 
 class TestEndToEndPythonDictCsv:

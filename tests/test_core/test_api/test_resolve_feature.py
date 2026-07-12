@@ -7,11 +7,13 @@ and candidate tracking.
 """
 
 import pytest
-from typing import Optional
+from typing import Any, Optional
 
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -31,6 +33,9 @@ OPTION_GATED_FEATURE = "OptionGatedResolveFeature"
 OPTION_CAP_FEATURE = "OptionCapResolveFeature"
 PARTITION_BY_KEY = "partition_by"
 ALLOW_PYTHON_DICT_KEY = "allow_python_dict"
+
+PROBE_TYPE_KEY = "resolve_probe_type"
+PROBE_FEATURE = "value__median_resolveprobe"
 
 
 class SplitCapResolveFeatureGroup(FeatureGroup):
@@ -156,10 +161,36 @@ class OptionCapResolveFeatureGroup(FeatureGroup):
         return None
 
 
+class ForwardMismatchResolveFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+    """Chain-parsed group whose match raises ValueError on a forwarded/name option mismatch."""
+
+    PREFIX_PATTERN = r".*__([\w]+)_resolveprobe$"
+
+    PROPERTY_MAPPING = {
+        PROBE_TYPE_KEY: {
+            "median": "Median value",
+            "sum": "Sum of values",
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
+        },
+    }
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PandasDataFrame, PythonDictFramework}
+
+
 @pytest.fixture(scope="module", autouse=True)
 def load_plugins() -> None:
     """Load all plugins before running tests in this module."""
     PluginLoader.all()
+
+
+def _forwarded_mismatch_options() -> Options:
+    """Options whose forwarded probe type ('sum') contradicts the name-parsed one ('median')."""
+    options = Options(group={PROBE_TYPE_KEY: "sum"})
+    options.inherited_group_keys = frozenset({PROBE_TYPE_KEY})
+    return options
 
 
 class TestResolvedFeatureDataclass:
@@ -483,13 +514,20 @@ class TestResolveFeatureWithOptions:
         assert "PandasDataFrame" in result.supported_compute_frameworks
 
     def test_options_default_is_equivalent_to_explicit_empty_options(self) -> None:
-        """options=None must behave exactly like a fresh, empty Options."""
-        implicit = resolve_feature(OPTION_GATED_FEATURE)
-        explicit = resolve_feature(OPTION_GATED_FEATURE, options=Options())
+        """options=None must behave exactly like a fresh, empty Options, on every resolution outcome."""
+        for feature_name in (OPTION_GATED_FEATURE, OPTION_CAP_FEATURE, ALL_REJECTED_CAP_FEATURE, SPLIT_CAP_FEATURE):
+            implicit = resolve_feature(feature_name)
+            explicit = resolve_feature(feature_name, options=Options())
 
-        assert explicit.feature_group is implicit.feature_group
-        assert explicit.candidates == implicit.candidates
-        assert explicit.error == implicit.error
+            assert explicit.feature_group is implicit.feature_group, feature_name
+            assert explicit.candidates == implicit.candidates, feature_name
+            assert explicit.error == implicit.error, feature_name
+            assert explicit.supported_compute_frameworks == implicit.supported_compute_frameworks, feature_name
+            assert explicit.unsupported_compute_frameworks == implicit.unsupported_compute_frameworks, feature_name
+
+        # Guard against a trivially-passing comparison: options must actually be threaded through.
+        gated = resolve_feature(OPTION_GATED_FEATURE, options=Options(group={PARTITION_BY_KEY: ["id"]}))
+        assert gated.feature_group is OptionGatedResolveFeatureGroup
 
     def test_supports_compute_framework_sees_default_options(self) -> None:
         """Without options, the capability hook rejects PythonDictFramework."""
@@ -550,3 +588,118 @@ class TestResolveFeatureWithOptions:
         )
         assert "PandasDataFrame" in result.error
         assert "PythonDictFramework" in result.error
+
+
+class TestResolveFeatureIsNonThrowing:
+    """resolve_feature is a debug API: matching errors surface as ResolvedFeature.error, never as exceptions."""
+
+    def test_forwarded_name_mismatch_does_not_propagate_value_error(self) -> None:
+        """A ValueError raised by match_feature_group_criteria must not escape resolve_feature."""
+        result = resolve_feature(PROBE_FEATURE, options=_forwarded_mismatch_options())
+
+        assert isinstance(result, ResolvedFeature)
+        assert result.feature_name == PROBE_FEATURE
+
+    def test_forwarded_name_mismatch_reports_no_feature_group(self) -> None:
+        """A candidate that raises during matching must not be resolved as the winner."""
+        result = resolve_feature(PROBE_FEATURE, options=_forwarded_mismatch_options())
+
+        assert result.feature_group is None
+
+    def test_forwarded_name_mismatch_surfaces_validation_reason_in_error(self) -> None:
+        """The error must carry the underlying validation reason so the user sees why nothing matched."""
+        result = resolve_feature(PROBE_FEATURE, options=_forwarded_mismatch_options())
+
+        assert result.error is not None
+        assert PROBE_TYPE_KEY in result.error, f"Error must name the rejected option key, got: {result.error}"
+        assert "forwarded" in result.error.lower(), (
+            f"Error must surface the forwarded-name-mismatch reason, got: {result.error}"
+        )
+
+    def test_probe_group_resolves_normally_without_conflicting_forwarded_options(self) -> None:
+        """The probe group is a normal, resolvable group: only the mismatch case is an error."""
+        result = resolve_feature(PROBE_FEATURE)
+
+        assert result.feature_group is ForwardMismatchResolveFeatureGroup
+        assert result.error is None
+
+
+class TestResolveFeatureOptionsNoneEqualsEmpty:
+    """options=None and options=Options() are indistinguishable, including in error wording."""
+
+    def test_all_rejected_error_identical_for_none_and_explicit_empty_options(self) -> None:
+        """The all-rejected error string must not depend on how the empty options were supplied."""
+        implicit = resolve_feature(ALL_REJECTED_CAP_FEATURE)
+        explicit = resolve_feature(ALL_REJECTED_CAP_FEATURE, options=Options())
+
+        assert implicit.error is not None
+        assert explicit.error == implicit.error, (
+            f"options=Options() must produce the same error as options=None, got: {explicit.error!r} "
+            f"vs {implicit.error!r}"
+        )
+
+    def test_explicit_empty_options_keeps_default_options_caveat(self) -> None:
+        """An explicitly-passed empty Options is the documented default, so it keeps the default-options caveat."""
+        result = resolve_feature(ALL_REJECTED_CAP_FEATURE, options=Options())
+
+        assert result.error is not None
+        assert "default options" in result.error, (
+            f"An empty Options is the default, so the caveat must stay, got: {result.error}"
+        )
+
+    def test_non_empty_options_still_drops_default_options_caveat(self) -> None:
+        """Only a non-empty Options drops the default-options wording."""
+        result = resolve_feature(ALL_REJECTED_CAP_FEATURE, options=Options(group={PARTITION_BY_KEY: ["id"]}))
+
+        assert result.error is not None
+        assert "default options" not in result.error, (
+            f"Non-empty caller options must drop the default-options caveat, got: {result.error}"
+        )
+
+
+class TestResolveFeatureKeywordOnlyArguments:
+    """options and plugin_collector are keyword-only, so legacy positional calls fail loudly."""
+
+    def test_positional_options_raises_type_error(self) -> None:
+        """resolve_feature(name, Options()) must raise TypeError instead of silently binding."""
+        resolve_feature_untyped: Any = resolve_feature
+
+        with pytest.raises(TypeError):
+            resolve_feature_untyped(OPTION_CAP_FEATURE, Options())
+
+    def test_positional_plugin_collector_raises_type_error(self) -> None:
+        """A legacy resolve_feature(name, collector) call must raise TypeError, not bind a collector into options."""
+        resolve_feature_untyped: Any = resolve_feature
+        collector = PluginCollector.enabled_feature_groups({OptionCapResolveFeatureGroup})
+
+        with pytest.raises(TypeError):
+            resolve_feature_untyped(OPTION_CAP_FEATURE, collector)
+
+    def test_options_keyword_still_works(self) -> None:
+        """The options keyword form remains supported."""
+        result = resolve_feature(OPTION_GATED_FEATURE, options=Options(group={PARTITION_BY_KEY: ["id"]}))
+
+        assert result.feature_group is OptionGatedResolveFeatureGroup
+        assert result.error is None
+
+    def test_plugin_collector_keyword_still_works(self) -> None:
+        """The plugin_collector keyword form remains supported."""
+        collector = PluginCollector.enabled_feature_groups({OptionCapResolveFeatureGroup})
+
+        result = resolve_feature(OPTION_CAP_FEATURE, plugin_collector=collector)
+
+        assert result.feature_group is OptionCapResolveFeatureGroup
+        assert result.error is None
+
+    def test_both_keywords_together_still_work(self) -> None:
+        """Both keyword arguments can be combined."""
+        collector = PluginCollector.enabled_feature_groups({OptionGatedResolveFeatureGroup})
+
+        result = resolve_feature(
+            OPTION_GATED_FEATURE,
+            options=Options(group={PARTITION_BY_KEY: ["id"]}),
+            plugin_collector=collector,
+        )
+
+        assert result.feature_group is OptionGatedResolveFeatureGroup
+        assert result.error is None

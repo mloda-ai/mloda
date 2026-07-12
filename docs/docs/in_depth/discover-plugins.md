@@ -24,18 +24,24 @@ This is useful for:
 
 ### Option-Gated Feature Groups
 
-Some FeatureGroups only match when an option is present, and
-`supports_compute_framework` may also depend on the options. Matching and the
-compute framework split default to empty `Options`, so pass the options the
-feature would really run with:
+Matching and the compute framework split both run under the options you pass.
+A FeatureGroup whose `match_feature_group_criteria` or
+`supports_compute_framework` reads an option therefore only resolves when you
+supply it. Without `options` the evaluation uses empty `Options`, and such a
+group reports no candidates:
 
 ``` python
-from mloda.user import Options
 from mloda.steward import resolve_feature
+from mloda.user import Options, PluginLoader
 
-result = resolve_feature("value__median_agg", options=Options(group={"partition_by": ["customer_id"]}))
-print(result.supported_compute_frameworks)
+PluginLoader.all()
+
+# The group-by aggregation FeatureGroups in mloda-registry match only when partition_by is set.
+result = resolve_feature("sales__sum_aggr", options=Options(group={"partition_by": ["customer_id"]}))
+print(result.feature_group, result.supported_compute_frameworks)
 ```
+
+`options` and `plugin_collector` are keyword-only, so pass them by name.
 
 ### Inspecting Candidates
 

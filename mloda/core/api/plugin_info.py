@@ -41,7 +41,7 @@ class ResolvedFeature:
     feature_group: Optional[type["FeatureGroup"]]
     candidates: list[type["FeatureGroup"]]
     error: Optional[str]
-    # Frameworks supporting the feature, evaluated under default options.
+    # Frameworks supporting the feature, evaluated under the options passed to resolve_feature (empty by default).
     supported_compute_frameworks: list[str] = field(default_factory=list)
-    # Frameworks rejecting the feature, evaluated under default options.
+    # Frameworks rejecting the feature, evaluated under the options passed to resolve_feature (empty by default).
     unsupported_compute_frameworks: list[str] = field(default_factory=list)

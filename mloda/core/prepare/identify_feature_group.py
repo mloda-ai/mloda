@@ -352,7 +352,7 @@ class IdentifyFeatureGroupClass:
             msg += f"\nDid you mean one of: {similar}?"
 
         msg += (
-            "\nUse resolve_feature(name) to debug feature resolution."
+            "\nUse resolve_feature(name, options=...) to debug feature resolution."
             "\nFor troubleshooting guide, see: "
             "https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/"
         )

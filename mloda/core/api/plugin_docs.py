@@ -55,6 +55,27 @@ def _dedup_degrading_on_conflict(
         return dedup_feature_group_subclasses(feature_groups, allow_redefinition=True)
 
 
+def _match_recording_validation_errors(
+    fg_class: type[FeatureGroup],
+    feature_name: FeatureName,
+    options: Options,
+    validation_errors: list[str],
+) -> bool:
+    """Match a feature group, degrading a validation ValueError into "not a match" and recording its message.
+
+    resolve_feature is a non-throwing debug API, but matching can raise ValueError once caller
+    options reach the feature chain parser (e.g. a forwarded option contradicting the feature name).
+    Such a candidate is not a match, and the reason is recorded so it can be surfaced in the error.
+    """
+    try:
+        return fg_class.match_feature_group_criteria(feature_name, options, None)
+    except ValueError as exc:
+        message = str(exc)
+        if message not in validation_errors:
+            validation_errors.append(message)
+        return False
+
+
 def get_feature_group_docs(
     name: Optional[str] = None,
     search: Optional[str] = None,
@@ -266,6 +287,7 @@ def get_extender_docs(
 
 def resolve_feature(
     feature_name: str,
+    *,
     options: Optional[Options] = None,
     plugin_collector: Optional[PluginCollector] = None,
 ) -> ResolvedFeature:
@@ -276,18 +298,23 @@ def resolve_feature(
     the given feature name. It applies subclass filtering to prefer more
     specific (child) classes over parent classes.
 
+    Never raises: matching errors are reported in the returned ResolvedFeature.error.
+
     Args:
         feature_name: The name of the feature to resolve.
-        options: Options used for matching and capability checks. Defaults to empty Options.
-        plugin_collector: Optional PluginCollector; its ``allow_redefinition`` flag is threaded into deduplication.
+        options: Keyword-only. Options used for matching and capability checks. An empty or omitted Options is
+            the documented default.
+        plugin_collector: Keyword-only. Its ``allow_redefinition`` flag is threaded into deduplication.
 
     Returns:
         ResolvedFeature containing the resolved FeatureGroup (if found),
         all matching candidates, and any error message.
     """
     resolved_options = options if options is not None else Options()
-    options_caveat = "default options" if options is None else "the provided options"
+    is_default_options = not resolved_options.group and not resolved_options.context
+    options_caveat = "default options" if is_default_options else "the provided options"
     allow_redefinition = plugin_collector.allow_redefinition if plugin_collector is not None else False
+    validation_errors: list[str] = []
     fg_classes: set[type[FeatureGroup]] = get_all_subclasses(FeatureGroup)
     if plugin_collector is not None:
         fg_classes = {fg for fg in fg_classes if plugin_collector.applicable_feature_group_class(fg)}
@@ -297,7 +324,9 @@ def resolve_feature(
         raw_conflicts = list(getattr(exc, "conflicts", []))
         feature_name_obj = FeatureName(feature_name)
         matching_conflicts = [
-            fg for fg in raw_conflicts if fg.match_feature_group_criteria(feature_name_obj, resolved_options, None)
+            fg
+            for fg in raw_conflicts
+            if _match_recording_validation_errors(fg, feature_name_obj, resolved_options, validation_errors)
         ]
         return ResolvedFeature(
             feature_name=feature_name,
@@ -309,15 +338,18 @@ def resolve_feature(
     feature_name_obj = FeatureName(feature_name)
 
     for fg in all_fgs:
-        if fg.match_feature_group_criteria(feature_name_obj, resolved_options, None):
+        if _match_recording_validation_errors(fg, feature_name_obj, resolved_options, validation_errors):
             candidates.append(fg)
 
     if not candidates:
+        error = f"No FeatureGroup found for feature name: {feature_name}"
+        if validation_errors:
+            error = f"{error} Rejected during matching: {' | '.join(validation_errors)}"
         return ResolvedFeature(
             feature_name=feature_name,
             feature_group=None,
             candidates=[],
-            error=f"No FeatureGroup found for feature name: {feature_name}",
+            error=error,
         )
 
     supported, rejected = split_frameworks_by_capability(candidates, feature_name_obj, resolved_options)

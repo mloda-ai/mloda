@@ -43,6 +43,13 @@ print(result.feature_group, result.supported_compute_frameworks)
 
 `options` and `plugin_collector` are keyword-only, so pass them by name.
 
+When exactly one FeatureGroup resolves, `ResolvedFeature` also reports the
+feature's subtype: `subtype` is the value resolved from the name or the passed
+options (e.g. `"sum"` for `sales__sum_aggr`), and `subtype_family` is the
+parametric family name when the subtype is a parametric instance (`"ntile"`
+for `ntile_2`), else `None`. Both stay `None` for families without a subtype
+dimension or when nothing resolves.
+
 ### Inspecting Candidates
 
 When resolution fails due to conflicts, check the candidates:
@@ -70,6 +77,15 @@ fgs = get_feature_group_docs(name="timestamp")
 # Filter by compute framework
 fgs = get_feature_group_docs(compute_framework="PandasDataframe")
 ```
+
+Each `FeatureGroupInfo` also documents the family's subtype declaration:
+`subtype_key` (the discriminator option key, `None` without one), `subtypes`
+(the sorted universe), `parametric_subtypes` (family names like `ntile`),
+`subtype_support` (sorted supported subtypes per declared compute framework,
+not per installed one; empty for abstract bases) and `subtype_error` (set when
+the class declares support outside its universe, so a misdeclared capability
+is distinguishable from a legitimately empty matrix). See
+[Declaring capability per subtype](compute-framework-integration.md#declaring-capability-per-subtype).
 
 ## Inspecting Compute Frameworks
 

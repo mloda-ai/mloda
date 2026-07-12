@@ -57,6 +57,67 @@ pass `options=`, see [Discover Plugins](discover-plugins.md)), and a feature
 that matches a group but is unsupported on every installed framework resolves
 to `feature_group=None` with a capability error rather than appearing runnable.
 
+### Declaring capability per subtype
+
+Many families are not one operation but a set of subtypes: a window family with
+`median`, `sum` and `lag`, or a rank family with `dense` plus a parametric
+`ntile_<n>`. Hand-writing `supports_compute_framework` for these hides the
+capability picture inside imperative code. The subtype declaration turns it
+into data.
+
+**The data provider** declares the dimension once. In the common shape,
+`SUBTYPE_KEY` names the option key that holds the subtype, with an enumerable
+value space in `PROPERTY_MAPPING`; parametric families such as `ntile` join
+the universe via `PARAMETRIC_SUBTYPE_FAMILIES`. Per-framework capability is
+one `supported_subtypes()` override:
+
+``` python
+class RankFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+    SUBTYPE_KEY = "rank_type"
+    PARAMETRIC_SUBTYPE_FAMILIES = {"ntile": "N-tile bucketing"}
+    PREFIX_PATTERN = r".*__([\w]+)_rank$"
+    PROPERTY_MAPPING = {
+        "rank_type": property_spec(
+            "Rank subtype.",
+            strict=True,
+            allowed_values={"dense": "Dense ranking", "ordinal": "Ordinal ranking"},
+        ),
+    }
+
+    @classmethod
+    def supported_subtypes(cls, compute_framework):
+        if compute_framework is PythonDictFramework:
+            return cls.subtype_universe() - {"ntile"}  # ntile needs vectorized bucketing
+        return cls.subtype_universe()
+```
+
+The second shape covers flattened multi-axis families whose subtype is not a
+single option key: keep `SUBTYPE_KEY = None` and override both
+`subtype_universe()` and `resolve_subtype()`. Both shapes are enforced at
+class definition, so a half declaration (a `SUBTYPE_KEY` absent from
+`PROPERTY_MAPPING`, a universe override without a resolver) fails at import
+instead of silently doing nothing.
+
+The derived `supports_compute_framework` gates match-time routing from this
+declaration: it resolves the feature's subtype, canonicalizes parametric
+instances (`ntile_2` becomes `ntile`) and checks `supported_subtypes()`, so
+`value__ntile_2_rank` routes around an incapable backend. Undeclared subtypes
+and features without a subtype stay open; the declaration never rejects more
+than it claims to know.
+
+**The data steward** audits capability without probing synthetic features.
+`subtype_support_matrix()` returns the supported subtypes per declared
+compute framework; abstract bases report their universe but no matrix.
+`get_feature_group_docs()` carries the same picture per entry: `subtype_key`,
+`subtypes` (the sorted universe), `parametric_subtypes`, `subtype_support`
+(declared frameworks, not installed ones) and `subtype_error`, which
+distinguishes a misdeclared capability (support claimed outside the universe)
+from a legitimately empty matrix.
+
+**The data user** sees the outcome on the debug inspector:
+`resolve_feature(name, options=...)` reports `subtype` (e.g. `ntile_2`) and
+`subtype_family` (`ntile`, set only for parametric instances).
+
 ### Empty Results
 
 The contract is: a **final** requested feature must return a *schema-bearing*

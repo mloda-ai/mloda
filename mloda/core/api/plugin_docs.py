@@ -52,6 +52,19 @@ def _safe_version(fg_class: type[FeatureGroup]) -> str:
     return safe_field(lambda: _as_str(fg_class.version()), "unavailable", catching=SOURCE_INTROSPECTION_ERRORS)
 
 
+def _subtype_support_or_error(fg_class: type[FeatureGroup]) -> tuple[dict[str, list[str]], Optional[str]]:
+    """Return the sorted subtype support matrix, degrading a raising class to ({}, message).
+
+    safe_field cannot carry the failure message, and a misdeclared capability (ValueError
+    from subtype_support_matrix) must land in subtype_error instead of being swallowed.
+    """
+    try:
+        matrix = fg_class.subtype_support_matrix()
+    except Exception as exc:
+        return {}, str(exc)
+    return {framework: sorted(supported) for framework, supported in matrix.items()}, None
+
+
 def _dedup_degrading_on_conflict(
     feature_groups: set[type[FeatureGroup]], allow_redefinition: bool
 ) -> set[type[FeatureGroup]]:
@@ -144,6 +157,16 @@ def get_feature_group_docs(
             lambda: fg_class.feature_names_supported(), set(), field=f"{cls_name}.feature_names_supported"
         )
         prefix = safe_field(lambda: fg_class.prefix(), f"{cls_name}_", field=f"{cls_name}.prefix")
+        subtype_key: Optional[str] = safe_field(lambda: fg_class.SUBTYPE_KEY, None, field=f"{cls_name}.SUBTYPE_KEY")
+        subtypes: list[str] = safe_field(
+            lambda: sorted(fg_class.subtype_universe()), [], field=f"{cls_name}.subtype_universe"
+        )
+        parametric_subtypes: list[str] = safe_field(
+            lambda: sorted(fg_class.PARAMETRIC_SUBTYPE_FAMILIES or {}),
+            [],
+            field=f"{cls_name}.PARAMETRIC_SUBTYPE_FAMILIES",
+        )
+        subtype_support, subtype_error = _subtype_support_or_error(fg_class)
 
         if name is not None and name.lower() not in fg_name.lower():
             continue
@@ -168,6 +191,11 @@ def get_feature_group_docs(
                 compute_frameworks=compute_frameworks,
                 supported_feature_names=supported_feature_names,
                 prefix=prefix,
+                subtype_key=subtype_key,
+                subtypes=subtypes,
+                parametric_subtypes=parametric_subtypes,
+                subtype_support=subtype_support,
+                subtype_error=subtype_error,
             )
         )
 
@@ -390,13 +418,23 @@ def resolve_feature(
     filtered = _filter_subclasses(candidates)
 
     if len(filtered) == 1:
+        resolved = filtered[0]
+        subtype: Optional[str] = safe_field(lambda: resolved.resolve_subtype(feature_name_obj, resolved_options), None)
+        subtype_family: Optional[str] = None
+        if subtype is not None:
+            raw_subtype = subtype
+            canonical = safe_field(lambda: resolved.canonical_subtype(raw_subtype), raw_subtype)
+            if canonical != raw_subtype:
+                subtype_family = canonical
         return ResolvedFeature(
             feature_name=feature_name,
-            feature_group=filtered[0],
+            feature_group=resolved,
             candidates=candidates,
             error=None,
             supported_compute_frameworks=supported_names,
             unsupported_compute_frameworks=rejected_names,
+            subtype=subtype,
+            subtype_family=subtype_family,
         )
 
     conflicting_names = [fg.__name__ for fg in filtered]

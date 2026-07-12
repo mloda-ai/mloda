@@ -76,6 +76,8 @@ A feature selects a specific reader with an Option whose key equals the reader's
 Feature("value", options={UbaAirReader.__name__: url})
 ```
 
+The reader class itself is also accepted as the key, e.g. `Feature("value", options={UbaAirReader: url})`.
+
 The matched `(ReaderClass, data_access)` pair is stored under the reserved `"BaseInputData"` options key and consumed by `init_reader` at load time.
 
 For non-file sources such as HTTP endpoints, subclassing `ReadFile` and overriding `match_subclass_data_access` plus `load_data` is a supported pattern; on that path `suffix()` is never consulted (it is inert). `ApiInputData` injects in-memory data passed through the API request and is not an HTTP client.

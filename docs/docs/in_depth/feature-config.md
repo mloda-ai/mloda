@@ -126,6 +126,12 @@ When two enabled sources declare the same column, a bare name is ambiguous. Use 
 
 The config form takes the class name as a string and matches that exact class name only. The class-object form (`Feature("subject_token", feature_group=ClaimsReader)`), which also matches registered subclasses, stays Python-only because JSON cannot carry a class object. See [Feature Group resolution errors](troubleshooting/feature-group-resolution-errors.md).
 
+Name the concrete feature group class that will execute, not an abstract family base. Because the string matches the exact class name only, `{"feature_group": "AggregatedFeatureGroup"}` (an abstract base) fails with "No feature groups found", while `{"feature_group": "PandasAggregatedFeatureGroup"}` works. 12 of the 38 shipped feature groups are abstract bases with per-framework concrete subclasses, so this is the common case.
+
+`feature_group` is a top-level field, next to `name`. Putting it inside `options`, `group_options`, or `context_options` is rejected with a validation error.
+
+The scope is excluded from feature identity, so listing the same feature name twice in one config array with two different scopes raises `Duplicate feature setup: <name>`. To read the same column from two sources, give them distinct derived feature names.
+
 ## Worked Example: Window, Rank, and Percentile Features
 
 Row-preserving operations (window aggregation, rank, percentile) cannot be requested by a bare name: the Feature Group only matches when the request also carries the partition/order options its matcher needs. The feature name encodes the operation (`{source}__{operation}`); the matcher then requires those options to be present. It reads them via `options.get` (group first, then context), so they resolve from either side, but `context_options` is the right home.

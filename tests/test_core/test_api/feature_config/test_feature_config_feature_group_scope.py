@@ -11,7 +11,7 @@ only, because JSON cannot carry a class object) that
 ``load_features_from_config`` forwards to ``Feature(feature_group=...)`` on every
 branch, so ``feature.feature_group_scope`` carries the scope.
 
-Normalisation stays owned by ``Feature._set_feature_group_scope``: an empty or
+Normalization stays owned by ``Feature._set_feature_group_scope``: an empty or
 whitespace-only string becomes None, a padded name is stripped.
 """
 
@@ -278,7 +278,7 @@ def test_loader_without_feature_group_keeps_scope_none() -> None:
 
 
 def test_loader_empty_feature_group_string_normalizes_to_none() -> None:
-    """An empty or whitespace-only scope normalises to None, exactly as Feature does."""
+    """An empty or whitespace-only scope normalizes to None, exactly as Feature does."""
     config_str = """[
         {"name": "empty_scope", "feature_group": ""},
         {"name": "blank_scope", "feature_group": "   "}
@@ -341,3 +341,128 @@ def test_config_with_feature_group_resolves_to_scoped_source() -> None:
             values = list(result["subject_token"])
 
     assert values == ["s1", "s2", "s3", "s4"]
+
+
+# ---------------------------------------------------------------------------
+# Misplaced scope: "feature_group" inside an option container is a hard error
+#
+# The scope is a TOP-LEVEL field. Writing it inside "options" (or the
+# group/context variants) instead silently turns it into an ordinary option:
+# the scope stays None, the key poisons the option hash, and resolution still
+# fails with "Multiple feature groups found" without ever mentioning the key
+# that was ignored. JSON is the documented surface for AI agents, so this
+# misplacement is likely and must fail loudly at config-validation time.
+# ---------------------------------------------------------------------------
+
+
+def test_feature_config_rejects_feature_group_key_inside_options() -> None:
+    """A "feature_group" key inside 'options' is a misplaced scope and raises ValueError."""
+    with pytest.raises(ValueError) as exc_info:
+        FeatureConfig(name="subject_token", options={"feature_group": "Source582A"})
+
+    message = str(exc_info.value)
+    assert "feature_group" in message
+    assert "top-level" in message
+
+
+def test_feature_config_rejects_feature_group_key_inside_group_options() -> None:
+    """A "feature_group" key inside 'group_options' is a misplaced scope and raises ValueError."""
+    with pytest.raises(ValueError) as exc_info:
+        FeatureConfig(name="subject_token", group_options={"feature_group": "Source582A"})
+
+    message = str(exc_info.value)
+    assert "feature_group" in message
+    assert "top-level" in message
+
+
+def test_feature_config_rejects_feature_group_key_inside_context_options() -> None:
+    """A "feature_group" key inside 'context_options' is a misplaced scope and raises ValueError."""
+    with pytest.raises(ValueError) as exc_info:
+        FeatureConfig(name="subject_token", context_options={"feature_group": "Source582A"})
+
+    message = str(exc_info.value)
+    assert "feature_group" in message
+    assert "top-level" in message
+
+
+def test_loader_rejects_misplaced_feature_group_key_in_options() -> None:
+    """Through the JSON surface, a scope written inside 'options' fails loudly instead of becoming an option."""
+    config_str = json.dumps([{"name": "subject_token", "options": {"feature_group": "Source582A"}}])
+
+    with pytest.raises(ValueError) as exc_info:
+        load_features_from_config(config_str, format="json")
+
+    message = str(exc_info.value)
+    assert "feature_group" in message
+    assert "top-level" in message
+
+
+# ---------------------------------------------------------------------------
+# Nested in_features: validation errors follow the CONFIG style
+#
+# The top-level field raises a config-style ValueError for a non-string scope.
+# A nested in_features dict must not fall through to the Python-surface
+# TypeError raised by Feature; the config surface is one surface.
+# ---------------------------------------------------------------------------
+
+
+def test_process_nested_features_rejects_non_string_scope() -> None:
+    """A non-string "feature_group" in a nested in_features dict raises config-style ValueError."""
+    options: dict[str, Any] = {
+        "in_features": {"name": "subject_token", "feature_group": 123},
+    }
+
+    with pytest.raises(ValueError) as exc_info:
+        process_nested_features(options)
+
+    assert "feature_group" in str(exc_info.value)
+
+
+def test_loader_rejects_non_string_scope_in_nested_in_features() -> None:
+    """Through the loader, a non-string nested scope raises ValueError, not the Python-surface TypeError."""
+    config_str = json.dumps(
+        [
+            {
+                "name": "outer_feature",
+                "options": {"in_features": {"name": "subject_token", "feature_group": 123}},
+            }
+        ]
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        load_features_from_config(config_str, format="json")
+
+    assert "feature_group" in str(exc_info.value)
+
+
+# ---------------------------------------------------------------------------
+# Characterization: one config array cannot request the same name twice with
+# two different scopes. The scope is excluded from Feature identity, so the two
+# entries collide in the request-level Features validation.
+# ---------------------------------------------------------------------------
+
+
+def test_config_same_name_two_scopes_raises_duplicate_feature_setup() -> None:
+    """Characterization: the same name under two scopes in one config array is a duplicate.
+
+    Mirrors the Python-side pin in
+    tests/test_plugins/compute_framework/test_per_feature_fg_scope_integration.py.
+    Scope is not part of Feature identity, so the two features compare equal and
+    Features raises "Duplicate feature setup". Reading one column from two
+    sources needs two separate requests, not two array entries.
+    """
+    config_str = json.dumps(
+        [
+            {"name": "subject_token", "feature_group": Source582A.get_class_name()},
+            {"name": "subject_token", "feature_group": Source582B.get_class_name()},
+        ]
+    )
+
+    features = load_features_from_config(config_str, format="json")
+
+    with pytest.raises(ValueError, match="Duplicate feature setup"):
+        mloda.run_all(
+            features,
+            compute_frameworks={PandasDataFrame},
+            plugin_collector=PluginCollector.enabled_feature_groups({Source582A, Source582B}),
+        )

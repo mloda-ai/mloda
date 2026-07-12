@@ -13,7 +13,7 @@ from typing import Any
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.api.feature_config.parser import parse_json
-from mloda.core.api.feature_config.models import FeatureConfig
+from mloda.core.api.feature_config.models import FeatureConfig, validate_feature_group_scope
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 
 
@@ -51,11 +51,14 @@ def process_nested_features(options: dict[str, Any]) -> dict[str, Any]:
                 else:
                     processed_nested_options["in_features"] = in_features
 
-            # Create the Feature object; the nested dict carries its own resolution scope.
+            # Create the Feature object; the nested dict carries its own resolution scope,
+            # validated in the config layer so it fails config-style, not Python-surface.
+            nested_feature_group = value.get("feature_group")
+            validate_feature_group_scope(nested_feature_group)
             processed[key] = Feature(
                 name=feature_name,
                 options=processed_nested_options,
-                feature_group=value.get("feature_group"),
+                feature_group=nested_feature_group,
             )
         elif isinstance(value, dict):
             # Recursively process nested dicts

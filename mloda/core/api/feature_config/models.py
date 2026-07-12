@@ -8,6 +8,32 @@ feature configuration files.
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+FEATURE_GROUP_SCOPE_KEY = "feature_group"
+
+
+def validate_feature_group_scope(feature_group: Any) -> None:
+    """Config is string-only: JSON cannot carry a class object, so the class-object scope stays Python-only.
+
+    Shared by FeatureConfig and the nested in_features path so both raise the same config-style ValueError.
+    """
+    if feature_group is not None and not isinstance(feature_group, str):
+        raise ValueError(
+            f"'{FEATURE_GROUP_SCOPE_KEY}' must be a class-name string or None, got {type(feature_group).__name__}"
+        )
+
+
+def reject_misplaced_feature_group_scope(container: Optional[dict[str, Any]], container_name: str) -> None:
+    """Reject the scope written as a top-level key of an option container instead of the top-level field.
+
+    Only top-level keys are checked: a nested scope legitimately lives inside an
+    ``in_features`` dict value, which is not a key of the container.
+    """
+    if container and FEATURE_GROUP_SCOPE_KEY in container:
+        raise ValueError(
+            f"'{FEATURE_GROUP_SCOPE_KEY}' must be a top-level field of the feature config, "
+            f"not a key of '{container_name}'. Move it next to 'name'."
+        )
+
 
 @dataclass
 class FeatureConfig:
@@ -23,7 +49,7 @@ class FeatureConfig:
     feature_group: Optional[str] = None
 
     def __post_init__(self) -> None:
-        """Validate that options and group_options/context_options are mutually exclusive."""
+        """Validate option container exclusivity, propagate_context_keys, and the feature_group scope."""
         if self.options and (self.group_options or self.context_options):
             raise ValueError("Cannot use both 'options' and 'group_options'/'context_options'")
         if self.propagate_context_keys and not self.context_options:
@@ -31,11 +57,10 @@ class FeatureConfig:
                 "'propagate_context_keys' requires 'context_options'; "
                 "it is meaningless without context options and would otherwise be silently dropped"
             )
-        # Config is string-only: JSON cannot carry a class object, so the class-object scope stays Python-only.
-        if self.feature_group is not None and not isinstance(self.feature_group, str):
-            raise ValueError(
-                f"'feature_group' must be a class-name string or None, got {type(self.feature_group).__name__}"
-            )
+        validate_feature_group_scope(self.feature_group)
+        reject_misplaced_feature_group_scope(self.options, "options")
+        reject_misplaced_feature_group_scope(self.group_options, "group_options")
+        reject_misplaced_feature_group_scope(self.context_options, "context_options")
 
 
 def feature_config_schema() -> dict[str, Any]:
